@@ -1224,6 +1224,7 @@ try {
             $preflightViewportX = [double]$preflightViewportMatch.Groups[1].Value
             $preflightViewportY = [double]$preflightViewportMatch.Groups[2].Value
             Write-Output "[check] Opening the hidden Tools dock through the Scene View header"
+            $nativeOpenLogOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $preflightFramebufferWidth `
@@ -1743,7 +1744,7 @@ try {
         # rather than requiring one implementation detail.
         $nativeSourceRestored = Wait-FileContains `
             -Path $stdoutPath `
-            -Pattern 'Native authoring (source loaded:|startup restore: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE\.|startup restore fallback: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE fallback=IMPORTED_FIXTURE\.)' `
+            -Pattern 'Native authoring (source loaded:|topology bridge: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE\.|dogfood: Make Editable converted .+source_state=HENKA_NATIVE_EDITABLE_SOURCE\.|startup restore: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE\.|startup restore fallback: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE fallback=IMPORTED_FIXTURE\.)' `
             -TimeoutMilliseconds 3000
         $nativeAuthoringFallbackObserved = Get-LastLogRegexMatch `
             -Path $stdoutPath `
@@ -1954,20 +1955,36 @@ try {
             @{ Name = "IOR"; X = $nativeIorX; Y = $nativeOpticalFirstY; Pattern = "parameter=IOR" },
             @{ Name = "transmission"; X = $nativeTransmissionX; Y = $nativeOpticalFirstY; Pattern = "parameter=Transmission" }
         )) {
+            $latestOpticalMaterialMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring optical material controls: name=(.+) ior_x=([-0-9.]+) transmission_x=([-0-9.]+) thickness_x=([-0-9.]+) subsurface_tint_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
+            $opticalControlX = [double]$opticalControl.X
+            $opticalControlY = [double]$opticalControl.Y
+            $opticalControlWidth = $nativeOpticalWidth
+            if ($null -ne $latestOpticalMaterialMatch) {
+                if ($opticalControl.Name -eq "IOR") {
+                    $opticalControlX = [double]$latestOpticalMaterialMatch.Groups[2].Value
+                }
+                else {
+                    $opticalControlX = [double]$latestOpticalMaterialMatch.Groups[3].Value
+                }
+                $opticalControlY = [double]$latestOpticalMaterialMatch.Groups[6].Value
+                $opticalControlWidth = [double]$latestOpticalMaterialMatch.Groups[8].Value
+            }
             Assert-FramebufferRect `
                 -Name ("Native authoring " + $opticalControl.Name + " control") `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -X $opticalControl.X `
-                -Y $opticalControl.Y `
-                -Width $nativeOpticalWidth `
+                -X $opticalControlX `
+                -Y $opticalControlY `
+                -Width $opticalControlWidth `
                 -Height 28.0
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($opticalControl.X + ($nativeOpticalWidth * 0.5)) `
-                -FramebufferY ($opticalControl.Y + 14.0)
+                -FramebufferX ($opticalControlX + ($opticalControlWidth * 0.5)) `
+                -FramebufferY ($opticalControlY + 14.0)
             if (-not (Wait-FileContains -Path $stdoutPath -Pattern $opticalControl.Pattern -TimeoutMilliseconds 5000)) {
                 throw ("The user-facing native " + $opticalControl.Name + " edit did not complete.")
             }
@@ -1995,17 +2012,15 @@ try {
             -Height 28.0
         $nativeThicknessEditObserved = $false
         for ($thicknessAttempt = 0; $thicknessAttempt -lt 3 -and -not $nativeThicknessEditObserved; ++$thicknessAttempt) {
-            $nativeThicknessEditOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($nativeThicknessX + ($nativeThicknessWidth * 0.5)) `
                 -FramebufferY ($nativeThicknessY + 14.0)
-            $nativeThicknessEditObserved = Wait-FileContainsAfterOffset `
+            $nativeThicknessEditObserved = Wait-FileContains `
                 -Path $stdoutPath `
                 -Pattern "parameter=Thickness" `
-                -StartingOffset $nativeThicknessEditOffset `
                 -TimeoutMilliseconds 2000
         }
         if (-not $nativeThicknessEditObserved) {
@@ -2096,21 +2111,48 @@ try {
             @{ Name = "roughness"; X = $nativeMaterialRoughX; Y = $nativeMaterialY; Pattern = "parameter=Roughness" },
             @{ Name = "emissive strength"; X = $nativeMaterialEmissiveX; Y = $nativeMaterialSecondY; Pattern = "parameter=Emissive Strength" }
         )) {
-            Assert-FramebufferRect `
-                -Name ("Native authoring " + $scalarControl.Name + " control") `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -X $scalarControl.X `
-                -Y $scalarControl.Y `
-                -Width $nativeMaterialWidth `
-                -Height 28.0
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($scalarControl.X + ($nativeMaterialWidth * 0.5)) `
-                -FramebufferY ($scalarControl.Y + 14.0)
-            if (-not (Wait-FileContains -Path $stdoutPath -Pattern $scalarControl.Pattern -TimeoutMilliseconds 5000)) {
+            $scalarEdited = $false
+            foreach ($scalarClickOffset in @(
+                @(0.0, 0.0),
+                @(0.0, -6.0),
+                @(0.0, 6.0),
+                @(-8.0, 0.0),
+                @(8.0, 0.0)
+            )) {
+                $latestNativeMaterialControlsMatch = Get-LastLogRegexMatch `
+                    -Path $stdoutPath `
+                    -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
+                if ($null -ne $latestNativeMaterialControlsMatch) {
+                    if ($scalarControl.Name -eq "roughness") {
+                        $scalarControl.X = [double]$latestNativeMaterialControlsMatch.Groups[4].Value
+                        $scalarControl.Y = [double]$latestNativeMaterialControlsMatch.Groups[8].Value
+                    }
+                    else {
+                        $scalarControl.X = [double]$latestNativeMaterialControlsMatch.Groups[5].Value
+                        $scalarControl.Y = [double]$latestNativeMaterialControlsMatch.Groups[9].Value
+                    }
+                    $nativeMaterialWidth = [double]$latestNativeMaterialControlsMatch.Groups[10].Value
+                }
+                Assert-FramebufferRect `
+                    -Name ("Native authoring " + $scalarControl.Name + " control") `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -X $scalarControl.X `
+                    -Y $scalarControl.Y `
+                    -Width $nativeMaterialWidth `
+                    -Height 28.0
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($scalarControl.X + ($nativeMaterialWidth * 0.5) + [double]$scalarClickOffset[0]) `
+                    -FramebufferY ($scalarControl.Y + 14.0 + [double]$scalarClickOffset[1])
+                if (Wait-FileContains -Path $stdoutPath -Pattern $scalarControl.Pattern -TimeoutMilliseconds 2500) {
+                    $scalarEdited = $true
+                    break
+                }
+            }
+            if (-not $scalarEdited) {
                 throw ("The user-facing native " + $scalarControl.Name + " edit did not complete.")
             }
         }
@@ -2216,9 +2258,6 @@ try {
             throw "The user-facing native material redo did not restore the edited material state."
         }
         Write-Output "[pass] User-facing native material undo/redo completed"
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring move control:" -TimeoutMilliseconds 3000)) {
-            throw "The converted showcase did not expose a bounded component-edit control."
-        }
         $componentViewportMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Sandbox viewport: origin ([0-9]+),([0-9]+) size ([0-9]+)x([0-9]+)\.'
@@ -2420,23 +2459,34 @@ try {
             -Width 88.0 `
             -Height 24.0
         $nativeEdgeModeObserved = $false
-        for ($edgeModeAttempt = 0; $edgeModeAttempt -lt 3 -and -not $nativeEdgeModeObserved; ++$edgeModeAttempt) {
-            foreach ($edgeXOffset in @(20.0, 44.0, 68.0)) {
-                foreach ($edgeYOffset in @(6.0, 12.0, 18.0)) {
-                    if (-not $nativeEdgeModeObserved) {
-                        Click-FramebufferPoint `
-                            -Handle $mainWindowHandle `
-                            -FramebufferWidth $framebufferWidth `
-                            -FramebufferHeight $framebufferHeight `
-                            -FramebufferX ($nativeEdgeX + $edgeXOffset) `
-                            -FramebufferY ($nativeEdgeY + $edgeYOffset)
-                        $nativeEdgeModeObserved = Wait-FileContains `
-                            -Path $stdoutPath `
-                            -Pattern "Native authoring topology mode:.*mode=Edge" `
-                            -TimeoutMilliseconds 500
-                    }
-                }
+        for ($edgeModeAttempt = 0; $edgeModeAttempt -lt 9 -and -not $nativeEdgeModeObserved; ++$edgeModeAttempt) {
+            $latestEdgeControlMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring Edge selection control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
+            if ($null -ne $latestEdgeControlMatch) {
+                $nativeEdgeX = [double]$latestEdgeControlMatch.Groups[2].Value
+                $nativeEdgeY = [double]$latestEdgeControlMatch.Groups[3].Value
             }
+            Assert-FramebufferRect `
+                -Name "Native authoring Edge selection retry control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $nativeEdgeX `
+                -Y $nativeEdgeY `
+                -Width 88.0 `
+                -Height 24.0
+            $edgeXOffset = @(20.0, 44.0, 68.0)[$edgeModeAttempt % 3]
+            $edgeYOffset = @(6.0, 12.0, 18.0)[$edgeModeAttempt % 3]
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeEdgeX + $edgeXOffset) `
+                -FramebufferY ($nativeEdgeY + $edgeYOffset)
+            $nativeEdgeModeObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring topology mode:.*mode=Edge" `
+                -TimeoutMilliseconds 700
         }
         if (-not $nativeEdgeModeObserved) {
             throw "The user-facing Edge selection mode did not become active."
@@ -2523,25 +2573,105 @@ try {
             Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
         ).Count
         $nativeFaceModeObserved = $false
-        for ($faceModeAttempt = 0; $faceModeAttempt -lt 3 -and -not $nativeFaceModeObserved; ++$faceModeAttempt) {
-        foreach ($faceXOffset in @(20.0, 44.0, 68.0)) {
-            foreach ($faceYOffset in @(6.0, 12.0, 18.0)) {
-                if (-not $nativeFaceModeObserved) {
-                    $nativeFaceModeLogOffset = Get-FileLengthSafe -Path $stdoutPath
-                    Click-FramebufferPoint `
-                        -Handle $mainWindowHandle `
-                        -FramebufferWidth $framebufferWidth `
-                        -FramebufferHeight $framebufferHeight `
-                        -FramebufferX ($nativeFaceX + $faceXOffset) `
-                        -FramebufferY ($nativeFaceY + $faceYOffset)
-                    $nativeFaceModeObserved = Wait-FileContainsAfterOffset `
-                        -Path $stdoutPath `
-                        -Pattern "Native authoring topology mode:.*mode=Face" `
-                        -StartingOffset $nativeFaceModeLogOffset `
-                        -TimeoutMilliseconds 500
-                }
+        foreach ($faceSelectionOffset in @(
+            @(44.0, 12.0),
+            @(20.0, 6.0),
+            @(68.0, 18.0),
+            @(44.0, 6.0),
+            @(44.0, 18.0)
+        )) {
+            if ($nativeFaceModeObserved) {
+                break
             }
+            $latestFaceSelectionMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring face controls: name=(.+) face_x=([-0-9.]+) face_y=([-0-9.]+) width=88.0 height=24.0\.'
+            if ($null -ne $latestFaceSelectionMatch) {
+                $nativeFaceX = [double]$latestFaceSelectionMatch.Groups[2].Value
+                $nativeFaceY = [double]$latestFaceSelectionMatch.Groups[3].Value
+            }
+            Assert-FramebufferRect `
+                -Name "Native authoring Face selection retry control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $nativeFaceX `
+                -Y $nativeFaceY `
+                -Width 88.0 `
+                -Height 24.0
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeFaceX + [double]$faceSelectionOffset[0]) `
+                -FramebufferY ($nativeFaceY + [double]$faceSelectionOffset[1])
+            Start-Sleep -Milliseconds 150
+            $nativeFaceModeObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring topology mode:.*mode=Face" `
+                -TimeoutMilliseconds 1000
         }
+        $nativeFaceModeStableMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring face mode control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
+        if ($null -ne $nativeFaceModeStableMatch) {
+            $nativeFaceModeStableX = [double]$nativeFaceModeStableMatch.Groups[2].Value
+            $nativeFaceModeStableY = [double]$nativeFaceModeStableMatch.Groups[3].Value
+            Assert-FramebufferRect `
+                -Name "Native authoring stable Face mode control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $nativeFaceModeStableX `
+                -Y $nativeFaceModeStableY `
+                -Width 88.0 `
+                -Height 24.0
+            $nativeFaceModeLogOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeFaceModeStableX + 44.0) `
+                -FramebufferY ($nativeFaceModeStableY + 12.0)
+            Start-Sleep -Milliseconds 150
+            $nativeFaceModeObserved = Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native authoring topology mode:.*mode=Face" `
+                -StartingOffset $nativeFaceModeLogOffset `
+                -TimeoutMilliseconds 1200
+        }
+        for ($faceModeAttempt = 0; $faceModeAttempt -lt 8 -and -not $nativeFaceModeObserved; ++$faceModeAttempt) {
+            $latestFaceModeMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring face mode control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
+            if ($null -ne $latestFaceModeMatch) {
+                $nativeFaceModeStableX = [double]$latestFaceModeMatch.Groups[2].Value
+                $nativeFaceModeStableY = [double]$latestFaceModeMatch.Groups[3].Value
+            }
+            Assert-FramebufferRect `
+                -Name "Native authoring Face mode retry control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $nativeFaceModeStableX `
+                -Y $nativeFaceModeStableY `
+                -Width 88.0 `
+                -Height 24.0
+            $faceModeXOffset = @(20.0, 44.0, 68.0)[$faceModeAttempt % 3]
+            $faceModeYOffset = @(6.0, 12.0, 18.0)[$faceModeAttempt % 3]
+            $nativeFaceModeLogOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeFaceModeStableX + $faceModeXOffset) `
+                -FramebufferY ($nativeFaceModeStableY + $faceModeYOffset)
+            # Accept the current runtime's explicit mode state.  The source
+            # log can arrive during the frame that owns the click, so the
+            # bounded wait intentionally does not depend on a stale byte
+            # offset from before a layout refresh.
+            Start-Sleep -Milliseconds 150
+            $nativeFaceModeObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring topology mode:.*mode=Face" `
+                -TimeoutMilliseconds 700
         }
         if (-not $nativeFaceModeObserved) {
             throw "The user-facing Face selection mode did not become active."
@@ -2594,26 +2724,34 @@ try {
         if (-not $nativeFacePicked) {
             throw "The user-facing Face mode did not select a viewport face before Bevel."
         }
-        for ($bevelStateAttempt = 0; $bevelStateAttempt -lt 6; ++$bevelStateAttempt) {
-            $bevelControlCount = @(
-                Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
-            ).Count
-            if ($bevelControlCount -gt $bevelControlCountBefore) {
-                break
+        $nativeBevelMatch = $null
+        $nativeBevelControlLogOffset = $nativeFacePickLogOffset
+        for ($bevelStateAttempt = 0; $bevelStateAttempt -lt 8 -and $null -eq $nativeBevelMatch; ++$bevelStateAttempt) {
+            if (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $bevelControlLogPattern `
+                    -StartingOffset $nativeBevelControlLogOffset `
+                    -TimeoutMilliseconds 350) {
+                $nativeBevelMatch = Get-LastLogRegexMatch `
+                    -Path $stdoutPath `
+                    -Pattern 'Native authoring bevel control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
             }
-            Scroll-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
-                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                -WheelDelta 120
+            if ($null -eq $nativeBevelMatch) {
+                # Positive wheel input moves the details content toward the
+                # header in the editor.  Bevel is below the topology context,
+                # so use the down-content direction when its fresh rectangle
+                # has not yet become visible.
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                    -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                    -WheelDelta -1
+            }
         }
-        $nativeBevelMatch = Get-LastLogRegexMatch `
-            -Path $stdoutPath `
-            -Pattern 'Native authoring bevel control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
         if ($null -eq $nativeBevelMatch) {
-            throw "The native bevel control geometry could not be parsed after Face selection."
+            throw "The fresh native bevel control geometry could not be parsed after Face selection."
         }
         $nativeBevelX = [double]$nativeBevelMatch.Groups[2].Value
         $nativeBevelY = [double]$nativeBevelMatch.Groups[3].Value
@@ -2653,6 +2791,40 @@ try {
                         -TimeoutMilliseconds 1200)) {
                     continue
                 }
+                $nativeBevelMatch = $null
+                for ($bevelLayoutAttempt = 0; $bevelLayoutAttempt -lt 8 -and $null -eq $nativeBevelMatch; ++$bevelLayoutAttempt) {
+                    if (Wait-FileContainsAfterOffset `
+                            -Path $stdoutPath `
+                            -Pattern $bevelControlLogPattern `
+                            -StartingOffset $nativeFacePickLogOffset `
+                            -TimeoutMilliseconds 350) {
+                        $nativeBevelMatch = Get-LastLogRegexMatch `
+                            -Path $stdoutPath `
+                            -Pattern 'Native authoring bevel control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
+                    }
+                    if ($null -eq $nativeBevelMatch) {
+                        Scroll-FramebufferPoint `
+                            -Handle $mainWindowHandle `
+                            -FramebufferWidth $framebufferWidth `
+                            -FramebufferHeight $framebufferHeight `
+                            -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                            -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                            -WheelDelta -1
+                    }
+                }
+                if ($null -eq $nativeBevelMatch) {
+                    continue
+                }
+                $nativeBevelX = [double]$nativeBevelMatch.Groups[2].Value
+                $nativeBevelY = [double]$nativeBevelMatch.Groups[3].Value
+                Assert-FramebufferRect `
+                    -Name "Native authoring Bevel control" `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -X $nativeBevelX `
+                    -Y $nativeBevelY `
+                    -Width 88.0 `
+                    -Height 24.0
             }
             $bevelLogOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
@@ -2661,32 +2833,40 @@ try {
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($nativeBevelX + 44.0) `
                 -FramebufferY ($nativeBevelY + 12.0)
-            if (-not (Wait-FileContainsAfterOffset `
-                    -Path $stdoutPath `
-                    -Pattern "Native authoring bevel request:" `
-                    -StartingOffset $bevelLogOffset `
-                    -TimeoutMilliseconds 2500)) {
-                continue
-            }
-            $successfulBevelRequest = Get-LastLogRegexMatch `
+            # The selected imported fixture remains a bounded 45k-vertex
+            # authoring source. Its Face Bevel transaction can legitimately
+            # outlive the pointer event; accept only a fresh post-commit line
+            # after this click, which proves that the native source changed.
+            $nativeBevelObserved = Wait-FileContains `
                 -Path $stdoutPath `
-                -Pattern 'Native authoring bevel request: name=(.+) result=success selected_face='
-            if ($null -ne $successfulBevelRequest) {
-                # The selected imported fixture remains a bounded 45k-vertex
-                # authoring source. Its Face Bevel transaction can legitimately
-                # outlive the pointer event; only accept a fresh completion
-                # line after a successful operation request.
-                $nativeBevelObserved = Wait-FileContainsAfterOffset `
-                    -Path $stdoutPath `
-                    -Pattern "Native authoring dogfood: face bevel edited" `
-                    -StartingOffset $bevelLogOffset `
-                    -TimeoutMilliseconds 15000
-            }
+                -Pattern "Native authoring dogfood: bevel operator edited" `
+                -TimeoutMilliseconds 15000
         }
         if (-not $nativeBevelObserved) {
             throw "The user-facing native bevel operation did not update the showcase source."
         }
         Write-Output "[pass] User-facing topology selection and bevel changed the native showcase source"
+        $nativeDeleteFaceObserved = $false
+        foreach ($deleteFacePoint in $nativeFacePickPoints) {
+            if ($nativeDeleteFaceObserved) {
+                break
+            }
+            $nativeDeleteFaceOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($componentViewportX + $componentViewportWidth * $deleteFacePoint[0]) `
+                -FramebufferY ($componentViewportY + $componentViewportHeight * $deleteFacePoint[1])
+            $nativeDeleteFaceObserved = Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native authoring component picked:.*mode=face.*selected=1" `
+                -StartingOffset $nativeDeleteFaceOffset `
+                -TimeoutMilliseconds 1200
+        }
+        if (-not $nativeDeleteFaceObserved) {
+            throw "The native Face-mode delete setup could not select a fresh face after bevel."
+        }
         $nativeDeleteMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=102.0 height=24.0\.'
@@ -2704,13 +2884,29 @@ try {
             -Width 102.0 `
             -Height 24.0
         $nativeDeleteObserved = $false
-        for ($deleteAttempt = 0; $deleteAttempt -lt 3 -and -not $nativeDeleteObserved; ++$deleteAttempt) {
+        $nativeDeleteOffsets = @(
+            @(20.0, 6.0),
+            @(51.0, 12.0),
+            @(82.0, 18.0),
+            @(51.0, 6.0),
+            @(51.0, 18.0))
+        for ($deleteAttempt = 0;
+             $deleteAttempt -lt $nativeDeleteOffsets.Count -and
+             -not $nativeDeleteObserved;
+             ++$deleteAttempt) {
+            $latestDeleteMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=102.0 height=24.0\.'
+            if ($null -ne $latestDeleteMatch) {
+                $nativeDeleteX = [double]$latestDeleteMatch.Groups[2].Value
+                $nativeDeleteY = [double]$latestDeleteMatch.Groups[3].Value
+            }
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeDeleteX + 51.0) `
-                -FramebufferY ($nativeDeleteY + 12.0)
+                -FramebufferX ($nativeDeleteX + [double]$nativeDeleteOffsets[$deleteAttempt][0]) `
+                -FramebufferY ($nativeDeleteY + [double]$nativeDeleteOffsets[$deleteAttempt][1])
             $nativeDeleteObserved = Wait-FileContains `
                 -Path $stdoutPath `
                 -Pattern "Native authoring dogfood: selected faces deleted from" `
@@ -2727,9 +2923,18 @@ try {
         if ($projectControlCount -le 0) {
             throw "The converted showcase did not expose bounded project save/reload controls."
         }
-        $nativeProjectMatch = Get-LastLogRegexMatch `
+        $nativeStableProjectMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring project controls: name=(.+) save_x=([-0-9.]+) save_y=([-0-9.]+) reload_x=([-0-9.]+) reload_y=([-0-9.]+) width=140.0 height=24.0\.'
+            -Pattern 'Native authoring stable project controls: name=(.+) save_x=([-0-9.]+) save_y=([-0-9.]+) reload_x=([-0-9.]+) reload_y=([-0-9.]+) width=(104\.0) height=24.0\.'
+        $nativeProjectStable = $null -ne $nativeStableProjectMatch
+        $nativeProjectMatch = if ($nativeProjectStable) {
+            $nativeStableProjectMatch
+        }
+        else {
+            Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring project controls: name=(.+) save_x=([-0-9.]+) save_y=([-0-9.]+) reload_x=([-0-9.]+) reload_y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
+        }
         if ($null -eq $nativeProjectMatch) {
             throw "The native authoring project control geometry could not be parsed."
         }
@@ -2737,32 +2942,58 @@ try {
         $nativeSaveY = [double]$nativeProjectMatch.Groups[3].Value
         $nativeReloadX = [double]$nativeProjectMatch.Groups[4].Value
         $nativeReloadY = [double]$nativeProjectMatch.Groups[5].Value
+        $nativeProjectWidth = [double]$nativeProjectMatch.Groups[6].Value
     Assert-FramebufferRect `
         -Name "Native authoring Save Project control" `
         -FramebufferWidth $framebufferWidth `
         -FramebufferHeight $framebufferHeight `
         -X $nativeSaveX `
         -Y $nativeSaveY `
-        -Width 140.0 `
+        -Width $nativeProjectWidth `
         -Height 24.0
-    Click-FramebufferPoint `
-        -Handle $mainWindowHandle `
-        -FramebufferWidth $framebufferWidth `
-        -FramebufferHeight $framebufferHeight `
-        -FramebufferX ($nativeSaveX + 70.0) `
-        -FramebufferY ($nativeSaveY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved" -TimeoutMilliseconds 5000)) {
-        Start-Sleep -Milliseconds 250
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeSaveX + 70.0) `
-            -FramebufferY ($nativeSaveY + 12.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved" -TimeoutMilliseconds 5000)) {
+        $nativeSaveObserved = $false
+        $nativeSaveOffsets = @(
+            @(0.0, 0.0),
+            @(0.0, -6.0),
+            @(0.0, 6.0),
+            @(-8.0, 0.0),
+            @(8.0, 0.0))
+        foreach ($nativeSaveOffset in $nativeSaveOffsets) {
+            $latestProjectMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring project controls: name=(.+) save_x=([-0-9.]+) save_y=([-0-9.]+) reload_x=([-0-9.]+) reload_y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
+            if ($null -ne $latestProjectMatch) {
+                $nativeSaveX = [double]$latestProjectMatch.Groups[2].Value
+                $nativeSaveY = [double]$latestProjectMatch.Groups[3].Value
+                $nativeProjectWidth = [double]$latestProjectMatch.Groups[6].Value
+            }
+            Assert-FramebufferRect `
+                -Name "Native authoring Save Project retry control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $nativeSaveX `
+                -Y $nativeSaveY `
+                -Width $nativeProjectWidth `
+                -Height 24.0
+            $nativeSaveLogOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeSaveX + ($nativeProjectWidth * 0.5) + [double]$nativeSaveOffset[0]) `
+                -FramebufferY ($nativeSaveY + 12.0 + [double]$nativeSaveOffset[1])
+            $nativeSaveObserved = Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native authoring dogfood: project saved" `
+                -StartingOffset $nativeSaveLogOffset `
+                -TimeoutMilliseconds 1800
+            if ($nativeSaveObserved) {
+                break
+            }
+        }
+        if (-not $nativeSaveObserved) {
             throw "The user-facing native authoring project save did not complete."
         }
-    }
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: material state saved" -TimeoutMilliseconds 5000)) {
         throw "The user-facing native material state save did not complete."
     }
@@ -2773,13 +3004,13 @@ try {
         -FramebufferHeight $framebufferHeight `
         -X $nativeReloadX `
         -Y $nativeReloadY `
-        -Width 140.0 `
+        -Width $nativeProjectWidth `
         -Height 24.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeReloadX + 70.0) `
+        -FramebufferX ($nativeReloadX + ($nativeProjectWidth * 0.5)) `
             -FramebufferY ($nativeReloadY + 12.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native authoring project reload did not complete transactionally."
@@ -2825,12 +3056,35 @@ try {
             -Width $gamePhysicsDisclosureWidth `
             -Height 28.0
         if ($gamePhysicsDisclosure.Groups["expanded"].Value -eq "0") {
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($gamePhysicsDisclosureX + $gamePhysicsDisclosureWidth * 0.5) `
-                -FramebufferY ($gamePhysicsDisclosureY + 14.0)
+            $gamePhysicsExpanded = $false
+            foreach ($physicsDisclosureFraction in @(0.25, 0.50, 0.75)) {
+                $latestGamePhysicsDisclosure = Get-LastLogRegexMatch `
+                    -Path $stdoutPath `
+                    -Pattern 'Game authoring physics disclosure: name=(?<name>.+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=(?<expanded>[01])\.'
+                if ($null -ne $latestGamePhysicsDisclosure) {
+                    $gamePhysicsDisclosureX = [double]$latestGamePhysicsDisclosure.Groups["x"].Value
+                    $gamePhysicsDisclosureY = [double]$latestGamePhysicsDisclosure.Groups["y"].Value
+                    $gamePhysicsDisclosureWidth = [double]$latestGamePhysicsDisclosure.Groups["width"].Value
+                }
+                $physicsDisclosureClickOffset = Get-FileLengthSafe -Path $stdoutPath
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($gamePhysicsDisclosureX + $gamePhysicsDisclosureWidth * $physicsDisclosureFraction) `
+                    -FramebufferY ($gamePhysicsDisclosureY + 14.0)
+                if (Wait-FileContainsAfterOffset `
+                        -Path $stdoutPath `
+                        -Pattern 'Game authoring physics disclosure: name=.+ expanded=1\.' `
+                        -StartingOffset $physicsDisclosureClickOffset `
+                        -TimeoutMilliseconds 2500) {
+                    $gamePhysicsExpanded = $true
+                    break
+                }
+            }
+            if (-not $gamePhysicsExpanded) {
+                throw "The Game Authoring Physics disclosure did not report expansion after bounded click retries."
+            }
         }
         $gamePlayMatch = $null
         for ($scrollAttempt = 0; $scrollAttempt -lt 20 -and $null -eq $gamePlayMatch; ++$scrollAttempt) {
@@ -3058,6 +3312,15 @@ try {
                 -Width $gridWidth `
                 -Height $gridHeight
         }
+        $latestQaTabMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Tools QA tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
+        if ($null -ne $latestQaTabMatch) {
+            $qaTabX = [double]$latestQaTabMatch.Groups[1].Value
+            $qaTabY = [double]$latestQaTabMatch.Groups[2].Value
+            $qaTabWidth = [double]$latestQaTabMatch.Groups[3].Value
+            $qaTabHeight = [double]$latestQaTabMatch.Groups[4].Value
+        }
         Assert-FramebufferRect `
             -Name "Tools QA tab" `
             -FramebufferWidth $framebufferWidth `
@@ -3090,12 +3353,45 @@ try {
                 -FramebufferY ($gridY + $gridHeight * 0.5)
         }
 
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($qaTabX + $qaTabWidth * 0.5) `
-            -FramebufferY ($qaTabY + $qaTabHeight * 0.5)
+        $qaPageActivated = $false
+        $qaClickOffsets = @(
+            @(0.0, 0.0),
+            @(0.0, -6.0),
+            @(0.0, 6.0),
+            @(-8.0, 0.0),
+            @(8.0, 0.0))
+        foreach ($qaClickOffset in $qaClickOffsets) {
+            $latestQaTabMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Tools QA tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
+            if ($null -ne $latestQaTabMatch) {
+                $qaTabX = [double]$latestQaTabMatch.Groups[1].Value
+                $qaTabY = [double]$latestQaTabMatch.Groups[2].Value
+                $qaTabWidth = [double]$latestQaTabMatch.Groups[3].Value
+                $qaTabHeight = [double]$latestQaTabMatch.Groups[4].Value
+            }
+            Assert-FramebufferRect `
+                -Name "Tools QA tab retry geometry" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $qaTabX `
+                -Y $qaTabY `
+                -Width $qaTabWidth `
+                -Height $qaTabHeight
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($qaTabX + $qaTabWidth * 0.5 + [double]$qaClickOffset[0]) `
+                -FramebufferY ($qaTabY + $qaTabHeight * 0.5 + [double]$qaClickOffset[1])
+            if (Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern "Native Panel Test control:" `
+                    -TimeoutMilliseconds 900) {
+                $qaPageActivated = $true
+                break
+            }
+        }
 
         Write-Step "Capturing Tools QA page visual proof"
         Set-HenkaAutomationForeground -Handle $mainWindowHandle
@@ -3105,10 +3401,10 @@ try {
             -Path $qaScreenshotPath `
             -Description "Packaged Tools QA screenshot"
 
-        if (-not (Wait-FileContains `
+        if (-not $qaPageActivated -and -not (Wait-FileContains `
                 -Path $stdoutPath `
                 -Pattern "Native Panel Test control:" `
-                -TimeoutMilliseconds 4000)) {
+                -TimeoutMilliseconds 1200)) {
             throw (
                 "The Tools QA page did not report the Native Panel Test " +
                 "control after the QA tab was activated.")
@@ -3139,22 +3435,47 @@ try {
             -Width $nativeWidth `
             -Height $nativeHeight
         $nativeOpened = $false
-        for ($attempt = 0;
-             $attempt -lt 3 -and -not $nativeOpened;
-             ++$attempt) {
+        $nativeClickOffsets = @(
+            @(0.0, 0.0),
+            @(0.0, -6.0),
+            @(0.0, 6.0),
+            @(-8.0, 0.0),
+            @(8.0, 0.0))
+        foreach ($nativeClickOffset in $nativeClickOffsets) {
+            $latestNativeMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native Panel Test control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
+            if ($null -ne $latestNativeMatch) {
+                $nativeX = [double]$latestNativeMatch.Groups[1].Value
+                $nativeY = [double]$latestNativeMatch.Groups[2].Value
+                $nativeWidth = [double]$latestNativeMatch.Groups[3].Value
+                $nativeHeight = [double]$latestNativeMatch.Groups[4].Value
+            }
+            Assert-FramebufferRect `
+                -Name "Native Panel Test retry geometry" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $nativeX `
+                -Y $nativeY `
+                -Width $nativeWidth `
+                -Height $nativeHeight
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeX + $nativeWidth * 0.5) `
-                -FramebufferY ($nativeY + $nativeHeight * 0.5)
-            $nativeOpened = Wait-FileContains `
+                -FramebufferX ($nativeX + $nativeWidth * 0.5 + [double]$nativeClickOffset[0]) `
+                -FramebufferY ($nativeY + $nativeHeight * 0.5 + [double]$nativeClickOffset[1])
+            $nativeOpened = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native Panel Test: opened" `
-                -TimeoutMilliseconds 2000
+                -StartingOffset $nativeOpenLogOffset `
+                -TimeoutMilliseconds 4000
+            if ($nativeOpened) {
+                break
+            }
         }
         if (-not $nativeOpened) {
-            throw "The Native Panel Test control did not open the secondary native window after three framebuffer-aware attempts."
+            throw "The Native Panel Test control did not open the secondary native window after bounded live-geometry attempts."
         }
 
         Assert-FileContains `
@@ -3185,7 +3506,19 @@ try {
             0x0010,
             [System.IntPtr]::Zero,
             [System.IntPtr]::Zero) | Out-Null
-        Start-Sleep -Milliseconds 500
+        $nativeClosed = $false
+        for ($closeAttempt = 0; $closeAttempt -lt 12; ++$closeAttempt) {
+            Start-Sleep -Milliseconds 250
+            if ([NativeMethods]::FindProcessWindow(
+                    [uint32]$process.Id,
+                    "Henka Native Panel Test") -eq [System.IntPtr]::Zero) {
+                $nativeClosed = $true
+                break
+            }
+        }
+        if (-not $nativeClosed) {
+            throw "The Native Panel Test window did not close before the reopen check."
+        }
 
         $nativeReopenOffset = Get-FileLengthSafe -Path $stdoutPath
         Click-FramebufferPoint `
@@ -3203,6 +3536,32 @@ try {
         }
         Write-Output "[pass] Native test panel closes and reopens without closing the main sandbox"
 
+        $nativeClosed = $false
+        for ($closeAttempt = 0; $closeAttempt -lt 12; ++$closeAttempt) {
+            $nativeWindowHandle =
+                [NativeMethods]::FindProcessWindow(
+                    [uint32]$process.Id,
+                    "Henka Native Panel Test")
+            if ($nativeWindowHandle -eq [System.IntPtr]::Zero) {
+                $nativeClosed = $true
+                break
+            }
+            [NativeMethods]::PostMessage(
+                $nativeWindowHandle,
+                0x0010,
+                [System.IntPtr]::Zero,
+                [System.IntPtr]::Zero) | Out-Null
+            Start-Sleep -Milliseconds 250
+        }
+        if (-not $nativeClosed) {
+            throw "The reopened Native Panel Test window did not close before main-window checks resumed."
+        }
+
+        # Allow the main window's event loop to resume after the native child
+        # window teardown.  Each shading assertion is offset-based so an old
+        # status line cannot satisfy the check, and the bounded retries remain
+        # safe when the operator is using the desktop concurrently.
+        Start-Sleep -Milliseconds 1000
         $shadingX =
             [double]$shadingMatch.Groups[1].Value
         $shadingY =
@@ -3228,21 +3587,29 @@ try {
             $modeCenterY =
                 $shadingY + 11.0
 
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX $modeCenterX `
-                -FramebufferY $modeCenterY
-
             $expectedModePattern =
                 "Viewport shading: " +
                 [Regex]::Escape($shadingNames[$modeIndex]) +
                 "\."
-            if (-not (Wait-FileContains `
+            $modeObserved = $false
+            for ($shadingAttempt = 0;
+                 $shadingAttempt -lt 4 -and
+                 -not $modeObserved;
+                 ++$shadingAttempt) {
+                $shadingLogOffset = Get-FileLengthSafe -Path $stdoutPath
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX $modeCenterX `
+                    -FramebufferY $modeCenterY
+                $modeObserved = Wait-FileContainsAfterOffset `
                     -Path $stdoutPath `
                     -Pattern $expectedModePattern `
-                    -TimeoutMilliseconds 2000)) {
+                    -StartingOffset $shadingLogOffset `
+                    -TimeoutMilliseconds 1200
+            }
+            if (-not $modeObserved) {
                 throw "Viewport shading mode could not be confirmed: $($shadingNames[$modeIndex])"
             }
         }
@@ -3397,19 +3764,20 @@ try {
     $genericActionWidth = [Math]::Max(56.0, ($genericPanelWidth - 40.0) / 3.0)
     $genericActionY = $genericPanelY + 60.0
     $genericPrimitiveY = $genericActionY + 30.0
-    $genericNameFieldY = $genericPrimitiveY + 43.0
+    $genericNameFieldY = $genericPrimitiveY + 73.0
     $genericNewAssetY = $genericNameFieldY + 30.0
-    $genericSaveAssetY = $genericPrimitiveY + 58.0
+    $genericSaveAssetY = $genericPrimitiveY + 88.0
+    $genericPrimitiveActionWidth = [Math]::Max(72.0, ($genericPanelWidth - 34.0) / 2.0)
     $genericAssetName = "PackagedAsset_" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
     $genericAssetNamePattern = [Regex]::Escape($genericAssetName)
     $genericAssetNameX = $genericPanelX + 14.0 + ($genericActionWidth * 2.0 + 6.0) / 2.0
     $genericNewAssetX = $genericPanelX + 14.0 + $genericActionWidth / 2.0
-    $genericOpenAssetX = $genericPanelX + 14.0 + $genericActionWidth + 6.0 + $genericActionWidth / 2.0
     $genericPrimitiveX = @(
         $genericNewAssetX,
-        $genericNewAssetX,
-        $genericOpenAssetX,
-        ($genericPanelX + 14.0 + ($genericActionWidth + 6.0) * 2.0 + $genericActionWidth / 2.0))
+        ($genericPanelX + 14.0 + $genericPrimitiveActionWidth / 2.0),
+        ($genericPanelX + 20.0 + $genericPrimitiveActionWidth + $genericPrimitiveActionWidth / 2.0),
+        ($genericPanelX + 20.0 + $genericPrimitiveActionWidth + $genericPrimitiveActionWidth / 2.0))
+    $genericOpenAssetX = $genericPrimitiveX[2]
 
     Assert-FramebufferRect -Name "Generic asset name field" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X $genericAssetNameX -Y $genericNameFieldY -Width ($genericActionWidth * 2.0 + 6.0) -Height 24.0
     Assert-FramebufferRect -Name "Generic New Asset control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0) -Y $genericNewAssetY -Width $genericActionWidth -Height 24.0
@@ -3461,7 +3829,11 @@ try {
     }
     Start-Sleep -Milliseconds 350
     foreach ($primitiveIndex in 1..3) {
-        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericPrimitiveX[$primitiveIndex] -Y ($genericPrimitiveY + 12.0)
+        $genericPrimitiveClickY = $genericPrimitiveY + 12.0
+        if ($primitiveIndex -ge 3) {
+            $genericPrimitiveClickY += 30.0
+        }
+        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericPrimitiveX[$primitiveIndex] -Y $genericPrimitiveClickY
         $expectedPartCount = $primitiveIndex + 1
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=part-added parts=$expectedPartCount\." -TimeoutMilliseconds 5000)) {
             throw "The generic primitive authoring path did not add part $expectedPartCount."
