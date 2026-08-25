@@ -29,9 +29,12 @@ function Get-CaptureMetadata {
 
     $match = [regex]::Match(
         $indexText,
-        "(?m)CAPTURE_READY mode=$Mode viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) .* pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) .* giraffe_screen=(?<gminx>[-0-9.]+),(?<gminy>[-0-9.]+),(?<gmaxx>[-0-9.]+),(?<gmaxy>[-0-9.]+) rocket_screen=(?<rminx>[-0-9.]+),(?<rminy>[-0-9.]+),(?<rmaxx>[-0-9.]+),(?<rmaxy>[-0-9.]+) combined_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) giraffe_parts=(?<gp>\d+) rocket_parts=(?<rp>\d+) giraffe_sss_regions=(?<sss>\d+) giraffe_normal_texture_regions=(?<normal>\d+) giraffe_normal_texture_loaded=(?<loaded>\d+) giraffe_normal_texture_fallbacks=(?<fallback>\d+) giraffe_thickness_texture_regions=(?<thickness>\d+) giraffe_thickness_texture_loaded=(?<thicknessLoaded>\d+) giraffe_thickness_texture_fallbacks=(?<thicknessFallback>\d+) settled_frames=(?<sf>\d+) giraffe_provenance=(?<giraffeProvenance>[A-Z_]+) rocket_provenance=(?<rocketProvenance>[A-Z_]+) preset_applied=(?<presetApplied>[01]) draw_expected=1")
+        "(?m)CAPTURE_READY mode=$Mode viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) .* pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) .* giraffe_screen=(?<gminx>[-0-9.]+),(?<gminy>[-0-9.]+),(?<gmaxx>[-0-9.]+),(?<gmaxy>[-0-9.]+) rocket_screen=(?<rminx>[-0-9.]+),(?<rminy>[-0-9.]+),(?<rmaxx>[-0-9.]+),(?<rmaxy>[-0-9.]+) combined_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) giraffe_parts=(?<gp>\d+) rocket_parts=(?<rp>\d+) giraffe_sss_regions=(?<sss>\d+) giraffe_normal_texture_regions=(?<normal>\d+) giraffe_normal_texture_loaded=(?<loaded>\d+) giraffe_normal_texture_fallbacks=(?<fallback>\d+) giraffe_thickness_texture_regions=(?<thickness>\d+) giraffe_thickness_texture_loaded=(?<thicknessLoaded>\d+) giraffe_thickness_texture_fallbacks=(?<thicknessFallback>\d+) settled_frames=(?<sf>\d+) giraffe_provenance=(?<giraffeProvenance>[A-Z_]+) rocket_provenance=(?<rocketProvenance>[A-Z_]+) preset_applied=(?<presetApplied>[01]) capture_subject=(?<captureSubject>pair|giraffe|rocket) draw_expected=1")
     if (-not $match.Success) {
         throw "Showcase evidence is missing valid CAPTURE_READY metadata for $Mode."
+    }
+    if ($match.Groups["captureSubject"].Value -ne "pair") {
+        throw "Showcase evidence metadata for $Mode is not a pair capture."
     }
     return $match
 }

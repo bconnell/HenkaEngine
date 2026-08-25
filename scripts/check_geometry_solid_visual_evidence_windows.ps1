@@ -75,18 +75,30 @@ foreach ($file in $requiredFiles) {
 
 $metadata = [regex]::Matches(
     $indexText,
-    '(?m)^\w[^\r\n]*metadata: CAPTURE_READY mode=(?<mode>[a-z_]+)[^\r\n]*giraffe_provenance=(?<giraffe>[A-Z_]+) rocket_provenance=(?<rocket>[A-Z_]+) preset_applied=(?<preset>[01]) draw_expected=1')
+    '(?m)^\w[^\r\n]*metadata: CAPTURE_READY mode=(?<mode>[a-z_]+)[^\r\n]*giraffe_provenance=(?<giraffe>[A-Z_]+) rocket_provenance=(?<rocket>[A-Z_]+) preset_applied=(?<preset>[01]) capture_subject=(?<subject>pair|giraffe|rocket) draw_expected=1')
 if ($metadata.Count -lt 8) {
     throw "Geometry Solid evidence is missing application readiness metadata for all required views."
 }
+$subjectCounts = @{}
 $editorDerivedFixture = $true
 foreach ($record in $metadata) {
+    $subject = $record.Groups["subject"].Value
+    if (-not $subjectCounts.ContainsKey($subject)) {
+        $subjectCounts[$subject] = 0
+    }
+    ++$subjectCounts[$subject]
     if ($record.Groups["preset"].Value -ne "0") {
         throw "Geometry Solid evidence was produced after an asset-specific preset."
     }
     if ($record.Groups["giraffe"].Value -ne "HENKA_NATIVE_EDITED_FIXTURE" -or
         $record.Groups["rocket"].Value -ne "HENKA_NATIVE_EDITED_FIXTURE") {
         $editorDerivedFixture = $false
+    }
+}
+foreach ($requiredSubject in @("pair", "giraffe", "rocket")) {
+    $minimumCount = if ($requiredSubject -eq "pair") { 2 } else { 3 }
+    if (-not $subjectCounts.ContainsKey($requiredSubject) -or $subjectCounts[$requiredSubject] -lt $minimumCount) {
+        throw "Geometry Solid evidence is missing the required $requiredSubject capture set."
     }
 }
 if ($RequireEditorDerivedFixture -and -not $editorDerivedFixture) {

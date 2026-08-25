@@ -221,13 +221,18 @@ function Capture-HenkaWindowBitmap {
 function Assert-HenkaCaptureMetadata {
     param(
         [Parameter(Mandatory = $true)][string]$Line,
-        [Parameter(Mandatory = $true)][string]$Label
+        [Parameter(Mandatory = $true)][string]$Label,
+        [ValidateSet("pair", "giraffe", "rocket")]
+        [string]$ExpectedSubject = "pair"
     )
 
-    $pattern = '^\s*CAPTURE_READY mode=(?<mode>[a-z_]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) .* giraffe_screen=(?<gminx>[-0-9.]+),(?<gminy>[-0-9.]+),(?<gmaxx>[-0-9.]+),(?<gmaxy>[-0-9.]+) rocket_screen=(?<rminx>[-0-9.]+),(?<rminy>[-0-9.]+),(?<rmaxx>[-0-9.]+),(?<rmaxy>[-0-9.]+) combined_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) giraffe_parts=(?<gp>\d+) rocket_parts=(?<rp>\d+) giraffe_sss_regions=(?<sss>\d+) giraffe_normal_texture_regions=(?<normal>\d+) giraffe_normal_texture_loaded=(?<loaded>\d+) giraffe_normal_texture_fallbacks=(?<fallback>\d+) giraffe_thickness_texture_regions=(?<thickness>\d+) giraffe_thickness_texture_loaded=(?<thicknessLoaded>\d+) giraffe_thickness_texture_fallbacks=(?<thicknessFallback>\d+) settled_frames=(?<sf>\d+) giraffe_provenance=(?<giraffeProvenance>[A-Z_]+) rocket_provenance=(?<rocketProvenance>[A-Z_]+) preset_applied=(?<presetApplied>[01]) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY mode=(?<mode>[a-z_]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) .* giraffe_screen=(?<gminx>[-0-9.]+),(?<gminy>[-0-9.]+),(?<gmaxx>[-0-9.]+),(?<gmaxy>[-0-9.]+) rocket_screen=(?<rminx>[-0-9.]+),(?<rminy>[-0-9.]+),(?<rmaxx>[-0-9.]+),(?<rmaxy>[-0-9.]+) combined_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) giraffe_parts=(?<gp>\d+) rocket_parts=(?<rp>\d+) giraffe_sss_regions=(?<sss>\d+) giraffe_normal_texture_regions=(?<normal>\d+) giraffe_normal_texture_loaded=(?<loaded>\d+) giraffe_normal_texture_fallbacks=(?<fallback>\d+) giraffe_thickness_texture_regions=(?<thickness>\d+) giraffe_thickness_texture_loaded=(?<thicknessLoaded>\d+) giraffe_thickness_texture_fallbacks=(?<thicknessFallback>\d+) settled_frames=(?<sf>\d+) giraffe_provenance=(?<giraffeProvenance>[A-Z_]+) rocket_provenance=(?<rocketProvenance>[A-Z_]+) preset_applied=(?<presetApplied>[01]) capture_subject=(?<captureSubject>pair|giraffe|rocket) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success) {
         throw "Capture readiness metadata was malformed for $Label."
+    }
+    if ($match.Groups["captureSubject"].Value -ne $ExpectedSubject) {
+        throw "Capture readiness metadata targeted $($match.Groups['captureSubject'].Value) but $Label requires $ExpectedSubject."
     }
     if ([int]$match.Groups["sss"].Value -lt 1 -or
         [int]$match.Groups["gp"].Value -lt 13 -or
@@ -254,24 +259,65 @@ function Assert-HenkaCaptureMetadata {
     $midpointY = [double]::Parse($match.Groups["my"].Value, [Globalization.CultureInfo]::InvariantCulture)
     $marginX = $width * 0.04
     $marginY = $height * 0.04
-    $rectangles = @(
-        @("giraffe", "gminx", "gminy", "gmaxx", "gmaxy"),
-        @("rocket", "rminx", "rminy", "rmaxx", "rmaxy")
-    )
+    $rectangles = if ($ExpectedSubject -eq "pair") {
+        @(
+            [pscustomobject]@{ Name = "giraffe"; MinX = "gminx"; MinY = "gminy"; MaxX = "gmaxx"; MaxY = "gmaxy" },
+            [pscustomobject]@{ Name = "rocket"; MinX = "rminx"; MinY = "rminy"; MaxX = "rmaxx"; MaxY = "rmaxy" }
+        )
+    }
+    elseif ($ExpectedSubject -eq "rocket") {
+        @([pscustomobject]@{ Name = "rocket"; MinX = "rminx"; MinY = "rminy"; MaxX = "rmaxx"; MaxY = "rmaxy" })
+    }
+    else {
+        @([pscustomobject]@{ Name = "giraffe"; MinX = "gminx"; MinY = "gminy"; MaxX = "gmaxx"; MaxY = "gmaxy" })
+    }
 
     if ([Math]::Abs($pitch) -gt 0.001 -or [Math]::Abs($roll) -gt 0.001) {
         throw "Capture camera is not level for $Label (pitch=$pitch roll=$roll)."
     }
-    if ([Math]::Abs($midpointX - ($width / 2.0)) -gt ($width * 0.02) -or
-        [Math]::Abs($midpointY - ($height / 2.0)) -gt ($height * 0.02)) {
+    if ($ExpectedSubject -eq "pair" -and
+        ([Math]::Abs($midpointX - ($width / 2.0)) -gt ($width * 0.02) -or
+         [Math]::Abs($midpointY - ($height / 2.0)) -gt ($height * 0.02))) {
         throw "Showcase midpoint is not centered for $Label (midpoint=$midpointX,$midpointY viewport=$($width)x$($height))."
     }
+    if ($ExpectedSubject -ne "pair") {
+        $subjectMinimumX = if ($ExpectedSubject -eq "rocket") {
+            [double]::Parse($match.Groups["rminx"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        }
+        else {
+            [double]::Parse($match.Groups["gminx"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        }
+        $subjectMinimumY = if ($ExpectedSubject -eq "rocket") {
+            [double]::Parse($match.Groups["rminy"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        }
+        else {
+            [double]::Parse($match.Groups["gminy"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        }
+        $subjectMaximumX = if ($ExpectedSubject -eq "rocket") {
+            [double]::Parse($match.Groups["rmaxx"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        }
+        else {
+            [double]::Parse($match.Groups["gmaxx"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        }
+        $subjectMaximumY = if ($ExpectedSubject -eq "rocket") {
+            [double]::Parse($match.Groups["rmaxy"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        }
+        else {
+            [double]::Parse($match.Groups["gmaxy"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        }
+        $subjectMidpointX = ($subjectMinimumX + $subjectMaximumX) / 2.0
+        $subjectMidpointY = ($subjectMinimumY + $subjectMaximumY) / 2.0
+        if ([Math]::Abs($subjectMidpointX - ($width / 2.0)) -gt ($width * 0.02) -or
+            [Math]::Abs($subjectMidpointY - ($height / 2.0)) -gt ($height * 0.02)) {
+            throw "$ExpectedSubject subject is not centered for $Label (midpoint=$subjectMidpointX,$subjectMidpointY viewport=$($width)x$($height))."
+        }
+    }
     foreach ($rectangle in $rectangles) {
-        $name = $rectangle[0]
-        $minX = [double]::Parse($match.Groups[$rectangle[1]].Value, [Globalization.CultureInfo]::InvariantCulture)
-        $minY = [double]::Parse($match.Groups[$rectangle[2]].Value, [Globalization.CultureInfo]::InvariantCulture)
-        $maxX = [double]::Parse($match.Groups[$rectangle[3]].Value, [Globalization.CultureInfo]::InvariantCulture)
-        $maxY = [double]::Parse($match.Groups[$rectangle[4]].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $name = $rectangle.Name
+        $minX = [double]::Parse($match.Groups[$rectangle.MinX].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $minY = [double]::Parse($match.Groups[$rectangle.MinY].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $maxX = [double]::Parse($match.Groups[$rectangle.MaxX].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $maxY = [double]::Parse($match.Groups[$rectangle.MaxY].Value, [Globalization.CultureInfo]::InvariantCulture)
         if ($minX -lt $marginX -or $minY -lt $marginY -or
             $maxX -gt ($width - $marginX) -or $maxY -gt ($height - $marginY) -or
             $maxX -le $minX -or $maxY -le $minY) {
@@ -281,7 +327,7 @@ function Assert-HenkaCaptureMetadata {
     if ([int]$match.Groups["gp"].Value -lt 1 -or
         [int]$match.Groups["rp"].Value -lt 1 -or
         [int]$match.Groups["sf"].Value -lt 3) {
-        throw "Capture readiness did not prove both subjects and settled frames for $Label."
+        throw "Capture readiness did not prove the subject meshes and settled frames for $Label."
     }
 
     return [pscustomobject]@{
@@ -444,6 +490,16 @@ if ($IncludeGiraffeInspection) {
             }
             Assert-HenkaSandboxCaptureReady -Handle $handle -Label $inspectionMode.Label
             $metadataLine = Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $inspectionMode.Label
+            $inspectionSubject = if ($inspectionMode.Label -match "_wide_") {
+                "pair"
+            }
+            elseif ($inspectionMode.Label -like "rocket_*") {
+                "rocket"
+            }
+            else {
+                "giraffe"
+            }
+            Assert-HenkaCaptureMetadata -Line $metadataLine -Label $inspectionMode.Label -ExpectedSubject $inspectionSubject | Out-Null
             Start-Sleep -Milliseconds 150
             Assert-HenkaSandboxCaptureReady -Handle $handle -Label $inspectionMode.Label
             $rect = New-Object HenkaVisualCaptureNativeMethods+RECT

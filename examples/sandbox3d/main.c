@@ -7475,6 +7475,7 @@ static void sandbox3d_report_capture_ready(
     henka_vec3 maximum;
     henka_entity giraffe_entity;
     henka_entity rocket_entity;
+    bool subject_capture;
 
     if (engine == NULL || state == NULL ||
         (!state->capture_mode_requested && !state->startup_capture_requested) ||
@@ -7482,6 +7483,8 @@ static void sandbox3d_report_capture_ready(
     {
         return;
     }
+    subject_capture = state->showcase_capture_view_requested &&
+        state->showcase_capture_view != SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE;
     viewport = state->frame_layout.scene_viewport;
     giraffe_entity = sandbox3d_find_showcase_entity(state, "Showcase Giraffe ");
     rocket_entity = sandbox3d_find_showcase_entity(state, "Showcase Rocket ");
@@ -7501,19 +7504,54 @@ static void sandbox3d_report_capture_ready(
             &rocket_ready_part_count) ||
         giraffe_part_count != giraffe_ready_part_count ||
         rocket_part_count != rocket_ready_part_count ||
-        !henka_camera_is_valid(&state->camera) ||
-        !sandbox3d_project_showcase_bounds(
-            &state->camera,
-            viewport,
-            giraffe_bounds,
-            &giraffe_minimum,
-            &giraffe_maximum) ||
-        !sandbox3d_project_showcase_bounds(
-            &state->camera,
-            viewport,
-            rocket_bounds,
-            &rocket_minimum,
-            &rocket_maximum))
+        !henka_camera_is_valid(&state->camera))
+    {
+        state->capture_settled_frames = 0U;
+        return;
+    }
+
+    if (subject_capture)
+    {
+        giraffe_minimum = (henka_vec2){0.0f, 0.0f};
+        giraffe_maximum = (henka_vec2){0.0f, 0.0f};
+        rocket_minimum = (henka_vec2){0.0f, 0.0f};
+        rocket_maximum = (henka_vec2){0.0f, 0.0f};
+        if (state->showcase_capture_rocket_requested)
+        {
+            if (!sandbox3d_project_showcase_bounds(
+                    &state->camera,
+                    viewport,
+                    rocket_bounds,
+                    &rocket_minimum,
+                    &rocket_maximum))
+            {
+                state->capture_settled_frames = 0U;
+                return;
+            }
+        }
+        else if (!sandbox3d_project_showcase_bounds(
+                &state->camera,
+                viewport,
+                giraffe_bounds,
+                &giraffe_minimum,
+                &giraffe_maximum))
+        {
+            state->capture_settled_frames = 0U;
+            return;
+        }
+    }
+    else if (!sandbox3d_project_showcase_bounds(
+                &state->camera,
+                viewport,
+                giraffe_bounds,
+                &giraffe_minimum,
+                &giraffe_maximum) ||
+             !sandbox3d_project_showcase_bounds(
+                &state->camera,
+                viewport,
+                rocket_bounds,
+                &rocket_minimum,
+                &rocket_maximum))
     {
         state->capture_settled_frames = 0U;
         return;
@@ -7525,22 +7563,31 @@ static void sandbox3d_report_capture_ready(
         return;
     }
 
-    minimum = (henka_vec3){
-        fminf(giraffe_bounds.center.x - giraffe_bounds.extents.x,
-              rocket_bounds.center.x - rocket_bounds.extents.x),
-        fminf(giraffe_bounds.center.y - giraffe_bounds.extents.y,
-              rocket_bounds.center.y - rocket_bounds.extents.y),
-        fminf(giraffe_bounds.center.z - giraffe_bounds.extents.z,
-              rocket_bounds.center.z - rocket_bounds.extents.z)};
-    maximum = (henka_vec3){
-        fmaxf(giraffe_bounds.center.x + giraffe_bounds.extents.x,
-              rocket_bounds.center.x + rocket_bounds.extents.x),
-        fmaxf(giraffe_bounds.center.y + giraffe_bounds.extents.y,
-              rocket_bounds.center.y + rocket_bounds.extents.y),
-        fmaxf(giraffe_bounds.center.z + giraffe_bounds.extents.z,
-              rocket_bounds.center.z + rocket_bounds.extents.z)};
-    combined_bounds.center = henka_vec3_scale(henka_vec3_add(minimum, maximum), 0.5f);
-    combined_bounds.extents = henka_vec3_scale(henka_vec3_subtract(maximum, minimum), 0.5f);
+    if (subject_capture)
+    {
+        combined_bounds = state->showcase_capture_rocket_requested
+            ? rocket_bounds
+            : giraffe_bounds;
+    }
+    else
+    {
+        minimum = (henka_vec3){
+            fminf(giraffe_bounds.center.x - giraffe_bounds.extents.x,
+                  rocket_bounds.center.x - rocket_bounds.extents.x),
+            fminf(giraffe_bounds.center.y - giraffe_bounds.extents.y,
+                  rocket_bounds.center.y - rocket_bounds.extents.y),
+            fminf(giraffe_bounds.center.z - giraffe_bounds.extents.z,
+                  rocket_bounds.center.z - rocket_bounds.extents.z)};
+        maximum = (henka_vec3){
+            fmaxf(giraffe_bounds.center.x + giraffe_bounds.extents.x,
+                  rocket_bounds.center.x + rocket_bounds.extents.x),
+            fmaxf(giraffe_bounds.center.y + giraffe_bounds.extents.y,
+                  rocket_bounds.center.y + rocket_bounds.extents.y),
+            fmaxf(giraffe_bounds.center.z + giraffe_bounds.extents.z,
+                  rocket_bounds.center.z + rocket_bounds.extents.z)};
+        combined_bounds.center = henka_vec3_scale(henka_vec3_add(minimum, maximum), 0.5f);
+        combined_bounds.extents = henka_vec3_scale(henka_vec3_subtract(maximum, minimum), 0.5f);
+    }
     if (henka_camera_world_to_screen(
             &state->camera,
             viewport.width,
@@ -7555,7 +7602,7 @@ static void sandbox3d_report_capture_ready(
     }
 
     printf(
-        "CAPTURE_READY mode=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f giraffe_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f rocket_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f combined_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f giraffe_screen=%.2f,%.2f,%.2f,%.2f rocket_screen=%.2f,%.2f,%.2f,%.2f combined_midpoint=%.2f,%.2f giraffe_parts=%zu rocket_parts=%zu giraffe_sss_regions=%zu giraffe_normal_texture_regions=%zu giraffe_normal_texture_loaded=%zu giraffe_normal_texture_fallbacks=%zu giraffe_thickness_texture_regions=%zu giraffe_thickness_texture_loaded=%zu giraffe_thickness_texture_fallbacks=%zu settled_frames=%u giraffe_provenance=%s rocket_provenance=%s preset_applied=%d draw_expected=1\n",
+        "CAPTURE_READY mode=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f giraffe_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f rocket_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f combined_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f giraffe_screen=%.2f,%.2f,%.2f,%.2f rocket_screen=%.2f,%.2f,%.2f,%.2f combined_midpoint=%.2f,%.2f giraffe_parts=%zu rocket_parts=%zu giraffe_sss_regions=%zu giraffe_normal_texture_regions=%zu giraffe_normal_texture_loaded=%zu giraffe_normal_texture_fallbacks=%zu giraffe_thickness_texture_regions=%zu giraffe_thickness_texture_loaded=%zu giraffe_thickness_texture_fallbacks=%zu settled_frames=%u giraffe_provenance=%s rocket_provenance=%s preset_applied=%d capture_subject=%s draw_expected=1\n",
         state->startup_capture_requested
             ? "startup"
             : henka_viewport_shading_mode_get_setting_value(state->capture_mode),
@@ -7612,7 +7659,10 @@ static void sandbox3d_report_capture_ready(
         sandbox3d_showcase_provenance(state, giraffe_entity),
         sandbox3d_showcase_provenance(state, rocket_entity),
         ((sandbox3d_is_showcase_giraffe_entity(state, giraffe_entity) && state->giraffe_asset_specific_preset_applied) ||
-            (sandbox3d_is_showcase_rocket_entity(state, rocket_entity) && state->rocket_asset_specific_preset_applied)) ? 1 : 0);
+            (sandbox3d_is_showcase_rocket_entity(state, rocket_entity) && state->rocket_asset_specific_preset_applied)) ? 1 : 0,
+        subject_capture
+            ? (state->showcase_capture_rocket_requested ? "rocket" : "giraffe")
+            : "pair");
     fflush(stdout);
     state->capture_metadata_reported = true;
 }
@@ -11698,6 +11748,8 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
         const char* showcase_subject_prefix = state->showcase_capture_rocket_requested
             ? "Showcase Rocket"
             : "Showcase Giraffe";
+        size_t showcase_part_count = 0U;
+        size_t showcase_ready_part_count = 0U;
         float showcase_yaw;
         float showcase_pitch;
 
@@ -11713,26 +11765,43 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
                 {
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_FRONT:
                         showcase_yaw = -HENKA_PI * 0.5f;
-                        have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
-                            state, showcase_subject_prefix, &showcase_bounds);
+                        have_showcase_bounds = sandbox3d_collect_named_showcase_capture_bounds(
+                            state,
+                            showcase_subject_prefix,
+                            &showcase_bounds,
+                            &showcase_part_count,
+                            &showcase_ready_part_count);
                         break;
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_THREE_QUARTER:
                         showcase_yaw = -0.92f;
-                        have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
-                            state, showcase_subject_prefix, &showcase_bounds);
+                        have_showcase_bounds = sandbox3d_collect_named_showcase_capture_bounds(
+                            state,
+                            showcase_subject_prefix,
+                            &showcase_bounds,
+                            &showcase_part_count,
+                            &showcase_ready_part_count);
                         break;
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_PROFILE:
                         showcase_yaw = state->showcase_capture_rocket_requested
                             ? HENKA_PI
                             : 0.0f;
-                        have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
-                            state, showcase_subject_prefix, &showcase_bounds);
+                        have_showcase_bounds = sandbox3d_collect_named_showcase_capture_bounds(
+                            state,
+                            showcase_subject_prefix,
+                            &showcase_bounds,
+                            &showcase_part_count,
+                            &showcase_ready_part_count);
                         break;
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE:
                     default:
                         showcase_yaw = -HENKA_PI * 0.5f;
                         have_showcase_bounds = sandbox3d_get_scene_framing_bounds(state, &showcase_bounds);
                         break;
+                }
+                if (state->showcase_capture_view != SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE &&
+                    showcase_part_count != showcase_ready_part_count)
+                {
+                    have_showcase_bounds = false;
                 }
             }
             else

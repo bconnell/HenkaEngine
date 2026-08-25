@@ -138,11 +138,15 @@ an older launch out of the evidence path; the staged runtime is disposable
 build output and is not a source or package input.
 
 The capture process waits up to a bounded 20 seconds for a CAPTURE_READY record
-from the real application. That record proves both named subject groups are
-visible, their authoritative bounds and render meshes are ready, the final
-Scene View viewport is known, the front camera is level, the combined midpoint
-is centered, both projected rectangles have safety margins, and three settled
-frames have completed. Full showcase captures declare the `FULL_SHOWCASE`
+from the real application. Pair captures identify `capture_subject=pair` and
+prove both named subject groups are visible, their authoritative bounds and
+render meshes are ready, the final Scene View viewport is known, the front
+camera is level, the combined midpoint is centered, both projected rectangles
+have safety margins, and three settled frames have completed. Subject-specific
+captures identify `capture_subject=giraffe` or `capture_subject=rocket` and
+apply the same readiness, level-camera, centered-subject, and safety-margin
+checks only to the requested subject; the off-camera companion is not treated
+as a capture failure. Full showcase captures declare the `FULL_SHOWCASE`
 evidence profile; inspection-only runs should use `GIRAFFE_INSPECTION` and must
 not be used with this full validator. The validator also requires matching readiness metadata
 for Solid, Material Preview, and Rendered before checking the images. It then
