@@ -14,6 +14,7 @@ if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
 }
 [IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 
+$LASTEXITCODE = 0
 & $generator -OutputDirectory $OutputDirectory
 if ($LASTEXITCODE -ne 0) {
     throw "Showcase generator failed with exit code $LASTEXITCODE."
@@ -24,6 +25,7 @@ try {
         Remove-Item -LiteralPath $determinismDirectory -Recurse -Force
     }
     [IO.Directory]::CreateDirectory($determinismDirectory) | Out-Null
+    $LASTEXITCODE = 0
     & $generator -OutputDirectory $determinismDirectory
     if ($LASTEXITCODE -ne 0) {
         throw "Showcase generator determinism rerun failed with exit code $LASTEXITCODE."
