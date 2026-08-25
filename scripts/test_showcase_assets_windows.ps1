@@ -9,6 +9,19 @@ Add-Type -AssemblyName System.Drawing
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $generator = Join-Path $repoRoot "scripts\generate_showcase_assets.ps1"
+
+function Get-ShowcaseFileHash {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([System.BitConverter]::ToString(
+            $sha256.ComputeHash([IO.File]::ReadAllBytes($Path)))).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
 if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
     throw "OutputDirectory must be absolute."
 }
@@ -41,8 +54,8 @@ try {
             "rocket_base_color.png",
             "rocket_detail_normal.png",
             "rocket_metallic_roughness.png")) {
-        $firstHash = (Get-FileHash -LiteralPath (Join-Path $OutputDirectory $deterministicFile) -Algorithm SHA256).Hash
-        $secondHash = (Get-FileHash -LiteralPath (Join-Path $determinismDirectory $deterministicFile) -Algorithm SHA256).Hash
+        $firstHash = Get-ShowcaseFileHash (Join-Path $OutputDirectory $deterministicFile)
+        $secondHash = Get-ShowcaseFileHash (Join-Path $determinismDirectory $deterministicFile)
         if ($firstHash -ne $secondHash) {
             throw "Showcase generator output is not deterministic for '$deterministicFile'."
         }
