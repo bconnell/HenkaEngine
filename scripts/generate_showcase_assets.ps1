@@ -1104,8 +1104,7 @@ function New-Giraffe {
         (New-Material "Giraffe Hoof" @(0.055, 0.012, 0.004, 1.0) 0.0 0.66 0.01 0.26 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Mane" @(0.075, 0.014, 0.003, 1.0) 0.0 0.74 0.01 0.30 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Nose" @(0.055, 0.006, 0.002, 1.0) 0.0 0.58 0.01 0.22 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Joint" @(0.20, 0.085, 0.022, 1.0) 0.0 0.64 0.01 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Skin Transition" @(1.0, 1.0, 1.0, 1.0) 0.0 0.82 0.0 0.62 @(0.028, 0.009, 0.002) 0.66 -BaseColorTextureIndex 2 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1))
+        (New-Material "Giraffe Joint" @(0.20, 0.085, 0.022, 1.0) 0.0 0.64 0.01 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1))
     $tan = New-Part 0
     $spots = New-Part 1
     $cream = New-Part 2
@@ -1119,7 +1118,6 @@ function New-Giraffe {
     $mane = New-Part 10
     $nose = New-Part 11
     $joint = New-Part 12
-    $transition = New-Part 13
     # Keep the mascot identity restrained, but use continuous profiles and
     # believable curvature so the silhouette does not read as primitive
     # assembly when inspected from the authored front and three-quarter views.
@@ -1139,7 +1137,11 @@ function New-Giraffe {
     # Keep the head subordinate to the long neck and torso. The earlier
     # mascot-scale head overwhelmed the silhouette even after the torso loft
     # was made continuous.
-    Add-Ellipsoid $tan @(0.0, 3.91, 1.08) @(0.36, 0.31, 0.48) 36 64
+    Add-HorizontalLoft $tan `
+        @(0.72, 0.82, 0.96, 1.12, 1.28, 1.42, 1.54) `
+        @(0.18, 0.27, 0.34, 0.37, 0.34, 0.27, 0.12) `
+        @(0.15, 0.22, 0.28, 0.30, 0.26, 0.20, 0.10) `
+        0.0 @(3.90, 3.91, 3.92, 3.91, 3.86, 3.80, 3.75) 320
     foreach ($leg in @(
             [pscustomobject]@{ X = -0.46; Z = -0.82 },
             [pscustomobject]@{ X = 0.46; Z = -0.82 },
@@ -1162,12 +1164,9 @@ function New-Giraffe {
             ($legZBase * [float]0.92),
             ($legZBase * [float]0.80),
             ($legZBase * [float]0.68))
-        Add-CurvedLimb $tan $legY $legX $legZ @(0.15, 0.16, 0.155, 0.145, 0.20, 0.27) @(0.16, 0.17, 0.16, 0.15, 0.22, 0.30) 48
+        Add-CurvedLimb $tan $legY $legX $legZ @(0.15, 0.16, 0.155, 0.16, 0.24, 0.32) @(0.16, 0.17, 0.16, 0.17, 0.27, 0.36) 48
         Add-Ellipsoid $hoof @($legXBase, 0.08, $legZBase + 0.015) @(0.15, 0.060, 0.19) 16 28
         Add-Ellipsoid $joint @($legXBase, 0.88, $legZBase + 0.012) @(0.125, 0.085, 0.11) 12 22
-        $transitionX = [float]($legXBase * 0.58)
-        $transitionZ = [float]($legZBase * 0.68)
-        Add-Ellipsoid $transition @($transitionX, 1.42, $transitionZ) @(0.29, 0.28, 0.36) 20 32
     }
     # Model the ears as compact, flattened lobes in the head plane. The
     # previous deep capsules read like small missiles when viewed from the
@@ -1197,20 +1196,23 @@ function New-Giraffe {
     # The face is built as an elongated muzzle with small, recessed dark eyes
     # and a neutral lip crease. The model intentionally avoids oversized
     # highlights or a smiling mouth so its expression remains anatomical.
-    Add-Ellipsoid $cream @(0.0, 3.67, 1.56) @(0.22, 0.12, 0.24) 20 36
-    Add-Ellipsoid $cream @(0.0, 3.53, 1.73) @(0.15, 0.065, 0.14) 16 30
-    Add-Ellipsoid $eyes @(-0.155, 4.02, 1.39) @(0.020, 0.034, 0.022) 16 28
-    Add-Ellipsoid $eyes @(0.155, 4.02, 1.39) @(0.020, 0.034, 0.022) 16 28
-    Add-Ellipsoid $iris @(-0.155, 4.02, 1.415) @(0.010, 0.020, 0.008) 12 24
-    Add-Ellipsoid $iris @(0.155, 4.02, 1.415) @(0.010, 0.020, 0.008) 12 24
-    Add-Ellipsoid $details @(-0.155, 4.058, 1.402) @(0.036, 0.008, 0.010) 8 18
-    Add-Ellipsoid $details @(0.155, 4.058, 1.402) @(0.036, 0.008, 0.010) 8 18
+    Add-HorizontalLoft $cream `
+        @(1.34, 1.44, 1.58, 1.72, 1.86, 1.94) `
+        @(0.20, 0.23, 0.22, 0.17, 0.13, 0.08) `
+        @(0.12, 0.14, 0.13, 0.10, 0.075, 0.045) `
+        0.0 @(3.68, 3.67, 3.65, 3.62, 3.60, 3.59) 64
+    Add-Ellipsoid $eyes @(-0.21, 4.02, 1.39) @(0.020, 0.034, 0.022) 16 28
+    Add-Ellipsoid $eyes @(0.21, 4.02, 1.39) @(0.020, 0.034, 0.022) 16 28
+    Add-Ellipsoid $iris @(-0.21, 4.02, 1.415) @(0.010, 0.020, 0.008) 12 24
+    Add-Ellipsoid $iris @(0.21, 4.02, 1.415) @(0.010, 0.020, 0.008) 12 24
+    Add-Ellipsoid $details @(-0.21, 4.058, 1.402) @(0.036, 0.008, 0.010) 8 18
+    Add-Ellipsoid $details @(0.21, 4.058, 1.402) @(0.036, 0.008, 0.010) 8 18
     Add-Ellipsoid $details @(-0.075, 3.69, 1.895) @(0.030, 0.018, 0.010) 8 14
     Add-Ellipsoid $details @(0.075, 3.69, 1.895) @(0.030, 0.018, 0.010) 8 14
     Add-Ellipsoid $smile @(0.0, 3.53, 1.855) @(0.065, 0.008, 0.006) 8 16
     Add-Ellipsoid $nose @(-0.075, 3.69, 1.915) @(0.024, 0.018, 0.012) 10 20
     Add-Ellipsoid $nose @(0.075, 3.69, 1.915) @(0.024, 0.018, 0.012) 10 20
-    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone, $hoof, $mane, $nose, $joint, $transition); Materials = $materials }
+    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone, $hoof, $mane, $nose, $joint); Materials = $materials }
 }
 
 function New-Rocket {

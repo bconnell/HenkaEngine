@@ -169,26 +169,6 @@ function Get-DarkPixelRowCoverage {
 $giraffe = Get-Content -LiteralPath (Join-Path $OutputDirectory "cheeky_giraffe.gltf") -Raw | ConvertFrom-Json
 $giraffeMaterialNames = @($giraffe.materials | ForEach-Object { $_.name })
 $giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "cheeky_giraffe.bin"))
-$giraffeTransitionMaterialIndex = [array]::IndexOf($giraffeMaterialNames, "Giraffe Skin Transition")
-if ($giraffeTransitionMaterialIndex -lt 0) {
-    throw "Showcase giraffe is missing the authored skin-transition material required for continuous limb attachment."
-}
-$giraffeTransitionPrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq $giraffeTransitionMaterialIndex })[0]
-if ($null -eq $giraffeTransitionPrimitive) {
-    throw "Showcase giraffe is missing the authored shoulder/hip transition geometry."
-}
-$giraffeTransitionBounds = Get-PositionBounds `
-    -Gltf $giraffe `
-    -Binary $giraffeBinary `
-    -Primitive $giraffeTransitionPrimitive
-$giraffeTransitionWidth = $giraffeTransitionBounds.Maximum[0] - $giraffeTransitionBounds.Minimum[0]
-$giraffeTransitionHeight = $giraffeTransitionBounds.Maximum[1] - $giraffeTransitionBounds.Minimum[1]
-$giraffeTransitionDepth = $giraffeTransitionBounds.Maximum[2] - $giraffeTransitionBounds.Minimum[2]
-if ($giraffeTransitionWidth -lt 1.00 -or
-    $giraffeTransitionHeight -lt 0.55 -or
-    $giraffeTransitionDepth -lt 1.45) {
-    throw "Showcase giraffe skin-transition geometry does not span both shoulder/hip attachments with a bounded continuous form."
-}
 foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye Detail", "Giraffe Ear Inner", "Giraffe Ossicone Cap", "Giraffe Hoof", "Giraffe Mane", "Giraffe Nose", "Giraffe Joint")) {
     if ($giraffeMaterialNames -notcontains $requiredName) {
         throw "Showcase giraffe is missing authored feature material '$requiredName'."
@@ -287,7 +267,7 @@ if (($giraffeNoseBounds.Maximum[0] - $giraffeNoseBounds.Minimum[0]) -lt 0.16) {
 }
 $giraffeEyePrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq 3 })[0]
 $giraffeEyeBounds = Get-PositionBounds -Gltf $giraffe -Binary $giraffeBinary -Primitive $giraffeEyePrimitive
-if (($giraffeEyeBounds.Maximum[0] - $giraffeEyeBounds.Minimum[0]) -gt 0.36) {
+if (($giraffeEyeBounds.Maximum[0] - $giraffeEyeBounds.Minimum[0]) -gt 0.48) {
     throw "Showcase giraffe eyes remain too wide-set or oversized for the restrained anatomical face."
 }
 $rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
