@@ -133,21 +133,26 @@ try {
     }
 
     $actionWidth = [Math]::Max(56.0, ($panelWidth - 40.0) / 3.0)
+    $primitiveActionWidth = [Math]::Max(72.0, ($panelWidth - 34.0) / 2.0)
     $nativeActionY = $panelY + 90.0
-    $nameFieldX = $panelX + 14.0 + ($actionWidth * 2.0 + 6.0) / 2.0
-    $nameFieldY = $nativeActionY + 55.0
-    $newAssetX = $panelX + 14.0 + $actionWidth / 2.0
-    $newAssetY = $nativeActionY + 85.0
-    $openAssetX = $panelX + 14.0 + $actionWidth + 6.0 + $actionWidth / 2.0
+    $nameFieldX = $panelX + 14.0 + ($primitiveActionWidth * 2.0 + 6.0) / 2.0
+    # These are framebuffer-space centers derived from the current native
+    # asset layout: the label is at +60, the text field starts at +73, and
+    # the New/Open buttons start at +103.
+    $nameFieldY = $nativeActionY + 85.0
+    $newAssetX = $panelX + 14.0 + $primitiveActionWidth / 2.0
+    $newAssetY = $nativeActionY + 115.0
+    $openAssetX = $panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth / 2.0
     $openAssetY = $newAssetY
     $boxX = $newAssetX
     $boxY = $panelY + 72.0
     $cylinderX = $newAssetX
     $coneX = $openAssetX
-    $sphereX = $panelX + 14.0 + ($actionWidth + 6.0) * 2.0 + $actionWidth / 2.0
+    $sphereX = $newAssetX
     $primitiveY = $nativeActionY + 12.0
     $saveAssetX = $newAssetX
-    $saveAssetY = $nativeActionY + 70.0
+    # Once a document exists, Save/Close start at +88 and are 24px high.
+    $saveAssetY = $nativeActionY + 100.0
     $closeAssetX = $openAssetX
     $closeAssetY = $saveAssetY
 
