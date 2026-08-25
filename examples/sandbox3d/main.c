@@ -49,6 +49,7 @@
 #define SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS 256U
 #define SANDBOX3D_MAX_AUTHORING_OBJECTS SANDBOX3D_AUTHORING_ASSET_PART_CAPACITY
 #define SANDBOX3D_MAX_SCENE_NAME_BYTES 1024U
+#define SANDBOX3D_MAX_LOOP_CUT_COUNT 1024U
 
 static const float g_showcase_giraffe_stage_offset_x = -0.45f;
 static const float g_showcase_rocket_stage_offset_x = 0.90f;
@@ -396,6 +397,7 @@ typedef struct sandbox3d_state
     sandbox3d_authoring_asset_controller* authoring_asset_controller;
     char authoring_asset_name[64];
     char native_authoring_loop_cut_factor[16];
+    char native_authoring_loop_cut_cuts[16];
     char native_authoring_edge_slide_factor[16];
     char native_authoring_extrude_amount[16];
     char native_authoring_loose_vertex_x[16];
@@ -4138,6 +4140,30 @@ static bool sandbox3d_parse_loop_cut_factor(
     }
 
     *out_factor = factor;
+    return true;
+}
+
+static bool sandbox3d_parse_loop_cut_count(
+    const char* text,
+    size_t* out_count)
+{
+    char* end = NULL;
+    unsigned long count;
+
+    if (text == NULL || out_count == NULL || text[0] == '\0')
+    {
+        return false;
+    }
+
+    errno = 0;
+    count = strtoul(text, &end, 10);
+    if (errno == ERANGE || end == NULL || *end != '\0' || count == 0UL ||
+        count > (unsigned long)SANDBOX3D_MAX_LOOP_CUT_COUNT)
+    {
+        return false;
+    }
+
+    *out_count = (size_t)count;
     return true;
 }
 
@@ -25504,7 +25530,29 @@ details_group_authoring:
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 260.0f)
             {
+                bool loop_cut_cuts_changed = false;
+                (void)henka_ui_label(
+                    state->ui,
+                    row.x,
+                    row.y + 7.0f,
+                    0.8f,
+                    "Cuts");
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "authoring_loop_cut_cuts_leading",
+                    (henka_ui_rect){row.x + 42.0f, row.y, 78.0f, 24.0f},
+                    state->native_authoring_loop_cut_cuts,
+                    sizeof(state->native_authoring_loop_cut_cuts),
+                    &loop_cut_cuts_changed);
+                (void)loop_cut_cuts_changed;
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 260.0f)
+            {
                 float loop_cut_factor = 0.0f;
+                size_t loop_cut_count = 0U;
                 bool loop_cut_factor_changed = false;
                 (void)henka_ui_label(
                     state->ui,
@@ -25528,10 +25576,17 @@ details_group_authoring:
                             ? "Refresh"
                             : "Preview"))
                 {
+                    const bool count_valid = sandbox3d_parse_loop_cut_count(
+                        state->native_authoring_loop_cut_cuts,
+                        &loop_cut_count);
                     const bool factor_valid = sandbox3d_parse_loop_cut_factor(
                         state->native_authoring_loop_cut_factor,
                         &loop_cut_factor);
-                    const henka_result cut_result = factor_valid
+                    const henka_result cut_result = count_valid && loop_cut_count > 1U
+                        ? sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
+                            state->authoring_object,
+                            loop_cut_count)
+                        : factor_valid
                         ? sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
                             state->authoring_object,
                             loop_cut_factor)
@@ -25540,8 +25595,12 @@ details_group_authoring:
                         state,
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
-                            ? "Loop Cut preview ready; Apply or Cancel."
-                            : "Loop Cut preview rejected; use a factor between 0 and 1 and select a compatible quad strip.");
+                            ? (loop_cut_count > 1U
+                                ? "Multi-cut preview ready; Apply or Cancel."
+                                : "Loop Cut preview ready; Apply or Cancel.")
+                            : (loop_cut_count > 1U
+                                ? "Multi-cut needs an isolated boundary quad."
+                                : "Loop Cut needs a factor between 0 and 1 and a compatible quad strip."));
                 }
             }
             if (state->authoring_object != NULL &&
@@ -26672,7 +26731,29 @@ details_group_authoring:
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 260.0f)
             {
+                bool loop_cut_cuts_changed = false;
+                (void)henka_ui_label(
+                    state->ui,
+                    row.x,
+                    row.y + 7.0f,
+                    0.8f,
+                    "Cuts");
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "authoring_loop_cut_cuts_top",
+                    (henka_ui_rect){row.x + 42.0f, row.y, 78.0f, 24.0f},
+                    state->native_authoring_loop_cut_cuts,
+                    sizeof(state->native_authoring_loop_cut_cuts),
+                    &loop_cut_cuts_changed);
+                (void)loop_cut_cuts_changed;
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 260.0f)
+            {
                 float loop_cut_factor = 0.0f;
+                size_t loop_cut_count = 0U;
                 bool loop_cut_factor_changed = false;
                 (void)henka_ui_label(
                     state->ui,
@@ -26696,10 +26777,17 @@ details_group_authoring:
                             ? "Refresh"
                             : "Preview"))
                 {
+                    const bool count_valid = sandbox3d_parse_loop_cut_count(
+                        state->native_authoring_loop_cut_cuts,
+                        &loop_cut_count);
                     const bool factor_valid = sandbox3d_parse_loop_cut_factor(
                         state->native_authoring_loop_cut_factor,
                         &loop_cut_factor);
-                    const henka_result cut_result = factor_valid
+                    const henka_result cut_result = count_valid && loop_cut_count > 1U
+                        ? sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
+                            state->authoring_object,
+                            loop_cut_count)
+                        : factor_valid
                         ? sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
                             state->authoring_object,
                             loop_cut_factor)
@@ -26708,8 +26796,12 @@ details_group_authoring:
                         state,
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
-                            ? "Loop Cut preview ready; Apply or Cancel."
-                            : "Loop Cut preview rejected; use a factor between 0 and 1 and select a compatible quad strip.");
+                            ? (loop_cut_count > 1U
+                                ? "Multi-cut preview ready; Apply or Cancel."
+                                : "Loop Cut preview ready; Apply or Cancel.")
+                            : (loop_cut_count > 1U
+                                ? "Multi-cut needs an isolated boundary quad."
+                                : "Loop Cut needs a factor between 0 and 1 and a compatible quad strip."));
                 }
             }
             if (state->authoring_object != NULL &&
@@ -34838,6 +34930,11 @@ int main(int argc, char** argv)
         sizeof(state.native_authoring_loop_cut_factor),
         "%s",
         "0.5");
+    (void)snprintf(
+        state.native_authoring_loop_cut_cuts,
+        sizeof(state.native_authoring_loop_cut_cuts),
+        "%s",
+        "1");
     (void)snprintf(
         state.native_authoring_edge_slide_factor,
         sizeof(state.native_authoring_edge_slide_factor),

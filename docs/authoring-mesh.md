@@ -185,12 +185,12 @@ Edge Slide does not maintain a separate graph traversal. The editor Loop Cut
   (-1, 1), preview, cancel, and one transactional Apply; it moves the loop
   toward deterministic adjacent sides without changing topology and publishes
   through the same transactional source/render/bounds/collider/undo path.
-  The core modeling API also provides a bounded uniformly spaced multi-cut
-  variant for one isolated boundary-only quad; it creates only quad faces and
-  publishes the complete split transactionally. The editor-integrated operator
-  still exposes one cut at a time. Broader editor multi-cut spacing, interior
-  edge cases, and general loop-cut networks remain unfinished. The same Edge
-  workflow accepts the bounded pairwise
+  The core modeling API and editor-integrated operator also provide a bounded
+  uniformly spaced multi-cut variant for one isolated boundary-only quad; it
+  creates only quad faces and publishes the complete split transactionally
+  through preview, Apply, Cancel, and undo. Broader editor multi-cut spacing,
+  interior edge cases, and general loop-cut networks remain unfinished. The
+  same Edge workflow accepts the bounded pairwise
   vertex-disjoint boundary-edge bevel selection described above and publishes
   it as one undoable transaction.
 Bounded Vertex Extrude is available for a connected open boundary vertex fan,

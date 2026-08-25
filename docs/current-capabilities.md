@@ -171,10 +171,11 @@ authoritative section below.
   exposed through the integrated Vertex selection workflow.
 - Transactional operations also include plane/box creation, duplicate, face
   winding flip, face extrude, inset, planar bevel rings, face subdivision,
-  selected-face deletion, a bounded single-quad face loop cut, and a core-only
+  selected-face deletion, a bounded single-quad face loop cut, and a bounded
   uniformly spaced multi-cut variant for one isolated boundary-only quad.
-  Planar UV projection, island transforms, packing, and seam detection are
-  also available. HAMS v5 writes
+  The integrated Sandbox panel routes that multi-cut through preview,
+  Apply/Cancel, and undo. Planar UV projection, island transforms, packing,
+  and seam detection are also available. HAMS v5 writes
   portable little-endian data
   through unique same-directory temporary files and retains reads for
   checked-in v2/v3/v4 surface-only legacy sources. HAMS v5 is required for
