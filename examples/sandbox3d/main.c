@@ -7529,6 +7529,13 @@ static henka_result sandbox3d_prepare_realism_reference_capture(
     {
         return HENKA_ERROR_UNKNOWN;
     }
+    if (state->grid_entity != HENKA_INVALID_ENTITY &&
+        henka_scene_set_entity_visible(state->scene, state->grid_entity, false) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+    printf("Realism reference capture: debug grid hidden.\n");
+    fflush(stdout);
     return HENKA_SUCCESS;
 }
 
@@ -32307,6 +32314,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         }
     }
     sandbox3d_apply_loaded_settings(engine, state);
+    if (state->realism_reference_capture_requested)
+    {
+        result = sandbox3d_prepare_realism_reference_capture(state);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+    }
     state->startup_frame_pending = !state->capture_mode_requested;
     sandbox3d_editor_ui_state_load(
         state->settings,

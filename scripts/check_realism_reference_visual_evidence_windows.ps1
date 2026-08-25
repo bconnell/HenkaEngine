@@ -27,6 +27,14 @@ foreach ($stderrPath in $stderrPaths) {
     }
 }
 
+$stdoutPaths = Get-ChildItem -LiteralPath $InputDirectory -Filter "realism_reference_*.stdout.txt" -File
+foreach ($stdoutPath in $stdoutPaths) {
+    $stdoutText = Get-Content -LiteralPath $stdoutPath.FullName -Raw
+    if ($stdoutText -notmatch "Realism reference capture: debug grid hidden\.") {
+        throw "Realism reference capture did not prove that the debug grid was hidden in $($stdoutPath.Name)."
+    }
+}
+
 function Get-ReferenceMetadata {
     param(
         [Parameter(Mandatory = $true)][string]$Mode
