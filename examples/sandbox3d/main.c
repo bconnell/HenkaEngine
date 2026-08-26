@@ -10360,14 +10360,30 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     henka_texture_descriptor terrain_normal_descriptor;
     henka_texture_descriptor terrain_metallic_roughness_descriptor;
     henka_terrain_stream_observer stream_observer;
-    unsigned char terrain_layer_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][SANDBOX3D_TERRAIN_TEXTURE_SIZE * SANDBOX3D_TERRAIN_TEXTURE_SIZE * 4U];
-    unsigned char terrain_layer_normal_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][SANDBOX3D_TERRAIN_TEXTURE_SIZE * SANDBOX3D_TERRAIN_TEXTURE_SIZE * 4U];
-    unsigned char terrain_layer_metallic_roughness_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][SANDBOX3D_TERRAIN_TEXTURE_SIZE * SANDBOX3D_TERRAIN_TEXTURE_SIZE * 4U];
+    unsigned char (*terrain_layer_pixels)[SANDBOX3D_TERRAIN_TEXTURE_SIZE * SANDBOX3D_TERRAIN_TEXTURE_SIZE * 4U] = NULL;
+    unsigned char (*terrain_layer_normal_pixels)[SANDBOX3D_TERRAIN_TEXTURE_SIZE * SANDBOX3D_TERRAIN_TEXTURE_SIZE * 4U] = NULL;
+    unsigned char (*terrain_layer_metallic_roughness_pixels)[SANDBOX3D_TERRAIN_TEXTURE_SIZE * SANDBOX3D_TERRAIN_TEXTURE_SIZE * 4U] = NULL;
     henka_result result;
 
     if (engine == NULL || state == NULL || state->scene == NULL || state->basic_shader == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    terrain_layer_pixels = henka_calloc(
+        HENKA_MATERIAL_TERRAIN_LAYER_COUNT,
+        sizeof(*terrain_layer_pixels));
+    terrain_layer_normal_pixels = henka_calloc(
+        HENKA_MATERIAL_TERRAIN_LAYER_COUNT,
+        sizeof(*terrain_layer_normal_pixels));
+    terrain_layer_metallic_roughness_pixels = henka_calloc(
+        HENKA_MATERIAL_TERRAIN_LAYER_COUNT,
+        sizeof(*terrain_layer_metallic_roughness_pixels));
+    if (terrain_layer_pixels == NULL ||
+        terrain_layer_normal_pixels == NULL ||
+        terrain_layer_metallic_roughness_pixels == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto fail;
     }
     terrain_texture_descriptor = henka_texture_descriptor_default_color();
     terrain_texture_descriptor.generate_mipmaps = true;
@@ -10519,6 +10535,12 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             goto fail;
         }
     }
+    henka_free(terrain_layer_pixels);
+    terrain_layer_pixels = NULL;
+    henka_free(terrain_layer_normal_pixels);
+    terrain_layer_normal_pixels = NULL;
+    henka_free(terrain_layer_metallic_roughness_pixels);
+    terrain_layer_metallic_roughness_pixels = NULL;
     world_desc.max_resident_regions = 4U;
     world_desc.max_resident_chunks = 256U;
     world_desc.max_pending_io = 16U;
@@ -10777,6 +10799,9 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     return HENKA_SUCCESS;
 
 fail:
+    henka_free(terrain_layer_pixels);
+    henka_free(terrain_layer_normal_pixels);
+    henka_free(terrain_layer_metallic_roughness_pixels);
     henka_free(samples);
     henka_free(seed_samples);
     henka_terrain_render_runtime_destroy(state->terrain_render);
