@@ -50,6 +50,11 @@ The wide reference keeps the nine subjects in a single deterministic row for
 overview comparison. The close reference uses a non-overlapping 3x3 grid so
 each material receives useful screen area for visual inspection without
 changing the authored fixture or its material assignments.
+The PBR, normal-map, color-space, energy, IBL, and scene-probe reference
+profiles add a restrained neutral, shadowless fixture fill so every evaluated
+subject remains readable while the directional key, shadows, falloff, and
+probe contrast remain visible. The lighting and subsurface profiles retain
+their dedicated spatial-light arrangements instead of using this fill.
 
 The reference fixture's deterministic detail maps are generated at 32x32: the
 normal map is linear normal data, the macro and wood maps are color textures,

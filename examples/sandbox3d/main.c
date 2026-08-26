@@ -33296,11 +33296,18 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         {
             goto fail;
         }
-        if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SCENE_PROBE)
+        if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_PBR ||
+            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_HDR ||
+            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_NORMAL_MAP ||
+            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE ||
+            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY ||
+            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL ||
+            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SCENE_PROBE)
         {
-            /* Keep every probe-reference subject legible without replacing the
-             * directional key and local probe contrast with a flat wash. This
-             * fill is a fixture-only readability aid and does not cast shadows. */
+            /* Keep every material/probe-reference subject legible without
+             * replacing the directional key and local probe contrast with a
+             * flat wash. This fill is a fixture-only readability aid and does
+             * not cast shadows. */
             result = henka_scene_add_light(
                 state->scene,
                 (henka_scene_light_desc){
@@ -33312,7 +33319,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                     16.0f,
                     1.0f,
                     0.5f,
-                    false},
+                    true},
                 &light_index);
             if (result != HENKA_SUCCESS)
             {
