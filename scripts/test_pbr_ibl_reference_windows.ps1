@@ -20,6 +20,10 @@ if ($sandbox -notmatch 'ibl_reference=1' -or
     $sandbox -notmatch 'rendered_ibl_ready') {
     $missing += 'IBL readiness metadata'
 }
+if ($sandbox -notmatch 'IBL Roughness 0\.05' -or
+    $sandbox -notmatch 'ibl_roughness_ladder') {
+    $missing += 'IBL roughness ladder fixture'
+}
 if ($sandbox -notmatch '--capture-realism-reference ibl wide\|close rendered') {
     $missing += 'IBL command help'
 }
@@ -39,7 +43,8 @@ else {
     $checker = Get-Content -LiteralPath $checkerPath -Raw
     if ($checker -notmatch 'roughness' -or
         $checker -notmatch 'prefilter' -or
-        $checker -notmatch 'irradiance') {
+        $checker -notmatch 'irradiance' -or
+        $checker -notmatch 'roughness ladder') {
         $missing += 'IBL response checks'
     }
 }

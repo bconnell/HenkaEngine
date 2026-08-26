@@ -19,7 +19,7 @@ if ($indexText -notmatch "(?m)^Evidence profile: PBR_IBL_REFERENCE\s*$") {
     throw "PBR IBL reference evidence does not declare its dedicated profile."
 }
 
-$metadataPattern = "(?m)CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 ibl_irradiance_resolution=32 ibl_prefilter_levels=5 ibl_brdf_resolution=128 .*viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
+$metadataPattern = "(?m)CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_levels=5 ibl_brdf_resolution=128 .*viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
 $metadata = @([regex]::Matches($indexText, $metadataPattern))
 if ($metadata.Count -ne 1) {
     throw "PBR IBL reference evidence must contain exactly one rendered readiness record."
@@ -119,13 +119,33 @@ if ($statistics.Width -lt 160 -or $statistics.Height -lt 120 -or
     throw "PBR IBL Rendered evidence is empty, too flat, or excessively clipped (mean=$([Math]::Round($statistics.Mean, 2)), standard-deviation=$([Math]::Round($statistics.StandardDeviation, 2)), clipped=$([Math]::Round($statistics.ClippedFraction, 4)))."
 }
 
-$roughCenter = if ($expectedView -eq "close") { @(0.319, 0.235) } else { @(0.125, 0.520) }
-$polishedCenter = if ($expectedView -eq "close") { @(0.506, 0.235) } else { @(0.234, 0.520) }
-$roughLuma = Get-SubjectLuma -Path $renderedPath -CenterX $roughCenter[0] -CenterY $roughCenter[1]
-$polishedLuma = Get-SubjectLuma -Path $renderedPath -CenterX $polishedCenter[0] -CenterY $polishedCenter[1]
-$roughnessDifference = [Math]::Abs($roughLuma - $polishedLuma)
-if ($roughnessDifference -lt 3.0) {
-    throw "PBR IBL prefilter roughness response was not distinguishable between the matched rough and polished metal subjects (rough=$([Math]::Round($roughLuma, 2)), polished=$([Math]::Round($polishedLuma, 2)))."
+$centers = if ($expectedView -eq "close") {
+    @(
+        @(0.319, 0.235), @(0.506, 0.235), @(0.694, 0.235),
+        @(0.319, 0.500), @(0.506, 0.500), @(0.694, 0.500),
+        @(0.319, 0.765), @(0.506, 0.765), @(0.694, 0.765)
+    )
+}
+else {
+    @(
+        @(0.125, 0.520), @(0.234, 0.520), @(0.344, 0.520),
+        @(0.453, 0.520), @(0.562, 0.520), @(0.672, 0.520),
+        @(0.781, 0.520), @(0.891, 0.520), @(0.500, 0.735)
+    )
+}
+$lumas = @()
+foreach ($center in $centers) {
+    $lumas += Get-SubjectLuma -Path $renderedPath -CenterX $center[0] -CenterY $center[1]
+}
+$ladderRange = ($lumas | Measure-Object -Maximum).Maximum - ($lumas | Measure-Object -Minimum).Minimum
+$resolvedSteps = 0
+for ($i = 1; $i -lt $lumas.Count; ++$i) {
+    if ([Math]::Abs($lumas[$i] - $lumas[$i - 1]) -ge 1.5) {
+        ++$resolvedSteps
+    }
+}
+if ($ladderRange -lt 8.0 -or $resolvedSteps -lt 5) {
+    throw "PBR IBL roughness ladder was not visibly resolved (range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, luma=$([string]::Join(',', ($lumas | ForEach-Object { [Math]::Round($_, 1) }))))."
 }
 
-Write-Output "PBR IBL reference validation: passed (rendered-mean=$([Math]::Round($statistics.Mean, 2)), rendered-sd=$([Math]::Round($statistics.StandardDeviation, 2)), clipped-fraction=$([Math]::Round($statistics.ClippedFraction, 4)), roughness-response=$([Math]::Round($roughnessDifference, 2)))."
+Write-Output "PBR IBL reference validation: passed (rendered-mean=$([Math]::Round($statistics.Mean, 2)), rendered-sd=$([Math]::Round($statistics.StandardDeviation, 2)), clipped-fraction=$([Math]::Round($statistics.ClippedFraction, 4)), roughness-ladder-range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps)."

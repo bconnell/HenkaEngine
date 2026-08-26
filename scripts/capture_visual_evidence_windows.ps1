@@ -688,7 +688,7 @@ function Assert-HenkaIblReferenceCaptureMetadata {
         [Parameter(Mandatory = $true)][string]$ExpectedView
     )
 
-    $pattern = '^\s*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 ibl_irradiance_resolution=32 ibl_prefilter_levels=5 ibl_brdf_resolution=128 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_levels=5 ibl_brdf_resolution=128 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success -or
         $match.Groups["view"].Value -ne $ExpectedView -or
@@ -827,7 +827,7 @@ if ($EvidenceProfile -eq "PBR_ENERGY_REFERENCE") {
     $records.Add("PBR energy reference: three dielectric, three metallic, and three secondary-response subjects with bounded clipping; view=$ReferenceView")
 }
 if ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
-    $records.Add("PBR IBL reference: rendered-only nine-subject environment response with 32-sample irradiance, five prefilter levels, and split-sum BRDF data; view=$ReferenceView")
+    $records.Add("PBR IBL reference: rendered-only nine-subject metallic roughness ladder with 32-sample irradiance, five prefilter levels, and split-sum BRDF data; view=$ReferenceView")
 }
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
     $records.Add("Lighting reference: nine deterministic same-material subjects with scene-owned key, fill, and rim sources; view=$ReferenceView")

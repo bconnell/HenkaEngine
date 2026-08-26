@@ -120,14 +120,14 @@ bounded Rendered luminance/clipping. It does not promote the current direct
 lighting, environment, transmission, clearcoat, or sheen approximations to a
 production light-transport model.
 
-The package also exposes a rendered-only IBL calibration reference. It uses
-the ordinary nine-subject PBR board and refuses readiness unless the OpenGL
-renderer reports its generated 32-resolution irradiance cube, five-level
-prefilter chain, and 128-resolution split-sum BRDF LUT as ready. The checker
-then verifies that the matched rough and polished metal subjects remain
-visibly different under that prefiltered environment response while the image
-stays bounded. This is an activation and roughness-response guard for the
-supported OpenGL path, not proof of production HDRI authoring, probe-grid
+The package also exposes a rendered-only IBL calibration reference. It uses a
+dedicated nine-subject metallic roughness ladder (0.05 through 0.95) and
+refuses readiness unless the OpenGL renderer reports its generated
+32-resolution irradiance cube, five-level prefilter chain, and 128-resolution
+split-sum BRDF LUT as ready. The checker then verifies that the ladder remains
+visibly resolved across the prefiltered environment response while the image
+stays bounded. This is an activation and bounded roughness-response guard for
+the supported OpenGL path, not proof of production HDRI authoring, probe-grid
 blending, or universal image-based-lighting accuracy.
 
 ```text
