@@ -183,7 +183,13 @@ try {
         -StderrPath $stderrPath
 
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 30000)) {
-        throw "The editor did not report a usable UI."
+        $startupDiagnostics = ((Read-HenkaSharedText -Path $stdoutPath) + "`n" +
+            (Read-HenkaSharedText -Path $stderrPath)).Trim()
+        $startupDiagnostics = $startupDiagnostics -replace "\s+", " "
+        if ($startupDiagnostics.Length -gt 2048) {
+            $startupDiagnostics = $startupDiagnostics.Substring($startupDiagnostics.Length - 2048)
+        }
+        throw "The editor did not report a usable UI. Startup diagnostics: $startupDiagnostics"
     }
 
     $sceneGeometry = Get-LastMatch `
