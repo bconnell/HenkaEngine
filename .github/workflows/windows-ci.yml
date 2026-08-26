@@ -16,7 +16,11 @@ concurrency:
 
 jobs:
   build-test-package:
-    runs-on: windows-latest
+    # The OpenGL integration suite requires a stable hosted image with the
+    # declared desktop OpenGL baseline. Windows Server 2025 currently falls
+    # back to a legacy context on hosted runners, so keep this job pinned until
+    # that image provides a verified 3.3 core context.
+    runs-on: windows-2022
     timeout-minutes: 50
 
     steps:
@@ -50,6 +54,10 @@ jobs:
       - name: Build Debug
         shell: powershell
         run: .\scripts\build_windows.ps1 -Configuration Debug
+
+      - name: Check OpenGL capability
+        shell: powershell
+        run: .\scripts\test_opengl_capability_windows.ps1 -Configuration Debug
 
       - name: Run tests
         shell: powershell

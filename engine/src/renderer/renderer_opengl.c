@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <henka/log.h>
@@ -762,6 +763,92 @@ static henka_result henka_renderer_configure_gl_attributes(void)
     return HENKA_SUCCESS;
 }
 
+static bool henka_opengl_version_is_supported(const char* version)
+{
+    char* end;
+    const char* minor_text;
+    unsigned long major;
+    unsigned long minor;
+
+    if (version == NULL)
+    {
+        return false;
+    }
+
+    end = NULL;
+    major = strtoul(version, &end, 10);
+    if (end == version || *end != '.')
+    {
+        return false;
+    }
+    minor_text = end + 1;
+    end = NULL;
+    minor = strtoul(minor_text, &end, 10);
+    if (end == minor_text || major > (unsigned long)UINT_MAX ||
+        minor > (unsigned long)UINT_MAX)
+    {
+        return false;
+    }
+
+    return major > 3UL || (major == 3UL && minor >= 3UL);
+}
+
+static bool henka_opengl_log_capability_probe(void)
+{
+    typedef const GLubyte* (APIENTRYP henka_gl_get_string_fn)(GLenum name);
+    henka_gl_get_string_fn get_string;
+    SDL_FunctionPointer get_string_address;
+    SDL_FunctionPointer create_shader_address;
+    const char* video_driver;
+    const char* version;
+    const char* vendor;
+    const char* renderer;
+    int configured_major;
+    int configured_minor;
+    int configured_profile;
+    int configured_accelerated;
+    bool baseline_available;
+
+    get_string = NULL;
+    get_string_address = SDL_GL_GetProcAddress("glGetString");
+    memcpy(&get_string, &get_string_address, sizeof(get_string));
+    create_shader_address = SDL_GL_GetProcAddress("glCreateShader");
+    video_driver = SDL_GetCurrentVideoDriver();
+    version = get_string == NULL ? NULL : (const char*)get_string(GL_VERSION);
+    vendor = get_string == NULL ? NULL : (const char*)get_string(GL_VENDOR);
+    renderer = get_string == NULL ? NULL : (const char*)get_string(GL_RENDERER);
+    configured_major = 0;
+    configured_minor = 0;
+    configured_profile = 0;
+    configured_accelerated = 0;
+    (void)SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &configured_major);
+    (void)SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &configured_minor);
+    (void)SDL_GL_GetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, &configured_profile);
+    (void)SDL_GL_GetAttribute(SDL_GL_ACCELERATED_VISUAL, &configured_accelerated);
+    baseline_available =
+        get_string != NULL &&
+        henka_opengl_version_is_supported(version) &&
+        create_shader_address != NULL;
+
+    HENKA_LOG_INFO(
+        "HENKA_OPENGL_CAPABILITY status=%s stage=context-capability "
+        "video_driver=%s context_requested=%d.%d profile_requested=%d "
+        "accelerated=%d context_obtained=%s vendor=%s renderer=%s "
+        "glCreateShader=%s",
+        baseline_available ? "CONTEXT_READY" : "INFRASTRUCTURE_BLOCKED",
+        video_driver == NULL ? "<unavailable>" : video_driver,
+        configured_major,
+        configured_minor,
+        configured_profile,
+        configured_accelerated,
+        version == NULL ? "<unavailable>" : version,
+        vendor == NULL ? "<unavailable>" : vendor,
+        renderer == NULL ? "<unavailable>" : renderer,
+        create_shader_address == NULL ? "missing" : "available");
+
+    return baseline_available;
+}
+
 static bool henka_opengl_load_functions(void)
 {
 #define HENKA_GL_LOAD(name)                                                                 \
@@ -771,7 +858,10 @@ static bool henka_opengl_load_functions(void)
         proc_address = SDL_GL_GetProcAddress("gl" #name);                                   \
         if (proc_address == NULL)                                                           \
         {                                                                                   \
-            HENKA_LOG_ERROR("failed to load OpenGL function gl%s", #name);                  \
+            HENKA_LOG_ERROR(                                                                 \
+                "HENKA_OPENGL_CAPABILITY status=PRODUCT_FAILURE "                        \
+                "stage=required-entrypoints missing=gl%s",                                \
+                #name);                                                                      \
             return false;                                                                   \
         }                                                                                   \
         memcpy(&g_gl.name, &proc_address, sizeof(proc_address));                            \
@@ -852,6 +942,8 @@ static bool henka_opengl_load_functions(void)
     }
 
 #undef HENKA_GL_LOAD
+    HENKA_LOG_INFO(
+        "HENKA_OPENGL_CAPABILITY status=PASS stage=required-entrypoints");
     return true;
 }
 
@@ -3806,6 +3898,13 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
     if (!SDL_GL_MakeCurrent(state->window, state->gl_context))
     {
         HENKA_LOG_ERROR("SDL_GL_MakeCurrent failed: %s", SDL_GetError());
+        SDL_GL_DestroyContext(state->gl_context);
+        henka_free(state);
+        return HENKA_ERROR_RENDERER;
+    }
+
+    if (!henka_opengl_log_capability_probe())
+    {
         SDL_GL_DestroyContext(state->gl_context);
         henka_free(state);
         return HENKA_ERROR_RENDERER;

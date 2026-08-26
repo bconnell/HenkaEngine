@@ -523,6 +523,15 @@ henka_enable_project_warnings(henka_terrain_mesh_tests)
 add_test(NAME henka_terrain_mesh_tests COMMAND henka_terrain_mesh_tests)
 
 if(HENKA_BUILD_CLIENT)
+add_executable(henka_opengl_capability_probe
+    test_opengl_capability.c
+)
+target_link_libraries(henka_opengl_capability_probe
+    PRIVATE
+        henka
+)
+henka_enable_project_warnings(henka_opengl_capability_probe)
+
 add_executable(henka_terrain_render_tests
     test_terrain_render.c
 )
