@@ -130,7 +130,8 @@ typedef enum sandbox3d_realism_reference_kind
     SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_PERFORMANCE,
     SANDBOX3D_REALISM_REFERENCE_KIND_NORMAL_MAP,
     SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE,
-    SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY
+    SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY,
+    SANDBOX3D_REALISM_REFERENCE_KIND_IBL
 } sandbox3d_realism_reference_kind;
 
 typedef enum sandbox3d_sss_reference_variant
@@ -4363,6 +4364,11 @@ static bool sandbox3d_parse_realism_reference_kind(
         *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY;
         return true;
     }
+    if (strcmp(value, "ibl") == 0)
+    {
+        *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_IBL;
+        return true;
+    }
     return false;
 }
 
@@ -8107,6 +8113,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
     const char* capture_normal_map_details;
     const char* capture_color_space_details;
     const char* capture_energy_details;
+    const char* capture_ibl_details;
     float capture_exposure_stops;
 
     if (state == NULL || !state->realism_reference_capture_requested ||
@@ -8124,6 +8131,17 @@ static void sandbox3d_report_realism_reference_capture_ready(
             !diagnostics.rendered_reflection_probe_diffuse_active ||
             !diagnostics.rendered_reflection_probe_prefilter_active ||
             !diagnostics.rendered_reflection_probe_blend_active)
+        {
+            state->capture_settled_frames = 0U;
+            return;
+        }
+    }
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL)
+    {
+        memset(&diagnostics, 0, sizeof(diagnostics));
+        if (engine == NULL ||
+            henka_engine_get_diagnostics(engine, &diagnostics) != HENKA_SUCCESS ||
+            !diagnostics.rendered_ibl_ready)
         {
             state->capture_settled_frames = 0U;
             return;
@@ -8232,6 +8250,10 @@ static void sandbox3d_report_realism_reference_capture_ready(
     {
         capture_prefix = "CAPTURE_READY_ENERGY_REFERENCE";
     }
+    else if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL)
+    {
+        capture_prefix = "CAPTURE_READY_IBL_REFERENCE";
+    }
     else
     {
         capture_prefix = "CAPTURE_READY_REFERENCE";
@@ -8300,8 +8322,12 @@ static void sandbox3d_report_realism_reference_capture_ready(
             SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY
         ? " energy_reference=1 energy_dielectric_count=3 energy_metallic_count=3 energy_transmission_count=3 energy_clipped_channel_limit=254"
         : "";
+    capture_ibl_details = state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_IBL
+        ? " ibl_reference=1 ibl_irradiance_resolution=32 ibl_prefilter_levels=5 ibl_brdf_resolution=128"
+        : "";
     printf(
-        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s%s%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
+        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s%s%s%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
         capture_prefix,
         capture_motion_prefix,
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
@@ -8325,6 +8351,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
         capture_normal_map_details,
         capture_color_space_details,
         capture_energy_details,
+        capture_ibl_details,
         viewport.x,
         viewport.y,
         viewport.width,
@@ -36313,6 +36340,18 @@ int main(int argc, char** argv)
         capture_mode_requested = true;
         realism_reference_capture_requested = true;
     }
+    else if (argc == 5 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
+        sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
+        realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL &&
+        sandbox3d_parse_realism_reference_capture_view(
+            argv[3],
+            &realism_reference_capture_view) &&
+        henka_viewport_shading_mode_parse(argv[4], &capture_mode) == HENKA_SUCCESS &&
+        capture_mode == HENKA_VIEWPORT_SHADING_RENDERED)
+    {
+        capture_mode_requested = true;
+        realism_reference_capture_requested = true;
+    }
     else if (argc == 6 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
         sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
         realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION &&
@@ -36404,7 +36443,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 

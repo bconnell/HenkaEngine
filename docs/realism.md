@@ -120,6 +120,20 @@ bounded Rendered luminance/clipping. It does not promote the current direct
 lighting, environment, transmission, clearcoat, or sheen approximations to a
 production light-transport model.
 
+The package also exposes a rendered-only IBL calibration reference. It uses
+the ordinary nine-subject PBR board and refuses readiness unless the OpenGL
+renderer reports its generated 32-resolution irradiance cube, five-level
+prefilter chain, and 128-resolution split-sum BRDF LUT as ready. The checker
+then verifies that the matched rough and polished metal subjects remain
+visibly different under that prefiltered environment response while the image
+stays bounded. This is an activation and roughness-response guard for the
+supported OpenGL path, not proof of production HDRI authoring, probe-grid
+blending, or universal image-based-lighting accuracy.
+
+```text
+--capture-realism-reference ibl wide|close rendered
+```
+
 The package also exposes a separate lighting reference fixture. It uses nine
 same-material UV-sphere subjects, scene-owned directional/key/fill/rim light
 sources, the shared ground receiver, real shadow maps, and the same OpenGL
@@ -165,6 +179,7 @@ The Windows visual-evidence harness exposes the scene with:
 --capture-realism-reference wide|close solid|material_preview|rendered
 --capture-realism-reference normal_map wide|close solid|material_preview|rendered
 --capture-realism-reference color_space wide|close solid|material_preview|rendered
+--capture-realism-reference ibl wide|close rendered
 --capture-realism-reference lighting wide|close solid|material_preview|rendered
 --capture-realism-reference sss close opaque|thin|thick rendered
 --capture-realism-reference ssgi wide|close rendered
@@ -178,6 +193,9 @@ lighting-prefixed metadata and use the dedicated lighting checker. These are
 calibration and regression fixtures, not proof that every material or renderer
 effect is production-complete. The SSGI motion profile emits its own
 `CAPTURE_READY_SSGI_MOTION_REFERENCE` phase records as described below.
+The IBL reference emits `CAPTURE_READY_IBL_REFERENCE` only after the generated
+irradiance, prefilter, and BRDF resources report ready; it is rendered-only
+because its contract concerns the actual environment-lighting path.
 
 The SSGI reference is Rendered-only because the bounded indirect-diffuse term
 is a fullscreen post-process over the HDR color and depth targets:
@@ -266,9 +284,9 @@ overlap path, not a production probe-grid or multi-probe filtering solution.
 
 ## Direction
 
-The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes deterministic normal-map, color-space, energy-response, exposure-range, and bounded subsurface-response fixtures in addition to the PBR and lighting fixtures. Important follow-up tracks are:
+The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes deterministic normal-map, color-space, energy-response, IBL, exposure-range, and bounded subsurface-response fixtures in addition to the PBR and lighting fixtures. Important follow-up tracks are:
 
-1. extend the PBR, lighting, and HDR reference scenes to validate roughness/metallic response, IBL calibration, and light/shadow stability; dedicated normal-map, color-space, and bounded energy-response foundations are now in place;
+1. extend the PBR, lighting, and HDR reference scenes to validate roughness/metallic response, deeper IBL calibration, and light/shadow stability; dedicated normal-map, color-space, bounded energy-response, and initial IBL activation foundations are now in place;
 2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined; the current SSS fixture only guards the existing bounded response;
 3. extend the bounded screen-space indirect diffuse validation for leaks, halos, over-brightening, and deeper hardware-specific performance characterization; current activation, camera-motion, and gross fixed-reference performance guards are in place;
 4. extend the current scene-probe diffuse foundation into a bounded

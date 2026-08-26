@@ -6,7 +6,7 @@ param(
 
     [string]$ExecutablePath = "",
 
-    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "PBR_NORMAL_MAP_REFERENCE", "PBR_COLOR_SPACE_REFERENCE", "PBR_ENERGY_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE", "SSGI_PERFORMANCE_REFERENCE")]
+    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "PBR_NORMAL_MAP_REFERENCE", "PBR_COLOR_SPACE_REFERENCE", "PBR_ENERGY_REFERENCE", "PBR_IBL_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE", "SSGI_PERFORMANCE_REFERENCE")]
     [string]$EvidenceProfile = "FULL_SHOWCASE",
 
     [ValidateSet("wide", "close")]
@@ -64,7 +64,7 @@ if ($EvidenceProfile -eq "GEOMETRY_SOLID" -and -not $IncludeStartupShowcase) {
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $IncludeGiraffeInspection = $true
 }
-if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE" -or $EvidenceProfile -eq "PBR_COLOR_SPACE_REFERENCE" -or $EvidenceProfile -eq "PBR_ENERGY_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE" -or $EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") -and
+if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE" -or $EvidenceProfile -eq "PBR_COLOR_SPACE_REFERENCE" -or $EvidenceProfile -eq "PBR_ENERGY_REFERENCE" -or $EvidenceProfile -eq "PBR_IBL_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE" -or $EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") -and
     ($IncludeStartupShowcase -or $IncludeGiraffeInspection -or $IncludeTerrain)) {
     throw "REALISM_REFERENCE evidence is a dedicated reference-scene capture and cannot include showcase or terrain extras."
 }
@@ -137,7 +137,7 @@ function Wait-HenkaCaptureReady {
 
     for ($attempt = 0; $attempt -lt 600; ++$attempt) {
         if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
-            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE|_SSGI_PERFORMANCE_REFERENCE|_NORMAL_MAP_REFERENCE|_COLOR_SPACE_REFERENCE|_ENERGY_REFERENCE)? ' |
+            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE|_SSGI_PERFORMANCE_REFERENCE|_NORMAL_MAP_REFERENCE|_COLOR_SPACE_REFERENCE|_ENERGY_REFERENCE|_IBL_REFERENCE)? ' |
                 Select-Object -Last 1
             if ($null -ne $line) {
                 return $line.Line
@@ -681,6 +681,31 @@ function Assert-HenkaEnergyReferenceCaptureMetadata {
     }
 }
 
+function Assert-HenkaIblReferenceCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ExpectedView
+    )
+
+    $pattern = '^\s*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 ibl_irradiance_resolution=32 ibl_prefilter_levels=5 ibl_brdf_resolution=128 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1\s*$'
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success -or
+        $match.Groups["view"].Value -ne $ExpectedView -or
+        $match.Groups["layout"].Value -ne $(if ($ExpectedView -eq "close") { "close_grid" } else { "wide_row" }) -or
+        [int]$match.Groups["texture_edge"].Value -lt 32 -or
+        [int]$match.Groups["count"].Value -ne 9 -or
+        [int]$match.Groups["settled"].Value -lt 3) {
+        throw "PBR IBL reference capture readiness metadata was malformed for $Label."
+    }
+    return [pscustomobject]@{
+        Canonical = ($Line -replace 'mode=[^ ]+', 'mode=shared')
+        Mode = "rendered"
+        View = $match.Groups["view"].Value
+        Layout = $match.Groups["layout"].Value
+    }
+}
+
 [System.IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 Add-Type -AssemblyName System.Drawing
 $modes = @(
@@ -714,6 +739,11 @@ if ($EvidenceProfile -eq "PBR_ENERGY_REFERENCE") {
         @{ Label = "energy_reference_solid"; Arguments = @("--capture-realism-reference", "energy", $ReferenceView, "solid"); File = "energy-reference-$ReferenceView-solid.png" },
         @{ Label = "energy_reference_material_preview"; Arguments = @("--capture-realism-reference", "energy", $ReferenceView, "material_preview"); File = "energy-reference-$ReferenceView-material-preview.png" },
         @{ Label = "energy_reference_rendered"; Arguments = @("--capture-realism-reference", "energy", $ReferenceView, "rendered"); File = "energy-reference-$ReferenceView-rendered.png" }
+    )
+}
+if ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
+    $modes = @(
+        @{ Label = "ibl_reference_rendered"; Arguments = @("--capture-realism-reference", "ibl", $ReferenceView, "rendered"); File = "ibl-reference-$ReferenceView-rendered.png" }
     )
 }
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
@@ -795,6 +825,9 @@ if ($EvidenceProfile -eq "PBR_COLOR_SPACE_REFERENCE") {
 }
 if ($EvidenceProfile -eq "PBR_ENERGY_REFERENCE") {
     $records.Add("PBR energy reference: three dielectric, three metallic, and three secondary-response subjects with bounded clipping; view=$ReferenceView")
+}
+if ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
+    $records.Add("PBR IBL reference: rendered-only nine-subject environment response with 32-sample irradiance, five prefilter levels, and split-sum BRDF data; view=$ReferenceView")
 }
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
     $records.Add("Lighting reference: nine deterministic same-material subjects with scene-owned key, fill, and rim sources; view=$ReferenceView")
@@ -885,6 +918,10 @@ foreach ($mode in $modes) {
         elseif ($EvidenceProfile -eq "PBR_ENERGY_REFERENCE") {
             [void]$captureMetadata.Add(
                 (Assert-HenkaEnergyReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
+        }
+        elseif ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
+            [void]$captureMetadata.Add(
+                (Assert-HenkaIblReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
         }
         elseif ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
             [void]$captureMetadata.Add(
@@ -1235,6 +1272,11 @@ if ($EvidenceProfile -eq "PBR_ENERGY_REFERENCE") {
     & (Join-Path $PSScriptRoot "check_pbr_energy_reference_windows.ps1") `
         -InputDirectory $OutputDirectory
 }
+if ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
+    $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
+    & (Join-Path $PSScriptRoot "check_pbr_ibl_reference_windows.ps1") `
+        -InputDirectory $OutputDirectory
+}
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
     $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
     & (Join-Path $PSScriptRoot "check_lighting_reference_visual_evidence_windows.ps1") `
@@ -1290,6 +1332,9 @@ elseif ($EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE") {
 }
 elseif ($EvidenceProfile -eq "PBR_COLOR_SPACE_REFERENCE") {
     "PBR color-space reference evidence"
+}
+elseif ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
+    "PBR IBL reference evidence"
 }
 else {
     "Same-camera Solid, Material Preview, and Rendered evidence"
