@@ -3,6 +3,28 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $fixtureRoot = Join-Path $repoRoot (".ssgi-motion-visual-validator-test-" + [Guid]::NewGuid().ToString("N"))
+$sandbox = Get-Content (Join-Path $repoRoot 'examples/sandbox3d/main.c') -Raw
+$capture = Get-Content (Join-Path $repoRoot 'scripts/capture_visual_evidence_windows.ps1') -Raw
+$checker = Get-Content (Join-Path $repoRoot 'scripts/check_ssgi_motion_reference_visual_evidence_windows.ps1') -Raw
+$missing = @()
+if ($sandbox -notmatch 'temporal_history_ready' -or
+    $sandbox -notmatch 'temporal_resolve_count' -or
+    $sandbox -notmatch 'temporal_jitter_enabled' -or
+    $sandbox -notmatch 'capture_motion_phase == 2U' -or
+    $sandbox -notmatch 'rendered_temporal_history_valid') {
+    $missing += 'temporal readiness metadata in the sandbox'
+}
+if ($capture -notmatch 'temporal_resolve_count' -or
+    $capture -notmatch 'temporal_jitter_enabled') {
+    $missing += 'temporal readiness parsing in the capture harness'
+}
+if ($checker -notmatch 'temporal_resolve_count' -or
+    $checker -notmatch 'temporal_jitter_enabled') {
+    $missing += 'temporal readiness validation'
+}
+if ($missing.Count -gt 0) {
+    throw "SSGI motion temporal contract is incomplete: $($missing -join ', ')"
+}
 [System.IO.Directory]::CreateDirectory($fixtureRoot) | Out-Null
 Add-Type -AssemblyName System.Drawing
 
@@ -26,9 +48,9 @@ try {
     }
 
     $before = "CAPTURE_READY_SSGI_MOTION_REFERENCE phase=before mode=rendered view=close reference_layout=close_grid reference_texture_edge=32 reference_exposure_stops=0.0000 reference_ssgi_active=1 viewport=0,0,640,360 aspect=1.777778 camera_position=0.0000,0.0000,5.0000 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 reference_bounds=0.0000,1.9000,-3.5000,2.8500,1.8500,1.2500 reference_midpoint=320.00,180.00 reference_count=9 settled_frames=3 draw_expected=1"
-    $after = "CAPTURE_READY_SSGI_MOTION_REFERENCE phase=after mode=rendered view=close reference_layout=close_grid reference_texture_edge=32 reference_exposure_stops=0.0000 reference_ssgi_active=1 viewport=0,0,640,360 aspect=1.777778 camera_position=0.3500,0.0000,4.8000 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 reference_bounds=0.0000,1.9000,-3.5000,2.8500,1.8500,1.2500 reference_midpoint=320.00,180.00 reference_count=9 settled_frames=3 draw_expected=1"
-    $before = $before -replace 'reference_ssgi_active=1 ', 'reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=2 reference_probe_captured_count=2 reference_probe_capture_generation=1 reference_probe_capture_failures=0 '
-    $after = $after -replace 'reference_ssgi_active=1 ', 'reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=2 reference_probe_captured_count=2 reference_probe_capture_generation=1 reference_probe_capture_failures=0 '
+    $after = "CAPTURE_READY_SSGI_MOTION_REFERENCE phase=after mode=rendered view=close reference_layout=close_grid reference_texture_edge=32 reference_exposure_stops=0.0000 reference_ssgi_active=1 viewport=0,0,640,360 aspect=1.777778 camera_position=0.3500,0.0000,4.8000 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 reference_bounds=0.0000,1.9000,-3.5000,2.8500,1.8500,1.2500 reference_midpoint=320.00,180.00 reference_count=9 settled_frames=1 draw_expected=1"
+    $before = $before -replace 'reference_ssgi_active=1 ', 'reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 temporal_history_ready=1 temporal_history_valid=0 temporal_fallback_active=1 temporal_resolve_count=0 temporal_invalidation_count=0 temporal_fallback_frame_count=3 temporal_history_allocation_failures=0 motion_vectors_ready=1 temporal_jitter_enabled=0 reference_probe_enabled_count=2 reference_probe_captured_count=2 reference_probe_capture_generation=1 reference_probe_capture_failures=0 '
+    $after = $after -replace 'reference_ssgi_active=1 ', 'reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 temporal_history_ready=1 temporal_history_valid=1 temporal_fallback_active=0 temporal_resolve_count=4 temporal_invalidation_count=1 temporal_fallback_frame_count=3 temporal_history_allocation_failures=0 motion_vectors_ready=1 temporal_jitter_enabled=1 reference_probe_enabled_count=2 reference_probe_captured_count=2 reference_probe_capture_generation=1 reference_probe_capture_failures=0 '
     @(
         "Source: henka_sandbox3d.exe",
         "Evidence profile: SSGI_MOTION_REFERENCE",
@@ -53,6 +75,20 @@ try {
     }
     if (-not $rejected -or $message -notmatch "camera translation") {
         throw "The SSGI motion reference validator did not reject a missing camera translation."
+    }
+    $afterTemporalFailure = (Get-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt") -Raw) -replace "camera_position=0.0000,0.0000,5.0000", "camera_position=0.3500,0.0000,4.8000" -replace "temporal_resolve_count=4", "temporal_resolve_count=0"
+    $afterTemporalFailure | Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
+    $rejected = $false
+    $message = ""
+    try {
+        & (Join-Path $PSScriptRoot "check_ssgi_motion_reference_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
+    }
+    catch {
+        $rejected = $true
+        $message = $_.Exception.Message
+    }
+    if (-not $rejected -or $message -notmatch "temporal history") {
+        throw "The SSGI motion reference validator did not reject an unresolved moved phase."
     }
     Write-Output "SSGI motion reference visual evidence validator tests passed."
 }

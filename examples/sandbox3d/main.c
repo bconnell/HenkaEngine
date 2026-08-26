@@ -8111,6 +8111,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
     henka_texture_info color_space_srgb_info;
     henka_texture_info color_space_linear_info;
     size_t reference_count;
+    uint32_t required_settled_frames;
     const char* reference_layout;
     const char* capture_prefix;
     const char* capture_variant_prefix;
@@ -8124,6 +8125,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
     const char* capture_probe_prefilter_active;
     const char* capture_probe_blend_prefix;
     const char* capture_probe_blend_active;
+    char capture_temporal_details[256];
     const char* capture_normal_map_details;
     const char* capture_color_space_details;
     const char* capture_energy_details;
@@ -8261,9 +8263,24 @@ static void sandbox3d_report_realism_reference_capture_ready(
         state->capture_settled_frames = 0U;
         return;
     }
-    if (state->capture_settled_frames < 3U)
+    required_settled_frames =
+        state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION &&
+        state->capture_motion_phase == 2U ? 1U : 3U;
+    if (state->capture_settled_frames < required_settled_frames)
     {
         ++state->capture_settled_frames;
+        return;
+    }
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION &&
+        state->capture_motion_phase == 2U &&
+        (!diagnostics.rendered_temporal_history_ready ||
+         !diagnostics.rendered_temporal_history_valid ||
+         diagnostics.rendered_temporal_fallback_active ||
+         diagnostics.rendered_temporal_resolve_count == 0U ||
+         diagnostics.rendered_temporal_history_allocation_failure_count != 0U ||
+         !diagnostics.rendered_motion_vectors_ready ||
+         !diagnostics.rendered_temporal_jitter_enabled))
+    {
         return;
     }
 
@@ -8380,6 +8397,23 @@ static void sandbox3d_report_realism_reference_capture_ready(
         ? " energy_reference=1 energy_dielectric_count=3 energy_metallic_count=3 energy_transmission_count=3 energy_clipped_channel_limit=254"
         : "";
     capture_ibl_details[0] = '\0';
+    capture_temporal_details[0] = '\0';
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION)
+    {
+        (void)snprintf(
+            capture_temporal_details,
+            sizeof(capture_temporal_details),
+            " temporal_history_ready=%u temporal_history_valid=%u temporal_fallback_active=%u temporal_resolve_count=%llu temporal_invalidation_count=%u temporal_fallback_frame_count=%llu temporal_history_allocation_failures=%u motion_vectors_ready=%u temporal_jitter_enabled=%u",
+            diagnostics.rendered_temporal_history_ready ? 1U : 0U,
+            diagnostics.rendered_temporal_history_valid ? 1U : 0U,
+            diagnostics.rendered_temporal_fallback_active ? 1U : 0U,
+            (unsigned long long)diagnostics.rendered_temporal_resolve_count,
+            (unsigned int)diagnostics.rendered_temporal_invalidation_count,
+            (unsigned long long)diagnostics.rendered_temporal_fallback_frame_count,
+            (unsigned int)diagnostics.rendered_temporal_history_allocation_failure_count,
+            diagnostics.rendered_motion_vectors_ready ? 1U : 0U,
+            diagnostics.rendered_temporal_jitter_enabled ? 1U : 0U);
+    }
     if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL)
     {
         (void)snprintf(
@@ -8418,7 +8452,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
         ? " shadow_reference=1 shadow_maps_ready=1"
         : "";
     printf(
-        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
+        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
         capture_prefix,
         capture_motion_prefix,
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
@@ -8442,6 +8476,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
         capture_normal_map_details,
         capture_color_space_details,
         capture_energy_details,
+        capture_temporal_details,
         capture_ibl_details,
         capture_shadow_details,
         viewport.x,

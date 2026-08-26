@@ -24,7 +24,7 @@ if ($indexText -notmatch "(?m)^Evidence profile: SSGI_MOTION_REFERENCE\s*$" -or
 }
 
 $pattern = "(?m)CAPTURE_READY_SSGI_MOTION_REFERENCE phase=(?<phase>before|after) mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
-$pattern = $pattern -replace 'reference_ssgi_active=1 ', 'reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=\d+ reference_probe_captured_count=\d+ reference_probe_capture_generation=\d+ reference_probe_capture_failures=0 '
+$pattern = $pattern -replace 'reference_ssgi_active=1 ', 'reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 temporal_history_ready=(?<history_ready>[01]) temporal_history_valid=(?<history_valid>[01]) temporal_fallback_active=(?<fallback_active>[01]) temporal_resolve_count=(?<resolve_count>\d+) temporal_invalidation_count=(?<invalidation_count>\d+) temporal_fallback_frame_count=(?<fallback_frame_count>\d+) temporal_history_allocation_failures=(?<allocation_failures>\d+) motion_vectors_ready=(?<motion_vectors_ready>[01]) temporal_jitter_enabled=(?<jitter_enabled>[01]) reference_probe_enabled_count=\d+ reference_probe_captured_count=\d+ reference_probe_capture_generation=\d+ reference_probe_capture_failures=0 '
 $matches = [regex]::Matches($indexText, $pattern)
 if ($matches.Count -ne 2) {
     throw "SSGI motion reference evidence must contain exactly one before and one after readiness record."
@@ -45,11 +45,21 @@ foreach ($record in @($before, $after)) {
         [int]$probeHealth.Groups['failures'].Value -ne 0) {
         throw 'SSGI motion metadata did not prove two current captured probes without failures for both phases.'
     }
+    if ([int]$record.Groups['history_ready'].Value -ne 1 -or
+        [int]$record.Groups['allocation_failures'].Value -ne 0 -or
+        ($record.Groups['phase'].Value -eq 'after' -and
+            ([int]$record.Groups['history_valid'].Value -ne 1 -or
+             [int]$record.Groups['fallback_active'].Value -ne 0 -or
+             [uint64]$record.Groups['resolve_count'].Value -eq 0 -or
+             [int]$record.Groups['motion_vectors_ready'].Value -ne 1 -or
+             [int]$record.Groups['jitter_enabled'].Value -ne 1))) {
+        throw 'SSGI motion metadata did not prove a healthy temporal history and resolved moved phase.'
+    }
     if ($record.Groups["view"].Value -ne $expectedView -or
         $record.Groups["layout"].Value -ne $expectedLayout -or
         [int]$record.Groups["texture_edge"].Value -lt 32 -or
         [int]$record.Groups["count"].Value -ne 9 -or
-        [int]$record.Groups["settled"].Value -lt 3) {
+        [int]$record.Groups["settled"].Value -lt $(if ($record.Groups["phase"].Value -eq "after") { 1 } else { 3 })) {
         throw "SSGI motion reference metadata did not prove two stable nine-subject phases."
     }
 }
@@ -172,6 +182,7 @@ $summary = @(
     "Camera motion: deterministic in-process translation dx=$([Math]::Round($cameraDeltaX, 4)) dz=$([Math]::Round($cameraDeltaZ, 4))",
     "Before/after luminance distribution deltas: mean=$([Math]::Round($meanDelta, 3)) stddev=$([Math]::Round($deviationDelta, 3))",
     "Before/after sampled pixel difference: mean_absolute_luma=$([Math]::Round($difference.MeanAbsoluteLumaDifference, 3)) changed_fraction=$([Math]::Round($difference.ChangedFraction, 3))",
+    "Temporal status: the static baseline may begin in fallback; settled and moved perspective phases report explicit history, motion-vector, jitter, and resolve state",
     "Status: automated SSGI camera-motion stability guard passed; human visual inspection remains required"
 )
 $summary | Set-Content -LiteralPath (Join-Path $InputDirectory "ssgi-motion-reference-visual-validation.txt")

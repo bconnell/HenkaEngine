@@ -207,13 +207,15 @@ bool henka_temporal_camera_should_jitter(
     bool camera_static,
     bool camera_cut)
 {
+    /* Keep the sequence alive after a discrete move so valid history can
+     * accumulate on settled frames; projection-only changes still remain
+     * outside the transform-driven temporal path. */
     return
         rendered &&
         hdr_presentation &&
         history_ready &&
         projection_mode ==
             HENKA_CAMERA_PROJECTION_PERSPECTIVE &&
-        camera_transform_moving &&
-        !camera_static &&
+        (camera_transform_moving || camera_static) &&
         !camera_cut;
 }

@@ -583,12 +583,17 @@ function Assert-HenkaSsgiMotionCaptureMetadata {
         [Parameter(Mandatory = $true)][ValidateSet("before", "after")][string]$ExpectedPhase
     )
 
+    $temporalPattern = ' temporal_history_ready=(?<history_ready>[01]) temporal_history_valid=(?<history_valid>[01]) temporal_fallback_active=(?<fallback_active>[01]) temporal_resolve_count=(?<resolve_count>\d+) temporal_invalidation_count=(?<invalidation_count>\d+) temporal_fallback_frame_count=(?<fallback_frame_count>\d+) temporal_history_allocation_failures=(?<allocation_failures>\d+) motion_vectors_ready=(?<motion_vectors_ready>[01]) temporal_jitter_enabled=(?<jitter_enabled>[01])'
+    $temporalMatch = [regex]::Match($Line, $temporalPattern)
+    $Line = [regex]::Replace($Line, $temporalPattern, '')
+
     $pattern = '^\s*CAPTURE_READY_SSGI_MOTION_REFERENCE phase=(?<phase>before|after) mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=(?<enabled>\d+) reference_probe_captured_count=(?<captured>\d+) reference_probe_capture_generation=(?<generation>\d+) reference_probe_capture_failures=(?<failures>\d+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success) {
         throw "SSGI motion reference capture readiness metadata was malformed for $Label."
     }
     $expectedLayout = if ($ExpectedView -eq "close") { "close_grid" } else { "wide_row" }
+    $requiredSettledFrames = if ($ExpectedPhase -eq "after") { 1 } else { 3 }
     if ($match.Groups["phase"].Value -ne $ExpectedPhase -or
         $match.Groups["view"].Value -ne $ExpectedView -or
         $match.Groups["layout"].Value -ne $expectedLayout -or
@@ -598,8 +603,19 @@ function Assert-HenkaSsgiMotionCaptureMetadata {
         [uint64]$match.Groups["generation"].Value -eq 0 -or
         [int]$match.Groups["failures"].Value -ne 0 -or
         [int]$match.Groups["count"].Value -ne 9 -or
-        [int]$match.Groups["sf"].Value -lt 3) {
+        [int]$match.Groups["sf"].Value -lt $requiredSettledFrames) {
         throw "SSGI motion reference capture metadata is incomplete for $Label phase=$ExpectedPhase."
+    }
+    if (-not $temporalMatch.Success -or
+        [int]$temporalMatch.Groups["history_ready"].Value -ne 1 -or
+        [int]$temporalMatch.Groups["allocation_failures"].Value -ne 0 -or
+        ($ExpectedPhase -eq "after" -and
+            ([int]$temporalMatch.Groups["history_valid"].Value -ne 1 -or
+             [int]$temporalMatch.Groups["fallback_active"].Value -ne 0 -or
+             [uint64]$temporalMatch.Groups["resolve_count"].Value -eq 0 -or
+             [int]$temporalMatch.Groups["motion_vectors_ready"].Value -ne 1 -or
+             [int]$temporalMatch.Groups["jitter_enabled"].Value -ne 1))) {
+        throw "SSGI motion temporal readiness metadata is incomplete for $Label phase=$ExpectedPhase."
     }
     return $match
 }

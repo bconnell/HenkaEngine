@@ -266,6 +266,12 @@ continuity in the supported OpenGL path without claiming artifact-free motion
 at every speed, full temporal reconstruction quality, or production global
 illumination.
 
+Each phase also reports temporal history readiness, allocation failures, and
+motion-vector readiness. The static baseline may begin with the safe fallback
+before its first history copy; once history is valid, both settled and moved
+perspective frames keep the bounded jitter/resolve path active, and the moved
+phase must report a valid history, enabled jitter, and a nonzero resolve count.
+
 The performance reference is a separate Rendered-only measurement:
 
 ```text
