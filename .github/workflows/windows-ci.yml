@@ -55,6 +55,10 @@ jobs:
         shell: powershell
         run: .\scripts\build_windows.ps1 -Configuration Debug
 
+      - name: Prepare pinned software OpenGL fallback
+        shell: powershell
+        run: .\scripts\setup_windows_software_opengl.ps1 -TargetDirectory @("build\tests\Debug", "build\examples\sandbox3d\Debug")
+
       - name: Check OpenGL capability
         shell: powershell
         run: .\scripts\test_opengl_capability_windows.ps1 -Configuration Debug
@@ -75,13 +79,17 @@ jobs:
         shell: powershell
         run: .\scripts\check_packaged_sandbox3d_windows.ps1 -NonInteractive -ContractOnly
 
+      - name: Install CI-only OpenGL runtime for packaged smoke
+        shell: powershell
+        run: .\scripts\install_windows_software_opengl.ps1 -SourceDirectory "$env:HENKA_CI_SOFTWARE_OPENGL_ROOT" -TargetDirectory "out\HenkaSandbox3D"
+
       - name: Verify visible native modeling workflow
         shell: powershell
         run: .\scripts\test_visible_native_modeling_windows.ps1
 
       - name: Run bounded packaged soak
         shell: powershell
-        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10 -AllowHeadlessUnavailable
+        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10
 
       - name: Run Release tests
         shell: powershell
@@ -100,8 +108,8 @@ jobs:
         run: .\scripts\check_generated_output_lifecycle_windows.ps1
 
   sanitizer-runtime:
-    runs-on: windows-latest
-    timeout-minutes: 25
+    runs-on: windows-2022
+    timeout-minutes: 40
 
     steps:
       - name: Check out source

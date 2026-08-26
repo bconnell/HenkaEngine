@@ -162,6 +162,15 @@ try {
         -LiteralPath (Join-Path (Split-Path -Parent $executable) "assets") `
         -Destination (Join-Path $runtimeDirectory "assets") `
         -Recurse
+    $softwareOpenGLRoot = [string]$env:HENKA_CI_SOFTWARE_OPENGL_ROOT
+    if (-not [string]::IsNullOrWhiteSpace($softwareOpenGLRoot)) {
+        $softwareOpenGLInstaller = Join-Path $repoRoot "scripts\install_windows_software_opengl.ps1"
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $softwareOpenGLInstaller `
+            -SourceDirectory $softwareOpenGLRoot -TargetDirectory $runtimeDirectory
+        if ($LASTEXITCODE -ne 0) {
+            throw "The CI-only OpenGL runtime could not be installed into the visible modeling runtime."
+        }
+    }
     New-Item -ItemType File -Path $automationInputPath -Force | Out-Null
 
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"

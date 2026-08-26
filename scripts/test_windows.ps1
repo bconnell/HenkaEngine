@@ -79,6 +79,21 @@ Invoke-HenkaNative `
     -WorkingDirectory $repoRoot `
     -Label "Build Henka Engine tests"
 
+$softwareOpenGLRoot = [string]$env:HENKA_CI_SOFTWARE_OPENGL_ROOT
+if (-not [string]::IsNullOrWhiteSpace($softwareOpenGLRoot)) {
+    $softwareOpenGLInstaller = Join-Path $PSScriptRoot "install_windows_software_opengl.ps1"
+    Invoke-HenkaNative `
+        -FilePath "powershell.exe" `
+        -Arguments @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", $softwareOpenGLInstaller,
+            "-SourceDirectory", $softwareOpenGLRoot,
+            "-TargetDirectory", (Join-Path $buildRoot "tests\$Configuration")) `
+        -WorkingDirectory $repoRoot `
+        -Label "Install CI-only OpenGL runtime for tests"
+}
+
 Invoke-HenkaNative `
     -FilePath $ctest `
     -Arguments @("--test-dir", $buildRoot, "--output-on-failure", "-C", $Configuration) `
