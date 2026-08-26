@@ -87,11 +87,29 @@ shadow contrast; together these checks cover the initial reference-scene
 lighting/shadow contract without treating automated metrics as human visual
 approval.
 
+The package also exposes a dedicated subsurface reference fixture. It uses nine
+same-camera, same-geometry, same-light UV-sphere subjects and captures the
+bounded material response at three explicit variants:
+
+```text
+--capture-realism-reference sss close opaque rendered
+--capture-realism-reference sss close thin rendered
+--capture-realism-reference sss close thick rendered
+```
+
+The SSS checker requires matching composition metadata, nine settled subjects,
+and measurable image and center-subject color response between the opaque,
+thin, and thick variants. This proves that authored subsurface amount and
+thickness reach the OpenGL material path with a stable pixel response. It does
+not promote the bounded three-lobe approximation to production multi-scatter,
+screen-space, or ray-traced subsurface transport.
+
 The background-safe capture harness exposes the scene with:
 
 ```text
 --capture-realism-reference wide|close solid|material_preview|rendered
 --capture-realism-reference lighting wide|close solid|material_preview|rendered
+--capture-realism-reference sss close opaque|thin|thick rendered
 ```
 
 Each capture emits `CAPTURE_READY_REFERENCE` metadata proving the selected
@@ -112,10 +130,10 @@ This is not full global illumination. The screen-space method cannot see geometr
 
 ## Direction
 
-The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes a deterministic exposure-range fixture in addition to the PBR and lighting fixtures. Important follow-up tracks are:
+The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes deterministic exposure-range and bounded subsurface-response fixtures in addition to the PBR and lighting fixtures. Important follow-up tracks are:
 
 1. extend the PBR, lighting, and HDR reference scenes to validate energy response, texture color-space handling, normal-map behavior, roughness/metallic response, IBL calibration, and light/shadow stability;
-2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined;
+2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined; the current SSS fixture only guards the existing bounded response;
 3. validate the screen-space indirect diffuse result for leaks, halos, over-brightening, camera-motion instability, and performance;
 4. add a scene-space indirect-light solution that can represent off-screen and hidden contributors, such as a bounded irradiance-probe or probe-grid system;
 

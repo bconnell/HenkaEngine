@@ -121,8 +121,16 @@ typedef enum sandbox3d_realism_reference_kind
 {
     SANDBOX3D_REALISM_REFERENCE_KIND_PBR = 0,
     SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING,
-    SANDBOX3D_REALISM_REFERENCE_KIND_HDR
+    SANDBOX3D_REALISM_REFERENCE_KIND_HDR,
+    SANDBOX3D_REALISM_REFERENCE_KIND_SSS
 } sandbox3d_realism_reference_kind;
+
+typedef enum sandbox3d_sss_reference_variant
+{
+    SANDBOX3D_SSS_REFERENCE_VARIANT_OPAQUE = 0,
+    SANDBOX3D_SSS_REFERENCE_VARIANT_THIN,
+    SANDBOX3D_SSS_REFERENCE_VARIANT_THICK
+} sandbox3d_sss_reference_variant;
 
 typedef enum sandbox3d_utility_view
 {
@@ -625,6 +633,7 @@ typedef struct sandbox3d_state
     sandbox3d_showcase_capture_view showcase_capture_view;
     sandbox3d_realism_reference_capture_view realism_reference_capture_view;
     sandbox3d_realism_reference_kind realism_reference_kind;
+    sandbox3d_sss_reference_variant sss_reference_variant;
     bool capture_exposure_override;
     float capture_exposure_stops;
     henka_viewport_shading_mode capture_mode;
@@ -4258,7 +4267,50 @@ static bool sandbox3d_parse_realism_reference_kind(
         *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_HDR;
         return true;
     }
+    if (strcmp(value, "sss") == 0)
+    {
+        *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_SSS;
+        return true;
+    }
     return false;
+}
+
+static bool sandbox3d_parse_sss_reference_variant(
+    const char* value,
+    sandbox3d_sss_reference_variant* out_variant)
+{
+    if (value == NULL || out_variant == NULL)
+    {
+        return false;
+    }
+    if (strcmp(value, "opaque") == 0)
+    {
+        *out_variant = SANDBOX3D_SSS_REFERENCE_VARIANT_OPAQUE;
+        return true;
+    }
+    if (strcmp(value, "thin") == 0)
+    {
+        *out_variant = SANDBOX3D_SSS_REFERENCE_VARIANT_THIN;
+        return true;
+    }
+    if (strcmp(value, "thick") == 0)
+    {
+        *out_variant = SANDBOX3D_SSS_REFERENCE_VARIANT_THICK;
+        return true;
+    }
+    return false;
+}
+
+static const char* sandbox3d_sss_reference_variant_name(
+    sandbox3d_sss_reference_variant variant)
+{
+    switch (variant)
+    {
+        case SANDBOX3D_SSS_REFERENCE_VARIANT_OPAQUE: return "opaque";
+        case SANDBOX3D_SSS_REFERENCE_VARIANT_THIN: return "thin";
+        case SANDBOX3D_SSS_REFERENCE_VARIANT_THICK: return "thick";
+        default: return "invalid";
+    }
 }
 
 static bool sandbox3d_parse_capture_exposure(
@@ -7760,6 +7812,8 @@ static void sandbox3d_report_realism_reference_capture_ready(
     size_t reference_count;
     const char* reference_layout;
     const char* capture_prefix;
+    const char* capture_variant_prefix;
+    const char* capture_variant_name;
     float capture_exposure_stops;
 
     if (state == NULL || !state->realism_reference_capture_requested ||
@@ -7828,12 +7882,24 @@ static void sandbox3d_report_realism_reference_capture_ready(
     {
         capture_prefix = "CAPTURE_READY_HDR_REFERENCE";
     }
+    else if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSS)
+    {
+        capture_prefix = "CAPTURE_READY_SSS_REFERENCE";
+    }
     else
     {
         capture_prefix = "CAPTURE_READY_REFERENCE";
     }
+    capture_variant_prefix = state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_SSS
+        ? " reference_sss_variant="
+        : "";
+    capture_variant_name = state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_SSS
+        ? sandbox3d_sss_reference_variant_name(state->sss_reference_variant)
+        : "";
     printf(
-        "%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
+        "%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
         capture_prefix,
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
         state->realism_reference_capture_view ==
@@ -7843,6 +7909,8 @@ static void sandbox3d_report_realism_reference_capture_ready(
         reference_layout,
         detail_normal_info.width,
         capture_exposure_stops,
+        capture_variant_prefix,
+        capture_variant_name,
         viewport.x,
         viewport.y,
         viewport.width,
@@ -31784,6 +31852,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             "Lighting Subject 04", "Lighting Subject 05", "Lighting Subject 06",
             "Lighting Subject 07", "Lighting Subject 08", "Lighting Subject 09"
         };
+        static const char* sss_names[SANDBOX3D_REALISM_ENTITY_COUNT] =
+        {
+            "SSS Subject 01", "SSS Subject 02", "SSS Subject 03",
+            "SSS Subject 04", "SSS Subject 05", "SSS Subject 06",
+            "SSS Subject 07", "SSS Subject 08", "SSS Subject 09"
+        };
         static const henka_vec3 realism_positions[SANDBOX3D_REALISM_ENTITY_COUNT] =
         {
             {-6.3f, 0.65f, -2.8f}, {-4.5f, 0.65f, -2.8f}, {-2.7f, 0.65f, -2.8f},
@@ -31803,6 +31877,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         {
             const bool lighting_reference = state->realism_reference_kind ==
                 SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING;
+            const bool sss_reference = state->realism_reference_kind ==
+                SANDBOX3D_REALISM_REFERENCE_KIND_SSS;
             henka_material realism_material = henka_material_default();
             henka_vec3 realism_position = realism_positions[realism_index];
             if (state->realism_reference_capture_requested &&
@@ -31820,34 +31896,42 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 (henka_vec3){1.0f, 1.0f, 1.0f});
             state->realism_entities[realism_index] = henka_scene_create_entity_named(
                 state->scene,
-                lighting_reference
-                    ? lighting_names[realism_index]
-                    : realism_names[realism_index]);
+                sss_reference
+                    ? sss_names[realism_index]
+                    : lighting_reference
+                        ? lighting_names[realism_index]
+                        : realism_names[realism_index]);
             if (state->realism_entities[realism_index] == HENKA_INVALID_ENTITY)
             {
                 result = HENKA_ERROR_OUT_OF_MEMORY;
                 goto fail;
             }
-            realism_material.name = lighting_reference
-                ? lighting_names[realism_index]
-                : realism_names[realism_index];
+            realism_material.name = sss_reference
+                ? sss_names[realism_index]
+                : lighting_reference
+                    ? lighting_names[realism_index]
+                    : realism_names[realism_index];
             realism_material.type = HENKA_MATERIAL_TYPE_LIT;
             realism_material.shader = state->basic_shader;
-            realism_material.base_color = lighting_reference
-                ? (henka_vec4){0.48f, 0.52f, 0.58f, 1.0f}
-                : realism_colors[realism_index];
+            realism_material.base_color = sss_reference
+                ? (henka_vec4){0.62f, 0.30f, 0.18f, 1.0f}
+                : lighting_reference
+                    ? (henka_vec4){0.48f, 0.52f, 0.58f, 1.0f}
+                    : realism_colors[realism_index];
             realism_material.use_lighting = true;
-            realism_material.metallic = lighting_reference
+            realism_material.metallic = sss_reference || lighting_reference
                 ? 0.0f
                 : realism_index < 2 ? 1.0f : 0.0f;
-            realism_material.roughness = lighting_reference
-                ? 0.42f
-                : realism_index == 1 ? 0.08f :
-                    realism_index == 0 ? 0.34f :
-                    realism_index == 2 ? 0.24f :
-                    realism_index == 4 ? 0.72f :
-                    realism_index == 6 ? 0.68f :
-                    realism_index == 7 ? 0.82f : 0.46f;
+            realism_material.roughness = sss_reference
+                ? 0.38f
+                : lighting_reference
+                    ? 0.42f
+                    : realism_index == 1 ? 0.08f :
+                        realism_index == 0 ? 0.34f :
+                        realism_index == 2 ? 0.24f :
+                        realism_index == 4 ? 0.72f :
+                        realism_index == 6 ? 0.68f :
+                        realism_index == 7 ? 0.82f : 0.46f;
             realism_material.clearcoat = !lighting_reference && realism_index == 2 ? 0.9f : 0.0f;
             realism_material.clearcoat_roughness = 0.12f;
             if (!lighting_reference && realism_index == 4)
@@ -31888,6 +31972,25 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 realism_material.thickness = 0.42f;
                 realism_material.roughness = 0.38f;
             }
+            if (sss_reference)
+            {
+                realism_material.subsurface_color = (henka_vec3){1.0f, 0.16f, 0.06f};
+                if (state->sss_reference_variant == SANDBOX3D_SSS_REFERENCE_VARIANT_THIN)
+                {
+                    realism_material.subsurface = 0.62f;
+                    realism_material.thickness = 0.20f;
+                }
+                else if (state->sss_reference_variant == SANDBOX3D_SSS_REFERENCE_VARIANT_THICK)
+                {
+                    realism_material.subsurface = 0.92f;
+                    realism_material.thickness = 0.82f;
+                }
+                else
+                {
+                    realism_material.subsurface = 0.0f;
+                    realism_material.thickness = 0.0f;
+                }
+            }
             result = sandbox3d_configure_entity(
                 state->scene,
                 state->realism_entities[realism_index],
@@ -31906,6 +32009,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 true,
                 lighting_reference
                     ? "Inspect controlled lighting response"
+                    : sss_reference
+                        ? "Inspect bounded subsurface response"
                     : "Inspect realism validation material");
         }
     }
@@ -32434,7 +32539,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         {
             goto fail;
         }
-        if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING)
+        if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING ||
+            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSS)
         {
             result = henka_scene_add_light(
                 state->scene,
@@ -32442,8 +32548,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                     HENKA_SCENE_LIGHT_POINT,
                     (henka_vec3){0.0f, 4.5f, -6.0f},
                     (henka_vec3){0.0f, -1.0f, 0.0f},
-                    (henka_vec3){0.42f, 0.62f, 1.0f},
-                    18.0f,
+                    state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSS
+                        ? (henka_vec3){1.0f, 0.24f, 0.08f}
+                        : (henka_vec3){0.42f, 0.62f, 1.0f},
+                    state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSS
+                        ? 24.0f
+                        : 18.0f,
                     14.0f,
                     1.0f,
                     0.5f,
@@ -35410,6 +35520,7 @@ int main(int argc, char** argv)
     sandbox3d_showcase_capture_view showcase_capture_view;
     sandbox3d_realism_reference_capture_view realism_reference_capture_view;
     sandbox3d_realism_reference_kind realism_reference_kind;
+    sandbox3d_sss_reference_variant sss_reference_variant;
     bool capture_exposure_override;
     float capture_exposure_stops;
     henka_viewport_shading_mode capture_mode;
@@ -35431,6 +35542,7 @@ int main(int argc, char** argv)
     showcase_capture_view = SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE;
     realism_reference_capture_view = SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_WIDE;
     realism_reference_kind = SANDBOX3D_REALISM_REFERENCE_KIND_PBR;
+    sss_reference_variant = SANDBOX3D_SSS_REFERENCE_VARIANT_OPAQUE;
     capture_exposure_override = false;
     capture_exposure_stops = 0.0f;
     capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
@@ -35524,6 +35636,18 @@ int main(int argc, char** argv)
         realism_reference_capture_requested = true;
         capture_exposure_override = true;
     }
+    else if (argc == 6 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
+        sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
+        realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSS &&
+        sandbox3d_parse_realism_reference_capture_view(
+            argv[3],
+            &realism_reference_capture_view) &&
+        sandbox3d_parse_sss_reference_variant(argv[4], &sss_reference_variant) &&
+        henka_viewport_shading_mode_parse(argv[5], &capture_mode) == HENKA_SUCCESS)
+    {
+        capture_mode_requested = true;
+        realism_reference_capture_requested = true;
+    }
     else if (argc == 3 && strcmp(argv[1], "--capture-terrain-mode") == 0 &&
         henka_viewport_shading_mode_parse(argv[2], &capture_mode) == HENKA_SUCCESS)
     {
@@ -35539,7 +35663,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -35607,6 +35731,7 @@ int main(int argc, char** argv)
     state.showcase_capture_view = showcase_capture_view;
     state.realism_reference_capture_view = realism_reference_capture_view;
     state.realism_reference_kind = realism_reference_kind;
+    state.sss_reference_variant = sss_reference_variant;
     state.capture_exposure_override = capture_exposure_override;
     state.capture_exposure_stops = capture_exposure_stops;
     state.capture_mode = capture_mode;
