@@ -15,18 +15,38 @@ if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
 }
 $BuildDirectory = [System.IO.Path]::GetFullPath($BuildDirectory)
 
-$asanRuntime = Get-ChildItem `
-    -Path (Join-Path ${env:ProgramFiles} "Microsoft Visual Studio") `
-    -Filter "clang_rt.asan_dynamic-x86_64.dll" `
-    -File `
-    -Recurse `
-    -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-if ($null -eq $asanRuntime) {
-    throw "MSVC AddressSanitizer runtime clang_rt.asan_dynamic-x86_64.dll was not found."
+function Get-HenkaAddressSanitizerRuntime {
+    $cachePath = Join-Path $BuildDirectory "CMakeCache.txt"
+    $compilerPath = $null
+    if (Test-Path -LiteralPath $cachePath -PathType Leaf) {
+        $compilerLine = Get-Content -LiteralPath $cachePath |
+            Where-Object { $_ -match '^CMAKE_C_COMPILER:FILEPATH=(.+)$' } |
+            Select-Object -First 1
+        if ($null -ne $compilerLine -and $compilerLine -match '^CMAKE_C_COMPILER:FILEPATH=(.+)$') {
+            $compilerPath = $Matches[1].Trim()
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($compilerPath)) {
+        $compilerRuntime = Join-Path (Split-Path -Parent $compilerPath) "clang_rt.asan_dynamic-x86_64.dll"
+        if (Test-Path -LiteralPath $compilerRuntime -PathType Leaf) {
+            return Get-Item -LiteralPath $compilerRuntime
+        }
+    }
+
+    $visualStudioRoot = Join-Path ${env:ProgramFiles} "Microsoft Visual Studio"
+    $fallback = Get-ChildItem `
+        -Path $visualStudioRoot `
+        -Filter "clang_rt.asan_dynamic-x86_64.dll" `
+        -File `
+        -Recurse `
+        -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match '\\VC\\Tools\\MSVC\\[^\\]+\\bin\\Hostx64\\x64\\' } |
+        Select-Object -First 1
+    if ($null -eq $fallback) {
+        throw "MSVC AddressSanitizer runtime clang_rt.asan_dynamic-x86_64.dll was not found beside the configured compiler."
+    }
+    return $fallback
 }
-$env:Path = $asanRuntime.DirectoryName + ";" + $env:Path
-Write-Host "AddressSanitizer runtime: $($asanRuntime.FullName)"
 
 $configureArguments = @(
     "-S", $repoRoot,
@@ -63,6 +83,10 @@ Invoke-HenkaNative `
     -Arguments $configureArguments `
     -WorkingDirectory $repoRoot `
     -Label "Configure first-party sanitizer runtime"
+
+$asanRuntime = Get-HenkaAddressSanitizerRuntime
+$env:Path = $asanRuntime.DirectoryName + ";" + $env:Path
+Write-Host "AddressSanitizer runtime: $($asanRuntime.FullName)"
 
 Invoke-HenkaNative `
     -FilePath $cmake `

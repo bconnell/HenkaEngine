@@ -67,7 +67,10 @@ if ($actualSha256 -ne $expectedSha256) {
 $driverDirectories = @()
 if (Test-Path -LiteralPath $extractRoot -PathType Container) {
     $driverDirectories = @(Get-ChildItem -LiteralPath $extractRoot -Recurse -Filter "opengl32.dll" -File |
-        Where-Object { Test-Path -LiteralPath (Join-Path $_.DirectoryName "libgallium_wgl.dll") } |
+        Where-Object {
+            $_.FullName -match '(?i)(^|[\\/])x64([\\/]|$)' -and
+            (Test-Path -LiteralPath (Join-Path $_.DirectoryName "libgallium_wgl.dll"))
+        } |
         Select-Object -ExpandProperty DirectoryName)
 }
 if ($driverDirectories.Count -eq 0) {
@@ -78,7 +81,10 @@ if ($driverDirectories.Count -eq 0) {
         throw "Pinned Mesa3D runtime extraction failed with exit code $LASTEXITCODE."
     }
     $driverDirectories = @(Get-ChildItem -LiteralPath $extractRoot -Recurse -Filter "opengl32.dll" -File |
-        Where-Object { Test-Path -LiteralPath (Join-Path $_.DirectoryName "libgallium_wgl.dll") } |
+        Where-Object {
+            $_.FullName -match '(?i)(^|[\\/])x64([\\/]|$)' -and
+            (Test-Path -LiteralPath (Join-Path $_.DirectoryName "libgallium_wgl.dll"))
+        } |
         Select-Object -ExpandProperty DirectoryName)
 }
 if ($driverDirectories.Count -ne 1) {
