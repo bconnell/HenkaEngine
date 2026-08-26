@@ -1858,6 +1858,8 @@ henka_result henka_engine_get_diagnostics(
         henka_opengl_renderer_get_reflection_probe_diffuse_active(engine->renderer);
     out_diagnostics->rendered_reflection_probe_prefilter_active =
         henka_opengl_renderer_get_reflection_probe_prefilter_active(engine->renderer);
+    out_diagnostics->rendered_reflection_probe_blend_active =
+        henka_opengl_renderer_get_reflection_probe_blend_active(engine->renderer);
     out_diagnostics->scene_viewport =
         henka_renderer_get_scene_viewport(engine->renderer);
     henka_opengl_renderer_get_hdr_diagnostics(

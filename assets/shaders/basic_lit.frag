@@ -64,6 +64,12 @@ uniform bool useReflectionProbe;
 uniform bool useReflectionProbeBoxProjection;
 uniform samplerCube reflectionProbeMap;
 uniform bool useReflectionProbeMap;
+uniform samplerCube reflectionProbeMapSecondary;
+uniform bool useReflectionProbeMapSecondary;
+uniform vec3 reflectionProbePositionSecondary;
+uniform vec3 reflectionProbeExtentsSecondary;
+uniform bool useReflectionProbeBoxProjectionSecondary;
+uniform float reflectionProbeBlendWeight;
 uniform bool useReflectionProbeDiffuse;
 uniform bool doubleSided;
 uniform int localLightCount;
@@ -280,6 +286,28 @@ vec3 parallaxCorrectReflectionDirection(vec3 direction)
     }
     return safeNormalize(
         fragWorldPosition + safeDirection * distanceToBox - reflectionProbePosition,
+        direction);
+}
+
+vec3 parallaxCorrectSecondaryReflectionDirection(vec3 direction)
+{
+    if (!useReflectionProbeMapSecondary || !useReflectionProbeBoxProjectionSecondary)
+    {
+        return direction;
+    }
+    vec3 boxMin = reflectionProbePositionSecondary - reflectionProbeExtentsSecondary;
+    vec3 boxMax = reflectionProbePositionSecondary + reflectionProbeExtentsSecondary;
+    vec3 safeDirection = safeNormalize(direction, vec3(0.0, 0.0, 1.0));
+    vec3 firstIntersection = (boxMax - fragWorldPosition) / safeDirection;
+    vec3 secondIntersection = (boxMin - fragWorldPosition) / safeDirection;
+    vec3 furthestIntersection = max(firstIntersection, secondIntersection);
+    float distanceToBox = min(min(furthestIntersection.x, furthestIntersection.y), furthestIntersection.z);
+    if (!(distanceToBox > 0.0) || distanceToBox > 65536.0)
+    {
+        return direction;
+    }
+    return safeNormalize(
+        fragWorldPosition + safeDirection * distanceToBox - reflectionProbePositionSecondary,
         direction);
 }
 
@@ -524,6 +552,22 @@ vec3 sampleSceneProbeDiffuse(vec3 direction)
     diffuse += textureLod(reflectionProbeMap, safeNormalize(normal - tangent, normal), 0.0).rgb * 0.15;
     diffuse += textureLod(reflectionProbeMap, safeNormalize(normal + bitangent, normal), 0.0).rgb * 0.15;
     diffuse += textureLod(reflectionProbeMap, safeNormalize(normal - bitangent, normal), 0.0).rgb * 0.15;
+    return min(max(diffuse, vec3(0.0)), vec3(8.0));
+}
+
+vec3 sampleSecondarySceneProbeDiffuse(vec3 direction)
+{
+    vec3 normal = safeNormalize(direction, vec3(0.0, 1.0, 0.0));
+    vec3 tangent = safeNormalize(
+        abs(normal.y) < 0.95 ? cross(normal, vec3(0.0, 1.0, 0.0)) :
+            cross(normal, vec3(1.0, 0.0, 0.0)),
+        vec3(1.0, 0.0, 0.0));
+    vec3 bitangent = safeNormalize(cross(normal, tangent), vec3(0.0, 0.0, 1.0));
+    vec3 diffuse = textureLod(reflectionProbeMapSecondary, normal, 0.0).rgb * 0.40;
+    diffuse += textureLod(reflectionProbeMapSecondary, safeNormalize(normal + tangent, normal), 0.0).rgb * 0.15;
+    diffuse += textureLod(reflectionProbeMapSecondary, safeNormalize(normal - tangent, normal), 0.0).rgb * 0.15;
+    diffuse += textureLod(reflectionProbeMapSecondary, safeNormalize(normal + bitangent, normal), 0.0).rgb * 0.15;
+    diffuse += textureLod(reflectionProbeMapSecondary, safeNormalize(normal - bitangent, normal), 0.0).rgb * 0.15;
     return min(max(diffuse, vec3(0.0)), vec3(8.0));
 }
 
@@ -847,8 +891,16 @@ void main()
                 /* A captured scene probe adds bounded local color transfer to
                  * the environment irradiance. This is a scene-space
                  * approximation, not a full irradiance volume or GI solution. */
+                vec3 sceneProbeDiffuse = sampleSceneProbeDiffuse(normal);
+                if (useReflectionProbeMapSecondary)
+                {
+                    sceneProbeDiffuse = mix(
+                        sceneProbeDiffuse,
+                        sampleSecondarySceneProbeDiffuse(normal),
+                        clamp(reflectionProbeBlendWeight, 0.0, 1.0));
+                }
                 environmentDiffuse = min(
-                    environmentDiffuse + sampleSceneProbeDiffuse(normal) * 0.18,
+                    environmentDiffuse + sceneProbeDiffuse * 0.18,
                     vec3(8.0));
             }
             vec3 reflectionDirection = reflect(-viewDirection, normal);
@@ -865,6 +917,18 @@ void main()
                         reflectionProbeMap,
                         blurredReflectionDirection,
                         surfaceRoughness * 4.0).rgb;
+                    if (useReflectionProbeMapSecondary)
+                    {
+                        vec3 secondaryReflectionDirection = parallaxCorrectSecondaryReflectionDirection(
+                            safeNormalize(mix(reflectionDirection, normal, surfaceRoughness * 0.75), normal));
+                        environmentSpecular = mix(
+                            environmentSpecular,
+                            textureLod(
+                                reflectionProbeMapSecondary,
+                                secondaryReflectionDirection,
+                                surfaceRoughness * 4.0).rgb,
+                            clamp(reflectionProbeBlendWeight, 0.0, 1.0));
+                    }
                 }
                 else
                 {

@@ -7918,6 +7918,7 @@ static void sandbox3d_report_ssgi_performance_capture_ready(
         !diagnostics.rendered_screen_space_indirect_active ||
         !diagnostics.rendered_reflection_probe_diffuse_active ||
         !diagnostics.rendered_reflection_probe_prefilter_active ||
+        !diagnostics.rendered_reflection_probe_blend_active ||
         viewport.x < 0 || viewport.y < 0 || viewport.width != 1280 ||
         viewport.height != 720 || !state->capture_camera_aspect_applied ||
         state->detail_normal_texture == NULL ||
@@ -7998,7 +7999,7 @@ static void sandbox3d_report_ssgi_performance_capture_ready(
         return;
     }
     printf(
-        "CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=0.0000 reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 viewport=%d,%d,%d,%d aspect=%.6f reference_count=%zu settled_frames=%u samples=%u gpu_samples=%u frame_mean_ms=%.4f frame_max_ms=%.4f scene_cpu_mean_ms=%.4f scene_cpu_max_ms=%.4f scene_gpu_mean_ms=%.4f scene_gpu_max_ms=%.4f scene_gpu_timing=%s draw_expected=1\n",
+        "CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=0.0000 reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 viewport=%d,%d,%d,%d aspect=%.6f reference_count=%zu settled_frames=%u samples=%u gpu_samples=%u frame_mean_ms=%.4f frame_max_ms=%.4f scene_cpu_mean_ms=%.4f scene_cpu_max_ms=%.4f scene_gpu_mean_ms=%.4f scene_gpu_max_ms=%.4f scene_gpu_timing=%s draw_expected=1\n",
         state->realism_reference_capture_view ==
                 SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE
             ? "close"
@@ -8057,6 +8058,8 @@ static void sandbox3d_report_realism_reference_capture_ready(
     const char* capture_probe_diffuse_active;
     const char* capture_probe_prefilter_prefix;
     const char* capture_probe_prefilter_active;
+    const char* capture_probe_blend_prefix;
+    const char* capture_probe_blend_active;
     float capture_exposure_stops;
 
     if (state == NULL || !state->realism_reference_capture_requested ||
@@ -8072,7 +8075,8 @@ static void sandbox3d_report_realism_reference_capture_ready(
             henka_engine_get_diagnostics(engine, &diagnostics) != HENKA_SUCCESS ||
             !diagnostics.rendered_screen_space_indirect_active ||
             !diagnostics.rendered_reflection_probe_diffuse_active ||
-            !diagnostics.rendered_reflection_probe_prefilter_active)
+            !diagnostics.rendered_reflection_probe_prefilter_active ||
+            !diagnostics.rendered_reflection_probe_blend_active)
         {
             state->capture_settled_frames = 0U;
             return;
@@ -8197,8 +8201,18 @@ static void sandbox3d_report_realism_reference_capture_ready(
         state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION)
         ? "1"
         : "";
+    capture_probe_blend_prefix = (state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_SSGI ||
+        state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION)
+        ? " reference_probe_blend_active="
+        : "";
+    capture_probe_blend_active = (state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_SSGI ||
+        state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION)
+        ? "1"
+        : "";
     printf(
-        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
+        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
         capture_prefix,
         capture_motion_prefix,
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
@@ -8217,6 +8231,8 @@ static void sandbox3d_report_realism_reference_capture_ready(
         capture_probe_diffuse_active,
         capture_probe_prefilter_prefix,
         capture_probe_prefilter_active,
+        capture_probe_blend_prefix,
+        capture_probe_blend_active,
         viewport.x,
         viewport.y,
         viewport.width,
@@ -10843,6 +10859,19 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             layer_index == 2U ? "runtime/terrain/layer2/base_color" :
             "runtime/terrain/layer3/base_color",
             &state->terrain_layer_textures[layer_index]);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        result = henka_scene_add_reflection_probe(
+            state->scene,
+            (henka_scene_reflection_probe_desc){
+                (henka_vec3){1.5f, 1.0f, -1.5f},
+                (henka_vec3){6.5f, 4.0f, 7.0f},
+                1.0f,
+                true,
+                true},
+            &(uint32_t){UINT32_MAX});
         if (result != HENKA_SUCCESS)
         {
             goto fail;

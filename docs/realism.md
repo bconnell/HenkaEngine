@@ -187,7 +187,8 @@ materials can also receive a bounded local diffuse color-transfer approximation
 from five clamped cubemap samples around the receiver normal. This reuses the
 existing scene-probe capture boundary and is reported through
 `rendered_reflection_probe_diffuse_active`; the SSGI reference metadata requires
-both the screen-space indirect path and this probe-diffuse path to be active.
+the screen-space indirect path, probe-diffuse path, five-level probe prefilter,
+and bounded two-probe overlap path to be active.
 
 This is scene-space support for the current reference fixture, not a full
 irradiance volume or global-illumination solution. It does not provide
@@ -201,8 +202,12 @@ levels (64, 32, 16, 8, and 4 pixels per face). The material roughness LOD
 selection therefore has a real bounded filtered source instead of requesting
 roughness levels from a level-zero-only texture. The generated chain is a
 stability and plausibility improvement for the supported OpenGL path; it is
-not a production GGX convolution, parallax-aware probe blend, or probe-grid
-system.
+not a production GGX convolution or probe-grid system. When two captured probe
+volumes contain a receiver, the renderer deterministically ranks a primary and
+secondary probe and blends their specular and diffuse contributions with a
+bounded inverse-score weight. If only one capture is valid, it promotes that
+capture and uses the shared environment fallback otherwise. This is a bounded
+overlap path, not a production probe-grid or multi-probe filtering solution.
 
 ## Direction
 
@@ -216,7 +221,10 @@ The next realism work should build from reference scenes. Effects outside those 
    hidden contributors with explicit capture, filtering, blending, and
    performance contracts;
 
-5. improve local reflection-probe placement, blending, capture policy, and interaction with indirect diffuse lighting;
+5. extend local reflection-probe placement, capture policy, and interaction with
+   indirect diffuse lighting; bounded two-probe overlap blending is now part of
+   the supported OpenGL foundation, while probe-grid scale and production
+   filtering remain future work;
 6. retain rasterization as the broad hardware baseline while designing future renderer-backend boundaries for optional hardware ray tracing;
 7. consider a path-traced reference renderer later as a visual ground-truth tool, even if production games continue to use hybrid real-time rendering.
 

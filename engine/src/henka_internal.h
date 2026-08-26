@@ -779,6 +779,8 @@ bool henka_opengl_renderer_get_reflection_probe_diffuse_active(
     const struct henka_renderer* renderer);
 bool henka_opengl_renderer_get_reflection_probe_prefilter_active(
     const struct henka_renderer* renderer);
+bool henka_opengl_renderer_get_reflection_probe_blend_active(
+    const struct henka_renderer* renderer);
 bool henka_opengl_renderer_get_screen_space_indirect_active(
     const struct henka_renderer* renderer);
 void henka_opengl_renderer_get_scene_diagnostics(

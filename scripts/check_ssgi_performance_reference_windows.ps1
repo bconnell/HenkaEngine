@@ -23,12 +23,12 @@ if ($indexText -notmatch "(?m)^Evidence profile: SSGI_PERFORMANCE_REFERENCE\s*$"
     $stdoutText -notmatch "Realism reference capture: debug grid hidden\.") {
     throw "SSGI performance reference evidence does not prove the dedicated reference capture profile."
 }
-if ($stdoutText -notmatch "(?m)CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE .* reference_probe_prefilter_active=1 ") {
+if ($stdoutText -notmatch "(?m)CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE .* reference_probe_prefilter_active=1 reference_probe_blend_active=1 ") {
     throw "SSGI performance reference did not prove that local reflection-probe prefiltering was active."
 }
 
 $pattern = "(?m)CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 reference_probe_diffuse_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) samples=(?<samples>\d+) gpu_samples=(?<gpu_samples>\d+) frame_mean_ms=(?<frame_mean>[-0-9.]+) frame_max_ms=(?<frame_max>[-0-9.]+) scene_cpu_mean_ms=(?<cpu_mean>[-0-9.]+) scene_cpu_max_ms=(?<cpu_max>[-0-9.]+) scene_gpu_mean_ms=(?<gpu_mean>[-0-9.]+) scene_gpu_max_ms=(?<gpu_max>[-0-9.]+) scene_gpu_timing=(?<timing>available|unavailable) draw_expected=1"
-$pattern = $pattern -replace 'reference_probe_diffuse_active=1 ', 'reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 '
+$pattern = $pattern -replace 'reference_probe_diffuse_active=1 ', 'reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 '
 $matches = [regex]::Matches($stdoutText, $pattern)
 if ($matches.Count -ne 1) {
     throw "SSGI performance reference evidence must contain exactly one readiness record."
