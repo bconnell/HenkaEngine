@@ -51,6 +51,7 @@
 #define SANDBOX3D_MAX_SCENE_NAME_BYTES 1024U
 #define SANDBOX3D_MAX_LOOP_CUT_COUNT 1024U
 #define SANDBOX3D_CAPTURE_OUTPUT_PATH_BYTES 1024U
+#define SANDBOX3D_SSGI_PERFORMANCE_SAMPLE_LIMIT 32U
 
 static const float g_showcase_giraffe_stage_offset_x = -0.45f;
 static const float g_showcase_rocket_stage_offset_x = 0.90f;
@@ -125,7 +126,8 @@ typedef enum sandbox3d_realism_reference_kind
     SANDBOX3D_REALISM_REFERENCE_KIND_HDR,
     SANDBOX3D_REALISM_REFERENCE_KIND_SSS,
     SANDBOX3D_REALISM_REFERENCE_KIND_SSGI,
-    SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION
+    SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION,
+    SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_PERFORMANCE
 } sandbox3d_realism_reference_kind;
 
 typedef enum sandbox3d_sss_reference_variant
@@ -633,6 +635,14 @@ typedef struct sandbox3d_state
     uint32_t capture_settled_frames;
     uint32_t capture_motion_phase;
     bool capture_metadata_reported;
+    uint32_t capture_performance_samples;
+    uint32_t capture_performance_gpu_samples;
+    double capture_performance_frame_sum_milliseconds;
+    double capture_performance_frame_max_milliseconds;
+    double capture_performance_cpu_sum_milliseconds;
+    double capture_performance_cpu_max_milliseconds;
+    double capture_performance_gpu_sum_milliseconds;
+    double capture_performance_gpu_max_milliseconds;
     sandbox3d_terrain_capture_view terrain_capture_view;
     sandbox3d_showcase_capture_view showcase_capture_view;
     sandbox3d_realism_reference_capture_view realism_reference_capture_view;
@@ -4306,6 +4316,11 @@ static bool sandbox3d_parse_realism_reference_kind(
         *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION;
         return true;
     }
+    if (strcmp(value, "ssgi_performance") == 0)
+    {
+        *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_PERFORMANCE;
+        return true;
+    }
     return false;
 }
 
@@ -7863,6 +7878,147 @@ static bool sandbox3d_request_capture_frame(
     return henka_engine_request_frame_capture(engine, path) == HENKA_SUCCESS;
 }
 
+static void sandbox3d_report_ssgi_performance_capture_ready(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    henka_engine_diagnostics diagnostics;
+    henka_bounds reference_bounds;
+    henka_vec2 reference_midpoint;
+    henka_viewport viewport;
+    henka_texture_info detail_normal_info;
+    henka_texture_info macro_variation_info;
+    henka_texture_info wood_grain_info;
+    henka_texture_info wet_dry_roughness_info;
+    size_t reference_count;
+
+    if (engine == NULL || state == NULL ||
+        !state->realism_reference_capture_requested ||
+        state->capture_metadata_reported ||
+        state->realism_reference_kind !=
+            SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_PERFORMANCE)
+    {
+        return;
+    }
+    memset(&diagnostics, 0, sizeof(diagnostics));
+    viewport = state->frame_layout.scene_viewport;
+    if (henka_engine_get_diagnostics(engine, &diagnostics) != HENKA_SUCCESS ||
+        !diagnostics.rendered_screen_space_indirect_active ||
+        viewport.x < 0 || viewport.y < 0 || viewport.width != 1280 ||
+        viewport.height != 720 || !state->capture_camera_aspect_applied ||
+        state->detail_normal_texture == NULL ||
+        state->macro_variation_texture == NULL ||
+        state->wood_grain_texture == NULL ||
+        state->wet_dry_roughness_texture == NULL ||
+        henka_texture_get_info(state->detail_normal_texture, &detail_normal_info) != HENKA_SUCCESS ||
+        henka_texture_get_info(state->macro_variation_texture, &macro_variation_info) != HENKA_SUCCESS ||
+        henka_texture_get_info(state->wood_grain_texture, &wood_grain_info) != HENKA_SUCCESS ||
+        henka_texture_get_info(state->wet_dry_roughness_texture, &wet_dry_roughness_info) != HENKA_SUCCESS ||
+        detail_normal_info.width != (int)SANDBOX3D_REALISM_TEXTURE_EDGE ||
+        detail_normal_info.height != (int)SANDBOX3D_REALISM_TEXTURE_EDGE ||
+        macro_variation_info.width != detail_normal_info.width ||
+        macro_variation_info.height != detail_normal_info.height ||
+        wood_grain_info.width != detail_normal_info.width ||
+        wood_grain_info.height != detail_normal_info.height ||
+        wet_dry_roughness_info.width != detail_normal_info.width ||
+        wet_dry_roughness_info.height != detail_normal_info.height ||
+        !sandbox3d_collect_realism_reference_bounds(
+            state,
+            &reference_bounds,
+            &reference_count) ||
+        reference_count != 9U || !henka_camera_is_valid(&state->camera) ||
+        henka_camera_world_to_screen(
+            &state->camera,
+            viewport.width,
+            viewport.height,
+            reference_bounds.center,
+            &reference_midpoint,
+            NULL) != HENKA_SUCCESS ||
+        !isfinite(reference_midpoint.x) || !isfinite(reference_midpoint.y))
+    {
+        state->capture_settled_frames = 0U;
+        return;
+    }
+    if (state->capture_settled_frames < 3U)
+    {
+        ++state->capture_settled_frames;
+        return;
+    }
+    if (!isfinite(diagnostics.frame_time_milliseconds) ||
+        diagnostics.frame_time_milliseconds < 0.0 ||
+        !isfinite(diagnostics.rendered_scene_cpu_time_milliseconds) ||
+        diagnostics.rendered_scene_cpu_time_milliseconds < 0.0)
+    {
+        return;
+    }
+    if (state->capture_performance_samples <
+        SANDBOX3D_SSGI_PERFORMANCE_SAMPLE_LIMIT)
+    {
+        state->capture_performance_frame_sum_milliseconds +=
+            diagnostics.frame_time_milliseconds;
+        state->capture_performance_frame_max_milliseconds = fmax(
+            state->capture_performance_frame_max_milliseconds,
+            diagnostics.frame_time_milliseconds);
+        state->capture_performance_cpu_sum_milliseconds +=
+            diagnostics.rendered_scene_cpu_time_milliseconds;
+        state->capture_performance_cpu_max_milliseconds = fmax(
+            state->capture_performance_cpu_max_milliseconds,
+            diagnostics.rendered_scene_cpu_time_milliseconds);
+        if (diagnostics.rendered_scene_gpu_timing_available &&
+            isfinite(diagnostics.rendered_scene_gpu_time_milliseconds) &&
+            diagnostics.rendered_scene_gpu_time_milliseconds > 0.0)
+        {
+            state->capture_performance_gpu_sum_milliseconds +=
+                diagnostics.rendered_scene_gpu_time_milliseconds;
+            state->capture_performance_gpu_max_milliseconds = fmax(
+                state->capture_performance_gpu_max_milliseconds,
+                diagnostics.rendered_scene_gpu_time_milliseconds);
+            if (state->capture_performance_gpu_samples < UINT32_MAX)
+                ++state->capture_performance_gpu_samples;
+        }
+        ++state->capture_performance_samples;
+    }
+    if (state->capture_performance_samples <
+        SANDBOX3D_SSGI_PERFORMANCE_SAMPLE_LIMIT)
+    {
+        return;
+    }
+    printf(
+        "CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=0.0000 reference_ssgi_active=1 viewport=%d,%d,%d,%d aspect=%.6f reference_count=%zu settled_frames=%u samples=%u gpu_samples=%u frame_mean_ms=%.4f frame_max_ms=%.4f scene_cpu_mean_ms=%.4f scene_cpu_max_ms=%.4f scene_gpu_mean_ms=%.4f scene_gpu_max_ms=%.4f scene_gpu_timing=%s draw_expected=1\n",
+        state->realism_reference_capture_view ==
+                SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE
+            ? "close"
+            : "wide",
+        state->realism_reference_capture_view ==
+                SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE
+            ? "close_grid"
+            : "wide_row",
+        detail_normal_info.width,
+        viewport.x,
+        viewport.y,
+        viewport.width,
+        viewport.height,
+        henka_viewport_get_aspect_ratio(viewport),
+        reference_count,
+        state->capture_settled_frames,
+        state->capture_performance_samples,
+        state->capture_performance_gpu_samples,
+        state->capture_performance_frame_sum_milliseconds /
+            (double)state->capture_performance_samples,
+        state->capture_performance_frame_max_milliseconds,
+        state->capture_performance_cpu_sum_milliseconds /
+            (double)state->capture_performance_samples,
+        state->capture_performance_cpu_max_milliseconds,
+        state->capture_performance_gpu_samples > 0U
+            ? state->capture_performance_gpu_sum_milliseconds /
+                (double)state->capture_performance_gpu_samples
+            : 0.0,
+        state->capture_performance_gpu_max_milliseconds,
+        state->capture_performance_gpu_samples > 0U ? "available" : "unavailable");
+    fflush(stdout);
+    state->capture_metadata_reported = true;
+}
+
 static void sandbox3d_report_realism_reference_capture_ready(
     henka_engine* engine,
     sandbox3d_state* state)
@@ -8096,6 +8252,12 @@ static void sandbox3d_report_capture_ready(
     }
     if (state->realism_reference_capture_requested)
     {
+        if (state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_PERFORMANCE)
+        {
+            sandbox3d_report_ssgi_performance_capture_ready(engine, state);
+            return;
+        }
         sandbox3d_report_realism_reference_capture_ready(engine, state);
         return;
     }
@@ -35864,7 +36026,8 @@ int main(int argc, char** argv)
     else if (argc == 5 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
         sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
         (realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI ||
-            realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION) &&
+            realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION ||
+            realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_PERFORMANCE) &&
         sandbox3d_parse_realism_reference_capture_view(
             argv[3],
             &realism_reference_capture_view) &&
@@ -35889,7 +36052,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 

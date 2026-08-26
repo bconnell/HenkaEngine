@@ -6,7 +6,7 @@ param(
 
     [string]$ExecutablePath = "",
 
-    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE")]
+    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE", "SSGI_PERFORMANCE_REFERENCE")]
     [string]$EvidenceProfile = "FULL_SHOWCASE",
 
     [ValidateSet("wide", "close")]
@@ -64,7 +64,7 @@ if ($EvidenceProfile -eq "GEOMETRY_SOLID" -and -not $IncludeStartupShowcase) {
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $IncludeGiraffeInspection = $true
 }
-if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE") -and
+if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE" -or $EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") -and
     ($IncludeStartupShowcase -or $IncludeGiraffeInspection -or $IncludeTerrain)) {
     throw "REALISM_REFERENCE evidence is a dedicated reference-scene capture and cannot include showcase or terrain extras."
 }
@@ -137,7 +137,7 @@ function Wait-HenkaCaptureReady {
 
     for ($attempt = 0; $attempt -lt 600; ++$attempt) {
         if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
-            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE)? ' |
+            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE|_SSGI_PERFORMANCE_REFERENCE)? ' |
                 Select-Object -Last 1
             if ($null -ne $line) {
                 return $line.Line
@@ -592,6 +592,20 @@ function Assert-HenkaSsgiMotionCaptureMetadata {
     return $match
 }
 
+function Assert-HenkaSsgiPerformanceCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ExpectedView
+    )
+
+    $pattern = '^\s*CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=(?<view>wide|close) '
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success -or $match.Groups["view"].Value -ne $ExpectedView) {
+        throw "SSGI performance reference capture readiness metadata was malformed for $Label."
+    }
+}
+
 [System.IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 Add-Type -AssemblyName System.Drawing
 $modes = @(
@@ -637,6 +651,11 @@ if ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
         @{ Label = "ssgi_motion_reference"; Arguments = @("--capture-realism-reference", "ssgi_motion", $ReferenceView, "rendered", $OutputDirectory); File = "ssgi-motion-reference-$ReferenceView-before.png"; Motion = $true; Native = $true }
     )
 }
+if ($EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") {
+    $modes = @(
+        @{ Label = "ssgi_performance_reference"; Arguments = @("--capture-realism-reference", "ssgi_performance", $ReferenceView, "rendered"); NoImage = $true }
+    )
+}
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $modes = @(
         @{ Label = "solid"; Arguments = @("--capture-mode", "solid"); File = "same-camera-solid.png" }
@@ -658,6 +677,9 @@ if ($EvidenceProfile -eq "SSGI_REFERENCE") {
 }
 elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
     $records.Add("Modes: Rendered only; SSGI is exercised across a deterministic in-process camera translation")
+}
+elseif ($EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") {
+    $records.Add("Modes: Rendered only; SSGI timing is sampled across a bounded fixed-resolution reference")
 }
 else {
     $records.Add("Modes: Solid, Material Preview, Rendered")
@@ -684,11 +706,17 @@ if ($EvidenceProfile -eq "SSGI_REFERENCE") {
 if ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
     $records.Add("SSGI motion reference: deterministic before/after rendered captures from one process with a bounded camera translation; view=$ReferenceView")
 }
+if ($EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") {
+    $records.Add("SSGI performance reference: bounded 1280x720 Rendered timing sample set with SSGI active; view=$ReferenceView")
+}
 $capturePolicy = if ($script:allowForegroundIntegration) {
         "foreground desktop capture was explicitly enabled"
     }
     elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
         "application-owned OpenGL framebuffer readback; no foreground or desktop ownership"
+    }
+    elseif ($EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") {
+        "application-owned readiness/timing record; no foreground, desktop, or image capture"
     }
     else {
         "background-safe PrintWindow capture; no foreground or desktop ownership"
@@ -700,6 +728,7 @@ foreach ($mode in $modes) {
     $capturedProcess = $null
     $isMotion = $mode.ContainsKey("Motion") -and $mode.Motion
     $isNative = $mode.ContainsKey("Native") -and $mode.Native
+    $isNoImage = $mode.ContainsKey("NoImage") -and $mode.NoImage
     $stdoutPath = Join-Path $OutputDirectory "$($mode.Label).stdout.txt"
     $stderrPath = Join-Path $OutputDirectory "$($mode.Label).stderr.txt"
     if ($isNative) {
@@ -753,9 +782,16 @@ foreach ($mode in $modes) {
         elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
             Assert-HenkaSsgiMotionCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView -ExpectedPhase "before" | Out-Null
         }
+        elseif ($EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") {
+            Assert-HenkaSsgiPerformanceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView
+        }
         else {
             [void]$captureMetadata.Add(
                 (Assert-HenkaCaptureMetadata -Line $metadataLine -Label $mode.Label))
+        }
+        if ($isNoImage) {
+            $records.Add("$($mode.Label) metadata: $metadataLine")
+            continue
         }
         if ($isNative) {
             $nativeBeforePath = Join-Path $OutputDirectory "ssgi-motion-reference-$ReferenceView-before.bmp"
@@ -1081,6 +1117,11 @@ if ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
     & (Join-Path $PSScriptRoot "check_ssgi_motion_reference_visual_evidence_windows.ps1") `
         -InputDirectory $OutputDirectory
 }
+if ($EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") {
+    $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
+    & (Join-Path $PSScriptRoot "check_ssgi_performance_reference_windows.ps1") `
+        -InputDirectory $OutputDirectory
+}
 
 if ($IncludeTerrain) {
     & (Join-Path $PSScriptRoot "check_terrain_visual_evidence_windows.ps1") `
@@ -1097,6 +1138,9 @@ $captureSummary = if ($EvidenceProfile -eq "SSGI_REFERENCE") {
 }
 elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
     "Application-owned SSGI camera-motion reference evidence"
+}
+elseif ($EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") {
+    "Bounded SSGI performance reference evidence"
 }
 else {
     "Same-camera Solid, Material Preview, and Rendered evidence"

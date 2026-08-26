@@ -155,6 +155,20 @@ continuity in the supported OpenGL path without claiming artifact-free motion
 at every speed, full temporal reconstruction quality, or production global
 illumination.
 
+The performance reference is a separate Rendered-only measurement:
+
+```text
+--capture-realism-reference ssgi_performance close rendered
+```
+
+It holds the same nine-subject reference at a fixed 1280x720 viewport, waits
+for three settled frames, then records 32 bounded frame, scene-CPU, and
+available OpenGL scene-GPU timing samples while the SSGI path is active. The
+checker requires the timer query to be available and rejects a gross GPU
+runaway above the 100 ms reference budget. The budget is a regression guard
+for this fixed supported OpenGL reference; it is not a universal frame-rate
+promise or an isolated SSGI-shader cost measurement.
+
 ## Screen-space indirect diffuse lighting
 
 Rendered presentation also contains a bounded screen-space indirect diffuse approximation. It reconstructs the current receiver position and normal from depth, samples nearby visible HDR surfaces in eight directions, rejects samples outside bounded distance and thickness limits, caps source radiance, and adds the gathered indirect contribution in HDR before bloom and tone mapping.
@@ -170,7 +184,7 @@ The next realism work should build from reference scenes. Effects outside those 
 
 1. extend the PBR, lighting, and HDR reference scenes to validate energy response, texture color-space handling, normal-map behavior, roughness/metallic response, IBL calibration, and light/shadow stability;
 2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined; the current SSS fixture only guards the existing bounded response;
-3. validate the screen-space indirect diffuse result for leaks, halos, over-brightening, camera-motion instability, and performance;
+3. extend the bounded screen-space indirect diffuse validation for leaks, halos, over-brightening, and deeper hardware-specific performance characterization; current activation, camera-motion, and gross fixed-reference performance guards are in place;
 4. add a scene-space indirect-light solution that can represent off-screen and hidden contributors, such as a bounded irradiance-probe or probe-grid system;
 
 5. improve local reflection-probe placement, blending, capture policy, and interaction with indirect diffuse lighting;
