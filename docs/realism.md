@@ -82,6 +82,23 @@ normal-map binding and tangent-space response are active; it is a bounded
 calibration fixture, not a claim that the generated detail texture represents
 production surface authoring quality.
 
+The package also exposes a dedicated color-space reference fixture. It uses the
+same RGBA8 source bytes for four sRGB-tagged subjects and five linear-tagged
+subjects, with the color-space descriptor carried through the ordinary material
+and OpenGL texture paths. Base-color textures accept either explicit sRGB or
+linear semantics; normal, metallic/roughness, occlusion, transmission, and
+thickness data retain their required linear contract.
+
+```text
+--capture-realism-reference color_space wide|close solid|material_preview|rendered
+```
+
+The checker requires the sRGB and linear texture metadata to be present and
+measures the paired rendered response. This proves that the supported texture
+color-space distinction reaches the renderer; it is a bounded response fixture,
+not a claim of universal color-management, display-mastering, or scene-wide
+energy calibration.
+
 The package also exposes a separate lighting reference fixture. It uses nine
 same-material UV-sphere subjects, scene-owned directional/key/fill/rim light
 sources, the shared ground receiver, real shadow maps, and the same OpenGL
@@ -126,6 +143,7 @@ The Windows visual-evidence harness exposes the scene with:
 ```text
 --capture-realism-reference wide|close solid|material_preview|rendered
 --capture-realism-reference normal_map wide|close solid|material_preview|rendered
+--capture-realism-reference color_space wide|close solid|material_preview|rendered
 --capture-realism-reference lighting wide|close solid|material_preview|rendered
 --capture-realism-reference sss close opaque|thin|thick rendered
 --capture-realism-reference ssgi wide|close rendered
@@ -229,7 +247,7 @@ overlap path, not a production probe-grid or multi-probe filtering solution.
 
 The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes deterministic normal-map, exposure-range, and bounded subsurface-response fixtures in addition to the PBR and lighting fixtures. Important follow-up tracks are:
 
-1. extend the PBR, lighting, and HDR reference scenes to validate energy response, texture color-space handling, roughness/metallic response, IBL calibration, and light/shadow stability; the dedicated normal-map A/B foundation is now in place;
+1. extend the PBR, lighting, and HDR reference scenes to validate energy response, roughness/metallic response, IBL calibration, and light/shadow stability; dedicated normal-map and color-space A/B foundations are now in place;
 2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined; the current SSS fixture only guards the existing bounded response;
 3. extend the bounded screen-space indirect diffuse validation for leaks, halos, over-brightening, and deeper hardware-specific performance characterization; current activation, camera-motion, and gross fixed-reference performance guards are in place;
 4. extend the current scene-probe diffuse foundation into a bounded

@@ -358,6 +358,7 @@ henka_result henka_texture_create_from_rgba8_with_descriptor(
         (*out_texture)->width = width;
         (*out_texture)->height = height;
         (*out_texture)->original_channel_count = 4;
+        (*out_texture)->source_byte_size = decoded_bytes;
         (*out_texture)->source_class = HENKA_TEXTURE_SOURCE_CLASS_LDR_8_BIT;
         (*out_texture)->alpha_mode = henka_texture_classify_alpha(
             pixels,

@@ -183,6 +183,12 @@ static bool henka_material_texture_matches(
     (void)color_space;
     return true;
 }
+
+static bool henka_material_color_texture_matches(const henka_texture* texture)
+{
+    (void)texture;
+    return true;
+}
 #else
 static bool henka_material_texture_matches(
     const henka_texture* texture,
@@ -197,6 +203,24 @@ static bool henka_material_texture_matches(
     }
     if (henka_texture_get_info(texture, &info) != HENKA_SUCCESS ||
         !info.backend_ready || info.usage != usage || info.color_space != color_space)
+    {
+        return false;
+    }
+    return true;
+}
+
+static bool henka_material_color_texture_matches(const henka_texture* texture)
+{
+    henka_texture_info info;
+
+    if (texture == NULL)
+    {
+        return true;
+    }
+    if (henka_texture_get_info(texture, &info) != HENKA_SUCCESS ||
+        !info.backend_ready || info.usage != HENKA_TEXTURE_USAGE_COLOR ||
+        (info.color_space != HENKA_TEXTURE_COLOR_SPACE_SRGB &&
+            info.color_space != HENKA_TEXTURE_COLOR_SPACE_LINEAR))
     {
         return false;
     }
@@ -290,7 +314,7 @@ henka_result henka_material_validate(const henka_material* material)
         material->alpha_mode > HENKA_MATERIAL_ALPHA_BLENDED ||
         (!material->use_texture && material->base_color_texture != NULL) ||
         (material->use_texture && material->base_color_texture == NULL) ||
-        !henka_material_texture_matches(material->base_color_texture, HENKA_TEXTURE_USAGE_COLOR, HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
+        !henka_material_color_texture_matches(material->base_color_texture) ||
         !henka_material_texture_matches(material->normal_texture, HENKA_TEXTURE_USAGE_NORMAL, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
         !henka_material_texture_matches(material->metallic_roughness_texture, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
         !henka_material_texture_matches(material->occlusion_texture, HENKA_TEXTURE_USAGE_OCCLUSION, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
@@ -322,7 +346,7 @@ henka_result henka_material_validate(const henka_material* material)
                 layer->roughness < 0.045f || layer->roughness > 1.0f ||
                 layer->texture_scale_meters <= 0.0f || layer->texture_scale_meters > 4096.0f ||
                 layer->normal_scale < 0.0f || layer->normal_scale > 4.0f ||
-                !henka_material_texture_matches(layer->base_color_texture, HENKA_TEXTURE_USAGE_COLOR, HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
+                !henka_material_color_texture_matches(layer->base_color_texture) ||
                 !henka_material_texture_matches(layer->normal_texture, HENKA_TEXTURE_USAGE_NORMAL, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
                 !henka_material_texture_matches(layer->metallic_roughness_texture, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, HENKA_TEXTURE_COLOR_SPACE_LINEAR))
             {
