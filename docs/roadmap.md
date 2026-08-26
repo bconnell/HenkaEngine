@@ -30,6 +30,7 @@ The next development work remains bounded repair and verification.
 4. Keep local and GitHub validation deterministic across build, tests, package provenance, packaged startup, repository integrity, and external-project checks.
 5. Keep the README, architecture, roadmap, runtime help, and repository description aligned with the implemented product.
 6. Preserve stable identities, transactional editing boundaries, versionable data, and external-tool compatibility needed by 2.5D and later modeling.
+7. Shape the existing Action API toward a versioned semantic agent surface, while deferring any MCP/WebMCP-compatible bridge until stable Scene Document identities, explicit capability discovery, permission boundaries, dry-run behavior, auditability, and structured failure contracts are dependable.
 
 ## Workspace and tools
 
@@ -65,6 +66,34 @@ Planned workspace improvements include:
    complete scene/project save and load workflow.
 
 These features should appear only when they are wired into the engine, tested, documented, and useful.
+
+## Agent and automation interface
+
+Henka already has the beginning of the right architectural seam for agent-driven development: the local Action API lets tools and tests request validated engine operations and receive structured results without pretending to be a human operating the editor with a mouse.
+
+The next goal is not to expose every editor control immediately. The agent surface should grow only as the underlying engine contracts become stable enough to make machine-driven operations deterministic, inspectable, and safe.
+
+### Readiness gates
+
+An MCP-compatible agent adapter becomes appropriate once the following foundations are dependable:
+
+1. Action targets use persistent Scene Document identities rather than relying on transient runtime entity handles.
+2. Action schemas and capability discovery are versioned so external agents can determine what the running Henka build actually supports.
+3. Authoring, scene, asset, play-session, and inspection operations have explicit authority and transaction boundaries instead of bypassing engine ownership.
+4. Requests support bounded validation, dry-run behavior where meaningful, structured failures, and enough result state to prove what changed.
+5. Local permission and user-approval boundaries prevent arbitrary code execution or silent access to capabilities outside the exposed tool surface.
+6. Agent actions produce auditable diagnostics suitable for the same executable validation harness used for normal development and regression testing.
+7. Visual evidence remains a separate authority for appearance, readability, anatomy, composition, material response, and other properties that structured state alone cannot prove.
+
+### Planned integration
+
+Once those gates are met, Henka should expose the Action API through a thin standards-oriented adapter rather than building a second automation system. The preferred direction is an MCP-compatible semantic tool surface for desktop development agents, with WebMCP-compatible exposure considered where Henka later has an appropriate browser or web-hosted surface.
+
+The adapter should remain transport-level infrastructure. Engine authority, validation, transactions, identity, undo boundaries, diagnostics, and test evidence stay inside Henka so changing agent protocols does not change the engine's correctness model.
+
+Because MCP and WebMCP are evolving ecosystems, Henka should track their stable capability-discovery, schema, permission, and transport conventions and implement the adapter when doing so reduces custom automation instead of forcing premature compatibility work.
+
+Foreground mouse and keyboard automation remains useful for testing the human interface itself. It should not be the primary control path for an agent performing ordinary scene, authoring, inspection, or validation work when an equivalent semantic engine action exists.
 
 ## Game authoring foundation
 
@@ -358,51 +387,3 @@ Longer-term work may include:
 8. Provenance for release artifacts.
 
 These systems will require careful design because they affect safety, project structure, and long-term maintenance.
-
-## External project workflow
-
-Henka Engine should remain a reusable engine repository. Real games built with Henka should live in separate repositories.
-
-### Foundation
-
-1. Separate game and server templates consume the public runtime boundaries;
-   the external server links only the renderer-independent runtime.
-2. Separate asset and scene roots, build guidance, packaging guidance, and
-   Windows configure/build/startup validation are available.
-3. Bounded public-API consumer smokes prove that the templates remain usable
-   without depending on Sandbox source.
-
-### Current Development
-
-1. Strengthen starter templates and project configuration.
-2. Continue external-project validation and improve asset-root diagnostics.
-
-### Future Work
-
-Complete external scene/project editing and serialization remain future work.
-
-## Sponsorship supported work
-
-Henka Engine is open source, and sponsorship helps support the time needed to continue development.
-
-Funding can help with engine development, sandbox usability, documentation, examples, packaged builds, testing, asset workflow improvements, and future workspace tools.
-
-Sponsorship does not change the license, purchase feature priority, or override the project roadmap. Roadmap decisions remain based on stability, maintainability, scope, and usefulness to the engine.
-
-## Current limitations
-
-Henka is still early. Some systems are intentionally limited while the engine foundation is being built.
-
-Current limitations include:
-
-1. The sandbox is an engine sample and QA target, not a game.
-2. The transform gizmo workflow still needs manual desktop QA for visual feel and mouse comfort.
-3. Scene saving and loading are not complete authoring workflows yet.
-4. The docked and detached workspace is useful for inspection, testing, and early authoring behavior, but it is not yet a full production editor and project-authoring workflow.
-5. Workspace movement and sizing require desktop QA for feel. Detached placement, matching detached controls, bounded title-bar drag-back recognition, layout history, named slots, and panel-group persistence are implemented; native desktop feel and detachable Scene View remain manual-QA/open items.
-6. The native test panel and detached production-panel surfaces use multi-window rendering and event routing; bounded detached controls and title-bar drag-back recognition are implemented, while detachable Scene View remains open.
-7. Asset loading is still limited.
-8. The 2D workflow and the sprite, layer, parallax, animation, and movement-constraint parts of 2.5D are not implemented yet; the first 2.5D camera presets are available.
-9. Physics v1 is intentionally limited to rigid bodies and primitive colliders; mesh collision, joints, character controllers, and advanced simulation remain future work.
-10. Audio, end-user scripting workflows, and release distribution remain later
-    milestones beyond the current scripting foundation.
