@@ -33,6 +33,7 @@ static bool henka_test_workspace_dock_contains_section(
 }
 void henka_test_sandbox3d_workspace(void)
 {
+    volatile size_t context_count = SANDBOX3D_WORK_CONTEXT_COUNT;
     float studio_environment[SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT];
     unsigned char ground_texture[SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT];
     henka_vec4 ground_color;
@@ -185,7 +186,7 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(
         context_state.active == SANDBOX3D_WORK_CONTEXT_BUILD);
     HENKA_TEST_ASSERT(!context_state.debug_hud_visible);
-    HENKA_TEST_ASSERT(SANDBOX3D_WORK_CONTEXT_COUNT == 3);
+    HENKA_TEST_ASSERT(context_count == 3U);
     HENKA_TEST_ASSERT(strcmp(
         sandbox3d_workspace_panel_name(
             SANDBOX3D_WORKSPACE_PANEL_CONTROLS),

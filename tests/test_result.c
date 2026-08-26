@@ -9,8 +9,9 @@ void henka_test_result(void)
 {
     henka_engine* engine;
     henka_engine_config invalid_config;
+    volatile henka_result success = HENKA_SUCCESS;
 
-    HENKA_TEST_ASSERT(HENKA_SUCCESS == 0);
+    HENKA_TEST_ASSERT(success == 0);
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_SUCCESS), "success") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_INVALID_ARGUMENT), "invalid argument") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_OUT_OF_MEMORY), "out of memory") == 0);

@@ -11,6 +11,10 @@
 
 void henka_test_input(void)
 {
+    volatile henka_key key_f = HENKA_KEY_F;
+    volatile henka_key key_home = HENKA_KEY_HOME;
+    volatile henka_key key_up = HENKA_KEY_UP;
+    volatile henka_key key_left_alt = HENKA_KEY_LEFT_ALT;
     henka_engine engine;
     henka_engine_diagnostics diagnostics;
     henka_input_state input;
@@ -164,11 +168,11 @@ void henka_test_input(void)
     HENKA_TEST_ASSERT(henka_input_action_find_by_name("move_forward") == HENKA_INPUT_ACTION_MOVE_FORWARD);
     HENKA_TEST_ASSERT(henka_input_action_find_by_name("Move Forward") == HENKA_INPUT_ACTION_MOVE_FORWARD);
     HENKA_TEST_ASSERT(henka_input_action_find_by_name("toggle-mouse-capture") == HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE);
-    HENKA_TEST_ASSERT(HENKA_KEY_F != HENKA_KEY_UNKNOWN);
-    HENKA_TEST_ASSERT(HENKA_KEY_HOME != HENKA_KEY_UNKNOWN);
-    HENKA_TEST_ASSERT(HENKA_KEY_UP != HENKA_KEY_UNKNOWN);
+    HENKA_TEST_ASSERT(key_f != HENKA_KEY_UNKNOWN);
+    HENKA_TEST_ASSERT(key_home != HENKA_KEY_UNKNOWN);
+    HENKA_TEST_ASSERT(key_up != HENKA_KEY_UNKNOWN);
     HENKA_TEST_ASSERT(henka_input_key_find_by_name("down") == HENKA_KEY_DOWN);
-    HENKA_TEST_ASSERT(HENKA_KEY_LEFT_ALT != HENKA_KEY_UNKNOWN);
+    HENKA_TEST_ASSERT(key_left_alt != HENKA_KEY_UNKNOWN);
     HENKA_TEST_ASSERT(strcmp(henka_input_key_get_name(HENKA_KEY_M), "M") == 0);
     HENKA_TEST_ASSERT(henka_input_key_find_by_name("left_ctrl") == HENKA_KEY_LEFT_CTRL);
     HENKA_TEST_ASSERT(henka_input_mouse_button_find_by_name("Mouse Left") == HENKA_MOUSE_BUTTON_LEFT);
