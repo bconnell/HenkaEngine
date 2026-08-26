@@ -104,21 +104,23 @@ thickness reach the OpenGL material path with a stable pixel response. It does
 not promote the bounded three-lobe approximation to production multi-scatter,
 screen-space, or ray-traced subsurface transport.
 
-The background-safe capture harness exposes the scene with:
+The Windows visual-evidence harness exposes the scene with:
 
 ```text
 --capture-realism-reference wide|close solid|material_preview|rendered
 --capture-realism-reference lighting wide|close solid|material_preview|rendered
 --capture-realism-reference sss close opaque|thin|thick rendered
 --capture-realism-reference ssgi wide|close rendered
+--capture-realism-reference ssgi_motion wide|close rendered output_directory
 ```
 
-Each capture emits `CAPTURE_READY_REFERENCE` metadata proving the selected
+The ordinary reference captures emit `CAPTURE_READY_REFERENCE` metadata proving the selected
 PBR reference view, all nine settled subjects, the deterministic camera, and
 the centered reference bounds. Lighting captures emit the corresponding
 lighting-prefixed metadata and use the dedicated lighting checker. These are
 calibration and regression fixtures, not proof that every material or renderer
-effect is production-complete.
+effect is production-complete. The SSGI motion profile emits its own
+`CAPTURE_READY_SSGI_MOTION_REFERENCE` phase records as described below.
 
 The SSGI reference is Rendered-only because the bounded indirect-diffuse term
 is a fullscreen post-process over the HDR color and depth targets:
@@ -135,6 +137,23 @@ HDR clipping, over-bright pixels, and bright subject-edge halos. This is an
 activation, presentation-stability, and gross-artifact guard for the current
 supported OpenGL path, not proof that every pixel receives indirect light or
 that subtle leaks, camera-motion stability, and performance are solved.
+
+The motion-stability reference is a separate Rendered-only capture:
+
+```text
+--capture-realism-reference ssgi_motion close rendered output_directory
+```
+
+It emits settled `before` and `after` readiness records from one process,
+applies one bounded in-process camera translation, and requests the next
+completed frames through Henka's application-owned OpenGL framebuffer
+readback. The Windows harness converts those bounded readbacks to inspection
+images and verifies the deterministic camera delta, matching dimensions,
+non-flat content, gross brightness limits, bounded luminance-distribution
+change, and a real sampled pixel difference. This guards current-frame
+continuity in the supported OpenGL path without claiming artifact-free motion
+at every speed, full temporal reconstruction quality, or production global
+illumination.
 
 ## Screen-space indirect diffuse lighting
 

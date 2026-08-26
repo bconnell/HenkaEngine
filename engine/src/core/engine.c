@@ -1986,6 +1986,17 @@ henka_result henka_engine_get_diagnostics(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_engine_request_frame_capture(
+    henka_engine* engine,
+    const char* path)
+{
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_renderer_request_frame_capture(engine->renderer, path);
+}
+
 const char* henka_engine_get_user_data_base_path(const henka_engine* engine)
 {
     if (engine == NULL || engine->user_data_base_path == NULL)

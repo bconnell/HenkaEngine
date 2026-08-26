@@ -764,6 +764,124 @@ static henka_result henka_renderer_configure_gl_attributes(void)
     return HENKA_SUCCESS;
 }
 
+static void henka_write_u16_le(unsigned char* destination, uint16_t value)
+{
+    destination[0] = (unsigned char)(value & 0xffU);
+    destination[1] = (unsigned char)((value >> 8U) & 0xffU);
+}
+
+static void henka_write_u32_le(unsigned char* destination, uint32_t value)
+{
+    destination[0] = (unsigned char)(value & 0xffU);
+    destination[1] = (unsigned char)((value >> 8U) & 0xffU);
+    destination[2] = (unsigned char)((value >> 16U) & 0xffU);
+    destination[3] = (unsigned char)((value >> 24U) & 0xffU);
+}
+
+static bool henka_opengl_write_bmp(
+    const char* path,
+    int width,
+    int height,
+    const unsigned char* rgba_pixels)
+{
+    FILE* file = NULL;
+    unsigned char header[54];
+    unsigned char* row = NULL;
+    size_t row_bytes;
+    size_t row_stride;
+    size_t pixel_bytes;
+    size_t file_size;
+    int output_y;
+    bool success = false;
+
+    if (path == NULL || path[0] == '\0' || rgba_pixels == NULL ||
+        width <= 0 || height <= 0 || width > 16384 || height > 16384 ||
+        (size_t)width > SIZE_MAX / 3U)
+    {
+        return false;
+    }
+    row_bytes = (size_t)width * 3U;
+    if (row_bytes > SIZE_MAX - 3U)
+    {
+        return false;
+    }
+    row_stride = (row_bytes + 3U) & ~(size_t)3U;
+    if ((size_t)height > SIZE_MAX / row_stride)
+    {
+        return false;
+    }
+    pixel_bytes = row_stride * (size_t)height;
+    if (pixel_bytes > SIZE_MAX - 54U || pixel_bytes + 54U > UINT32_MAX)
+    {
+        return false;
+    }
+    file_size = pixel_bytes + 54U;
+
+    row = (unsigned char*)henka_malloc(row_stride);
+    if (row == NULL)
+    {
+        return false;
+    }
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "wb") != 0)
+    {
+        file = NULL;
+    }
+#else
+    file = fopen(path, "wb");
+#endif
+    if (file == NULL)
+    {
+        henka_free(row);
+        return false;
+    }
+
+    memset(header, 0, sizeof(header));
+    header[0] = 'B';
+    header[1] = 'M';
+    henka_write_u32_le(&header[2], (uint32_t)file_size);
+    henka_write_u32_le(&header[10], 54U);
+    henka_write_u32_le(&header[14], 40U);
+    henka_write_u32_le(&header[18], (uint32_t)width);
+    henka_write_u32_le(&header[22], (uint32_t)(-(int32_t)height));
+    henka_write_u16_le(&header[26], 1U);
+    henka_write_u16_le(&header[28], 24U);
+    henka_write_u32_le(&header[34], (uint32_t)pixel_bytes);
+    if (fwrite(header, 1U, sizeof(header), file) != sizeof(header))
+    {
+        goto cleanup;
+    }
+    for (output_y = 0; output_y < height; ++output_y)
+    {
+        int source_y = height - 1 - output_y;
+        int x;
+
+        memset(row, 0, row_stride);
+        for (x = 0; x < width; ++x)
+        {
+            const unsigned char* source =
+                &rgba_pixels[((size_t)source_y * (size_t)width + (size_t)x) * 4U];
+            unsigned char* destination = &row[(size_t)x * 3U];
+            destination[0] = source[2];
+            destination[1] = source[1];
+            destination[2] = source[0];
+        }
+        if (fwrite(row, 1U, row_stride, file) != row_stride)
+        {
+            goto cleanup;
+        }
+    }
+    success = fflush(file) == 0;
+
+cleanup:
+    if (fclose(file) != 0)
+    {
+        success = false;
+    }
+    henka_free(row);
+    return success;
+}
+
 static bool henka_opengl_version_is_supported(const char* version)
 {
     char* end;
@@ -6727,6 +6845,54 @@ henka_result henka_opengl_renderer_end_frame(
             "main-window presentation") != HENKA_SUCCESS)
     {
         return HENKA_ERROR_RENDERER;
+    }
+
+    if (renderer->frame_capture_requested)
+    {
+        unsigned char* pixels;
+        size_t pixel_count;
+        bool capture_success;
+
+        renderer->frame_capture_requested = false;
+        if (renderer->framebuffer_width <= 0 || renderer->framebuffer_height <= 0 ||
+            (size_t)renderer->framebuffer_width > SIZE_MAX / (size_t)renderer->framebuffer_height ||
+            (size_t)renderer->framebuffer_width * (size_t)renderer->framebuffer_height > SIZE_MAX / 4U)
+        {
+            HENKA_LOG_ERROR("application-owned frame capture rejected invalid framebuffer dimensions");
+            return HENKA_ERROR_RENDERER;
+        }
+        pixel_count = (size_t)renderer->framebuffer_width *
+            (size_t)renderer->framebuffer_height * 4U;
+        pixels = (unsigned char*)henka_malloc(pixel_count);
+        if (pixels == NULL)
+        {
+            HENKA_LOG_ERROR("application-owned frame capture could not allocate its bounded readback buffer");
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadBuffer(GL_BACK);
+        glReadPixels(
+            0,
+            0,
+            renderer->framebuffer_width,
+            renderer->framebuffer_height,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            pixels);
+        capture_success = glGetError() == GL_NO_ERROR &&
+            henka_opengl_write_bmp(
+                renderer->frame_capture_path,
+                renderer->framebuffer_width,
+                renderer->framebuffer_height,
+                pixels);
+        henka_free(pixels);
+        if (!capture_success)
+        {
+            HENKA_LOG_ERROR(
+                "application-owned frame capture failed for '%s'",
+                renderer->frame_capture_path);
+            return HENKA_ERROR_RENDERER;
+        }
     }
 
     if (!SDL_GL_SwapWindow(state->window))

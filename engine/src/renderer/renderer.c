@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <henka/log.h>
 #include "../ui/ui_internal.h"
@@ -199,6 +200,35 @@ henka_result henka_renderer_end_frame(struct henka_renderer* renderer)
         renderer->frame_active = false;
     }
     return result;
+}
+
+henka_result henka_renderer_request_frame_capture(
+    struct henka_renderer* renderer,
+    const char* path)
+{
+    size_t path_length;
+
+    if (renderer == NULL || path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    path_length = 0U;
+    while (path_length < sizeof(renderer->frame_capture_path) &&
+        path[path_length] != '\0')
+    {
+        ++path_length;
+    }
+    if (path_length == 0U || path_length >= sizeof(renderer->frame_capture_path))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (renderer->frame_capture_requested)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    memcpy(renderer->frame_capture_path, path, path_length + 1U);
+    renderer->frame_capture_requested = true;
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_renderer_create_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id)

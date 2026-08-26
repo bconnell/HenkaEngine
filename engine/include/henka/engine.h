@@ -306,6 +306,16 @@ float henka_engine_get_viewport_exposure(const henka_engine* engine);
 henka_package_mode henka_engine_get_package_mode(const henka_engine* engine);
 const char* henka_engine_get_package_mode_label(henka_package_mode package_mode);
 henka_result henka_engine_get_diagnostics(const henka_engine* engine, henka_engine_diagnostics* out_diagnostics);
+/*
+ * Requests one application-owned capture of the next completed main-window
+ * framebuffer. The path is copied before this function returns and the
+ * request is consumed by the next successful frame presentation. This is
+ * intended for deterministic visual evidence and does not capture the
+ * desktop or change foreground focus.
+ */
+henka_result henka_engine_request_frame_capture(
+    henka_engine* engine,
+    const char* path);
 henka_result henka_engine_open_tool_window(
     henka_engine* engine,
     const henka_tool_window_desc* desc,

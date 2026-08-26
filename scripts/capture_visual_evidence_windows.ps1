@@ -6,7 +6,7 @@ param(
 
     [string]$ExecutablePath = "",
 
-    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SSGI_REFERENCE")]
+    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE")]
     [string]$EvidenceProfile = "FULL_SHOWCASE",
 
     [ValidateSet("wide", "close")]
@@ -64,7 +64,7 @@ if ($EvidenceProfile -eq "GEOMETRY_SOLID" -and -not $IncludeStartupShowcase) {
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $IncludeGiraffeInspection = $true
 }
-if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE") -and
+if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE") -and
     ($IncludeStartupShowcase -or $IncludeGiraffeInspection -or $IncludeTerrain)) {
     throw "REALISM_REFERENCE evidence is a dedicated reference-scene capture and cannot include showcase or terrain extras."
 }
@@ -137,7 +137,7 @@ function Wait-HenkaCaptureReady {
 
     for ($attempt = 0; $attempt -lt 600; ++$attempt) {
         if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
-            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE)? ' |
+            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE)? ' |
                 Select-Object -Last 1
             if ($null -ne $line) {
                 return $line.Line
@@ -149,6 +149,30 @@ function Wait-HenkaCaptureReady {
         Start-Sleep -Milliseconds 100
     }
     throw "Sandbox did not report bounded capture readiness for $Label within 60 seconds."
+}
+
+function Wait-HenkaSsgiMotionCaptureReady {
+    param(
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][ValidateSet("before", "after")][string]$Phase
+    )
+
+    for ($attempt = 0; $attempt -lt 600; ++$attempt) {
+        if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
+            $line = Select-String -LiteralPath $StdoutPath -Pattern ("^CAPTURE_READY_SSGI_MOTION_REFERENCE phase=" + $Phase + " ") |
+                Select-Object -Last 1
+            if ($null -ne $line) {
+                return $line.Line
+            }
+        }
+        if ($Process.HasExited) {
+            throw "Sandbox exited before SSGI motion readiness for $Label phase=$Phase."
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw "Sandbox did not report SSGI motion readiness for $Label phase=$Phase within 60 seconds."
 }
 
 function Assert-HenkaSandboxCaptureReady {
@@ -207,7 +231,9 @@ function Capture-HenkaWindowBitmap {
     $bitmap = New-Object System.Drawing.Bitmap($width, $height)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
-        if ($script:allowForegroundIntegration) {
+        $windowAlreadyForeground =
+            [HenkaVisualCaptureNativeMethods]::GetForegroundWindow() -eq $Handle
+        if ($script:allowForegroundIntegration -or $windowAlreadyForeground) {
             $graphics.CopyFromScreen($Rect.Left, $Rect.Top, 0, 0, $bitmap.Size)
         }
         else {
@@ -236,6 +262,43 @@ function Capture-HenkaWindowBitmap {
         $graphics.Dispose()
     }
     return $bitmap
+}
+
+function Wait-HenkaNativeFrameCapture {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    for ($attempt = 0; $attempt -lt 600; ++$attempt) {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            $length = (Get-Item -LiteralPath $Path).Length
+            if ($length -gt 54) {
+                return
+            }
+        }
+        if ($Process.HasExited) {
+            throw "Sandbox exited before its application-owned framebuffer capture was written for $Label."
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw "Sandbox did not write its application-owned framebuffer capture for $Label within 60 seconds."
+}
+
+function Convert-HenkaNativeFrameCaptureToPng {
+    param(
+        [Parameter(Mandatory = $true)][string]$BitmapPath,
+        [Parameter(Mandatory = $true)][string]$PngPath
+    )
+
+    $bitmap = [System.Drawing.Bitmap]::new($BitmapPath)
+    try {
+        $bitmap.Save($PngPath, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $bitmap.Dispose()
+    }
 }
 
 function Assert-HenkaCaptureMetadata {
@@ -504,6 +567,31 @@ function Assert-HenkaSsgiReferenceCaptureMetadata {
     }
 }
 
+function Assert-HenkaSsgiMotionCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ExpectedView,
+        [Parameter(Mandatory = $true)][ValidateSet("before", "after")][string]$ExpectedPhase
+    )
+
+    $pattern = '^\s*CAPTURE_READY_SSGI_MOTION_REFERENCE phase=(?<phase>before|after) mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success) {
+        throw "SSGI motion reference capture readiness metadata was malformed for $Label."
+    }
+    $expectedLayout = if ($ExpectedView -eq "close") { "close_grid" } else { "wide_row" }
+    if ($match.Groups["phase"].Value -ne $ExpectedPhase -or
+        $match.Groups["view"].Value -ne $ExpectedView -or
+        $match.Groups["layout"].Value -ne $expectedLayout -or
+        [int]$match.Groups["texture_edge"].Value -lt 32 -or
+        [int]$match.Groups["count"].Value -ne 9 -or
+        [int]$match.Groups["sf"].Value -lt 3) {
+        throw "SSGI motion reference capture metadata is incomplete for $Label phase=$ExpectedPhase."
+    }
+    return $match
+}
+
 [System.IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 Add-Type -AssemblyName System.Drawing
 $modes = @(
@@ -544,6 +632,11 @@ if ($EvidenceProfile -eq "SSGI_REFERENCE") {
         @{ Label = "ssgi_reference"; Arguments = @("--capture-realism-reference", "ssgi", $ReferenceView, "rendered"); File = "ssgi-reference-$ReferenceView-rendered.png" }
     )
 }
+if ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
+    $modes = @(
+        @{ Label = "ssgi_motion_reference"; Arguments = @("--capture-realism-reference", "ssgi_motion", $ReferenceView, "rendered", $OutputDirectory); File = "ssgi-motion-reference-$ReferenceView-before.png"; Motion = $true; Native = $true }
+    )
+}
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $modes = @(
         @{ Label = "solid"; Arguments = @("--capture-mode", "solid"); File = "same-camera-solid.png" }
@@ -562,6 +655,9 @@ $records.Add("Evidence profile: $EvidenceProfile")
 $records.Add("Camera policy: capture-mode runs use the same deterministic two-model showcase camera and never save capture-mode settings")
 if ($EvidenceProfile -eq "SSGI_REFERENCE") {
     $records.Add("Modes: Rendered only; SSGI is a fullscreen HDR post-process")
+}
+elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
+    $records.Add("Modes: Rendered only; SSGI is exercised across a deterministic in-process camera translation")
 }
 else {
     $records.Add("Modes: Solid, Material Preview, Rendered")
@@ -585,8 +681,14 @@ if ($EvidenceProfile -eq "SUBSURFACE_REFERENCE") {
 if ($EvidenceProfile -eq "SSGI_REFERENCE") {
     $records.Add("SSGI reference: deterministic rendered capture proving the bounded screen-space indirect-diffuse path is active; same nine-subject camera and view=$ReferenceView")
 }
+if ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
+    $records.Add("SSGI motion reference: deterministic before/after rendered captures from one process with a bounded camera translation; view=$ReferenceView")
+}
 $capturePolicy = if ($script:allowForegroundIntegration) {
         "foreground desktop capture was explicitly enabled"
+    }
+    elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
+        "application-owned OpenGL framebuffer readback; no foreground or desktop ownership"
     }
     else {
         "background-safe PrintWindow capture; no foreground or desktop ownership"
@@ -596,8 +698,19 @@ $captureMetadata = New-Object System.Collections.Generic.List[object]
 
 foreach ($mode in $modes) {
     $capturedProcess = $null
+    $isMotion = $mode.ContainsKey("Motion") -and $mode.Motion
+    $isNative = $mode.ContainsKey("Native") -and $mode.Native
     $stdoutPath = Join-Path $OutputDirectory "$($mode.Label).stdout.txt"
     $stderrPath = Join-Path $OutputDirectory "$($mode.Label).stderr.txt"
+    if ($isNative) {
+        foreach ($nativePath in @(
+                (Join-Path $OutputDirectory "ssgi-motion-reference-$ReferenceView-before.bmp"),
+                (Join-Path $OutputDirectory "ssgi-motion-reference-$ReferenceView-after.bmp"))) {
+            if (Test-Path -LiteralPath $nativePath -PathType Leaf) {
+                Remove-Item -LiteralPath $nativePath -Force
+            }
+        }
+    }
     $capturedProcess = Start-HenkaCapturedProcess -FilePath $captureExecutable -Arguments $mode.Arguments -WorkingDirectory $captureRuntimeDirectory -StdoutPath $stdoutPath -StderrPath $stderrPath
     $process = $capturedProcess.Process
     $handle = [IntPtr]::Zero
@@ -611,7 +724,12 @@ foreach ($mode in $modes) {
             throw "Sandbox window did not become available for $($mode.Label)."
         }
         Assert-HenkaSandboxCaptureReady -Handle $handle -Label $mode.Label
-        $metadataLine = Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $mode.Label
+        $metadataLine = if ($isMotion) {
+            Wait-HenkaSsgiMotionCaptureReady -StdoutPath $stdoutPath -Process $process -Label $mode.Label -Phase "before"
+        }
+        else {
+            Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $mode.Label
+        }
         if ($EvidenceProfile -eq "REALISM_REFERENCE") {
             [void]$captureMetadata.Add(
                 (Assert-HenkaReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
@@ -632,39 +750,108 @@ foreach ($mode in $modes) {
             [void]$captureMetadata.Add(
                 (Assert-HenkaSsgiReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
         }
+        elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
+            Assert-HenkaSsgiMotionCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView -ExpectedPhase "before" | Out-Null
+        }
         else {
             [void]$captureMetadata.Add(
                 (Assert-HenkaCaptureMetadata -Line $metadataLine -Label $mode.Label))
         }
-        Start-Sleep -Milliseconds 150
-        Assert-HenkaSandboxCaptureReady -Handle $handle -Label $mode.Label
-        $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
-        $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
-            $handle,
-            9,
-            [ref]$rect,
-            [System.Runtime.InteropServices.Marshal]::SizeOf($rect))
-        if ($dwmResult -ne 0) {
-            throw "Window bounds could not be read for $($mode.Label): $dwmResult"
-        }
-        $width = $rect.Right - $rect.Left
-        $height = $rect.Bottom - $rect.Top
-        if ($width -le 0 -or $height -le 0) {
-            throw "Window bounds were invalid for $($mode.Label)."
-        }
-        $bitmap = Capture-HenkaWindowBitmap `
-            -Handle $handle `
-            -Rect $rect `
-            -Label $mode.Label
-        try {
+        if ($isNative) {
+            $nativeBeforePath = Join-Path $OutputDirectory "ssgi-motion-reference-$ReferenceView-before.bmp"
             $path = Join-Path $OutputDirectory $mode.File
-            $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+            Wait-HenkaNativeFrameCapture -Path $nativeBeforePath -Process $process -Label "$($mode.Label) before"
+            Convert-HenkaNativeFrameCaptureToPng -BitmapPath $nativeBeforePath -PngPath $path
+            $nativeBitmap = [System.Drawing.Bitmap]::new($path)
+            try {
+                $width = $nativeBitmap.Width
+                $height = $nativeBitmap.Height
+            }
+            finally {
+                $nativeBitmap.Dispose()
+            }
             $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
-            $records.Add("$($mode.Label): $($mode.File) SHA-256=$hash bounds=$($width)x$($height)")
+            $records.Add("$($mode.Label): $($mode.File) SHA-256=$hash bounds=$($width)x$($height) capture=application-owned-framebuffer")
             $records.Add("$($mode.Label) metadata: $metadataLine")
         }
-        finally {
-            $bitmap.Dispose()
+        else {
+            Start-Sleep -Milliseconds 150
+            Assert-HenkaSandboxCaptureReady -Handle $handle -Label $mode.Label
+            $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
+            $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
+                $handle,
+                9,
+                [ref]$rect,
+                [System.Runtime.InteropServices.Marshal]::SizeOf($rect))
+            if ($dwmResult -ne 0) {
+                throw "Window bounds could not be read for $($mode.Label): $dwmResult"
+            }
+            $width = $rect.Right - $rect.Left
+            $height = $rect.Bottom - $rect.Top
+            if ($width -le 0 -or $height -le 0) {
+                throw "Window bounds were invalid for $($mode.Label)."
+            }
+            $bitmap = Capture-HenkaWindowBitmap `
+                -Handle $handle `
+                -Rect $rect `
+                -Label $mode.Label
+            try {
+                $path = Join-Path $OutputDirectory $mode.File
+                $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+                $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+                $records.Add("$($mode.Label): $($mode.File) SHA-256=$hash bounds=$($width)x$($height)")
+                $records.Add("$($mode.Label) metadata: $metadataLine")
+            }
+            finally {
+                $bitmap.Dispose()
+            }
+        }
+        if ($isMotion) {
+            Start-Sleep -Milliseconds 150
+            $afterMetadataLine = Wait-HenkaSsgiMotionCaptureReady `
+                -StdoutPath $stdoutPath `
+                -Process $process `
+                -Label $mode.Label `
+                -Phase "after"
+            Assert-HenkaSsgiMotionCaptureMetadata `
+                -Line $afterMetadataLine `
+                -Label $mode.Label `
+                -ExpectedView $ReferenceView `
+                -ExpectedPhase "after" | Out-Null
+            if ($isNative) {
+                $nativeAfterPath = Join-Path $OutputDirectory "ssgi-motion-reference-$ReferenceView-after.bmp"
+                $afterPath = Join-Path $OutputDirectory ("ssgi-motion-reference-$ReferenceView-after.png")
+                Wait-HenkaNativeFrameCapture -Path $nativeAfterPath -Process $process -Label "$($mode.Label) after"
+                Convert-HenkaNativeFrameCaptureToPng -BitmapPath $nativeAfterPath -PngPath $afterPath
+                $afterBitmap = [System.Drawing.Bitmap]::new($afterPath)
+                try {
+                    $afterWidth = $afterBitmap.Width
+                    $afterHeight = $afterBitmap.Height
+                }
+                finally {
+                    $afterBitmap.Dispose()
+                }
+                $afterHash = (Get-FileHash -LiteralPath $afterPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                $records.Add("$($mode.Label) after: ssgi-motion-reference-$ReferenceView-after.png SHA-256=$afterHash bounds=$($afterWidth)x$($afterHeight) capture=application-owned-framebuffer")
+                $records.Add("$($mode.Label) after metadata: $afterMetadataLine")
+            }
+            else {
+                Assert-HenkaSandboxCaptureReady -Handle $handle -Label "$($mode.Label) after"
+                $afterBitmap = Capture-HenkaWindowBitmap `
+                    -Handle $handle `
+                    -Rect $rect `
+                    -Label "$($mode.Label) after"
+                try {
+                    $afterPath = Join-Path $OutputDirectory ("ssgi-motion-reference-$ReferenceView-after.png")
+                    $afterBitmap.Save($afterPath, [System.Drawing.Imaging.ImageFormat]::Png)
+                    $afterHash = (Get-FileHash -LiteralPath $afterPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                    $records.Add("$($mode.Label) after: ssgi-motion-reference-$ReferenceView-after.png SHA-256=$afterHash bounds=$($width)x$($height)")
+                    $records.Add("$($mode.Label) after metadata: $afterMetadataLine")
+                }
+                finally {
+                    $afterBitmap.Dispose()
+                }
+            }
         }
     }
     finally {
@@ -889,6 +1076,11 @@ if ($EvidenceProfile -eq "SSGI_REFERENCE") {
     & (Join-Path $PSScriptRoot "check_ssgi_reference_visual_evidence_windows.ps1") `
         -InputDirectory $OutputDirectory
 }
+if ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
+    $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
+    & (Join-Path $PSScriptRoot "check_ssgi_motion_reference_visual_evidence_windows.ps1") `
+        -InputDirectory $OutputDirectory
+}
 
 if ($IncludeTerrain) {
     & (Join-Path $PSScriptRoot "check_terrain_visual_evidence_windows.ps1") `
@@ -902,6 +1094,9 @@ if ($IncludeTerrain) {
 $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
 $captureSummary = if ($EvidenceProfile -eq "SSGI_REFERENCE") {
     "Rendered SSGI reference evidence"
+}
+elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
+    "Application-owned SSGI camera-motion reference evidence"
 }
 else {
     "Same-camera Solid, Material Preview, and Rendered evidence"

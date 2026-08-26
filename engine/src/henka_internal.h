@@ -409,6 +409,8 @@ henka_result henka_scene_restore_material_asset_state(
 
 struct henka_platform;
 
+#define HENKA_RENDERER_FRAME_CAPTURE_PATH_BYTES 4096U
+
 struct henka_renderer
 {
     struct henka_platform* platform;
@@ -423,6 +425,8 @@ struct henka_renderer
     henka_scene_view_render_desc scene_view;
     henka_viewport_shading_mode last_non_wireframe_mode;
     float exposure;
+    bool frame_capture_requested;
+    char frame_capture_path[HENKA_RENDERER_FRAME_CAPTURE_PATH_BYTES];
 };
 
 #define HENKA_MESH_MAX_PRIMITIVE_PARTS 3U
@@ -572,6 +576,9 @@ void henka_renderer_clear_frame(struct henka_renderer* renderer);
 henka_result henka_renderer_draw_scene(struct henka_renderer* renderer, const struct henka_scene* scene);
 henka_result henka_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context);
 henka_result henka_renderer_end_frame(struct henka_renderer* renderer);
+henka_result henka_renderer_request_frame_capture(
+    struct henka_renderer* renderer,
+    const char* path);
 henka_result henka_renderer_create_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id);
 void henka_renderer_destroy_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id);
 henka_result henka_renderer_draw_tool_window_ui(
