@@ -192,6 +192,16 @@ if (-not (Test-Path -LiteralPath $templateExe -PathType Leaf)) {
     throw "The external game template executable was not produced: $templateExe"
 }
 
+$softwareOpenGLRoot = [string]$env:HENKA_CI_SOFTWARE_OPENGL_ROOT
+if (-not [string]::IsNullOrWhiteSpace($softwareOpenGLRoot)) {
+    $softwareOpenGLInstaller = Join-Path $repoRoot "scripts\install_windows_software_opengl.ps1"
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $softwareOpenGLInstaller `
+        -SourceDirectory $softwareOpenGLRoot -TargetDirectory (Split-Path -Parent $templateExe)
+    if ($LASTEXITCODE -ne 0) {
+        throw "The CI-only OpenGL runtime could not be installed into the external game-template runtime."
+    }
+}
+
 $result = Invoke-HenkaNativeCapture `
     -FilePath $templateExe `
     -WorkingDirectory (Split-Path -Parent $templateExe) `
