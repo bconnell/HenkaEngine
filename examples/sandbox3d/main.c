@@ -7864,13 +7864,25 @@ static bool sandbox3d_request_capture_frame(
     }
     view = state->realism_reference_capture_view ==
         SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE ? "close" : "wide";
-    written = snprintf(
-        path,
-        sizeof(path),
-        "%s/ssgi-motion-reference-%s-%s.bmp",
-        state->capture_output_directory,
-        view,
-        phase);
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI)
+    {
+        written = snprintf(
+            path,
+            sizeof(path),
+            "%s/ssgi-reference-%s.bmp",
+            state->capture_output_directory,
+            view);
+    }
+    else
+    {
+        written = snprintf(
+            path,
+            sizeof(path),
+            "%s/ssgi-motion-reference-%s-%s.bmp",
+            state->capture_output_directory,
+            view,
+            phase);
+    }
     if (written < 0 || (size_t)written >= sizeof(path))
     {
         return false;
@@ -7904,6 +7916,7 @@ static void sandbox3d_report_ssgi_performance_capture_ready(
     viewport = state->frame_layout.scene_viewport;
     if (henka_engine_get_diagnostics(engine, &diagnostics) != HENKA_SUCCESS ||
         !diagnostics.rendered_screen_space_indirect_active ||
+        !diagnostics.rendered_reflection_probe_diffuse_active ||
         viewport.x < 0 || viewport.y < 0 || viewport.width != 1280 ||
         viewport.height != 720 || !state->capture_camera_aspect_applied ||
         state->detail_normal_texture == NULL ||
@@ -7984,7 +7997,7 @@ static void sandbox3d_report_ssgi_performance_capture_ready(
         return;
     }
     printf(
-        "CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=0.0000 reference_ssgi_active=1 viewport=%d,%d,%d,%d aspect=%.6f reference_count=%zu settled_frames=%u samples=%u gpu_samples=%u frame_mean_ms=%.4f frame_max_ms=%.4f scene_cpu_mean_ms=%.4f scene_cpu_max_ms=%.4f scene_gpu_mean_ms=%.4f scene_gpu_max_ms=%.4f scene_gpu_timing=%s draw_expected=1\n",
+        "CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=0.0000 reference_ssgi_active=1 reference_probe_diffuse_active=1 viewport=%d,%d,%d,%d aspect=%.6f reference_count=%zu settled_frames=%u samples=%u gpu_samples=%u frame_mean_ms=%.4f frame_max_ms=%.4f scene_cpu_mean_ms=%.4f scene_cpu_max_ms=%.4f scene_gpu_mean_ms=%.4f scene_gpu_max_ms=%.4f scene_gpu_timing=%s draw_expected=1\n",
         state->realism_reference_capture_view ==
                 SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE
             ? "close"
@@ -8039,6 +8052,8 @@ static void sandbox3d_report_realism_reference_capture_ready(
     const char* capture_motion_prefix;
     const char* capture_ssgi_prefix;
     const char* capture_ssgi_active;
+    const char* capture_probe_diffuse_prefix;
+    const char* capture_probe_diffuse_active;
     float capture_exposure_stops;
 
     if (state == NULL || !state->realism_reference_capture_requested ||
@@ -8052,7 +8067,8 @@ static void sandbox3d_report_realism_reference_capture_ready(
         memset(&diagnostics, 0, sizeof(diagnostics));
         if (engine == NULL ||
             henka_engine_get_diagnostics(engine, &diagnostics) != HENKA_SUCCESS ||
-            !diagnostics.rendered_screen_space_indirect_active)
+            !diagnostics.rendered_screen_space_indirect_active ||
+            !diagnostics.rendered_reflection_probe_diffuse_active)
         {
             state->capture_settled_frames = 0U;
             return;
@@ -8157,8 +8173,18 @@ static void sandbox3d_report_realism_reference_capture_ready(
         state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION)
         ? "1"
         : "";
+    capture_probe_diffuse_prefix = (state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_SSGI ||
+        state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION)
+        ? " reference_probe_diffuse_active="
+        : "";
+    capture_probe_diffuse_active = (state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_SSGI ||
+        state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION)
+        ? "1"
+        : "";
     printf(
-        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
+        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
         capture_prefix,
         capture_motion_prefix,
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
@@ -8173,6 +8199,8 @@ static void sandbox3d_report_realism_reference_capture_ready(
         capture_variant_name,
         capture_ssgi_prefix,
         capture_ssgi_active,
+        capture_probe_diffuse_prefix,
+        capture_probe_diffuse_active,
         viewport.x,
         viewport.y,
         viewport.width,
@@ -8196,6 +8224,15 @@ static void sandbox3d_report_realism_reference_capture_ready(
         reference_count,
         state->capture_settled_frames);
     fflush(stdout);
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI &&
+        state->capture_output_directory[0] != '\0' &&
+        !sandbox3d_request_capture_frame(engine, state, "reference"))
+    {
+        HENKA_LOG_ERROR("SSGI reference could not request its application-owned framebuffer capture");
+        state->capture_metadata_reported = true;
+        henka_engine_request_exit(engine);
+        return;
+    }
     if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION &&
         state->capture_output_directory[0] != '\0' &&
         !sandbox3d_request_capture_frame(
@@ -36000,6 +36037,25 @@ int main(int argc, char** argv)
     }
     else if (argc == 6 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
         sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
+        realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI &&
+        sandbox3d_parse_realism_reference_capture_view(
+            argv[3],
+            &realism_reference_capture_view) &&
+        henka_viewport_shading_mode_parse(argv[4], &capture_mode) == HENKA_SUCCESS &&
+        capture_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
+        argv[5] != NULL && argv[5][0] != '\0' &&
+        strlen(argv[5]) < sizeof(capture_output_directory))
+    {
+        capture_mode_requested = true;
+        realism_reference_capture_requested = true;
+        (void)snprintf(
+            capture_output_directory,
+            sizeof(capture_output_directory),
+            "%s",
+            argv[5]);
+    }
+    else if (argc == 6 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
+        sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
         realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_HDR &&
         sandbox3d_parse_realism_reference_capture_view(
             argv[3],
@@ -36025,8 +36081,7 @@ int main(int argc, char** argv)
     }
     else if (argc == 5 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
         sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
-        (realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI ||
-            realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION ||
+        (realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION ||
             realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_PERFORMANCE) &&
         sandbox3d_parse_realism_reference_capture_view(
             argv[3],
@@ -36052,7 +36107,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 

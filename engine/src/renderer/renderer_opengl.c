@@ -209,6 +209,7 @@ typedef struct henka_opengl_renderer_state
     uint32_t reflection_probe_capture_failure_count;
     bool screen_space_reflections_active;
     bool screen_space_indirect_active;
+    bool reflection_probe_diffuse_active;
     bool reflection_fallback_active;
     GLuint shadow_program;
     henka_opengl_shader_data shadow_shader_data;
@@ -1408,7 +1409,7 @@ static void henka_add_optional_shader_locations(
         "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
         "useReflectionProbeBoxProjection",
-        "reflectionProbeMap", "useReflectionProbeMap", "doubleSided",
+        "reflectionProbeMap", "useReflectionProbeMap", "useReflectionProbeDiffuse", "doubleSided",
         "previousViewProjection", "previousModel", "useMotionVectors",
         "useInstancing", "cascadeBlendDistance", "thickness", "attenuationDistance", "attenuationColor",
         "thicknessUvSet", "useThicknessTexture", "transmissionUvSet", "useTransmissionTexture",
@@ -2160,6 +2161,10 @@ static void henka_opengl_delete_reflection_probe_resources(
     state->reflection_probe_capture_index = UINT32_MAX;
     state->reflection_probe_enabled_count = 0U;
     state->reflection_probe_captured_count = 0U;
+    if (!state->reflection_probe_capture_active)
+    {
+        state->reflection_probe_diffuse_active = false;
+    }
     state->reflection_probe_capture_generation = 0U;
     state->reflection_probe_capture_failure_count = 0U;
 }
@@ -5574,6 +5579,7 @@ henka_result henka_opengl_renderer_draw_scene(
         bool use_reflection_probe_box_projection;
         uint32_t reflection_probe_index = UINT32_MAX;
         bool use_reflection_probe_map;
+        bool use_reflection_probe_diffuse;
         size_t instance_count = 1U;
          bool occlusion_query_active = false;
          uint32_t part_index;
@@ -5715,6 +5721,18 @@ henka_result henka_opengl_renderer_draw_scene(
             editor_surface ?
                 state->viewport_program :
                 shader_data->program;
+        use_reflection_probe_diffuse = use_reflection_probe_map &&
+            !editor_surface &&
+            policy.use_hdr_presentation &&
+            (!helper_entity || entity->material.terrain_layers_enabled) &&
+            henka_opengl_shader_uniform_location(
+                program,
+                shader_data,
+                "useReflectionProbeDiffuse") >= 0;
+        if (use_reflection_probe_diffuse)
+        {
+            state->reflection_probe_diffuse_active = true;
+        }
         base_color = entity->material.base_color;
         light_direction = scene->light_direction;
         light_color = scene->light_color;
@@ -5984,6 +6002,11 @@ henka_result henka_opengl_renderer_draw_scene(
             use_reflection_probe_box_projection);
         henka_set_uniform_int_owned(program, shader_data, "reflectionProbeMap", 10);
         henka_set_uniform_bool_owned(program, shader_data, "useReflectionProbeMap", use_reflection_probe_map);
+        henka_set_uniform_bool_owned(
+            program,
+            shader_data,
+            "useReflectionProbeDiffuse",
+            use_reflection_probe_diffuse);
         henka_set_uniform_int(program, "localLightCount", local_light_count);
         henka_set_uniform_vec4_array_owned(
             program,
@@ -7513,6 +7536,15 @@ bool henka_opengl_renderer_get_screen_space_indirect_active(
         (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
 
     return state != NULL && state->screen_space_indirect_active;
+}
+
+bool henka_opengl_renderer_get_reflection_probe_diffuse_active(
+    const struct henka_renderer* renderer)
+{
+    const henka_opengl_renderer_state* state = renderer != NULL && renderer->backend_state != NULL ?
+        (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
+
+    return state != NULL && state->reflection_probe_diffuse_active;
 }
 
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled)

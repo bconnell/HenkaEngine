@@ -64,6 +64,7 @@ uniform bool useReflectionProbe;
 uniform bool useReflectionProbeBoxProjection;
 uniform samplerCube reflectionProbeMap;
 uniform bool useReflectionProbeMap;
+uniform bool useReflectionProbeDiffuse;
 uniform bool doubleSided;
 uniform int localLightCount;
 uniform vec4 localLightPositionRange[4];
@@ -510,6 +511,22 @@ vec3 sampleEnvironment(vec3 direction)
     return min(max(color, vec3(0.0)) * max(environmentIntensity, 0.0), vec3(65504.0));
 }
 
+vec3 sampleSceneProbeDiffuse(vec3 direction)
+{
+    vec3 normal = safeNormalize(direction, vec3(0.0, 1.0, 0.0));
+    vec3 tangent = safeNormalize(
+        abs(normal.y) < 0.95 ? cross(normal, vec3(0.0, 1.0, 0.0)) :
+            cross(normal, vec3(1.0, 0.0, 0.0)),
+        vec3(1.0, 0.0, 0.0));
+    vec3 bitangent = safeNormalize(cross(normal, tangent), vec3(0.0, 0.0, 1.0));
+    vec3 diffuse = textureLod(reflectionProbeMap, normal, 0.0).rgb * 0.40;
+    diffuse += textureLod(reflectionProbeMap, safeNormalize(normal + tangent, normal), 0.0).rgb * 0.15;
+    diffuse += textureLod(reflectionProbeMap, safeNormalize(normal - tangent, normal), 0.0).rgb * 0.15;
+    diffuse += textureLod(reflectionProbeMap, safeNormalize(normal + bitangent, normal), 0.0).rgb * 0.15;
+    diffuse += textureLod(reflectionProbeMap, safeNormalize(normal - bitangent, normal), 0.0).rgb * 0.15;
+    return min(max(diffuse, vec3(0.0)), vec3(8.0));
+}
+
 /* OpenGL 3.3 core permits sampler-array access only with a compile-time
  * constant index on the supported Mesa/llvmpipe path. Keep the terrain layer
  * selection dynamic while spelling out the four legal sampler accesses. */
@@ -825,6 +842,15 @@ void main()
             vec3 environmentDiffuse = useIBL ? texture(iblIrradianceMap, normal).rgb : sampleEnvironment(normal);
             vec3 environmentBackScatter = useIBL ?
                 texture(iblIrradianceMap, -normal).rgb : sampleEnvironment(-normal);
+            if (useReflectionProbeDiffuse)
+            {
+                /* A captured scene probe adds bounded local color transfer to
+                 * the environment irradiance. This is a scene-space
+                 * approximation, not a full irradiance volume or GI solution. */
+                environmentDiffuse = min(
+                    environmentDiffuse + sampleSceneProbeDiffuse(normal) * 0.18,
+                    vec3(8.0));
+            }
             vec3 reflectionDirection = reflect(-viewDirection, normal);
             vec3 blurredReflectionDirection = safeNormalize(
                 mix(reflectionDirection, normal, surfaceRoughness * 0.75),

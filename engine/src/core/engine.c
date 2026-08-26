@@ -1854,6 +1854,8 @@ henka_result henka_engine_get_diagnostics(
         &out_diagnostics->rendered_reflection_fallback_active);
     out_diagnostics->rendered_screen_space_indirect_active =
         henka_opengl_renderer_get_screen_space_indirect_active(engine->renderer);
+    out_diagnostics->rendered_reflection_probe_diffuse_active =
+        henka_opengl_renderer_get_reflection_probe_diffuse_active(engine->renderer);
     out_diagnostics->scene_viewport =
         henka_renderer_get_scene_viewport(engine->renderer);
     henka_opengl_renderer_get_hdr_diagnostics(

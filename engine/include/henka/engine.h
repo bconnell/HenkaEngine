@@ -228,6 +228,10 @@ typedef struct henka_engine_diagnostics
      * was enabled for the current Rendered frame; it does not claim full-scene
      * global illumination or a nonzero contribution at every pixel. */
     bool rendered_screen_space_indirect_active;
+    /* Appended to preserve the existing public diagnostics field offsets. It
+     * describes whether a captured scene-reflection probe supplied the bounded
+     * diffuse transfer approximation for the current Rendered frame. */
+    bool rendered_reflection_probe_diffuse_active;
 } henka_engine_diagnostics;
 
 typedef henka_result (*henka_engine_initialize_fn)(henka_engine* engine, void* user_data);

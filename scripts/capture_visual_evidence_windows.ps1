@@ -547,7 +547,7 @@ function Assert-HenkaSsgiReferenceCaptureMetadata {
         [Parameter(Mandatory = $true)][string]$ExpectedView
     )
 
-    $pattern = '^\s*CAPTURE_READY_SSGI_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY_SSGI_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 reference_probe_diffuse_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success) {
         throw "SSGI reference capture readiness metadata was malformed for $Label."
@@ -575,7 +575,7 @@ function Assert-HenkaSsgiMotionCaptureMetadata {
         [Parameter(Mandatory = $true)][ValidateSet("before", "after")][string]$ExpectedPhase
     )
 
-    $pattern = '^\s*CAPTURE_READY_SSGI_MOTION_REFERENCE phase=(?<phase>before|after) mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY_SSGI_MOTION_REFERENCE phase=(?<phase>before|after) mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 reference_probe_diffuse_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success) {
         throw "SSGI motion reference capture readiness metadata was malformed for $Label."
@@ -599,7 +599,7 @@ function Assert-HenkaSsgiPerformanceCaptureMetadata {
         [Parameter(Mandatory = $true)][string]$ExpectedView
     )
 
-    $pattern = '^\s*CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=(?<view>wide|close) '
+    $pattern = '^\s*CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=(?<view>wide|close) .*reference_ssgi_active=1 reference_probe_diffuse_active=1 '
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success -or $match.Groups["view"].Value -ne $ExpectedView) {
         throw "SSGI performance reference capture readiness metadata was malformed for $Label."
@@ -643,7 +643,7 @@ if ($EvidenceProfile -eq "SUBSURFACE_REFERENCE") {
 }
 if ($EvidenceProfile -eq "SSGI_REFERENCE") {
     $modes = @(
-        @{ Label = "ssgi_reference"; Arguments = @("--capture-realism-reference", "ssgi", $ReferenceView, "rendered"); File = "ssgi-reference-$ReferenceView-rendered.png" }
+        @{ Label = "ssgi_reference"; Arguments = @("--capture-realism-reference", "ssgi", $ReferenceView, "rendered", $OutputDirectory); File = "ssgi-reference-$ReferenceView-rendered.png"; Native = $true }
     )
 }
 if ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
@@ -712,7 +712,7 @@ if ($EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") {
 $capturePolicy = if ($script:allowForegroundIntegration) {
         "foreground desktop capture was explicitly enabled"
     }
-    elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
+    elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE") {
         "application-owned OpenGL framebuffer readback; no foreground or desktop ownership"
     }
     elseif ($EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") {
@@ -732,9 +732,15 @@ foreach ($mode in $modes) {
     $stdoutPath = Join-Path $OutputDirectory "$($mode.Label).stdout.txt"
     $stderrPath = Join-Path $OutputDirectory "$($mode.Label).stderr.txt"
     if ($isNative) {
-        foreach ($nativePath in @(
+        $nativePaths = if ($isMotion) {
+            @(
                 (Join-Path $OutputDirectory "ssgi-motion-reference-$ReferenceView-before.bmp"),
-                (Join-Path $OutputDirectory "ssgi-motion-reference-$ReferenceView-after.bmp"))) {
+                (Join-Path $OutputDirectory "ssgi-motion-reference-$ReferenceView-after.bmp"))
+        }
+        else {
+            @(Join-Path $OutputDirectory "ssgi-reference-$ReferenceView.bmp")
+        }
+        foreach ($nativePath in $nativePaths) {
             if (Test-Path -LiteralPath $nativePath -PathType Leaf) {
                 Remove-Item -LiteralPath $nativePath -Force
             }
@@ -794,9 +800,14 @@ foreach ($mode in $modes) {
             continue
         }
         if ($isNative) {
-            $nativeBeforePath = Join-Path $OutputDirectory "ssgi-motion-reference-$ReferenceView-before.bmp"
+            $nativeBeforePath = if ($isMotion) {
+                Join-Path $OutputDirectory "ssgi-motion-reference-$ReferenceView-before.bmp"
+            }
+            else {
+                Join-Path $OutputDirectory "ssgi-reference-$ReferenceView.bmp"
+            }
             $path = Join-Path $OutputDirectory $mode.File
-            Wait-HenkaNativeFrameCapture -Path $nativeBeforePath -Process $process -Label "$($mode.Label) before"
+            Wait-HenkaNativeFrameCapture -Path $nativeBeforePath -Process $process -Label $mode.Label
             Convert-HenkaNativeFrameCaptureToPng -BitmapPath $nativeBeforePath -PngPath $path
             $nativeBitmap = [System.Drawing.Bitmap]::new($path)
             try {

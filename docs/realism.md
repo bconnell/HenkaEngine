@@ -178,6 +178,22 @@ The screen-space gather uses symmetric receiver-depth reconstruction, depth-edge
 
 This is not full global illumination. The screen-space method cannot see geometry that is outside the current view, hidden behind another surface, or otherwise absent from the depth/color buffers. It is single-frame and bounded; it does not claim multi-bounce transport, probe-volume GI, hardware ray tracing, or path tracing.
 
+## Scene-probe diffuse transfer
+
+When the Rendered path has a captured scene-reflection probe, opaque scene
+materials can also receive a bounded local diffuse color-transfer approximation
+from five clamped cubemap samples around the receiver normal. This reuses the
+existing scene-probe capture boundary and is reported through
+`rendered_reflection_probe_diffuse_active`; the SSGI reference metadata requires
+both the screen-space indirect path and this probe-diffuse path to be active.
+
+This is scene-space support for the current reference fixture, not a full
+irradiance volume or global-illumination solution. It does not provide
+probe-grid blending, production irradiance filtering, multi-bounce transport,
+or guaranteed hidden/off-screen contribution beyond what the captured probe
+contains. Missing shader support or an unavailable probe fails closed to the
+existing environment-lighting path.
+
 ## Direction
 
 The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes deterministic exposure-range and bounded subsurface-response fixtures in addition to the PBR and lighting fixtures. Important follow-up tracks are:
@@ -185,7 +201,10 @@ The next realism work should build from reference scenes. Effects outside those 
 1. extend the PBR, lighting, and HDR reference scenes to validate energy response, texture color-space handling, normal-map behavior, roughness/metallic response, IBL calibration, and light/shadow stability;
 2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined; the current SSS fixture only guards the existing bounded response;
 3. extend the bounded screen-space indirect diffuse validation for leaks, halos, over-brightening, and deeper hardware-specific performance characterization; current activation, camera-motion, and gross fixed-reference performance guards are in place;
-4. add a scene-space indirect-light solution that can represent off-screen and hidden contributors, such as a bounded irradiance-probe or probe-grid system;
+4. extend the current scene-probe diffuse foundation into a bounded
+   irradiance-probe or probe-grid solution that can represent off-screen and
+   hidden contributors with explicit capture, filtering, blending, and
+   performance contracts;
 
 5. improve local reflection-probe placement, blending, capture policy, and interaction with indirect diffuse lighting;
 6. retain rasterization as the broad hardware baseline while designing future renderer-backend boundaries for optional hardware ray tracing;

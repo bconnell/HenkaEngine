@@ -12,7 +12,7 @@ try {
     ) | Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
     @(
         "Realism reference capture: debug grid hidden.",
-        "CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=close reference_layout=close_grid reference_texture_edge=32 reference_exposure_stops=0.0000 reference_ssgi_active=1 viewport=0,0,1280,720 aspect=1.777778 reference_count=9 settled_frames=3 samples=32 gpu_samples=32 frame_mean_ms=18.000 frame_max_ms=25.000 scene_cpu_mean_ms=32.000 scene_cpu_max_ms=47.000 scene_gpu_mean_ms=2.800 scene_gpu_max_ms=4.100 scene_gpu_timing=available draw_expected=1"
+        "CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=close reference_layout=close_grid reference_texture_edge=32 reference_exposure_stops=0.0000 reference_ssgi_active=1 reference_probe_diffuse_active=1 viewport=0,0,1280,720 aspect=1.777778 reference_count=9 settled_frames=3 samples=32 gpu_samples=32 frame_mean_ms=18.000 frame_max_ms=25.000 scene_cpu_mean_ms=32.000 scene_cpu_max_ms=47.000 scene_gpu_mean_ms=2.800 scene_gpu_max_ms=4.100 scene_gpu_timing=available draw_expected=1"
     ) | Set-Content -LiteralPath (Join-Path $fixtureRoot "ssgi_performance_reference.stdout.txt")
     & (Join-Path $PSScriptRoot "check_ssgi_performance_reference_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
 
