@@ -17,9 +17,11 @@ The current Rendered path includes:
 - depth-derived ambient occlusion;
 - a bounded depth-derived screen-space reflection path that consumes the
   material pass's per-pixel roughness output, uses signed depth-crossing hit
-  refinement, and falls back to environment/probe lighting on missing HDR
-  resources; this remains a screen-space approximation rather than production
-  planar, hierarchical, or off-screen reflection coverage;
+  refinement, weights hit confidence with roughness, edge distance, and a
+  bounded Schlick Fresnel response, and falls back to environment/probe
+  lighting on missing HDR resources; this remains a screen-space approximation
+  rather than production planar, hierarchical, or off-screen reflection
+  coverage;
 - bloom, exposure, ACES-style tone mapping, a restrained rendered grade, and reconstruction sharpening;
 - bounded temporal history with motion, previous-depth, disocclusion, reactive-mask, and history-clamping safeguards.
 
