@@ -48,6 +48,33 @@ try {
     if (-not $rejected -or $message -notmatch "exactly one rendered readiness record") {
         throw "The SSGI reference validator did not reject an inactive readiness record."
     }
+
+    $bitmap = [System.Drawing.Bitmap]::new(640, 360)
+    try {
+        for ($y = 0; $y -lt $bitmap.Height; ++$y) {
+            for ($x = 0; $x -lt $bitmap.Width; ++$x) {
+                $wave = [int](8.0 * [Math]::Sin($x * 0.035) + 6.0 * [Math]::Cos($y * 0.045))
+                $value = [Math]::Max(0, [Math]::Min(255, 245 + $wave))
+                $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($value, $value, $value))
+            }
+        }
+        $bitmap.Save((Join-Path $fixtureRoot "ssgi-reference-close-rendered.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally { $bitmap.Dispose() }
+    (Get-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt") -Raw) -replace "reference_ssgi_active=0", "reference_ssgi_active=1" |
+        Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
+    $rejected = $false
+    $message = ""
+    try {
+        & (Join-Path $PSScriptRoot "check_ssgi_reference_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
+    }
+    catch {
+        $rejected = $true
+        $message = $_.Exception.Message
+    }
+    if (-not $rejected -or $message -notmatch "excessively clipped or over-bright") {
+        throw "The SSGI reference validator did not reject an excessively bright image."
+    }
     Write-Output "SSGI reference visual evidence validator tests passed."
 }
 finally {

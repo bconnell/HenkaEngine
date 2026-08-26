@@ -74,6 +74,61 @@ try {
     if ($standardDeviation -lt 2.0) {
         throw "SSGI reference image is too flat to prove a stable rendered result."
     }
+
+    [int]$clippedPixelCount = 0
+    [int]$brightPixelCount = 0
+    [int]$haloSampleCount = 0
+    [int]$haloBrightPixelCount = 0
+    $sampleStep = [Math]::Max(1, [int][Math]::Floor($bitmap.Width / 160.0))
+    $haloCentersX = @(0.328, 0.507, 0.694)
+    $haloCentersY = @(0.213, 0.519, 0.814)
+    $haloInnerRadius = $bitmap.Width * 0.082
+    $haloOuterRadius = $bitmap.Width * 0.098
+    for ($y = 0; $y -lt $bitmap.Height; $y += $sampleStep) {
+        for ($x = 0; $x -lt $bitmap.Width; $x += $sampleStep) {
+            $pixel = $bitmap.GetPixel($x, $y)
+            [double]$luma = 0.2126 * $pixel.R + 0.7152 * $pixel.G + 0.0722 * $pixel.B
+            if ($luma -ge 250.0) { ++$clippedPixelCount }
+            if ($luma -ge 240.0) { ++$brightPixelCount }
+        }
+    }
+    foreach ($centerY in $haloCentersY) {
+        foreach ($centerX in $haloCentersX) {
+            $centerPixelX = $bitmap.Width * $centerX
+            $centerPixelY = $bitmap.Height * $centerY
+            $minX = [Math]::Max(0, [int][Math]::Floor($centerPixelX - $haloOuterRadius))
+            $maxX = [Math]::Min($bitmap.Width - 1, [int][Math]::Ceiling($centerPixelX + $haloOuterRadius))
+            $minY = [Math]::Max(0, [int][Math]::Floor($centerPixelY - $haloOuterRadius))
+            $maxY = [Math]::Min($bitmap.Height - 1, [int][Math]::Ceiling($centerPixelY + $haloOuterRadius))
+            for ($y = $minY; $y -le $maxY; $y += $sampleStep) {
+                for ($x = $minX; $x -le $maxX; $x += $sampleStep) {
+                    $dx = $x - $centerPixelX
+                    $dy = $y - $centerPixelY
+                    $distance = [Math]::Sqrt(($dx * $dx) + ($dy * $dy))
+                    if ($distance -lt $haloInnerRadius -or $distance -gt $haloOuterRadius) {
+                        continue
+                    }
+                    $pixel = $bitmap.GetPixel($x, $y)
+                    [double]$luma = 0.2126 * $pixel.R + 0.7152 * $pixel.G + 0.0722 * $pixel.B
+                    ++$haloSampleCount
+                    if ($luma -ge 180.0) { ++$haloBrightPixelCount }
+                }
+            }
+        }
+    }
+    $clippedFraction = $clippedPixelCount / [double]$count
+    $brightFraction = $brightPixelCount / [double]$count
+    $haloBrightFraction = if ($haloSampleCount -gt 0) {
+        $haloBrightPixelCount / [double]$haloSampleCount
+    } else {
+        1.0
+    }
+    if ($clippedFraction -gt 0.20 -or $brightFraction -gt 0.30) {
+        throw "SSGI reference image is excessively clipped or over-bright (clipped=$([Math]::Round(100.0 * $clippedFraction, 3))%, bright=$([Math]::Round(100.0 * $brightFraction, 3))%)."
+    }
+    if ($haloBrightFraction -gt 0.05) {
+        throw "SSGI reference image has a bright subject-edge halo (halo=$([Math]::Round(100.0 * $haloBrightFraction, 3))%)."
+    }
 }
 finally {
     $bitmap.Dispose()
@@ -83,6 +138,7 @@ $summary = @(
     "SSGI reference visual evidence validation: passed",
     "Reference view: $($record.Groups['view'].Value)",
     "Nine deterministic subjects: settled composition and bounded Rendered path",
+    "Bounded image guard: clipped=$([Math]::Round(100.0 * $clippedFraction, 3))% bright=$([Math]::Round(100.0 * $brightFraction, 3))% subject_edge_halo=$([Math]::Round(100.0 * $haloBrightFraction, 3))%",
     "Status: automated SSGI activation and image-stability guard passed; human visual inspection remains required"
 )
 $summary | Set-Content -LiteralPath (Join-Path $InputDirectory "ssgi-reference-visual-validation.txt")
