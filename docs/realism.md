@@ -156,7 +156,10 @@ directional, cascade, and point shadow targets are complete, and records that
 shadow contract in the capture metadata. The existing PBR close checker
 continues to require contact-shadow contrast; together these checks cover the
 initial reference-scene lighting/shadow contract without treating automated
-metrics as human visual approval.
+metrics as human visual approval. The lighting profile captures Rendered twice
+and bounds the repeat-to-repeat image difference, guarding deterministic
+shadow/light output across fresh runs without claiming temporal anti-aliasing
+or hardware-independent pixel identity.
 
 The package also exposes a dedicated subsurface reference fixture. It uses nine
 same-camera, same-geometry, same-light UV-sphere subjects and captures the

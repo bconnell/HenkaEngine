@@ -65,6 +65,13 @@ foreach ($entry in $metadata) {
 if (-not $metadata[2].Groups["shadow"].Success) {
     throw "Lighting Rendered evidence did not prove that directional, cascade, and point shadow targets were ready."
 }
+$renderedMetadataRecords = @(
+    $indexText -split '\r?\n' |
+        Where-Object { $_ -match '^lighting_reference_rendered(_repeat)? metadata: .*mode=rendered .*shadow_reference=1 shadow_maps_ready=1 ' }
+)
+if ($renderedMetadataRecords.Count -ne 2) {
+    throw "Lighting evidence must contain exactly two shadow-ready Rendered metadata records for repeatability."
+}
 $canonical = ($metadata[0].Value -replace 'mode=(solid|material_preview|rendered)', 'mode=shared') -replace ' shadow_reference=1 shadow_maps_ready=1', ''
 foreach ($entry in $metadata) {
     if ((($entry.Value -replace 'mode=(solid|material_preview|rendered)', 'mode=shared') -replace ' shadow_reference=1 shadow_maps_ready=1', '') -ne $canonical) {
@@ -224,6 +231,7 @@ $files = @{
     solid = Join-Path $InputDirectory "lighting-reference-$view-solid.png"
     material_preview = Join-Path $InputDirectory "lighting-reference-$view-material-preview.png"
     rendered = Join-Path $InputDirectory "lighting-reference-$view-rendered.png"
+    rendered_repeat = Join-Path $InputDirectory "lighting-reference-$view-rendered-repeat.png"
 }
 $measurements = @()
 foreach ($mode in @("solid", "material_preview", "rendered")) {
@@ -237,6 +245,10 @@ foreach ($mode in @("solid", "material_preview", "rendered")) {
 $difference = Get-MeanRgbDifference $files.material_preview $files.rendered
 if ($difference -lt 2.0) {
     throw "Lighting Rendered evidence is not materially distinct from Material Preview (mean RGB difference=$([Math]::Round($difference, 2)))."
+}
+$repeatDifference = Get-MeanRgbDifference $files.rendered $files.rendered_repeat
+if ($repeatDifference -gt 2.0) {
+    throw "Lighting Rendered evidence was not repeatable across deterministic runs (mean RGB difference=$([Math]::Round($repeatDifference, 2)))."
 }
 
 $renderedLeftLuma = if ($view -eq "close") {
@@ -260,6 +272,7 @@ $summary = @(
     "Reference view: $view",
     "Nine deterministic same-material lighting subjects: settled and centered",
     "Rendered versus Material Preview mean RGB difference: $([Math]::Round($difference, 2))",
+    "Repeated Rendered capture mean RGB difference: $([Math]::Round($repeatDifference, 2))",
     "Rendered key/fill/rim response is distinguishable: left=$([Math]::Round($renderedLeftLuma, 2)), right=$([Math]::Round($renderedRightLuma, 2))",
     "Status: automated lighting reference guard passed; human visual inspection remains required"
 )

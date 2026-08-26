@@ -754,7 +754,8 @@ if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
     $modes = @(
         @{ Label = "lighting_reference_solid"; Arguments = @("--capture-realism-reference", "lighting", $ReferenceView, "solid"); File = "lighting-reference-$ReferenceView-solid.png" },
         @{ Label = "lighting_reference_material_preview"; Arguments = @("--capture-realism-reference", "lighting", $ReferenceView, "material_preview"); File = "lighting-reference-$ReferenceView-material-preview.png" },
-        @{ Label = "lighting_reference_rendered"; Arguments = @("--capture-realism-reference", "lighting", $ReferenceView, "rendered"); File = "lighting-reference-$ReferenceView-rendered.png" }
+        @{ Label = "lighting_reference_rendered"; Arguments = @("--capture-realism-reference", "lighting", $ReferenceView, "rendered"); File = "lighting-reference-$ReferenceView-rendered.png" },
+        @{ Label = "lighting_reference_rendered_repeat"; Arguments = @("--capture-realism-reference", "lighting", $ReferenceView, "rendered"); File = "lighting-reference-$ReferenceView-rendered-repeat.png" }
     )
 }
 if ($EvidenceProfile -eq "HDR_RANGE_REFERENCE") {

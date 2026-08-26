@@ -18,6 +18,10 @@ if ($capture -notmatch 'shadow_reference=1' -or
     $checker -notmatch 'shadow_reference=1') {
     $missing += 'shadow metadata capture/check contract'
 }
+if ($capture -notmatch 'lighting-reference-\$ReferenceView-rendered-repeat\.png' -or
+    $checker -notmatch 'rendered-repeat') {
+    $missing += 'repeated Rendered stability capture/check'
+}
 
 if ($missing.Count -gt 0) {
     throw "Lighting shadow reference contract is incomplete: $($missing -join ', ')"
