@@ -19,7 +19,8 @@ if ($sandbox -notmatch 'CAPTURE_READY_SCENE_PROBE_REFERENCE') {
 if ($sandbox -notmatch 'probe_reference=1' -or
     $sandbox -notmatch 'rendered_reflection_probe_diffuse_active' -or
     $sandbox -notmatch 'rendered_reflection_probe_prefilter_active' -or
-    $sandbox -notmatch 'rendered_reflection_probe_blend_active') {
+    $sandbox -notmatch 'rendered_reflection_probe_blend_active' -or
+    $sandbox -notmatch 'screen_space_reflections_active') {
     $missing += 'scene-probe readiness diagnostics'
 }
 if ($sandbox -notmatch 'rendered_reflection_probe_enabled_count' -or

@@ -247,6 +247,11 @@ if(WIN32)
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_branding_windows.ps1
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
+        NAME henka_ssr_roughness_buffer_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_ssr_roughness_buffer_windows.ps1)
 endif()
 
 add_executable(henka_terrain_tests

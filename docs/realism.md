@@ -15,20 +15,21 @@ The current Rendered path includes:
   approximation, not the GGX-prefiltered global IBL path;
 - directional, cascade, spot, and point shadow-map foundations;
 - depth-derived ambient occlusion;
-- a validated environment/probe reflection fallback; the retained depth-derived
-  screen-space reflection implementation is fail-closed until the post-process
-  has per-pixel material roughness data;
+- a bounded depth-derived screen-space reflection path that consumes the
+  material pass's per-pixel roughness output, uses signed depth-crossing hit
+  refinement, and falls back to environment/probe lighting on missing HDR
+  resources; this remains a screen-space approximation rather than production
+  planar, hierarchical, or off-screen reflection coverage;
 - bloom, exposure, ACES-style tone mapping, a restrained rendered grade, and reconstruction sharpening;
 - bounded temporal history with motion, previous-depth, disocclusion, reactive-mask, and history-clamping safeguards.
 
-Rendered post-processing keeps the calibrated screen-space indirect-diffuse and
-ambient-occlusion contributions in the linear HDR target until the single final
-exposure/tone-map/presentation transform. Reflection uses the environment,
-probe, or analytical fallback while the retained screen-space reflection
-implementation is disabled without a material-aware roughness buffer. This
-improves color-space correctness without emitting false self-reflections, but
-does not turn the screen-space paths into full-scene reflections or production
-GTAO.
+Rendered post-processing keeps the calibrated screen-space indirect-diffuse,
+ambient-occlusion, and bounded screen-space reflection contributions in the
+linear HDR target until the single final exposure/tone-map/presentation
+transform. Reflection still uses the environment, probe, or analytical
+fallback when a valid roughness attachment is unavailable. This improves
+material-aware reflection response without claiming full-scene reflections or
+production GTAO.
 
 The shared fullscreen-triangle presentation path maps its oversized clip-space
 triangle to the complete normalized texture domain. Material Preview and
@@ -332,7 +333,9 @@ The next realism work should build from reference scenes. Effects outside those 
 5. extend local reflection-probe placement, capture policy, and interaction with
    indirect diffuse lighting; bounded two-probe overlap blending is now part of
    the supported OpenGL foundation, while probe-grid scale and production
-   filtering remain future work;
+   filtering remain future work. The current bounded SSR path now consumes
+   per-pixel roughness, while planar, hierarchical, and off-screen reflection
+   coverage remain future work;
 6. retain rasterization as the broad hardware baseline while designing future renderer-backend boundaries for optional hardware ray tracing;
 7. consider a path-traced reference renderer later as a visual ground-truth tool, even if production games continue to use hybrid real-time rendering.
 

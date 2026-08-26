@@ -140,6 +140,7 @@ uniform bool useMotionVectors;
 out vec4 outColor;
 layout(location = 1) out vec2 outMotion;
 layout(location = 2) out float outReactive;
+layout(location = 3) out float outRoughness;
 
 const float PI = 3.14159265359;
 
@@ -1040,6 +1041,7 @@ void main()
             max(surfaceTransmission * 0.65, max(emissive.r, max(emissive.g, emissive.b)) * 0.08)),
         0.0,
         1.0);
+    outRoughness = clamp(surfaceRoughness, 0.045, 1.0);
     if (useMotionVectors && abs(fragCurrentClipPosition.w) > 0.0001 &&
         abs(fragPreviousClipPosition.w) > 0.0001)
     {

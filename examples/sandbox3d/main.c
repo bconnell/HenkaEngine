@@ -8127,7 +8127,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
     const char* capture_normal_map_details;
     const char* capture_color_space_details;
     const char* capture_energy_details;
-    char capture_ibl_details[192];
+    char capture_ibl_details[256];
     const char* capture_shadow_details;
     float capture_exposure_stops;
 
@@ -8393,7 +8393,8 @@ static void sandbox3d_report_realism_reference_capture_ready(
         (void)snprintf(
             capture_ibl_details,
             sizeof(capture_ibl_details),
-            " probe_reference=1 probe_diffuse_active=1 probe_prefilter_active=1 probe_blend_active=1 probe_enabled_count=%u probe_captured_count=%u probe_capture_generation=%llu probe_capture_failures=%u",
+            " probe_reference=1 probe_diffuse_active=1 probe_prefilter_active=1 probe_blend_active=1 screen_space_reflections_active=%u probe_enabled_count=%u probe_captured_count=%u probe_capture_generation=%llu probe_capture_failures=%u",
+            diagnostics.rendered_screen_space_reflections_active ? 1U : 0U,
             (unsigned int)diagnostics.rendered_reflection_probe_enabled_count,
             (unsigned int)diagnostics.rendered_reflection_probe_captured_count,
             (unsigned long long)diagnostics.rendered_reflection_probe_capture_generation,

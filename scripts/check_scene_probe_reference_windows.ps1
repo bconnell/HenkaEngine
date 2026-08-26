@@ -27,7 +27,7 @@ foreach ($stdoutPath in $stdoutPaths) {
     }
 }
 
-$pattern = '(?m)CAPTURE_READY_SCENE_PROBE_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) probe_reference=1 probe_diffuse_active=1 probe_prefilter_active=1 probe_blend_active=1 probe_enabled_count=(?<enabled>\d+) probe_captured_count=(?<captured>\d+) probe_capture_generation=(?<generation>\d+) probe_capture_failures=(?<failures>\d+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1'
+$pattern = '(?m)CAPTURE_READY_SCENE_PROBE_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) probe_reference=1 probe_diffuse_active=1 probe_prefilter_active=1 probe_blend_active=1 screen_space_reflections_active=1 probe_enabled_count=(?<enabled>\d+) probe_captured_count=(?<captured>\d+) probe_capture_generation=(?<generation>\d+) probe_capture_failures=(?<failures>\d+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1'
 $metadata = @([regex]::Matches($indexText, $pattern))
 if ($metadata.Count -ne 1) {
     throw 'Scene-probe reference evidence must contain exactly one rendered readiness record.'

@@ -729,7 +729,7 @@ function Assert-HenkaSceneProbeReferenceCaptureMetadata {
         [Parameter(Mandatory = $true)][string]$ExpectedView
     )
 
-    $pattern = '^\s*CAPTURE_READY_SCENE_PROBE_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*probe_reference=1 probe_diffuse_active=1 probe_prefilter_active=1 probe_blend_active=1 probe_enabled_count=(?<enabled>\d+) probe_captured_count=(?<captured>\d+) probe_capture_generation=(?<generation>\d+) probe_capture_failures=(?<failures>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY_SCENE_PROBE_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*probe_reference=1 probe_diffuse_active=1 probe_prefilter_active=1 probe_blend_active=1 screen_space_reflections_active=1 probe_enabled_count=(?<enabled>\d+) probe_captured_count=(?<captured>\d+) probe_capture_generation=(?<generation>\d+) probe_capture_failures=(?<failures>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success -or
         $match.Groups["view"].Value -ne $ExpectedView -or

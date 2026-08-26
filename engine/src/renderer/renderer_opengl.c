@@ -145,6 +145,7 @@ typedef struct henka_opengl_renderer_state
     GLuint hdr_color_texture;
     GLuint hdr_motion_texture;
     GLuint hdr_reactive_texture;
+    GLuint hdr_roughness_texture;
     GLuint hdr_depth_buffer;
     int hdr_width;
     int hdr_height;
@@ -1805,7 +1806,7 @@ static void henka_opengl_delete_hdr_target(henka_opengl_renderer_state* state)
 
     if (state != NULL && state->hdr_width > 0 && state->hdr_height > 0)
     {
-        target_bytes = (uint64_t)state->hdr_width * (uint64_t)state->hdr_height * 21U;
+        target_bytes = (uint64_t)state->hdr_width * (uint64_t)state->hdr_height * 22U;
         henka_opengl_memory_remove_category(
             state,
             &state->tracked_render_target_bytes,
@@ -1827,6 +1828,10 @@ static void henka_opengl_delete_hdr_target(henka_opengl_renderer_state* state)
     {
         glDeleteTextures(1, &state->hdr_reactive_texture);
     }
+    if (state->hdr_roughness_texture != 0U)
+    {
+        glDeleteTextures(1, &state->hdr_roughness_texture);
+    }
     if (state->hdr_framebuffer != 0U)
     {
         g_gl.DeleteFramebuffers(1, &state->hdr_framebuffer);
@@ -1835,9 +1840,11 @@ static void henka_opengl_delete_hdr_target(henka_opengl_renderer_state* state)
     state->hdr_color_texture = 0U;
     state->hdr_motion_texture = 0U;
     state->hdr_reactive_texture = 0U;
+    state->hdr_roughness_texture = 0U;
     state->hdr_framebuffer = 0U;
     state->hdr_width = 0;
     state->hdr_height = 0;
+    state->hdr_framebuffer_complete = false;
 }
 
 static void henka_opengl_delete_bloom_target(henka_opengl_renderer_state* state)
@@ -2651,6 +2658,7 @@ static henka_result henka_opengl_create_hdr_target(
     GLuint color_texture = 0U;
     GLuint motion_texture = 0U;
     GLuint reactive_texture = 0U;
+    GLuint roughness_texture = 0U;
     GLuint depth_buffer = 0U;
     GLuint framebuffer = 0U;
     GLint previous_framebuffer = 0;
@@ -2676,13 +2684,15 @@ static henka_result henka_opengl_create_hdr_target(
     glGenTextures(1, &motion_texture);
     glGenTextures(1, &depth_buffer);
     glGenTextures(1, &reactive_texture);
+    glGenTextures(1, &roughness_texture);
     if (framebuffer == 0U || color_texture == 0U || motion_texture == 0U ||
-        reactive_texture == 0U || depth_buffer == 0U)
+        reactive_texture == 0U || roughness_texture == 0U || depth_buffer == 0U)
     {
         if (depth_buffer != 0U) glDeleteTextures(1, &depth_buffer);
         if (color_texture != 0U) glDeleteTextures(1, &color_texture);
         if (motion_texture != 0U) glDeleteTextures(1, &motion_texture);
         if (reactive_texture != 0U) glDeleteTextures(1, &reactive_texture);
+        if (roughness_texture != 0U) glDeleteTextures(1, &roughness_texture);
         if (framebuffer != 0U) g_gl.DeleteFramebuffers(1, &framebuffer);
         (void)snprintf(state->hdr_failure_reason, sizeof(state->hdr_failure_reason), "GPU object allocation failed");
         return HENKA_ERROR_RENDERER;
@@ -2709,11 +2719,19 @@ static henka_result henka_opengl_create_hdr_target(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, reactive_texture, 0);
+    glBindTexture(GL_TEXTURE_2D, roughness_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+    g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, roughness_texture, 0);
     {
         static const GLenum draw_buffers[] = {
-            GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
+            GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2,
+            GL_COLOR_ATTACHMENT3};
         if (g_gl.DrawBuffers != NULL)
-            g_gl.DrawBuffers(3, draw_buffers);
+            g_gl.DrawBuffers(4, draw_buffers);
     }
     glBindTexture(GL_TEXTURE_2D, depth_buffer);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -2732,6 +2750,7 @@ static henka_result henka_opengl_create_hdr_target(
         glDeleteTextures(1, &color_texture);
         glDeleteTextures(1, &motion_texture);
         glDeleteTextures(1, &reactive_texture);
+        glDeleteTextures(1, &roughness_texture);
         g_gl.DeleteFramebuffers(1, &framebuffer);
         return HENKA_ERROR_RENDERER;
     }
@@ -2743,6 +2762,7 @@ static henka_result henka_opengl_create_hdr_target(
     state->hdr_color_texture = color_texture;
     state->hdr_motion_texture = motion_texture;
     state->hdr_reactive_texture = reactive_texture;
+    state->hdr_roughness_texture = roughness_texture;
     state->hdr_depth_buffer = depth_buffer;
     state->hdr_width = width;
     state->hdr_height = height;
@@ -2750,7 +2770,7 @@ static henka_result henka_opengl_create_hdr_target(
     state->hdr_framebuffer_complete = true;
     state->hdr_failure_reason[0] = '\0';
     {
-        uint64_t target_bytes = (uint64_t)width * (uint64_t)height * 21U;
+        uint64_t target_bytes = (uint64_t)width * (uint64_t)height * 22U;
         henka_opengl_memory_add_category(
             state,
             &state->tracked_render_target_bytes,
@@ -3116,7 +3136,7 @@ static henka_result henka_opengl_create_point_shadow_target(
 static henka_result henka_opengl_create_render_programs(
     henka_opengl_renderer_state* state)
 {
-    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "historyTexture", "historyDepthTexture", "motionTexture", "reactiveTexture", "depthTexture", "projection", "exposure", "useBloom", "bloomStrength", "useTemporalHistory", "useMotionVectors", "useReactiveMask", "useAmbientOcclusion", "aoRadius", "aoThickness", "aoFalloff", "aoBias", "aoIntensity", "useScreenSpaceIndirect", "ssgiRadius", "ssgiThickness", "ssgiIntensity", "ssgiMaxRadiance", "ssrThickness", "ssrMaxDistance", "ssrRoughness", "ssrEdgeFade", "temporalBlend", "sharpenStrength", "useRenderedGrade", "useScreenSpaceReflections"};
+    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "historyTexture", "historyDepthTexture", "motionTexture", "reactiveTexture", "depthTexture", "roughnessTexture", "projection", "exposure", "useBloom", "bloomStrength", "useTemporalHistory", "useMotionVectors", "useReactiveMask", "useAmbientOcclusion", "aoRadius", "aoThickness", "aoFalloff", "aoBias", "aoIntensity", "useScreenSpaceIndirect", "ssgiRadius", "ssgiThickness", "ssgiIntensity", "ssgiMaxRadiance", "ssrThickness", "ssrMaxDistance", "ssrEdgeFade", "temporalBlend", "sharpenStrength", "useRenderedGrade", "useScreenSpaceReflections"};
     static const char* bloom_extract_uniforms[] = {"hdrTexture", "threshold"};
     static const char* bloom_blur_uniforms[] = {"sourceTexture", "direction"};
     static const char* ibl_conversion_uniforms[] = {"equirectangularTexture", "rotation", "viewProjection"};
@@ -3139,7 +3159,9 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n";
     static const char* tone_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform sampler2D historyTexture; uniform sampler2D historyDepthTexture; uniform sampler2D motionTexture; uniform sampler2D reactiveTexture; uniform sampler2D depthTexture; uniform mat4 projection; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; uniform bool useTemporalHistory; uniform bool useMotionVectors; uniform bool useReactiveMask; uniform bool useAmbientOcclusion; uniform float aoRadius; uniform float aoThickness; uniform float aoFalloff; uniform float aoBias; uniform float aoIntensity; uniform float ssrThickness; uniform float ssrMaxDistance; uniform float ssrRoughness; uniform float ssrEdgeFade; uniform float temporalBlend; uniform float sharpenStrength; uniform bool useRenderedGrade; uniform bool useScreenSpaceReflections; out vec4 outColor;\n"
+        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform sampler2D historyTexture; uniform sampler2D historyDepthTexture; uniform sampler2D motionTexture; uniform sampler2D reactiveTexture; uniform sampler2D depthTexture; uniform sampler2D roughnessTexture; uniform mat4 projection; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; uniform bool useTemporalHistory; uniform bool useMotionVectors; uniform bool useReactiveMask; uniform bool useAmbientOcclusion; uniform float aoRadius; uniform float aoThickness; uniform float aoFalloff; uniform float aoBias; uniform float aoIntensity; uniform float ssrThickness; uniform float ssrMaxDistance; uniform float ssrRoughness; uniform float ssrEdgeFade; uniform float temporalBlend; uniform float sharpenStrength; uniform bool useRenderedGrade; uniform bool useScreenSpaceReflections; out vec4 outColor;\n"
+        "float materialRoughnessAt(vec2 at){ return clamp(texture(roughnessTexture, at).r, 0.045, 1.0); }\n"
+        "#define ssrRoughness materialRoughnessAt(at)\n"
         "uniform bool useScreenSpaceIndirect; uniform float ssgiRadius; uniform float ssgiThickness; uniform float ssgiIntensity; uniform float ssgiMaxRadiance;\
 "
         "vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }\n"
@@ -3150,7 +3172,7 @@ static henka_result henka_opengl_create_render_programs(
         "float normalAwareOcclusion(vec2 at, vec2 texel, float depth){ if(depth>=0.9999) return 0.0; vec3 position=viewPosition(at,depth); vec2 xUv=clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999)); vec2 yUv=clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999)); vec3 px=viewPosition(xUv,texture(depthTexture,xUv).r); vec3 py=viewPosition(yUv,texture(depthTexture,yUv).r); vec3 normal=normalize(cross(py-position,px-position)); const vec2 directions[4]=vec2[4](vec2(1.0,0.0),vec2(0.0,1.0),vec2(0.7071,0.7071),vec2(-0.7071,0.7071)); float occluded=0.0; for(int directionIndex=0;directionIndex<4;++directionIndex){ float directionOcclusion=0.0; for(int side=0;side<2;++side){ vec2 direction=directions[directionIndex]*(side==0?1.0:-1.0); float horizon=0.0; for(int step=1;step<=4;++step){ vec2 sampleUv=clamp(at+direction*texel*(2.0*float(step)),vec2(0.001),vec2(0.999)); float sampleDepth=texture(depthTexture,sampleUv).r; if(sampleDepth>=0.9999||sampleDepth>depth-aoBias) continue; vec3 delta=viewPosition(sampleUv,sampleDepth)-position; float distanceToSample=length(delta); float thicknessWeight=1.0-clamp(abs(delta.z)/max(aoThickness,0.001),0.0,1.0); float radiusWeight=pow(1.0-clamp(distanceToSample/max(aoRadius,0.001),0.0,1.0),max(aoFalloff,0.1)); float horizonAngle=max(dot(normal,normalize(delta)),0.0); horizon=max(horizon,horizonAngle*thicknessWeight*radiusWeight); } directionOcclusion+=horizon; } occluded+=directionOcclusion*0.5; } float rawOcclusion=clamp(occluded*0.25*clamp(aoIntensity,0.0,2.0),0.0,1.0); float depthAgreement=0.0; const vec2 denoiseDirections[4]=vec2[4](vec2(1.0,0.0),vec2(-1.0,0.0),vec2(0.0,1.0),vec2(0.0,-1.0)); for(int denoiseIndex=0;denoiseIndex<4;++denoiseIndex){ float neighbourDepth=texture(depthTexture,clamp(at+denoiseDirections[denoiseIndex]*texel*1.5,vec2(0.001),vec2(0.999))).r; depthAgreement+=1.0-clamp(abs(neighbourDepth-depth)/0.04,0.0,1.0); } float edgeConfidence=depthAgreement*0.25; return rawOcclusion*mix(0.55,1.0,edgeConfidence); }\n"
         "vec3 screenIndirectDiffuse(vec2 at, vec2 texel, float depth, vec3 currentHdr){ if(depth>=0.9999) return vec3(0.0); vec3 position=viewPosition(at,depth); vec2 xUv=clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999)); vec2 nxUv=clamp(at-vec2(texel.x,0.0),vec2(0.001),vec2(0.999)); vec2 yUv=clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999)); vec2 nyUv=clamp(at-vec2(0.0,texel.y),vec2(0.001),vec2(0.999)); float xDepth=texture(depthTexture,xUv).r; float nxDepth=texture(depthTexture,nxUv).r; float yDepth=texture(depthTexture,yUv).r; float nyDepth=texture(depthTexture,nyUv).r; if(xDepth>=0.9999||nxDepth>=0.9999||yDepth>=0.9999||nyDepth>=0.9999) return vec3(0.0); vec2 x2Uv=clamp(at+vec2(texel.x*2.0,0.0),vec2(0.001),vec2(0.999)); vec2 nx2Uv=clamp(at-vec2(texel.x*2.0,0.0),vec2(0.001),vec2(0.999)); vec2 y2Uv=clamp(at+vec2(0.0,texel.y*2.0),vec2(0.001),vec2(0.999)); vec2 ny2Uv=clamp(at-vec2(0.0,texel.y*2.0),vec2(0.001),vec2(0.999)); float x2Depth=texture(depthTexture,x2Uv).r; float nx2Depth=texture(depthTexture,nx2Uv).r; float y2Depth=texture(depthTexture,y2Uv).r; float ny2Depth=texture(depthTexture,ny2Uv).r; float receiverDepthDelta=max(max(max(abs(xDepth-depth),abs(nxDepth-depth)),max(abs(yDepth-depth),abs(nyDepth-depth))),max(max(abs(x2Depth-depth),abs(nx2Depth-depth)),max(abs(y2Depth-depth),abs(ny2Depth-depth)))); float receiverEdgeConfidence=1.0-clamp(receiverDepthDelta/0.025,0.0,1.0); receiverEdgeConfidence*=receiverEdgeConfidence; if(receiverEdgeConfidence<=0.05) return vec3(0.0); vec3 px=viewPosition(xUv,xDepth); vec3 nx=viewPosition(nxUv,nxDepth); vec3 py=viewPosition(yUv,yDepth); vec3 ny=viewPosition(nyUv,nyDepth); vec3 normal=normalize(cross(py-ny,px-nx)); const vec2 directions[8]=vec2[8](vec2(1.0,0.0),vec2(-1.0,0.0),vec2(0.0,1.0),vec2(0.0,-1.0),vec2(0.7071,0.7071),vec2(-0.7071,0.7071),vec2(0.7071,-0.7071),vec2(-0.7071,-0.7071)); vec3 indirect=vec3(0.0); float totalWeight=0.0; for(int directionIndex=0;directionIndex<8;++directionIndex){ for(int step=1;step<=2;++step){ float pixelDistance=3.0+6.0*float(step); vec2 sampleUv=clamp(at+directions[directionIndex]*texel*pixelDistance,vec2(0.002),vec2(0.998)); float sampleDepth=texture(depthTexture,sampleUv).r; if(sampleDepth>=0.9999) continue; vec3 samplePosition=viewPosition(sampleUv,sampleDepth); vec3 delta=samplePosition-position; float distanceToSample=length(delta); if(distanceToSample<=0.001||distanceToSample>max(ssgiRadius,0.01)) continue; vec3 incomingDirection=delta/distanceToSample; float receiverCosine=max(dot(normal,incomingDirection),0.0); if(receiverCosine<=0.0001) continue; float thicknessWeight=1.0-clamp(abs(delta.z)/max(ssgiThickness,0.001),0.0,1.0); float distanceWeight=1.0-clamp(distanceToSample/max(ssgiRadius,0.01),0.0,1.0); float weight=receiverCosine*thicknessWeight*distanceWeight; vec3 sampleHdr=texture(hdrTexture,sampleUv).rgb*0.40; sampleHdr+=texture(hdrTexture,clamp(sampleUv+vec2(texel.x,0.0)*1.5,vec2(0.002),vec2(0.998))).rgb*0.15; sampleHdr+=texture(hdrTexture,clamp(sampleUv-vec2(texel.x,0.0)*1.5,vec2(0.002),vec2(0.998))).rgb*0.15; sampleHdr+=texture(hdrTexture,clamp(sampleUv+vec2(0.0,texel.y)*1.5,vec2(0.002),vec2(0.998))).rgb*0.15; sampleHdr+=texture(hdrTexture,clamp(sampleUv-vec2(0.0,texel.y)*1.5,vec2(0.002),vec2(0.998))).rgb*0.15; sampleHdr=clamp(sampleHdr,vec3(0.0),vec3(max(ssgiMaxRadiance,0.0))); indirect+=sampleHdr*weight; totalWeight+=weight; } } if(totalWeight<=0.0001) return vec3(0.0); vec3 bounced=indirect/totalWeight; float currentLuma=dot(max(currentHdr,vec3(0.0)),vec3(0.2126,0.7152,0.0722)); float limiter=1.0/(1.0+currentLuma*0.1); return bounced*clamp(ssgiIntensity,0.0,1.0)*limiter*receiverEdgeConfidence; }\
 "
-        "vec3 screenReflection(vec2 at, vec2 texel, float depth, vec3 base){ if(depth>=0.9999) return base; vec3 position=viewPosition(at,depth); vec3 px=viewPosition(clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999)),texture(depthTexture,clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999))).r); vec3 py=viewPosition(clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999)),texture(depthTexture,clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999))).r); vec3 normal=normalize(cross(py-position,px-position)); vec3 direction=normalize(reflect(normalize(-position),normal)); vec3 reflected=base; float confidence=0.0; float hitDistance=0.0; float maxDistance=clamp(ssrMaxDistance,0.25,32.0); for(int step=1;step<=16;++step){ float distanceAlongRay=maxDistance*(float(step)/16.0); vec3 rayPosition=position+direction*distanceAlongRay; vec4 clip=projection*vec4(rayPosition,1.0); if(clip.w<=0.0) break; vec2 sampleUv=clip.xy/clip.w*0.5+0.5; if(sampleUv.x<0.002||sampleUv.x>0.998||sampleUv.y<0.002||sampleUv.y>0.998) break; float sceneDepth=texture(depthTexture,sampleUv).r; if(sceneDepth>=0.9999) continue; vec3 scenePosition=viewPosition(sampleUv,sceneDepth); float depthDelta=abs(scenePosition.z-rayPosition.z); if(depthDelta<=max(ssrThickness,0.001)){ reflected=texture(hdrTexture,sampleUv).rgb; hitDistance=distanceAlongRay; float edgeDistance=min(min(sampleUv.x,1.0-sampleUv.x),min(sampleUv.y,1.0-sampleUv.y)); float edgeConfidence=clamp(edgeDistance/max(ssrEdgeFade,0.001),0.0,1.0); float roughnessConfidence=1.0-clamp(ssrRoughness,0.0,1.0)*0.65; confidence=0.45*edgeConfidence*roughnessConfidence*(1.0-clamp(hitDistance/maxDistance,0.0,1.0)*0.5); break; } } return mix(base,reflected,clamp(confidence,0.0,0.45)); }\n"
+        "vec3 screenReflection(vec2 at, vec2 texel, float depth, vec3 base){ if(depth>=0.9999) return base; vec3 position=viewPosition(at,depth); vec3 px=viewPosition(clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999)),texture(depthTexture,clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999))).r); vec3 py=viewPosition(clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999)),texture(depthTexture,clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999))).r); vec3 normal=normalize(cross(py-position,px-position)); vec3 direction=normalize(reflect(normalize(-position),normal)); vec3 reflected=base; float confidence=0.0; float hitDistance=0.0; float maxDistance=clamp(ssrMaxDistance,0.25,32.0); for(int step=1;step<=16;++step){ float distanceAlongRay=maxDistance*(float(step)/16.0); vec3 rayPosition=position+direction*distanceAlongRay; vec4 clip=projection*vec4(rayPosition,1.0); if(clip.w<=0.0) break; vec2 sampleUv=clip.xy/clip.w*0.5+0.5; if(sampleUv.x<0.002||sampleUv.x>0.998||sampleUv.y<0.002||sampleUv.y>0.998) break; float sceneDepth=texture(depthTexture,sampleUv).r; if(sceneDepth>=0.9999) continue; vec3 scenePosition=viewPosition(sampleUv,sceneDepth); float depthDelta=abs(scenePosition.z-rayPosition.z); if(depthDelta<=max(ssrThickness,0.001)){ reflected=texture(hdrTexture,sampleUv).rgb; hitDistance=distanceAlongRay; float edgeDistance=min(min(sampleUv.x,1.0-sampleUv.x),min(sampleUv.y,1.0-sampleUv.y)); float edgeConfidence=clamp(edgeDistance/max(ssrEdgeFade,0.001),0.0,1.0); float materialRoughness=clamp(texture(roughnessTexture,at).r,0.045,1.0); float roughnessConfidence=1.0-materialRoughness*0.65; confidence=0.45*edgeConfidence*roughnessConfidence*(1.0-clamp(hitDistance/maxDistance,0.0,1.0)*0.5); break; } } return mix(base,reflected,clamp(confidence,0.0,0.45)); }\n"
         "vec3 screenReflectionRefined(vec2 at, vec2 texel, float depth, vec3 base){ if(depth>=0.9999) return base; vec3 position=viewPosition(at,depth); vec3 px=viewPosition(clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999)),texture(depthTexture,clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999))).r); vec3 py=viewPosition(clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999)),texture(depthTexture,clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999))).r); vec3 normal=normalize(cross(py-position,px-position)); vec3 direction=normalize(reflect(normalize(-position),normal)); vec3 reflected=base; float confidence=0.0; float hitDistance=0.0; float maxDistance=clamp(ssrMaxDistance,0.25,32.0); float previousDistance=0.0; bool previousValid=false; for(int step=1;step<=16;++step){ float distanceAlongRay=maxDistance*(float(step)/16.0); vec3 rayPosition=position+direction*distanceAlongRay; vec4 clip=projection*vec4(rayPosition,1.0); if(clip.w<=0.0) break; vec2 sampleUv=clip.xy/clip.w*0.5+0.5; if(sampleUv.x<0.002||sampleUv.x>0.998||sampleUv.y<0.002||sampleUv.y>0.998) break; float sceneDepth=texture(depthTexture,sampleUv).r; if(sceneDepth>=0.9999){ previousValid=false; continue; } vec3 scenePosition=viewPosition(sampleUv,sceneDepth); float thickness=max(ssrThickness,0.001); float depthDelta=scenePosition.z-rayPosition.z; if(depthDelta>=0.0 && depthDelta<=thickness){ vec2 bestUv=sampleUv; float bestDelta=depthDelta; float bestDistance=distanceAlongRay; float low=previousValid?previousDistance:max(0.0,distanceAlongRay-maxDistance/16.0); float high=distanceAlongRay; for(int refine=0;refine<4;++refine){ float refinedDistance=(low+high)*0.5; vec3 refinedPosition=position+direction*refinedDistance; vec4 refinedClip=projection*vec4(refinedPosition,1.0); if(refinedClip.w<=0.0){ low=refinedDistance; continue; } vec2 refinedUv=refinedClip.xy/refinedClip.w*0.5+0.5; if(refinedUv.x<0.002||refinedUv.x>0.998||refinedUv.y<0.002||refinedUv.y>0.998){ low=refinedDistance; continue; } float refinedDepth=texture(depthTexture,refinedUv).r; if(refinedDepth>=0.9999){ low=refinedDistance; continue; } float refinedDelta=abs(viewPosition(refinedUv,refinedDepth).z-refinedPosition.z); if(refinedDelta<bestDelta){ bestDelta=refinedDelta; bestUv=refinedUv; bestDistance=refinedDistance; } if(refinedDelta<=thickness) high=refinedDistance; else low=refinedDistance; } reflected=texture(hdrTexture,bestUv).rgb; hitDistance=bestDistance; float edgeDistance=min(min(bestUv.x,1.0-bestUv.x),min(bestUv.y,1.0-bestUv.y)); float edgeConfidence=clamp(edgeDistance/max(ssrEdgeFade,0.001),0.0,1.0); float roughnessConfidence=1.0-clamp(ssrRoughness,0.0,1.0)*0.65; confidence=0.45*edgeConfidence*roughnessConfidence*(1.0-clamp(hitDistance/maxDistance,0.0,1.0)*0.5); break; } previousDistance=distanceAlongRay; previousValid=true; } return mix(base,reflected,clamp(confidence,0.0,0.45)); }\n"
         "#define screenReflection screenReflectionRefined\n"
         "vec3 sharpen(vec2 at, vec2 texel, vec3 color, float strength){ vec3 crossNeighborhood = (presentColor(texture(hdrTexture, clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999))).rgb) + presentColor(texture(hdrTexture, clamp(at-vec2(texel.x,0.0),vec2(0.001),vec2(0.999))).rgb) + presentColor(texture(hdrTexture, clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999))).rgb) + presentColor(texture(hdrTexture, clamp(at-vec2(0.0,texel.y),vec2(0.001),vec2(0.999))).rgb)) * 0.25; return clamp(color + (color-crossNeighborhood)*clamp(strength,0.0,0.2),vec3(0.0),vec3(1.0)); }\n"
@@ -3790,12 +3812,10 @@ static void henka_opengl_present_hdr(
         state->hdr_depth_buffer != 0U;
     state->screen_space_indirect_active = use_screen_space_indirect;
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
-    /* Screen-space reflection currently has no material-aware roughness
-     * buffer. Keep the renderer on the validated environment/probe fallback
-     * until the post-process receives per-pixel material response data; a
-     * constant roughness estimate can turn self-intersections into visible
-     * structured artifacts on otherwise smooth surfaces. */
-    state->screen_space_reflections_active = false;
+    state->screen_space_reflections_active = use_rendered_post_processing &&
+        state->hdr_framebuffer_complete &&
+        state->hdr_depth_buffer != 0U &&
+        state->hdr_roughness_texture != 0U;
     state->reflection_fallback_active = use_rendered_post_processing &&
         !state->screen_space_reflections_active;
     use_temporal_history =
@@ -3842,6 +3862,7 @@ static void henka_opengl_present_hdr(
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "motionTexture", 3);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "reactiveTexture", 5);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "depthTexture", 4);
+    henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "roughnessTexture", 7);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "exposure", renderer->exposure);
     henka_set_uniform_mat4_owned(
         state->tone_program,
@@ -3900,7 +3921,6 @@ static void henka_opengl_present_hdr(
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "ssgiMaxRadiance", 4.0f);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "ssrThickness", 0.10f);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "ssrMaxDistance", 8.0f);
-    henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "ssrRoughness", 0.45f);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "ssrEdgeFade", 0.08f);
     henka_set_uniform_bool_owned(
         state->tone_program,
@@ -3932,6 +3952,11 @@ static void henka_opengl_present_hdr(
         use_temporal_history ?
             state->temporal_history_depth_texture :
             0U);
+    g_gl.ActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D,
+        state->screen_space_reflections_active ?
+            state->hdr_roughness_texture :
+            0U);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
@@ -3947,6 +3972,8 @@ static void henka_opengl_present_hdr(
     g_gl.ActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, 0U);
+    g_gl.ActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture((GLenum)previous_active_texture);
     g_gl.UseProgram(0);
