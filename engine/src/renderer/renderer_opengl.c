@@ -208,6 +208,7 @@ typedef struct henka_opengl_renderer_state
     uint64_t reflection_probe_capture_generation;
     uint32_t reflection_probe_capture_failure_count;
     bool screen_space_reflections_active;
+    bool screen_space_indirect_active;
     bool reflection_fallback_active;
     GLuint shadow_program;
     henka_opengl_shader_data shadow_shader_data;
@@ -3624,9 +3625,11 @@ static void henka_opengl_present_hdr(
 {
     henka_viewport viewport;
     bool use_temporal_history;
+    bool use_screen_space_indirect;
     GLint previous_active_texture = GL_TEXTURE0;
 
     state->screen_space_reflections_active = false;
+    state->screen_space_indirect_active = false;
     state->reflection_fallback_active = false;
     if (state->hdr_color_texture == 0U || state->tone_program == 0U)
     {
@@ -3637,6 +3640,9 @@ static void henka_opengl_present_hdr(
     {
         return;
     }
+    use_screen_space_indirect = use_rendered_post_processing &&
+        state->hdr_depth_buffer != 0U;
+    state->screen_space_indirect_active = use_screen_space_indirect;
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     /* Screen-space reflection currently has no material-aware roughness
      * buffer. Keep the renderer on the validated environment/probe fallback
@@ -3741,7 +3747,7 @@ static void henka_opengl_present_hdr(
         state->tone_program,
         &state->tone_shader_data,
         "useScreenSpaceIndirect",
-        use_rendered_post_processing && state->hdr_depth_buffer != 0U);
+        use_screen_space_indirect);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "ssgiRadius", 2.5f);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "ssgiThickness", 1.5f);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "ssgiIntensity", 0.04f);
@@ -7332,6 +7338,15 @@ void henka_opengl_renderer_get_reflection_policy_diagnostics(
         *out_screen_space_active = state != NULL && state->screen_space_reflections_active;
     if (out_fallback_active != NULL)
         *out_fallback_active = state != NULL && state->reflection_fallback_active;
+}
+
+bool henka_opengl_renderer_get_screen_space_indirect_active(
+    const struct henka_renderer* renderer)
+{
+    const henka_opengl_renderer_state* state = renderer != NULL && renderer->backend_state != NULL ?
+        (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
+
+    return state != NULL && state->screen_space_indirect_active;
 }
 
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled)

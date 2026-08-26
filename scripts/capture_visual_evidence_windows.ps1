@@ -6,7 +6,7 @@ param(
 
     [string]$ExecutablePath = "",
 
-    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE")]
+    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SSGI_REFERENCE")]
     [string]$EvidenceProfile = "FULL_SHOWCASE",
 
     [ValidateSet("wide", "close")]
@@ -64,7 +64,7 @@ if ($EvidenceProfile -eq "GEOMETRY_SOLID" -and -not $IncludeStartupShowcase) {
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $IncludeGiraffeInspection = $true
 }
-if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE") -and
+if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE") -and
     ($IncludeStartupShowcase -or $IncludeGiraffeInspection -or $IncludeTerrain)) {
     throw "REALISM_REFERENCE evidence is a dedicated reference-scene capture and cannot include showcase or terrain extras."
 }
@@ -135,9 +135,9 @@ function Wait-HenkaCaptureReady {
         [Parameter(Mandatory = $true)][string]$Label
     )
 
-    for ($attempt = 0; $attempt -lt 200; ++$attempt) {
+    for ($attempt = 0; $attempt -lt 600; ++$attempt) {
         if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
-            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE)? ' |
+            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE)? ' |
                 Select-Object -Last 1
             if ($null -ne $line) {
                 return $line.Line
@@ -148,7 +148,7 @@ function Wait-HenkaCaptureReady {
         }
         Start-Sleep -Milliseconds 100
     }
-    throw "Sandbox did not report bounded capture readiness for $Label within 20 seconds."
+    throw "Sandbox did not report bounded capture readiness for $Label within 60 seconds."
 }
 
 function Assert-HenkaSandboxCaptureReady {
@@ -477,6 +477,33 @@ function Assert-HenkaSubsurfaceReferenceCaptureMetadata {
     }
 }
 
+function Assert-HenkaSsgiReferenceCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ExpectedView
+    )
+
+    $pattern = '^\s*CAPTURE_READY_SSGI_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success) {
+        throw "SSGI reference capture readiness metadata was malformed for $Label."
+    }
+    $expectedLayout = if ($ExpectedView -eq "close") { "close_grid" } else { "wide_row" }
+    if ($match.Groups["view"].Value -ne $ExpectedView -or
+        $match.Groups["layout"].Value -ne $expectedLayout -or
+        [int]$match.Groups["texture_edge"].Value -lt 32 -or
+        [int]$match.Groups["count"].Value -ne 9 -or
+        [int]$match.Groups["sf"].Value -lt 3) {
+        throw "SSGI reference capture metadata is incomplete for $Label."
+    }
+    return [pscustomobject]@{
+        Canonical = $Line
+        Mode = "rendered"
+        View = $match.Groups["view"].Value
+    }
+}
+
 [System.IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 Add-Type -AssemblyName System.Drawing
 $modes = @(
@@ -512,6 +539,11 @@ if ($EvidenceProfile -eq "SUBSURFACE_REFERENCE") {
         @{ Label = "sss_reference_thick"; Arguments = @("--capture-realism-reference", "sss", $ReferenceView, "thick", "rendered"); File = "sss-reference-$ReferenceView-thick.png"; Variant = "thick" }
     )
 }
+if ($EvidenceProfile -eq "SSGI_REFERENCE") {
+    $modes = @(
+        @{ Label = "ssgi_reference"; Arguments = @("--capture-realism-reference", "ssgi", $ReferenceView, "rendered"); File = "ssgi-reference-$ReferenceView-rendered.png" }
+    )
+}
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $modes = @(
         @{ Label = "solid"; Arguments = @("--capture-mode", "solid"); File = "same-camera-solid.png" }
@@ -528,7 +560,12 @@ $records.Add("Source: $executable")
 $records.Add("Isolated runtime: $captureExecutable")
 $records.Add("Evidence profile: $EvidenceProfile")
 $records.Add("Camera policy: capture-mode runs use the same deterministic two-model showcase camera and never save capture-mode settings")
-$records.Add("Modes: Solid, Material Preview, Rendered")
+if ($EvidenceProfile -eq "SSGI_REFERENCE") {
+    $records.Add("Modes: Rendered only; SSGI is a fullscreen HDR post-process")
+}
+else {
+    $records.Add("Modes: Solid, Material Preview, Rendered")
+}
 $records.Add("Startup evidence: application-provided readiness for the ordinary startup scene")
 $records.Add("Geometry authority: GEOMETRY_SOLID uses neutral Solid captures only; generated fixtures and asset-specific presets are not native-authored proof")
 $records.Add("Giraffe inspection: optional close front, three-quarter, profile, and wide Rendered views plus front Material Preview")
@@ -544,6 +581,9 @@ if ($EvidenceProfile -eq "HDR_RANGE_REFERENCE") {
 }
 if ($EvidenceProfile -eq "SUBSURFACE_REFERENCE") {
     $records.Add("Subsurface reference: deterministic rendered captures at opaque, thin, and thick bounded material variants; same nine-subject camera and view=$ReferenceView")
+}
+if ($EvidenceProfile -eq "SSGI_REFERENCE") {
+    $records.Add("SSGI reference: deterministic rendered capture proving the bounded screen-space indirect-diffuse path is active; same nine-subject camera and view=$ReferenceView")
 }
 $capturePolicy = if ($script:allowForegroundIntegration) {
         "foreground desktop capture was explicitly enabled"
@@ -587,6 +627,10 @@ foreach ($mode in $modes) {
         elseif ($EvidenceProfile -eq "SUBSURFACE_REFERENCE") {
             [void]$captureMetadata.Add(
                 (Assert-HenkaSubsurfaceReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView -ExpectedVariant $mode.Variant))
+        }
+        elseif ($EvidenceProfile -eq "SSGI_REFERENCE") {
+            [void]$captureMetadata.Add(
+                (Assert-HenkaSsgiReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
         }
         else {
             [void]$captureMetadata.Add(
@@ -840,6 +884,11 @@ if ($EvidenceProfile -eq "SUBSURFACE_REFERENCE") {
     & (Join-Path $PSScriptRoot "check_subsurface_reference_visual_evidence_windows.ps1") `
         -InputDirectory $OutputDirectory
 }
+if ($EvidenceProfile -eq "SSGI_REFERENCE") {
+    $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
+    & (Join-Path $PSScriptRoot "check_ssgi_reference_visual_evidence_windows.ps1") `
+        -InputDirectory $OutputDirectory
+}
 
 if ($IncludeTerrain) {
     & (Join-Path $PSScriptRoot "check_terrain_visual_evidence_windows.ps1") `
@@ -851,4 +900,10 @@ if ($IncludeTerrain) {
 }
 
 $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
-Write-Host "[pass] Same-camera Solid, Material Preview, and Rendered evidence captured in $OutputDirectory"
+$captureSummary = if ($EvidenceProfile -eq "SSGI_REFERENCE") {
+    "Rendered SSGI reference evidence"
+}
+else {
+    "Same-camera Solid, Material Preview, and Rendered evidence"
+}
+Write-Host "[pass] $captureSummary captured in $OutputDirectory"

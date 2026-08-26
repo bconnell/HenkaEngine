@@ -110,6 +110,7 @@ The background-safe capture harness exposes the scene with:
 --capture-realism-reference wide|close solid|material_preview|rendered
 --capture-realism-reference lighting wide|close solid|material_preview|rendered
 --capture-realism-reference sss close opaque|thin|thick rendered
+--capture-realism-reference ssgi wide|close rendered
 ```
 
 Each capture emits `CAPTURE_READY_REFERENCE` metadata proving the selected
@@ -118,6 +119,20 @@ the centered reference bounds. Lighting captures emit the corresponding
 lighting-prefixed metadata and use the dedicated lighting checker. These are
 calibration and regression fixtures, not proof that every material or renderer
 effect is production-complete.
+
+The SSGI reference is Rendered-only because the bounded indirect-diffuse term
+is a fullscreen post-process over the HDR color and depth targets:
+
+```text
+--capture-realism-reference ssgi wide|close rendered
+```
+
+It emits `CAPTURE_READY_SSGI_REFERENCE` only after the renderer reports that
+the screen-space indirect path was enabled for a settled frame. The checker
+also requires the deterministic nine-subject composition and a non-flat
+image. This is an activation and presentation-stability guard for the current
+supported OpenGL path, not proof that every pixel receives indirect light or
+that leaks, halos, camera-motion stability, and performance are solved.
 
 ## Screen-space indirect diffuse lighting
 

@@ -223,6 +223,11 @@ typedef struct henka_engine_diagnostics
     bool last_tool_window_resized;
     /* Rendered-frame Terrain submissions and post-process consumers. */
     uint32_t rendered_scene_terrain_pass_flags;
+    /* Appended to preserve the existing public diagnostics field offsets. It
+     * describes whether the bounded screen-space indirect-diffuse contribution
+     * was enabled for the current Rendered frame; it does not claim full-scene
+     * global illumination or a nonzero contribution at every pixel. */
+    bool rendered_screen_space_indirect_active;
 } henka_engine_diagnostics;
 
 typedef henka_result (*henka_engine_initialize_fn)(henka_engine* engine, void* user_data);
