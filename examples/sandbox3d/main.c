@@ -639,6 +639,25 @@ typedef struct sandbox3d_state
     henka_viewport_shading_mode capture_mode;
 } sandbox3d_state;
 
+static void sandbox3d_mark_smoke_validation_failed(
+    sandbox3d_state* state,
+    const char* source_file,
+    int source_line)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+    if (!state->smoke_validation_failed)
+    {
+        HENKA_LOG_ERROR(
+            "Sandbox smoke validation failed at %s:%d.",
+            source_file != NULL ? source_file : "unknown",
+            source_line);
+    }
+    state->smoke_validation_failed = true;
+}
+
 static const float g_default_mouse_look_sensitivity = 0.0025f;
 static const float g_default_camera_movement_speed = 4.0f;
 static const henka_vec3 g_camera_start_position = {0.0f, 2.4f, 8.6f};
@@ -8504,7 +8523,7 @@ static void sandbox3d_report_startup_camera_validation(sandbox3d_state* state)
     if (!sandbox3d_validate_startup_camera(state))
     {
         HENKA_LOG_ERROR("Sandbox startup camera did not frame meaningful scene content.");
-        state->smoke_validation_failed = true;
+        sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
         return;
     }
 
@@ -15394,7 +15413,7 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         environment.time_of_day_enabled = true;
         if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
         {
-            state->smoke_validation_failed = true;
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
             HENKA_LOG_ERROR("Environment stress could not install its procedural/time-of-day descriptor.");
         }
         else
@@ -15407,7 +15426,7 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
             if (!sandbox3d_environment_parameters_equal(&environment, &round_trip) ||
                 henka_scene_set_environment(state->scene, round_trip) != HENKA_SUCCESS)
             {
-                state->smoke_validation_failed = true;
+                sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
                 HENKA_LOG_ERROR("Environment settings round-trip did not retain the validated descriptor.");
             }
         }
@@ -34076,7 +34095,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 henka_result_to_string(stream_result));
             if (state->smoke_test)
             {
-                state->smoke_validation_failed = true;
+                sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
                 henka_engine_request_exit(engine);
             }
         }
@@ -34097,7 +34116,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 henka_result_to_string(terrain_result));
             if (state->smoke_test)
             {
-                state->smoke_validation_failed = true;
+                sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
                 henka_engine_request_exit(engine);
             }
         }
@@ -34357,7 +34376,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 "Terrain edit smoke validation failed at %s (%s)",
                 terrain_smoke_stage,
                 henka_result_to_string(terrain_result));
-            state->smoke_validation_failed = true;
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
             henka_engine_request_exit(engine);
         }
         else
@@ -34390,7 +34409,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             sandbox3d_run_residency_stress(engine, state);
         if (residency_result != HENKA_SUCCESS)
         {
-            state->smoke_validation_failed = true;
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
             HENKA_LOG_ERROR(
                 "Residency stress scenario failed (%d)",
                 (int)residency_result);
@@ -34408,7 +34427,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             sandbox3d_run_terrain_stream_stress(state);
         if (stream_result != HENKA_SUCCESS)
         {
-            state->smoke_validation_failed = true;
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
             HENKA_LOG_ERROR(
                 "Terrain stream stress scenario failed (%d)",
                 (int)stream_result);
@@ -34421,7 +34440,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         const henka_result material_result = sandbox3d_run_material_stress(state);
         if (material_result != HENKA_SUCCESS)
         {
-            state->smoke_validation_failed = true;
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
             HENKA_LOG_ERROR(
                 "Material stress scenario failed (%d)",
                 (int)material_result);
@@ -34712,7 +34731,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             sandbox3d_validate_add_primitive_smoke(engine, state);
         if (primitive_smoke_result != HENKA_SUCCESS)
         {
-            state->smoke_validation_failed = true;
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
             HENKA_LOG_ERROR(
                 "Sandbox Add Cube smoke validation failed (%d)",
                 (int)primitive_smoke_result);
@@ -34724,7 +34743,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             fflush(stdout);
             if (sandbox3d_validate_native_asset_document_smoke(engine, state) != HENKA_SUCCESS)
             {
-                state->smoke_validation_failed = true;
+                sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
                 HENKA_LOG_ERROR("Sandbox native asset Save/Close/Open smoke validation failed");
                 henka_engine_request_exit(engine);
             }
@@ -35278,7 +35297,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             smoke_environment.time_of_day_hours < 0.0f ||
             smoke_environment.time_of_day_hours >= 24.0f)
         {
-            state->smoke_validation_failed = true;
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
         }
         else
         {
@@ -35295,7 +35314,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                  smoke_environment.time_of_day_hours <= 6.0f ||
                  !smoke_environment.moon.enabled))
             {
-                state->smoke_validation_failed = true;
+                sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
                 printf("Environment stress validation failed: procedural sky, advancing sun state, or shared moon state was not retained.\n");
             }
             else if (state->environment_stress)
@@ -35307,7 +35326,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             (henka_terrain_streamer_get_stats(state->terrain_streamer, &terrain_stream_stats),
              terrain_stream_stats.observer_count != 1U))
         {
-            state->smoke_validation_failed = true;
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
         }
         else
         {
@@ -35333,7 +35352,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             terrain_scene_material.terrain_layers[2].base_color_texture == NULL ||
             terrain_scene_material.terrain_layers[3].base_color_texture == NULL)
         {
-            state->smoke_validation_failed = true;
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
         }
         else
         {
@@ -35351,7 +35370,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     terrain_texture_info.usage != HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS ||
                     terrain_texture_info.color_space != HENKA_TEXTURE_COLOR_SPACE_LINEAR)
                 {
-                    state->smoke_validation_failed = true;
+                    sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
                     break;
                 }
             }
@@ -35376,7 +35395,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 terrain_render_stats.material_gpu_bytes == 0U ||
                 terrain_render_stats.material_texture_count != HENKA_MATERIAL_TERRAIN_LAYER_COUNT * 3U)
             {
-                state->smoke_validation_failed = true;
+                sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
             }
             else
             {
@@ -35404,8 +35423,27 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     HENKA_RENDERED_TERRAIN_PASS_HDR;
                 const uint32_t required_flags =
                     required_terrain_pass_flags |
-                    (smoke_environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI ?
+                    (smoke_environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
+                     smoke_diagnostics.rendered_screen_space_reflections_active ?
                         HENKA_RENDERED_TERRAIN_PASS_SSR : 0U);
+                const bool terrain_shading_is_rendered =
+                    smoke_diagnostics.viewport_shading_mode == HENKA_VIEWPORT_SHADING_RENDERED;
+                const bool terrain_color_draws_present =
+                    smoke_diagnostics.rendered_scene_terrain_draw_calls != 0U;
+                const bool terrain_shadow_draws_present =
+                    smoke_diagnostics.rendered_scene_terrain_shadow_draw_calls != 0U;
+                const bool terrain_pass_flags_present =
+                    (smoke_diagnostics.rendered_scene_terrain_pass_flags & required_flags) == required_flags;
+                const bool reflection_policy_valid =
+                    smoke_environment.mode != HENKA_SCENE_ENVIRONMENT_HDRI ||
+                    smoke_diagnostics.rendered_screen_space_reflections_active ||
+                    smoke_diagnostics.rendered_reflection_fallback_active;
+                const bool terrain_rendered_pass_valid =
+                    !terrain_shading_is_rendered ||
+                    (terrain_color_draws_present &&
+                     terrain_shadow_draws_present &&
+                     terrain_pass_flags_present &&
+                     reflection_policy_valid);
 
                 printf(
                     "Terrain Rendered pass diagnostics: mask=0x%03x required=0x%03x color-draws=%u shadow-draws=%u.\n",
@@ -35413,12 +35451,21 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     required_flags,
                     smoke_diagnostics.rendered_scene_terrain_draw_calls,
                     smoke_diagnostics.rendered_scene_terrain_shadow_draw_calls);
-                if (smoke_diagnostics.viewport_shading_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
-                    (smoke_diagnostics.rendered_scene_terrain_draw_calls == 0U ||
-                     smoke_diagnostics.rendered_scene_terrain_shadow_draw_calls == 0U ||
-                     (smoke_diagnostics.rendered_scene_terrain_pass_flags & required_flags) != required_flags))
+                if (!terrain_rendered_pass_valid)
                 {
-                    state->smoke_validation_failed = true;
+                    printf(
+                        "Terrain Rendered pass validation failed: shading=%u mask=0x%03x required=0x%03x color-draws=%u shadow-draws=%u checks=shading:%s,color:%s,shadow:%s,flags:%s,reflection:%s.\n",
+                        (unsigned int)smoke_diagnostics.viewport_shading_mode,
+                        smoke_diagnostics.rendered_scene_terrain_pass_flags,
+                        required_flags,
+                        smoke_diagnostics.rendered_scene_terrain_draw_calls,
+                        smoke_diagnostics.rendered_scene_terrain_shadow_draw_calls,
+                        terrain_shading_is_rendered ? "ok" : "bad",
+                        terrain_color_draws_present ? "ok" : "bad",
+                        terrain_shadow_draws_present ? "ok" : "bad",
+                        terrain_pass_flags_present ? "ok" : "bad",
+                        reflection_policy_valid ? "ok" : "bad");
+                    sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
                 }
             }
             if (state->temporal_stress)
@@ -35438,12 +35485,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     (unsigned int)smoke_diagnostics.rendered_temporal_history_allocation_failure_count,
                     smoke_diagnostics.rendered_temporal_previous_history_retained ? "yes" : "no");
                 if (!temporal_recovery_valid)
-                    state->smoke_validation_failed = true;
+                    sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
             }
             if (state->environment_stress && smoke_diagnostics.rendered_ibl_ready)
             {
                 printf("Environment stress validation failed: procedural mode retained HDRI-derived IBL resources.\n");
-                state->smoke_validation_failed = true;
+                sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
             }
             if (smoke_diagnostics.viewport_shading_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
                 smoke_environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
@@ -35456,7 +35503,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     (unsigned int)smoke_diagnostics.rendered_reflection_probe_captured_count,
                     (unsigned long long)smoke_diagnostics.rendered_reflection_probe_capture_generation,
                     (unsigned int)smoke_diagnostics.rendered_reflection_probe_capture_failure_count);
-                state->smoke_validation_failed = true;
+                sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
             }
             else
             {
