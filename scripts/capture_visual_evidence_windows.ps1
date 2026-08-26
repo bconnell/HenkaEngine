@@ -6,7 +6,7 @@ param(
 
     [string]$ExecutablePath = "",
 
-    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE", "SSGI_PERFORMANCE_REFERENCE")]
+    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "PBR_NORMAL_MAP_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE", "SSGI_PERFORMANCE_REFERENCE")]
     [string]$EvidenceProfile = "FULL_SHOWCASE",
 
     [ValidateSet("wide", "close")]
@@ -64,7 +64,7 @@ if ($EvidenceProfile -eq "GEOMETRY_SOLID" -and -not $IncludeStartupShowcase) {
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $IncludeGiraffeInspection = $true
 }
-if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE" -or $EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") -and
+if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE" -or $EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") -and
     ($IncludeStartupShowcase -or $IncludeGiraffeInspection -or $IncludeTerrain)) {
     throw "REALISM_REFERENCE evidence is a dedicated reference-scene capture and cannot include showcase or terrain extras."
 }
@@ -137,7 +137,7 @@ function Wait-HenkaCaptureReady {
 
     for ($attempt = 0; $attempt -lt 600; ++$attempt) {
         if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
-            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE|_SSGI_PERFORMANCE_REFERENCE)? ' |
+            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE|_SSGI_PERFORMANCE_REFERENCE|_NORMAL_MAP_REFERENCE)? ' |
                 Select-Object -Last 1
             if ($null -ne $line) {
                 return $line.Line
@@ -606,6 +606,31 @@ function Assert-HenkaSsgiPerformanceCaptureMetadata {
     }
 }
 
+function Assert-HenkaNormalMapReferenceCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ExpectedView
+    )
+
+    $pattern = '^\s*CAPTURE_READY_NORMAL_MAP_REFERENCE mode=(?<mode>solid|material_preview|rendered) view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*normal_map_reference=1 normal_map_flat_count=4 normal_map_mapped_count=5 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1\s*$'
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success -or
+        $match.Groups["view"].Value -ne $ExpectedView -or
+        $match.Groups["layout"].Value -ne $(if ($ExpectedView -eq "close") { "close_grid" } else { "wide_row" }) -or
+        [int]$match.Groups["texture_edge"].Value -lt 32 -or
+        [int]$match.Groups["count"].Value -ne 9 -or
+        [int]$match.Groups["settled"].Value -lt 3) {
+        throw "PBR normal-map reference capture readiness metadata was malformed for $Label."
+    }
+    return [pscustomobject]@{
+        Canonical = ($Line -replace 'mode=[^ ]+', 'mode=shared')
+        Mode = $match.Groups["mode"].Value
+        View = $match.Groups["view"].Value
+        Layout = $match.Groups["layout"].Value
+    }
+}
+
 [System.IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 Add-Type -AssemblyName System.Drawing
 $modes = @(
@@ -618,6 +643,13 @@ if ($EvidenceProfile -eq "REALISM_REFERENCE") {
         @{ Label = "realism_reference_solid"; Arguments = @("--capture-realism-reference", $ReferenceView, "solid"); File = "realism-reference-$ReferenceView-solid.png" },
         @{ Label = "realism_reference_material_preview"; Arguments = @("--capture-realism-reference", $ReferenceView, "material_preview"); File = "realism-reference-$ReferenceView-material-preview.png" },
         @{ Label = "realism_reference_rendered"; Arguments = @("--capture-realism-reference", $ReferenceView, "rendered"); File = "realism-reference-$ReferenceView-rendered.png" }
+    )
+}
+if ($EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE") {
+    $modes = @(
+        @{ Label = "normal_map_reference_solid"; Arguments = @("--capture-realism-reference", "normal_map", $ReferenceView, "solid"); File = "normal-map-reference-$ReferenceView-solid.png" },
+        @{ Label = "normal_map_reference_material_preview"; Arguments = @("--capture-realism-reference", "normal_map", $ReferenceView, "material_preview"); File = "normal-map-reference-$ReferenceView-material-preview.png" },
+        @{ Label = "normal_map_reference_rendered"; Arguments = @("--capture-realism-reference", "normal_map", $ReferenceView, "rendered"); File = "normal-map-reference-$ReferenceView-rendered.png" }
     )
 }
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
@@ -690,6 +722,9 @@ $records.Add("Giraffe inspection: optional close front, three-quarter, profile, 
 $records.Add("Terrain evidence: deterministic wide, close-material, and four-region-corner cameras")
 if ($EvidenceProfile -eq "REALISM_REFERENCE") {
     $records.Add("Realism reference: nine deterministic PBR material subjects; view=$ReferenceView")
+}
+if ($EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE") {
+    $records.Add("PBR normal-map reference: four matched flat controls and five matched normal-mapped subjects; view=$ReferenceView")
 }
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
     $records.Add("Lighting reference: nine deterministic same-material subjects with scene-owned key, fill, and rim sources; view=$ReferenceView")
@@ -768,6 +803,10 @@ foreach ($mode in $modes) {
         if ($EvidenceProfile -eq "REALISM_REFERENCE") {
             [void]$captureMetadata.Add(
                 (Assert-HenkaReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
+        }
+        elseif ($EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE") {
+            [void]$captureMetadata.Add(
+                (Assert-HenkaNormalMapReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
         }
         elseif ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
             [void]$captureMetadata.Add(
@@ -1103,6 +1142,11 @@ if ($EvidenceProfile -eq "REALISM_REFERENCE") {
     & (Join-Path $PSScriptRoot "check_realism_reference_visual_evidence_windows.ps1") `
         -InputDirectory $OutputDirectory
 }
+if ($EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE") {
+    $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
+    & (Join-Path $PSScriptRoot "check_pbr_normal_map_reference_windows.ps1") `
+        -InputDirectory $OutputDirectory
+}
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
     $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
     & (Join-Path $PSScriptRoot "check_lighting_reference_visual_evidence_windows.ps1") `
@@ -1152,6 +1196,9 @@ elseif ($EvidenceProfile -eq "SSGI_MOTION_REFERENCE") {
 }
 elseif ($EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") {
     "Bounded SSGI performance reference evidence"
+}
+elseif ($EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE") {
+    "PBR normal-map reference evidence"
 }
 else {
     "Same-camera Solid, Material Preview, and Rendered evidence"

@@ -67,6 +67,21 @@ with an unobstructed ground control. The checker requires measurable contact
 shadow contrast, providing an initial lighting/shadow regression without
 confusing ambient darkening with a claimed full lighting benchmark.
 
+The package also exposes a matched normal-map reference fixture. It uses the
+same neutral material and camera for four flat controls and five subjects with
+the generated linear normal map bound through the ordinary OpenGL material
+path:
+
+```text
+--capture-realism-reference normal_map wide|close solid|material_preview|rendered
+```
+
+The dedicated checker requires the five mapped regions to produce a measurable
+local rendered response above the four flat controls. This proves that the
+normal-map binding and tangent-space response are active; it is a bounded
+calibration fixture, not a claim that the generated detail texture represents
+production surface authoring quality.
+
 The package also exposes a separate lighting reference fixture. It uses nine
 same-material UV-sphere subjects, scene-owned directional/key/fill/rim light
 sources, the shared ground receiver, real shadow maps, and the same OpenGL
@@ -110,6 +125,7 @@ The Windows visual-evidence harness exposes the scene with:
 
 ```text
 --capture-realism-reference wide|close solid|material_preview|rendered
+--capture-realism-reference normal_map wide|close solid|material_preview|rendered
 --capture-realism-reference lighting wide|close solid|material_preview|rendered
 --capture-realism-reference sss close opaque|thin|thick rendered
 --capture-realism-reference ssgi wide|close rendered
@@ -211,9 +227,9 @@ overlap path, not a production probe-grid or multi-probe filtering solution.
 
 ## Direction
 
-The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes deterministic exposure-range and bounded subsurface-response fixtures in addition to the PBR and lighting fixtures. Important follow-up tracks are:
+The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes deterministic normal-map, exposure-range, and bounded subsurface-response fixtures in addition to the PBR and lighting fixtures. Important follow-up tracks are:
 
-1. extend the PBR, lighting, and HDR reference scenes to validate energy response, texture color-space handling, normal-map behavior, roughness/metallic response, IBL calibration, and light/shadow stability;
+1. extend the PBR, lighting, and HDR reference scenes to validate energy response, texture color-space handling, roughness/metallic response, IBL calibration, and light/shadow stability; the dedicated normal-map A/B foundation is now in place;
 2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined; the current SSS fixture only guards the existing bounded response;
 3. extend the bounded screen-space indirect diffuse validation for leaks, halos, over-brightening, and deeper hardware-specific performance characterization; current activation, camera-motion, and gross fixed-reference performance guards are in place;
 4. extend the current scene-probe diffuse foundation into a bounded
