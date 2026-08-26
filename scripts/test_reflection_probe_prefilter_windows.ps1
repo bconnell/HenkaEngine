@@ -11,8 +11,10 @@ if ($renderer -notmatch 'HENKA_REFLECTION_PROBE_PREFILTER_LEVELS\s+5') {
 if ($renderer -notmatch 'GL_LINEAR_MIPMAP_LINEAR') {
     $missing += 'trilinear reflection-probe filtering'
 }
-if ($renderer -notmatch 'g_gl\.GenerateMipmap\(GL_TEXTURE_CUBE_MAP\)') {
-    $missing += 'generated reflection-probe mip chain'
+if ($renderer -notmatch 'henka_opengl_prefilter_reflection_probe' -or
+    $renderer -notmatch 'importanceSampleGGX' -or
+    $renderer -notmatch 'ibl_prefilter_program') {
+    $missing += 'roughness-aware GGX reflection-probe prefiltering'
 }
 if ($renderer -notmatch 'reflection_probe_prefilter_active') {
     $missing += 'reflection_probe_prefilter_active renderer diagnostic'
