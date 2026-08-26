@@ -23,6 +23,8 @@ try {
     finally { $bitmap.Dispose() }
 
     $metadata = "CAPTURE_READY_SSGI_REFERENCE mode=rendered view=close reference_layout=close_grid reference_texture_edge=32 reference_exposure_stops=0.0000 reference_ssgi_active=1 reference_probe_diffuse_active=1 viewport=0,0,640,360 aspect=1.777778 camera_position=0.0000,0.0000,5.0000 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 reference_bounds=0.0000,1.9000,-3.5000,2.8500,1.8500,1.2500 reference_midpoint=320.00,180.00 reference_count=9 settled_frames=3 draw_expected=1"
+    # Keep the temporary fixture aligned with the runtime record without touching repository documentation.
+    $metadata = $metadata -replace 'reference_probe_diffuse_active=1 ', 'reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 '
     @(
         "Source: henka_sandbox3d.exe",
         "Evidence profile: SSGI_REFERENCE",

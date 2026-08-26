@@ -10,7 +10,9 @@ The current Rendered path includes:
 - transmission uses the authored IOR for a bounded environment-refraction direction and authored volume attenuation; KHR_materials_transmission scalar textures and KHR_materials_volume thickness textures are manager-owned linear data that modulate the corresponding response. Screen-space refraction, layered volumes, and production glass remain unfinished;
 - a bounded view-aware three-lobe direct-light diffusion-profile approximation for subsurface-tinted materials, with authored thickness and the shared linear thickness texture widening the profile and a bounded back-facing environment contribution; diffuse energy is reserved so the response is not simply added on top of full diffuse. The shared material-instance/editor path can assign, clear, restore, inspect, and transactionally refresh the imported thickness texture without creating a second material authority. This is still not true multi-scatter diffusion, a skin/wax profile, or screen-space/ray-traced SSS;
 - HDR environment lighting with transactionally derived 32-sample cosine-weighted irradiance, 32-sample GGX-prefiltered specular environment data across bounded mips, and a 32-sample split-sum BRDF lookup texture; this improves the rasterized environment response without claiming path tracing or full-scene global illumination;
-- local reflection probes;
+- local reflection probes with a bounded five-level generated cubemap mip chain
+  for roughness-dependent filtering; this is a box-filtered local probe
+  approximation, not the GGX-prefiltered global IBL path;
 - directional, cascade, spot, and point shadow-map foundations;
 - depth-derived ambient occlusion;
 - a validated environment/probe reflection fallback; the retained depth-derived
@@ -193,6 +195,14 @@ probe-grid blending, production irradiance filtering, multi-bounce transport,
 or guaranteed hidden/off-screen contribution beyond what the captured probe
 contains. Missing shader support or an unavailable probe fails closed to the
 existing environment-lighting path.
+
+Local reflection-probe specular now allocates and generates five cubemap mip
+levels (64, 32, 16, 8, and 4 pixels per face). The material roughness LOD
+selection therefore has a real bounded filtered source instead of requesting
+roughness levels from a level-zero-only texture. The generated chain is a
+stability and plausibility improvement for the supported OpenGL path; it is
+not a production GGX convolution, parallax-aware probe blend, or probe-grid
+system.
 
 ## Direction
 

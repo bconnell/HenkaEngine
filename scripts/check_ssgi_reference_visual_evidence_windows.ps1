@@ -34,7 +34,11 @@ $stdoutText = Get-Content -LiteralPath $stdoutPath -Raw
 if ($stdoutText -notmatch "Realism reference capture: debug grid hidden\.") {
     throw "SSGI reference capture did not prove that the debug grid was hidden."
 }
+if ($indexText -notmatch "(?m)CAPTURE_READY_SSGI_REFERENCE .* reference_probe_prefilter_active=1 ") {
+    throw "SSGI reference capture did not prove that local reflection-probe prefiltering was active."
+}
 $pattern = "(?m)CAPTURE_READY_SSGI_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 reference_probe_diffuse_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) .* reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
+$pattern = $pattern -replace 'reference_probe_diffuse_active=1 ', 'reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 '
 $records = [regex]::Matches($indexText, $pattern)
 if ($records.Count -ne 1) {
     throw "SSGI reference evidence must contain exactly one rendered readiness record."

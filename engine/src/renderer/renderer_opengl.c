@@ -210,6 +210,7 @@ typedef struct henka_opengl_renderer_state
     bool screen_space_reflections_active;
     bool screen_space_indirect_active;
     bool reflection_probe_diffuse_active;
+    bool reflection_probe_prefilter_active;
     bool reflection_fallback_active;
     GLuint shadow_program;
     henka_opengl_shader_data shadow_shader_data;
@@ -2114,6 +2115,22 @@ bloom_target_failure:
 #define HENKA_IBL_PREFILTER_LEVELS 5
 #define HENKA_IBL_BRDF_RESOLUTION 128
 #define HENKA_REFLECTION_PROBE_RESOLUTION 64
+#define HENKA_REFLECTION_PROBE_PREFILTER_LEVELS 5
+
+static uint64_t henka_opengl_reflection_probe_storage_bytes(void)
+{
+    uint64_t bytes = 0U;
+    int mip;
+
+    for (mip = 0; mip < HENKA_REFLECTION_PROBE_PREFILTER_LEVELS; ++mip)
+    {
+        int resolution = HENKA_REFLECTION_PROBE_RESOLUTION >> mip;
+        if (resolution < 1)
+            resolution = 1;
+        bytes += (uint64_t)resolution * (uint64_t)resolution * 6U * 8U;
+    }
+    return bytes;
+}
 
 static void henka_opengl_delete_reflection_probe_resources(
     henka_opengl_renderer_state* state)
@@ -2132,8 +2149,7 @@ static void henka_opengl_delete_reflection_probe_resources(
             henka_opengl_memory_remove_category(
                 state,
                 &state->tracked_render_target_bytes,
-                (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION *
-                    (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION * 6U * 8U);
+                henka_opengl_reflection_probe_storage_bytes());
         }
         state->reflection_probe_cubes[index] = 0U;
         state->reflection_probe_capture_ready[index] = false;
@@ -2161,9 +2177,11 @@ static void henka_opengl_delete_reflection_probe_resources(
     state->reflection_probe_capture_index = UINT32_MAX;
     state->reflection_probe_enabled_count = 0U;
     state->reflection_probe_captured_count = 0U;
+    state->reflection_probe_prefilter_active = false;
     if (!state->reflection_probe_capture_active)
     {
         state->reflection_probe_diffuse_active = false;
+        state->reflection_probe_prefilter_active = false;
     }
     state->reflection_probe_capture_generation = 0U;
     state->reflection_probe_capture_failure_count = 0U;
@@ -4771,25 +4789,32 @@ static bool henka_opengl_allocate_reflection_probe_cube(GLuint* out_texture)
         return false;
     }
     glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, 0);
-    for (face = 0; face < 6; ++face)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL,
+        HENKA_REFLECTION_PROBE_PREFILTER_LEVELS - 1);
+    for (int mip = 0; mip < HENKA_REFLECTION_PROBE_PREFILTER_LEVELS; ++mip)
     {
-        glTexImage2D(
-            GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
-            0,
-            GL_RGBA16F,
-            HENKA_REFLECTION_PROBE_RESOLUTION,
-            HENKA_REFLECTION_PROBE_RESOLUTION,
-            0,
-            GL_RGBA,
-            GL_HALF_FLOAT,
-            NULL);
+        int resolution = HENKA_REFLECTION_PROBE_RESOLUTION >> mip;
+        if (resolution < 1)
+            resolution = 1;
+        for (face = 0; face < 6; ++face)
+        {
+            glTexImage2D(
+                GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
+                mip,
+                GL_RGBA16F,
+                resolution,
+                resolution,
+                0,
+                GL_RGBA,
+                GL_HALF_FLOAT,
+                NULL);
+        }
     }
     valid = glGetError() == GL_NO_ERROR;
     if (!valid)
@@ -4947,14 +4972,21 @@ static void henka_opengl_capture_next_reflection_probe(
     glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
     if (success)
     {
+        while (glGetError() != GL_NO_ERROR) {}
+        glBindTexture(GL_TEXTURE_CUBE_MAP, candidate);
+        g_gl.GenerateMipmap(GL_TEXTURE_CUBE_MAP);
+        success = glGetError() == GL_NO_ERROR;
+        glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
+    }
+    if (success)
+    {
         if (state->reflection_probe_cubes[probe_index] != 0U)
         {
             glDeleteTextures(1, &state->reflection_probe_cubes[probe_index]);
             henka_opengl_memory_remove_category(
                 state,
                 &state->tracked_render_target_bytes,
-                (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION *
-                    (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION * 6U * 8U);
+                henka_opengl_reflection_probe_storage_bytes());
         }
         state->reflection_probe_cubes[probe_index] = candidate;
         state->reflection_probe_capture_ready[probe_index] = true;
@@ -4965,8 +4997,7 @@ static void henka_opengl_capture_next_reflection_probe(
         henka_opengl_memory_add_category(
             state,
             &state->tracked_render_target_bytes,
-            (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION *
-                (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION * 6U * 8U);
+            henka_opengl_reflection_probe_storage_bytes());
     }
     else if (candidate != 0U)
     {
@@ -5732,6 +5763,10 @@ henka_result henka_opengl_renderer_draw_scene(
         if (use_reflection_probe_diffuse)
         {
             state->reflection_probe_diffuse_active = true;
+        }
+        if (use_reflection_probe_map)
+        {
+            state->reflection_probe_prefilter_active = true;
         }
         base_color = entity->material.base_color;
         light_direction = scene->light_direction;
@@ -7545,6 +7580,15 @@ bool henka_opengl_renderer_get_reflection_probe_diffuse_active(
         (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
 
     return state != NULL && state->reflection_probe_diffuse_active;
+}
+
+bool henka_opengl_renderer_get_reflection_probe_prefilter_active(
+    const struct henka_renderer* renderer)
+{
+    const henka_opengl_renderer_state* state = renderer != NULL && renderer->backend_state != NULL ?
+        (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
+
+    return state != NULL && state->reflection_probe_prefilter_active;
 }
 
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled)

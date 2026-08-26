@@ -232,6 +232,10 @@ typedef struct henka_engine_diagnostics
      * describes whether a captured scene-reflection probe supplied the bounded
      * diffuse transfer approximation for the current Rendered frame. */
     bool rendered_reflection_probe_diffuse_active;
+    /* Appended to preserve the existing public diagnostics field offsets. It
+     * describes whether the selected local reflection probe supplied its
+     * bounded roughness-filtered mip chain for the current Rendered frame. */
+    bool rendered_reflection_probe_prefilter_active;
 } henka_engine_diagnostics;
 
 typedef henka_result (*henka_engine_initialize_fn)(henka_engine* engine, void* user_data);
