@@ -6,7 +6,7 @@ param(
 
     [string]$ExecutablePath = "",
 
-    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "PBR_NORMAL_MAP_REFERENCE", "PBR_COLOR_SPACE_REFERENCE", "PBR_ENERGY_REFERENCE", "PBR_IBL_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE", "SSGI_PERFORMANCE_REFERENCE")]
+    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "PBR_NORMAL_MAP_REFERENCE", "PBR_COLOR_SPACE_REFERENCE", "PBR_ENERGY_REFERENCE", "PBR_IBL_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SCENE_PROBE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE", "SSGI_PERFORMANCE_REFERENCE")]
     [string]$EvidenceProfile = "FULL_SHOWCASE",
 
     [ValidateSet("wide", "close")]
@@ -64,7 +64,7 @@ if ($EvidenceProfile -eq "GEOMETRY_SOLID" -and -not $IncludeStartupShowcase) {
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $IncludeGiraffeInspection = $true
 }
-if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE" -or $EvidenceProfile -eq "PBR_COLOR_SPACE_REFERENCE" -or $EvidenceProfile -eq "PBR_ENERGY_REFERENCE" -or $EvidenceProfile -eq "PBR_IBL_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE" -or $EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") -and
+if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE" -or $EvidenceProfile -eq "PBR_COLOR_SPACE_REFERENCE" -or $EvidenceProfile -eq "PBR_ENERGY_REFERENCE" -or $EvidenceProfile -eq "PBR_IBL_REFERENCE" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "HDR_RANGE_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SCENE_PROBE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE" -or $EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") -and
     ($IncludeStartupShowcase -or $IncludeGiraffeInspection -or $IncludeTerrain)) {
     throw "REALISM_REFERENCE evidence is a dedicated reference-scene capture and cannot include showcase or terrain extras."
 }
@@ -137,7 +137,7 @@ function Wait-HenkaCaptureReady {
 
     for ($attempt = 0; $attempt -lt 600; ++$attempt) {
         if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
-            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE|_SSGI_PERFORMANCE_REFERENCE|_NORMAL_MAP_REFERENCE|_COLOR_SPACE_REFERENCE|_ENERGY_REFERENCE|_IBL_REFERENCE)? ' |
+            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE|_SSGI_PERFORMANCE_REFERENCE|_NORMAL_MAP_REFERENCE|_COLOR_SPACE_REFERENCE|_ENERGY_REFERENCE|_IBL_REFERENCE|_SCENE_PROBE_REFERENCE)? ' |
                 Select-Object -Last 1
             if ($null -ne $line) {
                 return $line.Line
@@ -710,6 +710,35 @@ function Assert-HenkaIblReferenceCaptureMetadata {
     }
 }
 
+function Assert-HenkaSceneProbeReferenceCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ExpectedView
+    )
+
+    $pattern = '^\s*CAPTURE_READY_SCENE_PROBE_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*probe_reference=1 probe_diffuse_active=1 probe_prefilter_active=1 probe_blend_active=1 probe_enabled_count=(?<enabled>\d+) probe_captured_count=(?<captured>\d+) probe_capture_generation=(?<generation>\d+) probe_capture_failures=(?<failures>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1\s*$'
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success -or
+        $match.Groups["view"].Value -ne $ExpectedView -or
+        $match.Groups["layout"].Value -ne $(if ($ExpectedView -eq "close") { "close_grid" } else { "wide_row" }) -or
+        [int]$match.Groups["texture_edge"].Value -lt 32 -or
+        [int]$match.Groups["enabled"].Value -lt 2 -or
+        [int]$match.Groups["captured"].Value -lt 2 -or
+        [uint64]$match.Groups["generation"].Value -eq 0 -or
+        [int]$match.Groups["failures"].Value -ne 0 -or
+        [int]$match.Groups["count"].Value -ne 9 -or
+        [int]$match.Groups["settled"].Value -lt 3) {
+        throw "Scene-probe reference capture readiness metadata was malformed for $Label."
+    }
+    return [pscustomobject]@{
+        Canonical = ($Line -replace 'mode=[^ ]+', 'mode=shared')
+        Mode = "rendered"
+        View = $match.Groups["view"].Value
+        Layout = $match.Groups["layout"].Value
+    }
+}
+
 [System.IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 Add-Type -AssemblyName System.Drawing
 $modes = @(
@@ -748,6 +777,11 @@ if ($EvidenceProfile -eq "PBR_ENERGY_REFERENCE") {
 if ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
     $modes = @(
         @{ Label = "ibl_reference_rendered"; Arguments = @("--capture-realism-reference", "ibl", $ReferenceView, "rendered"); File = "ibl-reference-$ReferenceView-rendered.png" }
+    )
+}
+if ($EvidenceProfile -eq "SCENE_PROBE_REFERENCE") {
+    $modes = @(
+        @{ Label = "scene_probe_reference_rendered"; Arguments = @("--capture-realism-reference", "scene_probe", $ReferenceView, "rendered"); File = "scene-probe-reference-$ReferenceView-rendered.png" }
     )
 }
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
@@ -927,6 +961,10 @@ foreach ($mode in $modes) {
         elseif ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
             [void]$captureMetadata.Add(
                 (Assert-HenkaIblReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
+        }
+        elseif ($EvidenceProfile -eq "SCENE_PROBE_REFERENCE") {
+            [void]$captureMetadata.Add(
+                (Assert-HenkaSceneProbeReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
         }
         elseif ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
             [void]$captureMetadata.Add(
@@ -1282,6 +1320,11 @@ if ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
     & (Join-Path $PSScriptRoot "check_pbr_ibl_reference_windows.ps1") `
         -InputDirectory $OutputDirectory
 }
+if ($EvidenceProfile -eq "SCENE_PROBE_REFERENCE") {
+    $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
+    & (Join-Path $PSScriptRoot "check_scene_probe_reference_windows.ps1") `
+        -InputDirectory $OutputDirectory
+}
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
     $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
     & (Join-Path $PSScriptRoot "check_lighting_reference_visual_evidence_windows.ps1") `
@@ -1340,6 +1383,9 @@ elseif ($EvidenceProfile -eq "PBR_COLOR_SPACE_REFERENCE") {
 }
 elseif ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
     "PBR IBL reference evidence"
+}
+elseif ($EvidenceProfile -eq "SCENE_PROBE_REFERENCE") {
+    "Scene-probe diffuse and overlap reference evidence"
 }
 else {
     "Same-camera Solid, Material Preview, and Rendered evidence"

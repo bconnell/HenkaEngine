@@ -134,6 +134,22 @@ blending, or universal image-based-lighting accuracy.
 --capture-realism-reference ibl wide|close rendered
 ```
 
+The `SCENE_PROBE_REFERENCE` profile exposes a rendered-only scene-probe reference. It uses the
+same nine-subject calibration fixture and refuses readiness unless two enabled
+local probes have captured the current scene content revision and the renderer
+reports bounded probe diffuse transfer, prefiltering, and overlap blending. A
+restrained, shadowless fixture fill keeps all nine evaluated subjects readable
+while preserving directional lighting, falloff, and probe contrast; it does not
+claim equal direct-key exposure. The image guard proves that the captured
+rendered result is populated, bounded, and keeps all nine subjects legible.
+This is evidence for the supported two-probe OpenGL foundation, not a
+production irradiance volume, probe grid, or guarantee of hidden/off-screen
+global illumination.
+
+```text
+--capture-realism-reference scene_probe wide|close rendered
+```
+
 The package also exposes a separate lighting reference fixture. It uses nine
 same-material UV-sphere subjects, scene-owned directional/key/fill/rim light
 sources, the shared ground receiver, real shadow maps, and the same OpenGL
@@ -185,6 +201,7 @@ The Windows visual-evidence harness exposes the scene with:
 --capture-realism-reference normal_map wide|close solid|material_preview|rendered
 --capture-realism-reference color_space wide|close solid|material_preview|rendered
 --capture-realism-reference ibl wide|close rendered
+--capture-realism-reference scene_probe wide|close rendered
 --capture-realism-reference lighting wide|close solid|material_preview|rendered
 --capture-realism-reference sss close opaque|thin|thick rendered
 --capture-realism-reference ssgi wide|close rendered

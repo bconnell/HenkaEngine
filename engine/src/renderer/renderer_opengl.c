@@ -196,7 +196,7 @@ typedef struct henka_opengl_renderer_state
     float ibl_source_rotation;
     GLuint reflection_probe_cubes[HENKA_SCENE_MAX_REFLECTION_PROBES];
     bool reflection_probe_capture_ready[HENKA_SCENE_MAX_REFLECTION_PROBES];
-    uint64_t reflection_probe_captured_scene_revision[HENKA_SCENE_MAX_REFLECTION_PROBES];
+    uint64_t reflection_probe_captured_content_revision[HENKA_SCENE_MAX_REFLECTION_PROBES];
     henka_scene_reflection_probe_desc reflection_probe_captured_desc[HENKA_SCENE_MAX_REFLECTION_PROBES];
     GLuint reflection_probe_framebuffer;
     GLuint reflection_probe_depth_buffer;
@@ -2157,7 +2157,7 @@ static void henka_opengl_delete_reflection_probe_resources(
         }
         state->reflection_probe_cubes[index] = 0U;
         state->reflection_probe_capture_ready[index] = false;
-        state->reflection_probe_captured_scene_revision[index] = 0U;
+        state->reflection_probe_captured_content_revision[index] = 0U;
         memset(&state->reflection_probe_captured_desc[index], 0,
             sizeof(state->reflection_probe_captured_desc[index]));
     }
@@ -4931,7 +4931,7 @@ static void henka_opengl_capture_next_reflection_probe(
             continue;
         }
         if (state->reflection_probe_capture_ready[index] &&
-            state->reflection_probe_captured_scene_revision[index] == scene->render_revision &&
+            state->reflection_probe_captured_content_revision[index] == scene->content_revision &&
             henka_opengl_reflection_probe_desc_equal(
                 &state->reflection_probe_captured_desc[index],
                 &scene->reflection_probes[index]) )
@@ -5043,7 +5043,7 @@ static void henka_opengl_capture_next_reflection_probe(
         }
         state->reflection_probe_cubes[probe_index] = candidate;
         state->reflection_probe_capture_ready[probe_index] = true;
-        state->reflection_probe_captured_scene_revision[probe_index] = scene->render_revision;
+        state->reflection_probe_captured_content_revision[probe_index] = scene->content_revision;
         state->reflection_probe_captured_desc[probe_index] = probe;
         if (state->reflection_probe_capture_generation < UINT64_MAX)
             ++state->reflection_probe_capture_generation;
@@ -5368,7 +5368,7 @@ henka_result henka_opengl_renderer_draw_scene(
                 ++state->reflection_probe_enabled_count;
             if (state->reflection_probe_capture_ready[index] &&
                 state->reflection_probe_cubes[index] != 0U &&
-                state->reflection_probe_captured_scene_revision[index] == scene->render_revision)
+                state->reflection_probe_captured_content_revision[index] == scene->content_revision)
             {
                 if (state->reflection_probe_captured_count < UINT32_MAX)
                     ++state->reflection_probe_captured_count;

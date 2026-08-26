@@ -40,6 +40,18 @@ static void henka_scene_bump_render_revision(henka_scene* scene)
     }
     scene->render_revision = scene->render_revision == UINT64_MAX ? 1U :
         scene->render_revision + 1U;
+    scene->content_revision = scene->content_revision == UINT64_MAX ? 1U :
+        scene->content_revision + 1U;
+}
+
+static void henka_scene_bump_camera_revision(henka_scene* scene)
+{
+    if (scene == NULL)
+    {
+        return;
+    }
+    scene->render_revision = scene->render_revision == UINT64_MAX ? 1U :
+        scene->render_revision + 1U;
 }
 
 henka_material henka_material_default(void)
@@ -828,6 +840,7 @@ henka_result henka_scene_create(henka_scene** out_scene)
         80.0f,
         0.0f};
     scene->render_revision = 1U;
+    scene->content_revision = 1U;
 
     *out_scene = scene;
     return HENKA_SUCCESS;
@@ -874,6 +887,7 @@ henka_result henka_scene_clone(
     memcpy(clone->reflection_probes, source->reflection_probes, sizeof(clone->reflection_probes));
     memcpy(clone->reflection_probe_active, source->reflection_probe_active, sizeof(clone->reflection_probe_active));
     clone->render_revision = source->render_revision;
+    clone->content_revision = source->content_revision;
     memcpy(clone->local_lights, source->local_lights, sizeof(clone->local_lights));
     memcpy(clone->local_light_active, source->local_light_active, sizeof(clone->local_light_active));
     clone->fog = source->fog;
@@ -1775,8 +1789,11 @@ henka_result henka_scene_set_entity_visible(henka_scene* scene, henka_entity ent
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    record->visible = visible;
-    henka_scene_bump_render_revision(scene);
+    if (record->visible != visible)
+    {
+        record->visible = visible;
+        henka_scene_bump_render_revision(scene);
+    }
     return HENKA_SUCCESS;
 }
 
@@ -1989,7 +2006,7 @@ henka_result henka_scene_set_camera(henka_scene* scene, const henka_camera* came
 
     scene->camera = *camera;
     scene->has_camera = true;
-    henka_scene_bump_render_revision(scene);
+    henka_scene_bump_camera_revision(scene);
     return HENKA_SUCCESS;
 }
 
