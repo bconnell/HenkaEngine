@@ -72,6 +72,38 @@ try {
     try {
         for ($y = 0; $y -lt $bitmap.Height; ++$y) {
             for ($x = 0; $x -lt $bitmap.Width; ++$x) {
+                $wave = [int](22.0 * [Math]::Sin($x * 0.035) + 14.0 * [Math]::Cos($y * 0.045))
+                $red = [Math]::Max(0, [Math]::Min(255, 64 + $wave + [int]($x / 18)))
+                $green = [Math]::Max(0, [Math]::Min(255, 76 + $wave + [int]($y / 24)))
+                $blue = [Math]::Max(0, [Math]::Min(255, 58 + $wave))
+                $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($red, $green, $blue))
+            }
+        }
+        for ($y = 59; $y -le 107; ++$y) {
+            for ($x = 176; $x -le 224; ++$x) {
+                $bitmap.SetPixel($x, $y, [System.Drawing.Color]::Black)
+            }
+        }
+        $bitmap.Save((Join-Path $fixtureRoot "ssgi-reference-close-rendered.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally { $bitmap.Dispose() }
+    $rejected = $false
+    $message = ""
+    try {
+        & (Join-Path $PSScriptRoot "check_ssgi_reference_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
+    }
+    catch {
+        $rejected = $true
+        $message = $_.Exception.Message
+    }
+    if (-not $rejected -or $message -notmatch "all nine evaluated subjects visually legible") {
+        throw "The SSGI reference validator did not reject an unreadable evaluated subject."
+    }
+
+    $bitmap = [System.Drawing.Bitmap]::new(640, 360)
+    try {
+        for ($y = 0; $y -lt $bitmap.Height; ++$y) {
+            for ($x = 0; $x -lt $bitmap.Width; ++$x) {
                 $wave = [int](8.0 * [Math]::Sin($x * 0.035) + 6.0 * [Math]::Cos($y * 0.045))
                 $value = [Math]::Max(0, [Math]::Min(255, 245 + $wave))
                 $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($value, $value, $value))

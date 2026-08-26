@@ -70,6 +70,7 @@ try {
     [double]$sum = 0.0
     [double]$sumSquares = 0.0
     [int]$count = 0
+    [int]$visibleSubjectCount = 0
     $step = [Math]::Max(1, [int][Math]::Floor($bitmap.Width / 160.0))
     for ($y = 0; $y -lt $bitmap.Height; $y += $step) {
         for ($x = 0; $x -lt $bitmap.Width; $x += $step) {
@@ -85,6 +86,35 @@ try {
     $standardDeviation = [Math]::Sqrt($variance)
     if ($standardDeviation -lt 2.0) {
         throw "SSGI reference image is too flat to prove a stable rendered result."
+    }
+    if ($record.Groups["view"].Value -eq "close") {
+        $subjectCentersX = @(0.3125, 0.5, 0.6875)
+        $subjectCentersY = @(0.23, 0.54, 0.85)
+        foreach ($centerY in $subjectCentersY) {
+            foreach ($centerX in $subjectCentersX) {
+                [double]$subjectSum = 0.0
+                [int]$subjectCount = 0
+                $centerPixelX = [int][Math]::Round($bitmap.Width * $centerX)
+                $centerPixelY = [int][Math]::Round($bitmap.Height * $centerY)
+                $minimumX = [Math]::Max(0, $centerPixelX - 24)
+                $maximumX = [Math]::Min($bitmap.Width - 1, $centerPixelX + 24)
+                $minimumY = [Math]::Max(0, $centerPixelY - 24)
+                $maximumY = [Math]::Min($bitmap.Height - 1, $centerPixelY + 24)
+                for ($subjectY = $minimumY; $subjectY -le $maximumY; ++$subjectY) {
+                    for ($subjectX = $minimumX; $subjectX -le $maximumX; ++$subjectX) {
+                        $subjectPixel = $bitmap.GetPixel($subjectX, $subjectY)
+                        $subjectSum += 0.2126 * $subjectPixel.R + 0.7152 * $subjectPixel.G + 0.0722 * $subjectPixel.B
+                        ++$subjectCount
+                    }
+                }
+                if ($subjectCount -gt 0 -and ($subjectSum / $subjectCount) -ge 8.0) {
+                    ++$visibleSubjectCount
+                }
+            }
+        }
+        if ($visibleSubjectCount -ne 9) {
+            throw "SSGI reference image did not keep all nine evaluated subjects visually legible (visible=$visibleSubjectCount/9)."
+        }
     }
 
     [int]$clippedPixelCount = 0
@@ -150,6 +180,7 @@ $summary = @(
     "SSGI reference visual evidence validation: passed",
     "Reference view: $($record.Groups['view'].Value)",
     "Nine deterministic subjects: settled composition and bounded Rendered path",
+    $(if ($record.Groups['view'].Value -eq "close") { "Evaluated subject legibility: $visibleSubjectCount/9" } else { "Evaluated subject legibility: close-only guard not applicable to wide row" }),
     "Bounded image guard: clipped=$([Math]::Round(100.0 * $clippedFraction, 3))% bright=$([Math]::Round(100.0 * $brightFraction, 3))% subject_edge_halo=$([Math]::Round(100.0 * $haloBrightFraction, 3))%",
     "Status: automated SSGI activation and image-stability guard passed; human visual inspection remains required"
 )

@@ -229,7 +229,8 @@ is a fullscreen post-process over the HDR color and depth targets:
 It emits `CAPTURE_READY_SSGI_REFERENCE` only after the renderer reports that
 the screen-space indirect path was enabled for a settled frame. The checker
 also requires the deterministic nine-subject composition and a non-flat
-image. It also applies bounded fixture-specific sanity limits for excessive
+image; close captures additionally require every evaluated subject patch to
+remain visibly legible. It also applies bounded fixture-specific sanity limits for excessive
 HDR clipping, over-bright pixels, and bright subject-edge halos. This is an
 activation, presentation-stability, and gross-artifact guard for the current
 supported OpenGL path, not proof that every pixel receives indirect light or
