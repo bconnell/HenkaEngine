@@ -44,7 +44,8 @@ else {
     if ($checker -notmatch 'roughness' -or
         $checker -notmatch 'prefilter' -or
         $checker -notmatch 'irradiance' -or
-        $checker -notmatch 'roughness ladder') {
+        $checker -notmatch 'roughness ladder' -or
+        $checker -notmatch '\$lumas \| Where-Object \{ \$_ -lt 8\.0 \}') {
         $missing += 'IBL response checks'
     }
 }

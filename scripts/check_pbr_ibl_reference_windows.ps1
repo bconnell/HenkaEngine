@@ -137,6 +137,10 @@ $lumas = @()
 foreach ($center in $centers) {
     $lumas += Get-SubjectLuma -Path $renderedPath -CenterX $center[0] -CenterY $center[1]
 }
+$unreadableSubjects = @($lumas | Where-Object { $_ -lt 8.0 }).Count
+if ($unreadableSubjects -gt 0) {
+    throw "PBR IBL reference contains unreadable evaluated subjects (unreadable=$unreadableSubjects, luma=$([string]::Join(',', ($lumas | ForEach-Object { [Math]::Round($_, 1) }))))."
+}
 $ladderRange = ($lumas | Measure-Object -Maximum).Maximum - ($lumas | Measure-Object -Minimum).Minimum
 $resolvedSteps = 0
 for ($i = 1; $i -lt $lumas.Count; ++$i) {
@@ -148,4 +152,4 @@ if ($ladderRange -lt 8.0 -or $resolvedSteps -lt 5) {
     throw "PBR IBL roughness ladder was not visibly resolved (range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, luma=$([string]::Join(',', ($lumas | ForEach-Object { [Math]::Round($_, 1) }))))."
 }
 
-Write-Output "PBR IBL reference validation: passed (rendered-mean=$([Math]::Round($statistics.Mean, 2)), rendered-sd=$([Math]::Round($statistics.StandardDeviation, 2)), clipped-fraction=$([Math]::Round($statistics.ClippedFraction, 4)), roughness-ladder-range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps)."
+Write-Output "PBR IBL reference validation: passed (rendered-mean=$([Math]::Round($statistics.Mean, 2)), rendered-sd=$([Math]::Round($statistics.StandardDeviation, 2)), clipped-fraction=$([Math]::Round($statistics.ClippedFraction, 4)), visible-subjects=$($lumas.Count - $unreadableSubjects)/$($lumas.Count), roughness-ladder-range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps)."

@@ -133,7 +133,9 @@ split-sum BRDF LUT as ready. The checker then verifies that the ladder remains
 visibly resolved across the prefiltered environment response while the image
 stays bounded. This is an activation and bounded roughness-response guard for
 the supported OpenGL path, not proof of production HDRI authoring, probe-grid
-blending, or universal image-based-lighting accuracy.
+blending, or universal image-based-lighting accuracy. The close-image guard
+also requires all nine evaluated subjects to remain readable, so an unlit or
+otherwise lost subject cannot be mistaken for a valid roughness response.
 
 ```text
 --capture-realism-reference ibl wide|close rendered
