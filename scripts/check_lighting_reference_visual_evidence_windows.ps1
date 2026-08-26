@@ -37,6 +37,9 @@ function Get-ReferenceMetadata {
     param([Parameter(Mandatory = $true)][string]$Mode)
 
     $pattern = "(?m)CAPTURE_READY_LIGHTING_REFERENCE mode=$Mode view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) .* pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) .* reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
+    $pattern = $pattern.Replace(
+        'reference_exposure_stops=(?<exposure>[-0-9.]+) viewport=',
+        'reference_exposure_stops=(?<exposure>[-0-9.]+)(?<shadow> shadow_reference=1 shadow_maps_ready=1)? viewport=')
     $match = [regex]::Match($indexText, $pattern)
     if (-not $match.Success) {
         throw "Lighting reference evidence is missing valid readiness metadata for $Mode."
@@ -59,9 +62,12 @@ foreach ($entry in $metadata) {
         throw "Lighting reference metadata diverged or did not prove nine settled subjects."
     }
 }
-$canonical = $metadata[0].Value -replace 'mode=(solid|material_preview|rendered)', 'mode=shared'
+if (-not $metadata[2].Groups["shadow"].Success) {
+    throw "Lighting Rendered evidence did not prove that directional, cascade, and point shadow targets were ready."
+}
+$canonical = ($metadata[0].Value -replace 'mode=(solid|material_preview|rendered)', 'mode=shared') -replace ' shadow_reference=1 shadow_maps_ready=1', ''
 foreach ($entry in $metadata) {
-    if (($entry.Value -replace 'mode=(solid|material_preview|rendered)', 'mode=shared') -ne $canonical) {
+    if ((($entry.Value -replace 'mode=(solid|material_preview|rendered)', 'mode=shared') -replace ' shadow_reference=1 shadow_maps_ready=1', '') -ne $canonical) {
         throw "Lighting reference composition metadata diverged between shading modes."
     }
 }

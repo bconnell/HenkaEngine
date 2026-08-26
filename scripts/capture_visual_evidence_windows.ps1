@@ -455,7 +455,7 @@ function Assert-HenkaLightingReferenceCaptureMetadata {
         [Parameter(Mandatory = $true)][string]$ExpectedView
     )
 
-    $pattern = '^\s*CAPTURE_READY_LIGHTING_REFERENCE mode=(?<mode>[a-z_]+) view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY_LIGHTING_REFERENCE mode=(?<mode>[a-z_]+) view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+)(?<shadow> shadow_reference=1 shadow_maps_ready=1)? viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success) {
         throw "Lighting reference capture readiness metadata was malformed for $Label."
@@ -467,8 +467,12 @@ function Assert-HenkaLightingReferenceCaptureMetadata {
         [int]$match.Groups["sf"].Value -lt 3) {
         throw "Lighting reference capture readiness metadata is incomplete for $Label."
     }
+    if ($match.Groups["mode"].Value -eq "rendered" -and
+        -not $match.Groups["shadow"].Success) {
+        throw "Lighting Rendered capture did not prove that directional, cascade, and point shadow targets were ready for $Label."
+    }
     return [pscustomobject]@{
-        Canonical = ($Line -replace 'mode=[^ ]+', 'mode=shared')
+        Canonical = (($Line -replace 'mode=[^ ]+', 'mode=shared') -replace ' shadow_reference=1 shadow_maps_ready=1', '')
         Mode = $match.Groups["mode"].Value
         View = $match.Groups["view"].Value
         Layout = $match.Groups["layout"].Value

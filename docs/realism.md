@@ -151,10 +151,12 @@ Each lighting capture emits `CAPTURE_READY_LIGHTING_REFERENCE` metadata. The
 lighting checker requires nine settled, centered subjects, stable composition
 across Solid, Material Preview, and Rendered, a meaningful Rendered-versus-
 Preview difference, and a measurable luminance difference between deterministic
-subject regions. The existing PBR close checker continues to require contact
-shadow contrast; together these checks cover the initial reference-scene
-lighting/shadow contract without treating automated metrics as human visual
-approval.
+subject regions. The Rendered readiness path also fails closed unless the
+directional, cascade, and point shadow targets are complete, and records that
+shadow contract in the capture metadata. The existing PBR close checker
+continues to require contact-shadow contrast; together these checks cover the
+initial reference-scene lighting/shadow contract without treating automated
+metrics as human visual approval.
 
 The package also exposes a dedicated subsurface reference fixture. It uses nine
 same-camera, same-geometry, same-light UV-sphere subjects and captures the

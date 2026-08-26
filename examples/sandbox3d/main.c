@@ -8114,6 +8114,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
     const char* capture_color_space_details;
     const char* capture_energy_details;
     const char* capture_ibl_details;
+    const char* capture_shadow_details;
     float capture_exposure_stops;
 
     if (state == NULL || !state->realism_reference_capture_requested ||
@@ -8142,6 +8143,21 @@ static void sandbox3d_report_realism_reference_capture_ready(
         if (engine == NULL ||
             henka_engine_get_diagnostics(engine, &diagnostics) != HENKA_SUCCESS ||
             !diagnostics.rendered_ibl_ready)
+        {
+            state->capture_settled_frames = 0U;
+            return;
+        }
+    }
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING &&
+        state->capture_mode == HENKA_VIEWPORT_SHADING_RENDERED)
+    {
+        memset(&diagnostics, 0, sizeof(diagnostics));
+        if (engine == NULL ||
+            henka_engine_get_diagnostics(engine, &diagnostics) != HENKA_SUCCESS ||
+            !diagnostics.rendered_shadow_ready ||
+            !diagnostics.rendered_shadow_framebuffer_complete ||
+            !diagnostics.rendered_cascade_shadow_framebuffer_complete ||
+            !diagnostics.rendered_point_shadow_framebuffer_complete)
         {
             state->capture_settled_frames = 0U;
             return;
@@ -8326,8 +8342,13 @@ static void sandbox3d_report_realism_reference_capture_ready(
             SANDBOX3D_REALISM_REFERENCE_KIND_IBL
         ? " ibl_reference=1 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_levels=5 ibl_brdf_resolution=128"
         : "";
+    capture_shadow_details = state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING &&
+            state->capture_mode == HENKA_VIEWPORT_SHADING_RENDERED
+        ? " shadow_reference=1 shadow_maps_ready=1"
+        : "";
     printf(
-        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s%s%s%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
+        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
         capture_prefix,
         capture_motion_prefix,
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
@@ -8352,6 +8373,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
         capture_color_space_details,
         capture_energy_details,
         capture_ibl_details,
+        capture_shadow_details,
         viewport.x,
         viewport.y,
         viewport.width,
