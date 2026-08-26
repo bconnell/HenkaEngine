@@ -435,6 +435,10 @@ function Assert-HenkaReferenceCaptureMetadata {
     if ($match.Groups["view"].Value -ne $ExpectedView -or
         $match.Groups["layout"].Value -ne $expectedLayout -or
         [int]$match.Groups["texture_edge"].Value -lt 32 -or
+        [int]$match.Groups["enabled"].Value -lt 2 -or
+        [int]$match.Groups["captured"].Value -lt 2 -or
+        [uint64]$match.Groups["generation"].Value -eq 0 -or
+        [int]$match.Groups["failures"].Value -ne 0 -or
         [int]$match.Groups["count"].Value -ne 9 -or
         [int]$match.Groups["sf"].Value -lt 3) {
         throw "Reference capture readiness metadata is incomplete for $Label."
@@ -551,7 +555,7 @@ function Assert-HenkaSsgiReferenceCaptureMetadata {
         [Parameter(Mandatory = $true)][string]$ExpectedView
     )
 
-    $pattern = '^\s*CAPTURE_READY_SSGI_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY_SSGI_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=(?<enabled>\d+) reference_probe_captured_count=(?<captured>\d+) reference_probe_capture_generation=(?<generation>\d+) reference_probe_capture_failures=(?<failures>\d+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success) {
         throw "SSGI reference capture readiness metadata was malformed for $Label."
@@ -579,7 +583,7 @@ function Assert-HenkaSsgiMotionCaptureMetadata {
         [Parameter(Mandatory = $true)][ValidateSet("before", "after")][string]$ExpectedPhase
     )
 
-    $pattern = '^\s*CAPTURE_READY_SSGI_MOTION_REFERENCE phase=(?<phase>before|after) mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY_SSGI_MOTION_REFERENCE phase=(?<phase>before|after) mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=(?<enabled>\d+) reference_probe_captured_count=(?<captured>\d+) reference_probe_capture_generation=(?<generation>\d+) reference_probe_capture_failures=(?<failures>\d+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success) {
         throw "SSGI motion reference capture readiness metadata was malformed for $Label."
@@ -589,6 +593,10 @@ function Assert-HenkaSsgiMotionCaptureMetadata {
         $match.Groups["view"].Value -ne $ExpectedView -or
         $match.Groups["layout"].Value -ne $expectedLayout -or
         [int]$match.Groups["texture_edge"].Value -lt 32 -or
+        [int]$match.Groups["enabled"].Value -lt 2 -or
+        [int]$match.Groups["captured"].Value -lt 2 -or
+        [uint64]$match.Groups["generation"].Value -eq 0 -or
+        [int]$match.Groups["failures"].Value -ne 0 -or
         [int]$match.Groups["count"].Value -ne 9 -or
         [int]$match.Groups["sf"].Value -lt 3) {
         throw "SSGI motion reference capture metadata is incomplete for $Label phase=$ExpectedPhase."
@@ -603,9 +611,13 @@ function Assert-HenkaSsgiPerformanceCaptureMetadata {
         [Parameter(Mandatory = $true)][string]$ExpectedView
     )
 
-    $pattern = '^\s*CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=(?<view>wide|close) .*reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 '
+    $pattern = '^\s*CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=(?<view>wide|close) .*reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=(?<enabled>\d+) reference_probe_captured_count=(?<captured>\d+) reference_probe_capture_generation=(?<generation>\d+) reference_probe_capture_failures=(?<failures>\d+) '
     $match = [regex]::Match($Line, $pattern)
-    if (-not $match.Success -or $match.Groups["view"].Value -ne $ExpectedView) {
+    if (-not $match.Success -or $match.Groups["view"].Value -ne $ExpectedView -or
+        [int]$match.Groups["enabled"].Value -lt 2 -or
+        [int]$match.Groups["captured"].Value -lt 2 -or
+        [uint64]$match.Groups["generation"].Value -eq 0 -or
+        [int]$match.Groups["failures"].Value -ne 0) {
         throw "SSGI performance reference capture readiness metadata was malformed for $Label."
     }
 }

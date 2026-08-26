@@ -34,16 +34,24 @@ $stdoutText = Get-Content -LiteralPath $stdoutPath -Raw
 if ($stdoutText -notmatch "Realism reference capture: debug grid hidden\.") {
     throw "SSGI reference capture did not prove that the debug grid was hidden."
 }
-if ($indexText -notmatch "(?m)CAPTURE_READY_SSGI_REFERENCE .* reference_probe_prefilter_active=1 reference_probe_blend_active=1 ") {
+if ($indexText -notmatch "(?m)CAPTURE_READY_SSGI_REFERENCE .* reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=\d+ reference_probe_captured_count=\d+ reference_probe_capture_generation=\d+ reference_probe_capture_failures=0 ") {
     throw "SSGI reference capture did not prove that local reflection-probe prefiltering was active."
 }
 $pattern = "(?m)CAPTURE_READY_SSGI_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 reference_probe_diffuse_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) .* reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
-$pattern = $pattern -replace 'reference_probe_diffuse_active=1 ', 'reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 '
+$pattern = $pattern -replace 'reference_probe_diffuse_active=1 ', 'reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=\d+ reference_probe_captured_count=\d+ reference_probe_capture_generation=\d+ reference_probe_capture_failures=0 '
 $records = [regex]::Matches($indexText, $pattern)
 if ($records.Count -ne 1) {
     throw "SSGI reference evidence must contain exactly one rendered readiness record."
 }
 $record = $records[0]
+$probeHealth = [regex]::Match($record.Value, 'reference_probe_enabled_count=(?<enabled>\d+) reference_probe_captured_count=(?<captured>\d+) reference_probe_capture_generation=(?<generation>\d+) reference_probe_capture_failures=(?<failures>\d+)')
+if (-not $probeHealth.Success -or
+    [int]$probeHealth.Groups['enabled'].Value -lt 2 -or
+    [int]$probeHealth.Groups['captured'].Value -lt 2 -or
+    [uint64]$probeHealth.Groups['generation'].Value -eq 0 -or
+    [int]$probeHealth.Groups['failures'].Value -ne 0) {
+    throw 'SSGI reference metadata did not prove two current captured probes without failures.'
+}
 $imagePath = Join-Path $InputDirectory ("ssgi-reference-" + $record.Groups["view"].Value + "-rendered.png")
 $expectedLayout = if ($record.Groups["view"].Value -eq "close") { "close_grid" } else { "wide_row" }
 if ($record.Groups["layout"].Value -ne $expectedLayout -or

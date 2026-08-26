@@ -24,6 +24,7 @@ if ($indexText -notmatch "(?m)^Evidence profile: SSGI_MOTION_REFERENCE\s*$" -or
 }
 
 $pattern = "(?m)CAPTURE_READY_SSGI_MOTION_REFERENCE phase=(?<phase>before|after) mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) reference_ssgi_active=1 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
+$pattern = $pattern -replace 'reference_ssgi_active=1 ', 'reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=\d+ reference_probe_captured_count=\d+ reference_probe_capture_generation=\d+ reference_probe_capture_failures=0 '
 $matches = [regex]::Matches($indexText, $pattern)
 if ($matches.Count -ne 2) {
     throw "SSGI motion reference evidence must contain exactly one before and one after readiness record."
@@ -36,6 +37,14 @@ if ($null -eq $before -or $null -eq $after) {
 $expectedView = $before.Groups["view"].Value
 $expectedLayout = if ($expectedView -eq "close") { "close_grid" } else { "wide_row" }
 foreach ($record in @($before, $after)) {
+    $probeHealth = [regex]::Match($record.Value, 'reference_probe_enabled_count=(?<enabled>\d+) reference_probe_captured_count=(?<captured>\d+) reference_probe_capture_generation=(?<generation>\d+) reference_probe_capture_failures=(?<failures>\d+)')
+    if (-not $probeHealth.Success -or
+        [int]$probeHealth.Groups['enabled'].Value -lt 2 -or
+        [int]$probeHealth.Groups['captured'].Value -lt 2 -or
+        [uint64]$probeHealth.Groups['generation'].Value -eq 0 -or
+        [int]$probeHealth.Groups['failures'].Value -ne 0) {
+        throw 'SSGI motion metadata did not prove two current captured probes without failures for both phases.'
+    }
     if ($record.Groups["view"].Value -ne $expectedView -or
         $record.Groups["layout"].Value -ne $expectedLayout -or
         [int]$record.Groups["texture_edge"].Value -lt 32 -or

@@ -234,6 +234,11 @@ HDR clipping, over-bright pixels, and bright subject-edge halos. This is an
 activation, presentation-stability, and gross-artifact guard for the current
 supported OpenGL path, not proof that every pixel receives indirect light or
 that subtle leaks, camera-motion stability, and performance are solved.
+For this reference, readiness also requires at least two enabled local probes
+captured at a nonzero current generation with zero capture failures. The
+motion and performance profiles carry the same probe-health fields. This is a
+fixture and evidence-health condition, not a claim that SSGI can see hidden or
+off-screen geometry.
 
 The motion-stability reference is a separate Rendered-only capture:
 

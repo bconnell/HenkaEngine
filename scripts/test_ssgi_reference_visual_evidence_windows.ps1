@@ -24,7 +24,7 @@ try {
 
     $metadata = "CAPTURE_READY_SSGI_REFERENCE mode=rendered view=close reference_layout=close_grid reference_texture_edge=32 reference_exposure_stops=0.0000 reference_ssgi_active=1 reference_probe_diffuse_active=1 viewport=0,0,640,360 aspect=1.777778 camera_position=0.0000,0.0000,5.0000 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 reference_bounds=0.0000,1.9000,-3.5000,2.8500,1.8500,1.2500 reference_midpoint=320.00,180.00 reference_count=9 settled_frames=3 draw_expected=1"
     # Keep the temporary fixture aligned with the runtime record without touching repository documentation.
-    $metadata = $metadata -replace 'reference_probe_diffuse_active=1 ', 'reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 '
+    $metadata = $metadata -replace 'reference_probe_diffuse_active=1 ', 'reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=2 reference_probe_captured_count=2 reference_probe_capture_generation=1 reference_probe_capture_failures=0 '
     @(
         "Source: henka_sandbox3d.exe",
         "Evidence profile: SSGI_REFERENCE",
@@ -50,6 +50,23 @@ try {
     if (-not $rejected -or $message -notmatch "exactly one rendered readiness record") {
         throw "The SSGI reference validator did not reject an inactive readiness record."
     }
+
+    (Get-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt") -Raw) -replace "reference_ssgi_active=0", "reference_ssgi_active=1" -replace "reference_probe_capture_failures=0", "reference_probe_capture_failures=1" |
+        Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
+    $rejected = $false
+    $message = ""
+    try {
+        & (Join-Path $PSScriptRoot "check_ssgi_reference_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
+    }
+    catch {
+        $rejected = $true
+        $message = $_.Exception.Message
+    }
+    if (-not $rejected -or $message -notmatch "local reflection-probe prefiltering was active") {
+        throw "The SSGI reference validator did not reject probe capture failures."
+    }
+    (Get-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt") -Raw) -replace "reference_probe_capture_failures=1", "reference_probe_capture_failures=0" |
+        Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
 
     $bitmap = [System.Drawing.Bitmap]::new(640, 360)
     try {

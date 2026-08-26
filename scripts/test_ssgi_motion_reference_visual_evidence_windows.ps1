@@ -27,6 +27,8 @@ try {
 
     $before = "CAPTURE_READY_SSGI_MOTION_REFERENCE phase=before mode=rendered view=close reference_layout=close_grid reference_texture_edge=32 reference_exposure_stops=0.0000 reference_ssgi_active=1 viewport=0,0,640,360 aspect=1.777778 camera_position=0.0000,0.0000,5.0000 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 reference_bounds=0.0000,1.9000,-3.5000,2.8500,1.8500,1.2500 reference_midpoint=320.00,180.00 reference_count=9 settled_frames=3 draw_expected=1"
     $after = "CAPTURE_READY_SSGI_MOTION_REFERENCE phase=after mode=rendered view=close reference_layout=close_grid reference_texture_edge=32 reference_exposure_stops=0.0000 reference_ssgi_active=1 viewport=0,0,640,360 aspect=1.777778 camera_position=0.3500,0.0000,4.8000 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 reference_bounds=0.0000,1.9000,-3.5000,2.8500,1.8500,1.2500 reference_midpoint=320.00,180.00 reference_count=9 settled_frames=3 draw_expected=1"
+    $before = $before -replace 'reference_ssgi_active=1 ', 'reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=2 reference_probe_captured_count=2 reference_probe_capture_generation=1 reference_probe_capture_failures=0 '
+    $after = $after -replace 'reference_ssgi_active=1 ', 'reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=2 reference_probe_captured_count=2 reference_probe_capture_generation=1 reference_probe_capture_failures=0 '
     @(
         "Source: henka_sandbox3d.exe",
         "Evidence profile: SSGI_MOTION_REFERENCE",

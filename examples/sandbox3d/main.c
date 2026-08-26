@@ -7973,6 +7973,10 @@ static void sandbox3d_report_ssgi_performance_capture_ready(
         !diagnostics.rendered_reflection_probe_diffuse_active ||
         !diagnostics.rendered_reflection_probe_prefilter_active ||
         !diagnostics.rendered_reflection_probe_blend_active ||
+        diagnostics.rendered_reflection_probe_enabled_count < 2U ||
+        diagnostics.rendered_reflection_probe_captured_count < 2U ||
+        diagnostics.rendered_reflection_probe_capture_generation == 0U ||
+        diagnostics.rendered_reflection_probe_capture_failure_count != 0U ||
         viewport.x < 0 || viewport.y < 0 || viewport.width != 1280 ||
         viewport.height != 720 || !state->capture_camera_aspect_applied ||
         state->detail_normal_texture == NULL ||
@@ -8053,7 +8057,7 @@ static void sandbox3d_report_ssgi_performance_capture_ready(
         return;
     }
     printf(
-        "CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=0.0000 reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 viewport=%d,%d,%d,%d aspect=%.6f reference_count=%zu settled_frames=%u samples=%u gpu_samples=%u frame_mean_ms=%.4f frame_max_ms=%.4f scene_cpu_mean_ms=%.4f scene_cpu_max_ms=%.4f scene_gpu_mean_ms=%.4f scene_gpu_max_ms=%.4f scene_gpu_timing=%s draw_expected=1\n",
+        "CAPTURE_READY_SSGI_PERFORMANCE_REFERENCE mode=rendered view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=0.0000 reference_ssgi_active=1 reference_probe_diffuse_active=1 reference_probe_prefilter_active=1 reference_probe_blend_active=1 reference_probe_enabled_count=%u reference_probe_captured_count=%u reference_probe_capture_generation=%llu reference_probe_capture_failures=%u viewport=%d,%d,%d,%d aspect=%.6f reference_count=%zu settled_frames=%u samples=%u gpu_samples=%u frame_mean_ms=%.4f frame_max_ms=%.4f scene_cpu_mean_ms=%.4f scene_cpu_max_ms=%.4f scene_gpu_mean_ms=%.4f scene_gpu_max_ms=%.4f scene_gpu_timing=%s draw_expected=1\n",
         state->realism_reference_capture_view ==
                 SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE
             ? "close"
@@ -8063,6 +8067,10 @@ static void sandbox3d_report_ssgi_performance_capture_ready(
             ? "close_grid"
             : "wide_row",
         detail_normal_info.width,
+        (unsigned int)diagnostics.rendered_reflection_probe_enabled_count,
+        (unsigned int)diagnostics.rendered_reflection_probe_captured_count,
+        (unsigned long long)diagnostics.rendered_reflection_probe_capture_generation,
+        (unsigned int)diagnostics.rendered_reflection_probe_capture_failure_count,
         viewport.x,
         viewport.y,
         viewport.width,
@@ -8138,7 +8146,11 @@ static void sandbox3d_report_realism_reference_capture_ready(
             !diagnostics.rendered_screen_space_indirect_active ||
             !diagnostics.rendered_reflection_probe_diffuse_active ||
             !diagnostics.rendered_reflection_probe_prefilter_active ||
-            !diagnostics.rendered_reflection_probe_blend_active)
+            !diagnostics.rendered_reflection_probe_blend_active ||
+            diagnostics.rendered_reflection_probe_enabled_count < 2U ||
+            diagnostics.rendered_reflection_probe_captured_count < 2U ||
+            diagnostics.rendered_reflection_probe_capture_generation == 0U ||
+            diagnostics.rendered_reflection_probe_capture_failure_count != 0U)
         {
             state->capture_settled_frames = 0U;
             return;
@@ -8382,6 +8394,18 @@ static void sandbox3d_report_realism_reference_capture_ready(
             capture_ibl_details,
             sizeof(capture_ibl_details),
             " probe_reference=1 probe_diffuse_active=1 probe_prefilter_active=1 probe_blend_active=1 probe_enabled_count=%u probe_captured_count=%u probe_capture_generation=%llu probe_capture_failures=%u",
+            (unsigned int)diagnostics.rendered_reflection_probe_enabled_count,
+            (unsigned int)diagnostics.rendered_reflection_probe_captured_count,
+            (unsigned long long)diagnostics.rendered_reflection_probe_capture_generation,
+            (unsigned int)diagnostics.rendered_reflection_probe_capture_failure_count);
+    }
+    else if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI ||
+        state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION)
+    {
+        (void)snprintf(
+            capture_ibl_details,
+            sizeof(capture_ibl_details),
+            " reference_probe_enabled_count=%u reference_probe_captured_count=%u reference_probe_capture_generation=%llu reference_probe_capture_failures=%u",
             (unsigned int)diagnostics.rendered_reflection_probe_enabled_count,
             (unsigned int)diagnostics.rendered_reflection_probe_captured_count,
             (unsigned long long)diagnostics.rendered_reflection_probe_capture_generation,
