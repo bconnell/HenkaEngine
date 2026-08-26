@@ -129,7 +129,8 @@ typedef enum sandbox3d_realism_reference_kind
     SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION,
     SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_PERFORMANCE,
     SANDBOX3D_REALISM_REFERENCE_KIND_NORMAL_MAP,
-    SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE
+    SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE,
+    SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY
 } sandbox3d_realism_reference_kind;
 
 typedef enum sandbox3d_sss_reference_variant
@@ -4357,6 +4358,11 @@ static bool sandbox3d_parse_realism_reference_kind(
         *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE;
         return true;
     }
+    if (strcmp(value, "energy") == 0)
+    {
+        *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY;
+        return true;
+    }
     return false;
 }
 
@@ -8100,6 +8106,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
     const char* capture_probe_blend_active;
     const char* capture_normal_map_details;
     const char* capture_color_space_details;
+    const char* capture_energy_details;
     float capture_exposure_stops;
 
     if (state == NULL || !state->realism_reference_capture_requested ||
@@ -8221,6 +8228,10 @@ static void sandbox3d_report_realism_reference_capture_ready(
     {
         capture_prefix = "CAPTURE_READY_COLOR_SPACE_REFERENCE";
     }
+    else if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY)
+    {
+        capture_prefix = "CAPTURE_READY_ENERGY_REFERENCE";
+    }
     else
     {
         capture_prefix = "CAPTURE_READY_REFERENCE";
@@ -8285,8 +8296,12 @@ static void sandbox3d_report_realism_reference_capture_ready(
             SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE
         ? " color_space_reference=1 color_space_srgb=1 color_space_linear=1 color_space_shared_source=1 color_space_srgb_count=4 color_space_linear_count=5"
         : "";
+    capture_energy_details = state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY
+        ? " energy_reference=1 energy_dielectric_count=3 energy_metallic_count=3 energy_transmission_count=3 energy_clipped_channel_limit=254"
+        : "";
     printf(
-        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
+        "%s%s mode=%s view=%s reference_layout=%s reference_texture_edge=%d reference_exposure_stops=%.4f%s%s%s%s%s%s%s%s%s%s%s%s%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
         capture_prefix,
         capture_motion_prefix,
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
@@ -8309,6 +8324,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
         capture_probe_blend_active,
         capture_normal_map_details,
         capture_color_space_details,
+        capture_energy_details,
         viewport.x,
         viewport.y,
         viewport.width,
@@ -32390,6 +32406,13 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             "Color Space sRGB 04", "Color Space Linear 04",
             "Color Space Linear 05"
         };
+        static const char* energy_names[SANDBOX3D_REALISM_ENTITY_COUNT] =
+        {
+            "Energy Dielectric Matte", "Energy Dielectric Mid",
+            "Energy Dielectric Glossy", "Energy Metallic Matte",
+            "Energy Metallic Mid", "Energy Metallic Glossy",
+            "Energy Transmission", "Energy Clearcoat", "Energy Sheen"
+        };
         static const henka_vec3 realism_positions[SANDBOX3D_REALISM_ENTITY_COUNT] =
         {
             {-6.3f, 0.65f, -2.8f}, {-4.5f, 0.65f, -2.8f}, {-2.7f, 0.65f, -2.8f},
@@ -32415,6 +32438,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 SANDBOX3D_REALISM_REFERENCE_KIND_NORMAL_MAP;
             const bool color_space_reference = state->realism_reference_kind ==
                 SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE;
+            const bool energy_reference = state->realism_reference_kind ==
+                SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY;
             henka_material realism_material = henka_material_default();
             henka_vec3 realism_position = realism_positions[realism_index];
             if (state->realism_reference_capture_requested &&
@@ -32432,7 +32457,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 (henka_vec3){1.0f, 1.0f, 1.0f});
             state->realism_entities[realism_index] = henka_scene_create_entity_named(
                 state->scene,
-                color_space_reference
+                energy_reference
+                    ? energy_names[realism_index]
+                : color_space_reference
                     ? color_space_names[realism_index]
                     : normal_map_reference
                         ? normal_map_names[realism_index]
@@ -32446,7 +32473,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 result = HENKA_ERROR_OUT_OF_MEMORY;
                 goto fail;
             }
-            realism_material.name = color_space_reference
+            realism_material.name = energy_reference
+                ? energy_names[realism_index]
+                : color_space_reference
                 ? color_space_names[realism_index]
                 : normal_map_reference
                     ? normal_map_names[realism_index]
@@ -32457,7 +32486,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                         : realism_names[realism_index];
             realism_material.type = HENKA_MATERIAL_TYPE_LIT;
             realism_material.shader = state->basic_shader;
-            realism_material.base_color = color_space_reference
+            realism_material.base_color = energy_reference
+                ? (henka_vec4){0.72f, 0.72f, 0.72f, 1.0f}
+                : color_space_reference
                 ? (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f}
                 : normal_map_reference
                     ? (henka_vec4){0.48f, 0.52f, 0.58f, 1.0f}
@@ -32467,10 +32498,13 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                         ? (henka_vec4){0.48f, 0.52f, 0.58f, 1.0f}
                         : realism_colors[realism_index];
             realism_material.use_lighting = true;
-            realism_material.metallic = color_space_reference || normal_map_reference || sss_reference || lighting_reference
+            realism_material.metallic = energy_reference || color_space_reference || normal_map_reference || sss_reference || lighting_reference
                 ? 0.0f
                 : realism_index < 2 ? 1.0f : 0.0f;
-            realism_material.roughness = color_space_reference
+            realism_material.roughness = energy_reference
+                ? realism_index == 0 || realism_index == 3 || realism_index == 6 ? 0.86f :
+                    realism_index == 1 || realism_index == 4 || realism_index == 7 ? 0.46f : 0.08f
+                : color_space_reference
                 ? 0.46f
                 : normal_map_reference
                     ? 0.46f
@@ -32503,28 +32537,28 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                  * staying inside the engine's bounded material range. */
                 realism_material.normal_scale = 3.0f;
             }
-            if (!color_space_reference && !normal_map_reference && !lighting_reference && realism_index == 4)
+            if (!energy_reference && !color_space_reference && !normal_map_reference && !lighting_reference && realism_index == 4)
             {
                 realism_material.base_color_texture = state->macro_variation_texture;
                 realism_material.normal_texture = state->detail_normal_texture;
                 realism_material.use_texture = true;
                 realism_material.normal_scale = 0.55f;
             }
-            if (!color_space_reference && !normal_map_reference && !lighting_reference && realism_index == 5)
+            if (!energy_reference && !color_space_reference && !normal_map_reference && !lighting_reference && realism_index == 5)
             {
                 realism_material.normal_texture = state->detail_normal_texture;
                 realism_material.normal_scale = 0.35f;
                 realism_material.sheen_color = (henka_vec3){0.42f, 0.08f, 0.24f};
                 realism_material.sheen_roughness = 0.82f;
             }
-            if (!color_space_reference && !normal_map_reference && !lighting_reference && realism_index == 6)
+            if (!energy_reference && !color_space_reference && !normal_map_reference && !lighting_reference && realism_index == 6)
             {
                 realism_material.base_color_texture = state->wood_grain_texture;
                 realism_material.normal_texture = state->detail_normal_texture;
                 realism_material.use_texture = true;
                 realism_material.normal_scale = 0.42f;
             }
-            if (!color_space_reference && !normal_map_reference && !lighting_reference && realism_index == 7)
+            if (!energy_reference && !color_space_reference && !normal_map_reference && !lighting_reference && realism_index == 7)
             {
                 realism_material.base_color_texture = state->macro_variation_texture;
                 realism_material.normal_texture = state->detail_normal_texture;
@@ -32534,12 +32568,25 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 realism_material.clearcoat = 0.22f;
                 realism_material.clearcoat_roughness = 0.09f;
             }
-            if (!color_space_reference && !normal_map_reference && !lighting_reference && realism_index == 8)
+            if (!energy_reference && !color_space_reference && !normal_map_reference && !lighting_reference && realism_index == 8)
             {
                 realism_material.subsurface = 0.72f;
                 realism_material.subsurface_color = (henka_vec3){1.0f, 0.22f, 0.14f};
                 realism_material.thickness = 0.42f;
                 realism_material.roughness = 0.38f;
+            }
+            if (energy_reference)
+            {
+                realism_material.metallic = realism_index >= 3 && realism_index < 6 ? 1.0f : 0.0f;
+                realism_material.transmission = realism_index == 6 ? 0.68f : 0.0f;
+                realism_material.ior = 1.50f;
+                realism_material.thickness = realism_index == 6 ? 0.55f : 0.0f;
+                realism_material.clearcoat = realism_index == 7 ? 0.86f : 0.0f;
+                realism_material.clearcoat_roughness = 0.12f;
+                realism_material.sheen_color = realism_index == 8
+                    ? (henka_vec3){0.45f, 0.18f, 0.08f}
+                    : (henka_vec3){0.0f, 0.0f, 0.0f};
+                realism_material.sheen_roughness = 0.46f;
             }
             if (sss_reference)
             {
@@ -36255,6 +36302,17 @@ int main(int argc, char** argv)
         capture_mode_requested = true;
         realism_reference_capture_requested = true;
     }
+    else if (argc == 5 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
+        sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
+        realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY &&
+        sandbox3d_parse_realism_reference_capture_view(
+            argv[3],
+            &realism_reference_capture_view) &&
+        henka_viewport_shading_mode_parse(argv[4], &capture_mode) == HENKA_SUCCESS)
+    {
+        capture_mode_requested = true;
+        realism_reference_capture_requested = true;
+    }
     else if (argc == 6 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
         sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
         realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI_MOTION &&
@@ -36346,7 +36404,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 

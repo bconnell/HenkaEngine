@@ -99,6 +99,27 @@ color-space distinction reaches the renderer; it is a bounded response fixture,
 not a claim of universal color-management, display-mastering, or scene-wide
 energy calibration.
 
+The package also exposes a dedicated bounded energy-response reference. It
+keeps the geometry, neutral base color, lighting, environment, and camera
+fixed while arranging three dielectric subjects, three metallic subjects, and
+three secondary-response subjects covering transmission, clearcoat, and sheen.
+The fixture exercises the ordinary OpenGL PBR path and checks that the groups
+remain visibly non-flat without allowing the Rendered image to become
+overwhelmingly clipped. This is a response and gross-energy regression guard;
+it is not a universal proof of physical energy conservation across arbitrary
+materials, lights, exposures, or displays.
+
+```text
+--capture-realism-reference energy wide|close solid|material_preview|rendered
+```
+
+The readiness record identifies the three bounded response groups and the
+clipped-channel limit. The dedicated checker requires matching composition
+across Solid, Material Preview, and Rendered, visible group separation, and
+bounded Rendered luminance/clipping. It does not promote the current direct
+lighting, environment, transmission, clearcoat, or sheen approximations to a
+production light-transport model.
+
 The package also exposes a separate lighting reference fixture. It uses nine
 same-material UV-sphere subjects, scene-owned directional/key/fill/rim light
 sources, the shared ground receiver, real shadow maps, and the same OpenGL
@@ -245,9 +266,9 @@ overlap path, not a production probe-grid or multi-probe filtering solution.
 
 ## Direction
 
-The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes deterministic normal-map, exposure-range, and bounded subsurface-response fixtures in addition to the PBR and lighting fixtures. Important follow-up tracks are:
+The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes deterministic normal-map, color-space, energy-response, exposure-range, and bounded subsurface-response fixtures in addition to the PBR and lighting fixtures. Important follow-up tracks are:
 
-1. extend the PBR, lighting, and HDR reference scenes to validate energy response, roughness/metallic response, IBL calibration, and light/shadow stability; dedicated normal-map and color-space A/B foundations are now in place;
+1. extend the PBR, lighting, and HDR reference scenes to validate roughness/metallic response, IBL calibration, and light/shadow stability; dedicated normal-map, color-space, and bounded energy-response foundations are now in place;
 2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined; the current SSS fixture only guards the existing bounded response;
 3. extend the bounded screen-space indirect diffuse validation for leaks, halos, over-brightening, and deeper hardware-specific performance characterization; current activation, camera-motion, and gross fixed-reference performance guards are in place;
 4. extend the current scene-probe diffuse foundation into a bounded
