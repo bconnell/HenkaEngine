@@ -510,6 +510,60 @@ vec3 sampleEnvironment(vec3 direction)
     return min(max(color, vec3(0.0)) * max(environmentIntensity, 0.0), vec3(65504.0));
 }
 
+/* OpenGL 3.3 core permits sampler-array access only with a compile-time
+ * constant index on the supported Mesa/llvmpipe path. Keep the terrain layer
+ * selection dynamic while spelling out the four legal sampler accesses. */
+vec4 sampleTerrainBaseColorTexture(int layerIndex, vec2 uv)
+{
+    if (layerIndex == 0)
+    {
+        return texture(terrainLayerBaseColorTextures[0], uv);
+    }
+    if (layerIndex == 1)
+    {
+        return texture(terrainLayerBaseColorTextures[1], uv);
+    }
+    if (layerIndex == 2)
+    {
+        return texture(terrainLayerBaseColorTextures[2], uv);
+    }
+    return texture(terrainLayerBaseColorTextures[3], uv);
+}
+
+vec3 sampleTerrainNormalTexture(int layerIndex, vec2 uv)
+{
+    if (layerIndex == 0)
+    {
+        return texture(terrainLayerNormalTextures[0], uv).xyz;
+    }
+    if (layerIndex == 1)
+    {
+        return texture(terrainLayerNormalTextures[1], uv).xyz;
+    }
+    if (layerIndex == 2)
+    {
+        return texture(terrainLayerNormalTextures[2], uv).xyz;
+    }
+    return texture(terrainLayerNormalTextures[3], uv).xyz;
+}
+
+vec4 sampleTerrainMetallicRoughnessTexture(int layerIndex, vec2 uv)
+{
+    if (layerIndex == 0)
+    {
+        return texture(terrainLayerMetallicRoughnessTextures[0], uv);
+    }
+    if (layerIndex == 1)
+    {
+        return texture(terrainLayerMetallicRoughnessTextures[1], uv);
+    }
+    if (layerIndex == 2)
+    {
+        return texture(terrainLayerMetallicRoughnessTextures[2], uv);
+    }
+    return texture(terrainLayerMetallicRoughnessTextures[3], uv);
+}
+
 void main()
 {
     vec4 surfaceColor = baseColor;
@@ -525,7 +579,7 @@ void main()
             vec2 layerUv = fragWorldPosition.xz / max(terrainLayerParameters[layerIndex].z, 0.001);
             if (terrainLayerBaseColorAvailable[layerIndex] != 0)
             {
-                layerColor *= texture(terrainLayerBaseColorTextures[layerIndex], layerUv);
+                layerColor *= sampleTerrainBaseColorTexture(layerIndex, layerUv);
             }
             float macro = terrainMacroVariation(fragWorldPosition.xz + vec2(float(layerIndex) * 19.0));
             float detail = terrainLayerDetail(fragWorldPosition.xz, float(layerIndex));
@@ -568,7 +622,7 @@ void main()
             if (terrainLayerNormalAvailable[layerIndex] != 0)
             {
                 vec2 layerUv = fragWorldPosition.xz / max(terrainLayerParameters[layerIndex].z, 0.001);
-                layerNormal = texture(terrainLayerNormalTextures[layerIndex], layerUv).xyz * 2.0 - 1.0;
+                layerNormal = sampleTerrainNormalTexture(layerIndex, layerUv) * 2.0 - 1.0;
                 layerNormal.xy *= terrainLayerParameters[layerIndex].w;
                 layerNormal.xy += terrainLayerDetailSlope(
                     fragWorldPosition.xz, float(layerIndex)) *
@@ -638,7 +692,7 @@ void main()
             float layerRoughness = terrainLayerParameters[layerIndex].y;
             if (terrainLayerMetallicRoughnessAvailable[layerIndex] != 0)
             {
-                vec4 layerMaterialData = texture(terrainLayerMetallicRoughnessTextures[layerIndex], layerUv);
+                vec4 layerMaterialData = sampleTerrainMetallicRoughnessTexture(layerIndex, layerUv);
                 layerMetallic *= layerMaterialData.b;
                 layerRoughness *= layerMaterialData.g;
             }
