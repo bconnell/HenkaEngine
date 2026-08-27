@@ -43,6 +43,10 @@ jobs:
         shell: powershell
         run: .\scripts\test_documentation_truth_windows.ps1
 
+      - name: Check generic realism reference capture contract
+        shell: powershell
+        run: .\scripts\test_realism_reference_capture_windows.ps1
+
       - name: Check scripting compiler authority
         shell: powershell
         run: .\scripts\check_scripting_authority.ps1

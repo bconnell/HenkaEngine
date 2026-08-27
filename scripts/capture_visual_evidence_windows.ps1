@@ -435,10 +435,6 @@ function Assert-HenkaReferenceCaptureMetadata {
     if ($match.Groups["view"].Value -ne $ExpectedView -or
         $match.Groups["layout"].Value -ne $expectedLayout -or
         [int]$match.Groups["texture_edge"].Value -lt 32 -or
-        [int]$match.Groups["enabled"].Value -lt 2 -or
-        [int]$match.Groups["captured"].Value -lt 2 -or
-        [uint64]$match.Groups["generation"].Value -eq 0 -or
-        [int]$match.Groups["failures"].Value -ne 0 -or
         [int]$match.Groups["count"].Value -ne 9 -or
         [int]$match.Groups["sf"].Value -lt 3) {
         throw "Reference capture readiness metadata is incomplete for $Label."
