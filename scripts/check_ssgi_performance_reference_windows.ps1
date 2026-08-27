@@ -67,7 +67,7 @@ if ($samples -ne 32 -or $gpuSamples -lt 8 -or $timing -ne "available") {
     throw "SSGI performance reference did not produce the required bounded GPU timing sample set."
 }
 foreach ($value in @($frameMean, $frameMax, $cpuMean, $cpuMax, $gpuMean, $gpuMax)) {
-    if (-not [double]::IsFinite($value) -or $value -lt 0.0) {
+    if ([double]::IsNaN($value) -or [double]::IsInfinity($value) -or $value -lt 0.0) {
         throw "SSGI performance reference reported a non-finite or negative timing value."
     }
 }

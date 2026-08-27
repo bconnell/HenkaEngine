@@ -44,6 +44,19 @@ try {
         throw "The SSGI performance validator did not reject a gross GPU budget regression."
     }
 
+    (Get-Content -LiteralPath (Join-Path $fixtureRoot "ssgi_performance_reference.stdout.txt") -Raw) -replace "scene_gpu_max_ms=100\.001", "scene_gpu_max_ms=-1.000" |
+        Set-Content -LiteralPath (Join-Path $fixtureRoot "ssgi_performance_reference.stdout.txt")
+    $rejectedNegative = $false
+    try {
+        & (Join-Path $PSScriptRoot "check_ssgi_performance_reference_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
+    }
+    catch {
+        $rejectedNegative = $_.Exception.Message -match "non-finite or negative timing"
+    }
+    if (-not $rejectedNegative) {
+        throw "The SSGI performance validator did not reject a negative timing value."
+    }
+
     Write-Output "SSGI performance reference validator tests passed."
 }
 finally {
