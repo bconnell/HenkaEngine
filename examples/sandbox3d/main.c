@@ -32604,7 +32604,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         static const henka_vec4 realism_colors[9] =
         {
             {0.58f, 0.62f, 0.68f, 1.0f}, {0.58f, 0.62f, 0.68f, 1.0f},
-            {0.72f, 0.06f, 0.04f, 1.0f}, {0.04f, 0.24f, 0.72f, 1.0f},
+            {0.32f, 0.012f, 0.008f, 1.0f}, {0.04f, 0.24f, 0.72f, 1.0f},
             {0.42f, 0.28f, 0.16f, 1.0f}, {0.38f, 0.08f, 0.22f, 1.0f},
             {0.72f, 0.34f, 0.10f, 1.0f}, {0.24f, 0.30f, 0.34f, 1.0f},
             {0.58f, 0.16f, 0.12f, 1.0f}

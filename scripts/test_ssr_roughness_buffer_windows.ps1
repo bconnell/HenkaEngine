@@ -27,6 +27,9 @@ if ($renderer -notmatch 'materialRoughnessAt') {
 if ($renderer -notmatch 'schlickFresnel' -or
     $renderer -notmatch 'fresnelConfidence' -or
     $renderer -notmatch 'screenReflectionSurface' -or
+    $renderer -notmatch 'candidateLengthSquared' -or
+    $renderer -notmatch 'inversesqrt\(candidateLengthSquared\)' -or
+    $renderer -notmatch 'dot\(normal,-position\)' -or
     $renderer -notmatch 'reflect\(normalize\(position\),normal\)' -or
     $renderer -notmatch 'roughnessConfidence=\(1\.0-materialRoughness\)\*\(1\.0-materialRoughness\)' -or
     $renderer -notmatch 'materialRoughness>0\.55' -or

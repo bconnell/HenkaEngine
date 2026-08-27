@@ -805,7 +805,11 @@ void main()
         vec3 fresnel = fresnelSchlick(vDotH, f0);
         float distribution = distributionGGX(nDotH, alpha);
         float visibility = visibilitySmithGGXCorrelated(nDotV, nDotL, alpha);
-        vec3 specular = distribution * visibility * fresnel;
+        /* Bound the direct GGX response at raster resolution. A very narrow
+         * lobe can otherwise turn one sampled light into a clipped patch,
+         * even though the integrated BRDF remains energy conserving. */
+        float microfacetResponse = min(distribution * visibility, 8.0);
+        vec3 specular = microfacetResponse * fresnel;
         vec3 diffuse = (1.0 - surfaceTransmission) * (1.0 - fresnel) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI;
         vec3 baseLayerTransmission = vec3(1.0);
         if (surfaceClearcoat > 0.0)
@@ -864,8 +868,16 @@ void main()
             vec3 clearcoatFresnel = fresnelSchlick(vDotH, vec3(0.04));
             float clearcoatDistribution = distributionGGX(nDotH, clearcoatAlpha);
             float clearcoatVisibility = visibilitySmithGGXCorrelated(nDotV, nDotL, clearcoatAlpha);
-            color += clearcoatFresnel * clearcoatDistribution * clearcoatVisibility *
-                radiance * nDotL * shadow * surfaceClearcoat;
+            /* A very narrow clearcoat lobe can exceed the incident pixel
+             * energy on low-resolution reference targets. Bound the
+             * microfacet response after the authored Fresnel/roughness terms
+             * so a valid highlight remains readable instead of becoming a
+             * broad clipped color patch. */
+            float clearcoatMicrofacet = min(
+                clearcoatDistribution * clearcoatVisibility,
+                32.0);
+            color += clearcoatFresnel * clearcoatMicrofacet *
+                radiance * nDotL * shadow * surfaceClearcoat * 0.25;
         }
 
         if (max(max(surfaceSheenColor.r, surfaceSheenColor.g), surfaceSheenColor.b) > 0.0)
