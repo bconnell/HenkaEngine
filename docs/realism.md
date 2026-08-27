@@ -12,8 +12,11 @@ The current Rendered path includes:
 - HDR environment lighting with transactionally derived 32-sample cosine-weighted irradiance, 128-sample GGX-prefiltered specular environment data across bounded mips, and a 128-sample split-sum BRDF lookup texture; IBL roughness lookup is capped at the supported 32x32 prefilter level so high-roughness subjects do not expose under-resolved 4x4/2x2 mip structure; this improves the rasterized environment response without claiming path tracing or full-scene global illumination;
 - local reflection probes with a bounded seven-level cubemap chain: the captured
   mip 0 is filtered through the existing bounded GGX prefilter program for
-  roughness-dependent local-probe response. This remains a local, bounded
-  probe approximation, not a production probe grid or the global IBL path;
+  roughness-dependent local-probe response. Local-probe roughness lookup is
+  capped at the supported 16x16 prefilter level so high-roughness subjects do
+  not expose under-resolved 8x8, 4x4, 2x2, or 1x1 mip structure. This remains a
+  local, bounded probe approximation, not a production probe grid or the global
+  IBL path;
 - directional, cascade, spot, and point shadow-map foundations;
 - depth-derived ambient occlusion;
 - a bounded depth-derived screen-space reflection path that consumes the

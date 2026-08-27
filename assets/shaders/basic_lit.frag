@@ -931,7 +931,7 @@ void main()
                     environmentSpecular = textureLod(
                         reflectionProbeMap,
                         blurredReflectionDirection,
-                        surfaceRoughness * 6.0).rgb;
+                        min(surfaceRoughness * 6.0, 2.0)).rgb;
                     if (useReflectionProbeMapSecondary)
                     {
                         vec3 secondaryReflectionDirection = parallaxCorrectSecondaryReflectionDirection(
@@ -941,7 +941,7 @@ void main()
                             textureLod(
                                 reflectionProbeMapSecondary,
                                 secondaryReflectionDirection,
-                                surfaceRoughness * 6.0).rgb,
+                                min(surfaceRoughness * 6.0, 2.0)).rgb,
                             clamp(reflectionProbeBlendWeight, 0.0, 1.0));
                     }
                 }

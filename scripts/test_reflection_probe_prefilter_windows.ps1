@@ -9,8 +9,9 @@ $missing = @()
 if ($renderer -notmatch 'HENKA_REFLECTION_PROBE_PREFILTER_LEVELS\s+7') {
     $missing += 'full seven-level reflection-probe prefilter contract'
 }
-if ($shader -notmatch 'surfaceRoughness\s*\*\s*6\.0') {
-    $missing += 'full-range roughness LOD selection'
+if ($shader -notmatch 'textureLod\(\s*reflectionProbeMap,\s*blurredReflectionDirection,\s*min\(surfaceRoughness\s*\*\s*6\.0,\s*2\.0\)\)' -or
+    $shader -notmatch 'textureLod\(\s*reflectionProbeMapSecondary,\s*secondaryReflectionDirection,\s*min\(surfaceRoughness\s*\*\s*6\.0,\s*2\.0\)\)') {
+    $missing += 'bounded local-probe roughness LOD selection'
 }
 if ($renderer -notmatch 'GL_LINEAR_MIPMAP_LINEAR') {
     $missing += 'trilinear reflection-probe filtering'

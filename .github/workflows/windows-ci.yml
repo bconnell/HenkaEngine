@@ -51,6 +51,10 @@ jobs:
         shell: powershell
         run: .\scripts\test_realism_texture_detail_windows.ps1
 
+      - name: Check reflection probe prefilter contract
+        shell: powershell
+        run: .\scripts\test_reflection_probe_prefilter_windows.ps1
+
       - name: Check bounded PBR clearcoat response
         shell: powershell
         run: .\scripts\test_pbr_clearcoat_response_windows.ps1
