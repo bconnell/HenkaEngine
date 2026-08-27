@@ -120,12 +120,13 @@ try {
     [int]$clippedPixelCount = 0
     [int]$brightPixelCount = 0
     [int]$haloSampleCount = 0
-    [int]$haloBrightPixelCount = 0
+    [int]$haloContrastBrightPixelCount = 0
     $sampleStep = [Math]::Max(1, [int][Math]::Floor($bitmap.Width / 160.0))
     $haloCentersX = @(0.328, 0.507, 0.694)
     $haloCentersY = @(0.213, 0.519, 0.814)
     $haloInnerRadius = $bitmap.Width * 0.082
     $haloOuterRadius = $bitmap.Width * 0.098
+    $haloControlOffset = $bitmap.Width * 0.01875
     for ($y = 0; $y -lt $bitmap.Height; $y += $sampleStep) {
         for ($x = 0; $x -lt $bitmap.Width; $x += $sampleStep) {
             $pixel = $bitmap.GetPixel($x, $y)
@@ -152,24 +153,34 @@ try {
                     }
                     $pixel = $bitmap.GetPixel($x, $y)
                     [double]$luma = 0.2126 * $pixel.R + 0.7152 * $pixel.G + 0.0722 * $pixel.B
+                    $normalX = ($x - $centerPixelX) / [Math]::Max($distance, 1.0)
+                    $normalY = ($y - $centerPixelY) / [Math]::Max($distance, 1.0)
+                    $controlX = [Math]::Min($bitmap.Width - 1, [Math]::Max(0,
+                        [int][Math]::Round($x + $normalX * $haloControlOffset)))
+                    $controlY = [Math]::Min($bitmap.Height - 1, [Math]::Max(0,
+                        [int][Math]::Round($y + $normalY * $haloControlOffset)))
+                    $controlPixel = $bitmap.GetPixel($controlX, $controlY)
+                    [double]$controlLuma = 0.2126 * $controlPixel.R + 0.7152 * $controlPixel.G + 0.0722 * $controlPixel.B
                     ++$haloSampleCount
-                    if ($luma -ge 180.0) { ++$haloBrightPixelCount }
+                    if ($luma -ge 180.0 -and ($luma - $controlLuma) -ge 24.0) {
+                        ++$haloContrastBrightPixelCount
+                    }
                 }
             }
         }
     }
     $clippedFraction = $clippedPixelCount / [double]$count
     $brightFraction = $brightPixelCount / [double]$count
-    $haloBrightFraction = if ($haloSampleCount -gt 0) {
-        $haloBrightPixelCount / [double]$haloSampleCount
+    $haloContrastBrightFraction = if ($haloSampleCount -gt 0) {
+        $haloContrastBrightPixelCount / [double]$haloSampleCount
     } else {
         1.0
     }
     if ($clippedFraction -gt 0.20 -or $brightFraction -gt 0.30) {
         throw "SSGI reference image is excessively clipped or over-bright (clipped=$([Math]::Round(100.0 * $clippedFraction, 3))%, bright=$([Math]::Round(100.0 * $brightFraction, 3))%)."
     }
-    if ($haloBrightFraction -gt 0.05) {
-        throw "SSGI reference image has a bright subject-edge halo (halo=$([Math]::Round(100.0 * $haloBrightFraction, 3))%)."
+    if ($haloContrastBrightFraction -gt 0.05) {
+        throw "SSGI reference image has a bright subject-edge halo (local-contrast=$([Math]::Round(100.0 * $haloContrastBrightFraction, 3))%)."
     }
 }
 finally {
@@ -181,7 +192,7 @@ $summary = @(
     "Reference view: $($record.Groups['view'].Value)",
     "Nine deterministic subjects: settled composition and bounded Rendered path",
     $(if ($record.Groups['view'].Value -eq "close") { "Evaluated subject legibility: $visibleSubjectCount/9" } else { "Evaluated subject legibility: close-only guard not applicable to wide row" }),
-    "Bounded image guard: clipped=$([Math]::Round(100.0 * $clippedFraction, 3))% bright=$([Math]::Round(100.0 * $brightFraction, 3))% subject_edge_halo=$([Math]::Round(100.0 * $haloBrightFraction, 3))%",
+    "Bounded image guard: clipped=$([Math]::Round(100.0 * $clippedFraction, 3))% bright=$([Math]::Round(100.0 * $brightFraction, 3))% subject_edge_halo_local_contrast=$([Math]::Round(100.0 * $haloContrastBrightFraction, 3))%",
     "Status: automated SSGI activation and image-stability guard passed; human visual inspection remains required"
 )
 $summary | Set-Content -LiteralPath (Join-Path $InputDirectory "ssgi-reference-visual-validation.txt")

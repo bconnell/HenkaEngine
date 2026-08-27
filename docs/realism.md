@@ -310,6 +310,11 @@ source-facing response, so back-facing depth samples do not contribute as if
 they were valid emitters. This reduces screen-space light leaks while keeping
 the approximation conservative when source-neighbor depth is unavailable.
 
+The close-reference image guard checks subject-edge brightness against a paired
+outward background sample rather than treating every bright sky or ground pixel
+in a fixed annulus as a halo. A localized bright annulus still fails the guard;
+ordinary scene illumination and background gradients do not.
+
 This is not full global illumination. The screen-space method cannot see geometry that is outside the current view, hidden behind another surface, or otherwise absent from the depth/color buffers. It is single-frame and bounded; it does not claim multi-bounce transport, probe-volume GI, hardware ray tracing, or path tracing.
 
 ## Scene-probe diffuse transfer

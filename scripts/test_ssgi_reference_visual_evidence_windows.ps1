@@ -41,6 +41,39 @@ try {
 
     & (Join-Path $PSScriptRoot "check_ssgi_reference_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
 
+    $bitmap = [System.Drawing.Bitmap]::new(640, 360)
+    try {
+        for ($y = 0; $y -lt $bitmap.Height; ++$y) {
+            for ($x = 0; $x -lt $bitmap.Width; ++$x) {
+                $wave = [int](22.0 * [Math]::Sin($x * 0.035) + 14.0 * [Math]::Cos($y * 0.045))
+                $red = [Math]::Max(0, [Math]::Min(255, 64 + $wave + [int]($x / 18)))
+                $green = [Math]::Max(0, [Math]::Min(255, 76 + $wave + [int]($y / 24)))
+                $blue = [Math]::Max(0, [Math]::Min(255, 58 + $wave))
+                $distance = [Math]::Sqrt((($x - 209.92) * ($x - 209.92)) + (($y - 76.68) * ($y - 76.68)))
+                if ($distance -ge 54.0 -and $distance -le 60.0) {
+                    $red = 255
+                    $green = 255
+                    $blue = 255
+                }
+                $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($red, $green, $blue))
+            }
+        }
+        $bitmap.Save((Join-Path $fixtureRoot "ssgi-reference-close-rendered.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally { $bitmap.Dispose() }
+    $rejected = $false
+    $message = ""
+    try {
+        & (Join-Path $PSScriptRoot "check_ssgi_reference_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
+    }
+    catch {
+        $rejected = $true
+        $message = $_.Exception.Message
+    }
+    if (-not $rejected -or $message -notmatch "bright subject-edge halo") {
+        throw "The SSGI reference validator did not reject a localized bright subject-edge halo."
+    }
+
     (Get-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt") -Raw) -replace "reference_ssgi_active=1", "reference_ssgi_active=0" |
         Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
     $rejected = $false
