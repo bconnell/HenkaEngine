@@ -380,7 +380,7 @@ typedef struct sandbox3d_physics_state
 
 #define SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT 65U
 #define SANDBOX3D_REALISM_ENTITY_COUNT 9U
-#define SANDBOX3D_REALISM_TEXTURE_EDGE 32U
+#define SANDBOX3D_REALISM_TEXTURE_EDGE 64U
 #define SANDBOX3D_REALISM_TEXTURE_CHANNEL_COUNT 4U
 #define SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT \
     (SANDBOX3D_REALISM_TEXTURE_EDGE * SANDBOX3D_REALISM_TEXTURE_EDGE * \
@@ -3901,6 +3901,68 @@ static unsigned char sandbox3d_encode_realism_texture_channel(float value)
     return (unsigned char)lroundf(fmaxf(0.0f, fminf(255.0f, value)));
 }
 
+static uint32_t sandbox3d_realism_texture_hash(
+    uint32_t x,
+    uint32_t y,
+    uint32_t seed)
+{
+    uint32_t value = x * 374761393U ^ y * 668265263U ^ seed * 2246822519U;
+
+    value ^= value >> 13U;
+    value *= 1274126177U;
+    value ^= value >> 16U;
+    return value;
+}
+
+static float sandbox3d_realism_value_noise(
+    float u,
+    float v,
+    uint32_t seed,
+    uint32_t x_period,
+    uint32_t y_period)
+{
+    float x;
+    float y;
+    float x_floor;
+    float y_floor;
+    float x_fraction;
+    float y_fraction;
+    float x_smooth;
+    float y_smooth;
+    uint32_t x0;
+    uint32_t x1;
+    uint32_t y0;
+    uint32_t y1;
+    float lower;
+    float upper;
+
+    if (x_period == 0U || y_period == 0U)
+    {
+        return 0.5f;
+    }
+    x = fmaxf(0.0f, fminf(1.0f, u)) * (float)x_period;
+    y = fmaxf(0.0f, fminf(1.0f, v)) * (float)y_period;
+    x_floor = floorf(x);
+    y_floor = floorf(y);
+    x_fraction = x - x_floor;
+    y_fraction = y - y_floor;
+    x_smooth = x_fraction * x_fraction * (3.0f - 2.0f * x_fraction);
+    y_smooth = y_fraction * y_fraction * (3.0f - 2.0f * y_fraction);
+    x0 = (uint32_t)x_floor % x_period;
+    y0 = (uint32_t)y_floor % y_period;
+    x1 = (x0 + 1U) % x_period;
+    y1 = (y0 + 1U) % y_period;
+    lower = (float)(sandbox3d_realism_texture_hash(x0, y0, seed) & 0xffffffU) /
+        16777215.0f * (1.0f - x_smooth) +
+        (float)(sandbox3d_realism_texture_hash(x1, y0, seed) & 0xffffffU) /
+        16777215.0f * x_smooth;
+    upper = (float)(sandbox3d_realism_texture_hash(x0, y1, seed) & 0xffffffU) /
+        16777215.0f * (1.0f - x_smooth) +
+        (float)(sandbox3d_realism_texture_hash(x1, y1, seed) & 0xffffffU) /
+        16777215.0f * x_smooth;
+    return lower * (1.0f - y_smooth) + upper * y_smooth;
+}
+
 static void sandbox3d_generate_realism_detail_textures(
     unsigned char* normal_pixels,
     unsigned char* macro_variation_pixels,
@@ -3923,20 +3985,26 @@ static void sandbox3d_generate_realism_detail_textures(
                 (float)SANDBOX3D_REALISM_TEXTURE_EDGE;
             const float v = ((float)y + 0.5f) /
                 (float)SANDBOX3D_REALISM_TEXTURE_EDGE;
-            const float normal_x = 0.20f * sinf(
-                2.0f * HENKA_PI * (u * 9.0f + v * 5.0f)) +
-                0.11f * cosf(2.0f * HENKA_PI * (u * 15.0f - v * 7.0f));
-            const float normal_y = 0.17f * cosf(
-                2.0f * HENKA_PI * (v * 11.0f - u * 6.0f)) +
-                0.09f * sinf(2.0f * HENKA_PI * (u * 7.0f + v * 13.0f));
+            const float normal_x =
+                (sandbox3d_realism_value_noise(u, v, 11U, 17U, 13U) - 0.5f) * 0.30f +
+                (sandbox3d_realism_value_noise(u, v, 29U, 31U, 23U) - 0.5f) * 0.14f;
+            const float normal_y =
+                (sandbox3d_realism_value_noise(u, v, 47U, 19U, 29U) - 0.5f) * 0.28f +
+                (sandbox3d_realism_value_noise(u, v, 71U, 37U, 17U) - 0.5f) * 0.12f;
             const float normal_z = sqrtf(fmaxf(
                 0.0f, 1.0f - normal_x * normal_x - normal_y * normal_y));
-            const float macro_signal = 0.5f + 0.5f * sinf(
-                2.0f * HENKA_PI * (u * 2.5f + 0.35f * sinf(v * 2.0f * HENKA_PI)));
-            const float grain_signal = 0.5f + 0.5f * sinf(
-                2.0f * HENKA_PI * (u * 3.0f + 0.35f * sinf(v * 2.0f * HENKA_PI * 1.5f)));
-            const float wet_signal = 0.5f + 0.5f * sinf(
-                2.0f * HENKA_PI * (v * 1.25f + 0.25f * sinf(u * 2.0f * HENKA_PI * 3.0f)));
+            const float macro_signal =
+                sandbox3d_realism_value_noise(u, v, 101U, 3U, 3U) * 0.52f +
+                sandbox3d_realism_value_noise(u, v, 103U, 9U, 7U) * 0.30f +
+                sandbox3d_realism_value_noise(u, v, 107U, 21U, 17U) * 0.18f;
+            const float grain_signal =
+                sandbox3d_realism_value_noise(u, v, 131U, 7U, 3U) * 0.48f +
+                sandbox3d_realism_value_noise(u, v, 137U, 19U, 5U) * 0.32f +
+                sandbox3d_realism_value_noise(u, v, 139U, 37U, 11U) * 0.20f;
+            const float wet_signal =
+                sandbox3d_realism_value_noise(u, v, 157U, 5U, 9U) * 0.55f +
+                sandbox3d_realism_value_noise(u, v, 163U, 13U, 23U) * 0.30f +
+                sandbox3d_realism_value_noise(u, v, 167U, 29U, 41U) * 0.15f;
             const size_t pixel = ((size_t)y * SANDBOX3D_REALISM_TEXTURE_EDGE + x) *
                 SANDBOX3D_REALISM_TEXTURE_CHANNEL_COUNT;
 

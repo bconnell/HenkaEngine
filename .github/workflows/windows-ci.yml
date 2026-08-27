@@ -47,6 +47,10 @@ jobs:
         shell: powershell
         run: .\scripts\test_realism_reference_capture_windows.ps1
 
+      - name: Check realism texture detail contract
+        shell: powershell
+        run: .\scripts\test_realism_texture_detail_windows.ps1
+
       - name: Check bounded PBR clearcoat response
         shell: powershell
         run: .\scripts\test_pbr_clearcoat_response_windows.ps1

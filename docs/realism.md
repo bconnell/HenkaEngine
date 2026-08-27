@@ -64,10 +64,13 @@ subject remains readable while the directional key, shadows, falloff, and
 probe contrast remain visible. The lighting and subsurface profiles retain
 their dedicated spatial-light arrangements instead of using this fill.
 
-The reference fixture's deterministic detail maps are generated at 32x32: the
+The reference fixture's deterministic detail maps are generated at 64x64: the
 normal map is linear normal data, the macro and wood maps are color textures,
-and the wet/dry map is linear metallic/roughness data. Capture readiness reads
-the runtime texture dimensions and fails closed below that minimum.
+and the wet/dry map is linear metallic/roughness data. The maps use tileable
+multi-scale value noise rather than periodic stripe signals, keeping authored
+material variation readable without introducing synthetic bands. Capture
+readiness reads the runtime texture dimensions and fails closed below that
+minimum.
 
 The close PBR board uses the same neutral base color for its rough-metal and
 polished-metal subjects. The visual checker samples those matched regions and
