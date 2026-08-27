@@ -133,10 +133,10 @@ bool sandbox3d_should_prefer_terrain_hit(
     float terrain_distance,
     bool object_hit,
     float object_distance);
-/* Component editing keeps the solid evaluated surface visible and overlays
- * only authored source edges.  This makes face structure explicit without
- * exposing renderer tessellation as editable topology. */
-#define SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT true
+/* Component editing keeps the solid evaluated surface visible.  Authored
+ * source topology is an explicit diagnostic overlay rather than the default
+ * representation of an ordinary selected object. */
+#define SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT false
 
 typedef struct sandbox3d_authoring_cage_edge
 {

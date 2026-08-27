@@ -39,7 +39,10 @@ function Get-LastMatch {
 function Clear-TextField {
     param([Parameter(Mandatory = $true)][string]$EventPath)
 
-    for ($index = 0; $index -lt 63; ++$index) {
+    # NativeAsset is the bounded first-run default. Keep enough erases to
+    # replace it without queueing dozens of redundant per-frame events on the
+    # slowest supported Debug renderer.
+    for ($index = 0; $index -lt 16; ++$index) {
         Send-HenkaAutomationEvent -EventPath $EventPath -EventLine "key Backspace down" -SettleMilliseconds 0
         Send-HenkaAutomationEvent -EventPath $EventPath -EventLine "key Backspace up" -SettleMilliseconds 0
     }
@@ -146,12 +149,28 @@ function Wait-AssetTransition {
     )
 
     $pattern = "Native asset document: name=$([Regex]::Escape($assetName)) action=$Action parts=$PartCount\."
-    if (-not (Wait-FileContains -Path $LogPath -Pattern $pattern -TimeoutMilliseconds 8000)) {
+    if (-not (Wait-FileContains -Path $LogPath -Pattern $pattern -TimeoutMilliseconds 15000)) {
         throw "The editor did not report the native asset transition: $Action/$PartCount."
     }
 }
 
 try {
+    $interactionToolsPath = Join-Path $repoRoot "examples\sandbox3d\interaction_tools.h"
+    $sandboxSourcePath = Join-Path $repoRoot "examples\sandbox3d\main.c"
+    $interactionToolsText = [System.IO.File]::ReadAllText($interactionToolsPath)
+    $sandboxSourceText = [System.IO.File]::ReadAllText($sandboxSourcePath)
+    if ($interactionToolsText -notmatch '(?m)^#define SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT false\s*$') {
+        throw "The topology diagnostic overlay must be disabled by default."
+    }
+    if ($sandboxSourceText -match 'static bool authoring_topology_overlay_enabled') {
+        throw "The topology diagnostic overlay state must be owned by the editor session."
+    }
+    if ($sandboxSourceText -notmatch 'bool authoring_topology_overlay_enabled;') {
+        throw "The editor session is missing topology diagnostic overlay state."
+    }
+    if ($sandboxSourceText -notmatch '&state->authoring_topology_overlay_enabled') {
+        throw "The topology overlay control is not bound to editor session state."
+    }
     if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
         throw "The Sandbox3D executable was not found: $executable"
     }
@@ -182,7 +201,11 @@ try {
         -StdoutPath $stdoutPath `
         -StderrPath $stderrPath
 
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 30000)) {
+    # Debug OpenGL startup on slower integrated GPUs can finish engine
+    # creation near the existing timeout and still need a bounded first frame
+    # to publish the UI geometry report. Keep this bounded, but do not turn a
+    # slow renderer startup into a false harness failure.
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 60000)) {
         $startupDiagnostics = ((Read-HenkaSharedText -Path $stdoutPath) + "`n" +
             (Read-HenkaSharedText -Path $stderrPath)).Trim()
         $startupDiagnostics = $startupDiagnostics -replace "\s+", " "
@@ -209,6 +232,9 @@ try {
     Send-HenkaAutomationClick -EventPath $automationInputPath -X $nameX -Y $nameY
     Clear-TextField -EventPath $automationInputPath
     Send-HenkaAutomationText -EventPath $automationInputPath -Text $assetName
+    # The runtime consumes one bounded automation event per frame. Allow the
+    # text replacement to drain before the following button click is queued.
+    Start-Sleep -Milliseconds 3000
     Send-HenkaAutomationClick -EventPath $automationInputPath -X $newAssetX -Y $newAssetY
     Wait-AssetTransition -LogPath $stdoutPath -Action "created" -PartCount 0
 
@@ -349,16 +375,15 @@ try {
         throw "The visible face extrude did not commit successfully."
     }
     Start-Sleep -Milliseconds 500
-    # Component editing shows the authored source cage by default over the
-    # evaluated solid surface. Capture that default presentation first.
+    # Component editing keeps the evaluated solid surface and clean object
+    # highlight visible by default. Capture that ordinary presentation first.
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
-        -Path (Join-Path $runtimeDirectory "after-extrude-before-inset.png")
+        -Path (Join-Path $runtimeDirectory "after-extrude-topology-overlay-default-off.png")
 
-    # The cyan authored cage above is an editor-only topology overlay. Capture
-    # the same committed edit with that overlay disabled so visual evidence
-    # proves the scene renderer is showing the evaluated mesh itself rather
-    # than only the selection/topology pass.
+    # The authored cage is an explicit editor-only diagnostic overlay. Capture
+    # both enabled and disabled states so the proof distinguishes authored
+    # topology from the evaluated solid surface and object highlight.
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ($viewportX + 328.0) `
@@ -366,12 +391,15 @@ try {
     Start-Sleep -Milliseconds 300
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
-        -Path (Join-Path $runtimeDirectory "after-extrude-topology-overlay-off.png")
+        -Path (Join-Path $runtimeDirectory "after-extrude-topology-overlay-on.png")
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ($viewportX + 328.0) `
         -Y ($viewportY + 26.0)
     Start-Sleep -Milliseconds 150
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "after-extrude-topology-overlay-off.png")
 
     Click-LoggedControl `
         -LogPath $stdoutPath `

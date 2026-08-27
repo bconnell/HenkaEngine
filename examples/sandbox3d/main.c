@@ -440,6 +440,8 @@ typedef struct sandbox3d_state
     char native_authoring_loose_vertex_y[16];
     char native_authoring_loose_vertex_z[16];
     sandbox3d_authoring_object* authoring_object;
+    bool authoring_topology_overlay_enabled;
+    henka_entity authoring_topology_overlay_entity;
     uint32_t native_authoring_hovered_component_id;
     /* A component pick is a selection within the already-selected scene
      * owner.  Keep one bounded post-pick miss from routing through the
@@ -6750,16 +6752,17 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
         authoring_cage_edges[HENKA_AUTHORING_MESH_HARD_MAX_EDGES];
     static sandbox3d_authoring_vertex_point
         authoring_vertex_points[HENKA_AUTHORING_MESH_HARD_MAX_VERTICES];
-    static bool authoring_topology_overlay_enabled =
-        SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT;
     size_t silhouette_count;
     size_t edge;
     bool component_selection_active;
+    henka_entity authoring_entity = HENKA_INVALID_ENTITY;
+    float overlay_scale;
 
     if (state == NULL || state->ui == NULL || !henka_viewport_is_valid(viewport))
     {
         return;
     }
+    overlay_scale = sandbox3d_workspace_get_ui_scale(&state->workspace.model);
 
     state->scene_view_authoring_controls =
         (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
@@ -6772,6 +6775,24 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
             state,
             selected_entity,
             sandbox3d_authoring_object_get_entity(state->authoring_object));
+    if (component_selection_active)
+    {
+        authoring_entity = sandbox3d_authoring_object_get_entity(state->authoring_object);
+        if (state->authoring_topology_overlay_entity != authoring_entity)
+        {
+            state->authoring_topology_overlay_enabled =
+                SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT;
+            state->authoring_topology_overlay_entity = authoring_entity;
+        }
+    }
+    else
+    {
+        /* Do not carry a diagnostic topology preference from an editable
+         * source into ordinary object selection or a later authoring session. */
+        state->authoring_topology_overlay_enabled =
+            SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT;
+        state->authoring_topology_overlay_entity = HENKA_INVALID_ENTITY;
+    }
     memset(&gate, 0, sizeof(gate));
     gate.selected_object_present = selected_entity != HENKA_INVALID_ENTITY;
     gate.selected_object_valid =
@@ -6799,7 +6820,8 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
     /* A component edit has its own topology-authoritative overlay below. The
      * object outline is built from indexed triangle boundaries/front-back
      * transitions, so disconnected parts and concavities remain explicit. */
-    silhouette_count = component_selection_active
+    silhouette_count = component_selection_active &&
+        state->authoring_topology_overlay_enabled
         ? 0U
         : sandbox3d_build_screen_silhouette(
             state,
@@ -6807,7 +6829,8 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
             viewport,
             silhouette,
             sizeof(silhouette) / sizeof(silhouette[0]));
-    if (!component_selection_active && silhouette_count > 0U)
+    if ((!component_selection_active ||
+         !state->authoring_topology_overlay_enabled) && silhouette_count > 0U)
     {
         for (edge = 0U; edge < silhouette_count; ++edge)
         {
@@ -6816,18 +6839,19 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                 viewport,
                 silhouette[edge].start,
                 silhouette[edge].end,
-                4.0f,
+                4.0f * overlay_scale,
                 outer_color);
             sandbox3d_draw_viewport_clipped_overlay_line(
                 state,
                 viewport,
                 silhouette[edge].start,
                 silhouette[edge].end,
-                2.0f,
+                2.0f * overlay_scale,
                 inner_color);
         }
     }
-    else if (!component_selection_active)
+    else if (!component_selection_active ||
+             !state->authoring_topology_overlay_enabled)
     {
         for (edge = 0U; edge < model.edge_count; ++edge)
         {
@@ -6839,8 +6863,10 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                 continue;
             }
 
-            sandbox3d_draw_viewport_clipped_overlay_line(state, viewport, start, end, 4.0f, outer_color);
-            sandbox3d_draw_viewport_clipped_overlay_line(state, viewport, start, end, 2.0f, inner_color);
+            sandbox3d_draw_viewport_clipped_overlay_line(
+                state, viewport, start, end, 4.0f * overlay_scale, outer_color);
+            sandbox3d_draw_viewport_clipped_overlay_line(
+                state, viewport, start, end, 2.0f * overlay_scale, inner_color);
         }
     }
 
@@ -6874,7 +6900,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
              * scene mesh remains the visible surface in Solid mode; keeping
              * renderer tessellation out of this screen-space pass prevents
              * the editor from presenting triangles as authored topology. */
-            if (authoring_topology_overlay_enabled)
+            if (state->authoring_topology_overlay_enabled)
             {
                 sandbox3d_draw_authoring_surface_overlay(
                     state,
@@ -6882,7 +6908,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                     transform,
                     state->authoring_object);
             }
-            if (authoring_topology_overlay_enabled &&
+            if (state->authoring_topology_overlay_enabled &&
                 sandbox3d_build_authoring_cage(
                     mesh,
                     authoring_cage_edges,
@@ -6948,7 +6974,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                             viewport,
                             start,
                             end,
-                            1.25f,
+                            1.25f * overlay_scale,
                             cage_color);
                 }
 
@@ -7077,7 +7103,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                     "authoring_topology_overlay",
                     topology_overlay_bounds,
                     "Topology Overlay",
-                    &authoring_topology_overlay_enabled);
+                    &state->authoring_topology_overlay_enabled);
             }
             else if (viewport.width >= 240 &&
                      viewport.height >= 84)
@@ -7094,7 +7120,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                     "authoring_topology_overlay",
                     topology_overlay_bounds,
                     "Topology Overlay",
-                    &authoring_topology_overlay_enabled);
+                    &state->authoring_topology_overlay_enabled);
             }
             for (selected_index = 0U; selected_index < selected_count; ++selected_index)
             {
@@ -7114,7 +7140,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                 {
                     const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(mesh, component_id);
                     henka_vec2 center;
-                    const float marker = 6.0f;
+                    const float marker = 6.0f * overlay_scale;
                     if (vertex == NULL || !sandbox3d_project_handle_point(
                             state, viewport,
                             sandbox3d_transform_authoring_point(transform, vertex->position),
@@ -7126,22 +7152,22 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                         state, viewport,
                         (henka_vec2){center.x - marker, center.y},
                         (henka_vec2){center.x + marker, center.y},
-                        active_component ? 7.0f : 4.0f, draw_outer);
+                        overlay_scale * (active_component ? 7.0f : 4.0f), draw_outer);
                     (void)sandbox3d_draw_viewport_clipped_overlay_line(
                         state, viewport,
                         (henka_vec2){center.x - marker, center.y},
                         (henka_vec2){center.x + marker, center.y},
-                        active_component ? 4.0f : 2.0f, draw_inner);
+                        overlay_scale * (active_component ? 4.0f : 2.0f), draw_inner);
                     (void)sandbox3d_draw_viewport_clipped_overlay_line(
                         state, viewport,
                         (henka_vec2){center.x, center.y - marker},
                         (henka_vec2){center.x, center.y + marker},
-                        active_component ? 7.0f : 4.0f, draw_outer);
+                        overlay_scale * (active_component ? 7.0f : 4.0f), draw_outer);
                     (void)sandbox3d_draw_viewport_clipped_overlay_line(
                         state, viewport,
                         (henka_vec2){center.x, center.y - marker},
                         (henka_vec2){center.x, center.y + marker},
-                        active_component ? 4.0f : 3.0f, draw_inner);
+                        overlay_scale * (active_component ? 4.0f : 3.0f), draw_inner);
                 }
                 else if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
                 {
@@ -7164,30 +7190,30 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                     }
                     (void)sandbox3d_draw_viewport_clipped_overlay_line(
                         state, viewport, start, end,
-                        active_component ? 8.0f : 5.0f, draw_outer);
+                        overlay_scale * (active_component ? 8.0f : 5.0f), draw_outer);
                     (void)sandbox3d_draw_viewport_clipped_overlay_line(
                         state, viewport, start, end,
-                        active_component ? 5.0f : 4.0f, draw_inner);
+                        overlay_scale * (active_component ? 5.0f : 4.0f), draw_inner);
                     (void)sandbox3d_draw_viewport_clipped_overlay_line(
                         state, viewport,
                         (henka_vec2){start.x - 4.0f, start.y},
                         (henka_vec2){start.x + 4.0f, start.y},
-                        active_component ? 5.0f : 3.0f, draw_inner);
+                        overlay_scale * (active_component ? 5.0f : 3.0f), draw_inner);
                     (void)sandbox3d_draw_viewport_clipped_overlay_line(
                         state, viewport,
                         (henka_vec2){start.x, start.y - 4.0f},
                         (henka_vec2){start.x, start.y + 4.0f},
-                        active_component ? 5.0f : 3.0f, draw_inner);
+                        overlay_scale * (active_component ? 5.0f : 3.0f), draw_inner);
                     (void)sandbox3d_draw_viewport_clipped_overlay_line(
                         state, viewport,
                         (henka_vec2){end.x - 4.0f, end.y},
                         (henka_vec2){end.x + 4.0f, end.y},
-                        active_component ? 5.0f : 3.0f, draw_inner);
+                        overlay_scale * (active_component ? 5.0f : 3.0f), draw_inner);
                     (void)sandbox3d_draw_viewport_clipped_overlay_line(
                         state, viewport,
                         (henka_vec2){end.x, end.y - 4.0f},
                         (henka_vec2){end.x, end.y + 4.0f},
-                        active_component ? 5.0f : 3.0f, draw_inner);
+                        overlay_scale * (active_component ? 5.0f : 3.0f), draw_inner);
                 }
                 else
                 {
@@ -7235,18 +7261,20 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                         }
                         (void)sandbox3d_draw_viewport_clipped_overlay_line(
                             state, viewport, start, end,
-                            active_component ? 10.0f : 7.0f, draw_outer);
+                            overlay_scale * (active_component ? 10.0f : 7.0f), draw_outer);
                         (void)sandbox3d_draw_viewport_clipped_overlay_line(
                             state, viewport, start, end,
-                            active_component ? 6.0f : 4.0f, draw_inner);
+                            overlay_scale * (active_component ? 6.0f : 4.0f), draw_inner);
                         face_center.x += start.x;
                         face_center.y += start.y;
                         ++projected_corner_count;
                     }
                     if (projected_corner_count > 0U)
                     {
-                        const float outer_radius = active_component ? 4.5f : 3.5f;
-                        const float inner_radius = active_component ? 2.75f : 2.0f;
+                        const float outer_radius =
+                            overlay_scale * (active_component ? 4.5f : 3.5f);
+                        const float inner_radius =
+                            overlay_scale * (active_component ? 2.75f : 2.0f);
                         const henka_vec4 marker_color =
                             (henka_vec4){0.82f, 0.88f, 0.94f, 0.94f};
                         henka_vec2 framebuffer_center;
@@ -36828,6 +36856,9 @@ int main(int argc, char** argv)
     state.fallback_model_entity = HENKA_INVALID_ENTITY;
     state.foliage_entity = HENKA_INVALID_ENTITY;
     state.selected_entity = HENKA_INVALID_ENTITY;
+    state.authoring_topology_overlay_entity = HENKA_INVALID_ENTITY;
+    state.authoring_topology_overlay_enabled =
+        SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT;
     state.native_panel_window_id = HENKA_INVALID_WINDOW_ID;
     state.ui_visible_last_frame = false;
     sandbox3d_reset_workspace_layout(&state);
