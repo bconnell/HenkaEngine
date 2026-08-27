@@ -9,7 +9,7 @@ The current Rendered path includes:
 - glTF-oriented PBR material inputs for base color, metallic/roughness, normals, occlusion, emissive response, specular controls, IOR, transmission, volume attenuation, clearcoat, sheen, alpha modes, and double-sided rendering, plus runtime-authored subsurface amount/tint controls;
 - transmission uses the authored IOR for a bounded environment-refraction direction and authored volume attenuation; KHR_materials_transmission scalar textures and KHR_materials_volume thickness textures are manager-owned linear data that modulate the corresponding response. Screen-space refraction, layered volumes, and production glass remain unfinished;
 - a bounded view-aware three-lobe direct-light diffusion-profile approximation for subsurface-tinted materials, with authored thickness and the shared linear thickness texture widening the profile and a bounded back-facing environment contribution; diffuse energy is reserved so the response is not simply added on top of full diffuse. The shared material-instance/editor path can assign, clear, restore, inspect, and transactionally refresh the imported thickness texture without creating a second material authority. This is still not true multi-scatter diffusion, a skin/wax profile, or screen-space/ray-traced SSS;
-- HDR environment lighting with transactionally derived 32-sample cosine-weighted irradiance, 128-sample GGX-prefiltered specular environment data across bounded mips, and a 128-sample split-sum BRDF lookup texture; this improves the rasterized environment response without claiming path tracing or full-scene global illumination;
+- HDR environment lighting with transactionally derived 32-sample cosine-weighted irradiance, 128-sample GGX-prefiltered specular environment data across bounded mips, and a 128-sample split-sum BRDF lookup texture; IBL roughness lookup is capped at the supported 32x32 prefilter level so high-roughness subjects do not expose under-resolved 4x4/2x2 mip structure; this improves the rasterized environment response without claiming path tracing or full-scene global illumination;
 - local reflection probes with a bounded seven-level cubemap chain: the captured
   mip 0 is filtered through the existing bounded GGX prefilter program for
   roughness-dependent local-probe response. This remains a local, bounded
@@ -21,6 +21,8 @@ The current Rendered path includes:
   refinement, reconstructs surfaces from valid central depth neighbors, rejects
   back-facing or edge-invalid hits, weights hit confidence with quadratic
   roughness attenuation, edge distance, and a bounded Schlick Fresnel response,
+  with screen-space hits limited to smooth materials and rougher materials using
+  the filtered environment/probe fallback,
   and applies a bounded roughness-aware resolve before falling back to
   environment/probe lighting on missing HDR resources; this remains a
   screen-space approximation rather than production planar, hierarchical, or

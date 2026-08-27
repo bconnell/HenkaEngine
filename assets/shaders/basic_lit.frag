@@ -938,7 +938,7 @@ void main()
                     environmentSpecular = textureLod(
                         iblPrefilterMap,
                         blurredReflectionDirection,
-                        surfaceRoughness * 6.0).rgb;
+                        min(surfaceRoughness * 6.0, 2.0)).rgb;
                 }
             }
             vec2 brdf = useIBL ? texture(iblBrdfLut, vec2(nDotV, 1.0 - surfaceRoughness)).rg : vec2(1.0, 0.0);

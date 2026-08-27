@@ -29,6 +29,7 @@ if ($renderer -notmatch 'schlickFresnel' -or
     $renderer -notmatch 'screenReflectionSurface' -or
     $renderer -notmatch 'reflect\(normalize\(position\),normal\)' -or
     $renderer -notmatch 'roughnessConfidence=\(1\.0-materialRoughness\)\*\(1\.0-materialRoughness\)' -or
+    $renderer -notmatch 'materialRoughness>0\.55' -or
     $renderer -notmatch 'filteredScreenReflection') {
     $missing += 'validated Fresnel-weighted screen-space reflection surface and roughness safeguards'
 }

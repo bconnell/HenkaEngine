@@ -76,7 +76,7 @@ if ($shader -notmatch 'iblIrradianceMap' -or
 }
 if ($shader -notmatch 'vec3 blurredReflectionDirection = reflectionDirection;' -or
     $shader -match 'mix\(reflectionDirection, normal, surfaceRoughness' -or
-    $shader -notmatch 'textureLod\(\s*iblPrefilterMap,\s*blurredReflectionDirection,\s*surfaceRoughness \* 6\.0' -or
+    $shader -notmatch 'textureLod\(\s*iblPrefilterMap,\s*blurredReflectionDirection,\s*min\(surfaceRoughness \* 6\.0,\s*2\.0\)' -or
     $shader -match 'textureLod\(\s*iblPrefilterMap,\s*vec3\(0\.0,\s*0\.0,\s*1\.0\),\s*0\.0' ) {
     $missing += 'single-source roughness filtering for IBL reflection direction'
 }
