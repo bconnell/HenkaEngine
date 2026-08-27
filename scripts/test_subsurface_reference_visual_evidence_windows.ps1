@@ -3,6 +3,11 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $fixtureRoot = Join-Path $repoRoot (".subsurface-visual-validator-test-" + [Guid]::NewGuid().ToString("N"))
+$shader = Get-Content (Join-Path $repoRoot 'assets/shaders/basic_lit.frag') -Raw
+if ($shader -notmatch 'subsurfaceDirectProfile' -or
+    $shader -notmatch 'mix\(0\.02, 0\.08, curvatureValue\)') {
+    throw "Subsurface direct profile is missing its bounded grazing-edge energy limit."
+}
 [System.IO.Directory]::CreateDirectory($fixtureRoot) | Out-Null
 Add-Type -AssemblyName System.Drawing
 

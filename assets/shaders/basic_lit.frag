@@ -258,7 +258,7 @@ float subsurfaceDirectProfile(
     float edgeLobe = pow(
         grazingView,
         mix(1.60, 0.70, thicknessValue)) *
-        mix(0.02, 0.20, curvatureValue);
+        mix(0.02, 0.08, curvatureValue);
     return saturate(
         broadLobe * 0.22 +
         wideLobe * 0.42 +
