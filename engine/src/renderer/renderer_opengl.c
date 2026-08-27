@@ -2123,10 +2123,10 @@ bloom_target_failure:
 
 #define HENKA_IBL_ENVIRONMENT_RESOLUTION 128
 #define HENKA_IBL_IRRADIANCE_RESOLUTION 32
-#define HENKA_IBL_PREFILTER_LEVELS 5
+#define HENKA_IBL_PREFILTER_LEVELS 7
 #define HENKA_IBL_BRDF_RESOLUTION 128
 #define HENKA_REFLECTION_PROBE_RESOLUTION 64
-#define HENKA_REFLECTION_PROBE_PREFILTER_LEVELS 5
+#define HENKA_REFLECTION_PROBE_PREFILTER_LEVELS 7
 
 static uint64_t henka_opengl_reflection_probe_storage_bytes(void)
 {
@@ -2213,7 +2213,7 @@ static void henka_opengl_delete_ibl_resources(henka_opengl_renderer_state* state
     }
     bytes += (uint64_t)HENKA_IBL_ENVIRONMENT_RESOLUTION * HENKA_IBL_ENVIRONMENT_RESOLUTION * 6U * 8U;
     bytes += (uint64_t)HENKA_IBL_IRRADIANCE_RESOLUTION * HENKA_IBL_IRRADIANCE_RESOLUTION * 6U * 8U;
-    bytes += (uint64_t)HENKA_IBL_BRDF_RESOLUTION * HENKA_IBL_BRDF_RESOLUTION * 4U;
+    bytes += (uint64_t)HENKA_IBL_BRDF_RESOLUTION * HENKA_IBL_BRDF_RESOLUTION * 8U;
     if (state->ibl_environment_cube != 0U || state->ibl_irradiance_cube != 0U ||
         state->ibl_prefilter_cube != 0U || state->ibl_brdf_lut != 0U)
     {
@@ -2303,7 +2303,12 @@ static henka_result henka_opengl_build_ibl_resources(
     GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
     GLint previous_cube_texture = 0;
+    GLint previous_pack_alignment = 4;
     GLint previous_viewport[4] = {0, 0, 0, 0};
+    GLboolean previous_scissor_enabled;
+    GLboolean previous_depth_enabled;
+    GLboolean previous_cull_enabled;
+    GLboolean previous_blend_enabled;
     const henka_opengl_texture_data* source_data;
     henka_mat4 projection;
     int face;
@@ -2321,7 +2326,12 @@ static henka_result henka_opengl_build_ibl_resources(
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_cube_texture);
+    glGetIntegerv(GL_PACK_ALIGNMENT, &previous_pack_alignment);
     glGetIntegerv(GL_VIEWPORT, previous_viewport);
+    previous_scissor_enabled = glIsEnabled(GL_SCISSOR_TEST);
+    previous_depth_enabled = glIsEnabled(GL_DEPTH_TEST);
+    previous_cull_enabled = glIsEnabled(GL_CULL_FACE);
+    previous_blend_enabled = glIsEnabled(GL_BLEND);
     g_gl.GenFramebuffers(1, &framebuffer);
     if (framebuffer == 0U ||
         !henka_opengl_allocate_ibl_cube(&environment_cube, HENKA_IBL_ENVIRONMENT_RESOLUTION, 1) ||
@@ -2336,9 +2346,15 @@ static henka_result henka_opengl_build_ibl_resources(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, HENKA_IBL_BRDF_RESOLUTION, HENKA_IBL_BRDF_RESOLUTION, 0, GL_RG, GL_HALF_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, HENKA_IBL_BRDF_RESOLUTION, HENKA_IBL_BRDF_RESOLUTION, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
     projection = henka_mat4_perspective(3.14159265359f * 0.5f, 1.0f, 0.1f, 10.0f);
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
     glViewport(0, 0, HENKA_IBL_ENVIRONMENT_RESOLUTION, HENKA_IBL_ENVIRONMENT_RESOLUTION);
     g_gl.UseProgram(state->ibl_conversion_program);
     henka_set_uniform_int_owned(state->ibl_conversion_program, &state->ibl_conversion_shader_data, "equirectangularTexture", 0);
@@ -2409,20 +2425,47 @@ static henka_result henka_opengl_build_ibl_resources(
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, brdf_lut, 0);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
     if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
     {
         (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "BRDF LUT framebuffer incomplete");
         goto ibl_failure;
     }
     glViewport(0, 0, HENKA_IBL_BRDF_RESOLUTION, HENKA_IBL_BRDF_RESOLUTION);
+    glClear(GL_COLOR_BUFFER_BIT);
     g_gl.UseProgram(state->ibl_brdf_program);
     /* Keep the generated split-sum LUT numerically active on drivers whose
      * default uniform values are zero. */
     henka_set_uniform_float_owned(state->ibl_brdf_program, &state->ibl_brdf_shader_data, "brdfScale", 1.0f);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
+    {
+        float brdf_lut_sample[2] = {0.0f, 0.0f};
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(
+            HENKA_IBL_BRDF_RESOLUTION / 2,
+            HENKA_IBL_BRDF_RESOLUTION / 2,
+            1,
+            1,
+            GL_RG,
+            GL_FLOAT,
+            brdf_lut_sample);
+        if (glGetError() != GL_NO_ERROR ||
+            !isfinite(brdf_lut_sample[0]) || !isfinite(brdf_lut_sample[1]) ||
+            fabsf(brdf_lut_sample[0]) + fabsf(brdf_lut_sample[1]) <= 0.0001f)
+        {
+            (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "BRDF LUT validation failed");
+            goto ibl_failure;
+        }
+    }
     g_gl.BindVertexArray(0);
     g_gl.UseProgram(0);
+    glPixelStorei(GL_PACK_ALIGNMENT, previous_pack_alignment);
+    if (previous_scissor_enabled) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    if (previous_depth_enabled) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (previous_cull_enabled) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    if (previous_blend_enabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
     glViewport(
         previous_viewport[0], previous_viewport[1],
@@ -2446,12 +2489,17 @@ static henka_result henka_opengl_build_ibl_resources(
         }
         bytes += (uint64_t)HENKA_IBL_ENVIRONMENT_RESOLUTION * HENKA_IBL_ENVIRONMENT_RESOLUTION * 6U * 8U;
         bytes += (uint64_t)HENKA_IBL_IRRADIANCE_RESOLUTION * HENKA_IBL_IRRADIANCE_RESOLUTION * 6U * 8U;
-        bytes += (uint64_t)HENKA_IBL_BRDF_RESOLUTION * HENKA_IBL_BRDF_RESOLUTION * 4U;
+        bytes += (uint64_t)HENKA_IBL_BRDF_RESOLUTION * HENKA_IBL_BRDF_RESOLUTION * 8U;
         henka_opengl_memory_add_category(state, &state->tracked_render_target_bytes, bytes);
     }
     return HENKA_SUCCESS;
 
 ibl_failure:
+    glPixelStorei(GL_PACK_ALIGNMENT, previous_pack_alignment);
+    if (previous_scissor_enabled) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    if (previous_depth_enabled) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (previous_cull_enabled) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    if (previous_blend_enabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
     glViewport(
         previous_viewport[0], previous_viewport[1],
@@ -3207,18 +3255,18 @@ static henka_result henka_opengl_create_render_programs(
         "float radicalInverseVdc(uint bits){ bits=(bits<<16u)|(bits>>16u); bits=((bits&0x55555555u)<<1u)|((bits&0xAAAAAAAAu)>>1u); bits=((bits&0x33333333u)<<2u)|((bits&0xCCCCCCCCu)>>2u); bits=((bits&0x0F0F0F0Fu)<<4u)|((bits&0xF0F0F0F0u)>>4u); return float(bits)*2.3283064365386963e-10; }\n"
         "vec2 hammersley(uint i,uint count){ return vec2(float(i)/float(count),radicalInverseVdc(i)); }\n"
         "vec3 importanceSampleGGX(vec2 xi,vec3 n,float alpha){ float phi=2.0*PI*xi.x; float cosTheta=sqrt((1.0-xi.y)/max(1.0+(alpha*alpha-1.0)*xi.y,0.0001)); float sinTheta=sqrt(max(1.0-cosTheta*cosTheta,0.0)); vec3 h=vec3(cos(phi)*sinTheta,sin(phi)*sinTheta,cosTheta); vec3 up=abs(n.y)<0.95?vec3(0.0,1.0,0.0):vec3(1.0,0.0,0.0); vec3 t=normalize(cross(up,n)); vec3 b=cross(n,t); return normalize(t*h.x+b*h.y+n*h.z); }\n"
-        "void main(){ vec2 ndc=uv*2.0-1.0; vec4 world=inverse(viewProjection)*vec4(ndc,1.0,1.0); vec3 n=normalize(world.xyz/world.w); vec3 v=n; float boundedRoughness=clamp(roughness,0.0,1.0); float alpha=max(boundedRoughness*boundedRoughness,0.001); vec3 color=vec3(0.0); float totalWeight=0.0; const uint sampleCount=32u; for(uint i=0u;i<sampleCount;++i){ vec3 h=importanceSampleGGX(hammersley(i,sampleCount),n,alpha); vec3 l=normalize(2.0*dot(v,h)*h-v); float nDotL=max(dot(n,l),0.0); if(nDotL>0.0){ color+=textureLod(environmentCube,l,0.0).rgb*nDotL; totalWeight+=nDotL; } } outColor=vec4(color/max(totalWeight,0.0001),1.0); }\n";
+        "void main(){ vec2 ndc=uv*2.0-1.0; vec4 world=inverse(viewProjection)*vec4(ndc,1.0,1.0); vec3 n=normalize(world.xyz/world.w); vec3 v=n; float boundedRoughness=clamp(roughness,0.0,1.0); float alpha=max(boundedRoughness*boundedRoughness,0.001); vec3 color=vec3(0.0); float totalWeight=0.0; const uint sampleCount=128u; for(uint i=0u;i<sampleCount;++i){ vec3 h=importanceSampleGGX(hammersley(i,sampleCount),n,alpha); vec3 l=normalize(2.0*dot(v,h)*h-v); float nDotL=max(dot(n,l),0.0); if(nDotL>0.0){ color+=textureLod(environmentCube,l,0.0).rgb*nDotL; totalWeight+=nDotL; } } outColor=vec4(color/max(totalWeight,0.0001),1.0); }\n";
     static const char* ibl_brdf_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform float brdfScale; out vec2 outColor;\n"
+        "in vec2 uv; uniform float brdfScale; out vec4 outColor;\n"
         "const float PI=3.14159265359;\n"
         "float radicalInverseVdc(uint bits){ bits=(bits<<16u)|(bits>>16u); bits=((bits&0x55555555u)<<1u)|((bits&0xAAAAAAAAu)>>1u); bits=((bits&0x33333333u)<<2u)|((bits&0xCCCCCCCCu)>>2u); bits=((bits&0x0F0F0F0Fu)<<4u)|((bits&0xF0F0F0F0u)>>4u); return float(bits)*2.3283064365386963e-10; }\n"
         "vec2 hammersley(uint i,uint count){ return vec2(float(i)/float(count),radicalInverseVdc(i)); }\n"
         "vec3 importanceSampleGGX(vec2 xi,vec3 n,float alpha){ float phi=2.0*PI*xi.x; float cosTheta=sqrt((1.0-xi.y)/max(1.0+(alpha*alpha-1.0)*xi.y,0.0001)); float sinTheta=sqrt(max(1.0-cosTheta*cosTheta,0.0)); vec3 h=vec3(cos(phi)*sinTheta,sin(phi)*sinTheta,cosTheta); vec3 up=abs(n.y)<0.95?vec3(0.0,1.0,0.0):vec3(1.0,0.0,0.0); vec3 t=normalize(cross(up,n)); vec3 b=cross(n,t); return normalize(t*h.x+b*h.y+n*h.z); }\n"
         "float geometrySchlickGGX(float nDot,float alpha){ float k=(alpha+1.0)*(alpha+1.0)/8.0; return nDot/max(nDot*(1.0-k)+k,0.0001); }\n"
         "float geometrySmith(float nDotV,float nDotL,float alpha){ return geometrySchlickGGX(nDotV,alpha)*geometrySchlickGGX(nDotL,alpha); }\n"
-        "vec2 integrateBrdf(float nDotV,float roughness){ vec3 v=vec3(sqrt(max(1.0-nDotV*nDotV,0.0)),0.0,nDotV); vec3 n=vec3(0.0,0.0,1.0); float alpha=max(roughness*roughness,0.001); float a=0.0; float b=0.0; const uint sampleCount=32u; for(uint i=0u;i<sampleCount;++i){ vec3 h=importanceSampleGGX(hammersley(i,sampleCount),n,alpha); vec3 l=normalize(2.0*dot(v,h)*h-v); float nDotL=max(l.z,0.0); float nDotH=max(h.z,0.0); float vDotH=max(dot(v,h),0.0); if(nDotL>0.0&&nDotH>0.0){ float visibility=geometrySmith(nDotV,nDotL,alpha)*vDotH/max(nDotH*nDotV,0.0001); float fresnel=pow(1.0-vDotH,5.0); a+=(1.0-fresnel)*visibility; b+=fresnel*visibility; } } return vec2(a,b)/float(sampleCount); }\n"
-        "void main(){ float nDotV=clamp(uv.x,0.0,1.0); float roughness=clamp(1.0-uv.y,0.0,1.0); outColor=integrateBrdf(nDotV,roughness)*max(brdfScale,0.0); }\n";
+        "vec2 integrateBrdf(float nDotV,float roughness){ vec3 v=vec3(sqrt(max(1.0-nDotV*nDotV,0.0)),0.0,nDotV); vec3 n=vec3(0.0,0.0,1.0); float alpha=max(roughness*roughness,0.001); float a=0.0; float b=0.0; const uint sampleCount=128u; for(uint i=0u;i<sampleCount;++i){ vec3 h=importanceSampleGGX(hammersley(i,sampleCount),n,alpha); vec3 l=normalize(2.0*dot(v,h)*h-v); float nDotL=max(l.z,0.0); float nDotH=max(h.z,0.0); float vDotH=max(dot(v,h),0.0); if(nDotL>0.0&&nDotH>0.0){ float visibility=geometrySmith(nDotV,nDotL,alpha)*vDotH/max(nDotH*nDotV,0.0001); float fresnel=pow(1.0-vDotH,5.0); a+=(1.0-fresnel)*visibility; b+=fresnel*visibility; } } return vec2(a,b)/float(sampleCount); }\n"
+        "void main(){ float nDotV=clamp(uv.x,0.0,1.0); float roughness=clamp(1.0-uv.y,0.0,1.0); outColor=vec4(integrateBrdf(nDotV,roughness)*max(brdfScale,0.0),0.0,1.0); }\n";
     static const char* environment_fragment =
         "#version 330 core\n"
         "in vec2 uv; uniform vec3 groundColor; uniform vec3 horizonColor; uniform vec3 zenithColor; uniform float intensity; uniform sampler2D environmentTexture; uniform samplerCube environmentCube; uniform bool useEnvironmentTexture; uniform bool useIBLCube; uniform float environmentRotation; uniform int environmentMode; uniform vec3 sunDirection; uniform vec3 sunColor; uniform float sunIntensity; uniform vec4 atmosphereParameters; uniform vec3 atmosphereGroundAlbedo; uniform float horizonIntensity; uniform float sunAngularRadius; uniform vec3 moonDirection; uniform vec3 moonColor; uniform float moonIntensity; uniform float moonAngularRadius; uniform bool starsEnabled; uniform float starsIntensity; uniform float starsRotation; out vec4 outColor; const float PI=3.14159265359;\n"

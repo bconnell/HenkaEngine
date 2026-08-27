@@ -9,8 +9,8 @@ The current Rendered path includes:
 - glTF-oriented PBR material inputs for base color, metallic/roughness, normals, occlusion, emissive response, specular controls, IOR, transmission, volume attenuation, clearcoat, sheen, alpha modes, and double-sided rendering, plus runtime-authored subsurface amount/tint controls;
 - transmission uses the authored IOR for a bounded environment-refraction direction and authored volume attenuation; KHR_materials_transmission scalar textures and KHR_materials_volume thickness textures are manager-owned linear data that modulate the corresponding response. Screen-space refraction, layered volumes, and production glass remain unfinished;
 - a bounded view-aware three-lobe direct-light diffusion-profile approximation for subsurface-tinted materials, with authored thickness and the shared linear thickness texture widening the profile and a bounded back-facing environment contribution; diffuse energy is reserved so the response is not simply added on top of full diffuse. The shared material-instance/editor path can assign, clear, restore, inspect, and transactionally refresh the imported thickness texture without creating a second material authority. This is still not true multi-scatter diffusion, a skin/wax profile, or screen-space/ray-traced SSS;
-- HDR environment lighting with transactionally derived 32-sample cosine-weighted irradiance, 32-sample GGX-prefiltered specular environment data across bounded mips, and a 32-sample split-sum BRDF lookup texture; this improves the rasterized environment response without claiming path tracing or full-scene global illumination;
-- local reflection probes with a bounded five-level cubemap chain: the captured
+- HDR environment lighting with transactionally derived 32-sample cosine-weighted irradiance, 128-sample GGX-prefiltered specular environment data across bounded mips, and a 128-sample split-sum BRDF lookup texture; this improves the rasterized environment response without claiming path tracing or full-scene global illumination;
+- local reflection probes with a bounded seven-level cubemap chain: the captured
   mip 0 is filtered through the existing bounded GGX prefilter program for
   roughness-dependent local-probe response. This remains a local, bounded
   probe approximation, not a production probe grid or the global IBL path;
@@ -132,14 +132,19 @@ production light-transport model.
 The package also exposes a rendered-only IBL calibration reference. It uses a
 dedicated nine-subject metallic roughness ladder (0.05 through 0.95) and
 refuses readiness unless the OpenGL renderer reports its generated
-32-resolution irradiance cube, five-level prefilter chain, and 128-resolution
-split-sum BRDF LUT as ready. The checker then verifies that the ladder remains
+32-resolution irradiance cube, seven-level prefilter chain, and 128-resolution
+split-sum BRDF LUT as ready. The specular prefilter and split-sum integration
+use bounded 128-sample Hammersley sequences to reduce deterministic sampling
+bands in the visible reflection response. The checker then verifies that the ladder remains
 visibly resolved across the prefiltered environment response while the image
 stays bounded. This is an activation and bounded roughness-response guard for
 the supported OpenGL path, not proof of production HDRI authoring, probe-grid
 blending, or universal image-based-lighting accuracy. The close-image guard
 also requires all nine evaluated subjects to remain readable, so an unlit or
 otherwise lost subject cannot be mistaken for a valid roughness response.
+The shared UV-sphere fixture keeps its triangle winding aligned with its
+authored outward normals, preserving the view-aware BRDF contract used by this
+reference rather than compensating for inverted geometry in the shader.
 
 ```text
 --capture-realism-reference ibl wide|close rendered
@@ -310,7 +315,7 @@ materials can also receive a bounded local diffuse color-transfer approximation
 from five clamped cubemap samples around the receiver normal. This reuses the
 existing scene-probe capture boundary and is reported through
 `rendered_reflection_probe_diffuse_active`; the SSGI reference metadata requires
-the screen-space indirect path, probe-diffuse path, five-level probe prefilter,
+the screen-space indirect path, probe-diffuse path, seven-level probe prefilter,
 and bounded two-probe overlap path to be active.
 
 This is scene-space support for the current reference fixture, not a full
@@ -320,8 +325,8 @@ or guaranteed hidden/off-screen contribution beyond what the captured probe
 contains. Missing shader support or an unavailable probe fails closed to the
 existing environment-lighting path.
 
-Local reflection-probe specular now allocates and generates five cubemap mip
-levels (64, 32, 16, 8, and 4 pixels per face). The material roughness LOD
+Local reflection-probe specular now allocates and generates seven cubemap mip
+levels (64, 32, 16, 8, 4, 2, and 1 pixels per face). The material roughness LOD
 selection therefore has a real bounded filtered source instead of requesting
 roughness levels from a level-zero-only texture. The generated chain is a
 stability and plausibility improvement for the supported OpenGL path; it is

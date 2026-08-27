@@ -8420,7 +8420,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
             capture_ibl_details,
             sizeof(capture_ibl_details),
             "%s",
-            " ibl_reference=1 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_levels=5 ibl_brdf_resolution=128");
+            " ibl_reference=1 ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_levels=7 ibl_brdf_resolution=128");
     }
     else if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SCENE_PROBE)
     {
@@ -11109,18 +11109,21 @@ static henka_result sandbox3d_initialize_terrain_rendering(
         {
             goto fail;
         }
-        result = henka_scene_add_reflection_probe(
-            state->scene,
-            (henka_scene_reflection_probe_desc){
-                (henka_vec3){1.5f, 1.0f, -1.5f},
-                (henka_vec3){6.5f, 4.0f, 7.0f},
-                1.0f,
-                true,
-                true},
-            &(uint32_t){UINT32_MAX});
-        if (result != HENKA_SUCCESS)
+        if (state->realism_reference_kind != SANDBOX3D_REALISM_REFERENCE_KIND_IBL)
         {
-            goto fail;
+            result = henka_scene_add_reflection_probe(
+                state->scene,
+                (henka_scene_reflection_probe_desc){
+                    (henka_vec3){1.5f, 1.0f, -1.5f},
+                    (henka_vec3){6.5f, 4.0f, 7.0f},
+                    1.0f,
+                    true,
+                    true},
+                &(uint32_t){UINT32_MAX});
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
         }
         result = sandbox3d_create_runtime_rgba8_texture(
             engine,
@@ -31797,8 +31800,15 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     {
-        float studio_environment_pixels[SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT];
+        float* studio_environment_pixels = (float*)henka_calloc(
+            SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT,
+            sizeof(*studio_environment_pixels));
         henka_texture_descriptor environment_descriptor = henka_texture_descriptor_default_data();
+        if (studio_environment_pixels == NULL)
+        {
+            result = HENKA_ERROR_OUT_OF_MEMORY;
+            goto fail;
+        }
         sandbox3d_generate_studio_environment(
             studio_environment_pixels,
             SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT);
@@ -31806,6 +31816,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 studio_environment_pixels,
                 SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT))
         {
+            henka_free(studio_environment_pixels);
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto fail;
         }
@@ -31817,6 +31828,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             &environment_descriptor,
             "runtime/environment/studio",
             &state->environment_texture);
+        henka_free(studio_environment_pixels);
         if (result != HENKA_SUCCESS)
         {
             goto fail;
@@ -31998,18 +32010,21 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 goto fail;
             }
         }
-        result = henka_scene_add_reflection_probe(
-            state->scene,
-            (henka_scene_reflection_probe_desc){
-                (henka_vec3){0.0f, 1.0f, -1.5f},
-                (henka_vec3){8.0f, 4.0f, 8.0f},
-                1.0f,
-                true,
-                true},
-            &(uint32_t){UINT32_MAX});
-        if (result != HENKA_SUCCESS)
+        if (state->realism_reference_kind != SANDBOX3D_REALISM_REFERENCE_KIND_IBL)
         {
-            goto fail;
+            result = henka_scene_add_reflection_probe(
+                state->scene,
+                (henka_scene_reflection_probe_desc){
+                    (henka_vec3){0.0f, 1.0f, -1.5f},
+                    (henka_vec3){8.0f, 4.0f, 8.0f},
+                    1.0f,
+                    true,
+                    true},
+                &(uint32_t){UINT32_MAX});
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
         }
         if (state->smoke_test &&
             henka_engine_set_viewport_shading_mode(
@@ -32089,7 +32104,10 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    result = henka_mesh_create_uv_sphere(engine, 0.5f, 32, 16, &state->sphere_mesh);
+    /* The shared sphere fixture is also the close-up realism benchmark. Keep
+     * enough longitudinal and latitudinal resolution that smooth material
+     * and reflection response is not confused with cage faceting. */
+    result = henka_mesh_create_uv_sphere(engine, 0.5f, 128, 64, &state->sphere_mesh);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
@@ -33294,51 +33312,61 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             : (henka_vec3){0.18f, 0.20f, 0.25f});
     {
         uint32_t light_index;
-        /* The showcase uses the public local-light path so Rendered mode has
-         * a readable warm key, cool fill, and real spot-shadow coverage. The
-         * sources are scene-owned fixtures; imported glTF materials remain
-         * unchanged and the settings file does not own these lights. */
-        result = henka_scene_add_light(
-            state->scene,
-            (henka_scene_light_desc){
-                HENKA_SCENE_LIGHT_SPOT,
-                (henka_vec3){-3.5f, 5.5f, 3.5f},
-                henka_vec3_normalize((henka_vec3){0.45f, -0.72f, -0.52f}),
-                (henka_vec3){1.0f, 0.62f, 0.36f},
-                34.0f,
-                16.0f,
-                0.92f,
-                0.72f,
-                true},
-            &light_index);
-        if (result != HENKA_SUCCESS)
+        const bool isolated_ibl_reference = state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_IBL;
+        /* Non-IBL showcase references use the public local-light path so
+         * Rendered mode has a readable warm key, cool fill, and real
+         * spot-shadow coverage. The IBL reference intentionally omits direct
+         * lights so its roughness ladder measures the filtered environment.
+         * These sources are scene-owned fixtures; imported glTF materials
+         * remain unchanged and the settings file does not own these lights. */
+        if (!isolated_ibl_reference)
         {
-            goto fail;
+            result = henka_scene_add_light(
+                state->scene,
+                (henka_scene_light_desc){
+                    HENKA_SCENE_LIGHT_SPOT,
+                    (henka_vec3){-3.5f, 5.5f, 3.5f},
+                    henka_vec3_normalize((henka_vec3){0.45f, -0.72f, -0.52f}),
+                    (henka_vec3){1.0f, 0.62f, 0.36f},
+                    34.0f,
+                    16.0f,
+                    0.92f,
+                    0.72f,
+                    true},
+                &light_index);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
         }
-        result = henka_scene_add_light(
-            state->scene,
-            (henka_scene_light_desc){
-                HENKA_SCENE_LIGHT_POINT,
-                (henka_vec3){3.5f, 3.0f, 1.5f},
-                (henka_vec3){0.0f, -1.0f, 0.0f},
-                (henka_vec3){0.28f, 0.46f, 1.0f},
-                15.0f,
-                12.0f,
-                1.0f,
-                0.5f,
-                true},
-            &light_index);
-        if (result != HENKA_SUCCESS)
+        if (!isolated_ibl_reference)
         {
-            goto fail;
+            result = henka_scene_add_light(
+                state->scene,
+                (henka_scene_light_desc){
+                    HENKA_SCENE_LIGHT_POINT,
+                    (henka_vec3){3.5f, 3.0f, 1.5f},
+                    (henka_vec3){0.0f, -1.0f, 0.0f},
+                    (henka_vec3){0.28f, 0.46f, 1.0f},
+                    15.0f,
+                    12.0f,
+                    1.0f,
+                    0.5f,
+                    true},
+                &light_index);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
         }
-        if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_PBR ||
-            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_HDR ||
-            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_NORMAL_MAP ||
-            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE ||
-            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY ||
-            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL ||
-            state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SCENE_PROBE)
+        if (!isolated_ibl_reference &&
+            (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_PBR ||
+             state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_HDR ||
+             state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_NORMAL_MAP ||
+             state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE ||
+             state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_ENERGY ||
+             state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SCENE_PROBE))
         {
             /* Keep every material/probe-reference subject legible without
              * replacing the directional key and local probe contrast with a
@@ -33467,6 +33495,13 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         }
     }
     sandbox3d_apply_loaded_settings(engine, state);
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL)
+    {
+        /* The public setter validates and clamps its input. In this bounded
+         * capture fixture, zero removes direct directional illumination while
+         * leaving the environment/IBL path active. */
+        henka_scene_set_light_intensity(state->scene, 0.0f);
+    }
     if (state->realism_reference_capture_requested)
     {
         result = sandbox3d_prepare_realism_reference_capture(state);

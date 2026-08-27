@@ -6,8 +6,10 @@
 
 #include <henka/math.h>
 
-#define SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH 32U
-#define SANDBOX3D_STUDIO_ENVIRONMENT_HEIGHT 16U
+/* Keep the deterministic studio source dense enough that smooth reflections
+ * do not inherit visible latitude/longitude bands from the fixture itself. */
+#define SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH 128U
+#define SANDBOX3D_STUDIO_ENVIRONMENT_HEIGHT 64U
 #define SANDBOX3D_STUDIO_ENVIRONMENT_CHANNELS 4U
 #define SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT \
     (SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH * \

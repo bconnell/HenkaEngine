@@ -2,11 +2,15 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $renderer = Get-Content (Join-Path $repoRoot 'engine/src/renderer/renderer_opengl.c') -Raw
+$shader = Get-Content (Join-Path $repoRoot 'assets/shaders/basic_lit.frag') -Raw
 $engineHeader = Get-Content (Join-Path $repoRoot 'engine/include/henka/engine.h') -Raw
 
 $missing = @()
-if ($renderer -notmatch 'HENKA_REFLECTION_PROBE_PREFILTER_LEVELS\s+5') {
-    $missing += 'five-level reflection-probe prefilter contract'
+if ($renderer -notmatch 'HENKA_REFLECTION_PROBE_PREFILTER_LEVELS\s+7') {
+    $missing += 'full seven-level reflection-probe prefilter contract'
+}
+if ($shader -notmatch 'surfaceRoughness\s*\*\s*6\.0') {
+    $missing += 'full-range roughness LOD selection'
 }
 if ($renderer -notmatch 'GL_LINEAR_MIPMAP_LINEAR') {
     $missing += 'trilinear reflection-probe filtering'

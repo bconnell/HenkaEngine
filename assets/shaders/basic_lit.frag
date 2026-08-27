@@ -905,9 +905,11 @@ void main()
                     vec3(8.0));
             }
             vec3 reflectionDirection = reflect(-viewDirection, normal);
-            vec3 blurredReflectionDirection = safeNormalize(
-                mix(reflectionDirection, normal, surfaceRoughness * 0.75),
-                normal);
+            /* Roughness is resolved by the GGX-prefiltered environment and
+             * split-sum BRDF. Do not blur the direction a second time here:
+             * that approximation compresses reflections toward the normal and
+             * can turn a smooth studio gradient into a broad visible band. */
+            vec3 blurredReflectionDirection = reflectionDirection;
             blurredReflectionDirection = parallaxCorrectReflectionDirection(blurredReflectionDirection);
             vec3 environmentSpecular = sampleEnvironment(blurredReflectionDirection);
             if (useIBL)
@@ -917,17 +919,17 @@ void main()
                     environmentSpecular = textureLod(
                         reflectionProbeMap,
                         blurredReflectionDirection,
-                        surfaceRoughness * 4.0).rgb;
+                        surfaceRoughness * 6.0).rgb;
                     if (useReflectionProbeMapSecondary)
                     {
                         vec3 secondaryReflectionDirection = parallaxCorrectSecondaryReflectionDirection(
-                            safeNormalize(mix(reflectionDirection, normal, surfaceRoughness * 0.75), normal));
+                            reflectionDirection);
                         environmentSpecular = mix(
                             environmentSpecular,
                             textureLod(
                                 reflectionProbeMapSecondary,
                                 secondaryReflectionDirection,
-                                surfaceRoughness * 4.0).rgb,
+                                surfaceRoughness * 6.0).rgb,
                             clamp(reflectionProbeBlendWeight, 0.0, 1.0));
                     }
                 }
@@ -936,7 +938,7 @@ void main()
                     environmentSpecular = textureLod(
                         iblPrefilterMap,
                         blurredReflectionDirection,
-                        surfaceRoughness * 4.0).rgb;
+                        surfaceRoughness * 6.0).rgb;
                 }
             }
             vec2 brdf = useIBL ? texture(iblBrdfLut, vec2(nDotV, 1.0 - surfaceRoughness)).rg : vec2(1.0, 0.0);
@@ -950,7 +952,6 @@ void main()
                 sampleEnvironment(transmissionDirection) * albedo * surfaceTransmission * volumeTransmittance * (1.0 - fresnel) * 0.55,
                 vec3(65504.0));
         }
-
         for (int lightIndex = 0; lightIndex < 4; ++lightIndex)
         {
             if (lightIndex >= localLightCount)

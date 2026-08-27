@@ -26,14 +26,21 @@ void sandbox3d_generate_studio_environment(float* pixels, size_t pixel_count)
         float latitude = ((float)y + 0.5f) /
             (float)SANDBOX3D_STUDIO_ENVIRONMENT_HEIGHT;
         float horizon = sandbox3d_smoothstep((latitude - 0.12f) / 0.50f);
-        float ground = sandbox3d_smoothstep((latitude - 0.54f) / 0.46f);
+        /* Keep the lower hemisphere as a real studio-floor contribution, but
+         * make its sky-to-ground transition broad enough that the reflection
+         * benchmark does not turn a single fixture horizon into a hard band. */
+        float ground = sandbox3d_smoothstep((latitude - 0.68f) / 0.32f);
         for (x = 0U; x < SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH; ++x)
         {
             const float longitude = 2.0f * (float)HENKA_PI *
                 ((float)x + 0.5f) /
                 (float)SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH;
-            float key_delta = fabsf(longitude - 1.05f);
-            float fill_delta = fabsf(longitude - 4.35f);
+            /* The camera-facing +Z direction is the primary reflected view
+             * in the close benchmark. Keep the broad warm key on that side
+             * so the IBL roughness ladder resolves authored reflection energy
+             * instead of measuring a uniformly dark back hemisphere. */
+            float key_delta = fabsf(longitude - 4.35f);
+            float fill_delta = fabsf(longitude - 1.05f);
             float key_lobe;
             float fill_lobe;
             float r = 0.045f + 0.075f * horizon + ground * 0.015f;
@@ -45,8 +52,8 @@ void sandbox3d_generate_studio_environment(float* pixels, size_t pixel_count)
             if (key_delta > (float)HENKA_PI) key_delta = 2.0f * (float)HENKA_PI - key_delta;
             if (fill_delta > (float)HENKA_PI) fill_delta = 2.0f * (float)HENKA_PI - fill_delta;
             key_lobe = expf(
-                -0.5f * (key_delta / 0.42f) * (key_delta / 0.42f) -
-                0.5f * ((latitude - 0.21f) / 0.15f) * ((latitude - 0.21f) / 0.15f));
+                -0.5f * (key_delta / 0.58f) * (key_delta / 0.58f) -
+                0.5f * ((latitude - 0.45f) / 0.32f) * ((latitude - 0.45f) / 0.32f));
             fill_lobe = expf(
                 -0.5f * (fill_delta / 0.70f) * (fill_delta / 0.70f) -
                 0.5f * ((latitude - 0.32f) / 0.24f) * ((latitude - 0.32f) / 0.24f));
@@ -54,15 +61,15 @@ void sandbox3d_generate_studio_environment(float* pixels, size_t pixel_count)
              * light. Their asymmetric warm/cool energy gives clearcoat and
              * brushed metal a stable highlight to resolve through the same
              * derived IBL path as imported consumer materials. */
-            r += key_lobe * 0.72f + fill_lobe * 0.10f;
-            g += key_lobe * 0.44f + fill_lobe * 0.13f;
-            b += key_lobe * 0.23f + fill_lobe * 0.20f;
+            r += key_lobe * 2.20f + fill_lobe * 0.28f;
+            g += key_lobe * 1.35f + fill_lobe * 0.34f;
+            b += key_lobe * 0.76f + fill_lobe * 0.48f;
 
             if (ground > 0.0f)
             {
-                r = r * (1.0f - ground) + 0.035f * ground;
-                g = g * (1.0f - ground) + 0.045f * ground;
-                b = b * (1.0f - ground) + 0.065f * ground;
+                r = r * (1.0f - ground) + 0.055f * ground;
+                g = g * (1.0f - ground) + 0.075f * ground;
+                b = b * (1.0f - ground) + 0.105f * ground;
             }
             pixels[offset + 0U] = r;
             pixels[offset + 1U] = g;

@@ -242,6 +242,9 @@ henka_result henka_mesh_create_uv_sphere(
 
     {
         int segment;
+        /* Keep index winding aligned with the outward analytic normals above.
+         * The renderer uses the visible-face normal for view-dependent BRDF
+         * terms, so reversing these triangles inverts the authored nDotV. */
         for (segment = 0; segment < segments; ++segment)
         {
             float u = (float)segment / (float)segments;
@@ -311,8 +314,8 @@ henka_result henka_mesh_create_uv_sphere(
             unsigned int top = (unsigned int)segment;
             unsigned int first = interior_base + (unsigned int)segment;
             indices[index++] = top;
-            indices[index++] = first;
             indices[index++] = first + 1U;
+            indices[index++] = first;
         }
         for (int ring = 0; ring < rings - 2; ++ring)
         {
@@ -321,11 +324,11 @@ henka_result henka_mesh_create_uv_sphere(
                 unsigned int first = interior_base + (unsigned int)(ring * (segments + 1) + segment);
                 unsigned int second = first + (unsigned int)(segments + 1);
                 indices[index++] = first;
-                indices[index++] = second;
                 indices[index++] = first + 1U;
                 indices[index++] = second;
+                indices[index++] = second;
+                indices[index++] = first + 1U;
                 indices[index++] = second + 1U;
-                indices[index++] = first + 1U;
             }
         }
         for (segment = 0; segment < segments; ++segment)
@@ -333,8 +336,8 @@ henka_result henka_mesh_create_uv_sphere(
             unsigned int first = interior_base + (unsigned int)((rings - 2) * (segments + 1) + segment);
             unsigned int bottom = bottom_base + (unsigned int)segment;
             indices[index++] = first;
-            indices[index++] = bottom;
             indices[index++] = first + 1U;
+            indices[index++] = bottom;
         }
     }
 
