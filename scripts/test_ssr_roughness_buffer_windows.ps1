@@ -25,8 +25,12 @@ if ($renderer -notmatch 'materialRoughnessAt') {
     $missing += 'per-pixel roughness sampling'
 }
 if ($renderer -notmatch 'schlickFresnel' -or
-    $renderer -notmatch 'fresnelConfidence') {
-    $missing += 'Fresnel-weighted screen-space reflection confidence'
+    $renderer -notmatch 'fresnelConfidence' -or
+    $renderer -notmatch 'screenReflectionSurface' -or
+    $renderer -notmatch 'reflect\(normalize\(position\),normal\)' -or
+    $renderer -notmatch 'roughnessConfidence=\(1\.0-materialRoughness\)\*\(1\.0-materialRoughness\)' -or
+    $renderer -notmatch 'filteredScreenReflection') {
+    $missing += 'validated Fresnel-weighted screen-space reflection surface and roughness safeguards'
 }
 if ($renderer -notmatch 'hdr_roughness_texture != 0U') {
     $missing += 'fail-closed SSR roughness readiness gate'

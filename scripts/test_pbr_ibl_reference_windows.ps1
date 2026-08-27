@@ -92,8 +92,10 @@ if ($renderer -notmatch 'HENKA_IBL_ENVIRONMENT_RESOLUTION 128' -or
     $renderer -notmatch 'HENKA_IBL_PREFILTER_LEVELS 7' -or
     $renderer -notmatch 'GL_RGBA16F, HENKA_IBL_BRDF_RESOLUTION' -or
     $renderer -notmatch 'BRDF LUT validation' -or
-    $renderer -notmatch 'const uint sampleCount=128u') {
-    $missing += 'validated high-sample IBL integration resource boundary'
+    $renderer -notmatch 'const uint sampleCount=128u' -or
+    $renderer -notmatch 'reflect\(normalize\(position\),normal\)' -or
+    $renderer -match 'reflect\(normalize\(-position\),normal\)') {
+    $missing += 'validated IBL integration resources and non-self-intersecting SSR ray direction'
 }
 if ($capture -notmatch 'PBR_IBL_REFERENCE' -or
     $capture -notmatch '--capture-realism-reference", "ibl"') {
