@@ -366,8 +366,10 @@ authoritative section below.
 - Voices bind to borrowed production `henka_scene` and `henka_entity` objects.
   The mixer reads the live entity transform each mix operation, rejects stale or
   destroyed entities before they contribute, and exposes bounded diagnostics.
-- Scene Documents v4 persist the authored Audio listener and emitter values;
-  v1-v3 load with safe listener defaults and are not rewritten on load. Play
+- Scene Documents v5 persist the authored Audio listener, emitter values, and
+  resident/streamed storage choice; v1-v3 load with safe listener defaults,
+  while v4 loads its authored listener and defaults emitter storage to resident.
+  Legacy documents are not rewritten on load. Play
   applies the authored listener to the Audio system before emitter creation,
   while the graphical Sandbox may update it from the live production camera.
   The first integration coverage uses a real scene entity created through the
@@ -378,11 +380,11 @@ authoritative section below.
 - This is an engine foundation, not a complete game-audio workflow. The public
   runtime also has a bounded, metadata-first PCM-WAV streaming API with
   caller-owned frame reads and stream-backed voices/emitters. The asset manager
-  now caches those streams by canonical path alongside resident clips; editor,
-  persistence, and packaged long-form workflow integration remain unfinished.
+  now caches those streams by canonical path alongside resident clips; packaged
+  long-form workflow integration remains unfinished.
   Authored
-  emitter configuration and authored listener now persist in v4 Scene
-  Documents, and the Sandbox Play session can instantiate those emitters
+  emitter configuration, authored listener, and resident/streamed storage mode
+  now persist in v5 Scene Documents, and the Sandbox Play session can instantiate those emitters
   through the normal Game Authoring coordinator. The graphical Sandbox owns a
   client-only, caller-pumped SDL3 playback boundary with bounded queue/pump
   budgets, device diagnostics, authored-listener application, production-camera
@@ -392,8 +394,8 @@ authoritative section below.
   `Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` bindings to both Lua
   and HenkaScript in Play. They resolve the same persisted object-to-emitter
   mapping used by the runtime and fail closed for missing or stale action
-  targets. Streamed long-form manager/editor/persistence integration, broader
-  decoder support, packaged content coverage, and broader format support remain
+  targets. Packaged long-form streamed-content coverage, broader decoder
+  support, packaged content coverage, and broader format support remain
   in progress. The current runtime core and output boundary are
   single-owner for voice commands and mixing; device-thread synchronization
   remains outside this scope.

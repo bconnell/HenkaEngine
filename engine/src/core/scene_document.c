@@ -28,6 +28,7 @@
 #define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED UINT32_C(64)
 #define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING UINT32_C(128)
 #define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL UINT32_C(256)
+#define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING UINT32_C(512)
 #define HENKA_SCENE_DOCUMENT_KNOWN_FLAGS ( \
     HENKA_SCENE_DOCUMENT_FLAG_VISIBLE | \
     HENKA_SCENE_DOCUMENT_FLAG_RENDERER_ENABLED | \
@@ -37,7 +38,8 @@
     HENKA_SCENE_DOCUMENT_FLAG_TRIGGER | \
     HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED | \
     HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING | \
-    HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL)
+    HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL | \
+    HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING)
 #define HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED UINT32_C(1)
 #define HENKA_SCENE_DOCUMENT_BEHAVIOR_KNOWN_FLAGS \
     HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED
@@ -1212,6 +1214,7 @@ static void henka_scene_document_encode_object(
     if (object->audio.enabled) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED;
     if (object->audio.looping) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING;
     if (object->audio.spatial) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL;
+    if (object->audio.streaming) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING;
 
     henka_scene_document_writer_u64(writer, object->id);
     henka_scene_document_writer_u32(writer, flags);
@@ -1372,6 +1375,8 @@ static bool henka_scene_document_decode_object(
             (flags & (HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED |
                 HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING |
                 HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL)) != 0U) ||
+        (format_version < HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+            (flags & HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING) != 0U) ||
         !henka_scene_document_reader_string(reader, object->name, sizeof(object->name)) ||
         !henka_scene_document_reader_float(reader, &object->transform.position.x) ||
         !henka_scene_document_reader_float(reader, &object->transform.position.y) ||
@@ -1454,6 +1459,8 @@ static bool henka_scene_document_decode_object(
             (flags & HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING) != 0U;
         object->audio.spatial =
             (flags & HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL) != 0U;
+        object->audio.streaming =
+            (flags & HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING) != 0U;
     }
     if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V2)
     {
@@ -1733,6 +1740,7 @@ henka_result henka_scene_document_load_file(
         (format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V2 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V4 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
@@ -1777,7 +1785,7 @@ henka_result henka_scene_document_load_file(
         }
         ++candidate->object_count;
     }
-    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V4 &&
         (!henka_scene_document_reader_float(
             &reader, &candidate->audio_listener.position.x) ||
             !henka_scene_document_reader_float(

@@ -108,6 +108,7 @@ henka_result sandbox3d_audio_runtime_start_preview(
     const henka_audio_emitter_config* config)
 {
     henka_audio_clip* clip = NULL;
+    henka_audio_stream* stream = NULL;
     henka_audio_emitter* candidate = NULL;
     henka_result result;
 
@@ -119,18 +120,36 @@ henka_result sandbox3d_audio_runtime_start_preview(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = henka_assets_load_audio_clip(assets, config->clip_path, &clip);
-    if (result != HENKA_SUCCESS || clip == NULL)
+    if (config->streaming)
     {
-        return result != HENKA_SUCCESS ? result : HENKA_ERROR_ASSET_SOURCE;
+        result = henka_assets_load_audio_stream(assets, config->clip_path, &stream);
+        if (result != HENKA_SUCCESS || stream == NULL)
+        {
+            return result != HENKA_SUCCESS ? result : HENKA_ERROR_ASSET_SOURCE;
+        }
+        result = henka_audio_emitter_create_with_stream(
+            runtime->system,
+            scene,
+            entity,
+            stream,
+            config,
+            &candidate);
     }
-    result = henka_audio_emitter_create_with_clip(
-        runtime->system,
-        scene,
-        entity,
-        clip,
-        config,
-        &candidate);
+    else
+    {
+        result = henka_assets_load_audio_clip(assets, config->clip_path, &clip);
+        if (result != HENKA_SUCCESS || clip == NULL)
+        {
+            return result != HENKA_SUCCESS ? result : HENKA_ERROR_ASSET_SOURCE;
+        }
+        result = henka_audio_emitter_create_with_clip(
+            runtime->system,
+            scene,
+            entity,
+            clip,
+            config,
+            &candidate);
+    }
     if (result != HENKA_SUCCESS)
     {
         return result;

@@ -55,6 +55,7 @@ int main(void)
     emitter_config.enabled = true;
     emitter_config.looping = true;
     emitter_config.spatial = true;
+    emitter_config.streaming = true;
     (void)snprintf(
         emitter_config.clip_path,
         sizeof(emitter_config.clip_path),

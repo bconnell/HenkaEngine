@@ -125,6 +125,7 @@ int main(void)
     object.audio.enabled = true;
     object.audio.looping = true;
     object.audio.spatial = true;
+    object.audio.streaming = true;
     (void)snprintf(object.audio.clip_path, sizeof(object.audio.clip_path), "%s", audio_path);
 
     memset(&asset_engine, 0, sizeof(asset_engine));

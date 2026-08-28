@@ -845,22 +845,55 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
             }
             if (session->audio_asset_manager != NULL)
             {
-                henka_audio_clip* clip = NULL;
-                audio_result = henka_assets_load_audio_clip(
-                    session->audio_asset_manager,
-                    object.audio.clip_path,
-                    &clip);
-                if (audio_result == HENKA_SUCCESS)
+                if (object.audio.streaming)
                 {
-                    audio_result = henka_audio_emitter_create_with_clip(
-                        session->audio_system,
-                        scene,
-                        entity,
-                        clip,
-                        &object.audio,
-                        &session->audio_emitters[
-                            session->snapshot_count - 1U]);
+                    henka_audio_stream* stream = NULL;
+                    audio_result = henka_assets_load_audio_stream(
+                        session->audio_asset_manager,
+                        object.audio.clip_path,
+                        &stream);
+                    if (audio_result == HENKA_SUCCESS)
+                    {
+                        audio_result = henka_audio_emitter_create_with_stream(
+                            session->audio_system,
+                            scene,
+                            entity,
+                            stream,
+                            &object.audio,
+                            &session->audio_emitters[
+                                session->snapshot_count - 1U]);
+                    }
                 }
+                else
+                {
+                    henka_audio_clip* clip = NULL;
+                    audio_result = henka_assets_load_audio_clip(
+                        session->audio_asset_manager,
+                        object.audio.clip_path,
+                        &clip);
+                    if (audio_result == HENKA_SUCCESS)
+                    {
+                        audio_result = henka_audio_emitter_create_with_clip(
+                            session->audio_system,
+                            scene,
+                            entity,
+                            clip,
+                            &object.audio,
+                            &session->audio_emitters[
+                                session->snapshot_count - 1U]);
+                    }
+                }
+            }
+            else if (object.audio.streaming)
+            {
+                audio_result = henka_audio_emitter_create_stream(
+                    session->audio_system,
+                    session->project_root,
+                    scene,
+                    entity,
+                    &object.audio,
+                    &session->audio_emitters[
+                        session->snapshot_count - 1U]);
             }
             else
             {

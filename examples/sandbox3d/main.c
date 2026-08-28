@@ -29846,7 +29846,7 @@ details_group_audio:
                     &row))
             {
                 const float gap = 6.0f;
-                const float button_width = (row.width - gap * 2.0f) / 3.0f;
+                const float button_width = (row.width - gap * 3.0f) / 4.0f;
                 if (henka_ui_button(
                         state->ui,
                         "game_authoring_audio_enabled",
@@ -29902,6 +29902,25 @@ details_group_audio:
                             state,
                             true,
                             "Audio spatial-mode change was rejected; authored Audio remains unchanged.");
+                    }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_audio_streaming",
+                        (henka_ui_rect){row.x + (button_width + gap) * 3.0f, row.y, button_width, row.height},
+                        authored_object.audio.streaming ? "Stream On" : "Resident") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    authored_object.audio.streaming = !authored_object.audio.streaming;
+                    if (!sandbox3d_commit_game_authoring_object(
+                            state,
+                            entity,
+                            &authored_object))
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Audio storage-mode change was rejected; authored Audio remains unchanged.");
                     }
                 }
             }

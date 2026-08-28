@@ -30,10 +30,11 @@ foundation in `engine/include/henka/audio.h`.
 - Destroyed or stale scene entities are rejected before they contribute audio.
   Scene and clip owners must stop dependent voices before destroying those
   borrowed objects.
-- Scene Document v4 stores a bounded, value-only emitter configuration on the
-  real authored object record and a value-only listener. v1 through v3
-  documents load with the listener at its default and older Audio fields
-  migrated in memory; loading a legacy document does not rewrite it.
+- Scene Document v5 stores a bounded, value-only emitter configuration on the
+  real authored object record and a value-only listener, including the
+  resident/streamed storage choice. v1 through v3 documents load with the
+  listener at its default, while v4 loads its authored listener and defaults
+  storage to resident; loading a legacy document does not rewrite it.
 
 The headless-safe mixer is the deterministic production-output boundary for
 the renderer-independent portion of this slice. A client-only, caller-pumped
@@ -46,7 +47,7 @@ background mixer thread; the caller owns scene and Audio synchronization.
 ## Current development
 
 The Sandbox Play session has a bounded runtime-emitter instantiation path when
-the caller supplies an Audio system: it reads the persisted v4 emitter
+the caller supplies an Audio system: it reads the persisted v5 emitter
 configuration and binds each emitter to the same real Scene entity used by
 Play. The normal graphical Sandbox now owns a client Audio system, maps its
 production camera to the listener, and caller-pumps the SDL3 output boundary.
@@ -65,8 +66,9 @@ Audio integrations preserve the renderer-free dedicated-server path. Integration
 coverage includes real imported or authored objects.
 
 The Sandbox Object Details panel provides an Audio group for authored scene
-objects. It edits the persisted clip path, enabled, looping, and spatial
-settings through the existing Game Authoring transaction. Preview and Stop
+objects. It edits the persisted clip path, enabled, looping, spatial, and
+resident/streamed storage settings through the existing Game Authoring
+transaction. Preview and Stop
 Preview use the reusable Audio runtime helper: the asset manager owns the
 resident clip, the scene owns the entity, and the Audio runtime owns the
 temporary emitter. Preview replacement is transactional and failed asset
@@ -79,8 +81,8 @@ missing or stale emitter bindings fail closed, while `IsPlaying` reports false.
 
 ## Future work
 
-Editor/persistence integration for streamed assets, broader decoder coverage,
-mixer effects, broader hot reload policy, expanded packaged-content coverage,
+Packaged long-form streamed-content coverage, broader decoder coverage, mixer
+effects, broader hot reload policy, and expanded packaged-content coverage,
 device-loss notification/hot-plug policy, and broader spatial/occlusion features
 remain future work. The current script bindings cover only the three typed emitter
 controls above; broader Audio scripting remains unfinished. None of those gaps

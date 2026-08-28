@@ -81,12 +81,15 @@ typedef struct henka_audio_voice_desc
 
 /* Value-only authored configuration for an object-attached emitter. It owns
  * no runtime clip, scene, entity, device, or mixer resources. The clip path is
- * project-relative and is resolved by the owning asset/runtime boundary. */
+ * project-relative and is resolved by the owning asset/runtime boundary.
+ * Streaming selects bounded file-backed playback when the owning runtime
+ * boundary supports it; false selects resident decoded playback. */
 typedef struct henka_audio_emitter_config
 {
     bool enabled;
     bool looping;
     bool spatial;
+    bool streaming;
     henka_audio_bus bus;
     float gain;
     float pitch;

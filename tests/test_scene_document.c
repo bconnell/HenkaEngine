@@ -585,9 +585,10 @@ int main(void)
         henka_scene_document_save_file(document, ".", second_path) != HENKA_SUCCESS ||
         !test_scene_document_write_v3_fixture(first_path, v3_path) ||
         !test_scene_document_files_equal(first_path, second_path) ||
+        !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)) ||
         henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=4 objects=257") == NULL)
+        inspection_size == 0U || strstr(inspection, "HSCN version=5 objects=257") == NULL)
     {
         fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
         goto cleanup;
@@ -651,6 +652,13 @@ int main(void)
         fprintf(stderr, "scene document test failed during v1 migration\n");
         goto cleanup;
     }
+    if (henka_scene_document_load_file(loaded, ".", second_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(loaded, first_id, &loaded_object) != HENKA_SUCCESS ||
+        loaded_object.audio.streaming)
+    {
+        fprintf(stderr, "scene document test failed during v4 migration\n");
+        goto cleanup;
+    }
     if (henka_scene_document_load_file(loaded, ".", v3_path) != HENKA_SUCCESS ||
         henka_scene_document_get_audio_listener(loaded, &loaded_listener) != HENKA_SUCCESS ||
         loaded_listener.position.x != 0.0f ||
@@ -705,6 +713,32 @@ int main(void)
         henka_scene_document_validate(exhausted) != HENKA_SUCCESS)
     {
         fprintf(stderr, "scene document test failed during ID exhaustion checks\n");
+        goto cleanup;
+    }
+    if (henka_scene_document_get_object_at(document, 0U, &object) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "scene document test failed preparing streamed audio object\n");
+        goto cleanup;
+    }
+    object.audio.streaming = true;
+    if (henka_scene_document_set_object(document, &object) != HENKA_SUCCESS ||
+        henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS ||
+        henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(loaded, object.id, &loaded_object) != HENKA_SUCCESS ||
+        !loaded_object.audio.streaming ||
+        henka_scene_document_format_inspection(
+            loaded, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
+        strstr(inspection, "HSCN version=5") == NULL)
+    {
+        fprintf(stderr, "scene document test failed during streamed audio v5 round-trip\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_patch_u32(first_path, 4L, UINT32_C(4)) ||
+        henka_scene_document_load_file(loaded, ".", first_path) == HENKA_SUCCESS ||
+        henka_scene_document_get_object(loaded, object.id, &loaded_object) != HENKA_SUCCESS ||
+        !loaded_object.audio.streaming)
+    {
+        fprintf(stderr, "scene document test failed rejecting streamed v4 interpretation\n");
         goto cleanup;
     }
     result = 0;
