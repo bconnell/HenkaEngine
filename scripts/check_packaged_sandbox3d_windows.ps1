@@ -972,6 +972,7 @@ foreach ($showcaseFile in @(
 )) {
     Assert-PathExists -Path (Join-Path $showcaseModelsDir $showcaseFile) -Description "Packaged showcase asset $showcaseFile"
 }
+Assert-PathExists -Path (Join-Path $assetsDir "audio\henka_audio_fixture.wav") -Description "Packaged Audio fixture"
 foreach ($authoringFile in @(
     "showcase_giraffe.hams",
     "showcase_rocket.hams"
@@ -1065,6 +1066,21 @@ if ($NonInteractive) {
     }
 
     Write-Output "[pass] Deterministic packaged startup smoke test completed."
+
+    Write-Step "Running packaged Audio fixture smoke"
+    $audioSmoke = Invoke-HenkaNativeCapture -FilePath $packagedExe -Arguments @("--audio-smoke-test") -WorkingDirectory $packageRoot -Label "Run packaged Audio fixture smoke"
+
+    if ($audioSmoke.Stdout -notmatch "Audio smoke: packaged WAV fixture loaded through the asset manager; real scene object emitter mixed and reached the SDL output boundary\.") {
+        throw "The packaged Audio smoke test did not prove the real fixture-to-SDL production path."
+    }
+    if ($audioSmoke.Stdout -notmatch "Sandbox smoke test completed\.") {
+        throw "The packaged Audio smoke test did not reach its deterministic exit."
+    }
+    if ($audioSmoke.Stderr -notmatch "leaving engine run loop") {
+        throw "The packaged Audio smoke test did not leave the engine run loop cleanly."
+    }
+
+    Write-Output "[pass] Packaged Audio fixture smoke completed."
 
     Write-Step "Running bounded packaged Terrain stream stress"
     $terrainStreamStress = Invoke-HenkaNativeCapture `

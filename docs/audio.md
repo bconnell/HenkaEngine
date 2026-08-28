@@ -47,8 +47,13 @@ emitters; the graphical camera remains the live listener source during normal
 interactive runtime.
 Play pause and resume now propagate to its live emitter voices without
 advancing their source positions. The next Audio slices must connect it to
-broader device-lifecycle policy and real packaged Audio fixtures. Those
-integrations must preserve the
+broader device-lifecycle policy. A packaged `--audio-smoke-test` now loads
+the repository-owned `assets/audio/henka_audio_fixture.wav` through the real
+asset manager, attaches it to a real scene entity, mixes it through the live
+emitter, and reaches the SDL output boundary. This is deterministic
+production-path coverage for one resident PCM WAV fixture, not broad packaged
+content coverage.
+Those integrations must preserve the
 renderer-free dedicated-server path and add real imported or authored-object
 coverage rather than test-only entities.
 
@@ -60,8 +65,8 @@ missing or stale emitter bindings fail closed, while `IsPlaying` reports false.
 ## Future work
 
 Streaming long-form assets, broader decoder coverage, mixer effects, broader hot
-reload policy, editor controls, package/runtime proof, device-loss
-notification/hot-plug policy, and broader spatial/occlusion features remain
-future work. The current script bindings cover only the three typed emitter
+reload policy, editor controls, expanded packaged-content coverage,
+device-loss notification/hot-plug policy, and broader spatial/occlusion features
+remain future work. The current script bindings cover only the three typed emitter
 controls above; broader Audio scripting remains unfinished. None of those gaps
 are hidden by the current Foundation status.

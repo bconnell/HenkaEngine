@@ -5,6 +5,7 @@
 
 #include <henka/audio.h>
 #include <henka/audio_output.h>
+#include <henka/assets.h>
 #include <henka/camera.h>
 #include <henka/scene.h>
 
@@ -32,5 +33,15 @@ henka_result sandbox3d_audio_runtime_pump(
 henka_result sandbox3d_audio_runtime_get_output_info(
     const sandbox3d_audio_runtime* runtime,
     henka_audio_output_info* out_info);
+
+/* Validates the packaged repository-owned WAV through the production asset
+ * manager, scene/entity, emitter, mixer, and SDL output boundaries. The
+ * manager-owned clip and temporary scene entity are cleaned up before return;
+ * callers retain ownership of the manager, scene, runtime, and camera. */
+henka_result sandbox3d_audio_runtime_validate_fixture(
+    sandbox3d_audio_runtime* runtime,
+    henka_scene* scene,
+    henka_asset_manager* assets,
+    const henka_camera* camera);
 
 #endif

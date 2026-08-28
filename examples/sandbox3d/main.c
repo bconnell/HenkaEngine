@@ -582,6 +582,8 @@ typedef struct sandbox3d_state
     sandbox3d_game_authoring* game_authoring;
     sandbox3d_audio_runtime* audio_runtime;
     bool audio_runtime_error_reported;
+    bool audio_smoke_test;
+    bool audio_smoke_ran;
     sandbox3d_script_editor_model* script_editor_model;
     sandbox3d_workspace_state workspace;
     sandbox3d_gizmo_state gizmo;
@@ -35007,6 +35009,29 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             state->audio_runtime_error_reported = false;
         }
     }
+    if (state != NULL && state->audio_smoke_test && !state->audio_smoke_ran)
+    {
+        const henka_result audio_smoke_result =
+            sandbox3d_audio_runtime_validate_fixture(
+                state->audio_runtime,
+                state->scene,
+                henka_engine_get_asset_manager(engine),
+                &state->camera);
+        if (audio_smoke_result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "Packaged Audio fixture smoke validation failed (%s).",
+                henka_result_to_string(audio_smoke_result));
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
+        }
+        else
+        {
+            printf(
+                "Audio smoke: packaged WAV fixture loaded through the asset manager; real scene object emitter mixed and reached the SDL output boundary.\n");
+            fflush(stdout);
+        }
+        state->audio_smoke_ran = true;
+    }
     if (state != NULL && state->terrain_world != NULL && state->terrain_storage != NULL &&
         !state->smoke_test && !state->capture_mode_requested &&
         !state->terrain_capture_mode_requested)
@@ -36555,6 +36580,7 @@ int main(int argc, char** argv)
     sandbox3d_state state;
     size_t index;
     bool smoke_test;
+    bool audio_smoke_test;
     bool primitive_gallery;
     bool residency_stress;
     bool temporal_stress;
@@ -36578,6 +36604,7 @@ int main(int argc, char** argv)
     char capture_output_directory[SANDBOX3D_CAPTURE_OUTPUT_PATH_BYTES];
 
     smoke_test = false;
+    audio_smoke_test = false;
     primitive_gallery = false;
     residency_stress = false;
     temporal_stress = false;
@@ -36599,7 +36626,12 @@ int main(int argc, char** argv)
     capture_exposure_stops = 0.0f;
     capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
     capture_output_directory[0] = '\0';
-    if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
+    if (argc == 2 && strcmp(argv[1], "--audio-smoke-test") == 0)
+    {
+        smoke_test = true;
+        audio_smoke_test = true;
+    }
+    else if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
     {
         smoke_test = true;
     }
@@ -36824,9 +36856,17 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
+
+#if defined(_WIN32)
+    if (audio_smoke_test && _putenv_s("SDL_AUDIODRIVER", "dummy") != 0)
+    {
+        fprintf(stderr, "Unable to select the deterministic SDL Audio smoke driver.\n");
+        return 1;
+    }
+#endif
 
     memset(&state, 0, sizeof(state));
     if (sandbox3d_authoring_asset_controller_create(
@@ -36876,6 +36916,7 @@ int main(int argc, char** argv)
         "%s",
         "0.0");
     state.smoke_test = smoke_test;
+    state.audio_smoke_test = audio_smoke_test;
     state.primitive_gallery = primitive_gallery;
     state.residency_stress = residency_stress;
     state.temporal_stress = temporal_stress;

@@ -371,7 +371,10 @@ authoritative section below.
   applies the authored listener to the Audio system before emitter creation,
   while the graphical Sandbox may update it from the live production camera.
   The first integration coverage uses a real scene entity created through the
-  public scene API and a WAV loaded through the confined file path.
+  public scene API and a WAV loaded through the confined file path. The
+  packaged `--audio-smoke-test` additionally proves the repository-owned
+  WAV fixture through the engine asset manager, live emitter, mixer, and SDL
+  output boundary; broader packaged content coverage remains in progress.
 - This is an engine foundation, not a complete game-audio workflow. Authored
   emitter configuration and authored listener now persist in v4 Scene
   Documents, and the Sandbox Play session can instantiate those emitters
@@ -385,10 +388,10 @@ authoritative section below.
   and HenkaScript in Play. They resolve the same persisted object-to-emitter
   mapping used by the runtime and fail closed for missing or stale action
   targets. Streamed long-form assets, broader decoder support, editor
-  integration, packaged runtime proof, and broader format support remain in
-  progress. The current runtime core and output boundary are single-owner for
-  voice commands
-  and mixing; device-thread synchronization remains outside this scope.
+  integration, broader packaged content coverage, and broader format support
+  remain in progress. The current runtime core and output boundary are
+  single-owner for voice commands and mixing; device-thread synchronization
+  remains outside this scope.
 
 ## Known Gaps
 
