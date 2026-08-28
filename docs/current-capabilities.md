@@ -321,7 +321,7 @@ authoritative section below.
   record validation, same-directory temporary files, flush/close-before-replace
   behavior, and failure retention of the prior in-memory state.
 - Authoring sources use the versioned HAMS format, and the Sandbox Game
-  Authoring V1 path uses a bounded, checksummed v2 `.hscene` Scene Document
+  Authoring V1 path uses a bounded, checksummed v3 `.hscene` Scene Document
   for registered objects and bounded Lua/HenkaScript behavior attachments.
   v1 documents load with behavior defaults for migration. A complete
   scene/project serializer and remote/network-backed save policy are not yet
@@ -367,11 +367,12 @@ authoritative section below.
   destroyed entities before they contribute, and exposes bounded diagnostics.
   The first integration coverage uses a real scene entity created through the
   public scene API and a WAV loaded through the confined file path.
-- This is an engine foundation, not a complete game-audio workflow. SDL/WASAPI
+- This is an engine foundation, not a complete game-audio workflow. Authored
+  emitter configuration now persists in v3 Scene Documents, while listener
+  authoring and runtime emitter instantiation remain in progress. SDL/WASAPI
   device output, streamed long-form assets, asset-manager metadata and reload,
-  authored Scene Document emitter/listener persistence, Play-session lifecycle,
-  scripting/editor integration, packaged runtime proof, and broader format
-  support remain in progress. The current runtime core is single-owner for
+  Play-session lifecycle, scripting/editor integration, packaged runtime proof,
+  and broader format support also remain in progress. The current runtime core is single-owner for
   voice commands and mixing; device-thread synchronization belongs at the
   future backend boundary.
 

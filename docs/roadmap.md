@@ -377,7 +377,8 @@ and V1 `.hscene` foundations.
 Longer-term work may include:
 
 1. Expanded physics features such as joints, controllers, and additional collider types.
-2. Audio.
+2. Audio device output, authored emitter runtime integration, and broader game
+   audio workflows beyond the current resident-WAV/mixer foundation.
 3. Additional scripting languages or extension support beyond the bounded V1
    Lua and HenkaScript foundations.
 4. Additional renderer backends.

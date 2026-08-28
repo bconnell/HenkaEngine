@@ -25,13 +25,19 @@
 #define HENKA_SCENE_DOCUMENT_FLAG_INTERACTION_ENABLED UINT32_C(8)
 #define HENKA_SCENE_DOCUMENT_FLAG_PHYSICS_ENABLED UINT32_C(16)
 #define HENKA_SCENE_DOCUMENT_FLAG_TRIGGER UINT32_C(32)
+#define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED UINT32_C(64)
+#define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING UINT32_C(128)
+#define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL UINT32_C(256)
 #define HENKA_SCENE_DOCUMENT_KNOWN_FLAGS ( \
     HENKA_SCENE_DOCUMENT_FLAG_VISIBLE | \
     HENKA_SCENE_DOCUMENT_FLAG_RENDERER_ENABLED | \
     HENKA_SCENE_DOCUMENT_FLAG_MATERIAL_OVERRIDE | \
     HENKA_SCENE_DOCUMENT_FLAG_INTERACTION_ENABLED | \
     HENKA_SCENE_DOCUMENT_FLAG_PHYSICS_ENABLED | \
-    HENKA_SCENE_DOCUMENT_FLAG_TRIGGER)
+    HENKA_SCENE_DOCUMENT_FLAG_TRIGGER | \
+    HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED | \
+    HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING | \
+    HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL)
 #define HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED UINT32_C(1)
 #define HENKA_SCENE_DOCUMENT_BEHAVIOR_KNOWN_FLAGS \
     HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED
@@ -273,6 +279,14 @@ static henka_result henka_scene_document_validate_object(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    if (henka_audio_emitter_config_validate(&object->audio) != HENKA_SUCCESS ||
+        henka_scene_document_validate_path(
+            object->audio.clip_path,
+            !object->audio.enabled) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
     interaction = &object->interaction;
     if (!isfinite(interaction->max_distance) || interaction->max_distance < 0.0f ||
         !henka_scene_document_string_is_valid(
@@ -445,6 +459,7 @@ henka_scene_document_object henka_scene_document_object_default(void)
     object.physics.material = (henka_physics_material){0.0f, 0.5f, 0.5f, 0.0f, 0.0f};
     object.physics.layer = 1U;
     object.physics.mask = HENKA_PHYSICS_ALL_LAYERS;
+    object.audio = henka_audio_emitter_config_default();
     return object;
 }
 
@@ -1051,12 +1066,15 @@ static bool henka_scene_document_payload_size(
         const size_t source_path_length = strlen(object->source.path);
         const size_t material_path_length = strlen(object->renderer.material_path);
         const size_t prompt_length = strlen(object->interaction.prompt);
+        const size_t audio_path_length = strlen(object->audio.clip_path);
         if (name_length > UINT16_MAX || source_path_length > UINT16_MAX ||
             material_path_length > UINT16_MAX || prompt_length > UINT16_MAX ||
+            audio_path_length > UINT16_MAX ||
             !henka_scene_document_size_add(&size, 8U + 4U + 2U + name_length + 40U +
                 4U + 4U + 12U + 2U + source_path_length + 4U +
                 2U + material_path_length + 40U + 4U + 2U + prompt_length +
-                4U + 4U + 12U + 4U + 12U + 4U + 20U + 4U + 4U + 4U))
+                4U + 4U + 12U + 4U + 12U + 4U + 20U + 4U + 4U +
+                2U + audio_path_length + 4U + 16U + 4U))
         {
             return false;
         }
@@ -1143,6 +1161,9 @@ static void henka_scene_document_encode_object(
     if (object->interaction.enabled) flags |= HENKA_SCENE_DOCUMENT_FLAG_INTERACTION_ENABLED;
     if (object->physics.enabled) flags |= HENKA_SCENE_DOCUMENT_FLAG_PHYSICS_ENABLED;
     if (object->physics.is_trigger) flags |= HENKA_SCENE_DOCUMENT_FLAG_TRIGGER;
+    if (object->audio.enabled) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED;
+    if (object->audio.looping) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING;
+    if (object->audio.spatial) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL;
 
     henka_scene_document_writer_u64(writer, object->id);
     henka_scene_document_writer_u32(writer, flags);
@@ -1194,6 +1215,12 @@ static void henka_scene_document_encode_object(
     henka_scene_document_writer_float(writer, object->physics.material.angular_damping);
     henka_scene_document_writer_u32(writer, object->physics.layer);
     henka_scene_document_writer_u32(writer, object->physics.mask);
+    henka_scene_document_writer_string(writer, object->audio.clip_path);
+    henka_scene_document_writer_u32(writer, (uint32_t)object->audio.bus);
+    henka_scene_document_writer_float(writer, object->audio.gain);
+    henka_scene_document_writer_float(writer, object->audio.pitch);
+    henka_scene_document_writer_float(writer, object->audio.min_distance);
+    henka_scene_document_writer_float(writer, object->audio.max_distance);
     henka_scene_document_writer_u32(writer, (uint32_t)object->behavior_count);
     for (size_t behavior_index = 0U;
          behavior_index < object->behavior_count;
@@ -1293,6 +1320,10 @@ static bool henka_scene_document_decode_object(
     if (!henka_scene_document_reader_u64(reader, &object->id) ||
         !henka_scene_document_reader_u32(reader, &flags) ||
         (flags & ~HENKA_SCENE_DOCUMENT_KNOWN_FLAGS) != 0U ||
+        (format_version < HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+            (flags & (HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED |
+                HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING |
+                HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL)) != 0U) ||
         !henka_scene_document_reader_string(reader, object->name, sizeof(object->name)) ||
         !henka_scene_document_reader_float(reader, &object->transform.position.x) ||
         !henka_scene_document_reader_float(reader, &object->transform.position.y) ||
@@ -1350,6 +1381,33 @@ static bool henka_scene_document_decode_object(
         !henka_scene_document_reader_u32(reader, &object->physics.layer) ||
         !henka_scene_document_reader_u32(reader, &object->physics.mask)) return false;
     if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    {
+        uint32_t audio_bus;
+        if (!henka_scene_document_reader_string(
+                reader,
+                object->audio.clip_path,
+                sizeof(object->audio.clip_path)) ||
+            !henka_scene_document_reader_u32(reader, &audio_bus) ||
+            !henka_scene_document_reader_float(reader, &object->audio.gain) ||
+            !henka_scene_document_reader_float(reader, &object->audio.pitch) ||
+            !henka_scene_document_reader_float(
+                reader,
+                &object->audio.min_distance) ||
+            !henka_scene_document_reader_float(
+                reader,
+                &object->audio.max_distance))
+        {
+            return false;
+        }
+        object->audio.bus = (henka_audio_bus)audio_bus;
+        object->audio.enabled =
+            (flags & HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED) != 0U;
+        object->audio.looping =
+            (flags & HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING) != 0U;
+        object->audio.spatial =
+            (flags & HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL) != 0U;
+    }
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V2)
     {
         uint32_t behavior_count;
         if (!henka_scene_document_reader_u32(reader, &behavior_count) ||
@@ -1616,6 +1674,7 @@ henka_result henka_scene_document_load_file(
     if (data[0] != HENKA_SCENE_DOCUMENT_MAGIC_0 || data[1] != HENKA_SCENE_DOCUMENT_MAGIC_1 ||
         data[2] != HENKA_SCENE_DOCUMENT_MAGIC_2 || data[3] != HENKA_SCENE_DOCUMENT_MAGIC_3 ||
         (format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V2 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)

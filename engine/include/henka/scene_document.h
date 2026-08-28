@@ -6,11 +6,13 @@
 #include <stdint.h>
 
 #include <henka/math.h>
+#include <henka/audio.h>
 #include <henka/physics.h>
 #include <henka/result.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(2)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(3)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V2 UINT32_C(2)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION UINT32_C(1)
 #define HENKA_SCENE_DOCUMENT_MAX_OBJECTS 1024U
 #define HENKA_SCENE_DOCUMENT_MAX_BEHAVIORS_PER_OBJECT 8U
@@ -115,6 +117,7 @@ typedef struct henka_scene_document_object
     henka_scene_document_renderer renderer;
     henka_scene_document_interaction interaction;
     henka_scene_document_physics physics;
+    henka_audio_emitter_config audio;
     size_t behavior_count;
     henka_scene_document_behavior behaviors[HENKA_SCENE_DOCUMENT_MAX_BEHAVIORS_PER_OBJECT];
 } henka_scene_document_object;

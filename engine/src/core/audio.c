@@ -48,6 +48,16 @@ struct henka_audio_system
     bool output_clipped;
 };
 
+struct henka_audio_emitter
+{
+    henka_audio_system* system;
+    henka_scene* scene;
+    henka_entity entity;
+    henka_audio_clip* clip;
+    henka_audio_emitter_config config;
+    henka_audio_voice_id voice;
+};
+
 static bool henka_audio_bus_is_valid(henka_audio_bus bus)
 {
     return bus >= HENKA_AUDIO_BUS_MASTER && bus < HENKA_AUDIO_BUS_COUNT;
@@ -56,6 +66,25 @@ static bool henka_audio_bus_is_valid(henka_audio_bus bus)
 static bool henka_audio_float_is_valid(float value)
 {
     return isfinite(value) != 0;
+}
+
+static bool henka_audio_string_is_valid(
+    const char* value,
+    size_t capacity)
+{
+    size_t index;
+    if (value == NULL || capacity == 0U)
+    {
+        return false;
+    }
+    for (index = 0U; index < capacity; ++index)
+    {
+        if (value[index] == '\0')
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 static bool henka_audio_vec3_is_finite(henka_vec3 value)
@@ -418,6 +447,44 @@ henka_audio_listener henka_audio_listener_default(void)
         (henka_vec3){0.0f, 1.0f, 0.0f}};
 }
 
+henka_audio_emitter_config henka_audio_emitter_config_default(void)
+{
+    henka_audio_emitter_config config;
+    memset(&config, 0, sizeof(config));
+    config.bus = HENKA_AUDIO_BUS_SFX;
+    config.gain = 1.0f;
+    config.pitch = 1.0f;
+    config.min_distance = 1.0f;
+    config.max_distance = 32.0f;
+    config.spatial = true;
+    return config;
+}
+
+henka_result henka_audio_emitter_config_validate(
+    const henka_audio_emitter_config* config)
+{
+    if (config == NULL ||
+        !henka_audio_string_is_valid(
+            config->clip_path,
+            HENKA_AUDIO_MAX_CLIP_PATH_BYTES) ||
+        config->bus <= HENKA_AUDIO_BUS_MASTER ||
+        !henka_audio_bus_is_valid(config->bus) ||
+        !henka_audio_float_is_valid(config->gain) ||
+        config->gain < 0.0f || config->gain > HENKA_AUDIO_MAX_GAIN ||
+        !henka_audio_float_is_valid(config->pitch) ||
+        config->pitch < HENKA_AUDIO_MIN_PITCH ||
+        config->pitch > HENKA_AUDIO_MAX_PITCH ||
+        !henka_audio_float_is_valid(config->min_distance) ||
+        config->min_distance < 0.0f ||
+        !henka_audio_float_is_valid(config->max_distance) ||
+        config->max_distance <= config->min_distance ||
+        (config->enabled && config->clip_path[0] == '\0'))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_audio_system_create(
     const henka_audio_system_config* config,
     henka_audio_system** out_system)
@@ -699,6 +766,119 @@ size_t henka_audio_system_get_active_voice_count(
     const henka_audio_system* system)
 {
     return system == NULL ? 0U : system->active_voice_count;
+}
+
+henka_result henka_audio_emitter_create(
+    henka_audio_system* system,
+    const char* project_root,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_audio_emitter_config* config,
+    henka_audio_emitter** out_emitter)
+{
+    henka_audio_emitter* emitter;
+    henka_audio_voice_desc voice_desc;
+    henka_result result;
+
+    if (out_emitter == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_emitter = NULL;
+    if (system == NULL || project_root == NULL || scene == NULL ||
+        !henka_scene_is_entity_valid(scene, entity) || config == NULL ||
+        !config->enabled ||
+        henka_audio_emitter_config_validate(config) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    emitter = (henka_audio_emitter*)henka_calloc(1U, sizeof(*emitter));
+    if (emitter == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    result = henka_audio_clip_load_file(
+        project_root,
+        config->clip_path,
+        &emitter->clip);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(emitter);
+        return result;
+    }
+    emitter->system = system;
+    emitter->scene = scene;
+    emitter->entity = entity;
+    emitter->config = *config;
+    voice_desc = (henka_audio_voice_desc){
+        config->bus,
+        config->gain,
+        config->pitch,
+        config->min_distance,
+        config->max_distance,
+        config->looping,
+        config->spatial};
+    result = henka_audio_voice_play(
+        system,
+        scene,
+        entity,
+        emitter->clip,
+        &voice_desc,
+        &emitter->voice);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_audio_clip_destroy(emitter->clip);
+        henka_free(emitter);
+        return result;
+    }
+    *out_emitter = emitter;
+    return HENKA_SUCCESS;
+}
+
+void henka_audio_emitter_destroy(henka_audio_emitter* emitter)
+{
+    if (emitter == NULL)
+    {
+        return;
+    }
+    if (emitter->system != NULL &&
+        emitter->voice != HENKA_INVALID_AUDIO_VOICE_ID)
+    {
+        (void)henka_audio_voice_stop(emitter->system, emitter->voice);
+    }
+    henka_audio_clip_destroy(emitter->clip);
+    henka_free(emitter);
+}
+
+bool henka_audio_emitter_is_valid(const henka_audio_emitter* emitter)
+{
+    return emitter != NULL && emitter->system != NULL && emitter->scene != NULL &&
+        henka_scene_is_entity_valid(emitter->scene, emitter->entity) &&
+        henka_audio_voice_is_valid(emitter->system, emitter->voice);
+}
+
+henka_result henka_audio_emitter_get_config(
+    const henka_audio_emitter* emitter,
+    henka_audio_emitter_config* out_config)
+{
+    if (emitter == NULL || out_config == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_config = emitter->config;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_emitter_get_voice_info(
+    const henka_audio_emitter* emitter,
+    henka_audio_voice_info* out_info)
+{
+    if (!henka_audio_emitter_is_valid(emitter) || out_info == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_audio_voice_get_info(emitter->system, emitter->voice, out_info);
 }
 
 static float henka_audio_clamp(float value, float minimum, float maximum)

@@ -11,6 +11,7 @@
 
 typedef struct henka_audio_system henka_audio_system;
 typedef struct henka_audio_clip henka_audio_clip;
+typedef struct henka_audio_emitter henka_audio_emitter;
 typedef uint64_t henka_audio_voice_id;
 
 #define HENKA_INVALID_AUDIO_VOICE_ID ((henka_audio_voice_id)0)
@@ -18,6 +19,7 @@ typedef uint64_t henka_audio_voice_id;
 #define HENKA_AUDIO_OUTPUT_CHANNELS 2U
 #define HENKA_AUDIO_DEFAULT_SAMPLE_RATE 48000U
 #define HENKA_AUDIO_MAX_CLIP_BYTES (64U * 1024U * 1024U)
+#define HENKA_AUDIO_MAX_CLIP_PATH_BYTES 512U
 
 typedef enum henka_audio_bus
 {
@@ -65,6 +67,22 @@ typedef struct henka_audio_voice_desc
     bool spatial;
 } henka_audio_voice_desc;
 
+/* Value-only authored configuration for an object-attached emitter. It owns
+ * no runtime clip, scene, entity, device, or mixer resources. The clip path is
+ * project-relative and is resolved by the owning asset/runtime boundary. */
+typedef struct henka_audio_emitter_config
+{
+    bool enabled;
+    bool looping;
+    bool spatial;
+    henka_audio_bus bus;
+    float gain;
+    float pitch;
+    float min_distance;
+    float max_distance;
+    char clip_path[HENKA_AUDIO_MAX_CLIP_PATH_BYTES];
+} henka_audio_emitter_config;
+
 typedef struct henka_audio_voice_info
 {
     henka_audio_voice_id id;
@@ -89,6 +107,9 @@ typedef struct henka_audio_diagnostics
 
 henka_audio_voice_desc henka_audio_voice_desc_default(void);
 henka_audio_listener henka_audio_listener_default(void);
+henka_audio_emitter_config henka_audio_emitter_config_default(void);
+henka_result henka_audio_emitter_config_validate(
+    const henka_audio_emitter_config* config);
 henka_result henka_audio_system_create(
     const henka_audio_system_config* config,
     henka_audio_system** out_system);
@@ -148,6 +169,27 @@ henka_result henka_audio_voice_get_info(
     henka_audio_voice_info* out_info);
 size_t henka_audio_system_get_active_voice_count(
     const henka_audio_system* system);
+
+/* Creates a real object-attached emitter through the production scene/entity
+ * path. The emitter owns its resident clip and stops that voice on destroy;
+ * system and scene are borrowed and must outlive the emitter. The entity may
+ * be destroyed first; the mixer then rejects the stale binding and the
+ * emitter becomes invalid without producing orphaned audio. */
+henka_result henka_audio_emitter_create(
+    henka_audio_system* system,
+    const char* project_root,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_audio_emitter_config* config,
+    henka_audio_emitter** out_emitter);
+void henka_audio_emitter_destroy(henka_audio_emitter* emitter);
+bool henka_audio_emitter_is_valid(const henka_audio_emitter* emitter);
+henka_result henka_audio_emitter_get_config(
+    const henka_audio_emitter* emitter,
+    henka_audio_emitter_config* out_config);
+henka_result henka_audio_emitter_get_voice_info(
+    const henka_audio_emitter* emitter,
+    henka_audio_voice_info* out_info);
 
 /* Mixes bounded stereo float PCM. output_interleaved must contain at least
  * frame_count * HENKA_AUDIO_OUTPUT_CHANNELS floats. The buffer is cleared
