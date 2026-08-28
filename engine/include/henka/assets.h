@@ -438,7 +438,8 @@ henka_result henka_assets_retry_failed_texture(
     henka_texture** out_texture);
 
 /*
- * Retries only a cached fallback entry from a previous failed OBJ load.
+ * Retries only a cached source-failure fallback entry from a previous failed
+ * OBJ load. Allocation and renderer failures are not cached as fallbacks.
  * The fallback entry remains intact when the replacement load fails.
  */
 henka_result henka_assets_retry_failed_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);

@@ -1033,6 +1033,20 @@ static void henka_assets_destroy_gltf_scene_payload(henka_gltf_scene_asset* asse
 
 /* Failed asset retries replace entries only after a successful new load. */
 
+static bool henka_asset_mesh_load_failure_uses_fallback(henka_result result)
+{
+    switch (result)
+    {
+        case HENKA_ERROR_PLATFORM:
+        case HENKA_ERROR_UNKNOWN:
+        case HENKA_ERROR_ASSET_SOURCE:
+        case HENKA_ERROR_LIMIT:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static henka_result henka_asset_manager_create_fallback_textures(
     henka_asset_manager* manager)
 {
@@ -2817,6 +2831,12 @@ henka_result henka_assets_load_obj_mesh(
     henka_free(resolved_path);
     if (result != HENKA_SUCCESS)
     {
+        if (!henka_asset_mesh_load_failure_uses_fallback(result))
+        {
+            henka_free(key);
+            henka_free(source_path);
+            return result;
+        }
         HENKA_LOG_ERROR(
             "Using the fallback mesh because '%s' could not be loaded",
             source_path);
@@ -2920,6 +2940,12 @@ henka_result henka_assets_load_gltf_mesh(
     henka_free(resolved_path);
     if (result != HENKA_SUCCESS)
     {
+        if (!henka_asset_mesh_load_failure_uses_fallback(result))
+        {
+            henka_free(key);
+            henka_free(source_path);
+            return result;
+        }
         HENKA_LOG_ERROR("Using the fallback mesh because glTF '%s' could not be loaded", source_path);
         mesh = manager->fallback_mesh;
     }

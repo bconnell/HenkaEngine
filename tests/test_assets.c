@@ -14,9 +14,66 @@
 #include <stdlib.h>
 #endif
 
+static void henka_test_mesh_renderer_failure_is_not_cached_as_fallback(void)
+{
+    henka_asset_manager manager;
+    henka_asset_mesh_entry entries[1];
+    henka_engine engine;
+    henka_mesh fallback_mesh;
+    henka_mesh* mesh;
+    henka_result result;
+    bool contract_ok;
+
+    memset(&manager, 0, sizeof(manager));
+    memset(entries, 0, sizeof(entries));
+    memset(&engine, 0, sizeof(engine));
+    memset(&fallback_mesh, 0, sizeof(fallback_mesh));
+    engine.asset_base_path = "";
+    engine.renderer = NULL;
+    manager.engine = &engine;
+    manager.fallback_mesh = &fallback_mesh;
+    manager.mesh_entries = entries;
+    manager.mesh_capacity = 1U;
+    mesh = (henka_mesh*)1;
+
+    result = henka_assets_load_obj_mesh(
+        &manager,
+        "assets/models/henka_marker.obj",
+        &mesh);
+    contract_ok = result == HENKA_ERROR_INVALID_ARGUMENT &&
+        mesh == NULL && manager.mesh_count == 0U;
+    if (manager.mesh_count > 0U)
+    {
+        henka_free(entries[0].display_name);
+        henka_free(entries[0].source_path);
+        henka_free(entries[0].key);
+        memset(entries, 0, sizeof(entries));
+        manager.mesh_count = 0U;
+    }
+    HENKA_TEST_ASSERT(contract_ok);
+
+    mesh = (henka_mesh*)1;
+    result = henka_assets_load_gltf_mesh(
+        &manager,
+        "assets/models/henka_marker.gltf",
+        &mesh);
+    contract_ok = result == HENKA_ERROR_INVALID_ARGUMENT &&
+        mesh == NULL && manager.mesh_count == 0U;
+    if (manager.mesh_count > 0U)
+    {
+        henka_free(entries[0].display_name);
+        henka_free(entries[0].source_path);
+        henka_free(entries[0].key);
+        memset(entries, 0, sizeof(entries));
+        manager.mesh_count = 0U;
+    }
+    HENKA_TEST_ASSERT(contract_ok);
+}
+
 
 void henka_test_assets(void)
 {
+    henka_test_mesh_renderer_failure_is_not_cached_as_fallback();
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
     HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.Ktx2"));
     HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.kTX2"));

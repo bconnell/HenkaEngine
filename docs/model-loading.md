@@ -161,7 +161,7 @@ transform, as required by glTF, and conflicting representations are rejected.
 
 ## Failure behavior
 
-When an OBJ or glTF file is missing, malformed, truncated, oversized, or outside the supported format:
+When an OBJ or glTF file is missing, malformed, truncated, oversized, or outside the supported format, the source failure is handled through the bounded fallback path:
 
 - the engine logs the failure
 - no partial model is returned
@@ -171,6 +171,10 @@ When an OBJ or glTF file is missing, malformed, truncated, oversized, or outside
 - `henka_assets_load_gltf_mesh` uses the same canonical identity, fallback,
   ownership, and transactional retry contract as OBJ mesh assets
 - a successfully loaded mesh is not destroyed by the retry path
+
+Allocation, renderer, and other runtime failures are returned to the caller;
+they do not get converted into a source fallback or cached as a successful
+load.
 
 Malformed faces, empty meshes, invalid indices, non-finite values, degenerate triangles, and unsafe allocation requests are rejected before renderer upload.
 
