@@ -2291,6 +2291,7 @@ try {
         $componentViewportWidth = [double]$componentViewportMatch.Groups[3].Value
         $componentViewportHeight = [double]$componentViewportMatch.Groups[4].Value
         $nativeComponentPicked = $false
+        $nativeMoveLogOffset = $null
         # The selected showcase is the left-hand Giraffe in the deterministic
         # Standard layout.  Probe its visible silhouette first; the prior
         # center-biased probes landed in the Rocket's empty side gap and could
@@ -2311,13 +2312,20 @@ try {
                     -Pattern "Native authoring component picked:" `
                     -StartingOffset $componentPickLogOffset `
                     -TimeoutMilliseconds 1200
+                if ($nativeComponentPicked) {
+                    # The native authoring update reports the component pick
+                    # and the mode-specific move control in one UI dispatch.
+                    # Keep the click offset so the second event cannot be
+                    # missed when it is already in the log by the time the
+                    # first wait returns.
+                    $nativeMoveLogOffset = $componentPickLogOffset
+                }
             }
             if ($nativeComponentPicked) { break }
         }
         if (-not $nativeComponentPicked) {
             throw "The selected showcase did not expose a pickable component for the user-facing edit check."
         }
-        $nativeMoveLogOffset = Get-FileLengthSafe -Path $stdoutPath
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring move control:" `
