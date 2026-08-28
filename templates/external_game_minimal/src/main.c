@@ -31,6 +31,8 @@ typedef struct external_audio_state
     henka_scene* scene;
     henka_audio_system* audio_system;
     henka_audio_emitter* emitter;
+    henka_audio_stream* stream;
+    henka_audio_emitter* stream_emitter;
     henka_scene_document* document;
     henka_scene_document* reloaded_document;
     henka_entity entity;
@@ -111,11 +113,15 @@ static void external_audio_destroy(external_audio_state* state)
         return;
     }
     henka_audio_emitter_destroy(state->emitter);
+    henka_audio_emitter_destroy(state->stream_emitter);
+    henka_audio_stream_destroy(state->stream);
     henka_audio_system_destroy(state->audio_system);
     henka_scene_destroy(state->scene);
     henka_scene_document_destroy(state->reloaded_document);
     henka_scene_document_destroy(state->document);
     state->emitter = NULL;
+    state->stream_emitter = NULL;
+    state->stream = NULL;
     state->audio_system = NULL;
     state->scene = NULL;
     state->reloaded_document = NULL;
@@ -136,6 +142,7 @@ static henka_result external_audio_initialize(
     henka_audio_clip* clip = NULL;
     henka_asset_metadata metadata = {0};
     henka_audio_emitter_config emitter_config;
+    henka_audio_emitter_config stream_config;
     henka_audio_listener listener;
     float first_samples[HENKA_AUDIO_OUTPUT_CHANNELS];
     float second_samples[HENKA_AUDIO_OUTPUT_CHANNELS];
@@ -249,6 +256,22 @@ static henka_result external_audio_initialize(
             &emitter_config,
             &state->emitter);
     }
+    stream_config = emitter_config;
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_audio_stream_load_file(
+            ".", stream_config.clip_path, &state->stream);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_audio_emitter_create_with_stream(
+            state->audio_system,
+            state->scene,
+            state->entity,
+            state->stream,
+            &stream_config,
+            &state->stream_emitter);
+    }
     if (result == HENKA_SUCCESS)
     {
         result = henka_audio_system_mix(
@@ -307,7 +330,7 @@ static henka_result external_audio_initialize(
         goto cleanup;
     }
     state->success = true;
-    printf("External public Audio asset, real scene object, persistence, spatial movement, listener movement, and stale cleanup workflow passed.\n");
+    printf("External public Audio asset, stream asset, real scene object, persistence, spatial movement, listener movement, and stale cleanup workflow passed.\n");
 
 cleanup:
     external_audio_destroy(state);

@@ -375,7 +375,11 @@ authoritative section below.
   packaged `--audio-smoke-test` additionally proves the repository-owned
   WAV fixture through the engine asset manager, live emitter, mixer, and SDL
   output boundary; broader packaged content coverage remains in progress.
-- This is an engine foundation, not a complete game-audio workflow. Authored
+- This is an engine foundation, not a complete game-audio workflow. The public
+  runtime also has a bounded, metadata-first PCM-WAV streaming API with
+  caller-owned frame reads and stream-backed voices/emitters; manager, editor,
+  persistence, and packaged long-form workflow integration remain unfinished.
+  Authored
   emitter configuration and authored listener now persist in v4 Scene
   Documents, and the Sandbox Play session can instantiate those emitters
   through the normal Game Authoring coordinator. The graphical Sandbox owns a
@@ -387,9 +391,9 @@ authoritative section below.
   `Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` bindings to both Lua
   and HenkaScript in Play. They resolve the same persisted object-to-emitter
   mapping used by the runtime and fail closed for missing or stale action
-  targets. Streamed long-form assets, broader decoder support, editor
-  integration, broader packaged content coverage, and broader format support
-  remain in progress. The current runtime core and output boundary are
+  targets. Streamed long-form manager/editor/persistence integration, broader
+  decoder support, packaged content coverage, and broader format support remain
+  in progress. The current runtime core and output boundary are
   single-owner for voice commands and mixing; device-thread synchronization
   remains outside this scope.
 

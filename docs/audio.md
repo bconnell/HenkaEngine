@@ -7,6 +7,12 @@ foundation in `engine/include/henka/audio.h`.
 
 - Resident PCM WAV clips are loaded through the same confined project-relative
   path boundary used by other file-backed runtime data.
+- A bounded PCM WAV stream API is available for long-form content. It validates
+  the file metadata without decoding the full payload, keeps a file-backed
+  handle, reads caller-owned float frames in bounded chunks, and can drive
+  generation-checked voices or object-attached emitters without loading the
+  entire source into resident sample memory. Stream reads are single-owner and
+  caller-synchronized, matching the current deterministic mixer contract.
 - The asset manager caches resident WAV clips by canonical path and can reload
   an existing clip transactionally in place. Borrowed clip identity remains
   stable for attached emitters; malformed or unreadable replacements leave the
@@ -71,8 +77,8 @@ missing or stale emitter bindings fail closed, while `IsPlaying` reports false.
 
 ## Future work
 
-Streaming long-form assets, broader decoder coverage, mixer effects, broader hot
-reload policy, expanded packaged-content coverage,
+Manager/editor/persistence integration for streamed assets, broader decoder
+coverage, mixer effects, broader hot reload policy, expanded packaged-content coverage,
 device-loss notification/hot-plug policy, and broader spatial/occlusion features
 remain future work. The current script bindings cover only the three typed emitter
 controls above; broader Audio scripting remains unfinished. None of those gaps

@@ -11,6 +11,7 @@
 
 typedef struct henka_audio_system henka_audio_system;
 typedef struct henka_audio_clip henka_audio_clip;
+typedef struct henka_audio_stream henka_audio_stream;
 typedef struct henka_audio_emitter henka_audio_emitter;
 typedef uint64_t henka_audio_voice_id;
 
@@ -19,6 +20,7 @@ typedef uint64_t henka_audio_voice_id;
 #define HENKA_AUDIO_OUTPUT_CHANNELS 2U
 #define HENKA_AUDIO_DEFAULT_SAMPLE_RATE 48000U
 #define HENKA_AUDIO_MAX_CLIP_BYTES (64U * 1024U * 1024U)
+#define HENKA_AUDIO_MAX_STREAM_BYTES (512U * 1024U * 1024U)
 #define HENKA_AUDIO_MAX_CLIP_PATH_BYTES 512U
 
 typedef enum henka_audio_bus
@@ -48,6 +50,16 @@ typedef struct henka_audio_clip_info
     size_t frame_count;
     bool resident;
 } henka_audio_clip_info;
+
+typedef struct henka_audio_stream_info
+{
+    const char* source_path;
+    uint32_t sample_rate;
+    uint16_t channels;
+    uint16_t bits_per_sample;
+    size_t frame_count;
+    bool resident;
+} henka_audio_stream_info;
 
 typedef struct henka_audio_listener
 {
@@ -90,6 +102,7 @@ typedef struct henka_audio_voice_info
     henka_scene* scene;
     henka_entity entity;
     const henka_audio_clip* clip;
+    const henka_audio_stream* stream;
     size_t source_frame;
     float gain;
     float pitch;
@@ -155,6 +168,30 @@ henka_result henka_audio_clip_get_info(
     const henka_audio_clip* clip,
     henka_audio_clip_info* out_info);
 
+/* Opens a PCM WAV stream beneath project_root without decoding the complete
+ * payload. The stream owns one file handle and a bounded read buffer; callers
+ * must serialize reads and keep the stream alive for every voice that borrows
+ * it. Only the validated WAV metadata and file handle remain resident. */
+henka_result henka_audio_stream_load_file(
+    const char* project_root,
+    const char* relative_path,
+    henka_audio_stream** out_stream);
+void henka_audio_stream_destroy(henka_audio_stream* stream);
+henka_result henka_audio_stream_get_info(
+    const henka_audio_stream* stream,
+    henka_audio_stream_info* out_info);
+/* Reads up to frame_capacity frames beginning at source_frame into the
+ * caller-owned interleaved float buffer. Reaching the exact frame count is a
+ * successful zero-frame read; an out-of-range start or undersized destination
+ * is rejected. The operation performs no allocation. */
+henka_result henka_audio_stream_read_frames(
+    henka_audio_stream* stream,
+    size_t source_frame,
+    size_t frame_capacity,
+    float* out_samples,
+    size_t out_frame_capacity,
+    size_t* out_frames);
+
 /* The scene, entity, and clip are borrowed production objects. They must
  * outlive every voice that references them; callers must stop voices before
  * destroying their scene or clip. Voice commands and mixing are currently
@@ -166,6 +203,13 @@ henka_result henka_audio_voice_play(
     henka_scene* scene,
     henka_entity entity,
     const henka_audio_clip* clip,
+    const henka_audio_voice_desc* desc,
+    henka_audio_voice_id* out_voice);
+henka_result henka_audio_voice_play_stream(
+    henka_audio_system* system,
+    henka_scene* scene,
+    henka_entity entity,
+    henka_audio_stream* stream,
     const henka_audio_voice_desc* desc,
     henka_audio_voice_id* out_voice);
 henka_result henka_audio_voice_stop(
@@ -231,6 +275,20 @@ henka_result henka_audio_emitter_create_with_clip(
     henka_scene* scene,
     henka_entity entity,
     const henka_audio_clip* clip,
+    const henka_audio_emitter_config* config,
+    henka_audio_emitter** out_emitter);
+henka_result henka_audio_emitter_create_stream(
+    henka_audio_system* system,
+    const char* project_root,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_audio_emitter_config* config,
+    henka_audio_emitter** out_emitter);
+henka_result henka_audio_emitter_create_with_stream(
+    henka_audio_system* system,
+    henka_scene* scene,
+    henka_entity entity,
+    henka_audio_stream* stream,
     const henka_audio_emitter_config* config,
     henka_audio_emitter** out_emitter);
 void henka_audio_emitter_destroy(henka_audio_emitter* emitter);

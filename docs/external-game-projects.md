@@ -55,8 +55,11 @@ editor; authored scene/project persistence beyond the mesh source remains
 unfinished. The template also consumes package-owned `.hks` and `.lua` assets
 through the public Scene Document behavior runtime and verifies shared input,
 interaction, and physics host calls, an HKS-to-Lua event, plus typed state
-delivery without importing Sandbox code. The consuming game still owns its
-window, scene, camera, and presentation policy.
+delivery without importing Sandbox code. Its Audio path also loads a real
+resident clip and a metadata-first streamed PCM-WAV asset through the public
+Audio API, attaches both to the same production scene object, and verifies
+spatial movement, listener movement, persistence, and stale-object cleanup. The
+consuming game still owns its window, scene, camera, and presentation policy.
 
 To validate that template against the current Henka checkout from this repository, run:
 
