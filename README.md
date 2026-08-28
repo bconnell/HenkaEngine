@@ -28,9 +28,9 @@ support.
 
 Integrated authoring is underway alongside runtime and workspace hardening. The
 current validated development and packaging path targets 64-bit Windows with
-MSVC, CMake, PowerShell, SDL3, and the OpenGL renderer backend. Linux and macOS
-support are planned and will be claimed only after their real build, test,
-runtime, packaging, and external-project paths are validated.
+MSVC, CMake, PowerShell, SDL3, and the OpenGL renderer backend. Linux 64-bit and
+macOS are planned desktop targets. Their support criteria include real build,
+test, runtime, packaging, and external-project validation.
 
 ## Highlights
 
@@ -63,11 +63,11 @@ runtime, packaging, and external-project paths are validated.
 | Assets and materials | In Progress | Current glTF/GLB and OBJ loading, manager-owned dependencies, and validated instances |
 | Terrain and world | Foundation | Current bounded four-layer terrain, streaming, edits, LOD, persistence, and collision paths |
 | Physics | Foundation | Current fixed-step rigid bodies, primitive colliders, contacts, events, and raycasts |
-| 2.5D | Foundation | Camera-side foundation only: perspective/side/top/isometric workflows and orthographic zoom |
+| 2.5D | Foundation | Camera-side foundation: perspective/side/top/isometric workflows and orthographic zoom |
 | Networking/server | Foundation | Current renderer-free runtime, dedicated host, and bounded Terrain authority paths |
 | External projects | Foundation | Current separate game/server templates with Windows validation |
 | Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, Save/Reload, and isolated runtime Play scenes |
-| 2D | Planned | No dedicated 2D scope yet; renderer, sprites, layers, parallax, and animation remain open |
+| 2D | Planned | Dedicated 2D scope remains open: renderer, sprites, layers, parallax, and animation |
 | Audio | Foundation | Resident WAV clips, fixed voices, buses, spatialization, deterministic mixing, manager-owned assets, persisted emitters, Sandbox Play integration, caller-pumped SDL3 output, and external public-API validation |
 | Scripting/behaviors | In Progress | Current bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, persistence, and cross-language events |
 
@@ -75,9 +75,9 @@ runtime, packaging, and external-project paths are validated.
 
 | Status | Meaning |
 | --- | --- |
-| **Foundation** | Core architecture exists, but the category is incomplete. |
-| **In Progress** | Substantial implementation exists while major functionality remains. |
-| **Available (Unhardened)** | The functional category is present, but hardening or validation remains. |
+| **Foundation** | Core architecture exists; the category remains incomplete. |
+| **In Progress** | Substantial implementation exists; major functionality remains. |
+| **Available (Unhardened)** | The functional category is present; hardening or validation remains. |
 | **Available** | The category is functionally complete and hardened for its stated scope. |
 | **Planned** | Meaningful implementation has not yet begun. |
 
@@ -262,14 +262,30 @@ current public Audio workflow. Complete game project serialization remains futur
 ## Current limitations
 
 The supported scope for each capability row is stated in its matrix cell above.
-Future expansion beyond that scope does not lower a current status. Unfinished
-work inside the stated scope still affects status.
+Current status applies to that stated scope. Open work inside the stated scope
+continues to affect status.
 
-- Henka and its editor are early-stage; the native workspace is not a complete production editor.
-- 2D, authored Audio workflows, scripting/behaviors, character controllers, advanced physics, broader renderer backends, and mature Game/Play workflows are unfinished.
-- Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
-- The default Giraffe and Rocket are deterministic imported/generated fixtures and editor-owned dogfood derivatives. They do not establish user-authored production-asset maturity.
-- Automated evidence does not replace human visual QA for editor feel, detached windows, terrain corners, rendering, or modeling quality.
+Major open areas include:
+
+- production editor maturity;
+- dedicated 2D workflows;
+- authored Audio workflows;
+- scripting and behavior workflows;
+- character controllers;
+- advanced physics;
+- broader renderer backends;
+- mature Game/Play workflows;
+- scene/project serialization and hierarchy authoring;
+- texture painting and automatic UV unwrap;
+- rigging and animation;
+- advanced topology tools.
+
+The default Giraffe and Rocket serve as deterministic imported/generated fixtures
+and editor-owned dogfood derivatives. User-authored production-asset maturity
+remains open.
+
+Human visual QA remains required for editor feel, detached windows, terrain
+corners, rendering, and modeling quality.
 
 The detailed boundary inventory is maintained in
 [docs/current-capabilities.md](docs/current-capabilities.md), with subsystem
@@ -296,9 +312,9 @@ packaged builds, asset workflow work, and future workspace/tooling work. Use the
 [GitHub Sponsors page](https://github.com/sponsors/bconnell) or this repository's
 Sponsor button.
 
-Sponsorship is voluntary support. It does not purchase feature priority,
-private support, guaranteed response times, ownership, project-direction
-control, or a different license. Feature decisions remain based on stability,
+Sponsorship is voluntary support. Feature priority, private support, guaranteed
+response times, ownership, project-direction control, and alternate licensing
+are outside sponsorship terms. Feature decisions remain based on stability,
 maintainability, scope, and usefulness to the wider engine. See
 [SUPPORT.md](SUPPORT.md) for the full terms and other ways to help.
 
