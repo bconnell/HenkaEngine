@@ -27,7 +27,7 @@ At a publication boundary:
 - current limitations must remain visible;
 - cross-references must point to the current authoritative document.
 
-Documentation-only modernization may improve structure and wording without changing capability truth.
+Documentation-only modernization may improve structure and wording while preserving capability truth.
 
 ## Page structure
 
@@ -55,30 +55,36 @@ Avoid screen-length walls of text.
 
 A paragraph that contains several distinct requirements, capabilities, lifecycle stages, validation conditions, or limitations should be split into smaller paragraphs, lists, tables, or focused subsections.
 
-Use prose for explanation and reasoning. Use lists or tables for repeated facts, requirements, states, comparisons required by the technical subject, inventories, sequences, and validation gates.
+Use prose for explanation and reasoning. Use lists or tables for repeated facts, requirements, states, technical comparisons, inventories, sequences, and validation gates.
 
-Do not split normal prose into artificial one-line fragments.
+Keep normal prose cohesive. Avoid artificial one-line fragments.
 
 ## Direct declarative wording
 
 State facts, requirements, limitations, and plans directly.
 
-Avoid rhetorical comparison constructions that make documentation sound conversational, defensive, or machine-generated. Common patterns to remove include:
+Use one clear assertion at a time. Name the current scope. State remaining gaps separately. State validation requirements separately. This keeps technical documentation factual and removes defensive or conversational wording.
 
-- `rather than ...`
-- `instead of ...`
-- `not X, but Y`
-- `this is not X; it is Y` when a direct statement carries the meaning;
-- repeated contrast framing used only for emphasis.
+Documentation should avoid:
+
+- rhetorical contrast;
+- defensive capability disclaimers;
+- conversational justification of a design choice;
+- negative framing when a positive scope statement carries the same information;
+- repeated statements that explain what a feature is by comparing it with something else;
+- prose that argues with an imagined reader;
+- wording that sounds like a response to a previous conversation.
 
 Preferred wording is declarative:
 
 - `The runtime uses the production scene graph.`
 - `Linux support is planned.`
 - `This subsystem remains a Foundation.`
-- `Automated visual evidence does not satisfy human visual QA.`
+- `Human visual QA remains required for subjective visual acceptance.`
+- `Complete game-project serialization remains future work.`
+- `The current scene model is a bounded entity model.`
 
-Use contrast only when the distinction is technically necessary to define incompatible behavior, prevent a real misunderstanding, or document a contract boundary.
+Negative wording is appropriate when the negative condition is itself part of the technical contract, such as a rejected input, forbidden state, unsupported operation, safety boundary, or failure condition. Keep those statements short and factual.
 
 ## Lists and tables
 
@@ -158,7 +164,7 @@ Documentation presentation work must preserve:
 - compatibility boundaries;
 - validation and evidence requirements.
 
-A documentation-only cleanup must not upgrade a capability or imply that planned work exists.
+A documentation-only cleanup must preserve the supported capability boundary.
 
 ## Current, planned, and historical material
 
@@ -220,7 +226,7 @@ For documentation-only presentation work, review the diff for:
 - duplicated or contradictory status wording;
 - Mermaid syntax errors;
 - Markdown formatting regressions;
-- unnecessary rhetorical comparison wording;
+- rhetorical comparison or defensive wording;
 - stale references to superseded behavior;
 - missing links to newly authoritative subsystem documents.
 
