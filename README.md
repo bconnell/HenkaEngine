@@ -4,21 +4,32 @@
 
 # Henka Engine
 
-Henka Engine is an early-stage open-source game engine and integrated
-development workspace written in C. It has a native 3D runtime/editor path,
-terrain, rendering, physics, 2.5D camera foundations, modeling and content
-authoring, asset/material workflows, persistence, and external-project support.
+Henka Engine is an early-stage open-source C17 game engine and integrated
+development workspace. It has a native 3D runtime/editor path, terrain,
+rendering, physics, Audio foundations, 2.5D camera foundations, modeling and
+content authoring, asset/material workflows, persistence, and external-project
+support.
 
-It is a real engine foundation, not a production-ready game platform. The
-repository's visible Sandbox is an engine sample and QA target; games built
-with Henka should live in separate repositories.
+> **Project status:** Henka is a real engine foundation, not a production-ready
+> game platform. The repository's Sandbox is an engine sample and QA target;
+> games built with Henka should live in separate repositories.
 
-## Current project status
+## At a glance
 
-Integrated authoring is already underway alongside runtime and workspace
-hardening. The current validated development and packaging path targets 64-bit
-Windows with MSVC, CMake, PowerShell, SDL3, and the OpenGL renderer backend.
-Other operating systems are not currently claimed as supported.
+| Area | Current direction |
+| --- | --- |
+| Language | C17 |
+| Primary validated platform | 64-bit Windows |
+| Current renderer backend | OpenGL |
+| Editor | Native integrated workspace |
+| Game project boundary | Separate external projects supported through validated templates |
+| Major system sequence | Audio completion → Character Controller → Scene Hierarchy / Parenting → Prefabs |
+| License | MIT |
+
+Integrated authoring is underway alongside runtime and workspace hardening. The
+current validated development and packaging path targets 64-bit Windows with
+MSVC, CMake, PowerShell, SDL3, and the OpenGL renderer backend. Other operating
+systems are not currently claimed as supported.
 
 ## Highlights
 
@@ -29,7 +40,8 @@ Other operating systems are not currently claimed as supported.
 - Integrated Object/Vertex/Edge/Face authoring with stable mesh-element identities
 - Transactional topology operations, UV foundations, and bounded undo/redo
 - Terrain streaming, editing, persistence, material layers, and collision ownership
-- Rigid-body physics foundation with sandbox inspection
+- Rigid-body physics foundation with Sandbox inspection
+- Bounded game-audio foundation with buses, spatial emitters, scene/Play integration, and SDL3 output
 - Perspective, side, top-down, and isometric 2.5D camera foundations
 - Headless/dedicated-server and external-project template foundations
 - Provenanced, packaged Windows Sandbox builds
@@ -58,41 +70,57 @@ Other operating systems are not currently claimed as supported.
 | Audio | Foundation | Bounded resident WAV clips, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, and graphical Sandbox camera/listener plus caller-pumped SDL3 output integration; editor and end-user workflows remain in progress |
 | Scripting/behaviors | In Progress | Current bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, persistence, and cross-language events |
 
-Status labels are contractual: **Foundation** means core architecture exists but
-the category is incomplete; **In Progress** means substantial implementation
-exists while major functionality remains; **Available (Unhardened)** means the
-functional category is present but hardening or validation remains; **Available**
-means the category is functionally complete and hardened; and **Planned** means
-meaningful implementation has not yet begun. The maintained status ownership and
-authoritative detailed sections are recorded in
-[docs/capability-statuses.tsv](docs/capability-statuses.tsv) and
-[docs/current-capabilities.md](docs/current-capabilities.md).
+### Status meanings
 
-For the detailed, code-backed inventory and explicit boundaries, see
+| Status | Meaning |
+| --- | --- |
+| **Foundation** | Core architecture exists, but the category is incomplete. |
+| **In Progress** | Substantial implementation exists while major functionality remains. |
+| **Available (Unhardened)** | The functional category is present, but hardening or validation remains. |
+| **Available** | The category is functionally complete and hardened for its stated scope. |
+| **Planned** | Meaningful implementation has not yet begun. |
+
+The maintained status ownership and authoritative detailed sections are recorded
+in [docs/capability-statuses.tsv](docs/capability-statuses.tsv) and
 [docs/current-capabilities.md](docs/current-capabilities.md).
 
 ## Editor and development workspace
 
 The Sandbox provides a native workspace for Scene View, utilities, object
-inspection, physics QA, materials, terrain, authoring, and layout tools. Panels
-can be docked or detached, and the workspace has validated split topology,
-tabs, named layout slots, bounded layout history, and reset-layout recovery.
+inspection, physics QA, materials, terrain, authoring, and layout tools.
 
-The Compass is a viewport instrument rather than a separate application: it
-tracks the active camera, supports axis snapping and orbit drag, and exposes
-projection and info-strip controls. Detailed controls are in
+Current workspace foundations include:
+
+- docked and detached panels;
+- validated split topology and tabs;
+- named layout slots and bounded layout history;
+- reset-layout recovery;
+- camera-driven Compass navigation and projection controls.
+
+Detailed controls are documented in
 [docs/help/sandbox3d.md](docs/help/sandbox3d.md) and
 [docs/editor-controls.md](docs/editor-controls.md).
 
 ## Game-engine runtime
 
-Henka is not only a modeling application. Its runtime includes scenes/entities,
-camera and input actions, asset management, rendering, physics, terrain,
-persistence, and a renderer-independent headless boundary. Full Game/Play
-authoring, character controllers, end-user scripting, and mature project
-serialization are not yet available. Audio has a bounded headless runtime and a
-graphical Sandbox client output foundation with camera/listener integration;
-editor and end-user audio workflows remain in progress.
+Henka is not only a modeling application. Its runtime includes:
+
+- scenes and entities;
+- camera and input actions;
+- asset management;
+- rendering;
+- physics;
+- terrain;
+- persistence;
+- scripting/behavior foundations;
+- a renderer-independent headless boundary;
+- a bounded Audio runtime and graphical Sandbox output path.
+
+Full Game/Play authoring, character controllers, end-user scripting workflows,
+and mature project serialization are not yet complete. Audio has a bounded
+headless runtime and a graphical Sandbox client output foundation with
+camera/listener integration; editor and broader end-user Audio workflows remain
+in progress.
 
 ## Modeling and content authoring
 
@@ -115,8 +143,16 @@ See [docs/authoring-mesh.md](docs/authoring-mesh.md) and
 
 Terrain provides bounded region persistence and streaming, four-layer material
 data, resident render/physics owners, sculpt/paint commands, collision patches,
-LOD transitions, and edit history. The current 2.5D foundation is camera-side:
-Perspective, Side, Top-down, and Isometric presets with orthographic zoom.
+LOD transitions, and edit history.
+
+The current 2.5D foundation is camera-side:
+
+- Perspective
+- Side
+- Top-down
+- Isometric
+- Orthographic zoom
+
 Sprites, texture regions, layered depth, parallax, animation, and movement
 constraints remain future work. See [docs/terrain.md](docs/terrain.md) and
 [docs/roadmap.md](docs/roadmap.md).
@@ -139,8 +175,8 @@ cd HenkaEngine
 .\scripts\test_windows.ps1 -Configuration Debug
 ```
 
-The detailed build, dependency, headless, Release, and package instructions
-are in [docs/building.md](docs/building.md).
+The detailed build, dependency, headless, Release, and package instructions are
+in [docs/building.md](docs/building.md).
 
 ### Run the Sandbox
 
@@ -177,19 +213,26 @@ bounded consumer validation paths, not complete game project serializers. See
 
 ## Documentation
 
+### Start here
+
 - [Detailed current capabilities](docs/current-capabilities.md)
+- [Roadmap](docs/roadmap.md)
 - [Architecture](docs/architecture.md)
 - [Building and validation](docs/building.md)
+- [Documentation presentation standard](docs/documentation-style.md)
+
+### Subsystems and workflows
+
 - [Runtime foundations](docs/runtime-foundations.md)
 - [UI and workspace](docs/ui.md)
 - [Model loading](docs/model-loading.md)
 - [Terrain](docs/terrain.md)
 - [Physics](docs/physics.md)
 - [Audio foundation](docs/audio.md)
-- [Editor controls and Sandbox help](docs/editor-controls.md) · [offline help](docs/help/sandbox3d.md)
+- [Editor controls](docs/editor-controls.md)
+- [Sandbox offline help](docs/help/sandbox3d.md)
 - [External game projects](docs/external-game-projects.md)
 - [Showcase asset provenance](docs/showcase-assets.md)
-- [Roadmap](docs/roadmap.md)
 - [Branding](docs/branding.md)
 - [Repository integrity](docs/repository-integrity.md)
 - [Contributing](CONTRIBUTING.md)
@@ -197,11 +240,11 @@ bounded consumer validation paths, not complete game project serializers. See
 ## Current limitations
 
 The supported scope for each capability row is stated in its matrix cell above.
-The limitations below are evaluated against that scope; future expansion beyond
-it does not lower the current status, while unfinished work inside it does.
+Future expansion beyond that scope does not lower a current status, while
+unfinished work inside it does.
 
 - Henka and its editor are early-stage; the native workspace is not a complete production editor.
-- 2D, authored audio workflows, scripting/behaviors, character controllers, advanced physics, broader renderer backends, and mature Game/Play workflows are unfinished.
+- 2D, authored Audio workflows, scripting/behaviors, character controllers, advanced physics, broader renderer backends, and mature Game/Play workflows are unfinished.
 - Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
 - The default Giraffe and Rocket are deterministic imported/generated fixtures and editor-owned dogfood derivatives, not proof of user-authored production assets.
 - Automated evidence does not replace human visual QA for editor feel, detached windows, terrain corners, rendering, or modeling quality.
@@ -212,11 +255,17 @@ contracts owned by the linked documentation above.
 
 ## Roadmap
 
-Current priorities are runtime and editor integrity, integrated authoring,
-terrain/world usability, renderer and asset hardening, and the next layers of
-2.5D workflow. Longer-term work includes complete Game authoring, 2D,
-animation, audio, scripting, additional renderer backends, and broader release
-distribution. See the [roadmap](docs/roadmap.md) for the maintained direction.
+The current major-system sequence is:
+
+1. Complete the Audio campaign to its defined production boundary.
+2. Build the Character Controller foundation.
+3. Mature Scene Hierarchy / Parenting.
+4. Build Prefabs / Reusable Scene Objects on the hierarchy foundation.
+
+Parallel and later work continues across renderer and realism maturity,
+integrated authoring, terrain/world systems, 2D/2.5D, animation, gameplay
+infrastructure, tooling, additional renderer backends, and release distribution.
+See the maintained [roadmap](docs/roadmap.md) for the full direction.
 
 ## Support Henka Engine
 
