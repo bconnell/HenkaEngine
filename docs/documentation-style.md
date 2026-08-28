@@ -48,6 +48,32 @@ facts, requirements, states, comparisons, or inventories.
 Do not split sentences into artificial one-line fragments merely for appearance.
 Readable documentation should still feel like documentation, not a slide deck.
 
+## Direct declarative wording
+
+State facts, requirements, limitations, and plans directly.
+
+Avoid rhetorical comparison constructions that sound conversational, defensive,
+or machine-generated. Common patterns to remove include:
+
+- `rather than ...`
+- `instead of ...`
+- `not X, but Y`
+- `this is not X; it is Y` when a direct statement can carry the same meaning
+- repeated contrast framing used only to emphasize a point
+
+Prefer a single declarative sentence whenever the intended meaning is clear.
+
+Examples:
+
+- Write `The runtime uses the production scene graph.`
+- Write `Linux support is planned.`
+- Write `This subsystem remains a Foundation.`
+- Write `Automated visual evidence does not satisfy human visual QA.`
+
+Use contrast only when the distinction is technically necessary to prevent a
+real misunderstanding, define a contract boundary, or document incompatible
+behavior.
+
 ## Lists and tables
 
 Use lists when order, steps, requirements, supported operations, or known gaps
@@ -73,7 +99,7 @@ capability definitions. Presentation does not change capability truth.
 ## Diagrams
 
 Use Mermaid when architecture, ownership, lifecycle, dependency, or data flow is
-materially clearer visually than through several paragraphs.
+materially clearer in visual form.
 
 Suitable subjects include:
 
@@ -85,8 +111,8 @@ Suitable subjects include:
 - hierarchy and prefab relationships;
 - roadmap dependencies.
 
-Keep diagrams bounded and readable. A diagram should explain a relationship, not
-repeat every implementation detail in a document.
+Keep diagrams bounded and readable. A diagram should explain a relationship and
+stay focused on the details needed for that relationship.
 
 ## Code, commands, and paths
 
@@ -124,18 +150,18 @@ work exists.
 ## Current, planned, and historical material
 
 Keep current behavior visually separate from future direction. Prefer explicit
-headings such as **Available**, **In Progress**, and **Planned** rather than mixing
-all three states in one paragraph.
+headings such as **Available**, **In Progress**, and **Planned** when they make the
+state easier to scan.
 
 Historical implementation notes should remain only when they help explain a
 current contract, migration, compatibility rule, or important design decision.
-Otherwise, prefer source history and release records over accumulating narrative
-history in current user documentation.
+Source history and release records should carry implementation history that no
+longer helps explain the current product.
 
 ## Links and navigation
 
-Link to the authoritative detailed document instead of duplicating large sections
-across several pages. Keep link labels descriptive.
+Link to the authoritative detailed document and keep duplicate overview text
+small. Keep link labels descriptive.
 
 Long overview documents should point readers toward focused subsystem pages.
 Focused subsystem pages should link back to relevant architecture, build,
@@ -163,7 +189,8 @@ For documentation-only presentation work, review the diff specifically for:
 - altered commands or paths;
 - duplicated or contradictory status wording;
 - Mermaid syntax errors;
-- Markdown formatting regressions.
+- Markdown formatting regressions;
+- unnecessary rhetorical comparison wording.
 
 The governing principle is simple: preserve product truth, improve information
 design.
