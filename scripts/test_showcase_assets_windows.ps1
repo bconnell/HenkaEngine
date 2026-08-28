@@ -309,7 +309,9 @@ $rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realist
 $rocketBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "original_realistic_rocket.bin"))
 $rocketMaterialNames = @($rocket.materials | ForEach-Object { $_.name })
 if ($rocketMaterialNames -notcontains "Rocket Avionics" -or
-    $rocketMaterialNames -notcontains "Rocket Launch Pad") {
+    $rocketMaterialNames -notcontains "Rocket Launch Pad" -or
+    $rocketMaterialNames -notcontains "Rocket Avionics Hardware" -or
+    $rocketMaterialNames -notcontains "Rocket Interstage Insulation") {
     throw "Showcase rocket is missing its stage-separation/avionics or launch-pad material."
 }
 $rocketNormalBindings = @($rocket.materials | Where-Object { $_.PSObject.Properties.Name -contains "normalTexture" })
@@ -328,7 +330,7 @@ foreach ($material in $rocket.materials) {
         throw "Showcase rocket detail-normal scale is too strong for restrained surface response."
     }
 }
-if ($rocket.meshes[0].primitives.Count -lt 12) {
+if ($rocket.meshes[0].primitives.Count -lt 15) {
     throw "Showcase rocket does not contain enough independently shaded heavy-lift, engine, and ground-support geometry."
 }
 $rocketCorePrimitive = @($rocket.meshes[0].primitives | Where-Object { $_.material -eq 0 })[0]
@@ -394,6 +396,12 @@ foreach ($requiredName in @("Rocket Panel Detail", "Rocket Core Insulation", "Ro
         throw "Showcase rocket is missing required generic heavy-lift material '$requiredName'."
     }
 }
+foreach ($requiredName in @("Rocket Avionics Hardware", "Rocket Interstage Insulation")) {
+    $materialIndex = [array]::IndexOf($rocketMaterialNames, $requiredName)
+    if (@($rocket.meshes[0].primitives | Where-Object { $_.material -eq $materialIndex }).Count -lt 1) {
+        throw "Showcase rocket is missing geometry for authored thermal/equipment material '$requiredName'."
+    }
+}
 if ([double]$rocket.materials[3].pbrMetallicRoughness.baseColorFactor[0] -gt 0.30) {
     throw "Showcase rocket mission marking remains too saturated for the utilitarian launch-vehicle material contract."
 }
@@ -422,5 +430,19 @@ $rocketTowerBounds = Get-PositionBounds -Gltf $rocket -Binary $rocketBinary -Pri
 if (($rocketTowerBounds.Maximum[1] - $rocketTowerBounds.Minimum[1]) -lt 6.0 -or
     $rocketTowerBounds.Minimum[0] -gt -2.5) {
     throw "Showcase rocket is missing the bounded adjacent service-structure scale reference."
+}
+$rocketHardwareMaterialIndex = [array]::IndexOf($rocketMaterialNames, "Rocket Avionics Hardware")
+$rocketHardwarePrimitive = @($rocket.meshes[0].primitives | Where-Object { $_.material -eq $rocketHardwareMaterialIndex })[0]
+$rocketHardwareBounds = Get-PositionBounds -Gltf $rocket -Binary $rocketBinary -Primitive $rocketHardwarePrimitive
+if (($rocketHardwareBounds.Maximum[1] - $rocketHardwareBounds.Minimum[1]) -lt 1.0 -or
+    ($rocketHardwareBounds.Maximum[0] - $rocketHardwareBounds.Minimum[0]) -lt 0.40) {
+    throw "Showcase rocket avionics hardware does not establish readable bounded equipment detail."
+}
+$rocketInsulationMaterialIndex = [array]::IndexOf($rocketMaterialNames, "Rocket Interstage Insulation")
+$rocketInsulationPrimitive = @($rocket.meshes[0].primitives | Where-Object { $_.material -eq $rocketInsulationMaterialIndex })[0]
+$rocketInsulationBounds = Get-PositionBounds -Gltf $rocket -Binary $rocketBinary -Primitive $rocketInsulationPrimitive
+if (($rocketInsulationBounds.Maximum[1] - $rocketInsulationBounds.Minimum[1]) -lt 0.30 -or
+    ($rocketInsulationBounds.Maximum[0] - $rocketInsulationBounds.Minimum[0]) -lt 1.20) {
+    throw "Showcase rocket interstage insulation does not establish a readable bounded thermal transition."
 }
 Write-Host "[pass] Deterministic showcase geometry, material ownership, and generated glTF contracts passed."

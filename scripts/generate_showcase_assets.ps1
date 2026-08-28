@@ -1273,7 +1273,9 @@ function New-Rocket {
         (New-Material "Rocket Panel Detail" @(0.075, 0.090, 0.105, 1.0) 0.56 0.34 0.03 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
         (New-Material "Rocket Core Insulation" @(0.52, 0.16, 0.035, 1.0) 0.06 0.58 0.02 0.26 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
         (New-Material "Rocket Booster Coating" @(0.66, 0.67, 0.64, 1.0) 0.10 0.44 0.10 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Rocket Service Structure" @(0.090, 0.105, 0.120, 1.0) 0.64 0.30 0.02 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1))
+        (New-Material "Rocket Service Structure" @(0.090, 0.105, 0.120, 1.0) 0.64 0.30 0.02 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Avionics Hardware" @(0.035, 0.045, 0.055, 1.0) 0.82 0.25 0.02 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Interstage Insulation" @(0.16, 0.18, 0.20, 1.0) 0.34 0.48 0.02 0.22 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1))
     $paint = New-Part 0
     $metal = New-Part 1
     $heat = New-Part 2
@@ -1287,6 +1289,8 @@ function New-Rocket {
     $coreInsulation = New-Part 10
     $booster = New-Part 11
     $serviceStructure = New-Part 12
+    $hardware = New-Part 13
+    $interstageInsulation = New-Part 14
     # Staged core, interstage, and ogive-like fairing sections provide a more
     # believable modern launch-vehicle silhouette while remaining bounded.
     # The extra shoulder profiles keep the tanks from reading as one perfect
@@ -1343,6 +1347,25 @@ function New-Rocket {
     Add-Box $panelDetail @(0.0, 2.20, 0.555) @(0.035, 0.82, 0.016)
     Add-Box $panelDetail @(-0.34, 2.20, 0.435) @(0.028, 0.72, 0.015)
     Add-Box $panelDetail @(0.34, 2.20, 0.435) @(0.028, 0.72, 0.015)
+    # Equipment bays and cable trays give the painted core functional surface
+    # detail at inspection distance. These are bounded authored panels and
+    # fasteners, not a decorative primitive grid or a named-vehicle shortcut.
+    foreach ($module in @(
+            @(-0.31, 1.78), @(0.31, 1.78),
+            @(-0.31, 2.18), @(0.31, 2.18),
+            @(-0.31, 2.58), @(0.31, 2.58))) {
+        Add-Box $hardware @([float]$module[0], [float]$module[1], 0.574) @(0.070, 0.105, 0.020)
+        Add-Box $hardware @([float]$module[0], [float]($module[1] + 0.115), 0.598) @(0.040, 0.012, 0.012)
+        Add-Ellipsoid $hardware @([float]($module[0] - 0.050), [float]($module[1] - 0.075), 0.602) @(0.014, 0.018, 0.010) 8 16
+        Add-Ellipsoid $hardware @([float]($module[0] + 0.050), [float]($module[1] - 0.075), 0.602) @(0.014, 0.018, 0.010) 8 16
+    }
+    Add-Box $hardware @(-0.43, 2.20, 0.574) @(0.028, 0.62, 0.018)
+    Add-Box $hardware @(0.43, 2.20, 0.574) @(0.028, 0.62, 0.018)
+    Add-Frustum $hardware 1.68 2.64 0.050 0.050 -0.565 0.0 16
+    Add-Frustum $hardware 1.68 2.64 0.050 0.050 0.565 0.0 16
+    # Thin insulation collars make the interstage and booster transitions
+    # read as layered flight hardware instead of uninterrupted cylinders.
+    Add-ProfiledFrustum $interstageInsulation @(2.52, 2.60, 2.68, 2.76) @(0.555, 0.565, 0.565, 0.555) 0.0 0.0 48
     foreach ($boosterX in @(-0.92, 0.92)) {
         Add-ProfiledFrustum $booster @(0.34, 0.48, 0.62, 2.40, 2.65, 2.84, 3.00, 3.24, 3.40, 3.50) @(0.22, 0.29, 0.30, 0.30, 0.285, 0.285, 0.27, 0.22, 0.14, 0.025) $boosterX 0.0 64
         Add-Frustum $metal 0.42 0.56 0.315 0.315 $boosterX 0.0 32
@@ -1350,6 +1373,7 @@ function New-Rocket {
         Add-Frustum $metal 2.06 2.13 0.292 0.292 $boosterX 0.0 32
         Add-Frustum $thermal 2.52 2.61 0.295 0.295 $boosterX 0.0 40
         Add-Frustum $avionics 3.00 3.07 0.275 0.275 $boosterX 0.0 32
+        Add-ProfiledFrustum $interstageInsulation @(2.46, 2.54, 2.62) @(0.296, 0.304, 0.296) $boosterX 0.0 40
         Add-Ellipsoid $heat @($boosterX, 0.30, 0.0) @(0.24, 0.06, 0.24) 10 20
         # Short radial attachment brackets make the boosters read as mounted
         # stages instead of two cylinders floating beside the core.
@@ -1383,10 +1407,10 @@ function New-Rocket {
         Add-Box $pad @($tower[0], 0.27, $tower[1]) @(0.08, 0.32, 0.08)
     }
     $rocketScale = 1.80
-    foreach ($part in @($paint, $metal, $heat, $stripe, $avionics, $pad, $fastener, $thermal, $engineBell, $panelDetail, $coreInsulation, $booster, $serviceStructure)) {
+    foreach ($part in @($paint, $metal, $heat, $stripe, $avionics, $pad, $fastener, $thermal, $engineBell, $panelDetail, $coreInsulation, $booster, $serviceStructure, $hardware, $interstageInsulation)) {
         Scale-Part-Uniform $part $rocketScale
     }
-    return [pscustomobject]@{ Parts = @($paint, $metal, $heat, $stripe, $avionics, $pad, $fastener, $thermal, $engineBell, $panelDetail, $coreInsulation, $booster, $serviceStructure); Materials = $materials }
+    return [pscustomobject]@{ Parts = @($paint, $metal, $heat, $stripe, $avionics, $pad, $fastener, $thermal, $engineBell, $panelDetail, $coreInsulation, $booster, $serviceStructure, $hardware, $interstageInsulation); Materials = $materials }
 }
 
 if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
