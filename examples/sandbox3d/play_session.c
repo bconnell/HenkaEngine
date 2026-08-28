@@ -37,6 +37,8 @@ struct sandbox3d_play_session
     char project_root[SANDBOX3D_PLAY_SESSION_MAX_PROJECT_ROOT_BYTES];
     size_t snapshot_count;
     sandbox3d_play_snapshot snapshots[SANDBOX3D_PLAY_SESSION_MAX_OBJECTS];
+    henka_audio_system* audio_system;
+    henka_audio_emitter* audio_emitters[SANDBOX3D_PLAY_SESSION_MAX_OBJECTS];
 };
 
 static size_t sandbox3d_play_session_find_snapshot(
@@ -453,6 +455,21 @@ static henka_result sandbox3d_play_session_destroy_bodies(
     return result;
 }
 
+static void sandbox3d_play_session_destroy_audio_emitters(
+    sandbox3d_play_session* session)
+{
+    size_t index;
+    if (session == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < session->snapshot_count; ++index)
+    {
+        henka_audio_emitter_destroy(session->audio_emitters[index]);
+        session->audio_emitters[index] = NULL;
+    }
+}
+
 static void sandbox3d_play_session_abort_start(
     sandbox3d_play_session* session)
 {
@@ -460,6 +477,7 @@ static void sandbox3d_play_session_abort_start(
     {
         return;
     }
+    sandbox3d_play_session_destroy_audio_emitters(session);
     (void)sandbox3d_play_session_destroy_bodies(session);
     if (session->behavior_runtime != NULL)
     {
@@ -620,6 +638,18 @@ henka_result sandbox3d_play_session_set_script_state_store(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_play_session_set_audio_system(
+    sandbox3d_play_session* session,
+    henka_audio_system* audio_system)
+{
+    if (session == NULL || session->state != SANDBOX3D_PLAY_SESSION_STOPPED)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    session->audio_system = audio_system;
+    return HENKA_SUCCESS;
+}
+
 henka_result sandbox3d_play_session_set_input_context(
     sandbox3d_play_session* session,
     sandbox3d_play_input_query input_query,
@@ -672,6 +702,7 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
         henka_transform transform;
         henka_physics_body_desc body_desc;
         henka_physics_body_id body = HENKA_INVALID_PHYSICS_BODY_ID;
+        henka_result audio_result;
         henka_scene* scene;
         if (sandbox3d_scene_document_bridge_get_binding_at(
                 session->bridge, index, &document_id, &entity) != HENKA_SUCCESS ||
@@ -694,6 +725,7 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
             transform,
             henka_scene_is_entity_visible(scene, entity),
             HENKA_INVALID_PHYSICS_BODY_ID};
+        ++session->snapshot_count;
         if (object.physics.enabled)
         {
             const henka_result descriptor_result =
@@ -708,9 +740,28 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
                 return sandbox3d_play_session_abort_start_with_error(
                     session, body_result);
             }
-            session->snapshots[session->snapshot_count].body = body;
+            session->snapshots[session->snapshot_count - 1U].body = body;
         }
-        ++session->snapshot_count;
+        if (object.audio.enabled)
+        {
+            if (session->audio_system == NULL)
+            {
+                return sandbox3d_play_session_abort_start_with_error(
+                    session, HENKA_ERROR_INVALID_ARGUMENT);
+            }
+            audio_result = henka_audio_emitter_create(
+                    session->audio_system,
+                    session->project_root,
+                    scene,
+                    entity,
+                    &object.audio,
+                    &session->audio_emitters[session->snapshot_count - 1U]);
+            if (audio_result != HENKA_SUCCESS)
+            {
+                return sandbox3d_play_session_abort_start_with_error(
+                    session, audio_result);
+            }
+        }
     }
     {
         henka_script_behavior_batch_report report;
@@ -949,6 +1000,7 @@ henka_result sandbox3d_play_session_stop(sandbox3d_play_session* session)
     session->behavior_runtime = NULL;
     henka_script_host_destroy(session->script_host);
     session->script_host = NULL;
+    sandbox3d_play_session_destroy_audio_emitters(session);
     restore_result = sandbox3d_play_session_restore_scene(session);
     body_result = sandbox3d_play_session_destroy_bodies(session);
     end_result = sandbox3d_scene_document_bridge_end_play(session->bridge);

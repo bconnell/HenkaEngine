@@ -8,6 +8,7 @@
 #include "scene_document_bridge.h"
 
 #include <henka/math.h>
+#include <henka/audio.h>
 #include <henka/script.h>
 #include <henka/script_source.h>
 
@@ -39,6 +40,12 @@ henka_result sandbox3d_play_session_create_with_project_root(
 henka_result sandbox3d_play_session_set_script_state_store(
     sandbox3d_play_session* session,
     henka_script_state_store* store);
+/* The audio system is borrowed and must outlive the session. Play instantiates
+ * persisted emitters only when this system is configured; enabled authored
+ * Audio therefore fails closed instead of being silently omitted. */
+henka_result sandbox3d_play_session_set_audio_system(
+    sandbox3d_play_session* session,
+    henka_audio_system* audio_system);
 /* The input query is borrowed and remains owned by the caller.  The observer
  * position is copied into the session; both values are used only by the
  * isolated Play world and may be refreshed while it is running. */

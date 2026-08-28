@@ -1,19 +1,84 @@
 #include <float.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include <henka/audio.h>
 #include <henka/physics.h>
 #include <henka/scene.h>
 #include <henka/scene_document.h>
 
 #include "../examples/sandbox3d/play_session.h"
 
+static void test_write_u16(unsigned char* bytes, size_t offset, uint16_t value)
+{
+    bytes[offset] = (unsigned char)(value & 0xffU);
+    bytes[offset + 1U] = (unsigned char)((value >> 8U) & 0xffU);
+}
+
+static void test_write_u32(unsigned char* bytes, size_t offset, uint32_t value)
+{
+    bytes[offset] = (unsigned char)(value & 0xffU);
+    bytes[offset + 1U] = (unsigned char)((value >> 8U) & 0xffU);
+    bytes[offset + 2U] = (unsigned char)((value >> 16U) & 0xffU);
+    bytes[offset + 3U] = (unsigned char)((value >> 24U) & 0xffU);
+}
+
+static bool test_write_audio_fixture(const char* path)
+{
+    const size_t frame_count = 128U;
+    const size_t data_size = frame_count * sizeof(int16_t);
+    const size_t file_size = 44U + data_size;
+    unsigned char* bytes = (unsigned char*)calloc(1U, file_size);
+    FILE* file = NULL;
+    size_t frame_index;
+    bool success;
+    if (bytes == NULL)
+    {
+        return false;
+    }
+    memcpy(bytes, "RIFF", 4U);
+    test_write_u32(bytes, 4U, (uint32_t)(file_size - 8U));
+    memcpy(bytes + 8U, "WAVEfmt ", 8U);
+    test_write_u32(bytes, 16U, 16U);
+    test_write_u16(bytes, 20U, 1U);
+    test_write_u16(bytes, 22U, 1U);
+    test_write_u32(bytes, 24U, HENKA_AUDIO_DEFAULT_SAMPLE_RATE);
+    test_write_u32(bytes, 28U, HENKA_AUDIO_DEFAULT_SAMPLE_RATE * 2U);
+    test_write_u16(bytes, 32U, 2U);
+    test_write_u16(bytes, 34U, 16U);
+    memcpy(bytes + 36U, "data", 4U);
+    test_write_u32(bytes, 40U, (uint32_t)data_size);
+    for (frame_index = 0U; frame_index < frame_count; ++frame_index)
+    {
+        test_write_u16(bytes, 44U + frame_index * 2U, 8192U);
+    }
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "wb") != 0)
+    {
+        file = NULL;
+    }
+#else
+    file = fopen(path, "wb");
+#endif
+    success = file != NULL && fwrite(bytes, 1U, file_size, file) == file_size;
+    if (file != NULL && fclose(file) != 0)
+    {
+        success = false;
+    }
+    free(bytes);
+    return success;
+}
+
 int main(void)
 {
+    const char* audio_path = "build/test_tmp/play_session_audio.wav";
     henka_scene_document* document = NULL;
     sandbox3d_scene_document_bridge* bridge = NULL;
     sandbox3d_play_session* session = NULL;
     henka_scene* scene = NULL;
     henka_physics_world* physics_world = NULL;
+    henka_audio_system* audio_system = NULL;
     henka_scene_document_object object = henka_scene_document_object_default();
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_entity entity = HENKA_INVALID_ENTITY;
@@ -49,10 +114,17 @@ int main(void)
         "%s",
         "tests/fixtures/scripts/subscriber.lua");
 
+    object.audio.enabled = true;
+    object.audio.looping = true;
+    object.audio.spatial = true;
+    (void)snprintf(object.audio.clip_path, sizeof(object.audio.clip_path), "%s", audio_path);
+
     if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
         henka_scene_create(&scene) != HENKA_SUCCESS ||
         henka_physics_world_create(&physics_world) != HENKA_SUCCESS ||
-        henka_script_state_store_create(&script_state_store) != HENKA_SUCCESS)
+        henka_script_state_store_create(&script_state_store) != HENKA_SUCCESS ||
+        !test_write_audio_fixture(audio_path) ||
+        henka_audio_system_create(&(henka_audio_system_config){0U}, &audio_system) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -69,9 +141,11 @@ int main(void)
         sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_SUCCESS ||
         sandbox3d_play_session_create(bridge, physics_world, &session) != HENKA_SUCCESS ||
         sandbox3d_play_session_set_script_state_store(session, script_state_store) != HENKA_SUCCESS ||
+        sandbox3d_play_session_set_audio_system(session, audio_system) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_STOPPED ||
         sandbox3d_play_session_start(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_RUNNING ||
+        henka_audio_system_get_active_voice_count(audio_system) != 1U ||
         (script_host = sandbox3d_play_session_get_script_host(session)) == NULL)
     {
         goto cleanup;
@@ -197,6 +271,12 @@ int main(void)
         henka_scene_get_entity_transform(scene, entity, &transform) != HENKA_SUCCESS ||
         transform.position.y != 5.0f ||
         !henka_scene_is_entity_visible(scene, entity) ||
+        henka_audio_system_get_active_voice_count(audio_system) != 0U ||
+        sandbox3d_play_session_set_audio_system(session, NULL) != HENKA_SUCCESS ||
+        sandbox3d_play_session_start(session) != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_STOPPED ||
+        henka_audio_system_get_active_voice_count(audio_system) != 0U ||
+        sandbox3d_play_session_set_audio_system(session, audio_system) != HENKA_SUCCESS ||
         henka_physics_world_set_gravity(
             physics_world,
             (henka_vec3){0.0f, FLT_MAX, 0.0f}) != HENKA_SUCCESS ||
@@ -242,7 +322,9 @@ cleanup:
     sandbox3d_scene_document_bridge_destroy(bridge);
     henka_physics_world_destroy(physics_world);
     henka_script_state_store_destroy(script_state_store);
+    henka_audio_system_destroy(audio_system);
     henka_scene_destroy(scene);
     henka_scene_document_destroy(document);
+    remove(audio_path);
     return exit_code;
 }

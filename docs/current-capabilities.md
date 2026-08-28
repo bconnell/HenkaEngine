@@ -368,11 +368,13 @@ authoritative section below.
   The first integration coverage uses a real scene entity created through the
   public scene API and a WAV loaded through the confined file path.
 - This is an engine foundation, not a complete game-audio workflow. Authored
-  emitter configuration now persists in v3 Scene Documents, while listener
-  authoring and runtime emitter instantiation remain in progress. SDL/WASAPI
-  device output, streamed long-form assets, asset-manager metadata and reload,
-  Play-session lifecycle, scripting/editor integration, packaged runtime proof,
-  and broader format support also remain in progress. The current runtime core is single-owner for
+  emitter configuration now persists in v3 Scene Documents, and the Sandbox
+  Play session can instantiate those emitters when given the Audio system;
+  listener authoring, normal graphical Sandbox/device wiring, and broader
+  runtime integration remain in progress. SDL/WASAPI device output, streamed
+  long-form assets, asset-manager metadata and reload, scripting/editor
+  integration, packaged runtime proof, and broader format support also remain
+  in progress. The current runtime core is single-owner for
   voice commands and mixing; device-thread synchronization belongs at the
   future backend boundary.
 

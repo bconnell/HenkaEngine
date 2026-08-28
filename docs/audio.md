@@ -27,12 +27,14 @@ generated test samples establish device or content-pipeline coverage.
 
 ## Current development
 
-The next Audio slices must connect the core to the existing SDL3 platform
-boundary, the manager-owned asset metadata path, Scene Document listener
-configuration and runtime emitter instantiation, and the Sandbox Play
-lifecycle. Those integrations must preserve the renderer-free dedicated-server
-path and add real imported or authored-object coverage rather than test-only
-entities.
+The Sandbox Play session now has a bounded runtime-emitter instantiation path
+when the caller supplies an Audio system: it reads the persisted v3 emitter
+configuration and binds each emitter to the same real Scene entity used by
+Play. The next Audio slices must connect that path to the existing SDL3
+platform boundary, the manager-owned asset metadata path, Scene Document
+listener configuration, and the normal graphical Sandbox lifecycle. Those
+integrations must preserve the renderer-free dedicated-server path and add
+real imported or authored-object coverage rather than test-only entities.
 
 ## Future work
 
