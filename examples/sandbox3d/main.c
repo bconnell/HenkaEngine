@@ -35253,12 +35253,20 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     }
     if (state != NULL && state->audio_smoke_test && !state->audio_smoke_ran)
     {
-        const henka_result audio_smoke_result =
+        henka_result audio_smoke_result =
             sandbox3d_audio_runtime_validate_fixture(
                 state->audio_runtime,
                 state->scene,
                 henka_engine_get_asset_manager(engine),
                 &state->camera);
+        if (audio_smoke_result == HENKA_SUCCESS)
+        {
+            audio_smoke_result = sandbox3d_audio_runtime_validate_stream_fixture(
+                state->audio_runtime,
+                state->scene,
+                henka_engine_get_asset_manager(engine),
+                &state->camera);
+        }
         if (audio_smoke_result != HENKA_SUCCESS)
         {
             HENKA_LOG_ERROR(
@@ -35269,7 +35277,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         else
         {
             printf(
-                "Audio smoke: packaged WAV fixture loaded through the asset manager; real scene object emitter mixed and reached the SDL output boundary.\n");
+                "Audio smoke: packaged resident and streamed WAV fixture paths loaded through the asset manager; real scene object emitters mixed and reached the SDL output boundary.\n");
             fflush(stdout);
         }
         state->audio_smoke_ran = true;

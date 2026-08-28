@@ -56,12 +56,13 @@ emitters; the graphical camera remains the live listener source during normal
 interactive runtime.
 Play pause and resume now propagate to its live emitter voices without
 advancing their source positions. The next Audio slices must connect it to
-broader device-lifecycle policy. A packaged `--audio-smoke-test` now loads
-the repository-owned `assets/audio/henka_audio_fixture.wav` through the real
-asset manager, attaches it to a real scene entity, mixes it through the live
-emitter, and reaches the SDL output boundary. This is deterministic
-production-path coverage for one resident PCM WAV fixture, not broad packaged
-content coverage.
+  broader device-lifecycle policy. A packaged `--audio-smoke-test` now loads
+  the repository-owned `assets/audio/henka_audio_fixture.wav` through the real
+  asset manager in both resident and metadata-first streamed modes. Each mode
+  attaches the payload to a real scene entity, mixes it through a live emitter,
+  and reaches the SDL output boundary. This is deterministic production-path
+  coverage for one packaged PCM WAV fixture in both storage modes, not broad
+  long-form or packaged-content coverage.
 Audio integrations preserve the renderer-free dedicated-server path. Integration
 coverage includes real imported or authored objects.
 

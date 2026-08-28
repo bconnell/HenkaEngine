@@ -34,11 +34,27 @@ henka_result sandbox3d_audio_runtime_get_output_info(
     const sandbox3d_audio_runtime* runtime,
     henka_audio_output_info* out_info);
 
-/* Validates the packaged repository-owned WAV through the production asset
- * manager, scene/entity, emitter, mixer, and SDL output boundaries. The
+/* Validates the packaged repository-owned WAV through the resident production
+ * asset manager, scene/entity, emitter, mixer, and SDL output boundaries. The
  * manager-owned clip and temporary scene entity are cleaned up before return;
  * callers retain ownership of the manager, scene, runtime, and camera. */
 henka_result sandbox3d_audio_runtime_validate_fixture(
+    sandbox3d_audio_runtime* runtime,
+    henka_scene* scene,
+    henka_asset_manager* assets,
+    const henka_camera* camera);
+/* Validates the same packaged WAV through the manager-owned streamed payload,
+ * real scene/entity, emitter, mixer, and SDL output boundaries. The stream
+ * and temporary scene entity are cleaned up before return. */
+henka_result sandbox3d_audio_runtime_validate_stream_fixture(
+    sandbox3d_audio_runtime* runtime,
+    henka_scene* scene,
+    henka_asset_manager* assets,
+    const henka_camera* camera);
+/* Validates the same packaged WAV through the manager-owned streamed payload,
+ * real scene/entity, emitter, mixer, and SDL output boundaries. The stream
+ * and temporary scene entity are cleaned up before return. */
+henka_result sandbox3d_audio_runtime_validate_stream_fixture(
     sandbox3d_audio_runtime* runtime,
     henka_scene* scene,
     henka_asset_manager* assets,

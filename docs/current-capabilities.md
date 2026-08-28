@@ -375,8 +375,9 @@ authoritative section below.
   The first integration coverage uses a real scene entity created through the
   public scene API and a WAV loaded through the confined file path. The
   packaged `--audio-smoke-test` additionally proves the repository-owned
-  WAV fixture through the engine asset manager, live emitter, mixer, and SDL
-  output boundary; broader packaged content coverage remains in progress.
+  WAV fixture through both resident and metadata-first streamed asset-manager
+  paths, live emitters, the mixer, and the SDL output boundary; broader
+  packaged content coverage remains in progress.
 - This is an engine foundation, not a complete game-audio workflow. The public
   runtime also has a bounded, metadata-first PCM-WAV streaming API with
   caller-owned frame reads and stream-backed voices/emitters. The asset manager

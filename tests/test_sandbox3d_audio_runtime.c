@@ -116,6 +116,16 @@ int main(void)
     }
     memset(assets, 0, sizeof(*assets));
     assets->engine = &engine;
+    audio_result = sandbox3d_audio_runtime_validate_stream_fixture(
+        runtime,
+        scene,
+        assets,
+        &camera);
+    if (audio_result != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "sandbox audio runtime packaged stream validation failed: %d\n", (int)audio_result);
+        goto cleanup;
+    }
     audio_result = sandbox3d_audio_runtime_start_preview(
         runtime,
         scene,

@@ -259,13 +259,15 @@ henka_result sandbox3d_audio_runtime_get_output_info(
     return henka_audio_output_get_info(runtime->output, out_info);
 }
 
-henka_result sandbox3d_audio_runtime_validate_fixture(
+static henka_result sandbox3d_audio_runtime_validate_fixture_mode(
     sandbox3d_audio_runtime* runtime,
     henka_scene* scene,
     henka_asset_manager* assets,
-    const henka_camera* camera)
+    const henka_camera* camera,
+    bool streaming)
 {
     henka_audio_clip* clip = NULL;
+    henka_audio_stream* stream = NULL;
     henka_audio_emitter* emitter = NULL;
     henka_audio_emitter_config emitter_config;
     henka_asset_metadata metadata;
@@ -290,15 +292,30 @@ henka_result sandbox3d_audio_runtime_validate_fixture(
     }
     baseline_voice_count = henka_audio_system_get_active_voice_count(system);
 
-    result = henka_assets_load_audio_clip(
-        assets,
-        SANDBOX3D_AUDIO_FIXTURE_PATH,
-        &clip);
-    if (result != HENKA_SUCCESS || clip == NULL)
+    if (streaming)
     {
-        goto cleanup;
+        result = henka_assets_load_audio_stream(
+            assets,
+            SANDBOX3D_AUDIO_FIXTURE_PATH,
+            &stream);
+        if (result != HENKA_SUCCESS || stream == NULL)
+        {
+            goto cleanup;
+        }
+        result = henka_assets_get_audio_stream_metadata(assets, stream, &metadata);
     }
-    result = henka_assets_get_audio_metadata(assets, clip, &metadata);
+    else
+    {
+        result = henka_assets_load_audio_clip(
+            assets,
+            SANDBOX3D_AUDIO_FIXTURE_PATH,
+            &clip);
+        if (result != HENKA_SUCCESS || clip == NULL)
+        {
+            goto cleanup;
+        }
+        result = henka_assets_get_audio_metadata(assets, clip, &metadata);
+    }
     if (result != HENKA_SUCCESS || metadata.type != HENKA_ASSET_TYPE_AUDIO ||
         !metadata.loaded || metadata.fallback ||
         metadata.source_path == NULL ||
@@ -326,18 +343,32 @@ henka_result sandbox3d_audio_runtime_validate_fixture(
     emitter_config.enabled = true;
     emitter_config.looping = true;
     emitter_config.spatial = true;
+    emitter_config.streaming = streaming;
     (void)snprintf(
         emitter_config.clip_path,
         sizeof(emitter_config.clip_path),
         "%s",
         SANDBOX3D_AUDIO_FIXTURE_PATH);
-    result = henka_audio_emitter_create_with_clip(
-        system,
-        scene,
-        entity,
-        clip,
-        &emitter_config,
-        &emitter);
+    if (streaming)
+    {
+        result = henka_audio_emitter_create_with_stream(
+            system,
+            scene,
+            entity,
+            stream,
+            &emitter_config,
+            &emitter);
+    }
+    else
+    {
+        result = henka_audio_emitter_create_with_clip(
+            system,
+            scene,
+            entity,
+            clip,
+            &emitter_config,
+            &emitter);
+    }
     if (result != HENKA_SUCCESS || emitter == NULL)
     {
         goto cleanup;
@@ -391,6 +422,26 @@ cleanup:
     {
         henka_scene_destroy_entity(scene, entity);
     }
-    /* clip is manager-owned and must not be destroyed here. */
+    /* clip and stream are manager-owned and must not be destroyed here. */
     return result;
+}
+
+henka_result sandbox3d_audio_runtime_validate_fixture(
+    sandbox3d_audio_runtime* runtime,
+    henka_scene* scene,
+    henka_asset_manager* assets,
+    const henka_camera* camera)
+{
+    return sandbox3d_audio_runtime_validate_fixture_mode(
+        runtime, scene, assets, camera, false);
+}
+
+henka_result sandbox3d_audio_runtime_validate_stream_fixture(
+    sandbox3d_audio_runtime* runtime,
+    henka_scene* scene,
+    henka_asset_manager* assets,
+    const henka_camera* camera)
+{
+    return sandbox3d_audio_runtime_validate_fixture_mode(
+        runtime, scene, assets, camera, true);
 }
