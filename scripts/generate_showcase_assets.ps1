@@ -947,11 +947,17 @@ function Write-ShowcaseTexture {
                             }
                         }
                         $spot = $nearestDistance -lt 0.30
+                        $spotEdge = $nearestDistance -ge 0.30 -and $nearestDistance -lt 0.36
                         $surfaceGrain = 0.5 + (0.5 * [Math]::Sin(($u * 97.0) + ($v * 61.0) + ($nearestSeed * 11.0)))
                         if ($spot) {
                             $red = 67 + [int][Math]::Round(27.0 * $nearestSeed + 6.0 * $surfaceGrain)
                             $green = 30 + [int][Math]::Round(15.0 * $nearestSeed + 4.0 * $surfaceGrain)
                             $blue = 8 + [int][Math]::Round(8.0 * $nearestSeed + 3.0 * $surfaceGrain)
+                        }
+                        elseif ($spotEdge) {
+                            $red = 128 + [int][Math]::Round(18.0 * $nearestSeed + 5.0 * $surfaceGrain)
+                            $green = 80 + [int][Math]::Round(13.0 * $nearestSeed + 4.0 * $surfaceGrain)
+                            $blue = 24 + [int][Math]::Round(7.0 * $nearestSeed + 3.0 * $surfaceGrain)
                         }
                         else {
                             $red = 181 + [int][Math]::Round(28.0 * $nearestSeed + 7.0 * $surfaceGrain)

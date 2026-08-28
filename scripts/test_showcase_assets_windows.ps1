@@ -49,6 +49,9 @@ if (-not $muzzleMatch.Success -or
     @($muzzleMatch.Groups["stations"].Value -split ',' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count -lt 10) {
     throw "Showcase giraffe muzzle profile is too coarse for a natural tapered face transition."
 }
+if ($generatorText -notmatch '(?s)\$spotEdge = .*?elseif \(\$spotEdge\)') {
+    throw "Showcase giraffe hide is missing its bounded reticulated spot-edge transition."
+}
 
 function Get-ShowcaseFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)
