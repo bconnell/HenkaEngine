@@ -806,7 +806,7 @@ function Write-ShowcaseTexture {
         [Parameter(Mandatory = $true)][ValidateSet("giraffe", "rocket")][string]$Subject
     )
     Add-Type -AssemblyName System.Drawing
-    $size = if ($Kind -eq "base_color") { 128 } else { 64 }
+    $size = if ($Kind -eq "base_color") { 256 } else { 64 }
     $bitmap = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $giraffeSeeds = @(
         [pscustomobject]@{ U = 0.08; V = 0.11; Ru = 0.075; Rv = 0.055; Angle = 0.30 },
@@ -871,26 +871,31 @@ function Write-ShowcaseTexture {
                             $sinAngle = [Math]::Sin($seedAngle)
                             $localU = ($deltaU * $cosAngle) + ($deltaV * $sinAngle)
                             $localV = (-$deltaU * $sinAngle) + ($deltaV * $cosAngle)
-                            $edgeWarp = 0.10 * [Math]::Sin(($localU * 41.0) + ($localV * 23.0) + ($seedU * 17.0))
-                            $normalizedDistance =
-                                ((($localU / $seedRu) * ($localU / $seedRu)) +
-                                 (($localV / $seedRv) * ($localV / $seedRv))) +
-                                $edgeWarp
+                            $normalizedU = $localU / $seedRu
+                            $normalizedV = $localV / $seedRv
+                            $shapeDistance =
+                                [Math]::Pow([Math]::Abs($normalizedU), 2.60) +
+                                [Math]::Pow([Math]::Abs($normalizedV), 2.60)
+                            $edgeWarp =
+                                (0.13 * [Math]::Sin(($localU * 37.0) + ($localV * 19.0) + ($seedU * 17.0))) +
+                                (0.07 * [Math]::Cos(($localU * 71.0) - ($localV * 43.0) + ($seedV * 23.0)))
+                            $normalizedDistance = $shapeDistance + $edgeWarp
                             if ($normalizedDistance -lt $nearestDistance) {
                                 $nearestDistance = $normalizedDistance
                                 $nearestSeed = 0.5 + (0.5 * [Math]::Sin(($seedU * 127.1) + ($seedV * 311.7)))
                             }
                         }
-                        $spot = $nearestDistance -lt 0.45
+                        $spot = $nearestDistance -lt 0.30
+                        $surfaceGrain = 0.5 + (0.5 * [Math]::Sin(($u * 97.0) + ($v * 61.0) + ($nearestSeed * 11.0)))
                         if ($spot) {
-                            $red = 76 + [int][Math]::Round(20.0 * $nearestSeed)
-                            $green = 35 + [int][Math]::Round(11.0 * $nearestSeed)
-                            $blue = 10 + [int][Math]::Round(6.0 * $nearestSeed)
+                            $red = 67 + [int][Math]::Round(27.0 * $nearestSeed + 6.0 * $surfaceGrain)
+                            $green = 30 + [int][Math]::Round(15.0 * $nearestSeed + 4.0 * $surfaceGrain)
+                            $blue = 8 + [int][Math]::Round(8.0 * $nearestSeed + 3.0 * $surfaceGrain)
                         }
                         else {
-                            $red = 194 + [int][Math]::Round(18.0 * $nearestSeed)
-                            $green = 141 + [int][Math]::Round(15.0 * $nearestSeed)
-                            $blue = 63 + [int][Math]::Round(10.0 * $nearestSeed)
+                            $red = 181 + [int][Math]::Round(28.0 * $nearestSeed + 7.0 * $surfaceGrain)
+                            $green = 128 + [int][Math]::Round(23.0 * $nearestSeed + 6.0 * $surfaceGrain)
+                            $blue = 54 + [int][Math]::Round(16.0 * $nearestSeed + 5.0 * $surfaceGrain)
                         }
                     }
                     else {

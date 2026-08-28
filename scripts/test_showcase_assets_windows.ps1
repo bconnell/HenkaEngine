@@ -228,6 +228,15 @@ $giraffeHideAverage = Get-ImageChannelAverage (Join-Path $OutputDirectory "giraf
 if ($giraffeHideAverage.Green -ge 205.0 -or $giraffeHideAverage.Blue -ge 150.0) {
     throw "Showcase giraffe hide does not use the restrained ochre palette required for an anatomical study."
 }
+$giraffeBaseColorBitmap = [System.Drawing.Bitmap]::new((Join-Path $OutputDirectory "giraffe_base_color.png"))
+try {
+    if ($giraffeBaseColorBitmap.Width -lt 256 -or $giraffeBaseColorBitmap.Height -lt 256) {
+        throw "Showcase giraffe base-color texture is under-resolved for close authored-detail inspection."
+    }
+}
+finally {
+    $giraffeBaseColorBitmap.Dispose()
+}
 $giraffeHideCoverage = Get-DarkPixelRowCoverage (Join-Path $OutputDirectory "giraffe_base_color.png")
 if ($giraffeHideCoverage.Total -lt 0.15 -or $giraffeHideCoverage.Total -gt 0.45 -or
     $giraffeHideCoverage.RowMaximum -gt 0.50) {
