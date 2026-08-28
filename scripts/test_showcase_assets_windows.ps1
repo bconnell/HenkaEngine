@@ -23,6 +23,16 @@ if ($rocketGeneratorText -match 'Add-Frustum \$thermal') {
 if ($rocketGeneratorText -notmatch 'Add-ProfiledFrustum \$thermal') {
     throw "Showcase rocket is missing profiled thermal/stage collar geometry."
 }
+$fairingMatch = [regex]::Match(
+    $rocketGeneratorText,
+    'Add-ProfiledFrustum \$paint @\((?<stations>[^)]*)\)')
+if (-not $fairingMatch.Success) {
+    throw "Showcase rocket is missing its profiled fairing geometry."
+}
+$fairingStations = @($fairingMatch.Groups["stations"].Value -split ',' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+if ($fairingStations.Count -lt 10) {
+    throw "Showcase rocket fairing profile is too coarse for a smooth ogive transition."
+}
 
 function Get-ShowcaseFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)

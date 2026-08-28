@@ -1366,7 +1366,7 @@ function New-Rocket {
     # The extra shoulder profiles keep the tanks from reading as one perfect
     # cylinder and give the skirt and fairing continuous, useful curvature.
     Add-ProfiledFrustum $coreInsulation @(0.38, 0.52, 0.70, 1.55, 2.42, 2.78, 3.10) @(0.40, 0.51, 0.55, 0.55, 0.54, 0.52, 0.48) 0.0 0.0 88
-    Add-ProfiledFrustum $paint @(3.10, 3.34, 3.48, 3.74, 4.04, 4.25, 4.42, 4.64) @(0.48, 0.51, 0.51, 0.49, 0.38, 0.29, 0.18, 0.025) 0.0 0.0 88
+    Add-ProfiledFrustum $paint @(3.10, 3.28, 3.44, 3.58, 3.72, 3.88, 4.06, 4.24, 4.42, 4.58, 4.70, 4.78) @(0.48, 0.505, 0.515, 0.512, 0.495, 0.46, 0.41, 0.35, 0.28, 0.20, 0.10, 0.025) 0.0 0.0 96
     Add-Frustum $metal 0.28 0.55 0.58 0.58 0.0 0.0 40
     Add-Frustum $metal 0.55 0.64 0.58 0.54 0.0 0.0 40
     Add-Frustum $metal 1.58 1.66 0.545 0.545 0.0 0.0 40
