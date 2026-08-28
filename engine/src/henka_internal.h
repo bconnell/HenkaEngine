@@ -281,6 +281,7 @@ typedef struct henka_asset_audio_entry
     char* source_path;
     char* display_name;
     henka_audio_clip* clip;
+    henka_audio_stream* stream;
     henka_asset_metadata metadata;
 } henka_asset_audio_entry;
 

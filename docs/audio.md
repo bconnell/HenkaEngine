@@ -13,10 +13,12 @@ foundation in `engine/include/henka/audio.h`.
   generation-checked voices or object-attached emitters without loading the
   entire source into resident sample memory. Stream reads are single-owner and
   caller-synchronized, matching the current deterministic mixer contract.
-- The asset manager caches resident WAV clips by canonical path and can reload
-  an existing clip transactionally in place. Borrowed clip identity remains
-  stable for attached emitters; malformed or unreadable replacements leave the
-  prior payload and metadata live.
+- The asset manager caches resident WAV clips and metadata-first WAV streams by
+  canonical path. A path may expose both borrowed payload forms through one
+  manager-owned asset identity; resident clips can be reloaded transactionally
+  in place, while streamed payloads retain bounded file-backed ownership.
+  Malformed or unreadable resident replacements leave the prior payload and
+  metadata live.
 - A fixed-capacity voice pool uses generation-checked voice IDs. Voices bind to
   borrowed `henka_scene` and `henka_entity` objects and read the live entity
   transform while mixing.
@@ -77,8 +79,8 @@ missing or stale emitter bindings fail closed, while `IsPlaying` reports false.
 
 ## Future work
 
-Manager/editor/persistence integration for streamed assets, broader decoder
-coverage, mixer effects, broader hot reload policy, expanded packaged-content coverage,
+Editor/persistence integration for streamed assets, broader decoder coverage,
+mixer effects, broader hot reload policy, expanded packaged-content coverage,
 device-loss notification/hot-plug policy, and broader spatial/occlusion features
 remain future work. The current script bindings cover only the three typed emitter
 controls above; broader Audio scripting remains unfinished. None of those gaps

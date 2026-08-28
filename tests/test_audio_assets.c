@@ -106,10 +106,14 @@ static bool test_nonzero_mix(const float* samples, size_t frame_count)
 int main(void)
 {
     const char* wav_path = "build/test_tmp/audio_manager.wav";
+    const char* stream_wav_path = "build/test_tmp/audio_manager_stream.wav";
     henka_engine engine;
     henka_asset_manager* manager;
     henka_audio_clip* clip = NULL;
     henka_audio_clip* same_clip = NULL;
+    henka_audio_clip* stream_clip = NULL;
+    henka_audio_stream* stream = NULL;
+    henka_audio_stream* same_stream = NULL;
     henka_asset_metadata metadata;
     henka_audio_system* system = NULL;
     henka_scene* scene = NULL;
@@ -119,6 +123,9 @@ int main(void)
     henka_audio_emitter* emitter = NULL;
     henka_audio_clip_info clip_info;
     henka_audio_clip_info reloaded_info;
+    henka_audio_stream_info stream_info;
+    float stream_samples[HENKA_AUDIO_OUTPUT_CHANNELS * 4U];
+    size_t stream_frames = 0U;
     float samples[HENKA_AUDIO_OUTPUT_CHANNELS];
     int result = EXIT_FAILURE;
 
@@ -129,6 +136,35 @@ int main(void)
     memset(manager, 0, sizeof(*manager));
     manager->engine = &engine;
     HENKA_TEST_ASSERT(test_write_wav(wav_path));
+    HENKA_TEST_ASSERT(test_write_wav(stream_wav_path));
+
+    HENKA_TEST_ASSERT(henka_assets_load_audio_stream(
+        manager, stream_wav_path, &stream) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stream != NULL);
+    HENKA_TEST_ASSERT(henka_assets_load_audio_stream(
+        manager, "build\\test_tmp\\.\\audio_manager_stream.wav", &same_stream) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(same_stream == stream);
+    HENKA_TEST_ASSERT(henka_assets_get_audio_stream_metadata(
+        manager, stream, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.type == HENKA_ASSET_TYPE_AUDIO);
+    HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback);
+    HENKA_TEST_ASSERT(!metadata.reload_supported);
+    HENKA_TEST_ASSERT(strcmp(metadata.source_path, stream_wav_path) == 0);
+    HENKA_TEST_ASSERT(henka_audio_stream_get_info(stream, &stream_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stream_info.frame_count == 64U);
+    HENKA_TEST_ASSERT(!stream_info.resident);
+    HENKA_TEST_ASSERT(henka_audio_stream_read_frames(
+        stream, 0U, 4U, stream_samples, 4U, &stream_frames) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stream_frames == 4U);
+    HENKA_TEST_ASSERT(test_nonzero_mix(stream_samples, 4U));
+    HENKA_TEST_ASSERT(henka_assets_load_audio_clip(
+        manager, "build\\test_tmp\\audio_manager_stream.wav", &stream_clip) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stream_clip != NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_audio_stream_metadata(
+        manager, stream, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.reload_supported);
 
     HENKA_TEST_ASSERT(henka_assets_load_audio_clip(
         manager, "../audio_manager.wav", &clip) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -140,7 +176,7 @@ int main(void)
         manager, "build\\test_tmp\\.\\audio_manager.wav", &same_clip) ==
         HENKA_SUCCESS);
     HENKA_TEST_ASSERT(same_clip == clip);
-    HENKA_TEST_ASSERT(henka_assets_get_metadata_count(manager) == 1U);
+    HENKA_TEST_ASSERT(henka_assets_get_metadata_count(manager) == 2U);
     HENKA_TEST_ASSERT(henka_assets_get_audio_metadata(
         manager, clip, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(metadata.type == HENKA_ASSET_TYPE_AUDIO);
@@ -220,6 +256,7 @@ int main(void)
     result = EXIT_SUCCESS;
 
     remove(wav_path);
+    remove(stream_wav_path);
     henka_audio_emitter_destroy(emitter);
     henka_audio_system_destroy(system);
     henka_scene_destroy(scene);

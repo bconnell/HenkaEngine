@@ -29,6 +29,7 @@ typedef struct external_graphical_terrain_state
 typedef struct external_audio_state
 {
     henka_scene* scene;
+    henka_asset_manager* assets;
     henka_audio_system* audio_system;
     henka_audio_emitter* emitter;
     henka_audio_stream* stream;
@@ -114,7 +115,6 @@ static void external_audio_destroy(external_audio_state* state)
     }
     henka_audio_emitter_destroy(state->emitter);
     henka_audio_emitter_destroy(state->stream_emitter);
-    henka_audio_stream_destroy(state->stream);
     henka_audio_system_destroy(state->audio_system);
     henka_scene_destroy(state->scene);
     henka_scene_document_destroy(state->reloaded_document);
@@ -122,13 +122,12 @@ static void external_audio_destroy(external_audio_state* state)
     state->emitter = NULL;
     state->stream_emitter = NULL;
     state->stream = NULL;
+    state->assets = NULL;
     state->audio_system = NULL;
     state->scene = NULL;
     state->reloaded_document = NULL;
     state->document = NULL;
     state->entity = HENKA_INVALID_ENTITY;
-    remove("external_audio_workflow.wav");
-    remove("external_audio_workflow.hnscene");
 }
 
 static henka_result external_audio_initialize(
@@ -157,6 +156,11 @@ static henka_result external_audio_initialize(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     state->entity = HENKA_INVALID_ENTITY;
+    state->assets = henka_engine_get_asset_manager(engine);
+    if (state->assets == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     if (!external_write_audio_fixture("external_audio_workflow.wav"))
     {
         return HENKA_ERROR_ASSET_SOURCE;
@@ -259,8 +263,8 @@ static henka_result external_audio_initialize(
     stream_config = emitter_config;
     if (result == HENKA_SUCCESS)
     {
-        result = henka_audio_stream_load_file(
-            ".", stream_config.clip_path, &state->stream);
+        result = henka_assets_load_audio_stream(
+            state->assets, stream_config.clip_path, &state->stream);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -376,6 +380,8 @@ static bool external_audio_workflow(void)
     }
     henka_engine_destroy(engine);
     external_audio_destroy(&state);
+    remove("external_audio_workflow.wav");
+    remove("external_audio_workflow.hnscene");
     return result == HENKA_SUCCESS && state.success;
 }
 

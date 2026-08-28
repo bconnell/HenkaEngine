@@ -503,6 +503,40 @@ static void henka_asset_set_summary(henka_asset_metadata* metadata, const char* 
     metadata->error_summary = error_summary;
 }
 
+static void henka_asset_update_audio_metadata(
+    henka_asset_audio_entry* entry)
+{
+    if (entry == NULL)
+    {
+        return;
+    }
+    entry->metadata.type = HENKA_ASSET_TYPE_AUDIO;
+    entry->metadata.loaded = entry->clip != NULL || entry->stream != NULL;
+    entry->metadata.fallback = false;
+    entry->metadata.reload_supported = entry->clip != NULL;
+    if (entry->clip != NULL && entry->stream != NULL)
+    {
+        henka_asset_set_summary(
+            &entry->metadata,
+            "Resident and metadata-first streamed PCM WAV payloads share the canonical asset path.",
+            "");
+    }
+    else if (entry->clip != NULL)
+    {
+        henka_asset_set_summary(
+            &entry->metadata,
+            "Resident PCM WAV loaded from the canonical asset path.",
+            "");
+    }
+    else
+    {
+        henka_asset_set_summary(
+            &entry->metadata,
+            "Metadata-first streamed PCM WAV loaded from the canonical asset path.",
+            "");
+    }
+}
+
 static bool henka_texture_descriptors_equal(
     const henka_texture_descriptor* left,
     const henka_texture_descriptor* right)
@@ -1343,6 +1377,7 @@ void henka_asset_manager_destroy(
 
     for (index = 0U; index < manager->audio_count; ++index)
     {
+        henka_audio_stream_destroy(manager->audio_entries[index].stream);
         henka_audio_clip_destroy(manager->audio_entries[index].clip);
         henka_free(manager->audio_entries[index].key);
         henka_free(manager->audio_entries[index].source_path);
@@ -1652,7 +1687,7 @@ henka_result henka_assets_load_audio_clip(
     }
 
     existing_entry = henka_asset_manager_find_audio_entry(manager, key);
-    if (existing_entry != NULL)
+    if (existing_entry != NULL && existing_entry->clip != NULL)
     {
         *out_clip = existing_entry->clip;
         henka_free(source_path);
@@ -1670,6 +1705,16 @@ henka_result henka_assets_load_audio_clip(
         henka_free(source_path);
         henka_free(key);
         return result;
+    }
+
+    if (existing_entry != NULL)
+    {
+        existing_entry->clip = clip;
+        henka_asset_update_audio_metadata(existing_entry);
+        henka_free(source_path);
+        henka_free(key);
+        *out_clip = clip;
+        return HENKA_SUCCESS;
     }
 
     display_name = henka_asset_copy_display_name(source_path);
@@ -1698,19 +1743,118 @@ henka_result henka_assets_load_audio_clip(
     manager->audio_entries[manager->audio_count].source_path = source_path;
     manager->audio_entries[manager->audio_count].display_name = display_name;
     manager->audio_entries[manager->audio_count].clip = clip;
-    manager->audio_entries[manager->audio_count].metadata.type =
-        HENKA_ASSET_TYPE_AUDIO;
+    manager->audio_entries[manager->audio_count].stream = NULL;
     manager->audio_entries[manager->audio_count].metadata.source_path = source_path;
     manager->audio_entries[manager->audio_count].metadata.display_name = display_name;
-    manager->audio_entries[manager->audio_count].metadata.loaded = true;
-    manager->audio_entries[manager->audio_count].metadata.fallback = false;
-    manager->audio_entries[manager->audio_count].metadata.reload_supported = true;
-    henka_asset_set_summary(
-        &manager->audio_entries[manager->audio_count].metadata,
-        "Resident PCM WAV loaded from the canonical asset path.",
-        "");
+    henka_asset_update_audio_metadata(
+        &manager->audio_entries[manager->audio_count]);
     manager->audio_count += 1U;
     *out_clip = clip;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_load_audio_stream(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_audio_stream** out_stream)
+{
+    henka_asset_audio_entry* existing_entry;
+    char* display_name;
+    char* key;
+    char* source_path;
+    henka_audio_stream* stream;
+    henka_result result;
+
+    if (out_stream != NULL)
+    {
+        *out_stream = NULL;
+    }
+
+    if (manager == NULL || manager->engine == NULL || path == NULL ||
+        out_stream == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    key = NULL;
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    source_path = NULL;
+    result = henka_assets_normalize_source_path(path, &source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        return result;
+    }
+
+    existing_entry = henka_asset_manager_find_audio_entry(manager, key);
+    if (existing_entry != NULL && existing_entry->stream != NULL)
+    {
+        *out_stream = existing_entry->stream;
+        henka_free(source_path);
+        henka_free(key);
+        return HENKA_SUCCESS;
+    }
+
+    stream = NULL;
+    result = henka_audio_stream_load_file(
+        henka_engine_get_asset_base_path(manager->engine),
+        source_path,
+        &stream);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(source_path);
+        henka_free(key);
+        return result;
+    }
+
+    if (existing_entry != NULL)
+    {
+        existing_entry->stream = stream;
+        henka_asset_update_audio_metadata(existing_entry);
+        henka_free(source_path);
+        henka_free(key);
+        *out_stream = stream;
+        return HENKA_SUCCESS;
+    }
+
+    display_name = henka_asset_copy_display_name(source_path);
+    if (display_name == NULL)
+    {
+        henka_audio_stream_destroy(stream);
+        henka_free(source_path);
+        henka_free(key);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    if (manager->audio_count == manager->audio_capacity)
+    {
+        result = henka_asset_manager_grow_audio(manager);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_audio_stream_destroy(stream);
+            henka_free(display_name);
+            henka_free(source_path);
+            henka_free(key);
+            return result;
+        }
+    }
+
+    manager->audio_entries[manager->audio_count].key = key;
+    manager->audio_entries[manager->audio_count].source_path = source_path;
+    manager->audio_entries[manager->audio_count].display_name = display_name;
+    manager->audio_entries[manager->audio_count].clip = NULL;
+    manager->audio_entries[manager->audio_count].stream = stream;
+    manager->audio_entries[manager->audio_count].metadata.source_path = source_path;
+    manager->audio_entries[manager->audio_count].metadata.display_name = display_name;
+    henka_asset_update_audio_metadata(
+        &manager->audio_entries[manager->audio_count]);
+    manager->audio_count += 1U;
+    *out_stream = stream;
     return HENKA_SUCCESS;
 }
 
@@ -5440,6 +5584,35 @@ henka_result henka_assets_get_audio_metadata(
     for (index = 0U; index < manager->audio_count; ++index)
     {
         if (manager->audio_entries[index].clip == clip)
+        {
+            *out_metadata = manager->audio_entries[index].metadata;
+            return HENKA_SUCCESS;
+        }
+    }
+
+    return HENKA_ERROR_UNKNOWN;
+}
+
+henka_result henka_assets_get_audio_stream_metadata(
+    const henka_asset_manager* manager,
+    const henka_audio_stream* stream,
+    henka_asset_metadata* out_metadata)
+{
+    size_t index;
+
+    if (out_metadata != NULL)
+    {
+        memset(out_metadata, 0, sizeof(*out_metadata));
+    }
+
+    if (manager == NULL || stream == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < manager->audio_count; ++index)
+    {
+        if (manager->audio_entries[index].stream == stream)
         {
             *out_metadata = manager->audio_entries[index].metadata;
             return HENKA_SUCCESS;

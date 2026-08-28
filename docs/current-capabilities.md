@@ -377,7 +377,8 @@ authoritative section below.
   output boundary; broader packaged content coverage remains in progress.
 - This is an engine foundation, not a complete game-audio workflow. The public
   runtime also has a bounded, metadata-first PCM-WAV streaming API with
-  caller-owned frame reads and stream-backed voices/emitters; manager, editor,
+  caller-owned frame reads and stream-backed voices/emitters. The asset manager
+  now caches those streams by canonical path alongside resident clips; editor,
   persistence, and packaged long-form workflow integration remain unfinished.
   Authored
   emitter configuration and authored listener now persist in v4 Scene
