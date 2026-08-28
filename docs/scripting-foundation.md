@@ -102,7 +102,7 @@ Current compiler support includes:
 
 The compiler owns HenkaScript syntax authority and the canonical minimal behavior source returned by `henka_hks_get_default_behavior_source`.
 
-The editor consumes compiler-owned token spans and lexical presentation classes. It does not maintain a separate HenkaScript keyword or grammar table.
+HenkaScript editor presentation consumes compiler-owned token spans and lexical presentation classes. The compiler remains the single HenkaScript grammar authority.
 
 ### Language constructs
 
@@ -189,7 +189,7 @@ Current Lua execution policy includes:
 - backend-owned token and indentation APIs for editor presentation;
 - the real Lua parser as syntax acceptance authority.
 
-The editor does not maintain a second Lua grammar.
+Lua parser ownership supplies the syntax authority used by editor validation.
 
 ## Script Host
 
@@ -264,7 +264,7 @@ Behavior state supports explicit candidate-based sidecar persistence with:
 
 ### Edit and Play state ownership
 
-Game Authoring exposes typed coordinator-checked state access. Mutable store pointers are not exposed through that boundary.
+Game Authoring exposes typed coordinator-checked state access. Store mutation is available through those coordinator operations.
 
 Authoring state reads and writes are rejected while Play is active.
 
@@ -275,7 +275,7 @@ Two explicit operations manage retained runtime state:
 - **Save Play State** writes the retained stopped Play store;
 - **Load Play State** replaces the authoring baseline and discards the retained runtime snapshot.
 
-State is not implicitly saved on Stop and is not stored inside authored `.hscene` data.
+Behavior-state persistence uses explicit Save Play State and Load Play State operations. Authored `.hscene` data excludes behavior state.
 
 ## Scene Document integration
 
@@ -377,7 +377,7 @@ Reload uses the shared candidate-first coordinator seam:
 
 ## External-project validation
 
-The external-game template consumes the public Scene Document behavior runtime without Sandbox source.
+The external-game template consumes the public Scene Document behavior runtime through its packaged consumer workflow.
 
 Its packaged smoke workflow loads:
 
@@ -390,7 +390,7 @@ The external executable verifies:
 - typed state delivery;
 - use of the public scripting boundary.
 
-No machine-global scripting installation is required by that workflow.
+The workflow is self-contained with the packaged scripting dependencies used by the template.
 
 ## Minimal language shapes
 
@@ -427,7 +427,7 @@ fn OnEvent() {
 
 Both examples run under the behavior instruction budget and require a valid Scene Document attachment in a Play session.
 
-Arbitrary filesystem, process, network, and renderer access are not exposed through these examples or the current scripting host surface.
+The current scripting host surface is limited to the documented gameplay APIs and bounded execution contracts.
 
 ## Execution order
 
