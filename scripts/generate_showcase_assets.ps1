@@ -1281,15 +1281,21 @@ function New-Giraffe {
         Add-Ellipsoid $hoof @($legXBase, 0.08, $legZBase + 0.015) @(0.13, 0.055, 0.17) 16 28
         Add-Ellipsoid $joint @($legXBase, 0.88, $legZBase + 0.012) @(0.125, 0.085, 0.11) 12 22
     }
-    # Model the ears as compact, flattened lobes in the head plane. The
-    # previous deep capsules read like small missiles when viewed from the
-    # front, especially with the inner-ear patch sitting on their top edge.
-    Add-Ellipsoid $tan @(-0.39, 4.16, 0.94) @(0.17, 0.12, 0.070) 16 32
-    Add-Ellipsoid $tan @(0.39, 4.16, 0.94) @(0.17, 0.12, 0.070) 16 32
-    Add-Frustum $tan 4.18 4.49 0.062 0.050 -0.16 0.96 16
-    Add-Frustum $tan 4.18 4.49 0.062 0.050 0.16 0.96 16
-    Add-Ellipsoid $earInner @(-0.39, 4.16, 1.010) @(0.080, 0.105, 0.018) 10 20
-    Add-Ellipsoid $earInner @(0.39, 4.16, 1.010) @(0.080, 0.105, 0.018) 10 20
+    # Model the ears as tapered, leaf-like profiles in the head plane. The
+    # vertical taper and shallow depth keep the silhouette organic instead of
+    # making the ears read as round toy lobes or detached discs.
+    foreach ($earX in @(-0.39, 0.39)) {
+        Add-HorizontalLoft $tan `
+            @(0.82, 0.86, 0.92, 0.99, 1.06, 1.12, 1.17, 1.21, 1.23, 1.24) `
+            @(0.025, 0.09, 0.15, 0.19, 0.20, 0.18, 0.14, 0.09, 0.045, 0.015) `
+            @(0.025, 0.05, 0.075, 0.09, 0.095, 0.085, 0.07, 0.05, 0.03, 0.012) `
+            $earX @(4.12, 4.14, 4.16, 4.17, 4.17, 4.15, 4.12, 4.09, 4.06, 4.04) 64
+        Add-HorizontalLoft $earInner `
+            @(0.90, 0.925, 0.95, 0.975, 0.99) `
+            @(0.025, 0.07, 0.09, 0.065, 0.018) `
+            @(0.050, 0.10, 0.115, 0.10, 0.050) `
+            $earX @(4.105, 4.13, 4.14, 4.12, 4.09) 24
+    }
     # Ossicones use a visible tan stalk and a short cap angled outward from
     # the head. The previous isolated ellipsoids read as floating pegs and
     # gave the mascot an unintended, lopsided silhouette in front views.

@@ -33,6 +33,15 @@ $fairingStations = @($fairingMatch.Groups["stations"].Value -split ',' | Where-O
 if ($fairingStations.Count -lt 10) {
     throw "Showcase rocket fairing profile is too coarse for a smooth ogive transition."
 }
+$giraffeStart = $generatorText.IndexOf("function New-Giraffe")
+if ($giraffeStart -lt 0 -or $giraffeStart -ge $rocketStart) {
+    throw "Showcase giraffe generator boundary was not found."
+}
+$giraffeGeneratorText = $generatorText.Substring($giraffeStart, $rocketStart - $giraffeStart)
+if (([regex]::Matches($giraffeGeneratorText, 'Add-HorizontalLoft \$tan')).Count -lt 3 -or
+    $giraffeGeneratorText -notmatch 'Add-HorizontalLoft \$earInner') {
+    throw "Showcase giraffe ears must use continuous tapered profiles rather than round primitive lobes."
+}
 
 function Get-ShowcaseFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)
