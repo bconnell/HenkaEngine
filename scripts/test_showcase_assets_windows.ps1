@@ -315,7 +315,8 @@ if (($giraffeNoseBounds.Maximum[0] - $giraffeNoseBounds.Minimum[0]) -lt 0.16) {
 }
 $giraffeEyePrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq 3 })[0]
 $giraffeEyeBounds = Get-PositionBounds -Gltf $giraffe -Binary $giraffeBinary -Primitive $giraffeEyePrimitive
-if (($giraffeEyeBounds.Maximum[0] - $giraffeEyeBounds.Minimum[0]) -gt 0.48) {
+if (($giraffeEyeBounds.Maximum[0] - $giraffeEyeBounds.Minimum[0]) -gt 0.48 -or
+    ($giraffeEyeBounds.Maximum[1] - $giraffeEyeBounds.Minimum[1]) -lt 0.09) {
     throw "Showcase giraffe eyes remain too wide-set or oversized for the restrained anatomical face."
 }
 $giraffeShoulderMaterialIndex = [array]::IndexOf($giraffeMaterialNames, "Giraffe Shoulder")

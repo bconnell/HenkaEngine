@@ -1179,8 +1179,8 @@ function New-Giraffe {
         (New-Material "Giraffe Tan" @(1.0, 1.0, 1.0, 1.0) 0.0 0.82 0.0 0.62 @(0.028, 0.009, 0.002) 0.66 -BaseColorTextureIndex 2 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Spots" @(0.075, 0.025, 0.006, 1.0) 0.0 0.84 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Cream" @(0.54, 0.33, 0.14, 1.0) 0.0 0.76 0.0 0.58 @(0.045, 0.018, 0.005) 0.68 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Eye White" @(0.075, 0.028, 0.008, 1.0) 0.0 0.36 0.05 0.20),
-        (New-Material "Giraffe Iris" @(0.035, 0.010, 0.003, 1.0) 0.0 0.22 0.18 0.06),
+        (New-Material "Giraffe Eye White" @(0.018, 0.006, 0.002, 1.0) 0.0 0.24 0.08 0.24),
+        (New-Material "Giraffe Iris" @(0.005, 0.001, 0.0005, 1.0) 0.0 0.18 0.04 0.12),
         (New-Material "Giraffe Eye Detail" @(0.004, 0.002, 0.001, 1.0) 0.0 0.10 0.70 0.06),
         (New-Material "Giraffe Smile" @(0.11, 0.015, 0.008, 1.0) 0.0 0.34 0.05 0.22),
         (New-Material "Giraffe Ear Inner" @(0.30, 0.065, 0.025, 1.0) 0.0 0.44 0.03 0.18 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
@@ -1315,12 +1315,12 @@ function New-Giraffe {
         @(0.20, 0.23, 0.22, 0.17, 0.13, 0.08) `
         @(0.12, 0.14, 0.13, 0.10, 0.075, 0.045) `
         0.0 @(3.68, 3.67, 3.65, 3.62, 3.60, 3.59) 64
-    Add-Ellipsoid $eyes @(-0.21, 4.02, 1.39) @(0.020, 0.034, 0.022) 16 28
-    Add-Ellipsoid $eyes @(0.21, 4.02, 1.39) @(0.020, 0.034, 0.022) 16 28
-    Add-Ellipsoid $iris @(-0.21, 4.02, 1.415) @(0.010, 0.020, 0.008) 12 24
-    Add-Ellipsoid $iris @(0.21, 4.02, 1.415) @(0.010, 0.020, 0.008) 12 24
-    Add-Ellipsoid $details @(-0.21, 4.058, 1.402) @(0.036, 0.008, 0.010) 8 18
-    Add-Ellipsoid $details @(0.21, 4.058, 1.402) @(0.036, 0.008, 0.010) 8 18
+    Add-Ellipsoid $eyes @(-0.18, 4.02, 1.39) @(0.045, 0.050, 0.018) 16 28
+    Add-Ellipsoid $eyes @(0.18, 4.02, 1.39) @(0.045, 0.050, 0.018) 16 28
+    Add-Ellipsoid $iris @(-0.18, 4.02, 1.414) @(0.023, 0.031, 0.008) 12 24
+    Add-Ellipsoid $iris @(0.18, 4.02, 1.414) @(0.023, 0.031, 0.008) 12 24
+    Add-Ellipsoid $details @(-0.18, 4.055, 1.407) @(0.018, 0.006, 0.006) 8 18
+    Add-Ellipsoid $details @(0.18, 4.055, 1.407) @(0.018, 0.006, 0.006) 8 18
     Add-Ellipsoid $details @(-0.075, 3.69, 1.895) @(0.030, 0.018, 0.010) 8 14
     Add-Ellipsoid $details @(0.075, 3.69, 1.895) @(0.030, 0.018, 0.010) 8 14
     Add-Ellipsoid $smile @(0.0, 3.53, 1.855) @(0.065, 0.008, 0.006) 8 16
