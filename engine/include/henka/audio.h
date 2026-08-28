@@ -169,6 +169,8 @@ henka_result henka_audio_voice_get_info(
     henka_audio_voice_info* out_info);
 size_t henka_audio_system_get_active_voice_count(
     const henka_audio_system* system);
+uint32_t henka_audio_system_get_sample_rate(
+    const henka_audio_system* system);
 
 /* Creates a real object-attached emitter through the production scene/entity
  * path. The emitter owns its resident clip and stops that voice on destroy;

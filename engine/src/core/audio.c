@@ -768,6 +768,12 @@ size_t henka_audio_system_get_active_voice_count(
     return system == NULL ? 0U : system->active_voice_count;
 }
 
+uint32_t henka_audio_system_get_sample_rate(
+    const henka_audio_system* system)
+{
+    return system == NULL ? 0U : system->output_sample_rate;
+}
+
 henka_result henka_audio_emitter_create(
     henka_audio_system* system,
     const char* project_root,

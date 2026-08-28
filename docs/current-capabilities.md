@@ -370,13 +370,14 @@ authoritative section below.
 - This is an engine foundation, not a complete game-audio workflow. Authored
   emitter configuration now persists in v3 Scene Documents, and the Sandbox
   Play session can instantiate those emitters when given the Audio system;
-  listener authoring, normal graphical Sandbox/device wiring, and broader
-  runtime integration remain in progress. SDL/WASAPI device output, streamed
-  long-form assets, asset-manager metadata and reload, scripting/editor
-  integration, packaged runtime proof, and broader format support also remain
-  in progress. The current runtime core is single-owner for
-  voice commands and mixing; device-thread synchronization belongs at the
-  future backend boundary.
+  a client-only caller-pumped SDL3 playback boundary is also available with
+  bounded queue/pump budgets and device diagnostics. Listener authoring,
+  normal graphical Sandbox/device lifecycle wiring, and broader runtime
+  integration remain in progress. Streamed long-form assets, asset-manager
+  metadata and reload, scripting/editor integration, packaged runtime proof,
+  and broader format support also remain in progress. The current runtime
+  core and output boundary are single-owner for voice commands and mixing;
+  device-thread synchronization remains outside this scope.
 
 ## Known Gaps
 

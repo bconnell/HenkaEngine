@@ -3,6 +3,7 @@
 
 #include <henka/action.h>
 #include <henka/audio.h>
+#include <henka/audio_output.h>
 #include <henka/authoring_mesh.h>
 #include <henka/authoring_modeling.h>
 #include <henka/assets.h>

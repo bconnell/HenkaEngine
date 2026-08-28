@@ -22,19 +22,22 @@ foundation in `engine/include/henka/audio.h`.
   configuration defaulted off. Loading a legacy document does not rewrite it.
 
 The headless-safe mixer is the deterministic production-output boundary for
-this slice. It does not open an audio device, and it does not pretend that
-generated test samples establish device or content-pipeline coverage.
+the renderer-independent portion of this slice. A client-only, caller-pumped
+SDL3 output owner now opens a playback stream, accepts bounded stereo
+float-PCM frames, and reports device/queue diagnostics. It does not create a
+background mixer thread; the caller owns scene and Audio synchronization.
 
 ## Current development
 
 The Sandbox Play session now has a bounded runtime-emitter instantiation path
 when the caller supplies an Audio system: it reads the persisted v3 emitter
 configuration and binds each emitter to the same real Scene entity used by
-Play. The next Audio slices must connect that path to the existing SDL3
-platform boundary, the manager-owned asset metadata path, Scene Document
-listener configuration, and the normal graphical Sandbox lifecycle. Those
-integrations must preserve the renderer-free dedicated-server path and add
-real imported or authored-object coverage rather than test-only entities.
+Play. The caller-pumped SDL3 output boundary is available to client consumers
+but is not yet wired into the normal graphical Sandbox lifecycle. The next
+Audio slices must connect it to the manager-owned asset metadata path, Scene
+Document listener configuration, and normal application/device lifecycle.
+Those integrations must preserve the renderer-free dedicated-server path and
+add real imported or authored-object coverage rather than test-only entities.
 
 ## Future work
 

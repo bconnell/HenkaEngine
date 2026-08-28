@@ -77,6 +77,7 @@ if(HENKA_BUILD_CLIENT)
         src/core/gizmo.c
         src/core/workspace.c
         src/platform/platform_sdl.c
+        src/platform/audio_output_sdl.c
         src/renderer/mesh.c
         src/renderer/terrain_render.c
         src/renderer/renderer.c
