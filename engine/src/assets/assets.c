@@ -1704,13 +1704,62 @@ henka_result henka_assets_load_audio_clip(
     manager->audio_entries[manager->audio_count].metadata.display_name = display_name;
     manager->audio_entries[manager->audio_count].metadata.loaded = true;
     manager->audio_entries[manager->audio_count].metadata.fallback = false;
-    manager->audio_entries[manager->audio_count].metadata.reload_supported = false;
+    manager->audio_entries[manager->audio_count].metadata.reload_supported = true;
     henka_asset_set_summary(
         &manager->audio_entries[manager->audio_count].metadata,
         "Resident PCM WAV loaded from the canonical asset path.",
         "");
     manager->audio_count += 1U;
     *out_clip = clip;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_reload_audio_clip(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_audio_clip** out_clip)
+{
+    char* key = NULL;
+    henka_asset_audio_entry* entry;
+    henka_result result;
+
+    if (out_clip != NULL)
+    {
+        *out_clip = NULL;
+    }
+    if (manager == NULL || manager->engine == NULL || path == NULL ||
+        out_clip == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    entry = henka_asset_manager_find_audio_entry(manager, key);
+    henka_free(key);
+    if (entry == NULL || entry->clip == NULL || entry->source_path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_audio_clip_reload_file(
+        entry->clip,
+        henka_engine_get_asset_base_path(manager->engine),
+        entry->source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    entry->metadata.loaded = true;
+    entry->metadata.fallback = false;
+    entry->metadata.reload_supported = true;
+    henka_asset_set_summary(
+        &entry->metadata,
+        "Resident PCM WAV reloaded transactionally through the canonical asset path.",
+        "");
+    *out_clip = entry->clip;
     return HENKA_SUCCESS;
 }
 

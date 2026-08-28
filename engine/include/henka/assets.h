@@ -217,6 +217,13 @@ henka_result henka_assets_load_audio_clip(
     henka_asset_manager* manager,
     const char* path,
     henka_audio_clip** out_clip);
+/* Reloads an existing manager-owned resident WAV clip in place. The borrowed
+ * clip identity remains stable for emitters, and a failed source read or WAV
+ * validation leaves both the prior payload and metadata live. */
+henka_result henka_assets_reload_audio_clip(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_audio_clip** out_clip);
 /* Adopts one caller-created GPU texture under a stable confined runtime
  * identity. Ownership transfers only on success; the manager then owns the
  * borrowed texture pointer and destroys it with the other texture assets.

@@ -651,6 +651,43 @@ henka_result henka_audio_clip_load_file(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_audio_clip_reload_file(
+    henka_audio_clip* clip,
+    const char* project_root,
+    const char* relative_path)
+{
+    henka_audio_clip* replacement = NULL;
+    float* old_samples;
+    char* old_source_path;
+    henka_result result;
+
+    if (clip == NULL || project_root == NULL || relative_path == NULL ||
+        project_root[0] == '\0' || relative_path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_audio_clip_load_file(project_root, relative_path, &replacement);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    old_samples = clip->samples;
+    old_source_path = clip->source_path;
+    clip->source_path = replacement->source_path;
+    clip->sample_rate = replacement->sample_rate;
+    clip->channels = replacement->channels;
+    clip->bits_per_sample = replacement->bits_per_sample;
+    clip->frame_count = replacement->frame_count;
+    clip->samples = replacement->samples;
+    replacement->source_path = NULL;
+    replacement->samples = NULL;
+    henka_free(old_samples);
+    henka_free(old_source_path);
+    henka_free(replacement);
+    return HENKA_SUCCESS;
+}
+
 void henka_audio_clip_destroy(henka_audio_clip* clip)
 {
     if (clip != NULL)

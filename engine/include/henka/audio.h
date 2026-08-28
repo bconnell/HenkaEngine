@@ -142,6 +142,14 @@ henka_result henka_audio_clip_load_file(
     const char* project_root,
     const char* relative_path,
     henka_audio_clip** out_clip);
+/* Replaces a decoded clip payload only after the complete replacement file
+ * validates. The clip pointer remains stable for manager-owned borrowers, and
+ * the prior payload remains live when loading or validation fails. The caller
+ * must synchronize this operation with the audio owner before mixing. */
+henka_result henka_audio_clip_reload_file(
+    henka_audio_clip* clip,
+    const char* project_root,
+    const char* relative_path);
 void henka_audio_clip_destroy(henka_audio_clip* clip);
 henka_result henka_audio_clip_get_info(
     const henka_audio_clip* clip,

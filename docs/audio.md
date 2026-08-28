@@ -7,6 +7,10 @@ foundation in `engine/include/henka/audio.h`.
 
 - Resident PCM WAV clips are loaded through the same confined project-relative
   path boundary used by other file-backed runtime data.
+- The asset manager caches resident WAV clips by canonical path and can reload
+  an existing clip transactionally in place. Borrowed clip identity remains
+  stable for attached emitters; malformed or unreadable replacements leave the
+  prior payload and metadata live.
 - A fixed-capacity voice pool uses generation-checked voice IDs. Voices bind to
   borrowed `henka_scene` and `henka_entity` objects and read the live entity
   transform while mixing.
@@ -43,14 +47,14 @@ emitters; the graphical camera remains the live listener source during normal
 interactive runtime.
 Play pause and resume now propagate to its live emitter voices without
 advancing their source positions. The next Audio slices must connect it to
-manager-owned asset reload and broader device-lifecycle policy. Those
+broader device-lifecycle policy and real packaged Audio fixtures. Those
 integrations must preserve the
 renderer-free dedicated-server path and add real imported or authored-object
 coverage rather than test-only entities.
 
 ## Future work
 
-Streaming long-form assets, broader decoder coverage, mixer effects, hot reload,
-editor controls, scripting bindings, package/runtime proof, device-loss
+Streaming long-form assets, broader decoder coverage, mixer effects, broader hot
+reload policy, editor controls, scripting bindings, package/runtime proof, device-loss
 notification/hot-plug policy, and broader spatial/occlusion features remain
 future work. None of those gaps are hidden by the current Foundation status.

@@ -378,8 +378,9 @@ authoritative section below.
   through the normal Game Authoring coordinator. The graphical Sandbox owns a
   client-only, caller-pumped SDL3 playback boundary with bounded queue/pump
   budgets, device diagnostics, authored-listener application, production-camera
-  listener mapping, and transactional stream recovery after device loss.
-  Streamed long-form assets, asset-manager reload, scripting/editor integration,
+  listener mapping, transactional stream recovery after device loss, and
+  manager-owned resident WAV reload that preserves borrowed clip identity.
+  Streamed long-form assets, broader decoder support, scripting/editor integration,
   packaged runtime proof, and broader format support remain in progress. The
   current runtime core and output boundary are single-owner for voice commands
   and mixing; device-thread synchronization remains outside this scope.

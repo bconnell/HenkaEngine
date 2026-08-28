@@ -33,9 +33,11 @@ static void test_write_u32(unsigned char* bytes, size_t offset, uint32_t value)
     bytes[offset + 3U] = (unsigned char)((value >> 24U) & 0xffU);
 }
 
-static bool test_write_wav(const char* path)
+static bool test_write_wav_with_sample(
+    const char* path,
+    size_t frame_count,
+    int16_t sample_value)
 {
-    const size_t frame_count = 64U;
     const size_t data_size = frame_count * sizeof(int16_t);
     const size_t file_size = 44U + data_size;
     unsigned char* bytes = (unsigned char*)calloc(1U, file_size);
@@ -61,7 +63,10 @@ static bool test_write_wav(const char* path)
     test_write_u32(bytes, 40U, (uint32_t)data_size);
     for (frame_index = 0U; frame_index < frame_count; ++frame_index)
     {
-        test_write_u16(bytes, 44U + frame_index * 2U, 8192U);
+        test_write_u16(
+            bytes,
+            44U + frame_index * 2U,
+            (uint16_t)sample_value);
     }
 #if defined(_WIN32)
     if (fopen_s(&file, path, "wb") != 0)
@@ -78,6 +83,11 @@ static bool test_write_wav(const char* path)
     }
     free(bytes);
     return success;
+}
+
+static bool test_write_wav(const char* path)
+{
+    return test_write_wav_with_sample(path, 64U, 8192);
 }
 
 static bool test_nonzero_mix(const float* samples, size_t frame_count)
@@ -107,6 +117,8 @@ int main(void)
     henka_audio_emitter_config emitter_config =
         henka_audio_emitter_config_default();
     henka_audio_emitter* emitter = NULL;
+    henka_audio_clip_info clip_info;
+    henka_audio_clip_info reloaded_info;
     float samples[HENKA_AUDIO_OUTPUT_CHANNELS];
     int result = EXIT_FAILURE;
 
@@ -133,6 +145,7 @@ int main(void)
         manager, clip, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(metadata.type == HENKA_ASSET_TYPE_AUDIO);
     HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback);
+    HENKA_TEST_ASSERT(metadata.reload_supported);
     HENKA_TEST_ASSERT(strcmp(metadata.source_path, wav_path) == 0);
     HENKA_TEST_ASSERT(henka_assets_get_audio_metadata_for_path(
         manager, "build\\test_tmp\\audio_manager.wav", &metadata) ==
@@ -141,6 +154,44 @@ int main(void)
     HENKA_TEST_ASSERT(henka_assets_get_metadata_at_index(
         manager, 0U, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(metadata.type == HENKA_ASSET_TYPE_AUDIO);
+    HENKA_TEST_ASSERT(henka_audio_clip_get_info(clip, &clip_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(clip_info.frame_count == 64U);
+
+    HENKA_TEST_ASSERT(test_write_wav_with_sample(wav_path, 96U, 16384));
+    same_clip = NULL;
+    HENKA_TEST_ASSERT(henka_assets_reload_audio_clip(
+        manager,
+        "build\\test_tmp\\.\\audio_manager.wav",
+        &same_clip) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(same_clip == clip);
+    HENKA_TEST_ASSERT(henka_audio_clip_get_info(clip, &reloaded_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_info.frame_count == 96U);
+    HENKA_TEST_ASSERT(reloaded_info.sample_rate == clip_info.sample_rate);
+
+    {
+        FILE* file = NULL;
+        const unsigned char malformed[] = {'R', 'I', 'F', 'F', 0U, 0U, 0U, 0U};
+#if defined(_WIN32)
+        HENKA_TEST_ASSERT(fopen_s(&file, wav_path, "wb") == 0 && file != NULL);
+#else
+        file = fopen(wav_path, "wb");
+#endif
+        HENKA_TEST_ASSERT(file != NULL);
+        HENKA_TEST_ASSERT(fwrite(malformed, 1U, sizeof(malformed), file) == sizeof(malformed));
+        HENKA_TEST_ASSERT(fclose(file) == 0);
+    }
+    same_clip = (henka_audio_clip*)1;
+    HENKA_TEST_ASSERT(henka_assets_reload_audio_clip(
+        manager,
+        wav_path,
+        &same_clip) == HENKA_ERROR_ASSET_SOURCE);
+    HENKA_TEST_ASSERT(same_clip == NULL);
+    HENKA_TEST_ASSERT(henka_audio_clip_get_info(clip, &clip_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(clip_info.frame_count == 96U);
+    HENKA_TEST_ASSERT(henka_assets_get_audio_metadata(
+        manager, clip, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback);
+    HENKA_TEST_ASSERT(metadata.reload_supported);
 
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     entity = henka_scene_create_entity_named(scene, "Manager Audio Object");
