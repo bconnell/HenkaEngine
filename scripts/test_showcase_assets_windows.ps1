@@ -49,6 +49,10 @@ if (-not $muzzleMatch.Success -or
     @($muzzleMatch.Groups["stations"].Value -split ',' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count -lt 10) {
     throw "Showcase giraffe muzzle profile is too coarse for a natural tapered face transition."
 }
+$muzzleLoftCount = [regex]::Matches($giraffeGeneratorText, 'Add-HorizontalLoft \$cream').Count
+if ($muzzleLoftCount -lt 2) {
+    throw "Showcase giraffe muzzle must separate the upper and lower mouth masses rather than one cream plate."
+}
 if ($generatorText -notmatch '(?s)\$spotEdge = .*?elseif \(\$spotEdge\)') {
     throw "Showcase giraffe hide is missing its bounded reticulated spot-edge transition."
 }

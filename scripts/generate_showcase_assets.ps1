@@ -1337,11 +1337,18 @@ function New-Giraffe {
     # The face is built as an elongated muzzle with small, recessed dark eyes
     # and a neutral lip crease. The model intentionally avoids oversized
     # highlights or a smiling mouth so its expression remains anatomical.
+    # Split the muzzle into upper and lower masses so the mouth reads as a
+    # shallow anatomical seam instead of a single cream appliqué.
     Add-HorizontalLoft $cream `
         @(1.28, 1.36, 1.46, 1.58, 1.70, 1.80, 1.88, 1.94, 1.98, 2.00) `
         @(0.13, 0.19, 0.225, 0.24, 0.23, 0.20, 0.16, 0.12, 0.07, 0.025) `
-        @(0.075, 0.11, 0.135, 0.145, 0.135, 0.115, 0.09, 0.065, 0.04, 0.018) `
-        0.0 @(3.74, 3.72, 3.70, 3.68, 3.66, 3.63, 3.60, 3.58, 3.56, 3.55) 64
+        @(0.040, 0.060, 0.075, 0.080, 0.075, 0.064, 0.050, 0.036, 0.022, 0.010) `
+        0.0 @(3.80, 3.78, 3.76, 3.74, 3.72, 3.69, 3.66, 3.64, 3.62, 3.61) 64
+    Add-HorizontalLoft $cream `
+        @(1.28, 1.36, 1.46, 1.58, 1.70, 1.80, 1.88, 1.94, 1.98, 2.00) `
+        @(0.13, 0.19, 0.225, 0.24, 0.23, 0.20, 0.16, 0.12, 0.07, 0.025) `
+        @(0.040, 0.060, 0.075, 0.080, 0.075, 0.064, 0.050, 0.036, 0.022, 0.010) `
+        0.0 @(3.68, 3.66, 3.64, 3.62, 3.60, 3.57, 3.54, 3.52, 3.50, 3.49) 64
     Add-Ellipsoid $eyes @(-0.18, 4.02, 1.39) @(0.045, 0.050, 0.018) 16 28
     Add-Ellipsoid $eyes @(0.18, 4.02, 1.39) @(0.045, 0.050, 0.018) 16 28
     Add-Ellipsoid $iris @(-0.18, 4.02, 1.414) @(0.023, 0.031, 0.008) 12 24
