@@ -18,6 +18,11 @@ if ($sandbox -match 'const float macro_signal = 0\.5f \+ 0\.5f \* sinf' -or
     $sandbox -match 'const float grain_signal = 0\.5f \+ 0\.5f \* sinf') {
     $missing += 'legacy periodic macro or grain bands'
 }
+if ($sandbox -match '101U, 3U, 3U' -or
+    $sandbox -match '131U, 7U, 3U' -or
+    $sandbox -match '157U, 5U, 9U') {
+    $missing += 'former very-low-frequency detail octaves'
+}
 if ($checker -notmatch '\[int\]\$metadata\[0\]\.Groups\["texture_edge"\]\.Value -lt 64') {
     $missing += 'visual gate minimum texture resolution'
 }

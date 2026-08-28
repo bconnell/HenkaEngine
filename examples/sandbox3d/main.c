@@ -3999,17 +3999,17 @@ static void sandbox3d_generate_realism_detail_textures(
             const float normal_z = sqrtf(fmaxf(
                 0.0f, 1.0f - normal_x * normal_x - normal_y * normal_y));
             const float macro_signal =
-                sandbox3d_realism_value_noise(u, v, 101U, 3U, 3U) * 0.52f +
-                sandbox3d_realism_value_noise(u, v, 103U, 9U, 7U) * 0.30f +
-                sandbox3d_realism_value_noise(u, v, 107U, 21U, 17U) * 0.18f;
+                sandbox3d_realism_value_noise(u, v, 101U, 5U, 5U) * 0.52f +
+                sandbox3d_realism_value_noise(u, v, 103U, 13U, 11U) * 0.30f +
+                sandbox3d_realism_value_noise(u, v, 107U, 29U, 23U) * 0.18f;
             const float grain_signal =
-                sandbox3d_realism_value_noise(u, v, 131U, 7U, 3U) * 0.48f +
-                sandbox3d_realism_value_noise(u, v, 137U, 19U, 5U) * 0.32f +
-                sandbox3d_realism_value_noise(u, v, 139U, 37U, 11U) * 0.20f;
+                sandbox3d_realism_value_noise(u, v, 131U, 9U, 5U) * 0.48f +
+                sandbox3d_realism_value_noise(u, v, 137U, 23U, 9U) * 0.32f +
+                sandbox3d_realism_value_noise(u, v, 139U, 43U, 17U) * 0.20f;
             const float wet_signal =
-                sandbox3d_realism_value_noise(u, v, 157U, 5U, 9U) * 0.55f +
-                sandbox3d_realism_value_noise(u, v, 163U, 13U, 23U) * 0.30f +
-                sandbox3d_realism_value_noise(u, v, 167U, 29U, 41U) * 0.15f;
+                sandbox3d_realism_value_noise(u, v, 157U, 7U, 11U) * 0.55f +
+                sandbox3d_realism_value_noise(u, v, 163U, 17U, 29U) * 0.30f +
+                sandbox3d_realism_value_noise(u, v, 167U, 37U, 53U) * 0.15f;
             const size_t pixel = ((size_t)y * SANDBOX3D_REALISM_TEXTURE_EDGE + x) *
                 SANDBOX3D_REALISM_TEXTURE_CHANNEL_COUNT;
 
