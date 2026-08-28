@@ -1,195 +1,256 @@
-# Building
+# Building Henka Engine
 
-These instructions are currently focused on Windows.
+> **Current validated development path:** Windows 64-bit with Visual Studio 2022, MSVC, CMake, and PowerShell 5.1-compatible scripts.
+
+This page covers normal development builds, tests, packaging, visual evidence, external-project validation, and headless/server builds.
+
+## Contents
+
+- [Requirements](#requirements)
+- [Normal development build](#normal-development-build)
+- [Renderer-free runtime build](#renderer-free-runtime-build)
+- [Dedicated server build and package](#dedicated-server-build-and-package)
+- [Tests](#tests)
+- [Run the Sandbox](#run-the-sandbox)
+- [Package the Sandbox](#package-the-sandbox)
+- [Visual evidence](#visual-evidence)
+- [Packaged validation](#packaged-validation)
+- [External project validation](#external-project-validation)
+- [Manual CMake commands](#manual-cmake-commands)
+- [Generated output and runtime assets](#generated-output-and-runtime-assets)
 
 ## Requirements
 
-- Visual Studio 2022 with C and C++ build tools installed
-- CMake available either on `PATH` or through the Visual Studio installation
-- Network access during the first configure step so CMake can fetch the pinned
-  SDL3 and KTX-Software sources. A populated `build/_deps/sdl3-src` or
-  `build/_deps/ktxsoftware-src` directory is optional offline acceleration;
-  clean builds clear absent local-source overrides and use the pinned network
-fallback instead. The clean KTX clone enables Git long-path handling
-locally for Windows, so the normal external-template build does not require
-a machine-wide Git or MSBuild setting or a populated dependency folder. The
-top-level project applies the same bounded Visual Studio path hardening to
-ordinary clean-clone builds.
+Install or provide:
 
-MSVC multi-config builds also apply one DLL CRT policy to Henka and the pinned
-KTX-Software dependency (`/MDd` for Debug and `/MD` for Release). This keeps
-KTX application-owned buffers on the same Windows heap as the consuming test
-and engine targets. Rebuild stale binaries after changing configuration or
-updating the dependency.
+- Visual Studio 2022 with C and C++ build tools;
+- CMake on `PATH` or available through the Visual Studio installation;
+- network access during the first configure when pinned dependencies are not already cached locally.
 
-## Build from the repository root
+Henka can use populated local dependency sources under `build/_deps/` as optional offline acceleration. Clean builds clear absent local-source overrides and use the pinned network-capable FetchContent path.
+
+The top-level project applies bounded Visual Studio path hardening for clean-clone builds. The KTX dependency also enables Git long-path handling inside its own clean clone. Machine-wide Git or MSBuild path changes are not required for the normal supported path.
+
+### MSVC runtime policy
+
+MSVC multi-config builds use one DLL CRT policy across Henka and the pinned KTX-Software dependency:
+
+| Configuration | CRT |
+| --- | --- |
+| Debug | `/MDd` |
+| Release | `/MD` |
+
+This keeps KTX application-owned buffers on the same Windows heap as Henka and its test consumers. Rebuild stale binaries after changing configuration or updating dependencies.
+
+## Normal development build
+
+From the repository root:
 
 ```powershell
 .\scripts\build_windows.ps1
 ```
 
-The script configures and builds the project in `build/`.
+The script configures and builds into `build/`.
 
-`build/` and `out/` are generated roots, not durable source. The external game
-and server template checks reuse the stable scratch roots
-`build/tv/external_game_minimal/` and `build/tv/external_server_minimal/`; they
-retire older timestamped validation roots and never copy a generated validation
-tree back into its own source. The Terrain process integration check similarly
-reuses `out/terrain-process-integration/` and keeps only the latest bounded
-session evidence. Use `scripts/check_generated_output_lifecycle_windows.ps1`
-to inspect these bounds; it fails before an abnormal generated tree can be
-mistaken for normal validation output.
+### Generated roots
 
-The normal client build keeps the graphical compatibility target `henka` and
-the sandbox enabled. A renderer-free runtime-only configuration is also
-validated independently:
+`build/` and `out/` are generated output roots. They are not durable source.
+
+Stable validation scratch roots include:
+
+```text
+build/tv/external_game_minimal/
+build/tv/external_server_minimal/
+out/terrain-process-integration/
+```
+
+The validation scripts reuse these roots and retire old generated validation trees. Inspect generated-output bounds with:
 
 ```powershell
-cmake -S . -B out/headless -DHENKA_BUILD_CLIENT=OFF -DHENKA_BUILD_DEDICATED_SERVER=OFF -DHENKA_BUILD_EXAMPLES=OFF -DHENKA_ENABLE_KTX2_TRANSCODER=OFF
+.\scripts\check_generated_output_lifecycle_windows.ps1
+```
+
+The check fails when generated-tree growth violates the repository's bounded output policy.
+
+## Renderer-free runtime build
+
+The normal client build produces the graphical compatibility target `henka` and the Sandbox. The renderer-independent public runtime is `henka_runtime`.
+
+Validate a runtime-only configuration with:
+
+```powershell
+cmake -S . -B out/headless `
+  -DHENKA_BUILD_CLIENT=OFF `
+  -DHENKA_BUILD_DEDICATED_SERVER=OFF `
+  -DHENKA_BUILD_EXAMPLES=OFF `
+  -DHENKA_ENABLE_KTX2_TRANSCODER=OFF
+
 cmake --build out/headless --config Debug --target henka_headless_runtime_tests
 ctest --test-dir out/headless -C Debug -R henka_headless_runtime_tests --output-on-failure
 ```
 
-`henka_runtime` is the public static library for renderer-independent
-consumers. `henka` links it underneath the existing graphical API. The
-dedicated-server executable is a headless network host with bounded
-command-line/configuration input, fixed-tick physics servicing, Terrain
-snapshot recovery, a bounded physics-resident Terrain collision rebuild path,
-loopback message handling, transactional smoke persistence, and graceful
-client shutdown. A headless deployment package and restart-persistence check
-are available; relevance-driven late-join orchestration and broad multiplayer
-soak remain future work. ENet is fetched at the pinned commit recorded in
-`docs/architecture.md`; its license is included in `third_party/licenses/enet.txt`.
+This path validates the renderer-free runtime boundary used by dedicated-server and headless consumers.
 
-For a developer-owned deployment package, run:
+## Dedicated server build and package
+
+The dedicated server is a renderer-free C17 network host. It includes bounded command-line/configuration input, fixed-tick physics, Terrain snapshot recovery, a bounded physics-resident Terrain collision rebuild path, loopback message handling, transactional smoke persistence, and graceful client shutdown.
+
+ENet is fetched at the pinned commit recorded in [architecture.md](architecture.md). Its license is included at `third_party/licenses/enet.txt`.
+
+### Create the deployment package
 
 ```powershell
 .\scripts\package_dedicated_server_windows.ps1 -Configuration Release
 .\scripts\check_packaged_dedicated_server_windows.ps1
 ```
 
-The package is written to `out/HenkaDedicatedServer` and contains the
-renderer-free server, sample configuration, server documentation, provenance,
-and an operator-owned `save/` directory. It does not include graphical
-assets, SDL, OpenGL, UI files, or KTX tooling. The package check launches the
-server without a window, proves a local loopback client and bind, and runs the
-same save root twice to verify committed Terrain revision recovery. Developers
-may deploy that package on another development PC, a physical server, or a VPS
-they control; Henka does not provide a hosted service.
+The package is written to:
 
-The C17 `templates/external_server_minimal` project links only
-`henka_runtime`. Validate it with
-`scripts/test_external_server_template_windows.ps1`; pass
-`-NoLocalProviders` to verify the normal network-capable pinned ENet fallback.
+```text
+out/HenkaDedicatedServer
+```
 
-Run `scripts/test_terrain_process_integration_windows.ps1` for the bounded
-multi-process Terrain authority check. It launches the dedicated server and two
-independent runtime-only clients, proves one accepted and one stale edit, adds
-a late observer and compares its resident-region checksum with the accepted
-client, reconnects another client after an accepted edit, and restarts the
-server against the same save root to verify the committed revision and checksum
-are restored exactly. The check remains bounded session-info/relevance coverage;
-it is not application authentication or a production multiplayer soak.
+It contains the renderer-free server, sample configuration, server documentation, provenance, and an operator-owned `save/` directory.
 
-Repeat that complete bounded scenario for a finite number of isolated sessions
-with:
+Graphical assets, SDL client runtime, OpenGL UI content, and KTX tooling are outside this package.
+
+### External server template
+
+`templates/external_server_minimal` is a C17 consumer that links only `henka_runtime`.
+
+Validate it with:
+
+```powershell
+.\scripts\test_external_server_template_windows.ps1
+```
+
+Use `-NoLocalProviders` to force the normal pinned ENet FetchContent path.
+
+### Terrain process integration
+
+Run the bounded multi-process Terrain authority test with:
+
+```powershell
+.\scripts\test_terrain_process_integration_windows.ps1
+```
+
+The test launches the dedicated server and two independent runtime-only clients. It verifies accepted and stale edits, late-observer bootstrap, resident-region checksum convergence, reconnect behavior, server restart, and exact committed revision recovery.
+
+Repeat the bounded scenario with fresh processes and isolated save roots:
 
 ```powershell
 .\scripts\soak_terrain_process_integration_windows.ps1 -Iterations 3
 ```
 
-Each iteration starts fresh server/client processes and resets the owned stable
-save root before use. This proves repeatable cleanup and restart recovery for
-the advertised resident region contract without retaining one full save tree
-per iteration; it does not claim relevance-driven multi-region orchestration or
-production-scale multiplayer capacity.
+The soak covers repeatability and cleanup for the current resident-region contract. Production-scale multiplayer capacity and relevance-driven multi-region orchestration remain future work.
 
-## Run tests
+## Tests
+
+Run the normal Windows validation suite:
 
 ```powershell
 .\scripts\test_windows.ps1
 ```
 
-The same helper accepts `-Configuration Release` for an exact Release build,
-CTest run, and build-provenance record:
+Run the exact Release path with:
 
 ```powershell
 .\scripts\test_windows.ps1 -Configuration Release
 ```
 
-The GitHub Windows workflow covers the packaged Debug contract and bounded soak,
-then runs this exact Release build-and-test path before checking the external game
-template. Release validation is intentionally separate so the packaged Debug
-provenance remains authoritative for its package checks.
+The GitHub Windows workflow covers the packaged Debug contract and bounded soak, then runs the Release build-and-test path before the external-game template validation.
 
-The workflow also runs a separate first-party memory-safety gate:
+### Sanitized runtime gate
+
+Run the first-party memory-safety gate with:
 
 ```powershell
 .\scripts\test_sanitized_runtime_windows.ps1
 ```
 
-This builds the renderer-independent runtime and its supported test surface with
-`HENKA_ENABLE_SANITIZERS=ON`. MSVC uses AddressSanitizer; Clang and GCC use
-AddressSanitizer plus UndefinedBehaviorSanitizer. The gate intentionally does
-not instrument bundled third-party sources or replace the normal graphical,
-packaging, and external-project checks.
+The renderer-independent runtime and supported tests are built with `HENKA_ENABLE_SANITIZERS=ON`.
 
-## Run the sandbox
+| Compiler | Sanitizer policy |
+| --- | --- |
+| MSVC | AddressSanitizer |
+| Clang/GCC | AddressSanitizer + UndefinedBehaviorSanitizer |
+
+Bundled third-party sources are not instrumented by this gate. Graphical, packaging, and external-project validation remain separate required checks.
+
+## Run the Sandbox
 
 ```powershell
 .\scripts\run_sandbox3d.ps1
 ```
 
-The development run script launches the built sandbox from the executable directory inside `build/`.
+The development run script launches the built Sandbox from its executable directory under `build/`.
 
-## Package a run-ready sandbox folder
+## Package the Sandbox
+
+Create a run-ready Windows Sandbox package with:
 
 ```powershell
 .\scripts\package_sandbox3d_windows.ps1
 ```
 
-The package script creates:
+The package is written under `out/HenkaSandbox3D/`.
 
-- `out/HenkaSandbox3D/HenkaSandbox3D.exe`
-- `out/HenkaSandbox3D/assets/`
-- `out/HenkaSandbox3D/assets/models/` with the generated Anatomical Giraffe Study and Original Realistic Rocket glTF scenes and sibling binary buffers
-- `out/HenkaSandbox3D/assets/textures/residency/` with the bounded residency
-  stress fixtures used by `--residency-stress`
-- `out/HenkaSandbox3D/docs/help/sandbox3d.md`
-- `out/HenkaSandbox3D/PACKAGE_INFO.txt`
-- `out/HenkaSandbox3D/README.txt`
-- `out/HenkaSandbox3D/user/` when local sandbox settings have already been created
+### Package contents
 
-The packaged executable also accepts `--terrain-stream-stress`. It uses the
-same public Sandbox path to seed the bounded 2x2 fixture, prove the active
-camera's one-region CPU/physics/render demand window, cross into generated
-regions, and return to the original rendered region and collision patch while
-reporting request failures and resident-region capacity; collision validation
-uses the bounded overlap patch rather than claiming residency-wide coverage.
-This is a runtime streaming foundation check, not a claim of broad-world
-streaming or automatic background regeneration.
+The package includes:
 
-## Capture same-camera shading evidence
+- `HenkaSandbox3D.exe`;
+- runtime assets under `assets/`;
+- generated Giraffe and Rocket glTF scenes and sibling buffers under `assets/models/`;
+- residency stress fixtures under `assets/textures/residency/`;
+- `docs/help/sandbox3d.md`;
+- `PACKAGE_INFO.txt`;
+- `README.txt`;
+- `user/` when local packaged settings already exist.
 
-After a Debug build, the application-only capture helper records the same
-camera in Solid, Material Preview, and Rendered mode:
+Required runtime DLLs are copied beside the executable when needed.
+
+### Terrain stream stress mode
+
+The packaged executable accepts:
+
+```text
+--terrain-stream-stress
+```
+
+The mode seeds or reuses the bounded Terrain fixture, verifies the active camera's one-region CPU/physics/render demand window, crosses into generated regions, returns to the original region, and checks bounded collision overlap on return.
+
+This is a runtime streaming foundation check. Broad-world streaming and automatic background regeneration remain open work.
+
+### Preserve or reset packaged settings
+
+Normal packaging refreshes executable, assets, and offline help while preserving `out/HenkaSandbox3D/user/`.
+
+Clear packaged Sandbox settings explicitly with:
+
+```powershell
+.\scripts\package_sandbox3d_windows.ps1 -ResetUserData
+```
+
+## Visual evidence
+
+After a Debug build, capture the same camera in Solid, Material Preview, and Rendered modes:
 
 ```powershell
 .\scripts\capture_visual_evidence_windows.ps1
 ```
 
-The PNGs and `INDEX.txt` are generated under `build/visual_evidence/`. Capture
-mode runs use one deterministic two-model showcase camera for all three modes; the
-camera is reframed once after the final capture viewport aspect is known so narrow
-Scene View layouts do not crop either model. Capture runs do not save sandbox
-settings, so ordinary user camera state is unchanged and no
-user-profile file is changed by this evidence path. Rendered uses scene
-lighting, the shadow path, transactional HDR/IBL presentation, bloom, and
-temporal presentation; Material Preview uses its deterministic preview-light
-policy and is not a substitute for the Rendered path.
+Evidence is written under:
 
-The same helper can target the packaged executable without changing its
-working directory or settings:
+```text
+build/visual_evidence/
+```
+
+The capture path uses deterministic framing after the final Scene View aspect is known. Capture runs leave normal user camera settings unchanged.
+
+Rendered mode exercises scene lighting, shadows, HDR/IBL presentation, bloom, and temporal presentation. Material Preview uses the deterministic preview-light policy.
+
+### Capture a packaged executable
 
 ```powershell
 .\scripts\capture_visual_evidence_windows.ps1 `
@@ -199,85 +260,92 @@ working directory or settings:
     -OutputDirectory .\build\visual_evidence\packaged-terrain
 ```
 
-With `-IncludeTerrain`, the helper validates the three application-only
-Terrain images plus deterministic close-material and four-seeded-region corner
-views with the bounded Scene View guards. This proves packaged launch,
-Rendered-path distinction, and non-flat terrain framing at wide, material-scale,
-and corner views; it remains automated evidence rather than human visual
-approval or complete topology QA.
+`-IncludeTerrain` captures the three application-only Terrain images plus deterministic material-close and four-region corner views. The automated guard covers packaged launch, Rendered-path distinction, non-flat terrain framing, and bounded viewport composition.
 
-If any runtime DLLs are needed beside the executable, the package script copies them into the same folder.
+Human visual QA remains required for appearance, readability, topology, material quality, and presentation judgment.
 
-By default, packaging refreshes the executable, assets, and offline help while keeping `out/HenkaSandbox3D/user/` in place. That preserves local sandbox settings across repackaging.
+## Packaged validation
 
-To intentionally clear the packaged sandbox settings:
+### Launch the package
+
+Use either:
 
 ```powershell
-.\scripts\package_sandbox3d_windows.ps1 -ResetUserData
+.\scripts\run_packaged_sandbox3d_windows.ps1
 ```
 
-## Launch the packaged sandbox
+or open `out/HenkaSandbox3D` in Explorer and launch `HenkaSandbox3D.exe`.
 
-You can launch the packaged sandbox in either of these ways:
+A first packaged run with no settings file opens the stable `Standard` workspace shell. The Sandbox currently opens a console window. Normal interactive controls live in the in-window workspace.
 
-- open `out/HenkaSandbox3D` in Explorer and double-click `HenkaSandbox3D.exe`
-- run `.\scripts\run_packaged_sandbox3d_windows.ps1`
-
-On a first packaged run with no local settings file yet, the sandbox opens the docked workspace in `View` mode so the controls are visible without covering most of the viewport.
-The packaged sandbox still opens a console window at this stage, but the in-window panels, utilities, and status area are the intended normal workflow.
-At startup, the sandbox also reports whether it detected `Development` or `Packaged` runtime mode.
-
-## Run a bounded packaged soak
-
-After packaging, the repeatable smoke/closure check runs ten isolated startup
-iterations by default and requires both the normal completion marker and the
-engine's clean allocation-shutdown report on every iteration:
+### Bounded startup soak
 
 ```powershell
 .\scripts\soak_packaged_sandbox3d_windows.ps1
 ```
 
-Use `-Iterations` for a longer bounded run. This check does not save sandbox
-settings or modify personal files. Hosted Windows CI passes
-`-AllowHeadlessUnavailable`: if the runner has no OpenGL-capable desktop video
-driver, that specific infrastructure limitation is recorded as a skip; other
-process failures remain fatal. Local runs remain strict by default.
+The default run performs ten isolated startup iterations and requires the normal completion marker plus clean allocation shutdown on every iteration.
 
-## Run a packaged sandbox check
+Hosted Windows CI may use `-AllowHeadlessUnavailable` for runners without an OpenGL-capable desktop video driver. Other process failures remain fatal. Local runs remain strict by default.
+
+### Full packaged check
 
 ```powershell
 .\scripts\check_packaged_sandbox3d_windows.ps1
 ```
 
-The packaged check script confirms that the packaged folder contains the expected glTF and editor-owned HAMS sources, launches the sandbox, checks the startup help text and package marker, confirms UI state logs when available, exercises a few UI clicks, and confirms the close-window path exits cleanly. Its deterministic `-NonInteractive` path also runs the bounded Terrain stream, texture-residency, temporal-presentation, and environment stress modes from the package root, so relative asset ownership is validated without relying on the repository working directory. The interactive startup heading check allows a bounded 15-second cold-start window for shader and asset initialization; the deterministic `-NonInteractive` path remains the preferred CI/package gate.
-It also checks the packaged runtime marker and runtime-mode output when that signal is available.
+The packaged check verifies:
 
-It does not replace human visual QA. You should still confirm by eye that the scene stays inside its own viewport, that docked panels do not cover scene graphics, that the controls are not cramped, and that the in-window utilities and status area feel readable and useful.
+- expected packaged files;
+- generated glTF and editor-owned HAMS sources;
+- startup help text and package marker;
+- runtime-mode reporting when available;
+- UI state logs when available;
+- selected interaction checks;
+- clean window-close shutdown;
+- non-interactive Terrain streaming;
+- texture residency;
+- temporal presentation;
+- environment stress paths.
 
-## Validate the external game template
+The non-interactive path runs from the package root and validates relative asset ownership without repository-root assumptions.
+
+Human desktop QA should still review viewport containment, dock readability, control spacing, utility readability, and overall visual behavior.
+
+## External project validation
+
+### External graphical game template
+
+Validate `templates/external_game_minimal` with:
 
 ```powershell
 .\scripts\test_external_game_template_windows.ps1
 ```
 
-This script copies `templates/external_game_minimal` into the stable repo-local
-validation scratch root under `build/tv/external_game_minimal/`, configures it
-against the current Henka checkout, builds it, copies generic shader fixtures
-beside the executable, and runs the public-API Terrain consumer smokes. The
-test covers the Terrain material contract, shared edits, collision raycast, CPU
-render-mesh rebuild, transactional persistence, restart reload, and a
-graphical Rendered draw with HDR/shadow diagnostics. Repeated validation reuses
-that root instead of creating a complete timestamped nested build each time.
+The validation uses the stable scratch root at `build/tv/external_game_minimal/` and configures it against the current Henka checkout.
 
-The packaged sandbox does not rely on the repository root as its working directory. Assets resolve relative to the executable folder by default.
+Current public-API coverage includes:
 
-Sandbox settings are also written relative to the executable folder by default. In a packaged run, the default settings file is:
+- authoring mesh creation and stable topology identities;
+- scene object creation and picking;
+- linked physics;
+- duplicate/delete behavior;
+- Terrain material, editing, collision, render-data, persistence, and restart flow;
+- a real graphical Rendered draw with HDR/shadow diagnostics;
+- Lua and HenkaScript behavior assets through the public Scene Document runtime;
+- shared input, interaction, physics, events, and typed state;
+- a real external WAV asset loaded through the Henka asset manager;
+- a real scene entity with persisted Audio emitter configuration;
+- spatial source movement and listener movement through the production mixer;
+- stale-entity Audio cleanup.
 
-- `out/HenkaSandbox3D/user/sandbox3d.settings`
+The external executable uses public Henka APIs and does not include Sandbox source.
+
+See [External Game Projects](external-game-projects.md) for the consumer model and project layout.
 
 ## Manual CMake commands
 
-If you prefer direct commands, use a Developer PowerShell or let the scripts locate the Visual Studio CMake install:
+A Developer PowerShell can run the direct build sequence:
 
 ```powershell
 cmake -S . -B build
@@ -285,20 +353,26 @@ cmake --build build --config Debug
 ctest --test-dir build --output-on-failure -C Debug
 ```
 
-If `cmake` is not on `PATH`, use the full path from the Visual Studio installation.
+When `cmake` is absent from `PATH`, use the executable supplied by the Visual Studio installation.
 
-## Runtime assets
+## Generated output and runtime assets
 
-The sandbox runtime assets live under:
+Sandbox runtime assets live under:
 
-- `assets/shaders/`
-- `assets/textures/`
-- `assets/models/`
+```text
+assets/shaders/
+assets/textures/
+assets/models/
+```
 
-CMake copies the `assets/` directory next to the sandbox executable after build.
+CMake copies `assets/` beside the Sandbox executable after build.
 
-Packaged output in `out/` is generated locally and should not be committed.
+Packaged output under `out/` is generated locally and should not be committed. Package-local `user/` data is also generated locally.
 
-The packaged sandbox `user/` folder is also generated locally and should not be committed.
+Running:
 
-If you run `.\scripts\clean_windows.ps1`, it removes the generated `out/` folder as well as `build/`. That also removes any package-local sandbox settings stored under `out/HenkaSandbox3D/user/`.
+```powershell
+.\scripts\clean_windows.ps1
+```
+
+removes both `build/` and `out/`, including package-local Sandbox settings under `out/HenkaSandbox3D/user/`.
