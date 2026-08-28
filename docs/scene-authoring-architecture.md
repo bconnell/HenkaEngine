@@ -1,151 +1,273 @@
-# Scene authoring architecture
+# Scene Authoring Architecture
 
-This document describes the durable ownership boundaries for Henka's Game
-Authoring Foundation. It is an architecture document, not an editor workflow
-checklist.
+> **Status:** Game Authoring Foundation architecture
 
-## Two identities for one authored object
+This document defines the durable ownership, identity, persistence, Play-session, and input boundaries used by Henka's current scene-authoring foundation.
 
-An authored scene object has a persistent `henka_scene_document_id`. This ID is
-owned by the Scene Document and remains stable across save/load, duplication,
-and editor sessions. Duplicating an object allocates a new persistent ID.
+## Contents
 
-`henka_entity` remains the runtime scene handle. It is generation-checked,
-may change after a scene is rebuilt, and is never serialized into a scene
-document. The Sandbox adapter maintains a bounded mapping between persistent
-IDs and the current runtime entities. The mapping is an adapter, not a second
-scene authority.
+- [Object identity](#object-identity)
+- [Scene Document ownership](#scene-document-ownership)
+- [Runtime materialization](#runtime-materialization)
+- [`.hscene` representation](#hscene-representation)
+- [Authored components and runtime state](#authored-components-and-runtime-state)
+- [Play-session lifecycle](#play-session-lifecycle)
+- [Input ownership](#input-ownership)
+- [Module boundaries](#module-boundaries)
 
-When an authoring document is reloaded, bindings are restored by persistent ID
-first. A missing ID may fall back to a unique authored object name; ambiguous
-names reject the candidate document rather than silently binding the wrong
-object.
+## Object identity
+
+One authored object has two identities with different lifetimes.
+
+| Identity | Owner | Lifetime | Serialized |
+| --- | --- | --- | --- |
+| `henka_scene_document_id` | Scene Document | Stable across save/load and editor sessions | Yes |
+| `henka_entity` | Runtime scene | Generation-checked runtime lifetime | No |
+
+Duplicating an authored object allocates a new persistent Scene Document ID.
+
+The Sandbox adapter maintains a bounded mapping from persistent IDs to current runtime entities. The Scene Document remains the authoring authority.
+
+### Binding after reload
+
+Bindings are restored by persistent ID first.
+
+A missing ID may use a unique authored object name as a bounded recovery key. Ambiguous names reject the candidate document and preserve the active state.
 
 ## Scene Document ownership
 
-The Scene Document is pure authoring data. It owns bounded object records,
-source references, transforms, renderer references and authored component
-values. It does not own renderer resources, asset-manager entries, physics
-bodies, UI state, pointers, or runtime handles.
+The Scene Document contains pure authoring data.
+
+It owns:
+
+- bounded object records;
+- source references;
+- transforms;
+- renderer references expressed as authoring values;
+- authored component values;
+- persistent object identity.
+
+Runtime resources remain under their existing subsystem owners.
+
+The Scene Document stores no:
+
+- renderer resource pointers;
+- asset-manager entry pointers;
+- physics body handles;
+- UI state;
+- raw runtime pointers;
+- `henka_entity` handles.
+
+### Source references
 
 Source references use explicit kinds:
 
-- none;
-- primitive, with validated primitive parameters;
-- authoring mesh, with a confined project-relative source path; and
-- asset, with a confined project-relative asset reference and asset kind.
+- **None**
+- **Primitive** with validated primitive parameters
+- **Authoring mesh** with a confined project-relative source path
+- **Asset** with a confined project-relative asset reference and asset kind
 
-The runtime materialization layer resolves these references through the
-existing asset manager, authoring-mesh loader, and `henka_scene` APIs. Asset
-manager resources remain manager-owned borrowed objects. A failed resolution
-does not partially replace the active scene.
+### Authored interaction data
 
-Interaction authoring is represented by the existing
-`henka_interaction_desc` value. Physics authoring is represented as pure
-component data that can be translated into the existing
-`henka_physics_body_desc`; the runtime continues to use one
-`henka_physics_world` implementation.
+Interaction authoring uses `henka_interaction_desc` values.
+
+### Authored physics data
+
+Physics authoring stores value-only component data that can be translated into `henka_physics_body_desc` for the existing `henka_physics_world` runtime.
+
+## Runtime materialization
+
+The runtime materialization layer resolves Scene Document references through existing production systems:
+
+```mermaid
+flowchart LR
+    Doc[Scene Document]
+    Resolve[Materialization]
+    Assets[Asset Manager]
+    Mesh[Authoring Mesh Loader]
+    Scene[henka_scene]
+    Physics[henka_physics_world]
+
+    Doc --> Resolve
+    Resolve --> Assets
+    Resolve --> Mesh
+    Resolve --> Scene
+    Resolve --> Physics
+```
+
+Asset-manager resources remain manager-owned borrowed objects.
+
+A failed materialization keeps the active scene intact. Candidate state is validated before publication.
 
 ## `.hscene` representation
 
-Henka does not currently have a general-purpose owned JSON, YAML, or TOML
-writer/parser. Its existing JSON reader is a bounded glTF-specific parser,
-while terrain storage already provides explicit little-endian fields,
-versioning, checksums, bounded records, and atomic replacement.
+Scene Document V1 uses a deterministic little-endian binary format with the `HSCN` magic.
 
-For that reason, Scene Document V1 uses a deterministic little-endian binary
-format with the `HSCN` magic. This is a deliberate format choice based on the
-current repository capabilities, not an assumption that binary is inherently
-preferable.
+The format matches the repository's existing bounded persistence model: explicit fields, versioning, checksums, bounded records, candidate validation, and atomic replacement.
 
-The V1 contract is:
+### V1 record contract
 
-- a documented header containing magic, format version, header size, payload
-  size, object count, and checksum;
-- explicit field encoding rather than C-struct or pointer serialization;
-- fixed upper bounds for object count, strings, references, and total file
-  size;
-- canonical object ordering and canonical field ordering for deterministic
-  output;
-- finite-number, enum, ID, path, and cross-reference validation on decode;
-- rejection of unknown V1-invalid fields and truncated or trailing records;
-- transactional load through a validated candidate document; and
-- temporary-file write followed by platform-aware atomic replacement.
+The format provides:
 
-The public document API will also provide a bounded inspection/dump path so
-tooling can report the header, version, object IDs, source kinds, and component
-presence without exposing runtime pointers. Future format versions use an
-explicit migration boundary: a newer version is rejected by V1 code rather
-than guessed, and a later loader may migrate a validated older document into
-the current in-memory schema before committing it.
+- a documented header containing magic, format version, header size, payload size, object count, and checksum;
+- explicit field encoding;
+- fixed bounds for object count, strings, references, and total file size;
+- canonical object ordering;
+- canonical field ordering;
+- finite-number validation;
+- enum validation;
+- ID validation;
+- path validation;
+- cross-reference validation;
+- rejection of truncated, trailing, or V1-invalid records;
+- candidate-first transactional loading;
+- same-directory temporary writes followed by platform-aware atomic replacement.
 
-The format is intended to be source-controlled and externally usable even
-though V1 is binary. Deterministic ordering, stable IDs, checksums, and the
-inspection path make diffs, corruption diagnosis, and future tooling practical
-without requiring an unsafe general parser. Semantic round-trip tests are a
-release requirement.
+Native C struct layouts and pointers are never serialized.
 
-## Authored components versus runtime state
+### Inspection
 
-The Inspector edits the Scene Document and the existing `henka_scene` working
-representation only while the editor is in an authoring state. Component
-changes are validated as a candidate and published together with dependent
-scene, bounds, material, and collider updates.
+The public document API provides bounded inspection data for tooling, including:
 
-Authored physics data includes body type, collider shape and dimensions,
-trigger state, collision masks/layers, and material values. It does not include
-runtime body IDs, contact history, velocities produced by Play, or pointers.
+- header information;
+- version;
+- object IDs;
+- source kinds;
+- authored component presence.
 
-Authored interaction data includes enabled state, prompt, and interaction
-distance through the existing scene descriptor. It is not duplicated in a
-second interaction runtime.
+### Version migration
+
+V1 code rejects newer unsupported format versions. Future loaders may validate an older format, migrate it into the current in-memory schema, and publish the migrated candidate only after successful validation.
+
+Semantic round-trip tests are part of the format's release requirements.
+
+## Authored components and runtime state
+
+The Inspector edits the Scene Document and its current authoring representation only while the editor is in an authoring state.
+
+Component changes follow a candidate transaction that publishes dependent scene, bounds, material, and collider updates together.
+
+### Physics
+
+Authored physics data includes:
+
+- body type;
+- collider shape and dimensions;
+- trigger state;
+- collision masks/layers;
+- material values.
+
+Runtime-only physics state includes:
+
+- body IDs;
+- contact history;
+- Play-generated velocities;
+- runtime pointers.
+
+### Interaction
+
+Authored interaction data includes:
+
+- enabled state;
+- prompt;
+- interaction distance.
+
+The existing scene interaction descriptor remains the runtime contract.
 
 ## Play-session lifecycle
 
-Play is owned by a focused Play-session module rather than `main.c`. It has an
-explicit lifecycle:
+Play is owned by a focused Play-session module.
 
-1. validate authored scene data and clone the authored scene into an independent
-   runtime scene while preserving generation-checked entity handles;
-2. materialize runtime bodies against the runtime scene, with renderer-owned
-   resources borrowed rather than duplicated;
-3. run, pause, resume, or perform one bounded fixed step;
-4. keep runtime transforms, velocities, contacts, and body IDs out of authored
-   persistence; and
-5. stop by cleaning up runtime bodies and discarding the runtime scene, leaving
-   the authored scene unchanged.
+```mermaid
+stateDiagram-v2
+    [*] --> Stopped
+    Stopped --> Running: Start
+    Running --> Paused: Pause
+    Paused --> Running: Resume
+    Paused --> Paused: Step
+    Running --> Stopped: Stop
+    Paused --> Stopped: Stop
+    Running --> Failed: Runtime failure
+    Paused --> Failed: Runtime failure
+    Failed --> Stopped: Cleanup
+```
 
-Save/reload and authoring mutations are rejected while Play is active. A
-materialization or fixed-step failure transitions to a failed session without
-silently committing runtime state as authoring state. Context switching may
-change presentation, but it does not replace the Play-session owner or its
-runtime-scene isolation contract.
+### Start
 
-## Input ownership boundary
+Starting Play:
 
-Scene View RMB navigation is application-local. A press inside the Scene View
-creates a candidate; movement beyond the four logical-pixel threshold commits
-the pan and captures the interaction until release. Camera and navigation
-target movement use `henka_camera_pan_target`.
+1. validates authored scene data;
+2. clones the authored scene into an independent runtime scene;
+3. preserves the persistent-ID mapping needed by runtime systems;
+4. materializes runtime bodies against the runtime scene;
+5. borrows existing renderer-owned resources through their normal ownership contracts.
 
-Panel ownership, active transforms, engine mouse capture, automation input
-ownership, and higher-priority editor interactions continue to win. A click
-that never crosses the threshold retains existing legitimate context-click
-behavior. No global operating-system input blocking is used.
+### Run, pause, resume, and step
 
-When automation ownership is enabled, the platform keeps a separate logical
-pointer state and admits only bounded, fully parsed events from the configured
-test stream. Main-window physical pointer motion, buttons, wheel input, and
-ordinary keys are ignored for application interaction; physical Escape is the
-explicit emergency-abort path. Focus loss releases held logical buttons and
-keys, malformed events fail closed and request shutdown, and ownership is
-released during engine teardown. The PowerShell packaged gate is required to
-use this stream rather than OS-level cursor or key injection.
+The Play session owns runtime lifecycle state and bounded fixed-step progression.
 
-## Module boundary rule
+### Stop
 
-New substantial behavior belongs in focused engine or Sandbox modules. The
-Sandbox executable remains the composition root, but the campaign adds only
-the ownership seams needed for Scene View navigation, the persistent-ID
-adapter, Inspector component transactions, and Play. It does not perform an
-unrelated full rewrite of `main.c`.
+Stopping Play:
+
+1. destroys runtime bodies and Play-owned runtime resources;
+2. discards the isolated runtime scene;
+3. retains authored Scene Document state unchanged.
+
+### Authoring lock while Play is active
+
+Scene mutations, Save Scene, and Reload Scene are rejected while Play is running or paused.
+
+Runtime transforms, velocities, contacts, body IDs, and other simulation state are excluded from authored persistence.
+
+Materialization and fixed-step failures move the Play session into a failed state. Cleanup retains authored state.
+
+## Input ownership
+
+### Scene View navigation
+
+Scene View right-mouse navigation is application-local.
+
+A press inside Scene View creates an interaction candidate. Movement beyond the four logical-pixel threshold commits the pan and retains ownership until release. Camera and navigation-target movement use `henka_camera_pan_target`.
+
+Higher-priority interaction owners include:
+
+- panels;
+- active transforms;
+- engine mouse capture;
+- automation input ownership;
+- other explicit editor transactions.
+
+A click that stays within the drag threshold preserves the existing context-click behavior.
+
+### Automation input
+
+When automation ownership is enabled, the platform uses a separate logical pointer state and accepts bounded fully parsed events from the configured test stream.
+
+During automation ownership:
+
+- main-window physical pointer motion is ignored by application interaction;
+- physical mouse buttons are ignored by application interaction;
+- physical wheel input is ignored by application interaction;
+- ordinary physical keys are ignored by application interaction;
+- physical `Escape` remains the emergency abort;
+- focus loss releases held logical buttons and keys;
+- malformed automation events fail closed and request shutdown;
+- engine teardown releases automation ownership.
+
+The packaged PowerShell gate uses this logical stream for deterministic interaction validation.
+
+## Module boundaries
+
+Substantial behavior belongs in focused engine or Sandbox modules.
+
+The Sandbox executable remains the composition root. Current scene-authoring work is split across focused boundaries for:
+
+- Scene View navigation;
+- persistent-ID mapping;
+- Inspector component transactions;
+- Play-session lifecycle;
+- runtime materialization;
+- persistence and validation.
+
+Large unrelated `main.c` rewrites are outside this architecture direction.
