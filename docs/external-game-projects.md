@@ -1,87 +1,193 @@
 # External Game Projects
 
-Henka Engine is the engine repository. Real games built with Henka should live in separate repositories.
+Henka Engine is the engine repository. Games built with Henka should live in separate repositories and consume the engine through its public boundaries.
 
-## Why keep games separate
+> **Current support:** Windows external game and dedicated-server templates provide bounded public-consumer validation. Complete project serialization and mature project tooling remain future work.
 
-Keeping engine code and game code in separate repositories helps you:
+## Contents
 
-- keep the engine public and generic
-- keep private or commercial game content out of the engine repo
-- manage game-specific assets, saves, and story files on their own terms
-- upgrade Henka without mixing unrelated engine work into game history
+- [Repository boundary](#repository-boundary)
+- [External game template](#external-game-template)
+- [Current public API coverage](#current-public-api-coverage)
+- [Audio validation](#audio-validation)
+- [Scripting validation](#scripting-validation)
+- [Running the Windows validation](#running-the-windows-validation)
+- [External server template](#external-server-template)
+- [Suggested project layout](#suggested-project-layout)
+- [Persistence](#persistence)
+- [Action API](#action-api)
+- [Windows dependency and path handling](#windows-dependency-and-path-handling)
+- [Current limits](#current-limits)
 
-## What belongs in Henka Engine
+## Repository boundary
 
-This repository is the right place for:
+### Henka Engine repository
 
-- engine code
-- engine-facing samples
-- generic runtime assets
-- sandbox QA content
-- public documentation
-- starter templates for separate projects
+The engine repository owns:
 
-## What belongs in your game repository
+- engine code;
+- engine-facing samples;
+- generic runtime assets;
+- Sandbox QA content;
+- public documentation;
+- starter templates for external projects.
 
-A separate game repository should own:
+### Game repository
 
-- game-specific assets
-- story and dialogue
-- game-specific save data
-- project-specific scripts and tools
-- private or commercial content
-- anything that should not ship as a generic engine sample
+A game repository should own:
 
-## Using Henka from an external game
+- game-specific assets;
+- story and dialogue;
+- game-specific save data;
+- project-specific scripts and tools;
+- private or commercial content;
+- project-specific scenes and configuration.
 
-Right now the simplest approach is to point your game project at a local Henka checkout with a CMake variable such as:
+This separation keeps Henka generic and lets game projects maintain their own history, content policy, release process, and engine upgrade cadence.
+
+## External game template
+
+The current template lives at:
+
+```text
+templates/external_game_minimal/
+```
+
+Point an external project at a local Henka checkout with:
 
 ```powershell
 cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
 ```
 
-The template under `templates/external_game_minimal/` shows one way to do that.
-Its executable is a bounded public-API authoring and Terrain consumer smoke
-test. It creates a box authoring mesh from code, manipulates stable vertex,
-edge, and face identities, evaluates it into a normal renderer mesh, saves and
-reloads the authored source, creates and picks a scene entity, creates a linked
-physics box, and verifies duplicate/delete of a user-owned entity without
-including Sandbox source. The same reloaded mesh is handed to a real engine
-window, scene, camera, and Terrain render owner through public APIs; the normal
-Rendered path requires a visible draw plus HDR/shadow diagnostics. This is a
-bounded dogfood harness, not a complete external game's scene serializer or
-editor; authored scene/project persistence beyond the mesh source remains
-unfinished. The template also consumes package-owned `.hks` and `.lua` assets
-through the public Scene Document behavior runtime and verifies shared input,
-interaction, and physics host calls, an HKS-to-Lua event, plus typed state
-delivery without importing Sandbox code. The consuming game still owns its
-window, scene, camera, and presentation policy.
+The template builds a real external executable using Henka's public API.
 
-To validate that template against the current Henka checkout from this repository, run:
+The consuming game owns its own window, scene, camera, assets, and presentation policy.
+
+## Current public API coverage
+
+The external game validation currently exercises several production boundaries.
+
+### Authoring and scene
+
+The template:
+
+- creates a box authoring mesh from code;
+- manipulates stable vertex, edge, and face identities;
+- evaluates the authored source into an ordinary renderer mesh;
+- saves and reloads the authored mesh;
+- creates and picks a real scene entity;
+- creates a linked physics box;
+- verifies duplicate/delete of a user-owned entity;
+- uses no Sandbox source for those operations.
+
+The reloaded mesh is also handed to a real engine window, scene, camera, and Terrain render owner through public APIs.
+
+### Rendered path
+
+The graphical validation requires:
+
+- a visible Rendered draw;
+- valid HDR diagnostics;
+- valid shadow diagnostics;
+- the real external engine window and scene path.
+
+### Terrain
+
+The current template exercises the bounded public Terrain workflow, including material, edit, collision, render-data, save, restart, and graphical Rendered behavior covered by the validation executable.
+
+Complete external scene/project serialization remains future work.
+
+## Audio validation
+
+The external template now validates the current Audio foundation through public Henka APIs.
+
+The workflow:
+
+1. creates a real external WAV asset;
+2. loads the asset through the engine-owned asset manager;
+3. creates a real scene entity;
+4. attaches authored Audio configuration to a Scene Document object;
+5. saves the Scene Document;
+6. reloads the Scene Document and verifies the Audio configuration;
+7. creates a runtime Audio emitter using the manager-owned clip;
+8. mixes deterministic production PCM;
+9. moves the scene entity and verifies spatial left/right response;
+10. moves the listener and verifies distance response;
+11. destroys the entity and verifies stale-emitter cleanup.
+
+A successful external run prints:
+
+```text
+External public Audio asset, real scene object, persistence, spatial movement, listener movement, and stale cleanup workflow passed.
+```
+
+This validates manager-owned Audio assets, real scene participation, persistence, spatial response, listener response, and stale cleanup from an external public-API consumer.
+
+## Scripting validation
+
+The template also consumes package-owned `.hks` and `.lua` assets through the public Scene Document behavior runtime.
+
+Current external scripting coverage includes:
+
+- shared input host calls;
+- interaction host calls;
+- physics host calls;
+- HKS-to-Lua Henka event delivery;
+- typed behavior-state delivery;
+- public Scene Document behavior loading;
+- no dependency on Sandbox source;
+- no machine-global scripting installation requirement.
+
+## Running the Windows validation
+
+From the Henka Engine repository, run:
 
 ```powershell
 .\scripts\test_external_game_template_windows.ps1
 ```
 
-The validation script owns and reuses `build/tv/external_game_minimal/` as a
-bounded scratch tree. It replaces only the generated template source snapshot,
-reuses the corresponding build directory, and retires legacy timestamped
-`ext_YYYYMMDD_HHMMSS` trees. The server template follows the same policy under
-`build/tv/external_server_minimal/`. Repeated checks therefore do not create a
-new complete nested engine build on every run.
+The validation script owns and reuses:
 
-## Using the external server template
+```text
+build/tv/external_game_minimal/
+```
 
-`templates/external_server_minimal/` is the renderer-free C17 counterpart. It
-disables the graphical client, KTX, bundled examples, and tests, then links
-only `henka_runtime`. It still enables the private Henka network transport so
-the consumer validates the same headless server dependency boundary. Run
-`scripts/test_external_server_template_windows.ps1` for a fresh configure,
-build, and initialization smoke test; `-NoLocalProviders` forces the pinned
-ENet FetchContent fallback when repository-local dependency sources are absent.
+It replaces the generated template source snapshot, reuses the corresponding build directory, and retires legacy timestamped `ext_YYYYMMDD_HHMMSS` trees.
 
-## Suggested external project layout
+The external target treats compiler warnings as errors on the supported compiler path.
+
+## External server template
+
+The renderer-free C17 server template lives at:
+
+```text
+templates/external_server_minimal/
+```
+
+It disables:
+
+- graphical client;
+- KTX;
+- bundled examples;
+- tests.
+
+It links only `henka_runtime` while retaining the private Henka network transport required by the server consumer.
+
+Run:
+
+```powershell
+.\scripts\test_external_server_template_windows.ps1
+```
+
+Use `-NoLocalProviders` to force the pinned ENet FetchContent path when repository-local dependency sources are absent.
+
+The server validator reuses:
+
+```text
+build/tv/external_server_minimal/
+```
+
+## Suggested project layout
 
 ```text
 your-game/
@@ -93,37 +199,64 @@ your-game/
   README.md
 ```
 
-You can keep local settings in a `user/` folder during development, or choose a different policy once your game needs a broader save strategy.
+Local development settings can live under `user/`. Projects can adopt a broader save layout when their runtime save requirements mature.
 
-## Using the current persistence layer
+## Persistence
 
-External games can reuse Henka's small settings API for:
+External games can use Henka's current settings APIs for:
 
-- graphics preferences
-- input preferences
-- camera defaults
-- prototype save flags
+- graphics preferences;
+- input preferences;
+- camera defaults;
+- prototype save flags.
 
-The current format is local-only and human-readable. It is a good fit for early project settings, but it is not a full save pipeline yet.
+The current settings format is local and human-readable.
 
-## Using the current action foundation
+Henka also has separate bounded save-data and Scene Document persistence foundations. Complete shipped-game save and full project serialization remain roadmap work.
 
-External game repositories can also use Henka's local Action API for validated scene and object operations in tools or tests.
+## Action API
 
-That API is intentionally local-only:
+External projects can use Henka's local Action API for validated scene and object operations in tools and tests.
 
-- no network listener
-- no cloud bridge
-- no scripting runtime
-- no arbitrary code execution
+The current Action API has:
 
-It is useful for deterministic local testing, basic scene-object workflows, and future editor-style tool surfaces that need validated requests instead of direct unchecked mutation.
+- no network listener;
+- no cloud bridge;
+- no arbitrary code-execution surface.
 
-On Windows, the template also applies local Visual Studio path-hardening for
-nested FetchContent builds. It does not require machine-wide Git long-path or
-MSBuild file-tracking settings; the engine's pinned KTX-Software source still
-comes from the normal network-capable FetchContent path when no local source
-override is supplied. The repository validation script uses a fresh short
-ignored build folder and accepts `-NoLocalProviders` to force this clean-clone
-path; Windows CI uses that switch. Without it, populated repository-local
-sources remain optional offline acceleration only.
+Scripting uses the separate bounded Script Host and behavior runtime.
+
+The Action API supports deterministic local testing and validated scene-object tooling through engine-owned authority.
+
+## Windows dependency and path handling
+
+The external template applies local Visual Studio path hardening for nested FetchContent builds.
+
+Machine-wide Git long-path and MSBuild file-tracking changes are not required by the template.
+
+When no local source override is supplied, the pinned KTX-Software dependency uses the normal network-capable FetchContent path.
+
+The repository validation script uses a short ignored build directory and accepts:
+
+```powershell
+-NoLocalProviders
+```
+
+Windows CI uses that switch to exercise the clean-clone dependency path.
+
+Populated repository-local dependency sources remain available as optional offline acceleration.
+
+## Current limits
+
+Current external-project work still leaves these areas open:
+
+- complete game-project serialization;
+- mature project creation/open workflows;
+- complete external scene editor workflow;
+- complete runtime save-game system;
+- broad cross-platform external-project validation;
+- mature build/export presets;
+- release packaging and distribution;
+- additional gameplay systems beyond the current public foundations.
+
+Platform plans and validation requirements are documented in [platform-support.md](platform-support.md). The broader project/tooling direction is maintained in [roadmap.md](roadmap.md).
