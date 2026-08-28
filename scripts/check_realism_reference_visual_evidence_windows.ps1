@@ -59,7 +59,7 @@ $expectedLayout = if ($view -eq "close") { "close_grid" } else { "wide_row" }
 if ($metadata[0].Groups["layout"].Value -ne $expectedLayout) {
     throw "Realism reference metadata declared an unexpected layout: $($metadata[0].Groups["layout"].Value)."
 }
-if ([int]$metadata[0].Groups["texture_edge"].Value -lt 64) {
+if ([int]$metadata[0].Groups["texture_edge"].Value -lt 128) {
     throw "Realism reference textures are below the minimum detail resolution."
 }
 foreach ($stdoutPath in $stdoutPaths) {

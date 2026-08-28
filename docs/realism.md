@@ -67,7 +67,7 @@ subject remains readable while the directional key, shadows, falloff, and
 probe contrast remain visible. The lighting and subsurface profiles retain
 their dedicated spatial-light arrangements.
 
-The reference fixture's deterministic detail maps are generated at 64x64: the
+The reference fixture's deterministic detail maps are generated at 128x128: the
 normal map is linear normal data, the macro and wood maps are color textures,
 and the wet/dry map is linear metallic/roughness data. The maps use tileable
 multi-scale value noise with bounded mid-scale octaves that avoid periodic

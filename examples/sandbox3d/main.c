@@ -381,7 +381,7 @@ typedef struct sandbox3d_physics_state
 
 #define SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT 65U
 #define SANDBOX3D_REALISM_ENTITY_COUNT 9U
-#define SANDBOX3D_REALISM_TEXTURE_EDGE 64U
+#define SANDBOX3D_REALISM_TEXTURE_EDGE 128U
 #define SANDBOX3D_REALISM_TEXTURE_CHANNEL_COUNT 4U
 #define SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT \
     (SANDBOX3D_REALISM_TEXTURE_EDGE * SANDBOX3D_REALISM_TEXTURE_EDGE * \
@@ -32048,6 +32048,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     size_t giraffe_sss_count;
     size_t rocket_entity_count;
     size_t source_binding_start;
+    unsigned char* detail_normal_pixels;
+    unsigned char* macro_variation_pixels;
+    unsigned char* wood_grain_pixels;
+    unsigned char* wet_dry_roughness_pixels;
+    unsigned char* color_space_reference_pixels;
     henka_result result;
     henka_transform transform;
     int framebuffer_height;
@@ -32055,6 +32060,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     int panel_index;
     sandbox3d_state* state;
     state = (sandbox3d_state*)user_data;
+    detail_normal_pixels = NULL;
+    macro_variation_pixels = NULL;
+    wood_grain_pixels = NULL;
+    wet_dry_roughness_pixels = NULL;
+    color_space_reference_pixels = NULL;
     /* Probe volumes remain available from Diagnostics, but do not obscure the
      * normal showcase/editor viewport until the user explicitly enables them. */
     state->diagnostics.show_reflection_probes = false;
@@ -32193,11 +32203,6 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         }
         {
             unsigned char ground_surface_pixels[SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT];
-            unsigned char detail_normal_pixels[SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT];
-            unsigned char macro_variation_pixels[SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT];
-            unsigned char wood_grain_pixels[SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT];
-            unsigned char wet_dry_roughness_pixels[SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT];
-            unsigned char color_space_reference_pixels[SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT];
             static const unsigned char foliage_mask_pixels[] =
             {
                 34U, 132U, 48U, 255U, 42U, 148U, 54U, 0U,
@@ -32215,6 +32220,32 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             henka_texture_descriptor color_space_srgb_descriptor = henka_texture_descriptor_default_color();
             henka_texture_descriptor color_space_linear_descriptor = henka_texture_descriptor_default_color();
             henka_texture_descriptor roughness_descriptor = henka_texture_descriptor_default_data();
+            detail_normal_pixels = (unsigned char*)henka_calloc(
+                SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT,
+                sizeof(*detail_normal_pixels));
+            macro_variation_pixels = (unsigned char*)henka_calloc(
+                SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT,
+                sizeof(*macro_variation_pixels));
+            wood_grain_pixels = (unsigned char*)henka_calloc(
+                SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT,
+                sizeof(*wood_grain_pixels));
+            wet_dry_roughness_pixels = (unsigned char*)henka_calloc(
+                SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT,
+                sizeof(*wet_dry_roughness_pixels));
+            if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE)
+            {
+                color_space_reference_pixels = (unsigned char*)henka_calloc(
+                    SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT,
+                    sizeof(*color_space_reference_pixels));
+            }
+            if (detail_normal_pixels == NULL || macro_variation_pixels == NULL ||
+                wood_grain_pixels == NULL || wet_dry_roughness_pixels == NULL ||
+                (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE &&
+                    color_space_reference_pixels == NULL))
+            {
+                result = HENKA_ERROR_OUT_OF_MEMORY;
+                goto fail;
+            }
             sandbox3d_generate_ground_surface_texture(
                 ground_surface_pixels,
                 SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT);
@@ -32226,7 +32257,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE &&
                 !sandbox3d_generate_color_space_reference_pixels(
                     color_space_reference_pixels,
-                    sizeof(color_space_reference_pixels)))
+                    SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT))
             {
                 result = HENKA_ERROR_INVALID_ARGUMENT;
                 goto fail;
@@ -32353,6 +32384,16 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 goto fail;
             }
         }
+        henka_free(detail_normal_pixels);
+        detail_normal_pixels = NULL;
+        henka_free(macro_variation_pixels);
+        macro_variation_pixels = NULL;
+        henka_free(wood_grain_pixels);
+        wood_grain_pixels = NULL;
+        henka_free(wet_dry_roughness_pixels);
+        wet_dry_roughness_pixels = NULL;
+        henka_free(color_space_reference_pixels);
+        color_space_reference_pixels = NULL;
         if (state->realism_reference_kind != SANDBOX3D_REALISM_REFERENCE_KIND_IBL)
         {
             result = henka_scene_add_reflection_probe(
@@ -33934,6 +33975,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     return HENKA_SUCCESS;
 
 fail:
+    henka_free(detail_normal_pixels);
+    henka_free(macro_variation_pixels);
+    henka_free(wood_grain_pixels);
+    henka_free(wet_dry_roughness_pixels);
+    henka_free(color_space_reference_pixels);
     sandbox3d_script_editor_model_destroy(state->script_editor_model);
     state->script_editor_model = NULL;
     sandbox3d_game_authoring_destroy(state->game_authoring);
