@@ -72,7 +72,9 @@ if ($giraffeGeneratorText -notmatch 'foreach \(\$hoofSide in @\(-1\.0, 1\.0\)\)'
     throw "Showcase giraffe hooves must preserve a bounded paired cloven profile rather than one undivided pad."
 }
 if ($giraffeGeneratorText -notmatch 'Add-AnatomicalLoft \$joint' -or
-    $giraffeGeneratorText -match 'Add-Ellipsoid \$joint') {
+    $giraffeGeneratorText -match 'Add-Ellipsoid \$joint' -or
+    $giraffeGeneratorText -notmatch '0\.76, 0\.81, 0\.88, 0\.95, 1\.00' -or
+    $giraffeGeneratorText -notmatch '0\.100, 0\.115, 0\.120, 0\.110, 0\.090') {
     throw "Showcase giraffe leg joints must use a tapered authored transition rather than rounded ellipsoid connectors."
 }
 
