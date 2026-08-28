@@ -1070,7 +1070,7 @@ if ($NonInteractive) {
     Write-Step "Running packaged Audio fixture smoke"
     $audioSmoke = Invoke-HenkaNativeCapture -FilePath $packagedExe -Arguments @("--audio-smoke-test") -WorkingDirectory $packageRoot -Label "Run packaged Audio fixture smoke"
 
-    if ($audioSmoke.Stdout -notmatch "Audio smoke: packaged WAV fixture loaded through the asset manager; real scene object emitter mixed and reached the SDL output boundary\.") {
+    if ($audioSmoke.Stdout -notmatch "Audio smoke: packaged resident and streamed WAV fixture paths loaded through the asset manager; real scene object emitters mixed and reached the SDL output boundary\.") {
         throw "The packaged Audio smoke test did not prove the real fixture-to-SDL production path."
     }
     if ($audioSmoke.Stdout -notmatch "Sandbox smoke test completed\.") {
