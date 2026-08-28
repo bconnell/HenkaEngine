@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <henka/scene_document.h>
@@ -357,6 +358,98 @@ static bool test_scene_document_write_v2_fixture(const char* path)
     return result;
 }
 
+static bool test_scene_document_write_v3_fixture(
+    const char* source_path,
+    const char* target_path)
+{
+    FILE* source = NULL;
+    FILE* target = NULL;
+    unsigned char* data = NULL;
+    long length;
+    size_t size;
+    size_t payload_size;
+    bool read_ok;
+    bool result = false;
+
+#if defined(_WIN32)
+    if (source_path == NULL || target_path == NULL ||
+        fopen_s(&source, source_path, "rb") != 0)
+    {
+        return false;
+    }
+#else
+    if (source_path == NULL || target_path == NULL ||
+        (source = fopen(source_path, "rb")) == NULL)
+    {
+        return false;
+    }
+#endif
+    if (fseek(source, 0L, SEEK_END) != 0 ||
+        (length = ftell(source)) < 40L + 9L * (long)sizeof(uint32_t) ||
+        fseek(source, 0L, SEEK_SET) != 0)
+    {
+        fclose(source);
+        return false;
+    }
+    size = (size_t)length;
+    data = (unsigned char*)malloc(size);
+    if (data == NULL)
+    {
+        fclose(source);
+        free(data);
+        return false;
+    }
+    read_ok = fread(data, 1U, size, source) == size;
+    if (fclose(source) != 0)
+    {
+        read_ok = false;
+    }
+    source = NULL;
+    if (!read_ok)
+    {
+        free(data);
+        return false;
+    }
+    payload_size = size - 40U - 9U * sizeof(uint32_t);
+    data[4] = 3U;
+    data[5] = 0U;
+    data[6] = 0U;
+    data[7] = 0U;
+    if (!test_scene_document_legacy_write_u64(
+            data,
+            size,
+            &(size_t){12U},
+            (uint64_t)payload_size) ||
+        !test_scene_document_legacy_write_u32(
+            data,
+            size,
+            &(size_t){32U},
+            test_scene_document_legacy_checksum(data + 40U, payload_size)))
+    {
+        free(data);
+        return false;
+    }
+#if defined(_WIN32)
+    if (fopen_s(&target, target_path, "wb") != 0)
+    {
+        free(data);
+        return false;
+    }
+#else
+    target = fopen(target_path, "wb");
+#endif
+    if (target != NULL)
+    {
+        result = fwrite(data, 1U, 40U + payload_size, target) == 40U + payload_size;
+        if (fclose(target) != 0)
+        {
+            result = false;
+        }
+    }
+    free(data);
+    return result;
+}
+
 int main(void)
 {
     const char* first_path = "build/test_tmp/scene_document_slice_b.hscene";
@@ -364,6 +457,7 @@ int main(void)
     const char* malformed_path = "build/test_tmp/scene_document_malformed.hscene";
     const char* legacy_path = "build/test_tmp/scene_document_legacy_v1.hscene";
     const char* v2_path = "build/test_tmp/scene_document_legacy_v2.hscene";
+    const char* v3_path = "build/test_tmp/scene_document_legacy_v3.hscene";
     const unsigned char malformed_data[] = {'H', 'S', 'C', 'N', 1U};
     henka_scene_document* document = NULL;
     henka_scene_document* loaded = NULL;
@@ -374,6 +468,8 @@ int main(void)
     henka_scene_document_object recycled_id_object;
     henka_scene_document_behavior behavior;
     henka_scene_document_behavior loaded_behavior;
+    henka_audio_listener authored_listener = henka_audio_listener_default();
+    henka_audio_listener loaded_listener;
     henka_scene_document_id first_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id added_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id duplicate_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
@@ -386,6 +482,26 @@ int main(void)
     if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
         henka_scene_document_create(&loaded) != HENKA_SUCCESS ||
         henka_scene_document_create(&exhausted) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    authored_listener.position = (henka_vec3){4.0f, 2.0f, -6.0f};
+    authored_listener.forward = (henka_vec3){0.0f, -0.25f, -1.0f};
+    authored_listener.up = (henka_vec3){0.0f, 1.0f, -0.1f};
+    if (henka_scene_document_set_audio_listener(document, authored_listener) != HENKA_SUCCESS ||
+        henka_scene_document_get_audio_listener(document, &loaded_listener) != HENKA_SUCCESS ||
+        loaded_listener.position.x != authored_listener.position.x ||
+        loaded_listener.forward.y != authored_listener.forward.y ||
+        loaded_listener.up.z != authored_listener.up.z)
+    {
+        goto cleanup;
+    }
+    loaded_listener.forward = (henka_vec3){0.0f, 0.0f, 0.0f};
+    if (henka_scene_document_set_audio_listener(document, loaded_listener) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_scene_document_get_audio_listener(document, &loaded_listener) != HENKA_SUCCESS ||
+        loaded_listener.position.x != authored_listener.position.x ||
+        loaded_listener.forward.y != authored_listener.forward.y ||
+        loaded_listener.up.z != authored_listener.up.z)
     {
         goto cleanup;
     }
@@ -467,10 +583,11 @@ int main(void)
         henka_scene_document_validate(document) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", second_path) != HENKA_SUCCESS ||
+        !test_scene_document_write_v3_fixture(first_path, v3_path) ||
         !test_scene_document_files_equal(first_path, second_path) ||
         henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=3 objects=257") == NULL)
+        inspection_size == 0U || strstr(inspection, "HSCN version=4 objects=257") == NULL)
     {
         fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
         goto cleanup;
@@ -489,6 +606,12 @@ int main(void)
         loaded_object.audio.min_distance != 2.0f ||
         loaded_object.audio.max_distance != 40.0f ||
         strcmp(loaded_object.audio.clip_path, "audio/scene_wind.wav") != 0 ||
+        henka_scene_document_get_audio_listener(loaded, &loaded_listener) != HENKA_SUCCESS ||
+        loaded_listener.position.x != authored_listener.position.x ||
+        loaded_listener.position.y != authored_listener.position.y ||
+        loaded_listener.position.z != authored_listener.position.z ||
+        loaded_listener.forward.y != authored_listener.forward.y ||
+        loaded_listener.up.z != authored_listener.up.z ||
         henka_scene_document_get_object(loaded, duplicate_id, &loaded_object) != HENKA_SUCCESS ||
         henka_scene_document_get_behavior_count(loaded, first_id) != 1U ||
         henka_scene_document_get_behavior(
@@ -517,11 +640,24 @@ int main(void)
         henka_scene_document_get_object_count(loaded) != 1U ||
         henka_scene_document_get_object_at(loaded, 0U, &loaded_object) != HENKA_SUCCESS ||
         strcmp(loaded_object.name, "legacy") != 0 ||
+        henka_scene_document_get_audio_listener(loaded, &loaded_listener) != HENKA_SUCCESS ||
+        loaded_listener.position.x != 0.0f ||
+        loaded_listener.forward.z != -1.0f ||
+        loaded_listener.up.y != 1.0f ||
         henka_scene_document_get_behavior_count(loaded, loaded_object.id) != 0U ||
         henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_get_object_count(loaded) != 257U)
     {
         fprintf(stderr, "scene document test failed during v1 migration\n");
+        goto cleanup;
+    }
+    if (henka_scene_document_load_file(loaded, ".", v3_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_audio_listener(loaded, &loaded_listener) != HENKA_SUCCESS ||
+        loaded_listener.position.x != 0.0f ||
+        loaded_listener.forward.z != -1.0f ||
+        loaded_listener.up.y != 1.0f)
+    {
+        fprintf(stderr, "scene document test failed during v3 migration\n");
         goto cleanup;
     }
     if (!test_scene_document_write_v2_fixture(v2_path) ||
@@ -531,6 +667,10 @@ int main(void)
         strcmp(loaded_object.name, "v2") != 0 ||
         loaded_object.audio.enabled ||
         loaded_object.audio.clip_path[0] != '\0' ||
+        henka_scene_document_get_audio_listener(loaded, &loaded_listener) != HENKA_SUCCESS ||
+        loaded_listener.position.x != 0.0f ||
+        loaded_listener.forward.z != -1.0f ||
+        loaded_listener.up.y != 1.0f ||
         henka_scene_document_get_behavior_count(loaded, loaded_object.id) != 0U)
     {
         fprintf(stderr, "scene document test failed during v2 migration\n");

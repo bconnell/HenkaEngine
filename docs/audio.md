@@ -18,9 +18,10 @@ foundation in `engine/include/henka/audio.h`.
 - Destroyed or stale scene entities are rejected before they contribute audio.
   Scene and clip owners must stop dependent voices before destroying those
   borrowed objects.
-- Scene Document v3 stores a bounded, value-only emitter configuration on the
-  real authored object record, while v1 and v2 documents load with the Audio
-  configuration defaulted off. Loading a legacy document does not rewrite it.
+- Scene Document v4 stores a bounded, value-only emitter configuration on the
+  real authored object record and a value-only listener. v1 through v3
+  documents load with the listener at its default and older Audio fields
+  migrated in memory; loading a legacy document does not rewrite it.
 
 The headless-safe mixer is the deterministic production-output boundary for
 the renderer-independent portion of this slice. A client-only, caller-pumped
@@ -31,14 +32,17 @@ background mixer thread; the caller owns scene and Audio synchronization.
 ## Current development
 
 The Sandbox Play session has a bounded runtime-emitter instantiation path when
-the caller supplies an Audio system: it reads the persisted v3 emitter
+the caller supplies an Audio system: it reads the persisted v4 emitter
 configuration and binds each emitter to the same real Scene entity used by
 Play. The normal graphical Sandbox now owns a client Audio system, maps its
 production camera to the listener, and caller-pumps the SDL3 output boundary.
+Play applies the persisted Scene Document listener before creating runtime
+emitters; the graphical camera remains the live listener source during normal
+interactive runtime.
 Play pause and resume now propagate to its live emitter voices without
 advancing their source positions. The next Audio slices must connect it to
-manager-owned asset metadata, Scene Document listener authoring, and broader
-application/device lifecycle recovery. Those integrations must preserve the
+manager-owned asset metadata and broader application/device lifecycle
+recovery. Those integrations must preserve the
 renderer-free dedicated-server path and add real imported or authored-object
 coverage rather than test-only entities.
 

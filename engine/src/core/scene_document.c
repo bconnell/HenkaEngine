@@ -46,6 +46,7 @@ typedef struct henka_scene_document_storage
 {
     size_t object_count;
     uint64_t next_id;
+    henka_audio_listener audio_listener;
     henka_scene_document_object objects[HENKA_SCENE_DOCUMENT_MAX_OBJECTS];
 } henka_scene_document_storage;
 
@@ -204,6 +205,21 @@ static bool henka_scene_document_valid_transform(const henka_transform* transfor
         transform->scale.x != 0.0f &&
         transform->scale.y != 0.0f &&
         transform->scale.z != 0.0f;
+}
+
+static bool henka_scene_document_valid_audio_listener(henka_audio_listener listener)
+{
+    const float forward_length = henka_vec3_length(listener.forward);
+    const float up_length = henka_vec3_length(listener.up);
+    const float right_length = henka_vec3_length(henka_vec3_cross(
+        listener.forward,
+        listener.up));
+    return henka_scene_document_finite_vec3(listener.position) &&
+        henka_scene_document_finite_vec3(listener.forward) &&
+        henka_scene_document_finite_vec3(listener.up) &&
+        isfinite(forward_length) != 0 && forward_length > 0.0f &&
+        isfinite(up_length) != 0 && up_length > 0.0f &&
+        isfinite(right_length) != 0 && right_length > 0.0001f;
 }
 
 static henka_result henka_scene_document_validate_object(
@@ -365,7 +381,8 @@ static henka_result henka_scene_document_validate_storage(
     size_t index;
 
     if (storage == NULL || storage->object_count > HENKA_SCENE_DOCUMENT_MAX_OBJECTS ||
-        (storage->next_id == 0U && storage->object_count == 0U))
+        (storage->next_id == 0U && storage->object_count == 0U) ||
+        !henka_scene_document_valid_audio_listener(storage->audio_listener))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -570,6 +587,7 @@ henka_result henka_scene_document_create(henka_scene_document** out_document)
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
     document->storage->next_id = 1U;
+    document->storage->audio_listener = henka_audio_listener_default();
     *out_document = document;
     return HENKA_SUCCESS;
 }
@@ -592,6 +610,7 @@ henka_result henka_scene_document_clear(henka_scene_document* document)
     }
     memset(document->storage, 0, sizeof(*document->storage));
     document->storage->next_id = 1U;
+    document->storage->audio_listener = henka_audio_listener_default();
     return HENKA_SUCCESS;
 }
 
@@ -975,6 +994,31 @@ henka_result henka_scene_document_remove_behavior(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_document_set_audio_listener(
+    henka_scene_document* document,
+    henka_audio_listener listener)
+{
+    if (document == NULL || document->storage == NULL ||
+        !henka_scene_document_valid_audio_listener(listener))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    document->storage->audio_listener = listener;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_document_get_audio_listener(
+    const henka_scene_document* document,
+    henka_audio_listener* out_listener)
+{
+    if (document == NULL || document->storage == NULL || out_listener == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_listener = document->storage->audio_listener;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_document_validate(const henka_scene_document* document)
 {
     if (document == NULL || document->storage == NULL)
@@ -1089,6 +1133,10 @@ static bool henka_scene_document_payload_size(
                 return false;
             }
         }
+    }
+    if (!henka_scene_document_size_add(&size, 9U * sizeof(uint32_t)))
+    {
+        return false;
     }
     *out_size = size;
     return size <= HENKA_SCENE_DOCUMENT_MAX_FILE_BYTES - HENKA_SCENE_DOCUMENT_HEADER_BYTES;
@@ -1320,7 +1368,7 @@ static bool henka_scene_document_decode_object(
     if (!henka_scene_document_reader_u64(reader, &object->id) ||
         !henka_scene_document_reader_u32(reader, &flags) ||
         (flags & ~HENKA_SCENE_DOCUMENT_KNOWN_FLAGS) != 0U ||
-        (format_version < HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        (format_version < HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3 &&
             (flags & (HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED |
                 HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING |
                 HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL)) != 0U) ||
@@ -1380,7 +1428,7 @@ static bool henka_scene_document_decode_object(
         !henka_scene_document_reader_float(reader, &object->physics.material.angular_damping) ||
         !henka_scene_document_reader_u32(reader, &object->physics.layer) ||
         !henka_scene_document_reader_u32(reader, &object->physics.mask)) return false;
-    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3)
     {
         uint32_t audio_bus;
         if (!henka_scene_document_reader_string(
@@ -1470,6 +1518,15 @@ static bool henka_scene_document_make_payload(
     {
         henka_scene_document_encode_object(&writer, &storage->objects[index]);
     }
+    henka_scene_document_writer_float(&writer, storage->audio_listener.position.x);
+    henka_scene_document_writer_float(&writer, storage->audio_listener.position.y);
+    henka_scene_document_writer_float(&writer, storage->audio_listener.position.z);
+    henka_scene_document_writer_float(&writer, storage->audio_listener.forward.x);
+    henka_scene_document_writer_float(&writer, storage->audio_listener.forward.y);
+    henka_scene_document_writer_float(&writer, storage->audio_listener.forward.z);
+    henka_scene_document_writer_float(&writer, storage->audio_listener.up.x);
+    henka_scene_document_writer_float(&writer, storage->audio_listener.up.y);
+    henka_scene_document_writer_float(&writer, storage->audio_listener.up.z);
     if (writer.failed || writer.position != payload_size)
     {
         henka_free(payload);
@@ -1675,6 +1732,7 @@ henka_result henka_scene_document_load_file(
         data[2] != HENKA_SCENE_DOCUMENT_MAGIC_2 || data[3] != HENKA_SCENE_DOCUMENT_MAGIC_3 ||
         (format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V2 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
@@ -1701,6 +1759,7 @@ henka_result henka_scene_document_load_file(
         goto load_cleanup;
     }
     candidate->next_id = next_id;
+    candidate->audio_listener = henka_audio_listener_default();
     reader = (henka_scene_document_reader){
         data + HENKA_SCENE_DOCUMENT_HEADER_BYTES,
         (size_t)payload_size,
@@ -1717,6 +1776,29 @@ henka_result henka_scene_document_load_file(
             goto load_cleanup;
         }
         ++candidate->object_count;
+    }
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        (!henka_scene_document_reader_float(
+            &reader, &candidate->audio_listener.position.x) ||
+            !henka_scene_document_reader_float(
+                &reader, &candidate->audio_listener.position.y) ||
+            !henka_scene_document_reader_float(
+                &reader, &candidate->audio_listener.position.z) ||
+            !henka_scene_document_reader_float(
+                &reader, &candidate->audio_listener.forward.x) ||
+            !henka_scene_document_reader_float(
+                &reader, &candidate->audio_listener.forward.y) ||
+            !henka_scene_document_reader_float(
+                &reader, &candidate->audio_listener.forward.z) ||
+            !henka_scene_document_reader_float(
+                &reader, &candidate->audio_listener.up.x) ||
+            !henka_scene_document_reader_float(
+                &reader, &candidate->audio_listener.up.y) ||
+            !henka_scene_document_reader_float(
+                &reader, &candidate->audio_listener.up.z)))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto load_cleanup;
     }
     if (reader.failed || reader.position != reader.size ||
         henka_scene_document_validate_storage(candidate) != HENKA_SUCCESS)

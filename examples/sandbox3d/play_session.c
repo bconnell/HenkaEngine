@@ -740,6 +740,18 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
     session->snapshot_count = 0U;
     session->last_error = HENKA_SUCCESS;
     session->frame_index = 0U;
+    if (session->audio_system != NULL)
+    {
+        henka_audio_listener listener;
+        if (henka_scene_document_get_audio_listener(
+                sandbox3d_scene_document_bridge_get_document(session->bridge),
+                &listener) != HENKA_SUCCESS ||
+            henka_audio_system_set_listener(session->audio_system, listener) != HENKA_SUCCESS)
+        {
+            return sandbox3d_play_session_abort_start_with_error(
+                session, HENKA_ERROR_INVALID_ARGUMENT);
+        }
+    }
     for (index = 0U; index < binding_count; ++index)
     {
         henka_scene_document_id document_id;

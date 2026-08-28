@@ -11,7 +11,8 @@
 #include <henka/result.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(3)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(4)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3 UINT32_C(3)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V2 UINT32_C(2)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION UINT32_C(1)
 #define HENKA_SCENE_DOCUMENT_MAX_OBJECTS 1024U
@@ -151,6 +152,16 @@ henka_result henka_scene_document_set_object(
 henka_result henka_scene_document_remove_object(
     henka_scene_document* document,
     henka_scene_document_id id);
+/* The authored listener is value-only scene configuration. It is validated
+ * and copied transactionally; runtime audio systems receive a separate
+ * listener value when the scene is played. Legacy documents load with the
+ * default listener. */
+henka_result henka_scene_document_set_audio_listener(
+    henka_scene_document* document,
+    henka_audio_listener listener);
+henka_result henka_scene_document_get_audio_listener(
+    const henka_scene_document* document,
+    henka_audio_listener* out_listener);
 size_t henka_scene_document_get_behavior_count(
     const henka_scene_document* document,
     henka_scene_document_id object_id);

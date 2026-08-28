@@ -88,6 +88,8 @@ int main(void)
     henka_scene_document_object object = henka_scene_document_object_default();
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_audio_listener authored_listener = henka_audio_listener_default();
+    henka_audio_listener runtime_listener;
     henka_transform transform;
     henka_transform stepped_transform;
     henka_script_host* script_host;
@@ -143,6 +145,13 @@ int main(void)
     {
         goto cleanup;
     }
+    authored_listener.position = (henka_vec3){3.0f, 4.0f, -5.0f};
+    authored_listener.forward = (henka_vec3){0.0f, 0.0f, -1.0f};
+    authored_listener.up = (henka_vec3){0.0f, 1.0f, 0.0f};
+    if (henka_scene_document_set_audio_listener(document, authored_listener) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
     object.transform.position = (henka_vec3){0.0f, 5.0f, 0.0f};
     object.physics.enabled = true;
     object.physics.body_type = HENKA_PHYSICS_BODY_DYNAMIC;
@@ -162,6 +171,12 @@ int main(void)
         sandbox3d_play_session_start(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_RUNNING ||
         henka_audio_system_get_active_voice_count(audio_system) != 1U ||
+        henka_audio_system_get_listener(audio_system, &runtime_listener) != HENKA_SUCCESS ||
+        runtime_listener.position.x != authored_listener.position.x ||
+        runtime_listener.position.y != authored_listener.position.y ||
+        runtime_listener.position.z != authored_listener.position.z ||
+        runtime_listener.forward.y != authored_listener.forward.y ||
+        runtime_listener.up.z != authored_listener.up.z ||
         (script_host = sandbox3d_play_session_get_script_host(session)) == NULL)
     {
         goto cleanup;

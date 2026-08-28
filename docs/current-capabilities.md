@@ -366,6 +366,10 @@ authoritative section below.
 - Voices bind to borrowed production `henka_scene` and `henka_entity` objects.
   The mixer reads the live entity transform each mix operation, rejects stale or
   destroyed entities before they contribute, and exposes bounded diagnostics.
+- Scene Documents v4 persist the authored Audio listener and emitter values;
+  v1-v3 load with safe listener defaults and are not rewritten on load. Play
+  applies the authored listener to the Audio system before emitter creation,
+  while the graphical Sandbox may update it from the live production camera.
   The first integration coverage uses a real scene entity created through the
   public scene API and a WAV loaded through the confined file path.
 - This is an engine foundation, not a complete game-audio workflow. Authored
