@@ -225,7 +225,7 @@ The scene layer is currently lightweight and provides:
 - one directional light direction, color, intensity, and ambient color;
 - per-object visibility and debug labels.
 
-The current scene model is not a full ECS.
+The current scene model is a bounded entity model.
 
 ### Renderer
 
@@ -283,7 +283,7 @@ Current interaction behavior includes:
 - selected objects can show a transform gizmo;
 - viewport-relative rays drive manipulation so docked panel clicks do not affect scene transforms.
 
-The Sandbox remains an engine sample and QA target. It is not a complete production editor.
+The Sandbox remains an engine sample and QA target. Production editor maturity is still in progress.
 
 ## Current boundaries
 
@@ -292,11 +292,10 @@ The Sandbox remains an engine sample and QA target. It is not a complete product
 - The engine owns the asset manager and fallback assets.
 - Runtime assets resolve relative to the executable directory by default.
 - Local user data resolves beside the executable by default.
-- Packaged Sandbox runs therefore remain independent from the repository root.
+- Packaged Sandbox runs remain independent from the repository root.
 - The engine can draw an optional UI context after the 3D scene.
 - Sandbox object selection and details come from the scene plus Sandbox-owned descriptors.
-- Saved scene files and editor-only data models are not used for that inspection path.
-- The Sandbox does not include SDL, Windows, or OpenGL headers.
+- SDL, Windows, and OpenGL headers remain confined to their owning implementation modules.
 - OpenGL stays in renderer implementation files.
 - Scene data remains public enough for engine consumers while renderer internals stay private.
 - Real games are intended to live in separate repositories and consume Henka through its public boundaries.
