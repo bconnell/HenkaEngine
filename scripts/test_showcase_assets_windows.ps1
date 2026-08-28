@@ -52,6 +52,10 @@ if (-not $muzzleMatch.Success -or
 if ($generatorText -notmatch '(?s)\$spotEdge = .*?elseif \(\$spotEdge\)') {
     throw "Showcase giraffe hide is missing its bounded reticulated spot-edge transition."
 }
+if ($giraffeGeneratorText -notmatch 'Add-CurvedLimb \$mane' -or
+    $giraffeGeneratorText -match '(?s)foreach \(\$maneY.*?Add-Ellipsoid \$mane') {
+    throw "Showcase giraffe mane must be a continuous curved ridge rather than repeated round elements."
+}
 
 function Get-ShowcaseFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)

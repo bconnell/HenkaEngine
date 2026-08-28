@@ -1309,11 +1309,14 @@ function New-Giraffe {
     Add-Frustum $tan 4.30 4.56 0.050 0.040 0.16 0.96 16
     Add-OrientedCone $ossicone @(-0.16, 4.52, 0.96) @(-0.22, 4.76, 0.95) 0.065 16
     Add-OrientedCone $ossicone @(0.16, 4.52, 0.96) @(0.22, 4.76, 0.95) 0.065 16
-    # A short mane row gives the neck a readable rear contour without making
-    # the mascot realistic in the photographic sense.
-    foreach ($maneY in @(2.08, 2.30, 2.52, 2.74, 2.96, 3.18, 3.40, 3.60)) {
-        Add-Ellipsoid $mane @(0.0, $maneY, 0.50 + (($maneY - 2.08) * 0.17)) @(0.075, 0.13, 0.040) 10 20
-    }
+    # A continuous curved ridge gives the mane a connected rear contour;
+    # isolated round elements made the neck read like a toy bead chain.
+    Add-CurvedLimb $mane `
+        @(2.04, 2.18, 2.32, 2.46, 2.60, 2.74, 2.88, 3.02, 3.16, 3.30, 3.44, 3.56, 3.66) `
+        @(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) `
+        @(0.49, 0.51, 0.53, 0.55, 0.57, 0.59, 0.61, 0.63, 0.65, 0.67, 0.69, 0.71, 0.73) `
+        @(0.064, 0.072, 0.078, 0.080, 0.078, 0.075, 0.071, 0.067, 0.063, 0.059, 0.055, 0.050, 0.044) `
+        @(0.043, 0.045, 0.045, 0.044, 0.043, 0.042, 0.041, 0.040, 0.039, 0.038, 0.036, 0.033, 0.029) 32
     # A short articulated tail restores a key rear-body relationship without
     # introducing a disconnected decorative peg.
     Add-OrientedCone $tan @(0.0, 1.56, -1.16) @(0.08, 1.84, -1.42) 0.060 16
