@@ -1390,9 +1390,9 @@ function New-Rocket {
         Add-Ellipsoid $heat @($engine[0], 0.02, $engine[1]) @(0.17, 0.06, 0.17) 8 16
     }
     Add-Frustum $stripe 2.35 2.54 0.535 0.535 0.0 0.0 40
-    Add-Frustum $thermal 1.08 1.16 0.555 0.555 0.0 0.0 56
-    Add-Frustum $thermal 1.92 1.99 0.55 0.55 0.0 0.0 56
-    Add-Frustum $thermal 2.95 3.04 0.535 0.535 0.0 0.0 56
+    Add-ProfiledFrustum $thermal @(1.05, 1.08, 1.16, 1.19) @(0.54, 0.555, 0.555, 0.54) 0.0 0.0 56
+    Add-ProfiledFrustum $thermal @(1.89, 1.92, 1.99, 2.02) @(0.535, 0.55, 0.55, 0.535) 0.0 0.0 56
+    Add-ProfiledFrustum $thermal @(2.92, 2.95, 3.04, 3.07) @(0.52, 0.535, 0.535, 0.52) 0.0 0.0 56
     foreach ($ring in @(@(1.58, 0.49), @(3.48, 0.44))) {
         for ($fastenerIndex = 0; $fastenerIndex -lt 8; ++$fastenerIndex) {
             $angle = 2.0 * [Math]::PI * $fastenerIndex / 8.0
@@ -1441,7 +1441,7 @@ function New-Rocket {
         Add-Frustum $metal 0.42 0.56 0.315 0.315 $boosterX 0.0 32
         Add-Frustum $metal 1.34 1.41 0.302 0.302 $boosterX 0.0 32
         Add-Frustum $metal 2.06 2.13 0.292 0.292 $boosterX 0.0 32
-        Add-Frustum $thermal 2.52 2.61 0.295 0.295 $boosterX 0.0 40
+        Add-ProfiledFrustum $thermal @(2.49, 2.52, 2.61, 2.64) @(0.286, 0.295, 0.295, 0.286) $boosterX 0.0 40
         Add-Frustum $avionics 3.00 3.07 0.275 0.275 $boosterX 0.0 32
         Add-ProfiledFrustum $interstageInsulation @(2.46, 2.54, 2.62) @(0.296, 0.304, 0.296) $boosterX 0.0 40
         Add-Ellipsoid $heat @($boosterX, 0.30, 0.0) @(0.24, 0.06, 0.24) 10 20

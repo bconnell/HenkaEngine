@@ -9,6 +9,20 @@ Add-Type -AssemblyName System.Drawing
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $generator = Join-Path $repoRoot "scripts\generate_showcase_assets.ps1"
+$generatorText = Get-Content -LiteralPath $generator -Raw
+
+$rocketStart = $generatorText.IndexOf("function New-Rocket")
+$rocketEnd = $generatorText.IndexOf('if (-not [IO.Path]::IsPathRooted($OutputDirectory))')
+if ($rocketStart -lt 0 -or $rocketEnd -le $rocketStart) {
+    throw "Showcase rocket generator boundary was not found."
+}
+$rocketGeneratorText = $generatorText.Substring($rocketStart, $rocketEnd - $rocketStart)
+if ($rocketGeneratorText -match 'Add-Frustum \$thermal') {
+    throw "Showcase rocket thermal/stage collars must use profiled bevel geometry rather than hard-edged rings."
+}
+if ($rocketGeneratorText -notmatch 'Add-ProfiledFrustum \$thermal') {
+    throw "Showcase rocket is missing profiled thermal/stage collar geometry."
+}
 
 function Get-ShowcaseFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)
