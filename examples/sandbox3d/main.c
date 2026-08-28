@@ -36,6 +36,7 @@
 #include "terrain_autosave.h"
 #include "physics_tools.h"
 #include "game_authoring.h"
+#include "audio_runtime.h"
 #include "script_editor.h"
 #include "studio_environment.h"
 #include "workspace_tools.h"
@@ -579,6 +580,8 @@ typedef struct sandbox3d_state
     henka_entity realism_entities[SANDBOX3D_REALISM_ENTITY_COUNT];
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
     sandbox3d_game_authoring* game_authoring;
+    sandbox3d_audio_runtime* audio_runtime;
+    bool audio_runtime_error_reported;
     sandbox3d_script_editor_model* script_editor_model;
     sandbox3d_workspace_state workspace;
     sandbox3d_gizmo_state gizmo;
@@ -33298,6 +33301,23 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
+    result = sandbox3d_audio_runtime_create(state->scene, &state->audio_runtime);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    result = sandbox3d_game_authoring_set_audio_system(
+        state->game_authoring,
+        sandbox3d_audio_runtime_get_system_if_available(state->audio_runtime));
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    if (!sandbox3d_audio_runtime_is_output_available(state->audio_runtime))
+    {
+        HENKA_LOG_WARN(
+            "Audio playback device is unavailable; authored Audio Play will fail closed.");
+    }
     if (state->authoring_object != NULL)
     {
         const henka_physics_body_id authoring_body =
@@ -33667,6 +33687,8 @@ fail:
     state->script_editor_model = NULL;
     sandbox3d_game_authoring_destroy(state->game_authoring);
     state->game_authoring = NULL;
+    sandbox3d_audio_runtime_destroy(state->audio_runtime);
+    state->audio_runtime = NULL;
     sandbox3d_release_owned_resources(state);
     return result;
 }
@@ -34951,6 +34973,33 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
      * engine-owned scene before any frame work can dereference the previous
      * runtime pointer (environment, terrain, input, or physics). */
     sandbox3d_update_game_authoring(engine, state);
+    if (state != NULL && state->audio_runtime != NULL &&
+        sandbox3d_audio_runtime_is_output_available(state->audio_runtime))
+    {
+        henka_result audio_result = sandbox3d_audio_runtime_update_listener(
+            state->audio_runtime,
+            &state->camera);
+        if (audio_result == HENKA_SUCCESS)
+        {
+            audio_result = sandbox3d_audio_runtime_pump(
+                state->audio_runtime,
+                delta_seconds);
+        }
+        if (audio_result != HENKA_SUCCESS)
+        {
+            if (!state->audio_runtime_error_reported)
+            {
+                HENKA_LOG_WARN(
+                    "Audio runtime update failed (%s); playback remains bounded and will retry.",
+                    henka_result_to_string(audio_result));
+                state->audio_runtime_error_reported = true;
+            }
+        }
+        else
+        {
+            state->audio_runtime_error_reported = false;
+        }
+    }
     if (state != NULL && state->terrain_world != NULL && state->terrain_storage != NULL &&
         !state->smoke_test && !state->capture_mode_requested &&
         !state->terrain_capture_mode_requested)
@@ -36486,6 +36535,8 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     state->script_editor_model = NULL;
     sandbox3d_game_authoring_destroy(state->game_authoring);
     state->game_authoring = NULL;
+    sandbox3d_audio_runtime_destroy(state->audio_runtime);
+    state->audio_runtime = NULL;
     sandbox3d_release_owned_resources(state);
 }
 

@@ -55,7 +55,7 @@ Other operating systems are not currently claimed as supported.
 | External projects | Foundation | Current separate game/server templates with Windows validation |
 | Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, Save/Reload, and isolated runtime Play scenes |
 | 2D | Planned | No dedicated 2D scope yet; renderer, sprites, layers, parallax, and animation remain open |
-| Audio | Foundation | Bounded resident WAV clips, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, and a caller-pumped SDL3 output boundary; normal device lifecycle, editor, and end-user workflows remain in progress |
+| Audio | Foundation | Bounded resident WAV clips, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, and graphical Sandbox camera/listener plus caller-pumped SDL3 output integration; editor and end-user workflows remain in progress |
 | Scripting/behaviors | In Progress | Current bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, persistence, and cross-language events |
 
 Status labels are contractual: **Foundation** means core architecture exists but
@@ -90,9 +90,9 @@ Henka is not only a modeling application. Its runtime includes scenes/entities,
 camera and input actions, asset management, rendering, physics, terrain,
 persistence, and a renderer-independent headless boundary. Full Game/Play
 authoring, character controllers, end-user scripting, and mature project
-serialization are not yet available. Audio has a bounded headless runtime and
-client output foundation; normal graphical device lifecycle, listener/editor
-workflows, and end-user audio workflows remain in progress.
+serialization are not yet available. Audio has a bounded headless runtime and a
+graphical Sandbox client output foundation with camera/listener integration;
+editor and end-user audio workflows remain in progress.
 
 ## Modeling and content authoring
 

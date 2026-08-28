@@ -242,6 +242,25 @@ add_test(
     COMMAND henka_sandbox3d_game_authoring_tests
 )
 
+if(HENKA_BUILD_CLIENT)
+    add_executable(henka_sandbox3d_audio_runtime_tests
+        ../examples/sandbox3d/audio_runtime.c
+        test_sandbox3d_audio_runtime.c
+    )
+
+    target_link_libraries(henka_sandbox3d_audio_runtime_tests
+        PRIVATE
+            henka
+    )
+
+    henka_enable_project_warnings(henka_sandbox3d_audio_runtime_tests)
+
+    add_test(
+        NAME henka_sandbox3d_audio_runtime_tests
+        COMMAND henka_sandbox3d_audio_runtime_tests
+    )
+endif()
+
 if(WIN32)
     add_test(
         NAME henka_fullscreen_presentation_mapping_tests

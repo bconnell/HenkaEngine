@@ -29,15 +29,16 @@ background mixer thread; the caller owns scene and Audio synchronization.
 
 ## Current development
 
-The Sandbox Play session now has a bounded runtime-emitter instantiation path
-when the caller supplies an Audio system: it reads the persisted v3 emitter
+The Sandbox Play session has a bounded runtime-emitter instantiation path when
+the caller supplies an Audio system: it reads the persisted v3 emitter
 configuration and binds each emitter to the same real Scene entity used by
-Play. The caller-pumped SDL3 output boundary is available to client consumers
-but is not yet wired into the normal graphical Sandbox lifecycle. The next
-Audio slices must connect it to the manager-owned asset metadata path, Scene
-Document listener configuration, and normal application/device lifecycle.
-Those integrations must preserve the renderer-free dedicated-server path and
-add real imported or authored-object coverage rather than test-only entities.
+Play. The normal graphical Sandbox now owns a client Audio system, maps its
+production camera to the listener, and caller-pumps the SDL3 output boundary.
+The next Audio slices must connect it to manager-owned asset metadata, Scene
+Document listener authoring, and broader application/device lifecycle
+recovery. Those integrations must preserve the renderer-free dedicated-server
+path and add real imported or authored-object coverage rather than test-only
+entities.
 
 ## Future work
 
