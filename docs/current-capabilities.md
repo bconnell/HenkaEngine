@@ -373,13 +373,13 @@ authoritative section below.
   The first integration coverage uses a real scene entity created through the
   public scene API and a WAV loaded through the confined file path.
 - This is an engine foundation, not a complete game-audio workflow. Authored
-  emitter configuration now persists in v3 Scene Documents, and the Sandbox
+  emitter configuration and authored listener now persist in v4 Scene Documents, and the Sandbox
   Play session can instantiate those emitters through the normal Game
   Authoring coordinator. The graphical Sandbox owns a client-only,
   caller-pumped SDL3 playback boundary with bounded queue/pump budgets,
-  device diagnostics, and production-camera listener mapping. Listener
-  authoring, broader application/device lifecycle recovery, streamed long-form
-  assets, asset-manager metadata and reload, scripting/editor integration,
+  device diagnostics, authored-listener application, and production-camera
+  listener mapping. Broader application/device lifecycle recovery, streamed
+  long-form assets, asset-manager reload, scripting/editor integration,
   packaged runtime proof, and broader format support remain in progress. The
   current runtime core and output boundary are single-owner for voice commands
   and mixing; device-thread synchronization remains outside this scope.
