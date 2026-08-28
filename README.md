@@ -10,9 +10,7 @@ rendering, physics, Audio foundations, 2.5D camera foundations, modeling and
 content authoring, asset/material workflows, persistence, and external-project
 support.
 
-> **Project status:** Henka is a real engine foundation, not a production-ready
-> game platform. The repository's Sandbox is an engine sample and QA target;
-> games built with Henka should live in separate repositories.
+> **Project status:** Henka is a real engine foundation. Production-ready game-platform maturity is still in progress. The repository's Sandbox is an engine sample and QA target. Games built with Henka should live in separate repositories.
 
 ## At a glance
 
@@ -20,7 +18,9 @@ support.
 | --- | --- |
 | Language | C17 |
 | Primary validated platform | 64-bit Windows |
+| Planned desktop platforms | Linux 64-bit, then macOS |
 | Current renderer backend | OpenGL |
+| Future renderer direction | Vulkan / Direct3D 12 / Metal through backend isolation |
 | Editor | Native integrated workspace |
 | Game project boundary | Separate external projects supported through validated templates |
 | Major system sequence | Audio completion → Character Controller → Scene Hierarchy / Parenting → Prefabs |
@@ -28,8 +28,9 @@ support.
 
 Integrated authoring is underway alongside runtime and workspace hardening. The
 current validated development and packaging path targets 64-bit Windows with
-MSVC, CMake, PowerShell, SDL3, and the OpenGL renderer backend. Other operating
-systems are not currently claimed as supported.
+MSVC, CMake, PowerShell, SDL3, and the OpenGL renderer backend. Linux and macOS
+support are planned and will be claimed only after their real build, test,
+runtime, packaging, and external-project paths are validated.
 
 ## Highlights
 
@@ -41,7 +42,7 @@ systems are not currently claimed as supported.
 - Transactional topology operations, UV foundations, and bounded undo/redo
 - Terrain streaming, editing, persistence, material layers, and collision ownership
 - Rigid-body physics foundation with Sandbox inspection
-- Bounded game-audio foundation with buses, spatial emitters, scene/Play integration, and SDL3 output
+- Bounded game-audio foundation with buses, spatial emitters, scene/Play integration, SDL3 output, and external public-API validation
 - Perspective, side, top-down, and isometric 2.5D camera foundations
 - Headless/dedicated-server and external-project template foundations
 - Provenanced, packaged Windows Sandbox builds
@@ -67,7 +68,7 @@ systems are not currently claimed as supported.
 | External projects | Foundation | Current separate game/server templates with Windows validation |
 | Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, Save/Reload, and isolated runtime Play scenes |
 | 2D | Planned | No dedicated 2D scope yet; renderer, sprites, layers, parallax, and animation remain open |
-| Audio | Foundation | Bounded resident WAV clips, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, and graphical Sandbox camera/listener plus caller-pumped SDL3 output integration; editor and end-user workflows remain in progress |
+| Audio | Foundation | Resident WAV clips, fixed voices, buses, spatialization, deterministic mixing, manager-owned assets, persisted emitters, Sandbox Play integration, caller-pumped SDL3 output, and external public-API validation |
 | Scripting/behaviors | In Progress | Current bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, persistence, and cross-language events |
 
 ### Status meanings
@@ -103,7 +104,7 @@ Detailed controls are documented in
 
 ## Game-engine runtime
 
-Henka is not only a modeling application. Its runtime includes:
+Henka's runtime currently includes:
 
 - scenes and entities;
 - camera and input actions;
@@ -116,11 +117,12 @@ Henka is not only a modeling application. Its runtime includes:
 - a renderer-independent headless boundary;
 - a bounded Audio runtime and graphical Sandbox output path.
 
-Full Game/Play authoring, character controllers, end-user scripting workflows,
-and mature project serialization are not yet complete. Audio has a bounded
-headless runtime and a graphical Sandbox client output foundation with
-camera/listener integration; editor and broader end-user Audio workflows remain
-in progress.
+Character controllers, complete end-user scripting workflows, mature project
+serialization, and broader Game/Play authoring remain unfinished. Audio has a
+bounded headless runtime, manager-owned asset path, persisted emitters, Sandbox
+Play integration, graphical client output, and external public-API validation.
+Editor authoring, streaming, broader decoding, scripting, and device-recovery
+work remain active.
 
 ## Modeling and content authoring
 
@@ -156,6 +158,23 @@ The current 2.5D foundation is camera-side:
 Sprites, texture regions, layered depth, parallax, animation, and movement
 constraints remain future work. See [docs/terrain.md](docs/terrain.md) and
 [docs/roadmap.md](docs/roadmap.md).
+
+## Platform direction
+
+The current validated platform is 64-bit Windows.
+
+Planned desktop support includes:
+
+- Linux 64-bit with a validated native build, test, runtime, packaging, and external-project path;
+- macOS after the portable runtime/platform boundary and renderer abstraction are ready for a Metal-oriented path.
+
+Renderer backend direction is:
+
+- Windows: OpenGL today, with future Vulkan and Direct3D 12 support;
+- Linux: Vulkan as the preferred modern backend, with OpenGL retained where practical;
+- macOS: Metal as the intended native modern backend.
+
+See [docs/platform-support.md](docs/platform-support.md) for the platform validation contract.
 
 ## Getting started
 
@@ -207,8 +226,9 @@ cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
 .\scripts\test_external_game_template_windows.ps1
 ```
 
-The external server template links only `henka_runtime`. These templates are
-bounded consumer validation paths, not complete game project serializers. See
+The external server template links only `henka_runtime`. The external game
+template exercises bounded public runtime and authoring paths, including the
+current public Audio workflow. Complete game project serialization remains future work. See
 [docs/external-game-projects.md](docs/external-game-projects.md).
 
 ## Documentation
@@ -220,6 +240,7 @@ bounded consumer validation paths, not complete game project serializers. See
 - [Architecture](docs/architecture.md)
 - [Building and validation](docs/building.md)
 - [Documentation presentation standard](docs/documentation-style.md)
+- [Platform support](docs/platform-support.md)
 
 ### Subsystems and workflows
 
@@ -233,6 +254,7 @@ bounded consumer validation paths, not complete game project serializers. See
 - [Sandbox offline help](docs/help/sandbox3d.md)
 - [External game projects](docs/external-game-projects.md)
 - [Showcase asset provenance](docs/showcase-assets.md)
+- [Rendering realism](docs/realism.md)
 - [Branding](docs/branding.md)
 - [Repository integrity](docs/repository-integrity.md)
 - [Contributing](CONTRIBUTING.md)
@@ -240,13 +262,13 @@ bounded consumer validation paths, not complete game project serializers. See
 ## Current limitations
 
 The supported scope for each capability row is stated in its matrix cell above.
-Future expansion beyond that scope does not lower a current status, while
-unfinished work inside it does.
+Future expansion beyond that scope does not lower a current status. Unfinished
+work inside the stated scope still affects status.
 
 - Henka and its editor are early-stage; the native workspace is not a complete production editor.
 - 2D, authored Audio workflows, scripting/behaviors, character controllers, advanced physics, broader renderer backends, and mature Game/Play workflows are unfinished.
 - Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
-- The default Giraffe and Rocket are deterministic imported/generated fixtures and editor-owned dogfood derivatives, not proof of user-authored production assets.
+- The default Giraffe and Rocket are deterministic imported/generated fixtures and editor-owned dogfood derivatives. They do not establish user-authored production-asset maturity.
 - Automated evidence does not replace human visual QA for editor feel, detached windows, terrain corners, rendering, or modeling quality.
 
 The detailed boundary inventory is maintained in
