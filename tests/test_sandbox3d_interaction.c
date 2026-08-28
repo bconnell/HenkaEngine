@@ -26,7 +26,7 @@ static void henka_test_sandbox3d_authoring_cage_overlay(void)
             "HENKA_T1B_AUTHORING_CAGE_TEST_V1") == 0);
 
     HENKA_TEST_ASSERT(
-        SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT);
+        !SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT);
 
     desc = henka_authoring_mesh_desc_default();
     desc.max_vertices = 8U;
