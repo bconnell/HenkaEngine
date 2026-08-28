@@ -1,6 +1,6 @@
 # Audio Foundation
 
-Henka's Audio system currently provides a renderer-independent runtime core, persisted scene emitters, manager-owned resident audio assets, Play-session integration, camera/listener mapping, deterministic PCM mixing, and caller-pumped SDL3 output.
+Henka's Audio system currently provides a renderer-independent runtime core, persisted scene emitters, manager-owned resident audio assets, Play-session integration, camera/listener mapping, deterministic PCM mixing, caller-pumped SDL3 output, and public external-project validation.
 
 > **Status:** Foundation. Core runtime playback and scene integration are active. Streaming, broader decoding, editor authoring, scripting, device recovery, and packaged end-user proof remain in progress.
 
@@ -12,6 +12,7 @@ Henka's Audio system currently provides a renderer-independent runtime core, per
 - [Scene emitters](#scene-emitters)
 - [Play-session integration](#play-session-integration)
 - [SDL3 output](#sdl3-output)
+- [External-project validation](#external-project-validation)
 - [Current development](#current-development)
 - [Future work](#future-work)
 
@@ -36,7 +37,7 @@ The headless-safe mixer is the deterministic production-output boundary for the 
 
 ## Asset ownership
 
-Audio clips are now available through the shared asset manager.
+Audio clips are available through the shared asset manager.
 
 `henka_assets_load_audio_clip`:
 
@@ -91,9 +92,9 @@ Legacy behavior is explicit:
 
 The Sandbox Play session reads persisted v3 emitter configuration and binds each runtime emitter to the same real Scene entity used by Play.
 
-The current production path can use manager-owned Audio clips during emitter creation. This keeps file-backed Audio under the same asset ownership boundary used by the wider engine.
+The current production path uses manager-owned Audio clips during emitter creation. File-backed Audio therefore shares the engine's normal asset ownership boundary.
 
-The graphical Sandbox also owns a client Audio system and maps its production camera to the listener.
+The graphical Sandbox owns a client Audio system and maps its production camera to the listener.
 
 ## SDL3 output
 
@@ -108,6 +109,27 @@ The client-only SDL3 output owner:
 The current output path does not create a background mixer thread. The caller owns scene and Audio synchronization.
 
 The renderer-free dedicated-server path remains device-free.
+
+## External-project validation
+
+The external game template now exercises Audio through Henka's public API boundary.
+
+The validation workflow:
+
+1. creates a real external WAV asset;
+2. loads it through the engine-owned asset manager;
+3. creates a real scene entity;
+4. attaches persisted Audio configuration to the authored Scene Document object;
+5. saves and reloads that configuration;
+6. creates a runtime emitter from the manager-owned clip;
+7. mixes deterministic production PCM;
+8. moves the scene entity and verifies spatial left/right response;
+9. moves the listener and verifies distance response;
+10. destroys the entity and verifies stale-emitter cleanup.
+
+The external consumer uses public Henka APIs and builds with warnings treated as errors on its supported compiler path.
+
+This establishes a real external-consumer Audio integration path for the current Foundation scope.
 
 ## Current development
 
@@ -138,7 +160,7 @@ Planned Audio maturity includes:
 - editor-facing Audio authoring;
 - scripting and gameplay APIs;
 - robust device discovery, loss, and recovery;
-- packaged external-project validation;
+- packaged external-project validation across future supported platforms;
 - broader performance and memory controls;
 - advanced mixer/effect capabilities after the core game-audio workflow is mature.
 
