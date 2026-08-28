@@ -55,7 +55,7 @@ Other operating systems are not currently claimed as supported.
 | External projects | Foundation | Current separate game/server templates with Windows validation |
 | Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, Save/Reload, and isolated runtime Play scenes |
 | 2D | Planned | No dedicated 2D scope yet; renderer, sprites, layers, parallax, and animation remain open |
-| Audio | Planned | No current audio scope or end-user workflow |
+| Audio | Foundation | Bounded resident WAV clips, fixed voices, bus gains, entity spatialization, and deterministic stereo PCM mixing; device, persistence, and end-user workflows remain in progress |
 | Scripting/behaviors | In Progress | Current bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, persistence, and cross-language events |
 
 Status labels are contractual: **Foundation** means core architecture exists but
@@ -89,8 +89,10 @@ projection and info-strip controls. Detailed controls are in
 Henka is not only a modeling application. Its runtime includes scenes/entities,
 camera and input actions, asset management, rendering, physics, terrain,
 persistence, and a renderer-independent headless boundary. Full Game/Play
-authoring, character controllers, audio, end-user scripting, and mature project
-serialization are not yet available.
+authoring, character controllers, end-user scripting, and mature project
+serialization are not yet available. Audio has a bounded headless runtime
+foundation; device output, authored scene emitters, and end-user audio
+workflows remain in progress.
 
 ## Modeling and content authoring
 
@@ -183,6 +185,7 @@ bounded consumer validation paths, not complete game project serializers. See
 - [Model loading](docs/model-loading.md)
 - [Terrain](docs/terrain.md)
 - [Physics](docs/physics.md)
+- [Audio foundation](docs/audio.md)
 - [Editor controls and Sandbox help](docs/editor-controls.md) · [offline help](docs/help/sandbox3d.md)
 - [External game projects](docs/external-game-projects.md)
 - [Showcase asset provenance](docs/showcase-assets.md)
@@ -198,7 +201,7 @@ The limitations below are evaluated against that scope; future expansion beyond
 it does not lower the current status, while unfinished work inside it does.
 
 - Henka and its editor are early-stage; the native workspace is not a complete production editor.
-- 2D, audio, scripting/behaviors, character controllers, advanced physics, broader renderer backends, and mature Game/Play workflows are unfinished.
+- 2D, authored audio workflows, scripting/behaviors, character controllers, advanced physics, broader renderer backends, and mature Game/Play workflows are unfinished.
 - Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
 - The default Giraffe and Rocket are deterministic imported/generated fixtures and editor-owned dogfood derivatives, not proof of user-authored production assets.
 - Automated evidence does not replace human visual QA for editor feel, detached windows, terrain corners, rendering, or modeling quality.

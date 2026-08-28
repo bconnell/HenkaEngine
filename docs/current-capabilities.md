@@ -357,14 +357,29 @@ authoritative section below.
 
 ## Audio
 
-- No current audio API or end-user audio workflow is implemented; audio remains
-  Planned.
+- The renderer-independent runtime now provides a bounded Audio foundation:
+  confined resident PCM WAV loading, fixed-capacity generation-checked voices,
+  Master/Music/SFX/Dialogue/Ambience/UI bus gains, listener orientation,
+  distance attenuation and stereo panning, and deterministic interleaved stereo
+  float-PCM mixing.
+- Voices bind to borrowed production `henka_scene` and `henka_entity` objects.
+  The mixer reads the live entity transform each mix operation, rejects stale or
+  destroyed entities before they contribute, and exposes bounded diagnostics.
+  The first integration coverage uses a real scene entity created through the
+  public scene API and a WAV loaded through the confined file path.
+- This is an engine foundation, not a complete game-audio workflow. SDL/WASAPI
+  device output, streamed long-form assets, asset-manager metadata and reload,
+  authored Scene Document emitter/listener persistence, Play-session lifecycle,
+  scripting/editor integration, packaged runtime proof, and broader format
+  support remain in progress. The current runtime core is single-owner for
+  voice commands and mixing; device-thread synchronization belongs at the
+  future backend boundary.
 
 ## Known Gaps
 
 - Henka remains early-stage. The native workspace is not a complete production
   editor or project-authoring suite.
-- 2D workflow, audio, end-user project script behaviors, character controllers,
+- 2D workflow, complete audio workflows, end-user project script behaviors, character controllers,
   advanced physics, broader renderer backends, and mature Game/Play workflows
   remain future work beyond the current bounded authoring/play foundation.
 - Advanced asset authoring, hierarchy authoring, animation/rigging, texture

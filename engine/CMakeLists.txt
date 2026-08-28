@@ -7,6 +7,7 @@ add_library(henka_runtime STATIC
     src/core/result.c
     src/core/scene_document.c
     src/core/time.c
+    src/core/audio.c
     src/scripting/script_host.c
     src/scripting/script_state.c
     src/scripting/script_runtime.c
