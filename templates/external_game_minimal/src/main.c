@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <henka/henka.h>
@@ -24,6 +25,336 @@ typedef struct external_graphical_terrain_state
     uint64_t start_frame;
     bool success;
 } external_graphical_terrain_state;
+
+typedef struct external_audio_state
+{
+    henka_scene* scene;
+    henka_audio_system* audio_system;
+    henka_audio_emitter* emitter;
+    henka_scene_document* document;
+    henka_scene_document* reloaded_document;
+    henka_entity entity;
+    bool success;
+} external_audio_state;
+
+static void external_write_u16(unsigned char* bytes, size_t offset, uint16_t value)
+{
+    bytes[offset] = (unsigned char)(value & 0xffU);
+    bytes[offset + 1U] = (unsigned char)((value >> 8U) & 0xffU);
+}
+
+static void external_write_u32(unsigned char* bytes, size_t offset, uint32_t value)
+{
+    bytes[offset] = (unsigned char)(value & 0xffU);
+    bytes[offset + 1U] = (unsigned char)((value >> 8U) & 0xffU);
+    bytes[offset + 2U] = (unsigned char)((value >> 16U) & 0xffU);
+    bytes[offset + 3U] = (unsigned char)((value >> 24U) & 0xffU);
+}
+
+static bool external_write_audio_fixture(const char* path)
+{
+    const size_t frame_count = 128U;
+    const size_t data_size = frame_count * sizeof(int16_t);
+    const size_t file_size = 44U + data_size;
+    unsigned char* bytes = (unsigned char*)calloc(1U, file_size);
+    FILE* file = NULL;
+    size_t frame_index;
+    bool success;
+
+    if (bytes == NULL)
+    {
+        return false;
+    }
+    memcpy(bytes, "RIFF", 4U);
+    external_write_u32(bytes, 4U, (uint32_t)(file_size - 8U));
+    memcpy(bytes + 8U, "WAVEfmt ", 8U);
+    external_write_u32(bytes, 16U, 16U);
+    external_write_u16(bytes, 20U, 1U);
+    external_write_u16(bytes, 22U, 1U);
+    external_write_u32(bytes, 24U, HENKA_AUDIO_DEFAULT_SAMPLE_RATE);
+    external_write_u32(bytes, 28U, HENKA_AUDIO_DEFAULT_SAMPLE_RATE * 2U);
+    external_write_u16(bytes, 32U, 2U);
+    external_write_u16(bytes, 34U, 16U);
+    memcpy(bytes + 36U, "data", 4U);
+    external_write_u32(bytes, 40U, (uint32_t)data_size);
+    for (frame_index = 0U; frame_index < frame_count; ++frame_index)
+    {
+        external_write_u16(bytes, 44U + frame_index * 2U, 8192U);
+    }
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "wb") != 0)
+    {
+        file = NULL;
+    }
+#else
+    file = fopen(path, "wb");
+#endif
+    success = file != NULL && fwrite(bytes, 1U, file_size, file) == file_size;
+    if (file != NULL && fclose(file) != 0)
+    {
+        success = false;
+    }
+    free(bytes);
+    return success;
+}
+
+static bool external_audio_nonzero(const float* samples)
+{
+    return samples != NULL &&
+        (fabsf(samples[0]) > 0.0001f || fabsf(samples[1]) > 0.0001f);
+}
+
+static void external_audio_destroy(external_audio_state* state)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+    henka_audio_emitter_destroy(state->emitter);
+    henka_audio_system_destroy(state->audio_system);
+    henka_scene_destroy(state->scene);
+    henka_scene_document_destroy(state->reloaded_document);
+    henka_scene_document_destroy(state->document);
+    state->emitter = NULL;
+    state->audio_system = NULL;
+    state->scene = NULL;
+    state->reloaded_document = NULL;
+    state->document = NULL;
+    state->entity = HENKA_INVALID_ENTITY;
+    remove("external_audio_workflow.wav");
+    remove("external_audio_workflow.hnscene");
+}
+
+static henka_result external_audio_initialize(
+    henka_engine* engine,
+    void* user_data)
+{
+    external_audio_state* state = (external_audio_state*)user_data;
+    henka_scene_document_object object = henka_scene_document_object_default();
+    henka_scene_document_object reloaded_object = henka_scene_document_object_default();
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_audio_clip* clip = NULL;
+    henka_asset_metadata metadata = {0};
+    henka_audio_emitter_config emitter_config;
+    henka_audio_listener listener;
+    float first_samples[HENKA_AUDIO_OUTPUT_CHANNELS];
+    float second_samples[HENKA_AUDIO_OUTPUT_CHANNELS];
+    float near_samples[HENKA_AUDIO_OUTPUT_CHANNELS];
+    float far_samples[HENKA_AUDIO_OUTPUT_CHANNELS];
+    float near_sum;
+    float far_sum;
+    henka_result result;
+
+    if (engine == NULL || state == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    state->entity = HENKA_INVALID_ENTITY;
+    if (!external_write_audio_fixture("external_audio_workflow.wav"))
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    result = henka_scene_document_create(&state->document);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_document_create(&state->reloaded_document);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    (void)snprintf(object.name, sizeof(object.name), "%s", "External Audio Object");
+    object.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE;
+    object.source.primitive = HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX;
+    object.source.primitive_dimensions = (henka_vec3){1.0f, 1.0f, 1.0f};
+    object.audio.enabled = true;
+    object.audio.looping = true;
+    object.audio.spatial = true;
+    (void)snprintf(
+        object.audio.clip_path,
+        sizeof(object.audio.clip_path),
+        "%s",
+        "external_audio_workflow.wav");
+    result = henka_scene_document_add_object(
+        state->document, &object, &object_id);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_document_save_file(
+            state->document, ".", "external_audio_workflow.hnscene");
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_document_load_file(
+            state->reloaded_document, ".", "external_audio_workflow.hnscene");
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_document_get_object(
+            state->reloaded_document, object_id, &reloaded_object);
+    }
+    if (result != HENKA_SUCCESS || !reloaded_object.audio.enabled ||
+        !reloaded_object.audio.looping || !reloaded_object.audio.spatial ||
+        strcmp(reloaded_object.audio.clip_path, object.audio.clip_path) != 0)
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto cleanup;
+    }
+    result = henka_scene_create(&state->scene);
+    if (result == HENKA_SUCCESS)
+    {
+        state->entity = henka_scene_create_entity_named(
+            state->scene, reloaded_object.name);
+        result = state->entity == HENKA_INVALID_ENTITY
+            ? HENKA_ERROR_OUT_OF_MEMORY
+            : HENKA_SUCCESS;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_entity_transform(
+            state->scene,
+            state->entity,
+            (henka_transform){
+                (henka_vec3){1.0f, 0.0f, -4.0f},
+                (henka_quat){0.0f, 0.0f, 0.0f, 1.0f},
+                (henka_vec3){1.0f, 1.0f, 1.0f}});
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_audio_system_create(NULL, &state->audio_system);
+    }
+    emitter_config = reloaded_object.audio;
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_load_audio_clip(
+            henka_engine_get_asset_manager(engine),
+            emitter_config.clip_path,
+            &clip);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_get_audio_metadata(
+            henka_engine_get_asset_manager(engine), clip, &metadata);
+    }
+    if (result == HENKA_SUCCESS && metadata.type != HENKA_ASSET_TYPE_AUDIO)
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_audio_emitter_create_with_clip(
+            state->audio_system,
+            state->scene,
+            state->entity,
+            clip,
+            &emitter_config,
+            &state->emitter);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_audio_system_mix(
+            state->audio_system, first_samples, 1U);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_translate_entity(
+            state->scene, state->entity, (henka_vec3){-2.0f, 0.0f, 0.0f});
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_audio_system_mix(
+            state->audio_system, second_samples, 1U);
+    }
+    if (result != HENKA_SUCCESS || !external_audio_nonzero(first_samples) ||
+        !external_audio_nonzero(second_samples) ||
+        first_samples[1] <= first_samples[0] ||
+        second_samples[0] <= second_samples[1])
+    {
+        result = HENKA_ERROR_UNKNOWN;
+        goto cleanup;
+    }
+    listener = henka_audio_listener_default();
+    listener.position = (henka_vec3){-1.0f, 0.0f, 0.0f};
+    result = henka_audio_system_set_listener(state->audio_system, listener);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_audio_system_mix(
+            state->audio_system, near_samples, 1U);
+    }
+    listener.position = (henka_vec3){1.0f, 0.0f, 0.0f};
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_audio_system_set_listener(state->audio_system, listener);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_audio_system_mix(
+            state->audio_system, far_samples, 1U);
+    }
+    near_sum = fabsf(near_samples[0]) + fabsf(near_samples[1]);
+    far_sum = fabsf(far_samples[0]) + fabsf(far_samples[1]);
+    if (result != HENKA_SUCCESS || near_sum <= far_sum)
+    {
+        result = HENKA_ERROR_UNKNOWN;
+        goto cleanup;
+    }
+    henka_scene_destroy_entity(state->scene, state->entity);
+    result = henka_audio_system_mix(state->audio_system, far_samples, 1U);
+    if (result != HENKA_SUCCESS ||
+        henka_audio_system_get_active_voice_count(state->audio_system) != 0U ||
+        henka_audio_emitter_is_valid(state->emitter))
+    {
+        result = HENKA_ERROR_UNKNOWN;
+        goto cleanup;
+    }
+    state->success = true;
+    printf("External public Audio asset, real scene object, persistence, spatial movement, listener movement, and stale cleanup workflow passed.\n");
+
+cleanup:
+    external_audio_destroy(state);
+    return result;
+}
+
+static void external_audio_update(
+    henka_engine* engine,
+    double delta_seconds,
+    void* user_data)
+{
+    (void)delta_seconds;
+    (void)user_data;
+    henka_engine_request_exit(engine);
+}
+
+static void external_audio_shutdown(henka_engine* engine, void* user_data)
+{
+    (void)engine;
+    external_audio_destroy((external_audio_state*)user_data);
+}
+
+static bool external_audio_workflow(void)
+{
+    external_audio_state state = {0};
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_result result;
+
+    config.application_name = "Henka External Audio Consumer";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.user_data_base_path = "external_audio_user_data";
+    config.package_mode = HENKA_PACKAGE_MODE_DEVELOPMENT;
+    config.on_initialize = external_audio_initialize;
+    config.on_update = external_audio_update;
+    config.on_shutdown = external_audio_shutdown;
+    config.user_data = &state;
+    result = henka_engine_create(&config, &engine);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_engine_run(engine);
+    }
+    henka_engine_destroy(engine);
+    external_audio_destroy(&state);
+    return result == HENKA_SUCCESS && state.success;
+}
 
 static bool external_authoring_bounds(
     const henka_authoring_render_data* render_data,
@@ -940,6 +1271,7 @@ int main(void)
 {
     if (!external_terrain_workflow() ||
         !external_graphical_terrain_workflow() ||
+        !external_audio_workflow() ||
         !external_scripting_workflow())
     {
         return 1;

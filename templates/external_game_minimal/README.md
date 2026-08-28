@@ -44,7 +44,11 @@ diagnostics. It also loads package-owned `.hks` and `.lua` assets through the
 public Scene Document behavior runtime and proves shared input, interaction,
 and physics host calls, an HKS-to-Lua Henka event, and typed state delivery.
 It does not depend on Sandbox source or a machine-global scripting
-installation.
+installation. The Audio workflow creates a real external WAV asset, loads it
+through the engine-owned asset manager, attaches it to a real scene entity,
+saves and reloads its authored Audio configuration, verifies object and
+listener spatial movement through the deterministic mixer, and confirms
+stale-entity cleanup. It uses only public Henka APIs.
 
 ## Template notes
 

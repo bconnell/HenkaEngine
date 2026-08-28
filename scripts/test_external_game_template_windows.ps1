@@ -211,9 +211,10 @@ $result = Invoke-HenkaNativeCapture `
 if ($result.Stdout -notmatch "External game template initialized\." -or
     $result.Stdout -notmatch "External Terrain material, edit, collision, render-data, save, and restart workflow passed\." -or
     $result.Stdout -notmatch "External public authoring mesh, scene, runtime clone isolation, collision, duplicate/delete, and reload handoff passed\." -or
+    $result.Stdout -notmatch "External public Audio asset, real scene object, persistence, spatial movement, listener movement, and stale cleanup workflow passed\." -or
     $result.Stdout -notmatch "External Lua/HenkaScript mixed-language gameplay host workflow passed\." -or
     $result.Stdout -notmatch "External Terrain graphical Rendered path passed\.") {
-    throw "The external game template authoring or Terrain workflow did not complete its expected public-API checks."
+    throw "The external game template public-API workflow did not complete its expected checks."
 }
 
 Write-Host "[pass] External game template configured, built, and ran successfully."

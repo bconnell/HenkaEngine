@@ -37,6 +37,12 @@ target_link_libraries(external_game_minimal
         henka
 )
 
+if(MSVC)
+    target_compile_options(external_game_minimal PRIVATE /W4 /WX)
+else()
+    target_compile_options(external_game_minimal PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
 add_custom_command(TARGET external_game_minimal POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${HENKA_ENGINE_DIR}/assets"
