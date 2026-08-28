@@ -275,6 +275,15 @@ typedef struct henka_asset_mesh_entry
     henka_asset_metadata metadata;
 } henka_asset_mesh_entry;
 
+typedef struct henka_asset_audio_entry
+{
+    char* key;
+    char* source_path;
+    char* display_name;
+    henka_audio_clip* clip;
+    henka_asset_metadata metadata;
+} henka_asset_audio_entry;
+
 struct henka_material_asset
 {
     char* key;
@@ -317,6 +326,9 @@ struct henka_asset_manager
     henka_asset_mesh_entry* mesh_entries;
     size_t mesh_count;
     size_t mesh_capacity;
+    henka_asset_audio_entry* audio_entries;
+    size_t audio_count;
+    size_t audio_capacity;
     henka_material_asset** material_entries;
     size_t material_count;
     size_t material_capacity;

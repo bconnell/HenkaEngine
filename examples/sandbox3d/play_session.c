@@ -38,6 +38,7 @@ struct sandbox3d_play_session
     size_t snapshot_count;
     sandbox3d_play_snapshot snapshots[SANDBOX3D_PLAY_SESSION_MAX_OBJECTS];
     henka_audio_system* audio_system;
+    henka_asset_manager* audio_asset_manager;
     henka_audio_emitter* audio_emitters[SANDBOX3D_PLAY_SESSION_MAX_OBJECTS];
 };
 
@@ -650,6 +651,18 @@ henka_result sandbox3d_play_session_set_audio_system(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_play_session_set_audio_asset_manager(
+    sandbox3d_play_session* session,
+    henka_asset_manager* asset_manager)
+{
+    if (session == NULL || session->state != SANDBOX3D_PLAY_SESSION_STOPPED)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    session->audio_asset_manager = asset_manager;
+    return HENKA_SUCCESS;
+}
+
 henka_result sandbox3d_play_session_set_input_context(
     sandbox3d_play_session* session,
     sandbox3d_play_input_query input_query,
@@ -749,13 +762,36 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
                 return sandbox3d_play_session_abort_start_with_error(
                     session, HENKA_ERROR_INVALID_ARGUMENT);
             }
-            audio_result = henka_audio_emitter_create(
+            if (session->audio_asset_manager != NULL)
+            {
+                henka_audio_clip* clip = NULL;
+                audio_result = henka_assets_load_audio_clip(
+                    session->audio_asset_manager,
+                    object.audio.clip_path,
+                    &clip);
+                if (audio_result == HENKA_SUCCESS)
+                {
+                    audio_result = henka_audio_emitter_create_with_clip(
+                        session->audio_system,
+                        scene,
+                        entity,
+                        clip,
+                        &object.audio,
+                        &session->audio_emitters[
+                            session->snapshot_count - 1U]);
+                }
+            }
+            else
+            {
+                audio_result = henka_audio_emitter_create(
                     session->audio_system,
                     session->project_root,
                     scene,
                     entity,
                     &object.audio,
-                    &session->audio_emitters[session->snapshot_count - 1U]);
+                    &session->audio_emitters[
+                        session->snapshot_count - 1U]);
+            }
             if (audio_result != HENKA_SUCCESS)
             {
                 return sandbox3d_play_session_abort_start_with_error(

@@ -33313,6 +33313,13 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
+    result = sandbox3d_game_authoring_set_audio_asset_manager(
+        state->game_authoring,
+        henka_engine_get_asset_manager(engine));
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
     if (!sandbox3d_audio_runtime_is_output_available(state->audio_runtime))
     {
         HENKA_LOG_WARN(

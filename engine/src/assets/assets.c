@@ -648,6 +648,8 @@ const char* henka_assets_get_type_label(henka_asset_type type)
             return "Material";
         case HENKA_ASSET_TYPE_GLTF_SCENE:
             return "glTF Scene";
+        case HENKA_ASSET_TYPE_AUDIO:
+            return "Audio";
         case HENKA_ASSET_TYPE_UNKNOWN:
         default:
             return "Unknown";
@@ -749,6 +751,37 @@ static henka_result henka_asset_manager_grow_meshes(henka_asset_manager* manager
 
     manager->mesh_entries = entries;
     manager->mesh_capacity = new_capacity;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_asset_manager_grow_audio(henka_asset_manager* manager)
+{
+    size_t allocation_size;
+    henka_asset_audio_entry* entries;
+    size_t new_capacity;
+    size_t required;
+
+    if (manager == NULL ||
+        !henka_checked_size_add(manager->audio_count, 1U, &required) ||
+        !henka_checked_capacity(
+            manager->audio_capacity,
+            required,
+            8U,
+            HENKA_MAX_ASSET_CACHE_ENTRIES,
+            &new_capacity) ||
+        !henka_checked_size_multiply(new_capacity, sizeof(*entries), &allocation_size))
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    entries = henka_realloc(manager->audio_entries, allocation_size);
+    if (entries == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    manager->audio_entries = entries;
+    manager->audio_capacity = new_capacity;
     return HENKA_SUCCESS;
 }
 
@@ -908,6 +941,38 @@ henka_asset_manager_find_mesh_entry(
 {
     return (henka_asset_mesh_entry*)
         henka_asset_manager_find_mesh_entry_const(manager, key);
+}
+
+static const henka_asset_audio_entry*
+henka_asset_manager_find_audio_entry_const(
+    const henka_asset_manager* manager,
+    const char* key)
+{
+    size_t index;
+
+    if (manager == NULL || key == NULL)
+    {
+        return NULL;
+    }
+
+    for (index = 0U; index < manager->audio_count; ++index)
+    {
+        if (strcmp(manager->audio_entries[index].key, key) == 0)
+        {
+            return &manager->audio_entries[index];
+        }
+    }
+
+    return NULL;
+}
+
+static henka_asset_audio_entry*
+henka_asset_manager_find_audio_entry(
+    henka_asset_manager* manager,
+    const char* key)
+{
+    return (henka_asset_audio_entry*)
+        henka_asset_manager_find_audio_entry_const(manager, key);
 }
 
 static henka_material_asset* henka_asset_manager_find_material_entry(
@@ -1276,6 +1341,14 @@ void henka_asset_manager_destroy(
         henka_free(manager->mesh_entries[index].display_name);
     }
 
+    for (index = 0U; index < manager->audio_count; ++index)
+    {
+        henka_audio_clip_destroy(manager->audio_entries[index].clip);
+        henka_free(manager->audio_entries[index].key);
+        henka_free(manager->audio_entries[index].source_path);
+        henka_free(manager->audio_entries[index].display_name);
+    }
+
     for (index = 0U; index < manager->material_count; ++index)
     {
         henka_free(manager->material_entries[index]->key);
@@ -1296,6 +1369,7 @@ void henka_asset_manager_destroy(
     henka_free(manager->shader_entries);
     henka_free(manager->texture_entries);
     henka_free(manager->mesh_entries);
+    henka_free(manager->audio_entries);
     henka_free(manager->material_entries);
     henka_free(manager->gltf_scene_entries);
     henka_mesh_destroy_owned(manager->fallback_mesh);
@@ -1537,6 +1611,107 @@ henka_result henka_assets_load_texture(
 {
     henka_texture_descriptor descriptor = henka_texture_descriptor_default_color();
     return henka_assets_load_texture_with_descriptor(manager, path, &descriptor, out_texture);
+}
+
+henka_result henka_assets_load_audio_clip(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_audio_clip** out_clip)
+{
+    henka_asset_audio_entry* existing_entry;
+    char* display_name;
+    char* key;
+    char* source_path;
+    henka_audio_clip* clip;
+    henka_result result;
+
+    if (out_clip != NULL)
+    {
+        *out_clip = NULL;
+    }
+
+    if (manager == NULL || manager->engine == NULL || path == NULL ||
+        out_clip == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    key = NULL;
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    source_path = NULL;
+    result = henka_assets_normalize_source_path(path, &source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        return result;
+    }
+
+    existing_entry = henka_asset_manager_find_audio_entry(manager, key);
+    if (existing_entry != NULL)
+    {
+        *out_clip = existing_entry->clip;
+        henka_free(source_path);
+        henka_free(key);
+        return HENKA_SUCCESS;
+    }
+
+    clip = NULL;
+    result = henka_audio_clip_load_file(
+        henka_engine_get_asset_base_path(manager->engine),
+        source_path,
+        &clip);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(source_path);
+        henka_free(key);
+        return result;
+    }
+
+    display_name = henka_asset_copy_display_name(source_path);
+    if (display_name == NULL)
+    {
+        henka_audio_clip_destroy(clip);
+        henka_free(source_path);
+        henka_free(key);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    if (manager->audio_count == manager->audio_capacity)
+    {
+        result = henka_asset_manager_grow_audio(manager);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_audio_clip_destroy(clip);
+            henka_free(display_name);
+            henka_free(source_path);
+            henka_free(key);
+            return result;
+        }
+    }
+
+    manager->audio_entries[manager->audio_count].key = key;
+    manager->audio_entries[manager->audio_count].source_path = source_path;
+    manager->audio_entries[manager->audio_count].display_name = display_name;
+    manager->audio_entries[manager->audio_count].clip = clip;
+    manager->audio_entries[manager->audio_count].metadata.type =
+        HENKA_ASSET_TYPE_AUDIO;
+    manager->audio_entries[manager->audio_count].metadata.source_path = source_path;
+    manager->audio_entries[manager->audio_count].metadata.display_name = display_name;
+    manager->audio_entries[manager->audio_count].metadata.loaded = true;
+    manager->audio_entries[manager->audio_count].metadata.fallback = false;
+    manager->audio_entries[manager->audio_count].metadata.reload_supported = false;
+    henka_asset_set_summary(
+        &manager->audio_entries[manager->audio_count].metadata,
+        "Resident PCM WAV loaded from the canonical asset path.",
+        "");
+    manager->audio_count += 1U;
+    *out_clip = clip;
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_assets_load_texture_with_descriptor(
@@ -5037,7 +5212,7 @@ size_t henka_assets_get_metadata_count(const henka_asset_manager* manager)
         return 0U;
     }
 
-    return manager->shader_count + manager->texture_count + manager->mesh_count + manager->material_count + manager->gltf_scene_count;
+    return manager->shader_count + manager->texture_count + manager->mesh_count + manager->audio_count + manager->material_count + manager->gltf_scene_count;
 }
 
 henka_result henka_assets_get_metadata_at_index(
@@ -5076,6 +5251,13 @@ henka_result henka_assets_get_metadata_at_index(
     }
 
     index -= manager->mesh_count;
+    if (index < manager->audio_count)
+    {
+        *out_metadata = manager->audio_entries[index].metadata;
+        return HENKA_SUCCESS;
+    }
+
+    index -= manager->audio_count;
     if (index < manager->material_count)
     {
         *out_metadata = manager->material_entries[index]->metadata;
@@ -5189,6 +5371,35 @@ henka_result henka_assets_get_mesh_metadata(
     return HENKA_ERROR_UNKNOWN;
 }
 
+henka_result henka_assets_get_audio_metadata(
+    const henka_asset_manager* manager,
+    const henka_audio_clip* clip,
+    henka_asset_metadata* out_metadata)
+{
+    size_t index;
+
+    if (out_metadata != NULL)
+    {
+        memset(out_metadata, 0, sizeof(*out_metadata));
+    }
+
+    if (manager == NULL || clip == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < manager->audio_count; ++index)
+    {
+        if (manager->audio_entries[index].clip == clip)
+        {
+            *out_metadata = manager->audio_entries[index].metadata;
+            return HENKA_SUCCESS;
+        }
+    }
+
+    return HENKA_ERROR_UNKNOWN;
+}
+
 henka_result henka_assets_get_texture_metadata_for_path(
     const henka_asset_manager* manager,
     const char* path,
@@ -5257,6 +5468,43 @@ henka_result henka_assets_get_mesh_metadata_for_path(
     entry = henka_asset_manager_find_mesh_entry_const(
         manager,
         key);
+    henka_free(key);
+    if (entry == NULL)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    *out_metadata = entry->metadata;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_get_audio_metadata_for_path(
+    const henka_asset_manager* manager,
+    const char* path,
+    henka_asset_metadata* out_metadata)
+{
+    char* key;
+    const henka_asset_audio_entry* entry;
+    henka_result result;
+
+    if (out_metadata != NULL)
+    {
+        memset(out_metadata, 0, sizeof(*out_metadata));
+    }
+
+    if (manager == NULL || path == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    key = NULL;
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    entry = henka_asset_manager_find_audio_entry_const(manager, key);
     henka_free(key);
     if (entry == NULL)
     {

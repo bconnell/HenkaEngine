@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include <henka/result.h>
+#include <henka/audio.h>
 #include <henka/scene.h>
 #include <henka/shader.h>
 #include <henka/texture.h>
@@ -25,7 +26,8 @@ typedef enum henka_asset_type
     HENKA_ASSET_TYPE_TEXTURE,
     HENKA_ASSET_TYPE_MESH,
     HENKA_ASSET_TYPE_MATERIAL,
-    HENKA_ASSET_TYPE_GLTF_SCENE
+    HENKA_ASSET_TYPE_GLTF_SCENE,
+    HENKA_ASSET_TYPE_AUDIO
 } henka_asset_type;
 
 typedef struct henka_asset_metadata
@@ -208,6 +210,13 @@ henka_result henka_assets_load_texture_with_descriptor(
     const char* path,
     const henka_texture_descriptor* descriptor,
     henka_texture** out_texture);
+/* Audio clips returned by the manager are borrowed and remain manager-owned.
+ * The cache identity is the same confined, canonical project-relative path
+ * contract used by the other file-backed asset types. */
+henka_result henka_assets_load_audio_clip(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_audio_clip** out_clip);
 /* Adopts one caller-created GPU texture under a stable confined runtime
  * identity. Ownership transfers only on success; the manager then owns the
  * borrowed texture pointer and destroys it with the other texture assets.
@@ -454,11 +463,16 @@ henka_result henka_assets_get_shader_metadata(const henka_asset_manager* manager
  */
 henka_result henka_assets_get_texture_metadata(const henka_asset_manager* manager, const henka_texture* texture, henka_asset_metadata* out_metadata);
 henka_result henka_assets_get_mesh_metadata(const henka_asset_manager* manager, const henka_mesh* mesh, henka_asset_metadata* out_metadata);
+henka_result henka_assets_get_audio_metadata(const henka_asset_manager* manager, const henka_audio_clip* clip, henka_asset_metadata* out_metadata);
 henka_result henka_assets_get_texture_metadata_for_path(
     const henka_asset_manager* manager,
     const char* path,
     henka_asset_metadata* out_metadata);
 henka_result henka_assets_get_mesh_metadata_for_path(
+    const henka_asset_manager* manager,
+    const char* path,
+    henka_asset_metadata* out_metadata);
+henka_result henka_assets_get_audio_metadata_for_path(
     const henka_asset_manager* manager,
     const char* path,
     henka_asset_metadata* out_metadata);

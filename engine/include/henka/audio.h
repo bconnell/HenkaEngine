@@ -184,6 +184,16 @@ henka_result henka_audio_emitter_create(
     henka_entity entity,
     const henka_audio_emitter_config* config,
     henka_audio_emitter** out_emitter);
+/* Creates an emitter from a borrowed clip, for use with manager-owned audio
+ * assets. The clip and system must outlive the emitter; the emitter does not
+ * destroy the borrowed clip. */
+henka_result henka_audio_emitter_create_with_clip(
+    henka_audio_system* system,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_audio_clip* clip,
+    const henka_audio_emitter_config* config,
+    henka_audio_emitter** out_emitter);
 void henka_audio_emitter_destroy(henka_audio_emitter* emitter);
 bool henka_audio_emitter_is_valid(const henka_audio_emitter* emitter);
 henka_result henka_audio_emitter_get_config(

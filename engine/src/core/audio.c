@@ -54,6 +54,7 @@ struct henka_audio_emitter
     henka_scene* scene;
     henka_entity entity;
     henka_audio_clip* clip;
+    bool owns_clip;
     henka_audio_emitter_config config;
     henka_audio_voice_id voice;
 };
@@ -774,11 +775,11 @@ uint32_t henka_audio_system_get_sample_rate(
     return system == NULL ? 0U : system->output_sample_rate;
 }
 
-henka_result henka_audio_emitter_create(
+henka_result henka_audio_emitter_create_with_clip(
     henka_audio_system* system,
-    const char* project_root,
     henka_scene* scene,
     henka_entity entity,
+    const henka_audio_clip* clip,
     const henka_audio_emitter_config* config,
     henka_audio_emitter** out_emitter)
 {
@@ -791,10 +792,11 @@ henka_result henka_audio_emitter_create(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_emitter = NULL;
-    if (system == NULL || project_root == NULL || scene == NULL ||
+    if (system == NULL || scene == NULL || clip == NULL ||
         !henka_scene_is_entity_valid(scene, entity) || config == NULL ||
         !config->enabled ||
-        henka_audio_emitter_config_validate(config) != HENKA_SUCCESS)
+        henka_audio_emitter_config_validate(config) != HENKA_SUCCESS ||
+        clip->frame_count == 0U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -804,18 +806,11 @@ henka_result henka_audio_emitter_create(
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
-    result = henka_audio_clip_load_file(
-        project_root,
-        config->clip_path,
-        &emitter->clip);
-    if (result != HENKA_SUCCESS)
-    {
-        henka_free(emitter);
-        return result;
-    }
     emitter->system = system;
     emitter->scene = scene;
     emitter->entity = entity;
+    emitter->clip = (henka_audio_clip*)clip;
+    emitter->owns_clip = false;
     emitter->config = *config;
     voice_desc = (henka_audio_voice_desc){
         config->bus,
@@ -834,10 +829,50 @@ henka_result henka_audio_emitter_create(
         &emitter->voice);
     if (result != HENKA_SUCCESS)
     {
-        henka_audio_clip_destroy(emitter->clip);
         henka_free(emitter);
         return result;
     }
+    *out_emitter = emitter;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_emitter_create(
+    henka_audio_system* system,
+    const char* project_root,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_audio_emitter_config* config,
+    henka_audio_emitter** out_emitter)
+{
+    henka_audio_clip* clip = NULL;
+    henka_audio_emitter* emitter = NULL;
+    henka_result result;
+
+    if (out_emitter == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_emitter = NULL;
+    if (project_root == NULL || config == NULL || system == NULL ||
+        scene == NULL || !henka_scene_is_entity_valid(scene, entity) ||
+        !config->enabled ||
+        henka_audio_emitter_config_validate(config) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_audio_clip_load_file(project_root, config->clip_path, &clip);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_audio_emitter_create_with_clip(
+        system, scene, entity, clip, config, &emitter);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_audio_clip_destroy(clip);
+        return result;
+    }
+    emitter->owns_clip = true;
     *out_emitter = emitter;
     return HENKA_SUCCESS;
 }
@@ -853,7 +888,10 @@ void henka_audio_emitter_destroy(henka_audio_emitter* emitter)
     {
         (void)henka_audio_voice_stop(emitter->system, emitter->voice);
     }
-    henka_audio_clip_destroy(emitter->clip);
+    if (emitter->owns_clip)
+    {
+        henka_audio_clip_destroy(emitter->clip);
+    }
     henka_free(emitter);
 }
 

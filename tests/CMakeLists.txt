@@ -213,7 +213,7 @@ add_executable(henka_sandbox3d_play_session_tests
 
 target_link_libraries(henka_sandbox3d_play_session_tests
     PRIVATE
-        henka_runtime
+        henka
 )
 
 henka_enable_project_warnings(henka_sandbox3d_play_session_tests)
@@ -232,7 +232,7 @@ add_executable(henka_sandbox3d_game_authoring_tests
 
 target_link_libraries(henka_sandbox3d_game_authoring_tests
     PRIVATE
-        henka_runtime
+        henka
 )
 
 henka_enable_project_warnings(henka_sandbox3d_game_authoring_tests)
@@ -560,6 +560,16 @@ henka_enable_project_warnings(henka_terrain_mesh_tests)
 add_test(NAME henka_terrain_mesh_tests COMMAND henka_terrain_mesh_tests)
 
 if(HENKA_BUILD_CLIENT)
+add_executable(henka_audio_asset_tests
+    test_audio_assets.c
+)
+target_link_libraries(henka_audio_asset_tests
+    PRIVATE
+        henka
+)
+henka_enable_project_warnings(henka_audio_asset_tests)
+add_test(NAME henka_audio_asset_tests COMMAND henka_audio_asset_tests)
+
 add_executable(henka_audio_output_tests
     test_audio_output.c
 )

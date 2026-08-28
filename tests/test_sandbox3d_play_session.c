@@ -4,11 +4,14 @@
 #include <string.h>
 
 #include <henka/audio.h>
+#include <henka/assets.h>
+#include <henka/memory.h>
 #include <henka/physics.h>
 #include <henka/scene.h>
 #include <henka/scene_document.h>
 
 #include "../examples/sandbox3d/play_session.h"
+#include "../engine/src/henka_internal.h"
 
 static void test_write_u16(unsigned char* bytes, size_t offset, uint16_t value)
 {
@@ -79,6 +82,8 @@ int main(void)
     henka_scene* scene = NULL;
     henka_physics_world* physics_world = NULL;
     henka_audio_system* audio_system = NULL;
+    henka_engine asset_engine;
+    henka_asset_manager* asset_manager = NULL;
     henka_scene_document_object object = henka_scene_document_object_default();
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_entity entity = HENKA_INVALID_ENTITY;
@@ -119,12 +124,21 @@ int main(void)
     object.audio.spatial = true;
     (void)snprintf(object.audio.clip_path, sizeof(object.audio.clip_path), "%s", audio_path);
 
+    memset(&asset_engine, 0, sizeof(asset_engine));
+    asset_engine.asset_base_path = ".";
+    asset_manager = (henka_asset_manager*)henka_malloc(sizeof(*asset_manager));
+    if (asset_manager != NULL)
+    {
+        memset(asset_manager, 0, sizeof(*asset_manager));
+        asset_manager->engine = &asset_engine;
+    }
     if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
         henka_scene_create(&scene) != HENKA_SUCCESS ||
         henka_physics_world_create(&physics_world) != HENKA_SUCCESS ||
         henka_script_state_store_create(&script_state_store) != HENKA_SUCCESS ||
         !test_write_audio_fixture(audio_path) ||
-        henka_audio_system_create(&(henka_audio_system_config){0U}, &audio_system) != HENKA_SUCCESS)
+        henka_audio_system_create(&(henka_audio_system_config){0U}, &audio_system) != HENKA_SUCCESS ||
+        asset_manager == NULL)
     {
         goto cleanup;
     }
@@ -142,6 +156,7 @@ int main(void)
         sandbox3d_play_session_create(bridge, physics_world, &session) != HENKA_SUCCESS ||
         sandbox3d_play_session_set_script_state_store(session, script_state_store) != HENKA_SUCCESS ||
         sandbox3d_play_session_set_audio_system(session, audio_system) != HENKA_SUCCESS ||
+        sandbox3d_play_session_set_audio_asset_manager(session, asset_manager) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_STOPPED ||
         sandbox3d_play_session_start(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_RUNNING ||
@@ -323,6 +338,7 @@ cleanup:
     henka_physics_world_destroy(physics_world);
     henka_script_state_store_destroy(script_state_store);
     henka_audio_system_destroy(audio_system);
+    henka_asset_manager_destroy(asset_manager);
     henka_scene_destroy(scene);
     henka_scene_document_destroy(document);
     remove(audio_path);

@@ -7,6 +7,7 @@
 
 #include <henka/scene.h>
 #include <henka/scene_document.h>
+#include <henka/assets.h>
 #include <henka/audio.h>
 #include <henka/script.h>
 #include <henka/script_source.h>
@@ -52,6 +53,11 @@ henka_result sandbox3d_game_authoring_set_play_input_context(
 henka_result sandbox3d_game_authoring_set_audio_system(
     sandbox3d_game_authoring* authoring,
     henka_audio_system* audio_system);
+/* The asset manager is borrowed and must outlive the authoring coordinator
+ * and every Play session it starts. */
+henka_result sandbox3d_game_authoring_set_audio_asset_manager(
+    sandbox3d_game_authoring* authoring,
+    henka_asset_manager* asset_manager);
 size_t sandbox3d_game_authoring_get_behavior_count_for_entity(
     const sandbox3d_game_authoring* authoring,
     henka_entity entity);

@@ -8,6 +8,7 @@
 #include "scene_document_bridge.h"
 
 #include <henka/math.h>
+#include <henka/assets.h>
 #include <henka/audio.h>
 #include <henka/script.h>
 #include <henka/script_source.h>
@@ -46,6 +47,11 @@ henka_result sandbox3d_play_session_set_script_state_store(
 henka_result sandbox3d_play_session_set_audio_system(
     sandbox3d_play_session* session,
     henka_audio_system* audio_system);
+/* The asset manager is borrowed and must outlive the session and every
+ * manager-owned Audio clip used by its Play emitters. */
+henka_result sandbox3d_play_session_set_audio_asset_manager(
+    sandbox3d_play_session* session,
+    henka_asset_manager* asset_manager);
 /* The input query is borrowed and remains owned by the caller.  The observer
  * position is copied into the session; both values are used only by the
  * isolated Play world and may be refreshed while it is running. */
