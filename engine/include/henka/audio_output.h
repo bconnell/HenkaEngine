@@ -37,6 +37,10 @@ henka_result henka_audio_output_create(
     const henka_audio_output_config* config,
     henka_audio_output** out_output);
 void henka_audio_output_destroy(henka_audio_output* output);
+/* Reopens the playback device through a replacement stream. The prior stream
+ * remains live if reopening fails; a successful recovery clears only queued
+ * device data and preserves mixer state and diagnostics counters. */
+henka_result henka_audio_output_recover(henka_audio_output* output);
 /* Mixes and queues at most the configured frame budget. This is deliberately
  * caller-pumped: the caller owns scene/audio-system synchronization and must
  * invoke it from the same owner thread as other Audio commands. */

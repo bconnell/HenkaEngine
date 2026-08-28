@@ -26,7 +26,9 @@ foundation in `engine/include/henka/audio.h`.
 The headless-safe mixer is the deterministic production-output boundary for
 the renderer-independent portion of this slice. A client-only, caller-pumped
 SDL3 output owner now opens a playback stream, accepts bounded stereo
-float-PCM frames, and reports device/queue diagnostics. It does not create a
+float-PCM frames, and reports device/queue diagnostics. It can transactionally
+reopen its SDL stream after device loss and retry one failed queue submission;
+successful recovery clears only queued device data. It does not create a
 background mixer thread; the caller owns scene and Audio synchronization.
 
 ## Current development
@@ -41,8 +43,8 @@ emitters; the graphical camera remains the live listener source during normal
 interactive runtime.
 Play pause and resume now propagate to its live emitter voices without
 advancing their source positions. The next Audio slices must connect it to
-manager-owned asset metadata and broader application/device lifecycle
-recovery. Those integrations must preserve the
+manager-owned asset reload and broader device-lifecycle policy. Those
+integrations must preserve the
 renderer-free dedicated-server path and add real imported or authored-object
 coverage rather than test-only entities.
 
@@ -50,5 +52,5 @@ coverage rather than test-only entities.
 
 Streaming long-form assets, broader decoder coverage, mixer effects, hot reload,
 editor controls, scripting bindings, package/runtime proof, device-loss
-recovery, and broader spatial/occlusion features remain future work. None of
-those gaps are hidden by the current Foundation status.
+notification/hot-plug policy, and broader spatial/occlusion features remain
+future work. None of those gaps are hidden by the current Foundation status.

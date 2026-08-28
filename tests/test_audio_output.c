@@ -124,6 +124,15 @@ int main(void)
     HENKA_TEST_ASSERT(info.sample_rate == HENKA_AUDIO_DEFAULT_SAMPLE_RATE);
     HENKA_TEST_ASSERT(info.pumped_frames == 64U);
     HENKA_TEST_ASSERT(info.queued_frames > 0U);
+    HENKA_TEST_ASSERT(henka_audio_output_recover(output) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(info.device_open);
+    HENKA_TEST_ASSERT(info.queued_frames == 0U);
+    HENKA_TEST_ASSERT(info.pumped_frames == 64U);
+    HENKA_TEST_ASSERT(henka_audio_output_pump(output, 32U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(info.pumped_frames == 96U);
+    HENKA_TEST_ASSERT(info.queued_frames > 0U);
     HENKA_TEST_ASSERT(henka_audio_output_pump(output, 129U) == HENKA_ERROR_LIMIT);
     HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(info.rejected_frames == 129U);

@@ -71,6 +71,37 @@ static henka_result henka_audio_output_get_queued_frames(
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_audio_output_open_stream(
+    const henka_audio_output* output,
+    SDL_AudioStream** out_stream)
+{
+    SDL_AudioSpec spec = {0};
+    SDL_AudioStream* stream;
+
+    if (output == NULL || out_stream == NULL || output->sample_rate == 0U ||
+        output->sample_rate > (uint32_t)INT_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_stream = NULL;
+    spec.format = SDL_AUDIO_F32;
+    spec.channels = (int)HENKA_AUDIO_OUTPUT_CHANNELS;
+    spec.freq = (int)output->sample_rate;
+    stream = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
+    if (stream == NULL)
+    {
+        return HENKA_ERROR_PLATFORM;
+    }
+    if (!SDL_ResumeAudioStreamDevice(stream))
+    {
+        SDL_DestroyAudioStream(stream);
+        return HENKA_ERROR_PLATFORM;
+    }
+    *out_stream = stream;
+    return HENKA_SUCCESS;
+}
+
 henka_audio_output_config henka_audio_output_config_default(void)
 {
     henka_audio_output_config config;
@@ -90,7 +121,6 @@ henka_result henka_audio_output_create(
     uint32_t sample_rate;
     size_t mix_sample_count;
     size_t mix_buffer_bytes;
-    SDL_AudioSpec spec = {0};
 
     if (out_output == NULL)
     {
@@ -145,21 +175,8 @@ henka_result henka_audio_output_create(
         henka_free(output);
         return HENKA_ERROR_PLATFORM;
     }
-    spec.format = SDL_AUDIO_F32;
-    spec.channels = (int)HENKA_AUDIO_OUTPUT_CHANNELS;
-    spec.freq = (int)sample_rate;
-    output->stream = SDL_OpenAudioDeviceStream(
-        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
-    if (output->stream == NULL)
+    if (henka_audio_output_open_stream(output, &output->stream) != HENKA_SUCCESS)
     {
-        SDL_QuitSubSystem(SDL_INIT_AUDIO);
-        henka_free(output->mix_buffer);
-        henka_free(output);
-        return HENKA_ERROR_PLATFORM;
-    }
-    if (!SDL_ResumeAudioStreamDevice(output->stream))
-    {
-        SDL_DestroyAudioStream(output->stream);
         SDL_QuitSubSystem(SDL_INIT_AUDIO);
         henka_free(output->mix_buffer);
         henka_free(output);
@@ -184,6 +201,25 @@ void henka_audio_output_destroy(henka_audio_output* output)
     henka_free(output);
 }
 
+henka_result henka_audio_output_recover(henka_audio_output* output)
+{
+    SDL_AudioStream* replacement_stream;
+    henka_result result;
+
+    if (output == NULL || output->stream == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_audio_output_open_stream(output, &replacement_stream);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    SDL_DestroyAudioStream(output->stream);
+    output->stream = replacement_stream;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_audio_output_pump(
     henka_audio_output* output,
     uint32_t frame_count)
@@ -195,6 +231,11 @@ henka_result henka_audio_output_pump(
     if (output == NULL || output->stream == NULL || frame_count == 0U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (SDL_GetAudioStreamDevice(output->stream) == 0U &&
+        henka_audio_output_recover(output) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_PLATFORM;
     }
     if (frame_count > output->max_pump_frames ||
         henka_audio_output_get_queued_frames(output, &queued_frames) != HENKA_SUCCESS)
@@ -228,7 +269,11 @@ henka_result henka_audio_output_pump(
     }
     if (!SDL_PutAudioStreamData(output->stream, output->mix_buffer, (int)byte_count))
     {
-        return HENKA_ERROR_PLATFORM;
+        if (henka_audio_output_recover(output) != HENKA_SUCCESS ||
+            !SDL_PutAudioStreamData(output->stream, output->mix_buffer, (int)byte_count))
+        {
+            return HENKA_ERROR_PLATFORM;
+        }
     }
     if (UINT64_MAX - output->pumped_frames < (uint64_t)frame_count)
     {
@@ -256,7 +301,7 @@ henka_result henka_audio_output_get_info(
     {
         return result;
     }
-    out_info->device_open = true;
+    out_info->device_open = SDL_GetAudioStreamDevice(output->stream) != 0U;
     out_info->sample_rate = output->sample_rate;
     out_info->queued_frames = queued_frames;
     out_info->pumped_frames = output->pumped_frames;
