@@ -7,6 +7,7 @@
 
 #include <henka/scene.h>
 #include <henka/scene_document.h>
+#include <henka/audio.h>
 #include <henka/script.h>
 #include <henka/script_source.h>
 
@@ -45,6 +46,12 @@ henka_result sandbox3d_game_authoring_set_play_input_context(
     sandbox3d_game_authoring_input_query input_query,
     void* input_user_data,
     henka_vec3 observer_position);
+/* The audio system is borrowed and must outlive the authoring coordinator and
+ * every Play session it starts. Enabled authored emitters fail closed when no
+ * system is configured; Audio is never silently omitted from Play. */
+henka_result sandbox3d_game_authoring_set_audio_system(
+    sandbox3d_game_authoring* authoring,
+    henka_audio_system* audio_system);
 size_t sandbox3d_game_authoring_get_behavior_count_for_entity(
     const sandbox3d_game_authoring* authoring,
     henka_entity entity);

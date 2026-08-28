@@ -1,16 +1,78 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include <henka/audio.h>
 #include <henka/physics.h>
 #include <henka/scene.h>
 
 #include "../examples/sandbox3d/game_authoring.h"
 
+static void test_write_u16(unsigned char* bytes, size_t offset, uint16_t value)
+{
+    bytes[offset] = (unsigned char)(value & 0xffU);
+    bytes[offset + 1U] = (unsigned char)((value >> 8U) & 0xffU);
+}
+
+static void test_write_u32(unsigned char* bytes, size_t offset, uint32_t value)
+{
+    bytes[offset] = (unsigned char)(value & 0xffU);
+    bytes[offset + 1U] = (unsigned char)((value >> 8U) & 0xffU);
+    bytes[offset + 2U] = (unsigned char)((value >> 16U) & 0xffU);
+    bytes[offset + 3U] = (unsigned char)((value >> 24U) & 0xffU);
+}
+
+static bool test_write_audio_fixture(const char* path)
+{
+    const size_t frame_count = 128U;
+    const size_t data_size = frame_count * sizeof(int16_t);
+    const size_t file_size = 44U + data_size;
+    unsigned char* bytes = (unsigned char*)calloc(1U, file_size);
+    FILE* file = NULL;
+    size_t frame_index;
+    bool success;
+    if (bytes == NULL)
+    {
+        return false;
+    }
+    memcpy(bytes, "RIFF", 4U);
+    test_write_u32(bytes, 4U, (uint32_t)(file_size - 8U));
+    memcpy(bytes + 8U, "WAVEfmt ", 8U);
+    test_write_u32(bytes, 16U, 16U);
+    test_write_u16(bytes, 20U, 1U);
+    test_write_u16(bytes, 22U, 1U);
+    test_write_u32(bytes, 24U, 48000U);
+    test_write_u32(bytes, 28U, 48000U * sizeof(int16_t));
+    test_write_u16(bytes, 32U, sizeof(int16_t));
+    test_write_u16(bytes, 34U, 16U);
+    memcpy(bytes + 36U, "data", 4U);
+    test_write_u32(bytes, 40U, (uint32_t)data_size);
+    for (frame_index = 0U; frame_index < frame_count; ++frame_index)
+    {
+        const int16_t sample = (frame_index % 2U) == 0U ? INT16_MAX / 4 : INT16_MIN / 4;
+        test_write_u16(bytes, 44U + frame_index * sizeof(int16_t), (uint16_t)sample);
+    }
+#if defined(_MSC_VER)
+    (void)fopen_s(&file, path, "wb");
+#else
+    file = fopen(path, "wb");
+#endif
+    success = file != NULL && fwrite(bytes, 1U, file_size, file) == file_size;
+    if (file != NULL && fclose(file) != 0)
+    {
+        success = false;
+    }
+    free(bytes);
+    return success;
+}
+
 int main(void)
 {
     const char* relative_path = "build/test_tmp/game_authoring_slice.hscene";
+    const char* audio_path = "build/test_tmp/game_authoring_audio.wav";
     henka_scene* scene = NULL;
     sandbox3d_game_authoring* authoring = NULL;
+    henka_audio_system* audio_system = NULL;
     henka_scene_document_object object;
     henka_scene_document_object restored;
     henka_scene_document* replacement_document = NULL;
@@ -106,7 +168,12 @@ int main(void)
     object.physics.shape = HENKA_PHYSICS_SHAPE_SPHERE;
     object.physics.sphere_radius = 0.5f;
     object.physics.mass = 1.0f;
+    object.audio.enabled = true;
+    object.audio.looping = true;
+    object.audio.spatial = true;
+    (void)snprintf(object.audio.clip_path, sizeof(object.audio.clip_path), "%s", audio_path);
     if (sandbox3d_game_authoring_update_object_for_entity(authoring, entity, &object) != HENKA_SUCCESS ||
+        !test_write_audio_fixture(audio_path) ||
         sandbox3d_game_authoring_save(authoring, ".") != HENKA_SUCCESS ||
         sandbox3d_game_authoring_set_script_state_value(
             authoring,
@@ -295,11 +362,17 @@ int main(void)
     }
 
     transform = restored.transform;
-    if (sandbox3d_game_authoring_get_play_scene(authoring) != NULL ||
+    if (sandbox3d_game_authoring_start_play(authoring) != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_get_play_scene(authoring) != NULL ||
+        henka_audio_system_create(&(henka_audio_system_config){0U}, &audio_system) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_set_audio_system(authoring, audio_system) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_play_scene(authoring) != NULL ||
         sandbox3d_game_authoring_start_play(authoring) != HENKA_SUCCESS ||
         (play_scene = sandbox3d_game_authoring_get_play_scene(authoring)) == NULL ||
         play_scene == scene ||
+        henka_audio_system_get_active_voice_count(audio_system) != 1U ||
         !sandbox3d_game_authoring_is_play_locked(authoring) ||
+        sandbox3d_game_authoring_set_audio_system(authoring, NULL) != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_pause_play(authoring) != HENKA_SUCCESS ||
         !sandbox3d_game_authoring_is_play_locked(authoring) ||
         sandbox3d_game_authoring_save(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
@@ -332,6 +405,8 @@ int main(void)
         henka_scene_set_entity_visible(play_scene, entity, false) != HENKA_SUCCESS ||
         henka_scene_is_entity_visible(scene, entity) == false ||
         sandbox3d_game_authoring_stop_play(authoring) != HENKA_SUCCESS ||
+        henka_audio_system_get_active_voice_count(audio_system) != 0U ||
+        sandbox3d_game_authoring_set_audio_system(authoring, NULL) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
         sandbox3d_game_authoring_get_play_scene(authoring) != NULL ||
         henka_scene_get_entity_transform(scene, entity, &restored.transform) != HENKA_SUCCESS ||
@@ -434,6 +509,8 @@ int main(void)
 cleanup:
     henka_scene_document_destroy(replacement_document);
     sandbox3d_game_authoring_destroy(authoring);
+    henka_audio_system_destroy(audio_system);
     henka_scene_destroy(scene);
+    (void)remove(audio_path);
     return exit_code;
 }

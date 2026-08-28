@@ -29,6 +29,7 @@ struct sandbox3d_game_authoring
     henka_scene* play_scene;
     sandbox3d_scene_document_bridge* play_bridge;
     sandbox3d_play_session* play_session;
+    henka_audio_system* audio_system;
     sandbox3d_game_authoring_input_query play_input_query;
     void* play_input_user_data;
     henka_vec3 play_observer_position;
@@ -1037,6 +1038,12 @@ henka_result sandbox3d_game_authoring_start_play(
             play_session,
             play_script_state_store);
     }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_play_session_set_audio_system(
+            play_session,
+            authoring->audio_system);
+    }
     if (result == HENKA_SUCCESS && authoring->play_observer_position_valid)
     {
         result = sandbox3d_play_session_set_input_context(
@@ -1062,6 +1069,20 @@ henka_result sandbox3d_game_authoring_start_play(
     henka_script_state_store_destroy(authoring->play_script_state_store);
     authoring->play_script_state_store = play_script_state_store;
     authoring->play_session = play_session;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_game_authoring_set_audio_system(
+    sandbox3d_game_authoring* authoring,
+    henka_audio_system* audio_system)
+{
+    if (authoring == NULL ||
+        sandbox3d_game_authoring_get_play_state(authoring) !=
+            SANDBOX3D_PLAY_SESSION_STOPPED)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    authoring->audio_system = audio_system;
     return HENKA_SUCCESS;
 }
 
