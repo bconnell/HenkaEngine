@@ -56,6 +56,10 @@ if ($giraffeGeneratorText -notmatch 'Add-CurvedLimb \$mane' -or
     $giraffeGeneratorText -match '(?s)foreach \(\$maneY.*?Add-Ellipsoid \$mane') {
     throw "Showcase giraffe mane must be a continuous curved ridge rather than repeated round elements."
 }
+if ($giraffeGeneratorText -notmatch 'Add-AnatomicalLoft \$hoof' -or
+    $giraffeGeneratorText -match 'Add-Ellipsoid \$hoof') {
+    throw "Showcase giraffe hooves must use tapered authored profiles rather than rounded ellipsoid pads."
+}
 
 function Get-ShowcaseFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)

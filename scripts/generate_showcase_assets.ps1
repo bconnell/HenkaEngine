@@ -1284,7 +1284,14 @@ function New-Giraffe {
                 ($legZBase * [float]0.68))
         }
         Add-CurvedLimb $tan $legY $legX $legZ @(0.12, 0.13, 0.125, 0.13, 0.20, 0.28) @(0.13, 0.14, 0.13, 0.14, 0.23, 0.32) 48
-        Add-Ellipsoid $hoof @($legXBase, 0.08, $legZBase + 0.015) @(0.13, 0.055, 0.17) 16 28
+        # Hooves use a low tapered profile with a slight forward toe sweep;
+        # rounded pads made the lower limb read like a toy peg.
+        Add-AnatomicalLoft $hoof `
+            @(0.03, 0.055, 0.09, 0.14, 0.19) `
+            @(0.10, 0.13, 0.145, 0.13, 0.08) `
+            @(0.13, 0.17, 0.19, 0.16, 0.08) `
+            $legXBase `
+            @($legZBase, ($legZBase + 0.018), ($legZBase + 0.042), ($legZBase + 0.060), ($legZBase + 0.052)) 96
         Add-Ellipsoid $joint @($legXBase, 0.88, $legZBase + 0.012) @(0.125, 0.085, 0.11) 12 22
     }
     # Model the ears as tapered, leaf-like profiles in the head plane. The
