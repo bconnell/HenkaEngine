@@ -10,7 +10,7 @@ rendering, physics, Audio foundations, 2.5D camera foundations, modeling and
 content authoring, asset/material workflows, persistence, and external-project
 support.
 
-> **Project status:** Henka is a real engine foundation. Production-ready game-platform maturity is still in progress. The repository's Sandbox is an engine sample and QA target. Games built with Henka should live in separate repositories.
+> **Project status:** Henka is an early-stage engine foundation. Production game-platform maturity is in progress. The repository's Sandbox is the engine sample and QA target. Games built with Henka live in separate repositories.
 
 ## At a glance
 
@@ -29,8 +29,8 @@ support.
 Integrated authoring is underway alongside runtime and workspace hardening. The
 current validated development and packaging path targets 64-bit Windows with
 MSVC, CMake, PowerShell, SDL3, and the OpenGL renderer backend. Linux 64-bit and
-macOS are planned desktop targets. Their support criteria include real build,
-test, runtime, packaging, and external-project validation.
+macOS are planned desktop targets. Platform support requires build, test,
+runtime, packaging, and external-project validation.
 
 ## Highlights
 
