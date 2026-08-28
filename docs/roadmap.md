@@ -32,6 +32,29 @@ The next development work remains bounded repair and verification.
 6. Preserve stable identities, transactional editing boundaries, versionable data, and external-tool compatibility needed by 2.5D and later modeling.
 7. Shape the existing Action API toward a versioned semantic agent surface, while deferring any MCP/WebMCP-compatible bridge until stable Scene Document identities, explicit capability discovery, permission boundaries, dry-run behavior, auditability, and structured failure contracts are dependable.
 
+### Sequenced composition foundations
+
+After the current Audio campaign reaches a coherent clean boundary and the
+Character Controller work reaches its appropriate maturity target, the next
+two major foundational projects are planned in this order:
+
+1. **Scene Hierarchy / Parenting Maturity** — establish an authoritative,
+   stable-ID parent/child scene model with deterministic traversal, cycle and
+   stale-parent rejection, correct local/world transform propagation,
+   explicit keep-world and keep-local reparenting, safe destruction,
+   persistence, undo/redo, editor/runtime agreement, and shared participation
+   by rendering, physics, Audio, cameras, scripting, and Play sessions.
+2. **Prefabs / Reusable Scene Objects** — build reusable authored objects and
+   hierarchies on that scene foundation, with stable prefab identity and
+   revision data, real scene instantiation, explicit inherited-versus-
+   overridden values, persistence, duplication, unpacking, and source-change
+   behavior.
+
+Both projects must use ordinary production scene objects and remain bounded,
+transactional, fail-closed, and package/external-project verifiable. Nested
+prefabs, variants, broader gameplay integration, and other advanced extensions
+remain staged work until their contracts are implemented and documented.
+
 ## Workspace and tools
 
 Henka is moving toward a practical developer workspace, but this should happen in layers.
@@ -58,11 +81,13 @@ Planned workspace improvements include:
 1. Complete the remaining native desktop feel and manual QA for detached controls and title-bar drag-back redocking.
 2. Add an in-window controls editor for the existing local keybinding profiles.
 3. A detachable Scene View after multi-window rendering and viewport input are dependable.
-4. A clearer scene hierarchy.
-5. Numeric transform editing.
-6. Extend undo and redo beyond the current bounded workspace-layout,
+4. Scene Hierarchy / Parenting Maturity as the sequenced next composition
+   project after the current Audio and Character Controller priorities.
+5. Prefabs / Reusable Scene Objects on top of the mature hierarchy.
+6. Numeric transform editing.
+7. Extend undo and redo beyond the current bounded workspace-layout,
    authoring, and material histories to more basic scene operations.
-7. Extend the current settings/save-slot and HAMS authoring persistence into a
+8. Extend the current settings/save-slot and HAMS authoring persistence into a
    complete scene/project save and load workflow.
 
 These features should appear only when they are wired into the engine, tested, documented, and useful.
