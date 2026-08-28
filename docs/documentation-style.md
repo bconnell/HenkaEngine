@@ -45,8 +45,8 @@ smaller paragraphs or another structure.
 Prefer prose for explanation and reasoning. Prefer lists or tables for repeated
 facts, requirements, states, comparisons, or inventories.
 
-Do not split sentences into artificial one-line fragments merely for appearance.
-Readable documentation should still feel like documentation, not a slide deck.
+Keep sentence and paragraph structure natural. Documentation should remain
+readable at normal desktop and narrow-window widths.
 
 ## Direct declarative wording
 
@@ -128,8 +128,8 @@ syntax that looks executable unless it is valid for the documented boundary.
 Use `<details>` blocks sparingly for long implementation notes, diagnostic
 examples, or advanced material that most readers do not need immediately.
 
-Do not hide critical limitations, safety requirements, failure behavior, or
-setup steps inside collapsed sections.
+Keep critical limitations, safety requirements, failure behavior, and setup
+steps visible in the normal document flow.
 
 ## Capability truth
 
@@ -146,6 +146,36 @@ Documentation presentation work must preserve:
 
 A documentation-only cleanup must not upgrade a capability or imply that planned
 work exists.
+
+## Live documentation maintenance
+
+Documentation is part of the active product surface. Keep it current as Henka
+changes.
+
+Update the relevant documentation in the same coherent change whenever an
+implementation changes:
+
+- public behavior or supported workflows;
+- capability status or scope;
+- commands, paths, configuration, or build steps;
+- platform or renderer support;
+- persistence or file-format behavior;
+- ownership, lifecycle, or failure contracts;
+- editor controls or user-visible terminology;
+- validation, packaging, or external-project behavior;
+- roadmap sequencing or a committed future direction.
+
+Fix stale documentation when it is encountered and the correct state is clear
+from the production code, tests, and current project direction. Keep those edits
+scoped to the affected documentation.
+
+README, roadmap, capability, subsystem, help, and platform documentation should
+not remain knowingly stale at a publication boundary. A disagreement between
+product behavior and live documentation is a documentation defect and should be
+resolved from product truth.
+
+The repository-wide presentation cleanup may proceed independently. New product
+work must still keep the live documentation it touches current.
 
 ## Current, planned, and historical material
 
