@@ -71,6 +71,10 @@ if ($giraffeGeneratorText -notmatch 'foreach \(\$hoofSide in @\(-1\.0, 1\.0\)\)'
     $giraffeGeneratorText -notmatch '\$hoofX = \$legXBase \+ \(\$hoofSide \* 0\.070\)') {
     throw "Showcase giraffe hooves must preserve a bounded paired cloven profile rather than one undivided pad."
 }
+if ($giraffeGeneratorText -notmatch 'Add-AnatomicalLoft \$joint' -or
+    $giraffeGeneratorText -match 'Add-Ellipsoid \$joint') {
+    throw "Showcase giraffe leg joints must use a tapered authored transition rather than rounded ellipsoid connectors."
+}
 
 function Get-ShowcaseFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)

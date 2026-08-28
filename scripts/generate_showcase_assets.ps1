@@ -1297,7 +1297,20 @@ function New-Giraffe {
                 $hoofX `
                 @($legZBase, ($legZBase + 0.018), ($legZBase + 0.042), ($legZBase + 0.060), ($legZBase + 0.052)) 96
         }
-        Add-Ellipsoid $joint @($legXBase, 0.88, $legZBase + 0.012) @(0.125, 0.085, 0.11) 12 22
+        # Profiled joint collars bridge the upper and lower limb volumes;
+        # a rounded ball made the leg read as a toy connector in close views.
+        Add-AnatomicalLoft $joint `
+            @(0.72, 0.78, 0.86, 0.94, 1.02, 1.08) `
+            @(0.095, 0.135, 0.160, 0.150, 0.125, 0.085) `
+            @(0.110, 0.140, 0.160, 0.150, 0.120, 0.085) `
+            $legXBase `
+            @(
+                ($legZBase + 0.010),
+                ($legZBase + 0.020),
+                ($legZBase + 0.032),
+                ($legZBase + 0.030),
+                ($legZBase + 0.020),
+                ($legZBase + 0.010)) 48
     }
     # Model the ears as tapered, leaf-like profiles in the head plane. The
     # vertical taper and shallow depth keep the silhouette organic instead of
