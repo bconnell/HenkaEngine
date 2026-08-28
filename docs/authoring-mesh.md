@@ -1,323 +1,570 @@
-# Authoring mesh foundation
+# Authoring Mesh Foundation
 
-Henka exposes a bounded polygonal authoring mesh in
-`<henka/authoring_mesh.h>`. It is the topology layer for the editor and is
-separate from the renderer's evaluated mesh representation.
+Henka exposes a bounded polygonal authoring mesh through `<henka/authoring_mesh.h>`. This is the editor topology layer. The renderer consumes evaluated mesh data produced from this source.
 
-The storage and persistence design for decoupling stable logical component
-identities from reusable physical slots is documented in
-[Stable authoring component identities](authoring-component-identities.md).
-That document describes the bounded migration contract; the capability list
-below remains the current implementation inventory.
+> **Status:** Integrated authoring foundation. The mesh, topology, modeling, UV, history, persistence, evaluation, scene, renderer, bounds, and bounded collider paths share one transactional source workflow.
+
+Stable logical component identity and reusable physical-slot storage are documented in [Stable authoring component identities](authoring-component-identities.md).
+
+## Contents
+
+- [Core representation](#core-representation)
+- [Topology analysis and repair](#topology-analysis-and-repair)
+- [Modeling operations](#modeling-operations)
+- [UV operations](#uv-operations)
+- [Connected Sandbox workflow](#connected-sandbox-workflow)
+- [Selection and transforms](#selection-and-transforms)
+- [Persistence and history](#persistence-and-history)
+- [Vertex modeling](#vertex-modeling)
+- [Edge modeling](#edge-modeling)
+- [Loop Cut and Edge Slide](#loop-cut-and-edge-slide)
+- [Loose components](#loose-components)
+- [Evaluation and renderer handoff](#evaluation-and-renderer-handoff)
+- [Material-region behavior](#material-region-behavior)
+- [Known limits](#known-limits)
+
+## Core representation
 
 The current foundation provides:
 
-- stable, non-reused logical vertex, edge, and face IDs resolved through
-  bounded maps; inactive physical slots are reusable;
-- explicit polygon corners and edges, with deterministic vertex-edge and
-  edge-face adjacency and boundary queries;
-- bounded material-region and UV data, transactional face material-region
-  editing, face smoothing intent, and hard-edge intent;
-- fail-closed face validation, non-manifold edge rejection, deletion safety,
-  and deterministic fan triangulation into caller-owned render buffers;
-- evaluated normals that honor smooth-face and hard-edge intent.
-- bounded shared topology undo/redo snapshots and versioned transactional
-  mesh-file save/load with failed-load retention.
+- stable, non-reused logical vertex, edge, and face IDs resolved through bounded maps;
+- reusable inactive physical slots;
+- explicit polygon corners and edges;
+- deterministic vertex-edge and edge-face adjacency;
+- boundary queries;
+- bounded material-region metadata;
+- per-corner UV data;
+- transactional face material-region editing;
+- face smoothing intent;
+- hard-edge intent;
+- fail-closed face validation;
+- non-manifold edge rejection;
+- deletion safety;
+- deterministic fan triangulation into caller-owned render buffers;
+- evaluated normals that honor smooth-face and hard-edge intent;
+- bounded shared topology undo/redo snapshots;
+- versioned transactional mesh-file save/load with failed-load retention.
 
-`<henka/authoring_topology.h>` provides non-destructive topology analysis and
-an explicit candidate-based repair boundary. Analysis reports component,
-boundary, manifold, winding, seam, hard-edge, degeneracy, duplicate-face,
-coincident-vertex, valence, and face-shape metrics. Repair is opt-in and
-bounded: it can remove isolated vertices, exact duplicate faces only when
-their winding, UVs, material, and smoothing metadata agree, and degenerate
-faces. The source is replaced only after candidate validation and a final
-analysis; unsafe duplicate groups, non-manifold results, vertex welding, and
-winding rewrites fail closed.
+The API allocates only within caller-selected bounded capacities. Invalid faces and capacity failures preserve prior topology. Render buffers remain caller-owned.
 
-`<henka/authoring_modeling.h>` adds bounded plane and box constructors plus
-transactional duplicate, face-winding flip, extrude, inset, planar bevel-ring,
-face subdivide, and bounded edge bevel operations. Face flip preserves the
-face's logical identity, vertex identity, edge identity, material/smoothing
-metadata, and per-corner UV correspondence while reversing its winding. Each
-operation works on a clone and publishes only a validated result, so capacity
-or non-manifold rejection leaves the source mesh unchanged.
+## Topology analysis and repair
 
-`<henka/authoring_uv.h>` provides per-face planar projection on each principal
-axis, bounded island transform and single-face packing helpers, finite-value
-validation, and seam detection from shared topology. These are deterministic
-UV primitives; automatic multi-island unwrap, seam editing UI, and global
-packing remain unfinished.
+`<henka/authoring_topology.h>` provides non-destructive analysis and explicit candidate-based repair.
 
-## Connected workflow status
+### Analysis reports
 
-The mesh, modeling, UV, history, evaluation, and file APIs share one bounded
-authoring representation: modeling and UV edits validate a clone before
-publishing, history snapshots preserve stable topology IDs and metadata, and
-evaluation reads the same committed source-of-truth. Versioned mesh-file load
-also commits transactionally, so a malformed file does not replace the current
-authoring state.
+Analysis covers:
 
-The first horizontal editor connection is now exercised by the Sandbox's
-selected Textured Cube and Add Cube results: each owns a bounded authoring box
-and history, and the viewport ray picker resolves a hit to the actual
-authoring component identity.
-Object Details Authoring exposes bounded Vertex, Edge, and Face selection modes;
-Ctrl-click adds components to the active mode, and the viewport draws the
-selected vertices as amber crosses, selected edges as cyan segments with endpoint
-markers, and selected faces as orange borders with a center marker. The most
-recently picked component is the active edit target: it receives a stronger
-mode-specific stroke/marker while the rest of a multi-selection remains visible.
-Dragging in Scene View performs bounded box selection against projected source
-components. Replace, Ctrl-add, and Shift-subtract commit atomically. Normal mode
-accepts only front-facing components proven frontmost by a source-mesh ray;
-X-Ray keeps the front-facing policy but permits selection through occluding
-mesh surfaces. Renderer triangulation is never exposed as authored edges.
-The Scene View also shows the active topology mode and selected-component count,
-including when the current mode has no component selected yet. Small Move X+, Move Y+, and Move Z+
-commands offset the selected components through a cloned mesh and the existing
-transactional scene/render/bounds/collider publication path. Face mode also
-exposes Normal + and Normal - commands that translate the active face's shared
-vertices along its evaluated local-space normal through the same transaction.
-This keeps the face connected to neighboring topology while providing a direct
-bounded profile-shaping operation for native-authored anatomy and mechanical
-forms. The operation rejects malformed or degenerate faces and distances outside
-its bounded editor range. Face mode exposes Grow Selection, which expands the
-active selection by one topology-adjacent
-ring, Select Connected, which continues that expansion to the complete
-reachable component within the bounded selection budget, and Scale Selected,
-which scales the touched vertices around their median pivot through the same
-transactional path. Select All, Select None, Invert, and Shrink operate on the
-active topology mode with deterministic sorted component IDs; failed
-replacement allocation leaves the prior selection intact. Rotate Selected and
-Scale Selected expose explicit median, active-component, and per-face
-individual pivot policies through the authoring API, plus world, local, and
-face-normal orientation for rotation. The sandbox controls use bounded local
-median transforms, while callers can select the other policies explicitly.
-Soft Move X+, Soft Move Y+, and Soft Move Z+ apply a bounded
-one-ring linear falloff: the active selection receives the full translation and
-directly adjacent vertices receive half strength. These are bounded generic
-selection/modeling operations rather than showcase-specific geometry rules, and
-the falloff is a foundation for shaping rather than final anatomy or mechanical
-topology proof.
-Face mode also exposes the selected face plus transactional material-region
-editing, Flip, Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo, Redo,
-Save Project, and Reload Project commands. Flip reverses the selected face's
-ordered winding without creating a replacement face or losing its per-corner
-metadata. Save Project writes a bounded
-versioned manifest beside the existing transactional `.hams` topology source;
-the manifest retains the source path, transform, and visibility needed to
-reopen the current bridge. Each edit
-evaluates a candidate, creates a normal renderer mesh, updates the scene entity
-mesh and local bounds, then checkpoints history; a bound box collider consumes
-the same evaluated local bounds as part of that transaction after each
-successful editor operation, so the editor does not rely on a later manual
-physics refresh. Reload builds a replacement
-history from the validated source before swapping the scene representation. Any
-evaluation, renderer, scene, bounds, history, or file-parse failure retains the
-prior source, render, and (when the linked body is present) spatial state,
-including the prior collider. The save/reload buttons use a confined,
-engine-owned user-data slot derived from the selected entity identity, so
-selecting or duplicating an authored object cannot overwrite another authored
-object's source through the editor controls; they do not scan or overwrite
-arbitrary files. This remains per-object authoring persistence, not complete
-scene/project serialization.
-The bridge stores one bounded selected-face identity beside each mesh-history
-snapshot. Topology operations select their deterministic result, undo/redo
-restores the corresponding prior or next face when it still exists, and a new
-edit after undo truncates both histories together. Reload resets the selection
-history to the validated replacement source. A missing or malformed project
-manifest, source, or transform is rejected without replacing the current scene
-mesh, bounds, transform, visibility, or authoring history.
-When the bounded authoring wrapper closes, it restores the mesh and local bounds
-that belonged to the entity before authoring took ownership, provided another
-editor path has not replaced the active evaluated mesh in the meantime.
-Scene selection remains the existing generation-checked entity authority rather
-than a second selection system.
+- connected components;
+- boundaries;
+- manifold state;
+- winding;
+- seams;
+- hard edges;
+- degeneracy;
+- duplicate faces;
+- coincident vertices;
+- valence;
+- face-shape metrics.
 
-The broader horizontal connection is still incomplete. General project open/save
-and arbitrary authoring-file selection are not yet editor workflows. The
-Sandbox bridge clones a validated authoring source into an independent
-per-entity history/render/bounds handoff, and the editor keeps a bounded
-per-entity registry for authored objects: duplicating an authored object creates
-an independent editable source, while selecting another entity activates only
-that entity's wrapper. When the source has the Sandbox box-collider contract,
-the duplicate receives a separate bounded collider and its collider is retired
-with the duplicate; the source body remains owned by its original descriptor.
-Imported entities are not yet automatically authoring-enabled. Wrapper-level
-vertex merge is present; bounded vertex dissolve/delete/connect are now
-available through the core API and Sandbox Vertex Modeling bridge. Dissolve
-supports boundary corner removal and unambiguous manifold triangle fans;
-ambiguous, hard-edge, UV-seamed, non-triangle, and non-manifold cases fail
-closed. Delete removes selected vertices and their incident faces, then
-removes only newly orphaned vertices in the affected neighborhood. Connect
-splits one face between two non-adjacent corners while preserving the original
-face ID and allocating the new face with a fresh logical ID in a reusable
-physical slot. Transactional single-edge dissolve is available for compatible
-interior edges, and transactional single-edge delete removes the selected
-edge's incident face set while preserving vertices. Bounded edge bevel is also
-available for one boundary edge whose endpoints belong to one face only, for a
-pairwise vertex-disjoint selection of boundary edges on distinct faces, or for
-one compatible interior edge in an isolated two-quad patch. These forms share
-one selected-edge bevel contract and create interpolated cut vertices and quad
-bevel faces transactionally; the singular API remains a compatibility wrapper.
-Interior bevel rejects hard edges, material/smooth/UV discontinuities, non-quad
-faces, neighboring shared boundaries, and ambiguous endpoint fans. Boundary
-batch bevel rejects shared faces and endpoints; same-face batches with shared
-endpoint corner caps are available, while mixed selections and broader
-interior edge-set bevel remain incomplete. A bounded
-single-quad face loop cut is also available: it interpolates two opposite
-boundary edges, creates two quad faces, and rejects shared-boundary faces so it
-cannot leave a T-junction in neighboring topology. The reusable topology layer
-also exposes a bounded deterministic compatible quad-strip walk for modeling
-operators. It records ordered face/entry/exit edges, terminates at boundaries or
-reports a closed ring, and rejects hard, material, smoothing, UV, non-quad,
-non-manifold, and ambiguous crossings without partial output. The same topology
-layer also orders connected selected edge chains and cycles deterministically, so
-Edge Slide does not maintain a separate graph traversal. The editor Loop Cut
-  operator now
-  accepts a validated user-entered factor, previews one cut across a compatible
-  open strip or closed ring, and exposes explicit Apply/Cancel publication for
-  the candidate. Preview updates evaluated render state without changing the
-  authoritative source or history; Apply publishes the whole operation
-  transactionally. Edge mode also exposes a
-  signed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle
-  selection. The shared modeling operator session supports numeric factors in
-  (-1, 1), preview, cancel, and one transactional Apply; it moves the loop
-  toward deterministic adjacent sides without changing topology and publishes
-  through the same transactional source/render/bounds/collider/undo path.
-  The core modeling API and editor-integrated operator also provide a bounded
-  uniformly spaced multi-cut variant for one isolated boundary-only quad; it
-  creates only quad faces and publishes the complete split transactionally
-  through preview, Apply, Cancel, and undo. Broader editor multi-cut spacing,
-  interior edge cases, and general loop-cut networks remain unfinished. The
-  same Edge workflow accepts the bounded pairwise
-  vertex-disjoint boundary-edge bevel selection described above and publishes
-  it as one undoable transaction.
-Bounded Vertex Extrude is available for a connected open boundary vertex fan,
-including the one-face corner case. It creates one offset cap vertex, replaces
-the incident fan, and creates the two boundary side faces while preserving the
-operation's transactional source/render/bounds/collider/undo boundary. Closed,
-disconnected, loose-edge, and incompatible-normal fans fail closed. Vertex
-Bevel is also available as one atomic multi-selection operation. It
-uses a deterministic edge/end-point cut table, rejects non-finite, zero,
-overlapping, non-manifold, and capacity-invalid requests, preserves
-per-corner UV interpolation and original hard trimmed segments, creates
-same-material interior caps with deterministic planar UVs, and leaves normal
-boundary vertices open. Successful Sandbox bevels replace Vertex selection with
-the live cut vertices and use the same history/render/bounds/collider
-transaction as other authoring edits. Bounded Vertex Extrude remains within
-the validated face-surface representation and does not create standalone
-components. The core modeling API also provides a bounded transactional
-explicit-direction loose-vertex extrude: it preserves the source vertex,
-inherits its UV/material metadata, and creates exactly one standalone wire
-edge to the new vertex without inventing a face. Zero directions, zero
-distances, connected vertices, invalid geometry, and capacity exhaustion fail
-closed. The shared Sandbox modeling-operator session now previews, cancels,
-and applies explicit-axis extrusion for exactly one selected loose vertex or
-standalone edge through these core operations; the Authoring panel exposes the
-same bounded Preview/Apply/Cancel path with a numeric amount on the Y axis.
-This bounded session does not claim general Vertex Extrude coverage, and
-dedicated loose-component creation UI remains unfinished. The core authoring
-representation also accepts
-explicit loose vertices and standalone wire edges: both use stable logical IDs,
-bounded physical storage, deterministic endpoint ordering, and the HAMS v5
-transactional save/load path. A standalone edge must connect two distinct
-active vertices, has zero incident faces until a face consumes that endpoint
-pair, and can be removed explicitly while it remains face-less. The core
-modeling API also provides a bounded transactional explicit-direction
-  loose-edge extrude: it creates a parallel edge and one quad face, inherits
-  endpoint UV/material metadata, preserves source-edge hard intent, and rejects
-  face-backed edges, mismatched endpoint materials, degenerate offsets, and
-  capacity exhaustion. The core API also provides bounded surface-connected
-  extrusion for one open boundary edge: it offsets the edge along its incident
-  face normal, replaces that edge in the source face, creates one connecting
-  quad, preserves selected hard-edge intent, and publishes only after topology
-  and geometry validation. Interior/manifold edges and broader edge-set
-  extrusion remain rejected. The shared Sandbox modeling session now exposes
-  this bounded boundary-edge operation through preview, cancel, and Apply;
-  the Authoring panel routes the same operation from the shared amount control,
-  and broader surface-connected Vertex/Edge Extrude workflows remain
-  unfinished.
-material-instance assignment, texture
-dependencies, general collision integration beyond the bound box contract,
-package ownership, topology-aware picking, and showcase rebuilds still need the
-shared scene/asset-manager bridge. The current authoring mesh is a validated
-surface representation for face-backed modeling, while also preserving explicit
-loose source components. Homogeneous wire-only and isolated-vertex-only sources
-are emitted by renderer evaluation as bounded line and point primitives; mixed
-surface-plus-loose sources use a bounded composite renderer mesh containing
-triangle, line, and point parts. The Sandbox topology overlay does present the
-committed source vertices and wire edges for inspection and selection, including
-a distinct loose-component visual treatment. The bounded fan
-extrusion contract is intentionally limited to connected open fans; broader
-non-manifold and incompatible-normal cases remain unsupported.
-Material regions retain their editable numeric metadata, and the evaluated
-model-to-render-mesh upload retains the bounded minimum/maximum region range
-for diagnostics. They do not yet choose multiple shared material instances in
-the renderer. These limitations are tracked explicitly so this API does
-not claim a complete modeling editor or a second material authority.
+### Repair contract
 
-The API allocates only within caller-selected bounded capacities. Invalid
-faces and capacity failures leave the prior topology unchanged. Render
-buffers are caller-owned, so evaluation does not transfer ownership to the
-renderer or asset manager.
+Repair is opt-in and bounded. Supported safe repairs include:
 
-Client applications can call `henka_mesh_create_from_authoring_mesh` from
-`<henka/mesh.h>` to evaluate the same committed source into an ordinary
-renderer-owned mesh. Face-backed sources upload as bounded triangle meshes;
-homogeneous wire-only sources upload as `GL_LINES`, and isolated-vertex-only
-sources upload as `GL_POINTS`. Mixed sources upload through bounded composite
-ownership, with one renderer-owned part for each present triangle, wire, and
-point primitive class. This keeps standalone topology visible without silently
-dropping one primitive class. The source remains caller-owned,
-the output slot must start empty, counts and indices are bounded and checked,
-and allocation or evaluation failure leaves the output slot empty. This is the
-reusable authoring-to-render boundary; it does not create a material authority
-or replace glTF scene/material ownership.
-`henka_authoring_mesh_save_file` writes HAMS v5 with explicitly little-endian
-32-bit integers and IEEE-754 float bit patterns. Each save uses a unique
-same-directory temporary name and atomically replaces the destination only
-after the complete candidate is flushed, so a failed or concurrent save does
-not remove the prior valid source. HAMS v5 is the first format whose validity
-contract includes loose vertices and zero-face wire edges. The loader accepts
-the current v5 format and legacy v2/v3/v4 surface-only sources shipped with
-the repository; a legacy v4 file containing a loose edge is rejected rather
-than interpreted under two different same-version contracts. Legacy files are
-validated and migrated in memory only and are not rewritten automatically.
-`henka_authoring_mesh_load_file_new` can load a versioned `.hams` source without
-requiring the consumer to duplicate the file's capacity header; it validates
-the declared bounded capacities before creating the candidate and retains an
-empty output slot on any failure.
-`henka_authoring_mesh_get_bounds` exposes bounds from the same active source
-vertices so a consuming scene can publish local bounds without a second
-geometry interpretation.
+- isolated-vertex removal;
+- exact duplicate-face removal when winding, UVs, material, and smoothing metadata agree;
+- degenerate-face removal.
 
-Vertex merge is available as an explicit candidate operation through
-`henka_authoring_mesh_merge_vertices` and
-`henka_authoring_mesh_merge_vertices_by_distance`. Center and active-vertex
-modes use deterministic stable-ID selection, preserve per-face corner UVs and
-face metadata, reconcile active endpoint-pair edges without reusing retired
-logical IDs, and publish only after the candidate validates. Distance mode uses
-a finite positive tolerance, deterministic stable-ID union-find clustering, a
-bounded spatial hash, and double-precision cluster means. A no-op distance
-merge returns success without changing topology or history. The Sandbox
-authoring bridge exposes these operations only in Vertex selection mode and
-keeps the editable merge distance in transient per-object UI state; it is not
-serialized into HAMS or project manifests.
+Repair builds and validates a complete candidate before source replacement. A final analysis runs before publication.
 
-The evaluator's tangent value is transport metadata for the bounded authoring
-representation, not an authoritative UV-derived tangent basis. At the shared
-authoring-to-render boundary, the renderer derives and orthogonalizes a stable
-tangent whenever that basis is not authoritative. This keeps axis-aligned
-authoring faces from treating non-authoritative tangent metadata as finished
-shading data while preserving the single mesh/material ownership path.
+The repair path rejects:
 
-This is the bounded runtime foundation of the authoring-parity campaign. It is
-not yet a full modeling editor: broader weld/split/bridge and multi-face loop-cut
-workflows, production
-hard-surface profiles, automatic multi-island UV unwrap and global packing,
-broader material authoring beyond the supported bounded material-instance
-editing, texture painting, editor integration for the history/file APIs, and
-showcase rebuild workflows remain unfinished. glTF and KTX2 material ownership
-continues through the existing asset paths; this API does not introduce a
-second material file format.
+- unsafe duplicate groups;
+- non-manifold results;
+- implicit vertex welding;
+- implicit winding rewrites.
+
+## Modeling operations
+
+`<henka/authoring_modeling.h>` provides bounded constructors and transactional modeling operations.
+
+Current operations include:
+
+- plane creation;
+- box creation;
+- duplicate;
+- face winding flip;
+- face extrude;
+- inset;
+- planar bevel ring;
+- face subdivision;
+- bounded edge bevel;
+- bounded loop-cut operations;
+- bounded vertex and edge extrusion paths described below.
+
+Each operation works on a clone and publishes only a validated result. Capacity, topology, geometry, or non-manifold rejection preserves the committed source.
+
+Face flip preserves:
+
+- logical face identity;
+- vertex identities;
+- edge identities;
+- material metadata;
+- smoothing metadata;
+- per-corner UV correspondence.
+
+The operation reverses only the ordered winding.
+
+## UV operations
+
+`<henka/authoring_uv.h>` currently provides:
+
+- per-face planar projection on each principal axis;
+- bounded island transforms;
+- single-face packing helpers;
+- finite-value validation;
+- seam detection from shared topology.
+
+Automatic multi-island unwrap, seam-editing UI, and global packing remain unfinished.
+
+## Connected Sandbox workflow
+
+The mesh, modeling, UV, history, evaluation, and file APIs share one bounded representation.
+
+The Sandbox exercises the first horizontal editor connection through the selected Textured Cube and Add Cube results. Each object owns:
+
+- a bounded authoring box;
+- independent history;
+- evaluated renderer data;
+- local bounds;
+- object-specific authoring state.
+
+The viewport ray picker resolves hits to authored component identities.
+
+Imported entities are not automatically authoring-enabled. The current Sandbox bridge clones validated authoring sources into independent per-entity authoring state. Duplicating an authored object produces an independent editable source. Selecting another entity activates that entity's wrapper.
+
+For objects using the Sandbox box-collider contract, a duplicate receives a separate bounded collider. The duplicate collider is retired with its object. The source body remains owned by its original descriptor.
+
+## Selection and transforms
+
+Object Details Authoring exposes bounded Vertex, Edge, and Face modes.
+
+### Selection behavior
+
+- `Ctrl`-click adds components to the active mode.
+- Scene View drag performs bounded box selection against projected source components.
+- Replace, Ctrl-add, and Shift-subtract operations commit atomically.
+- Normal mode accepts front-facing components proven frontmost by a source-mesh ray.
+- X-Ray keeps the front-facing policy and permits selection through occluding mesh surfaces.
+- Renderer triangulation never appears as authored edges.
+- The Scene View reports the active topology mode and selected-component count.
+- Select All, Select None, Invert, and Shrink use deterministic sorted component IDs.
+- Failed replacement allocation preserves the prior selection.
+
+Current selected-component visualization uses:
+
+- amber crosses for vertices;
+- cyan segments with endpoint markers for edges;
+- orange borders with center markers for faces;
+- a stronger mode-specific marker for the active edit target.
+
+### Translation and shaping
+
+The Sandbox exposes bounded Move X+, Move Y+, and Move Z+ operations through cloned-mesh publication.
+
+Face mode also provides Normal + and Normal -. These operations move the active face's shared vertices along its evaluated local-space normal through the same transactional source, render, bounds, and collider path.
+
+Malformed or degenerate faces and distances outside the bounded editor range are rejected.
+
+### Selection growth
+
+Face mode provides:
+
+- Grow Selection for one topology-adjacent ring;
+- Select Connected for the complete reachable component within the bounded selection budget.
+
+### Pivot and orientation policy
+
+Rotate Selected and Scale Selected expose:
+
+- median pivot;
+- active-component pivot;
+- per-face individual pivot;
+- world orientation;
+- local orientation;
+- face-normal orientation for rotation.
+
+Sandbox controls currently use bounded local median transforms. The public authoring API exposes the other policies.
+
+### Soft movement
+
+Soft Move X+, Soft Move Y+, and Soft Move Z+ use a bounded one-ring linear falloff:
+
+- selected vertices receive full translation;
+- directly adjacent vertices receive half translation.
+
+This is a generic authoring operation and an early shaping foundation.
+
+## Persistence and history
+
+Face mode exposes:
+
+- material-region editing;
+- Flip;
+- Extrude;
+- Inset;
+- Bevel;
+- Subdivide;
+- Project UV;
+- Pack UV;
+- Undo;
+- Redo;
+- Save Project;
+- Reload Project.
+
+Every successful edit follows the same publication sequence:
+
+1. Build a candidate source.
+2. Validate the candidate.
+3. Evaluate renderer geometry.
+4. Create a normal renderer mesh.
+5. Update scene-entity mesh and local bounds.
+6. Update the bound box collider when present.
+7. Checkpoint history.
+
+Any evaluation, renderer, scene, bounds, history, or file-parse failure preserves the prior source, renderer mesh, bounds, and linked collider state.
+
+### Per-object authoring persistence
+
+Save Project writes a bounded versioned manifest beside the transactional `.hams` source. The manifest stores:
+
+- source path;
+- transform;
+- visibility.
+
+Save/reload controls use a confined engine-owned user-data slot derived from the selected entity identity. Selecting or duplicating one authored object cannot overwrite another object's authoring source.
+
+This persistence currently operates per authored object. Complete scene/project serialization remains unfinished.
+
+### Selection history
+
+The authoring bridge stores one bounded selected-face identity beside each mesh-history snapshot.
+
+- topology operations select their deterministic result;
+- undo/redo restores the matching prior or next face when it still exists;
+- a new edit after undo truncates topology and selection history together;
+- Reload resets selection history to the validated replacement source.
+
+A missing or malformed project manifest, source, or transform preserves the current scene mesh, bounds, transform, visibility, and authoring history.
+
+When the bounded authoring wrapper closes, it restores the mesh and local bounds owned by the entity before authoring took ownership when no other editor path has replaced the active evaluated mesh.
+
+Scene selection remains the generation-checked scene-entity authority.
+
+## Vertex modeling
+
+### Merge
+
+Vertex merge is available through:
+
+- `henka_authoring_mesh_merge_vertices`;
+- `henka_authoring_mesh_merge_vertices_by_distance`.
+
+Center and active-vertex modes use deterministic stable-ID selection, preserve per-face corner UVs and face metadata, reconcile active endpoint-pair edges, and never reuse retired logical IDs.
+
+Distance merge uses:
+
+- a finite positive tolerance;
+- deterministic stable-ID union-find clustering;
+- a bounded spatial hash;
+- double-precision cluster means.
+
+A no-op distance merge returns success without changing topology or history. The Sandbox stores merge distance as transient per-object UI state. It is not serialized into HAMS or project manifests.
+
+### Dissolve, delete, and connect
+
+Bounded core and Sandbox Vertex Modeling paths provide:
+
+- vertex dissolve;
+- vertex delete;
+- vertex connect.
+
+Dissolve supports boundary corner removal and unambiguous manifold triangle fans. It rejects ambiguous, hard-edge, UV-seamed, non-triangle, and non-manifold cases.
+
+Delete removes selected vertices and their incident faces, then removes only newly orphaned vertices in the affected neighborhood.
+
+Connect splits one face between two non-adjacent corners. The original face ID is preserved. The new face receives a fresh logical ID in a reusable physical slot.
+
+### Vertex Extrude
+
+Bounded Vertex Extrude supports a connected open boundary vertex fan, including the one-face corner case.
+
+The operation:
+
+- creates one offset cap vertex;
+- replaces the incident fan;
+- creates two boundary side faces;
+- publishes through the shared source/render/bounds/collider/undo transaction.
+
+It rejects closed, disconnected, loose-edge, and incompatible-normal fans.
+
+### Vertex Bevel
+
+Vertex Bevel is an atomic multi-selection operation. It uses a deterministic edge/end-point cut table and:
+
+- rejects non-finite values;
+- rejects zero and overlapping requests;
+- rejects non-manifold input;
+- rejects capacity-invalid requests;
+- preserves per-corner UV interpolation;
+- preserves original hard trimmed segments;
+- creates same-material interior caps with deterministic planar UVs;
+- leaves normal boundary vertices open.
+
+Successful Sandbox bevels replace Vertex selection with live cut vertices and use the standard history/render/bounds/collider transaction.
+
+## Edge modeling
+
+### Dissolve and delete
+
+Transactional single-edge dissolve is available for compatible interior edges.
+
+Transactional single-edge delete removes the selected edge's incident face set while preserving vertices.
+
+### Edge Bevel
+
+Bounded edge bevel currently supports:
+
+- one boundary edge whose endpoints belong to one face;
+- a pairwise vertex-disjoint selection of boundary edges on distinct faces;
+- same-face boundary batches with shared-endpoint corner caps;
+- one compatible interior edge in an isolated two-quad patch.
+
+These forms share one selected-edge bevel contract and create interpolated cut vertices and quad bevel faces transactionally. The singular API remains as a compatibility wrapper.
+
+Interior bevel rejects:
+
+- hard edges;
+- material discontinuities;
+- smoothing discontinuities;
+- UV discontinuities;
+- non-quad faces;
+- neighboring shared boundaries;
+- ambiguous endpoint fans.
+
+Boundary batch bevel rejects shared faces and unsupported endpoint sharing. Mixed selections and broader interior edge-set bevel remain incomplete.
+
+### Surface-connected Edge Extrude
+
+The core API supports bounded surface-connected extrusion for one open boundary edge.
+
+The operation:
+
+- offsets the edge along its incident face normal;
+- replaces that edge in the source face;
+- creates one connecting quad;
+- preserves selected hard-edge intent;
+- publishes after topology and geometry validation.
+
+Interior/manifold edges and broader edge-set extrusion remain unsupported.
+
+The shared Sandbox modeling session exposes this path through Preview, Cancel, and Apply. The Authoring panel uses the shared amount control.
+
+## Loop Cut and Edge Slide
+
+### Single-quad Loop Cut
+
+A bounded single-quad face loop cut:
+
+- interpolates two opposite boundary edges;
+- creates two quad faces;
+- rejects shared-boundary faces that would create a T-junction in neighboring topology.
+
+### Quad-strip traversal
+
+The shared topology layer provides deterministic compatible quad-strip traversal for modeling operators. It records ordered face, entry-edge, and exit-edge identities.
+
+Traversal can terminate at an open boundary or report a closed ring. It rejects:
+
+- hard crossings;
+- material discontinuities;
+- smoothing discontinuities;
+- UV discontinuities;
+- non-quad crossings;
+- non-manifold crossings;
+- ambiguous crossings.
+
+No partial traversal result is published.
+
+The same topology layer orders connected selected edge chains and cycles deterministically for Edge Slide.
+
+### Factor-controlled Loop Cut
+
+The editor Loop Cut operator accepts a validated user-entered factor and supports compatible open strips and closed rings.
+
+The workflow provides:
+
+- Preview/Refresh;
+- Apply;
+- Cancel.
+
+Preview changes evaluated render state only. Apply publishes the complete candidate through the transactional authoring path.
+
+The core API and editor also provide a bounded uniformly spaced multi-cut variant for one isolated boundary-only quad. It creates quad faces only and participates in preview, apply, cancel, and undo.
+
+Broader multi-cut spacing, interior cases, and general loop-cut networks remain unfinished.
+
+### Edge Slide
+
+Edge mode provides signed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle selection.
+
+The modeling session supports:
+
+- numeric factors in `(-1, 1)`;
+- Preview;
+- Cancel;
+- one transactional Apply.
+
+The operation moves the loop toward deterministic adjacent sides while preserving topology and uses the shared source/render/bounds/collider/undo publication path.
+
+## Loose components
+
+The authoring representation supports explicit loose vertices and standalone wire edges with:
+
+- stable logical IDs;
+- bounded physical storage;
+- deterministic endpoint ordering;
+- HAMS v5 transactional persistence.
+
+A standalone edge connects two distinct active vertices. It has zero incident faces until a face consumes that endpoint pair. It can be removed explicitly while face-less.
+
+### Loose-vertex Extrude
+
+The core modeling API supports bounded explicit-direction loose-vertex extrusion.
+
+It:
+
+- preserves the source vertex;
+- inherits UV/material metadata;
+- creates one standalone wire edge to the new vertex.
+
+It rejects zero directions, zero distances, connected vertices, invalid geometry, and capacity exhaustion.
+
+### Loose-edge Extrude
+
+The core modeling API also supports bounded explicit-direction loose-edge extrusion.
+
+It:
+
+- creates a parallel edge;
+- creates one quad face;
+- inherits endpoint UV/material metadata;
+- preserves source-edge hard intent.
+
+It rejects face-backed edges, mismatched endpoint materials, degenerate offsets, and capacity exhaustion.
+
+### Sandbox loose-component session
+
+The shared Sandbox modeling-operator session previews, cancels, and applies explicit-axis extrusion for exactly one selected loose vertex or standalone edge. The Authoring panel exposes the same bounded Preview/Apply/Cancel path with a numeric Y-axis amount.
+
+Dedicated broader loose-component creation and generalized extrusion workflows remain unfinished.
+
+## Evaluation and renderer handoff
+
+The authoring mesh is the committed topology source. Evaluation produces renderer-consumable primitive data.
+
+Current evaluation supports:
+
+- face-backed triangle output;
+- homogeneous wire-only output as bounded lines;
+- isolated-vertex-only output as bounded points;
+- mixed surface-plus-loose output as a bounded composite mesh with triangle, line, and point parts.
+
+The Sandbox topology overlay presents committed source vertices and wire edges for inspection and selection and gives loose components a distinct visual treatment.
+
+### Public authoring-to-render API
+
+Client applications can call `henka_mesh_create_from_authoring_mesh` from `<henka/mesh.h>`.
+
+The contract requires:
+
+- caller-owned authoring source;
+- an empty output slot at entry;
+- bounded and checked counts and indices;
+- an empty output slot after allocation or evaluation failure.
+
+The renderer owns the resulting mesh resource. The function does not create material authority. glTF scene/material ownership remains in the existing asset path.
+
+### Bounds
+
+`henka_authoring_mesh_get_bounds` computes bounds from active source vertices. Consuming scenes can publish local bounds from the same geometry source.
+
+### Tangents
+
+The evaluator tangent field is transport metadata for the bounded authoring representation. The renderer derives and orthogonalizes a stable tangent at the authoring-to-render boundary when the basis is not authoritative.
+
+This keeps shading basis generation in the shared renderer path while preserving authored topology and UV ownership.
+
+## HAMS file format
+
+`henka_authoring_mesh_save_file` writes HAMS v5 using explicit little-endian 32-bit integers and IEEE-754 float bit patterns.
+
+Each save:
+
+1. writes to a unique same-directory temporary path;
+2. flushes the complete candidate;
+3. atomically replaces the destination only after successful completion.
+
+A failed or concurrent save preserves the prior valid source.
+
+HAMS v5 is the first version whose validity contract includes loose vertices and zero-face wire edges.
+
+The loader accepts:
+
+- current HAMS v5;
+- repository-supported surface-only HAMS v2;
+- surface-only HAMS v3;
+- surface-only HAMS v4.
+
+A legacy v4 file containing a loose edge is rejected. Legacy files are validated and migrated in memory only. Automatic rewriting is not performed.
+
+`henka_authoring_mesh_load_file_new` reads bounded capacities from the file header, validates them, creates the candidate, and leaves the output slot empty on failure.
+
+## Material-region behavior
+
+Material regions retain editable numeric metadata. Evaluated model-to-render upload retains the bounded minimum/maximum region range for diagnostics.
+
+Multiple shared material-instance selection from authoring material regions is not implemented yet. The current material authority remains the existing asset/material system.
+
+Additional connected work is still needed for:
+
+- material-instance assignment across broader authoring cases;
+- texture dependencies;
+- general collision integration beyond the bound box contract;
+- package ownership;
+- broader topology-aware picking;
+- showcase rebuild workflows through shared scene/asset-manager paths.
+
+## Known limits
+
+The current authoring mesh is a validated modeling foundation. Remaining work includes:
+
+- broader non-manifold vertex-fan handling;
+- incompatible-normal fan handling;
+- generalized surface-connected Vertex/Edge Extrude;
+- broader weld/split/bridge workflows;
+- multi-face and general loop-cut networks;
+- broader interior edge-set bevel;
+- broader hard-surface modeling profiles;
+- automatic multi-island UV unwrap;
+- global UV packing;
+- seam-editing UI;
+- texture painting;
+- broader material authoring beyond current bounded material-instance editing;
+- full editor workflows for arbitrary authoring-file selection;
+- complete scene/project serialization;
+- broader source export;
+- production showcase rebuild workflows;
+- package-level authoring ownership completion.
+
+The bounded fan extrusion remains limited to connected open fans. The loose-component and boundary-edge extrusion paths cover their documented domains only. glTF and KTX2 material ownership continues through the existing asset system.
