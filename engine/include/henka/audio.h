@@ -91,7 +91,10 @@ typedef struct henka_audio_voice_info
     henka_entity entity;
     const henka_audio_clip* clip;
     size_t source_frame;
+    float gain;
+    float pitch;
     bool active;
+    bool paused;
     bool looping;
     bool spatial;
 } henka_audio_voice_info;
@@ -160,7 +163,35 @@ henka_result henka_audio_voice_play(
 henka_result henka_audio_voice_stop(
     henka_audio_system* system,
     henka_audio_voice_id voice);
+/* Voice controls operate on resident clips. Pausing preserves the current
+ * source position; restart clears it and resumes playback. Seeking to the
+ * clip frame count is valid and lets the next mix complete a non-looping
+ * voice deterministically. */
+henka_result henka_audio_voice_pause(
+    henka_audio_system* system,
+    henka_audio_voice_id voice);
+henka_result henka_audio_voice_resume(
+    henka_audio_system* system,
+    henka_audio_voice_id voice);
+henka_result henka_audio_voice_restart(
+    henka_audio_system* system,
+    henka_audio_voice_id voice);
+henka_result henka_audio_voice_seek(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    size_t source_frame);
+henka_result henka_audio_voice_set_gain(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    float gain);
+henka_result henka_audio_voice_set_pitch(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    float pitch);
 bool henka_audio_voice_is_valid(
+    const henka_audio_system* system,
+    henka_audio_voice_id voice);
+bool henka_audio_voice_is_paused(
     const henka_audio_system* system,
     henka_audio_voice_id voice);
 henka_result henka_audio_voice_get_info(

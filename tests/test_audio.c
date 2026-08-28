@@ -127,6 +127,7 @@ int main(void)
     henka_audio_voice_id voice = HENKA_INVALID_AUDIO_VOICE_ID;
     henka_audio_voice_id stopped_voice = HENKA_INVALID_AUDIO_VOICE_ID;
     henka_audio_voice_id replacement_voice = HENKA_INVALID_AUDIO_VOICE_ID;
+    henka_audio_voice_id non_spatial_voice = HENKA_INVALID_AUDIO_VOICE_ID;
     float samples[HENKA_AUDIO_OUTPUT_CHANNELS * 2U];
     float right_position_left;
     float right_position_right;
@@ -134,6 +135,7 @@ int main(void)
     float left_position_right;
     float near_sum;
     float far_sum;
+    size_t paused_source_frame;
     henka_audio_voice_info emitter_info;
     henka_audio_diagnostics diagnostics;
     int result = EXIT_FAILURE;
@@ -185,6 +187,14 @@ int main(void)
         &emitter_info) == HENKA_SUCCESS);
     voice = emitter_info.id;
     HENKA_TEST_ASSERT(henka_audio_voice_is_valid(system, voice));
+    HENKA_TEST_ASSERT(henka_audio_voice_pause(system, voice) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, voice, &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(emitter_info.paused);
+    HENKA_TEST_ASSERT(emitter_info.source_frame == 0U);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!test_nonzero_mix(samples, 1U));
+    HENKA_TEST_ASSERT(henka_audio_voice_resume(system, voice) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(test_nonzero_mix(samples, 1U));
     right_position_left = samples[0];
@@ -196,6 +206,31 @@ int main(void)
     left_position_left = samples[0];
     left_position_right = samples[1];
     HENKA_TEST_ASSERT(left_position_left > left_position_right);
+    HENKA_TEST_ASSERT(henka_audio_voice_pause(system, voice) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_is_paused(system, voice));
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, voice, &emitter_info) == HENKA_SUCCESS);
+    paused_source_frame = emitter_info.source_frame;
+    HENKA_TEST_ASSERT(paused_source_frame > 0U);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!test_nonzero_mix(samples, 1U));
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, voice, &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(emitter_info.source_frame == paused_source_frame);
+    HENKA_TEST_ASSERT(henka_audio_voice_resume(system, voice) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!henka_audio_voice_is_paused(system, voice));
+    HENKA_TEST_ASSERT(henka_audio_voice_seek(system, voice, 64U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_gain(system, voice, 0.5f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_pitch(system, voice, 1.25f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, voice, &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(emitter_info.source_frame == 64U);
+    HENKA_TEST_ASSERT(emitter_info.gain == 0.5f);
+    HENKA_TEST_ASSERT(emitter_info.pitch == 1.25f);
+    HENKA_TEST_ASSERT(henka_audio_voice_restart(system, voice) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, voice, &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!emitter_info.paused && emitter_info.source_frame == 0U);
     HENKA_TEST_ASSERT(henka_scene_translate_entity(
         scene, entity, (henka_vec3){1.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
@@ -223,6 +258,20 @@ int main(void)
     HENKA_TEST_ASSERT(diagnostics.stale_voice_count == 1U);
     second_entity = henka_scene_create_entity_named(scene, "Audio generation object");
     HENKA_TEST_ASSERT(second_entity != HENKA_INVALID_ENTITY);
+    desc.spatial = false;
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+        scene,
+        second_entity,
+        (henka_transform){
+            (henka_vec3){100.0f, 0.0f, 0.0f},
+            (henka_quat){0.0f, 0.0f, 0.0f, 1.0f},
+            (henka_vec3){1.0f, 1.0f, 1.0f}}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_play(
+        system, scene, second_entity, clip, &desc, &non_spatial_voice) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(samples[0] > 0.15f && samples[1] > 0.15f);
+    HENKA_TEST_ASSERT(fabsf(samples[0] - samples[1]) < 0.0001f);
+    HENKA_TEST_ASSERT(henka_audio_voice_stop(system, non_spatial_voice) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_voice_play(
         system, scene, second_entity, clip, &desc, &stopped_voice) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_voice_stop(system, stopped_voice) == HENKA_SUCCESS);
@@ -230,6 +279,31 @@ int main(void)
         system, scene, second_entity, clip, &desc, &replacement_voice) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(replacement_voice != stopped_voice);
     HENKA_TEST_ASSERT(henka_audio_voice_stop(system, stopped_voice) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_pause(
+        system, stopped_voice) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_resume(
+        system, stopped_voice) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_restart(
+        system, stopped_voice) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_seek(
+        system, stopped_voice, 0U) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_gain(
+        system, stopped_voice, 1.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_pitch(
+        system, stopped_voice, 1.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(!henka_audio_voice_is_paused(system, stopped_voice));
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, replacement_voice, &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_gain(
+        system, replacement_voice, -0.1f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_pitch(
+        system, replacement_voice, 0.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_seek(
+        system, replacement_voice, clip_info.frame_count + 1U) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, replacement_voice, &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(emitter_info.gain == desc.gain && emitter_info.pitch == desc.pitch &&
+        emitter_info.source_frame == 0U);
     HENKA_TEST_ASSERT(henka_audio_voice_stop(system, replacement_voice) == HENKA_SUCCESS);
     result = EXIT_SUCCESS;
 

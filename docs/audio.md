@@ -13,7 +13,8 @@ foundation in `engine/include/henka/audio.h`.
 - The bounded bus layout is Master, Music, SFX, Dialogue, Ambience, and UI.
   The current mixer supports per-bus gains, listener orientation, distance
   attenuation, stereo panning, looping, pitch, and deterministic interleaved
-  stereo float-PCM output.
+  stereo float-PCM output. Resident voices also support bounded pause, resume,
+  restart, seek, gain, and pitch controls with generation-checked IDs.
 - Destroyed or stale scene entities are rejected before they contribute audio.
   Scene and clip owners must stop dependent voices before destroying those
   borrowed objects.
@@ -34,11 +35,12 @@ the caller supplies an Audio system: it reads the persisted v3 emitter
 configuration and binds each emitter to the same real Scene entity used by
 Play. The normal graphical Sandbox now owns a client Audio system, maps its
 production camera to the listener, and caller-pumps the SDL3 output boundary.
-The next Audio slices must connect it to manager-owned asset metadata, Scene
-Document listener authoring, and broader application/device lifecycle
-recovery. Those integrations must preserve the renderer-free dedicated-server
-path and add real imported or authored-object coverage rather than test-only
-entities.
+Play pause and resume now propagate to its live emitter voices without
+advancing their source positions. The next Audio slices must connect it to
+manager-owned asset metadata, Scene Document listener authoring, and broader
+application/device lifecycle recovery. Those integrations must preserve the
+renderer-free dedicated-server path and add real imported or authored-object
+coverage rather than test-only entities.
 
 ## Future work
 

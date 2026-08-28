@@ -1,4 +1,5 @@
 #include <float.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -164,6 +165,20 @@ int main(void)
         (script_host = sandbox3d_play_session_get_script_host(session)) == NULL)
     {
         goto cleanup;
+    }
+    {
+        float audio_samples[HENKA_AUDIO_OUTPUT_CHANNELS];
+        if (henka_audio_system_mix(audio_system, audio_samples, 1U) != HENKA_SUCCESS ||
+            fabsf(audio_samples[0]) <= 0.0001f || fabsf(audio_samples[1]) <= 0.0001f ||
+            sandbox3d_play_session_pause(session) != HENKA_SUCCESS ||
+            henka_audio_system_mix(audio_system, audio_samples, 1U) != HENKA_SUCCESS ||
+            fabsf(audio_samples[0]) > 0.0001f || fabsf(audio_samples[1]) > 0.0001f ||
+            sandbox3d_play_session_resume(session) != HENKA_SUCCESS ||
+            henka_audio_system_mix(audio_system, audio_samples, 1U) != HENKA_SUCCESS ||
+            fabsf(audio_samples[0]) <= 0.0001f || fabsf(audio_samples[1]) <= 0.0001f)
+        {
+            goto cleanup;
+        }
     }
     if (sandbox3d_play_session_reload_behavior(
             session, object_id, 10U, &reload_diagnostic) != HENKA_SUCCESS ||

@@ -471,6 +471,39 @@ static void sandbox3d_play_session_destroy_audio_emitters(
     }
 }
 
+static henka_result sandbox3d_play_session_set_audio_paused(
+    sandbox3d_play_session* session,
+    bool paused)
+{
+    size_t index;
+    if (session == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < session->snapshot_count; ++index)
+    {
+        henka_audio_emitter* emitter = session->audio_emitters[index];
+        henka_audio_voice_info voice_info;
+        henka_result result;
+        if (emitter == NULL || !henka_audio_emitter_is_valid(emitter))
+        {
+            continue;
+        }
+        if (henka_audio_emitter_get_voice_info(emitter, &voice_info) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = paused
+            ? henka_audio_voice_pause(session->audio_system, voice_info.id)
+            : henka_audio_voice_resume(session->audio_system, voice_info.id);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
 static void sandbox3d_play_session_abort_start(
     sandbox3d_play_session* session)
 {
@@ -846,9 +879,15 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
 
 henka_result sandbox3d_play_session_pause(sandbox3d_play_session* session)
 {
+    henka_result result;
     if (session == NULL || session->state != SANDBOX3D_PLAY_SESSION_RUNNING)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_play_session_set_audio_paused(session, true);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
     session->state = SANDBOX3D_PLAY_SESSION_PAUSED;
     return HENKA_SUCCESS;
@@ -856,9 +895,15 @@ henka_result sandbox3d_play_session_pause(sandbox3d_play_session* session)
 
 henka_result sandbox3d_play_session_resume(sandbox3d_play_session* session)
 {
+    henka_result result;
     if (session == NULL || session->state != SANDBOX3D_PLAY_SESSION_PAUSED)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_play_session_set_audio_paused(session, false);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
     session->state = SANDBOX3D_PLAY_SESSION_RUNNING;
     return HENKA_SUCCESS;

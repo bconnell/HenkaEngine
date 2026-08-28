@@ -24,6 +24,7 @@ typedef struct henka_audio_voice_slot
     const henka_audio_clip* clip;
     henka_audio_voice_desc desc;
     double source_position;
+    bool paused;
 } henka_audio_voice_slot;
 
 struct henka_audio_clip
@@ -394,6 +395,7 @@ static void henka_audio_release_voice(
     slot->entity = HENKA_INVALID_ENTITY;
     slot->clip = NULL;
     slot->source_position = 0.0;
+    slot->paused = false;
     if (system->active_voice_count > 0U)
     {
         --system->active_voice_count;
@@ -713,6 +715,7 @@ henka_result henka_audio_voice_play(
         slot->clip = clip;
         slot->desc = effective_desc;
         slot->source_position = 0.0;
+        slot->paused = false;
         ++system->active_voice_count;
         *out_voice = henka_audio_make_voice_id(index, slot->generation);
         return HENKA_SUCCESS;
@@ -733,11 +736,103 @@ henka_result henka_audio_voice_stop(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_audio_voice_pause(
+    henka_audio_system* system,
+    henka_audio_voice_id voice)
+{
+    henka_audio_voice_slot* slot = henka_audio_find_voice(system, voice);
+    if (slot == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->paused = true;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_voice_resume(
+    henka_audio_system* system,
+    henka_audio_voice_id voice)
+{
+    henka_audio_voice_slot* slot = henka_audio_find_voice(system, voice);
+    if (slot == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->paused = false;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_voice_restart(
+    henka_audio_system* system,
+    henka_audio_voice_id voice)
+{
+    henka_audio_voice_slot* slot = henka_audio_find_voice(system, voice);
+    if (slot == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->source_position = 0.0;
+    slot->paused = false;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_voice_seek(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    size_t source_frame)
+{
+    henka_audio_voice_slot* slot = henka_audio_find_voice(system, voice);
+    if (slot == NULL || slot->clip == NULL || source_frame > slot->clip->frame_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->source_position = (double)source_frame;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_voice_set_gain(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    float gain)
+{
+    henka_audio_voice_slot* slot = henka_audio_find_voice(system, voice);
+    if (slot == NULL || !henka_audio_float_is_valid(gain) ||
+        gain < 0.0f || gain > HENKA_AUDIO_MAX_GAIN)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->desc.gain = gain;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_voice_set_pitch(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    float pitch)
+{
+    henka_audio_voice_slot* slot = henka_audio_find_voice(system, voice);
+    if (slot == NULL || !henka_audio_float_is_valid(pitch) ||
+        pitch < HENKA_AUDIO_MIN_PITCH || pitch > HENKA_AUDIO_MAX_PITCH)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->desc.pitch = pitch;
+    return HENKA_SUCCESS;
+}
+
 bool henka_audio_voice_is_valid(
     const henka_audio_system* system,
     henka_audio_voice_id voice)
 {
     return henka_audio_find_voice_const(system, voice) != NULL;
+}
+
+bool henka_audio_voice_is_paused(
+    const henka_audio_system* system,
+    henka_audio_voice_id voice)
+{
+    const henka_audio_voice_slot* slot = henka_audio_find_voice_const(system, voice);
+    return slot != NULL && slot->paused;
 }
 
 henka_result henka_audio_voice_get_info(
@@ -757,7 +852,10 @@ henka_result henka_audio_voice_get_info(
         slot->entity,
         slot->clip,
         slot->source_position < 0.0 ? 0U : (size_t)slot->source_position,
+        slot->desc.gain,
+        slot->desc.pitch,
         slot->active,
+        slot->paused,
         slot->desc.looping,
         slot->desc.spatial};
     return HENKA_SUCCESS;
@@ -1021,6 +1119,10 @@ henka_result henka_audio_system_mix(
         float step;
         size_t frame_index;
         if (!slot->active)
+        {
+            continue;
+        }
+        if (slot->paused)
         {
             continue;
         }
