@@ -1,8 +1,8 @@
 # Roadmap
 
-Henka Engine is an early-stage open source C game engine and integrated development workspace. The active work combines runtime and integrity hardening with the already-underway modeling/content-authoring foundation, terrain/world usability, renderer and asset hardening, and the next layers of 2.5D while retaining external-pipeline compatibility.
+Henka Engine is an early-stage open source C game engine and integrated development workspace. Current work combines runtime and integrity hardening, modeling and content authoring, terrain and world usability, renderer and asset maturity, and the next layers of 2.5D support.
 
-> **Roadmap status:** This is a direction guide, not a release schedule. Priorities may change as the engine matures, testing finds issues, or core systems need more hardening. Capability claims remain governed by the current implementation and the repository's capability documentation.
+> **Roadmap status:** This page describes direction and priority. It does not define a release schedule. Capability claims remain governed by the current implementation and the repository's capability documentation.
 
 ## Contents
 
@@ -22,34 +22,36 @@ Henka Engine is an early-stage open source C game engine and integrated developm
 - [Persistence and undo/redo](#persistence-and-undoredo)
 - [Scripting and behavior authoring](#scripting-and-behavior-authoring)
 - [Game-completion and future engine systems](#game-completion-and-future-engine-systems)
-- [Longer-term platform and release systems](#longer-term-platform-and-release-systems)
+- [Platform targets](#platform-targets)
+- [Release systems](#release-systems)
+- [Roadmap completion principle](#roadmap-completion-principle)
 
 ## Current focus
 
-The current work is focused on repairing and hardening runtime, workspace, renderer, platform, asset, physics, persistence, packaging, and external-project paths while strengthening the integrated authoring foundation already present in the Sandbox.
+Current work hardens runtime, workspace, renderer, platform, assets, physics, persistence, packaging, external-project paths, and the integrated authoring foundation already present in the Sandbox.
 
 Current priorities include:
 
 1. Stable engine startup and shutdown.
 2. Clear platform, renderer, input, scene, camera, and authoring boundaries.
-3. Reliable object/component selection and transform behavior.
+3. Reliable object and component selection and transform behavior.
 4. Transactional modeling, UV, material, persistence, and undo/redo paths.
 5. Terrain editing, streaming, collision, and visual validation.
 6. Asset loading and material ownership with explicit failure behavior.
-7. A packaged sandbox that can be tested without private setup.
-8. Documentation that stays aligned with what the engine actually does.
-9. Test coverage for core behavior that should not depend on manual QA.
+7. A packaged Sandbox with public setup and validation paths.
+8. Documentation aligned with live product behavior.
+9. Executable test coverage for core behavior.
 
 ## Active major-system sequence
 
-The current intended major-system order is:
+The current major-system order is:
 
 1. **Complete Audio** to its defined production boundary.
-2. **Character Controller** as the next major gameplay project.
-3. **Scene Hierarchy / Parenting Maturity** as the next composition foundation.
-4. **Prefabs / Reusable Scene Objects** on top of the mature hierarchy.
+2. **Character Controller**.
+3. **Scene Hierarchy / Parenting Maturity**.
+4. **Prefabs / Reusable Scene Objects**.
 
-This sequence does not cancel renderer, realism, modeling, terrain, 2D/2.5D, scripting, or other roadmap work. It establishes which major system campaign should lead when the current campaign reaches a clean boundary.
+Renderer, realism, modeling, terrain, 2D/2.5D, scripting, and other roadmap work remain active supporting tracks. The sequence identifies the lead major-system campaign after each clean completion boundary.
 
 ```mermaid
 flowchart LR
@@ -63,21 +65,19 @@ flowchart LR
 
 ## Near-term priorities
 
-The next development work remains bounded repair and verification.
-
 1. Finish asset cache ownership, identity, retry, metadata, and failure-output contracts.
 2. Continue recursive audits across rendering, platform, physics, persistence, scene, workspace, packaging, and external-project paths.
-3. Keep viewport interaction helpers aligned with the real sandbox behavior and complete remaining manual transform QA.
+3. Keep viewport interaction helpers aligned with live Sandbox behavior and complete remaining manual transform QA.
 4. Keep local and GitHub validation deterministic across build, tests, package provenance, packaged startup, repository integrity, and external-project checks.
-5. Keep the README, architecture, roadmap, runtime help, and repository description aligned with the implemented product.
+5. Keep README, architecture, roadmap, runtime help, and repository description aligned with the implemented product.
 6. Preserve stable identities, transactional editing boundaries, versionable data, and external-tool compatibility needed by 2.5D and later modeling.
-7. Shape the existing Action API toward a versioned semantic agent surface, while deferring any MCP/WebMCP-compatible bridge until stable Scene Document identities, explicit capability discovery, permission boundaries, dry-run behavior, auditability, and structured failure contracts are dependable.
+7. Shape the Action API toward a versioned semantic agent surface after stable Scene Document identities, capability discovery, permission boundaries, dry-run behavior, auditability, and structured failure contracts are dependable.
 
 ## Character Controller
 
 > **Status:** Planned next major project after Audio reaches a coherent completion boundary.
 
-The Character Controller should be a production gameplay foundation suitable for first-person, third-person, and general character movement. A freely moving capsule is not sufficient to claim this system complete.
+The Character Controller is intended to become a production gameplay foundation for first-person, third-person, and general character movement.
 
 ### Target capability
 
@@ -97,7 +97,7 @@ The production foundation should cover:
 - first-person and third-person use;
 - keyboard, mouse, and gamepad integration through the real input boundary;
 - runtime camera integration;
-- physics participation without a competing movement simulation;
+- one authoritative physics/movement relationship;
 - animation hooks;
 - Audio and footstep hooks;
 - scripting/gameplay APIs;
@@ -108,17 +108,17 @@ The production foundation should cover:
 
 ### Integration expectations
 
-The controller must consume the same authoritative scene/entity, transform, input, camera, physics, Audio, scripting, and future animation boundaries used elsewhere in Henka. Editor-only proxies or test-only substitutes do not establish completion.
+The controller must consume the same authoritative scene/entity, transform, input, camera, physics, Audio, scripting, and future animation boundaries used elsewhere in Henka. Completion evidence must exercise those production boundaries.
 
 ### Completion direction
 
-A mature controller should remain stable across slopes, steps, moving platforms, pause/resume, scene save/load, runtime Play, package execution, and supported external projects. Failure cases such as blocked standing, invalid grounding, stale entity ownership, and unsupported movement states should fail predictably rather than silently desynchronize systems.
+A mature controller should remain stable across slopes, steps, moving platforms, pause/resume, scene save/load, runtime Play, package execution, and supported external projects. Blocked standing, invalid grounding, stale entity ownership, and unsupported movement states require explicit predictable outcomes.
 
 ## Scene Hierarchy / Parenting Maturity
 
 > **Status:** Planned after Character Controller reaches its appropriate maturity target.
 
-The hierarchy project establishes how real Henka objects compose. The target is not merely that an entity can store a parent reference; the editor, runtime, persistence, scripting, and major subsystems must agree on one authoritative scene relationship model.
+The hierarchy project establishes one authoritative composition model for real Henka objects across editor, runtime, persistence, scripting, and major subsystems.
 
 ### Core hierarchy
 
@@ -134,7 +134,7 @@ The hierarchy should support:
 
 ### Transform authority
 
-Local and world position, rotation, and scale must propagate through the real hierarchy. Reparenting should support explicit **keep world transform** and **keep local transform** behavior where appropriate.
+Local and world position, rotation, and scale must propagate through the hierarchy. Reparenting should support explicit **keep world transform** and **keep local transform** behavior where appropriate.
 
 Rendering, physics, Audio, cameras, scripting, animation hooks, networking, persistence, and Play sessions must observe the same transform truth.
 
@@ -151,13 +151,13 @@ Hierarchy maturity includes:
 - safe lifecycle behavior when roots, parents, children, or subtrees are destroyed;
 - package and external-project verification.
 
-A weapon attached to a hand, an Audio emitter attached to a world object, a camera attached to a player rig, and a light attached to a vehicle should all rely on this same hierarchy rather than separate attachment systems.
+Weapons attached to hands, Audio emitters attached to world objects, cameras attached to player rigs, and lights attached to vehicles should all consume this hierarchy.
 
 ## Prefabs / Reusable Scene Objects
 
 > **Status:** Planned on top of the mature scene hierarchy.
 
-Prefabs establish how real scene compositions become reusable authored game content. They should instantiate normal Henka scene objects and must not create a parallel fake runtime representation.
+Prefabs establish reusable authored scene compositions. Instances should materialize as normal Henka scene objects with traceable source relationships.
 
 ### Core prefab capability
 
@@ -167,13 +167,13 @@ A prefab system should provide:
 - traceable source-to-instance relationships;
 - real scene-entity instantiation;
 - preserved hierarchy and component data;
-- explicit inherited versus overridden values;
+- explicit inherited and overridden values;
 - instance-specific overrides;
 - source-change propagation that preserves intentional overrides;
-- structural reconciliation when children/components are added or removed;
+- structural reconciliation when children or components are added or removed;
 - duplication, unpacking, and deliberate apply/revert operations;
 - persistence of source identity, instance identity, mappings, overrides, and schema/version information;
-- asset move/rename resilience through stable identity rather than filename-only authority;
+- asset move/rename resilience through stable identity;
 - cycle prevention for nested prefab dependencies;
 - safe failure for missing, stale, corrupt, or unsupported sources;
 - undo/redo participation;
@@ -181,13 +181,13 @@ A prefab system should provide:
 
 ### Composition direction
 
-Prefab architecture should be compatible with nested reusable objects, controlled variants or an equivalent composition mechanism, runtime spawning, Character Controller integration, Audio emitters, scripting, imported assets, future networking, and future Smart Objects.
+Prefab architecture should support nested reusable objects, controlled variants or an equivalent composition mechanism, runtime spawning, Character Controller integration, Audio emitters, scripting, imported assets, future networking, and future Smart Objects.
 
-Advanced nested prefab and variant behavior may be staged, but unsupported behavior should be documented rather than silently flattened and claimed as complete.
+Advanced nested prefab and variant behavior may be staged. Unsupported behavior remains explicitly documented during staged development.
 
 ## Roadmap dependency map
 
-The roadmap is not purely linear. Several later systems depend on shared foundations.
+Several later systems depend on shared foundations.
 
 | Cluster | Dependency direction |
 | --- | --- |
@@ -197,11 +197,11 @@ The roadmap is not purely linear. Several later systems depend on shared foundat
 | Game completion | Runtime UI → Input → Localization → Accessibility → Save Games → Project/Build/Export |
 | Shipping and scale | Profiling → Loading/Streaming → Large Worlds → Packaging → Crash Diagnostics → Team Workflows |
 
-The table expresses dependency leverage, not a strict chronological requirement for every subsystem.
+The table expresses dependency leverage. Individual systems may overlap during development.
 
 ## Workspace and tools
 
-Henka is moving toward a practical developer workspace, but this should happen in layers.
+Henka is building a practical developer workspace in layers.
 
 ### Current workspace foundations
 
@@ -212,56 +212,56 @@ Henka is moving toward a practical developer workspace, but this should happen i
 5. Visible workspace and viewport interaction diagnostics.
 6. A multi-window platform foundation with a separate native test panel for render and event-routing validation.
 
-Current runtime foundations also include rigid-body physics v1: fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane collision, impulse response, friction, restitution, trigger events, raycasts, opt-in sandbox QA controls, and viewport selection highlighting for the selected real scene object.
+Current runtime foundations also include rigid-body physics v1: fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane collision, impulse response, friction, restitution, trigger events, raycasts, opt-in Sandbox QA controls, and viewport selection highlighting for the selected real scene object.
 
 Viewport/editor tooling is a Foundation with active usability work: Scene View, Compass navigation, docked and detached panels, layout persistence, bounded interaction diagnostics, and early authoring surfaces are implemented.
 
 ### Planned workspace improvements
 
-1. Complete the remaining native desktop feel and manual QA for detached controls and title-bar drag-back redocking.
+1. Complete native desktop feel and manual QA for detached controls and title-bar drag-back redocking.
 2. Add an in-window controls editor for the existing local keybinding profiles.
 3. Add a detachable Scene View after multi-window rendering and viewport input are dependable.
-4. Deliver Scene Hierarchy / Parenting Maturity in the sequenced composition work.
-5. Build Prefabs / Reusable Scene Objects on top of the mature hierarchy.
+4. Deliver Scene Hierarchy / Parenting Maturity.
+5. Build Prefabs / Reusable Scene Objects on the mature hierarchy.
 6. Add numeric transform editing.
-7. Extend undo and redo beyond the current bounded workspace-layout, authoring, and material histories to more basic scene operations.
-8. Extend the current settings/save-slot and HAMS authoring persistence into a complete scene/project save and load workflow.
+7. Extend undo and redo to more basic scene operations.
+8. Extend settings/save-slot and HAMS authoring persistence into a complete scene/project save and load workflow.
 
-Native desktop feel, broader hierarchy/project workflows, numeric transform editing, and complete manual interaction QA remain open. These features should appear only when they are wired into the engine, tested, documented, and useful.
+Native desktop feel, broader hierarchy/project workflows, numeric transform editing, and complete manual interaction QA remain open.
 
 ## Agent and automation interface
 
-Henka already has the beginning of the right architectural seam for agent-driven development: the local Action API lets tools and tests request validated engine operations and receive structured results without pretending to be a human operating the editor with a mouse.
+Henka's local Action API already provides a useful architectural seam for agent-driven development. Tools and tests can submit validated engine operations and receive structured results through engine-owned authority.
 
-The next goal is not to expose every editor control immediately. The agent surface should grow only as the underlying engine contracts become stable enough to make machine-driven operations deterministic, inspectable, and safe.
+The agent surface should expand as the underlying contracts become deterministic, inspectable, and safe.
 
 ### Readiness gates
 
-An MCP-compatible agent adapter becomes appropriate once the following foundations are dependable:
+An MCP-compatible agent adapter becomes appropriate after these foundations are dependable:
 
-1. Action targets use persistent Scene Document identities rather than relying on transient runtime entity handles.
-2. Action schemas and capability discovery are versioned so external agents can determine what the running Henka build actually supports.
-3. Authoring, scene, asset, play-session, and inspection operations have explicit authority and transaction boundaries instead of bypassing engine ownership.
-4. Requests support bounded validation, dry-run behavior where meaningful, structured failures, and enough result state to prove what changed.
-5. Local permission and user-approval boundaries prevent arbitrary code execution or silent access to capabilities outside the exposed tool surface.
-6. Agent actions produce auditable diagnostics suitable for the same executable validation harness used for normal development and regression testing.
-7. Visual evidence remains a separate authority for appearance, readability, anatomy, composition, material response, and other properties that structured state alone cannot prove.
+1. Action targets use persistent Scene Document identities.
+2. Action schemas and capability discovery are versioned.
+3. Authoring, scene, asset, Play-session, and inspection operations have explicit authority and transaction boundaries.
+4. Requests support bounded validation, dry-run behavior where meaningful, structured failures, and sufficient result state.
+5. Local permission and user-approval boundaries protect capabilities outside the exposed tool surface.
+6. Agent actions produce auditable diagnostics compatible with the executable validation harness.
+7. Visual evidence remains a separate authority for appearance, readability, anatomy, composition, material response, and other visual properties.
 
 ### Planned integration
 
-Once those gates are met, Henka should expose the Action API through a thin standards-oriented adapter rather than building a second automation system. The preferred direction is an MCP-compatible semantic tool surface for desktop development agents, with WebMCP-compatible exposure considered where Henka later has an appropriate browser or web-hosted surface.
+Henka should expose the Action API through a thin standards-oriented adapter once those gates are met. The preferred direction is an MCP-compatible semantic tool surface for desktop development agents. WebMCP-compatible exposure can be evaluated when Henka has an appropriate browser or web-hosted surface.
 
-The adapter should remain transport-level infrastructure. Engine authority, validation, transactions, identity, undo boundaries, diagnostics, and test evidence stay inside Henka so changing agent protocols does not change the engine's correctness model.
+Engine authority, validation, transactions, identity, undo boundaries, diagnostics, and test evidence remain inside Henka. The protocol adapter should stay transport-level infrastructure.
 
-Because MCP and WebMCP are evolving ecosystems, Henka should track their stable capability-discovery, schema, permission, and transport conventions and implement the adapter when doing so reduces custom automation instead of forcing premature compatibility work.
+MCP and WebMCP continue to evolve. Henka should track stable capability-discovery, schema, permission, and transport conventions before committing the adapter.
 
-Foreground mouse and keyboard automation remains useful for testing the human interface itself. It should not be the primary control path for an agent performing ordinary scene, authoring, inspection, or validation work when an equivalent semantic engine action exists.
+Foreground mouse and keyboard automation remains useful for testing the human interface. Ordinary machine-driven scene, authoring, inspection, and validation work should use equivalent semantic engine actions when available.
 
 ## Game authoring foundation
 
 > **Status:** Foundation
 
-The Sandbox has a bounded Game Authoring V1 slice. It shares the Scene Document, runtime scene, physics, workspace, scripting, and persistence boundaries; it is not a claim that the complete game-editor roadmap is finished.
+The Sandbox has a bounded Game Authoring V1 slice sharing Scene Document, runtime scene, physics, workspace, scripting, and persistence boundaries.
 
 ### Available
 
@@ -289,7 +289,7 @@ The Sandbox has a bounded Game Authoring V1 slice. It shares the Scene Document,
 
 ## Asset and material workflow
 
-The asset pipeline is still early, but it already has a manager-owned metadata, dependency, import, fallback, and material-instance foundation.
+The asset pipeline has a manager-owned metadata, dependency, import, fallback, and material-instance foundation.
 
 ### Foundation
 
@@ -311,11 +311,11 @@ The asset pipeline is still early, but it already has a manager-owned metadata, 
 2. Dedicated user-authored material-file authority, text-entry import, drag/drop, and dependency-graph tooling.
 3. Shader selection and procedural shader planning with safe parameter handling.
 
-Procedural shader work should come after the material system is stable enough to support it cleanly.
+Procedural shader work should follow sufficient material-system maturity.
 
 ## 2D and 2.5D direction
 
-Henka is planned to support 2D and 2.5D as first-class workflows, not as afterthoughts.
+Henka plans first-class 2D and 2.5D workflows.
 
 ### Planned 2D work
 
@@ -341,11 +341,11 @@ Henka is planned to support 2D and 2.5D as first-class workflows, not as afterth
 4. Layered depth and deterministic sorting. The current renderer provides bounded transparent sorting; sprite/layer authoring remains future work.
 5. Parallax.
 6. Movement-plane and physics-axis constraints.
-7. Tools that make 2D-style layout in 3D space easier to manage.
+7. Tools for 2D-style layout in 3D space.
 
 ## Integrated modeling and content authoring
 
-Integrated authoring is already underway in parallel with the 2D/2.5D roadmap. The camera-side 2.5D foundation and the modeling foundation are separate tracks that share renderer, asset, persistence, and workspace boundaries.
+Integrated authoring is underway alongside the 2D/2.5D roadmap. The camera-side 2.5D foundation and modeling foundation share renderer, asset, persistence, and workspace boundaries.
 
 ### Implemented Foundation
 
@@ -354,7 +354,7 @@ Integrated authoring is already underway in parallel with the 2D/2.5D roadmap. T
 3. Transactional authoring operations have validation, commit/rollback behavior, bounded undo/redo, and evaluated mesh replacement.
 4. Object, Vertex, Edge, and Face workflows include component selection, connected selection, bounded edge-loop/ring selection, soft movement, and axis-constrained movement.
 5. Vertex operations include Merge Center, Merge Active, Merge by Distance, Connect Vertices, Dissolve Vertex, Delete Vertex, Vertex Bevel, and bounded Vertex Extrude for connected open boundary vertex fans, including the one-face corner case. Closed, disconnected, loose-edge, and incompatible-normal fan cases remain fail-closed.
-6. Non-destructive topology analysis and explicit transactional safe repair are available. Repair is bounded and deterministic: it can remove enabled isolated vertices, exact metadata-preserving duplicate faces, and degenerate faces, while rejecting unsafe winding, UV, material, smoothing, or non-manifold changes.
+6. Non-destructive topology analysis and explicit transactional safe repair are available. Repair can remove enabled isolated vertices, exact metadata-preserving duplicate faces, and degenerate faces. Unsafe winding, UV, material, smoothing, and non-manifold changes are rejected.
 7. Face winding flip, face extrude, inset, planar bevel rings, face subdivision, selected-face deletion, planar UV projection, island transforms, packing, seam detection, Make Editable, HAMS persistence, material promotion, and supported PBR material-instance editing are available in the bounded workflow.
 8. HAMS preserves explicit loose vertices and standalone wire edges with stable IDs and bounded reusable storage. The topology overlay presents those source vertices and wire edges for inspection.
 9. The shared modeling-operator session and Authoring panel provide bounded explicit-axis extrusion for one selected loose vertex or standalone edge with numeric Preview, Cancel, and transactional Apply.
@@ -363,7 +363,7 @@ Integrated authoring is already underway in parallel with the 2D/2.5D roadmap. T
 
 ### Current Development
 
-**Edge topology and authoring UX**
+#### Edge topology and authoring UX
 
 - Bounded single-edge dissolve is available for compatible interior edges.
 - Bounded single-edge delete of an incident face set is available.
@@ -375,27 +375,27 @@ Integrated authoring is already underway in parallel with the 2D/2.5D roadmap. T
 - Edge mode provides signed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle selection through the shared modeling operator session, including numeric preview, cancel, and transactional Apply.
 - Broader interior-edge cases, edge-loop domains, and general loop-cut networks remain in progress or planned.
 
-**Loose-component and surface-connected editing**
+#### Loose-component and surface-connected editing
 
 - Bounded surface-connected extrusion for one open boundary edge is available through the shared modeling session and Authoring panel, with transactional preview, cancel, and Apply.
 - Homogeneous line/point evaluation and bounded triangle/wire/point renderer ownership are available.
 - Broader selection, editing, and surface-connected extrusion workflows remain in progress.
 
-**Cross-cutting authoring work**
+#### Cross-cutting authoring work
 
-- Strengthen transactional modeling, UV, material, persistence, and undo/redo paths while keeping failure behavior fail-closed.
+- Strengthen transactional modeling, UV, material, persistence, and undo/redo paths with fail-closed failure behavior.
 - Improve editor integration, authoring source/project workflows, and usability of existing operations.
-- Keep showcase fixture work separate from claims of user-authored, production-quality anatomy or mechanical topology.
+- Keep showcase fixture provenance and production-quality authoring claims explicitly classified.
 
 ### Future Work
 
 1. Broader non-manifold or incompatible-normal vertex-fan handling, generalized surface-connected Edge Extrude, broader edge and vertex topology operations, weld/split/bridge workflows, general loop-cut networks, and broader source export.
-2. Connected open boundary fan extrusion, bounded loose-vertex wire extrusion, and bounded loose-edge quad extrusion are already available in the core workflow, but none constitutes complete general Vertex/Edge Extrude authoring.
-3. Closed-ring Loop Cut is available in the bounded factor-controlled workflow; broader loop-cut network authoring remains future work.
+2. Connected open boundary fan extrusion, bounded loose-vertex wire extrusion, and bounded loose-edge quad extrusion are available in the core workflow. Complete general Vertex/Edge Extrude authoring remains open.
+3. Closed-ring Loop Cut is available in the bounded factor-controlled workflow. Broader loop-cut network authoring remains future work.
 4. Automatic multi-island UV unwrap, texture painting, rigging, skinning, and animation authoring.
 5. Complete scene/project serialization and wider adapter-based interchange beyond the current bounded paths.
 
-2D and 2.5D remain first-class roadmap work; their future sprite, layer, parallax, animation, and movement-constraint systems do not defer or replace the integrated authoring work already present.
+2D and 2.5D remain first-class roadmap work. Their future sprite, layer, parallax, animation, and movement-constraint systems share foundations with the integrated authoring work already present.
 
 ## Persistence and undo/redo
 
@@ -407,7 +407,7 @@ Versioned HAMS authoring sources, bounded authoring project save/reload, the che
 
 ### Current Development
 
-The next persistence work is to extend these bounded foundations into broader scene/project data, imported-object and component coverage, more complete authoring history, and durable cross-workflow versioning without weakening transactional failure behavior.
+The next persistence work extends these bounded foundations into broader scene/project data, imported-object and component coverage, more complete authoring history, and durable cross-workflow versioning while retaining transactional failure behavior.
 
 ### Future Work
 
@@ -425,12 +425,12 @@ A complete project-wide authoring serializer, hierarchy/project manifests, and r
 
 ### Current Development
 
-**Runtime and host boundaries**
+#### Runtime and host boundaries
 
 - Generalize runtime-entity and physics-body identity mapping around the Scene Document behavior runtime while keeping isolated Play-scene dispatch unable to mutate authoring state. The current bounded Play mapping is available foundation work.
-- Extend the available typed, non-reentrant Script Host dispatcher beyond the current Entity/Transform/Physics/Event slice and resolve required API bindings at load time.
+- Extend the typed, non-reentrant Script Host dispatcher beyond the current Entity/Transform/Physics/Event slice and resolve required API bindings at load time.
 
-**Persistence and authoring ergonomics**
+#### Persistence and authoring ergonomics
 
 - The bounded state store and explicit sidecar save/load seam are available.
 - Inspector template authoring and transactional attachment are available.
@@ -439,7 +439,7 @@ A complete project-wide authoring serializer, hierarchy/project manifests, and r
 - The source-panel Reload action is available.
 - Broader Inspector authoring and debugger presentation remain in progress.
 
-**Events and lifecycle diagnostics**
+#### Events and lifecycle diagnostics
 
 - Bounded queueing, Lua/HenkaScript emission, and `OnEvent` routing are available foundation work.
 - Richer subscriptions, tooling, and lifecycle diagnostics remain open.
@@ -451,7 +451,7 @@ A complete project-wide authoring serializer, hierarchy/project manifests, and r
 
 ## Game-completion and future engine systems
 
-The following systems are part of Henka's broader direction. Their presence here is a roadmap commitment, not a claim that they are currently implemented.
+The following systems are part of Henka's broader direction. Their entries define planned work and do not change current capability status.
 
 ### Gameplay and player-facing systems
 
@@ -482,7 +482,7 @@ The following systems are part of Henka's broader direction. Their presence here
 | --- | --- |
 | **Production Asset Database / Import Pipeline** | Stable IDs, source vs. derived assets, import/reimport, dependencies/invalidation, metadata, thumbnails, missing references, duplicate detection, move/rename, search/tags, cache/cook, hot reload, provenance/licensing, packaging, and large-project scaling. |
 | **Material / Shader Authoring UX** | Material instances/functions, exposed parameters, live preview, textures, diagnostics, composition, graph or equivalent authoring, custom shader path, performance visibility, and generated-shader inspection. |
-| **Cinematic / Sequencer** | Cameras, cuts, blends, animation, Audio, dialogue, events, activation, transforms, material/light changes, fades, VFX, scripts, and scene transitions. This is not intended to become a general video editor. |
+| **Cinematic / Sequencer** | Cameras, cuts, blends, animation, Audio, dialogue, events, activation, transforms, material/light changes, fades, VFX, scripts, and scene transitions. Scope is game cinematics and sequenced game events. |
 | **Animation and character production** | Rigging, skinning, animation authoring, runtime animation systems, events, controller integration, and eventual character-generation workflows built on real Henka assets. |
 | **Interactive Media & Streaming** | Local/network video to Henka textures/materials, provider-aware sources through permitted APIs/embed rules, controls, buffering/reconnect, adaptive streams, Audio routing, 3D positional Audio, scene persistence, scripting, and security/DRM/auth boundaries. |
 
@@ -504,7 +504,7 @@ The following systems are part of Henka's broader direction. Their presence here
 | **Developer Console / Runtime Debug Commands** | Commands, CVars, inspection, toggles, diagnostics, performance data, gameplay controls, log filters, dev-only safe commands, and script access with secure shipping behavior. |
 | **Crash / Recovery / Diagnostic Pipeline** | Crash detection/context, build identity, project/scene context where safe, log preservation, recovery/autosave, privacy-aware diagnostic bundles, and readable reporting. |
 | **Plugin / Extension SDK** | APIs, manifests, discovery, lifecycle, versions, dependencies, importers, components, editor/runtime extensions, permissions, docs, examples, and migration. |
-| **Source Control / Team Workflow Support** | Deterministic serialization, stable IDs, minimal churn, merge-friendly formats, conflict handling, locks where needed, external modifications, and multi-user/source-control-neutral workflows. Built-in Git is not required. |
+| **Source Control / Team Workflow Support** | Deterministic serialization, stable IDs, minimal churn, merge-friendly formats, conflict handling, locks where needed, external modifications, and multi-user/source-control-neutral workflows. Built-in Git integration is optional. |
 | **Modding / Runtime Extension Boundary** | Optional content packs, scripts, namespaces, sandboxing, permissions, versioning, dependencies, load order, and safe public game APIs. |
 
 ### Localization and accessibility
@@ -514,25 +514,64 @@ The following systems are part of Henka's broader direction. Their presence here
 | **Localization** | String tables, locales, Unicode, plural handling, font fallback, localized assets/Audio/subtitles/dialogue, language switching, RTL groundwork, and missing-translation diagnostics. |
 | **Game-facing Accessibility Framework** | Subtitles/captions, scalable UI, contrast and color-vision support, reduced motion/camera options, hold/toggle alternatives, remapping, visual/audio equivalents, and clear prompts. |
 
-These systems should be prioritized by maturity, dependency leverage, and the amount of downstream capability they unlock rather than by table order.
+These systems should be prioritized by maturity, dependency leverage, and downstream unlock value.
 
-## Longer-term platform and release systems
+## Platform targets
 
-Longer-term work also includes:
+Henka's platform plan is explicit and staged.
+
+| Platform | Direction |
+| --- | --- |
+| **Windows 64-bit** | Current validated primary desktop development and packaging target. |
+| **Linux 64-bit** | Planned validated desktop and headless/server target. |
+| **macOS** | Planned future desktop target. Renderer architecture should support a Metal-oriented production path. |
+| **Android / iOS** | Evaluation after desktop platform and renderer abstraction maturity. |
+| **Consoles** | Evaluation through platform-holder requirements and available SDK access when the engine reaches appropriate maturity. |
+| **Web / WebAssembly** | Evaluation after runtime, renderer, threading, asset, and browser-hosting constraints are understood. |
+
+### Renderer direction by desktop platform
+
+| Platform | Renderer direction |
+| --- | --- |
+| **Windows** | Current OpenGL path; future Vulkan and Direct3D 12 backends through explicit backend isolation. |
+| **Linux** | Vulkan as the preferred future modern backend, with OpenGL retained where practical. |
+| **macOS** | Metal as the long-term native renderer direction. OpenGL is legacy on macOS. MoltenVK may be evaluated where it provides clear maintenance or portability value. |
+
+### Platform acceptance
+
+A platform becomes supported only after its claimed boundary has executable validation covering the relevant areas:
+
+- configure and build;
+- automated tests;
+- runtime startup and shutdown;
+- editor/workspace behavior where applicable;
+- renderer and presentation where applicable;
+- windowing and input;
+- Audio;
+- persistence and filesystem behavior;
+- packaging and portable execution;
+- external-project consumption;
+- dependency acquisition and licensing;
+- failure and recovery behavior.
+
+Support labels should identify partial boundaries clearly. A headless/server path may mature before the graphical editor path on the same operating system.
+
+## Release systems
+
+Longer-term release work includes:
 
 1. Additional scripting languages or extension support beyond the bounded V1 Lua and HenkaScript foundations.
-2. Additional renderer backends and backend isolation suitable for future platform-specific APIs.
-3. Broader platform support beyond the current validated Windows path.
-4. Release packaging and distribution.
-5. Versioned builds.
-6. Checksums and release verification.
-7. Provenance for release artifacts.
-8. Continued Audio maturity beyond the current foundation, including remaining device lifecycle, streaming, broader format, editor, scripting, and packaged end-user workflow gaps until the Audio campaign reaches its defined completion boundary.
+2. Additional renderer backends and backend isolation for platform-specific APIs.
+3. Release packaging and distribution.
+4. Versioned builds.
+5. Checksums and release verification.
+6. Provenance for release artifacts.
+7. Continued Audio maturity through remaining device lifecycle, streaming, format, editor, scripting, and packaged end-user workflow gaps until the Audio campaign reaches its defined completion boundary.
 
-These systems require careful design because they affect safety, project structure, compatibility, and long-term maintenance.
+These systems affect project structure, compatibility, safety, and long-term maintenance and require explicit design and validation contracts.
 
 ## Roadmap completion principle
 
-A roadmap item is not complete merely because an API, UI panel, test fixture, metadata record, or demonstration exists.
+An API, UI panel, test fixture, metadata record, or demonstration establishes only the scope it actually exercises.
 
-Completion requires the claimed capability to be backed by the real production subsystem, usable through the intended workflow, tested with executable regressions, and validated through persistence, packaging, external projects, visual/auditory review, or other relevant evidence for that capability.
+A completed roadmap capability requires a real production subsystem, the intended user or external-consumer workflow, executable regression coverage, and the applicable persistence, packaging, platform, visual, auditory, performance, security, or external-project evidence.
