@@ -1,8 +1,6 @@
 # Documentation Presentation Standard
 
-Henka documentation should be technically complete, truthful, and easy to scan.
-Presentation improvements must never hide limitations, inflate capability claims,
-or remove important engineering detail merely to make a page shorter.
+Henka documentation should be technically complete, truthful, readable, and easy to scan. Presentation work must preserve capability boundaries, limitations, ownership rules, validation expectations, commands, paths, and implementation meaning.
 
 ## Goals
 
@@ -13,13 +11,29 @@ Documentation should help a reader quickly answer four questions:
 3. What remains incomplete or planned?
 4. Where can the reader find implementation, validation, or usage details?
 
+## Live documentation
+
+Documentation is part of the product boundary.
+
+When implementation changes affect public behavior, capability status, commands, platform support, persistence, editor terminology, packaging, validation, supported formats, ownership, failure behavior, or roadmap direction, the relevant live documentation must be updated in the same coherent change.
+
+At a publication boundary:
+
+- known stale documentation is a defect;
+- capability wording must match the actual production implementation;
+- removed or changed commands must be reflected in usage docs;
+- new supported workflows must be documented at the level users need to operate them;
+- planned work must remain clearly planned;
+- current limitations must remain visible;
+- cross-references must point to the current authoritative document.
+
+Documentation-only modernization may improve structure and wording without changing capability truth.
+
 ## Page structure
 
-Long documents should begin with a short summary and, when useful, a local table
-of contents. Prefer clear sections over long uninterrupted prose.
+Long documents should begin with a short summary and, when useful, a local table of contents.
 
-Use headings often enough that a reader can navigate by scanning. Good recurring
-section names include:
+Use headings often enough that readers can navigate by scanning. Useful recurring section names include:
 
 - Summary
 - Status
@@ -33,73 +47,69 @@ section names include:
 - Failure behavior
 - Related documentation
 
-Not every document needs every section. Use the smallest structure that makes the
-material easier to understand.
+Not every document needs every section. Use the smallest structure that makes the material easier to understand.
 
 ## Paragraphs
 
-Avoid screen-length walls of text. If a paragraph contains multiple distinct
-requirements, capabilities, lifecycle stages, or limitations, split it into
-smaller paragraphs or another structure.
+Avoid screen-length walls of text.
 
-Prefer prose for explanation and reasoning. Prefer lists or tables for repeated
-facts, requirements, states, comparisons, or inventories.
+A paragraph that contains several distinct requirements, capabilities, lifecycle stages, validation conditions, or limitations should be split into smaller paragraphs, lists, tables, or focused subsections.
 
-Keep sentence and paragraph structure natural. Documentation should remain
-readable at normal desktop and narrow-window widths.
+Use prose for explanation and reasoning. Use lists or tables for repeated facts, requirements, states, comparisons required by the technical subject, inventories, sequences, and validation gates.
+
+Do not split normal prose into artificial one-line fragments.
 
 ## Direct declarative wording
 
 State facts, requirements, limitations, and plans directly.
 
-Avoid rhetorical comparison constructions that sound conversational, defensive,
-or machine-generated. Common patterns to remove include:
+Avoid rhetorical comparison constructions that make documentation sound conversational, defensive, or machine-generated. Common patterns to remove include:
 
 - `rather than ...`
 - `instead of ...`
 - `not X, but Y`
-- `this is not X; it is Y` when a direct statement can carry the same meaning
-- repeated contrast framing used only to emphasize a point
+- `this is not X; it is Y` when a direct statement carries the meaning;
+- repeated contrast framing used only for emphasis.
 
-Prefer a single declarative sentence whenever the intended meaning is clear.
+Preferred wording is declarative:
 
-Examples:
+- `The runtime uses the production scene graph.`
+- `Linux support is planned.`
+- `This subsystem remains a Foundation.`
+- `Automated visual evidence does not satisfy human visual QA.`
 
-- Write `The runtime uses the production scene graph.`
-- Write `Linux support is planned.`
-- Write `This subsystem remains a Foundation.`
-- Write `Automated visual evidence does not satisfy human visual QA.`
-
-Use contrast only when the distinction is technically necessary to prevent a
-real misunderstanding, define a contract boundary, or document incompatible
-behavior.
+Use contrast only when the distinction is technically necessary to define incompatible behavior, prevent a real misunderstanding, or document a contract boundary.
 
 ## Lists and tables
 
-Use lists when order, steps, requirements, supported operations, or known gaps
-matter.
+Use lists when order, steps, requirements, supported operations, or known gaps matter.
 
-Use tables when readers need to compare several items across the same attributes.
-Examples include capability status, platform support, file formats, lifecycle
-states, validation gates, or feature maturity.
+Use tables when readers need to compare several items across the same attributes. Good uses include:
 
-Avoid very wide tables when normal prose or a list would be easier to read on a
-narrow display.
+- capability status;
+- platform support;
+- file formats;
+- lifecycle states;
+- validation gates;
+- feature maturity;
+- backend support.
+
+Avoid excessively wide tables on pages that must remain readable on narrow displays.
 
 ## Status callouts
 
-Short blockquotes may be used for important status information, for example:
+Short blockquotes may be used for important status information.
+
+Example:
 
 > **Status:** Foundation  
 > **Current focus:** Runtime integration and end-user workflow completion
 
-Status wording must remain consistent with the repository's authoritative
-capability definitions. Presentation does not change capability truth.
+Status wording must remain consistent with the repository's authoritative capability definitions. Presentation does not change capability truth.
 
 ## Diagrams
 
-Use Mermaid when architecture, ownership, lifecycle, dependency, or data flow is
-materially clearer in visual form.
+Use Mermaid when architecture, ownership, lifecycle, dependency, or data flow is materially clearer in visual form.
 
 Suitable subjects include:
 
@@ -111,25 +121,28 @@ Suitable subjects include:
 - hierarchy and prefab relationships;
 - roadmap dependencies.
 
-Keep diagrams bounded and readable. A diagram should explain a relationship and
-stay focused on the details needed for that relationship.
+Keep diagrams bounded and readable. A diagram should explain a specific relationship and include only the details needed for that relationship.
 
 ## Code, commands, and paths
 
-Use fenced code blocks for commands, code examples, configuration, serialized
-formats, and multi-line paths. Use inline code for short identifiers, API names,
-filenames, and single commands.
+Use fenced code blocks for:
 
-Examples should match supported product behavior. Do not publish illustrative
-syntax that looks executable unless it is valid for the documented boundary.
+- commands;
+- code examples;
+- configuration;
+- serialized formats;
+- multi-line paths;
+- diagnostic output when the exact structure matters.
+
+Use inline code for short identifiers, API names, filenames, flags, and single commands.
+
+Examples must match supported product behavior. Illustrative syntax that appears executable must be valid for the documented boundary.
 
 ## Collapsible detail
 
-Use `<details>` blocks sparingly for long implementation notes, diagnostic
-examples, or advanced material that most readers do not need immediately.
+Use `<details>` blocks sparingly for long implementation notes, diagnostic examples, or advanced material that most readers do not need immediately.
 
-Keep critical limitations, safety requirements, failure behavior, and setup
-steps visible in the normal document flow.
+Critical limitations, safety requirements, failure behavior, setup steps, support boundaries, and validation requirements must remain visible without expanding a collapsed section.
 
 ## Capability truth
 
@@ -137,81 +150,68 @@ Documentation presentation work must preserve:
 
 - current capability status;
 - explicit limitations;
-- production-versus-foundation distinctions;
+- production and Foundation distinctions;
 - ownership and lifetime requirements;
 - failure behavior;
 - platform scope;
-- persistence and compatibility boundaries;
+- persistence boundaries;
+- compatibility boundaries;
 - validation and evidence requirements.
 
-A documentation-only cleanup must not upgrade a capability or imply that planned
-work exists.
-
-## Live documentation maintenance
-
-Documentation is part of the active product surface. Keep it current as Henka
-changes.
-
-Update the relevant documentation in the same coherent change whenever an
-implementation changes:
-
-- public behavior or supported workflows;
-- capability status or scope;
-- commands, paths, configuration, or build steps;
-- platform or renderer support;
-- persistence or file-format behavior;
-- ownership, lifecycle, or failure contracts;
-- editor controls or user-visible terminology;
-- validation, packaging, or external-project behavior;
-- roadmap sequencing or a committed future direction.
-
-Fix stale documentation when it is encountered and the correct state is clear
-from the production code, tests, and current project direction. Keep those edits
-scoped to the affected documentation.
-
-README, roadmap, capability, subsystem, help, and platform documentation should
-not remain knowingly stale at a publication boundary. A disagreement between
-product behavior and live documentation is a documentation defect and should be
-resolved from product truth.
-
-The repository-wide presentation cleanup may proceed independently. New product
-work must still keep the live documentation it touches current.
+A documentation-only cleanup must not upgrade a capability or imply that planned work exists.
 
 ## Current, planned, and historical material
 
-Keep current behavior visually separate from future direction. Prefer explicit
-headings such as **Available**, **In Progress**, and **Planned** when they make the
-state easier to scan.
+Keep current behavior visually separate from future direction. Headings such as **Available**, **In Progress**, and **Planned** should be used when they improve state clarity.
 
-Historical implementation notes should remain only when they help explain a
-current contract, migration, compatibility rule, or important design decision.
-Source history and release records should carry implementation history that no
-longer helps explain the current product.
+Historical implementation notes should remain only when they explain a current contract, migration, compatibility rule, or important design decision.
+
+Source history and release records should carry implementation history that no longer helps explain the current product.
 
 ## Links and navigation
 
-Link to the authoritative detailed document and keep duplicate overview text
-small. Keep link labels descriptive.
+Link to the authoritative detailed document and keep duplicate overview text small.
 
-Long overview documents should point readers toward focused subsystem pages.
-Focused subsystem pages should link back to relevant architecture, build,
-capability, and roadmap documentation where useful.
+Use descriptive link labels.
+
+Long overview documents should point readers toward focused subsystem pages. Focused subsystem pages should link to relevant architecture, build, capability, roadmap, and validation documentation when useful.
 
 ## Visual restraint
 
 "Prettier" means easier to read, navigate, and understand.
 
-Avoid decorative badge walls, excessive emoji, oversized banners, or repeated
-visual elements that do not communicate useful information. The Henka lockup and
-other branding should support navigation and identity without competing with the
-technical content.
+Avoid:
+
+- decorative badge walls;
+- excessive emoji;
+- oversized banners;
+- repeated visual elements with no informational purpose;
+- ornamental section breaks that add scroll length without adding structure.
+
+Henka branding should support identity and navigation without competing with technical content.
+
+## Repository consistency
+
+The documentation set should use consistent terminology and structure.
+
+Repository-wide consistency includes:
+
+- matching subsystem names;
+- matching status labels;
+- matching command names and flags;
+- matching file-format names and versions;
+- matching platform claims;
+- matching roadmap sequence;
+- matching ownership language;
+- matching capitalization for product terms such as Audio, Scene View, Sandbox, and Play when they refer to named Henka concepts.
+
+Overview documents should summarize. Subsystem documents should carry detailed contracts. Validation documents should explain evidence and acceptance paths.
 
 ## Validation
 
-When documentation changes alongside product changes, run the repository's
-existing documentation truth, hygiene, integrity, and relevant product gates.
+When documentation changes alongside product changes, run the repository's existing documentation truth, hygiene, integrity, and relevant product gates.
 
-For documentation-only presentation work, review the diff specifically for:
+For documentation-only presentation work, review the diff for:
 
 - accidental capability changes;
 - removed limitations;
@@ -220,7 +220,8 @@ For documentation-only presentation work, review the diff specifically for:
 - duplicated or contradictory status wording;
 - Mermaid syntax errors;
 - Markdown formatting regressions;
-- unnecessary rhetorical comparison wording.
+- unnecessary rhetorical comparison wording;
+- stale references to superseded behavior;
+- missing links to newly authoritative subsystem documents.
 
-The governing principle is simple: preserve product truth, improve information
-design.
+The governing principle is simple: preserve product truth and improve information design.
