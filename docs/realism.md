@@ -1,212 +1,378 @@
 # Rendering Realism
 
-Henka's realism work is built as a layered, truthful rendering stack. The current renderer is a rasterized OpenGL path with physically based material inputs, HDR presentation, image-based lighting, local reflection probes, shadow maps, screen-space effects, and bounded temporal reconstruction. These systems improve realism without claiming capabilities that are not present.
+Henka's realism work is a layered rasterized OpenGL rendering stack with physically based material inputs, HDR presentation, image-based lighting, local reflection probes, shadow maps, screen-space effects, and bounded temporal reconstruction.
+
+> **Status:** Active renderer-realism foundation. Each effect keeps an explicit scope and validation boundary. Current evidence covers the supported OpenGL path and its deterministic reference fixtures.
+
+## Contents
+
+- [Current realism stack](#current-realism-stack)
+- [Reference-scene overview](#reference-scene-overview)
+- [PBR material reference](#pbr-material-reference)
+- [Normal-map reference](#normal-map-reference)
+- [Color-space reference](#color-space-reference)
+- [Energy-response reference](#energy-response-reference)
+- [IBL reference](#ibl-reference)
+- [Scene-probe reference](#scene-probe-reference)
+- [Lighting and shadow reference](#lighting-and-shadow-reference)
+- [Subsurface reference](#subsurface-reference)
+- [SSGI reference and motion evidence](#ssgi-reference-and-motion-evidence)
+- [SSGI performance evidence](#ssgi-performance-evidence)
+- [Screen-space indirect diffuse lighting](#screen-space-indirect-diffuse-lighting)
+- [Scene-probe diffuse transfer](#scene-probe-diffuse-transfer)
+- [Exposure and HDR-range reference](#exposure-and-hdr-range-reference)
+- [Direction](#direction)
 
 ## Current realism stack
 
-The current Rendered path includes:
+### PBR material inputs
 
-- glTF-oriented PBR material inputs for base color, metallic/roughness, normals, occlusion, emissive response, specular controls, IOR, transmission, volume attenuation, clearcoat, sheen, alpha modes, and double-sided rendering, plus runtime-authored subsurface amount/tint controls;
-- transmission uses the authored IOR for a bounded environment-refraction direction and authored volume attenuation; KHR_materials_transmission scalar textures and KHR_materials_volume thickness textures are manager-owned linear data that modulate the corresponding response. Screen-space refraction, layered volumes, and production glass remain unfinished;
-- a bounded view-aware three-lobe direct-light diffusion-profile approximation for subsurface-tinted materials, with authored thickness and the shared linear thickness texture widening the profile and a bounded back-facing environment contribution; diffuse energy is reserved so the response is not simply added on top of full diffuse. The shared material-instance/editor path can assign, clear, restore, inspect, and transactionally refresh the imported thickness texture without creating a second material authority. This is still not true multi-scatter diffusion, a skin/wax profile, or screen-space/ray-traced SSS;
-- HDR environment lighting with transactionally derived 32-sample cosine-weighted irradiance, 128-sample GGX-prefiltered specular environment data across bounded mips, and a 128-sample split-sum BRDF lookup texture; IBL roughness lookup is capped at the supported 32x32 prefilter level so high-roughness subjects do not expose under-resolved 4x4/2x2 mip structure; this improves the rasterized environment response without claiming path tracing or full-scene global illumination;
-- local reflection probes with a bounded seven-level cubemap chain: the captured
-  mip 0 is filtered through the existing bounded GGX prefilter program for
-  roughness-dependent local-probe response. Local-probe roughness lookup is
-  capped at the supported 16x16 prefilter level so high-roughness subjects do
-  not expose under-resolved 8x8, 4x4, 2x2, or 1x1 mip structure. This remains a
-  local, bounded probe approximation, not a production probe grid or the global
-  IBL path;
-- directional, cascade, spot, and point shadow-map foundations;
-- depth-derived ambient occlusion;
-- a bounded depth-derived screen-space reflection path that consumes the
-  material pass's per-pixel roughness output, uses signed depth-crossing hit
-  refinement, reconstructs surfaces from valid central depth neighbors, rejects
-  back-facing or edge-invalid hits, weights hit confidence with quadratic
-  roughness attenuation, edge distance, and a bounded Schlick Fresnel response,
-  with screen-space hits limited to smooth materials and rougher materials using
-  the filtered environment/probe fallback,
-  and applies a bounded roughness-aware resolve before falling back to
-  environment/probe lighting on missing HDR resources; this remains a
-  screen-space approximation rather than production planar, hierarchical, or
-  off-screen reflection coverage;
-- bloom, exposure, ACES-style tone mapping, a restrained rendered grade, and reconstruction sharpening;
-- bounded temporal history with motion, previous-depth, disocclusion, reactive-mask, and history-clamping safeguards.
+The Rendered path currently supports glTF-oriented material inputs for:
 
-Rendered post-processing keeps the calibrated screen-space indirect-diffuse,
-ambient-occlusion, and bounded screen-space reflection contributions in the
-linear HDR target until the single final exposure/tone-map/presentation
-transform. Reflection still uses the environment, probe, or analytical
-fallback when a valid roughness attachment is unavailable. This improves
-material-aware reflection response without claiming full-scene reflections or
-production GTAO.
+- base color;
+- metallic/roughness;
+- normal mapping;
+- occlusion;
+- emissive response;
+- specular controls;
+- IOR;
+- transmission;
+- volume attenuation;
+- clearcoat;
+- sheen;
+- alpha modes;
+- double-sided rendering;
+- runtime-authored subsurface amount and tint.
 
-The shared fullscreen-triangle presentation path maps its oversized clip-space
-triangle to the complete normalized texture domain. Material Preview and
-Rendered therefore preserve the same scene composition as Solid while applying
-their intended shading and post-processing differences. The Windows regression
-covers the triangle contract and normalized edge/corner coverage; application
-captures remain the visual authority for subject placement and quality.
+### Transmission and volume
 
-## Deterministic reference scene
+Transmission uses the authored IOR for a bounded environment-refraction direction and authored volume attenuation.
 
-The Sandbox3D package contains a Henka-owned PBR reference scene made from nine
-bounded UV-sphere subjects: rough metal, polished metal, painted clearcoat,
-plastic, stone, fabric sheen, dry wood, wet/dry stone, and a subsurface wax
-approximation. The fixture uses the same scene, material, texture, lighting,
-environment, and post-processing paths as the editor showcase; it is not a
-showcase-only shader path.
+Manager-owned linear texture data supports:
 
-The wide reference keeps the nine subjects in a single deterministic row for
-overview comparison. The close reference uses a non-overlapping 3x3 grid so
-each material receives useful screen area for visual inspection without
-changing the authored fixture or its material assignments.
-The PBR, normal-map, color-space, energy, IBL, and scene-probe reference
-profiles add a restrained neutral, shadowless fixture fill so every evaluated
-subject remains readable while the directional key, shadows, falloff, and
-probe contrast remain visible. The lighting and subsurface profiles retain
-their dedicated spatial-light arrangements instead of using this fill.
+- `KHR_materials_transmission` scalar textures;
+- `KHR_materials_volume` thickness textures.
 
-The reference fixture's deterministic detail maps are generated at 64x64: the
-normal map is linear normal data, the macro and wood maps are color textures,
-and the wet/dry map is linear metallic/roughness data. The maps use tileable
-multi-scale value noise with bounded mid-scale octaves rather than periodic
-stripe signals or broad block-like bands, keeping authored material variation
-readable at close range. Capture
-readiness reads the runtime texture dimensions and fails closed below that
-minimum.
+These textures modulate the corresponding renderer response. Screen-space refraction, layered volumes, and production glass remain unfinished.
 
-The close PBR board uses the same neutral base color for its rough-metal and
-polished-metal subjects. The visual checker samples those matched regions and
-requires their rendered luminance responses to remain distinguishable under the
-deterministic reference lighting. This is a fixture-specific calibration guard,
-not a claim that one universal luminance ordering applies to every scene.
+### Subsurface response
 
-The close capture also compares a normalized ground region beneath the subjects
-with an unobstructed ground control. The checker requires measurable contact
-shadow contrast, providing an initial lighting/shadow regression without
-confusing ambient darkening with a claimed full lighting benchmark.
+Subsurface-tinted materials use a bounded view-aware three-lobe direct-light diffusion-profile approximation.
 
-The package also exposes a matched normal-map reference fixture. It uses the
-same neutral material and camera for four flat controls and five subjects with
-the generated linear normal map bound through the ordinary OpenGL material
-path:
+The current response includes:
+
+- authored subsurface amount and tint;
+- authored thickness;
+- imported linear thickness texture support;
+- profile widening from thickness data;
+- a bounded back-facing environment contribution;
+- reserved diffuse energy so the subsurface term does not stack on a full diffuse response.
+
+The shared material-instance/editor path can assign, clear, restore, inspect, and transactionally refresh the imported thickness texture while preserving the existing material authority.
+
+Current SSS does not provide true multi-scatter diffusion, skin/wax profiles, screen-space SSS, or ray-traced SSS.
+
+### Image-based lighting
+
+HDR environment lighting derives the following resources transactionally:
+
+- 32-sample cosine-weighted irradiance;
+- 128-sample GGX-prefiltered specular environment data across bounded mip levels;
+- a 128-sample split-sum BRDF lookup texture.
+
+IBL roughness lookup is capped at the supported 32x32 prefilter level. High-roughness subjects therefore avoid the under-resolved 4x4 and 2x2 prefilter levels.
+
+This is the current rasterized environment-lighting foundation. Path tracing and full-scene global illumination are not implemented.
+
+### Local reflection probes
+
+Local reflection probes use a bounded seven-level cubemap chain. Captured mip 0 is filtered through the existing bounded GGX prefilter program.
+
+The chain contains:
+
+- 64x64;
+- 32x32;
+- 16x16;
+- 8x8;
+- 4x4;
+- 2x2;
+- 1x1 faces.
+
+Local-probe roughness lookup is capped at the supported 16x16 prefilter level. The 8x8, 4x4, 2x2, and 1x1 levels are not used for high-roughness lookup.
+
+The current probe system is a bounded local approximation. Production probe grids remain future work.
+
+### Shadows
+
+Current shadow foundations include:
+
+- directional shadows;
+- cascaded directional shadows;
+- spot shadows;
+- point shadows.
+
+### Ambient occlusion
+
+The current renderer provides depth-derived ambient occlusion.
+
+### Screen-space reflections
+
+The bounded SSR path uses the material pass's per-pixel roughness output and provides:
+
+- signed depth-crossing hit refinement;
+- surface reconstruction from valid central depth neighbors;
+- back-facing-hit rejection;
+- edge-invalid-hit rejection;
+- quadratic roughness attenuation;
+- edge-distance weighting;
+- bounded Schlick Fresnel weighting;
+- smooth-material screen-space hits;
+- filtered environment/probe fallback for rougher materials;
+- a bounded roughness-aware resolve;
+- environment/probe fallback when required HDR resources are unavailable.
+
+Current SSR remains limited to visible screen-space information. Planar, hierarchical, and off-screen reflection coverage remain future work.
+
+### HDR presentation and temporal reconstruction
+
+The current presentation path provides:
+
+- bloom;
+- finite exposure control;
+- ACES-style tone mapping;
+- a restrained rendered grade;
+- reconstruction sharpening;
+- bounded temporal history;
+- motion data;
+- previous-depth validation;
+- disocclusion safeguards;
+- reactive-mask safeguards;
+- history clamping.
+
+Screen-space indirect diffuse, ambient occlusion, and SSR remain in the linear HDR target until the final exposure, tone-map, and presentation transform.
+
+Reflection falls back to environment, probe, or analytical lighting when a valid roughness attachment is unavailable.
+
+### Fullscreen presentation geometry
+
+The shared fullscreen-triangle path maps its oversized clip-space triangle to the complete normalized texture domain.
+
+Material Preview and Rendered preserve Scene View composition while applying their respective shading and post-processing paths. The Windows regression checks normalized edge/corner coverage and the fullscreen-triangle contract. Application captures remain the visual authority for subject placement and quality.
+
+## Reference-scene overview
+
+The Sandbox3D package contains deterministic Henka-owned realism fixtures. These fixtures use the same scene, material, texture, lighting, environment, and post-processing paths exercised by the editor showcase.
+
+### Available reference profiles
+
+```text
+--capture-realism-reference wide|close solid|material_preview|rendered
+--capture-realism-reference normal_map wide|close solid|material_preview|rendered
+--capture-realism-reference color_space wide|close solid|material_preview|rendered
+--capture-realism-reference energy wide|close solid|material_preview|rendered
+--capture-realism-reference ibl wide|close rendered
+--capture-realism-reference scene_probe wide|close rendered
+--capture-realism-reference lighting wide|close solid|material_preview|rendered
+--capture-realism-reference sss close opaque|thin|thick rendered
+--capture-realism-reference ssgi wide|close rendered
+--capture-realism-reference ssgi_motion wide|close rendered output_directory
+--capture-realism-reference ssgi_performance close rendered
+--capture-realism-reference hdr close -2|0|2 rendered
+```
+
+Ordinary reference captures emit `CAPTURE_READY_REFERENCE`. Specialized profiles emit their own readiness metadata described below.
+
+The reference system is calibration and regression infrastructure. Human visual review remains authoritative for appearance, composition, anatomy, material quality, and other subjective visual properties.
+
+## PBR material reference
+
+The main PBR reference scene contains nine bounded UV-sphere subjects:
+
+1. rough metal;
+2. polished metal;
+3. painted clearcoat;
+4. plastic;
+5. stone;
+6. fabric sheen;
+7. dry wood;
+8. wet/dry stone;
+9. subsurface wax approximation.
+
+### Layouts
+
+**Wide** places all nine subjects in one deterministic row for overview comparison.
+
+**Close** uses a non-overlapping 3x3 grid so every material receives useful inspection area.
+
+### Fixture lighting
+
+The PBR, normal-map, color-space, energy, IBL, and scene-probe profiles include a restrained neutral, shadowless fixture fill. The fill keeps subjects readable while preserving directional-key response, shadows, falloff, and probe contrast.
+
+The lighting and subsurface profiles keep their dedicated spatial-light arrangements.
+
+### Deterministic detail maps
+
+Reference detail maps are generated at 64x64:
+
+| Map | Color/data semantics |
+| --- | --- |
+| Normal | Linear normal data |
+| Macro | Color texture |
+| Wood | Color texture |
+| Wet/dry | Linear metallic/roughness data |
+
+The generated maps use tileable multi-scale value noise with bounded mid-scale octaves. Capture readiness reads runtime texture dimensions and fails below the required minimum.
+
+### Rough/polished metal guard
+
+The close PBR board gives rough-metal and polished-metal subjects the same neutral base color. The checker samples matched regions and requires distinguishable rendered luminance responses under deterministic lighting.
+
+This requirement is fixture-specific.
+
+### Contact-shadow guard
+
+The close capture compares normalized ground beneath the subjects with an unobstructed ground control. The checker requires measurable contact-shadow contrast.
+
+## Normal-map reference
+
+The normal-map fixture uses the same neutral material and camera for:
+
+- four flat controls;
+- five subjects using the generated linear normal map.
+
+The map is bound through the ordinary OpenGL material path.
 
 ```text
 --capture-realism-reference normal_map wide|close solid|material_preview|rendered
 ```
 
-The dedicated checker requires the five mapped regions to produce a measurable
-local rendered response above the four flat controls. This proves that the
-normal-map binding and tangent-space response are active; it is a bounded
-calibration fixture, not a claim that the generated detail texture represents
-production surface authoring quality.
+The dedicated checker requires the five mapped regions to show measurable local rendered response above the four flat controls.
 
-The package also exposes a dedicated color-space reference fixture. It uses the
-same RGBA8 source bytes for four sRGB-tagged subjects and five linear-tagged
-subjects, with the color-space descriptor carried through the ordinary material
-and OpenGL texture paths. Base-color textures accept either explicit sRGB or
-linear semantics; normal, metallic/roughness, occlusion, transmission, and
-thickness data retain their required linear contract.
+This validates active normal-map binding and tangent-space response. Production surface-authoring quality remains outside this fixture's scope.
+
+## Color-space reference
+
+The color-space fixture uses identical RGBA8 source bytes for:
+
+- four sRGB-tagged subjects;
+- five linear-tagged subjects.
+
+The color-space descriptor travels through the ordinary material and OpenGL texture paths.
+
+Base-color textures accept explicit sRGB or linear semantics. Normal, metallic/roughness, occlusion, transmission, and thickness data retain linear semantics.
 
 ```text
 --capture-realism-reference color_space wide|close solid|material_preview|rendered
 ```
 
-The checker requires the sRGB and linear texture metadata to be present and
-measures the paired rendered response. This proves that the supported texture
-color-space distinction reaches the renderer; it is a bounded response fixture,
-not a claim of universal color-management, display-mastering, or scene-wide
-energy calibration.
+The checker requires sRGB and linear metadata and measures their paired rendered response.
 
-The package also exposes a dedicated bounded energy-response reference. It
-keeps the geometry, neutral base color, lighting, environment, and camera
-fixed while arranging three dielectric subjects, three metallic subjects, and
-three secondary-response subjects covering transmission, clearcoat, and sheen.
-The fixture exercises the ordinary OpenGL PBR path and checks that the groups
-remain visibly non-flat without allowing the Rendered image to become
-overwhelmingly clipped. This is a response and gross-energy regression guard;
-it is not a universal proof of physical energy conservation across arbitrary
-materials, lights, exposures, or displays.
+Universal color management, display mastering, and scene-wide energy calibration remain outside this fixture's scope.
+
+## Energy-response reference
+
+The energy fixture keeps geometry, neutral base color, lighting, environment, and camera fixed.
+
+It contains:
+
+- three dielectric subjects;
+- three metallic subjects;
+- three secondary-response subjects covering transmission, clearcoat, and sheen.
 
 ```text
 --capture-realism-reference energy wide|close solid|material_preview|rendered
 ```
 
-The readiness record identifies the three bounded response groups and the
-clipped-channel limit. The dedicated checker requires matching composition
-across Solid, Material Preview, and Rendered, visible group separation, and
-bounded Rendered luminance/clipping. It does not promote the current direct
-lighting, environment, transmission, clearcoat, or sheen approximations to a
-production light-transport model.
+The readiness record identifies the response groups and clipped-channel limit.
 
-The package also exposes a rendered-only IBL calibration reference. It uses a
-dedicated nine-subject metallic roughness ladder (0.05 through 0.95) and
-refuses readiness unless the OpenGL renderer reports its generated
-32-resolution irradiance cube, seven-level prefilter chain, and 128-resolution
-split-sum BRDF LUT as ready. The specular prefilter and split-sum integration
-use bounded 128-sample Hammersley sequences to reduce deterministic sampling
-bands in the visible reflection response. The checker then verifies that the ladder remains
-visibly resolved across the prefiltered environment response while the image
-stays bounded. This is an activation and bounded roughness-response guard for
-the supported OpenGL path, not proof of production HDRI authoring, probe-grid
-blending, or universal image-based-lighting accuracy. The close-image guard
-also requires all nine evaluated subjects to remain readable, so an unlit or
-otherwise lost subject cannot be mistaken for a valid roughness response.
-The shared UV-sphere fixture keeps its triangle winding aligned with its
-authored outward normals, preserving the view-aware BRDF contract used by this
-reference rather than compensating for inverted geometry in the shader.
+The checker requires:
+
+- matching composition across Solid, Material Preview, and Rendered;
+- visible group separation;
+- bounded Rendered luminance;
+- bounded clipping;
+- a non-flat ordinary OpenGL PBR response.
+
+This is a gross-energy regression guard for the supported fixture. It does not establish universal energy conservation across arbitrary materials, lights, exposures, or displays.
+
+## IBL reference
+
+The rendered-only IBL fixture uses a dedicated nine-subject metallic roughness ladder from `0.05` through `0.95`.
 
 ```text
 --capture-realism-reference ibl wide|close rendered
 ```
 
-The `SCENE_PROBE_REFERENCE` profile exposes a rendered-only scene-probe reference. It uses the
-same nine-subject calibration fixture and refuses readiness unless two enabled
-local probes have captured the current scene content revision and the renderer
-reports bounded probe diffuse transfer, prefiltering, and overlap blending. A
-restrained, shadowless fixture fill keeps all nine evaluated subjects readable
-while preserving directional lighting, falloff, and probe contrast; it does not
-claim equal direct-key exposure. The image guard proves that the captured
-rendered result is populated, bounded, and keeps all nine subjects legible.
-This is evidence for the supported two-probe OpenGL foundation, not a
-production irradiance volume, probe grid, or guarantee of hidden/off-screen
-global illumination.
+`CAPTURE_READY_IBL_REFERENCE` is emitted only after the renderer reports:
+
+- generated irradiance cube ready at resolution 32;
+- seven-level prefilter chain ready;
+- split-sum BRDF LUT ready at resolution 128.
+
+The prefilter and split-sum integration use bounded 128-sample Hammersley sequences.
+
+The checker verifies:
+
+- visible roughness resolution across the prefiltered environment response;
+- bounded image output;
+- all nine close-view subjects remain readable.
+
+The shared UV-sphere fixture keeps triangle winding aligned with authored outward normals.
+
+Production HDRI authoring, probe-grid blending, and universal IBL accuracy remain future work.
+
+## Scene-probe reference
+
+`SCENE_PROBE_REFERENCE` is rendered-only and uses the same nine-subject calibration fixture.
 
 ```text
 --capture-realism-reference scene_probe wide|close rendered
 ```
 
-The package also exposes a separate lighting reference fixture. It uses nine
-same-material UV-sphere subjects, scene-owned directional/key/fill/rim light
-sources, the shared ground receiver, real shadow maps, and the same OpenGL
-Rendered path. Its purpose is to isolate spatial light response from the PBR
-material board; it does not replace the PBR fixture or claim production
-lighting, global illumination, or cinematic light-authoring coverage.
+Readiness requires two enabled local probes with the current scene content revision. The renderer must report:
 
-The lighting fixture is selected explicitly and remains deterministic:
+- bounded probe diffuse transfer;
+- probe prefiltering;
+- overlap blending.
+
+A restrained shadowless fill keeps all nine subjects readable while directional lighting, falloff, and probe contrast remain visible.
+
+The image guard requires populated, bounded output and nine legible subjects.
+
+The current two-probe OpenGL foundation does not provide a production irradiance volume, production probe grid, or guaranteed hidden/off-screen global illumination.
+
+## Lighting and shadow reference
+
+The lighting fixture isolates spatial light response using:
+
+- nine same-material UV-sphere subjects;
+- scene-owned directional/key/fill/rim light sources;
+- the shared ground receiver;
+- real shadow maps;
+- the ordinary OpenGL Rendered path.
 
 ```text
 --capture-realism-reference lighting wide|close solid|material_preview|rendered
 ```
 
-Each lighting capture emits `CAPTURE_READY_LIGHTING_REFERENCE` metadata. The
-lighting checker requires nine settled, centered subjects, stable composition
-across Solid, Material Preview, and Rendered, a meaningful Rendered-versus-
-Preview difference, and a measurable luminance difference between deterministic
-subject regions. The Rendered readiness path also fails closed unless the
-directional, cascade, and point shadow targets are complete, and records that
-shadow contract in the capture metadata. The existing PBR close checker
-continues to require contact-shadow contrast; together these checks cover the
-initial reference-scene lighting/shadow contract without treating automated
-metrics as human visual approval. The lighting profile captures Rendered twice
-and bounds the repeat-to-repeat image difference, guarding deterministic
-shadow/light output across fresh runs without claiming temporal anti-aliasing
-or hardware-independent pixel identity.
+Each lighting capture emits `CAPTURE_READY_LIGHTING_REFERENCE` metadata.
 
-The package also exposes a dedicated subsurface reference fixture. It uses nine
-same-camera, same-geometry, same-light UV-sphere subjects and captures the
-bounded material response at three explicit variants:
+The checker requires:
+
+- nine settled centered subjects;
+- stable composition across Solid, Material Preview, and Rendered;
+- a meaningful Rendered/Material Preview difference;
+- measurable luminance differences between deterministic subject regions.
+
+Rendered readiness also requires complete directional, cascade, and point shadow targets and records that state in capture metadata.
+
+The PBR close checker independently requires contact-shadow contrast.
+
+The lighting profile captures Rendered twice and bounds repeat-to-repeat image difference. This guards deterministic shadow/light output across fresh runs. Temporal anti-aliasing and hardware-independent pixel identity are not claimed by this test.
+
+## Subsurface reference
+
+The subsurface fixture uses nine subjects with the same camera, geometry, and lighting and captures three authored variants:
 
 ```text
 --capture-realism-reference sss close opaque rendered
@@ -214,169 +380,158 @@ bounded material response at three explicit variants:
 --capture-realism-reference sss close thick rendered
 ```
 
-The SSS checker requires matching composition metadata, nine settled subjects,
-and measurable image and center-subject color response between the opaque,
-thin, and thick variants. This proves that authored subsurface amount and
-thickness reach the OpenGL material path with a stable pixel response. It does
-not promote the bounded three-lobe approximation to production multi-scatter,
-screen-space, or ray-traced subsurface transport.
+The checker requires:
 
-The Windows visual-evidence harness exposes the scene with:
+- matching composition metadata;
+- nine settled subjects;
+- measurable image response between variants;
+- measurable center-subject color response between variants.
 
-```text
---capture-realism-reference wide|close solid|material_preview|rendered
---capture-realism-reference normal_map wide|close solid|material_preview|rendered
---capture-realism-reference color_space wide|close solid|material_preview|rendered
---capture-realism-reference ibl wide|close rendered
---capture-realism-reference scene_probe wide|close rendered
---capture-realism-reference lighting wide|close solid|material_preview|rendered
---capture-realism-reference sss close opaque|thin|thick rendered
---capture-realism-reference ssgi wide|close rendered
---capture-realism-reference ssgi_motion wide|close rendered output_directory
-```
+This validates that authored subsurface amount and thickness reach the OpenGL material path with stable pixel response.
 
-The ordinary reference captures emit `CAPTURE_READY_REFERENCE` metadata proving the selected
-PBR reference view, all nine settled subjects, the deterministic camera, and
-the centered reference bounds. Lighting captures emit the corresponding
-lighting-prefixed metadata and use the dedicated lighting checker. These are
-calibration and regression fixtures, not proof that every material or renderer
-effect is production-complete. The SSGI motion profile emits its own
-`CAPTURE_READY_SSGI_MOTION_REFERENCE` phase records as described below.
-The IBL reference emits `CAPTURE_READY_IBL_REFERENCE` only after the generated
-irradiance, prefilter, and BRDF resources report ready; it is rendered-only
-because its contract concerns the actual environment-lighting path.
+Production multi-scatter, screen-space, and ray-traced subsurface transport remain future work.
 
-The SSGI reference is Rendered-only because the bounded indirect-diffuse term
-is a fullscreen post-process over the HDR color and depth targets:
+## SSGI reference and motion evidence
+
+### Static SSGI reference
+
+The SSGI profile is Rendered-only because the current indirect-diffuse term runs as a fullscreen post-process over HDR color and depth.
 
 ```text
 --capture-realism-reference ssgi wide|close rendered
 ```
 
-It emits `CAPTURE_READY_SSGI_REFERENCE` only after the renderer reports that
-the screen-space indirect path was enabled for a settled frame. The checker
-also requires the deterministic nine-subject composition and a non-flat
-image; close captures additionally require every evaluated subject patch to
-remain visibly legible. It also applies bounded fixture-specific sanity limits for excessive
-HDR clipping, over-bright pixels, and bright subject-edge halos. This is an
-activation, presentation-stability, and gross-artifact guard for the current
-supported OpenGL path, not proof that every pixel receives indirect light or
-that subtle leaks, camera-motion stability, and performance are solved.
-For this reference, readiness also requires at least two enabled local probes
-captured at a nonzero current generation with zero capture failures. The
-motion and performance profiles carry the same probe-health fields. This is a
-fixture and evidence-health condition, not a claim that SSGI can see hidden or
-off-screen geometry.
+`CAPTURE_READY_SSGI_REFERENCE` is emitted only after the renderer reports an active screen-space indirect path for a settled frame.
 
-The motion-stability reference is a separate Rendered-only capture:
+The checker requires:
+
+- deterministic nine-subject composition;
+- non-flat image content;
+- all evaluated subject patches remain legible in close capture;
+- bounded HDR clipping;
+- bounded over-bright pixels;
+- bounded bright subject-edge halos;
+- at least two enabled local probes;
+- nonzero current probe generation;
+- zero probe-capture failures.
+
+The motion and performance profiles carry the same probe-health fields.
+
+These checks cover activation, presentation stability, and gross artifacts in the supported OpenGL reference.
+
+### Motion-stability reference
 
 ```text
 --capture-realism-reference ssgi_motion close rendered output_directory
 ```
 
-It emits settled `before` and `after` readiness records from one process,
-applies one bounded in-process camera translation, and requests the next
-completed frames through Henka's application-owned OpenGL framebuffer
-readback. The Windows harness converts those bounded readbacks to inspection
-images and verifies the deterministic camera delta, matching dimensions,
-non-flat content, gross brightness limits, bounded luminance-distribution
-change, and a real sampled pixel difference. This guards current-frame
-continuity in the supported OpenGL path without claiming artifact-free motion
-at every speed, full temporal reconstruction quality, or production global
-illumination.
+The motion profile emits `CAPTURE_READY_SSGI_MOTION_REFERENCE` records for settled `before` and `after` phases from one process.
 
-Each phase also reports temporal history readiness, allocation failures, and
-motion-vector readiness. The static baseline may begin with the safe fallback
-before its first history copy; once history is valid, both settled and moved
-perspective frames keep the bounded jitter/resolve path active, and the moved
-phase must report a valid history, enabled jitter, and a nonzero resolve count.
+The capture flow:
 
-The performance reference is a separate Rendered-only measurement:
+1. settles the initial frame;
+2. performs one bounded in-process camera translation;
+3. requests completed frames through application-owned OpenGL framebuffer readback;
+4. converts the bounded readbacks into inspection images.
+
+The Windows harness verifies:
+
+- deterministic camera delta;
+- matching dimensions;
+- non-flat content;
+- gross brightness bounds;
+- bounded luminance-distribution change;
+- a real sampled pixel difference.
+
+Each phase also reports:
+
+- temporal history readiness;
+- allocation failures;
+- motion-vector readiness.
+
+The static baseline can begin with the safe fallback before its first history copy. Once history is valid, settled and moved perspective frames keep the bounded jitter/resolve path active. The moved phase must report valid history, enabled jitter, and a nonzero resolve count.
+
+This evidence covers current-frame continuity for the supported OpenGL fixture. Artifact-free motion at every speed, complete temporal reconstruction quality, and production global illumination remain future work.
+
+## SSGI performance evidence
 
 ```text
 --capture-realism-reference ssgi_performance close rendered
 ```
 
-It holds the same nine-subject reference at a fixed 1280x720 viewport, waits
-for three settled frames, then records 32 bounded frame, scene-CPU, and
-available OpenGL scene-GPU timing samples while the SSGI path is active. The
-checker requires the timer query to be available and rejects a gross GPU
-runaway above the 100 ms reference budget. The budget is a regression guard
-for this fixed supported OpenGL reference; it is not a universal frame-rate
-promise or an isolated SSGI-shader cost measurement.
+The performance reference uses the same nine-subject scene at a fixed `1280x720` viewport.
+
+The measurement flow:
+
+1. wait for three settled frames;
+2. record 32 bounded frame-time samples;
+3. record 32 bounded scene-CPU timing samples;
+4. record available OpenGL scene-GPU timing samples while SSGI is active.
+
+The checker requires timer-query availability and rejects gross GPU runaway above the 100 ms reference budget.
+
+The 100 ms threshold is a fixed-reference regression budget. It is not a universal frame-rate target or an isolated SSGI shader-cost measurement.
 
 ## Screen-space indirect diffuse lighting
 
-Rendered presentation also contains a bounded screen-space indirect diffuse approximation. It reconstructs the current receiver position and normal from depth, samples nearby visible HDR surfaces in eight directions, rejects samples outside bounded distance and thickness limits, caps source radiance, and adds the gathered indirect contribution in HDR before bloom and tone mapping.
+Rendered presentation contains a bounded screen-space indirect-diffuse approximation.
 
-The purpose is to introduce visible local diffuse light transfer and color bleeding while preserving the existing OpenGL baseline.
-The screen-space gather uses symmetric receiver-depth reconstruction, depth-edge confidence, and a small cross-filter on source radiance. Those filters intentionally suppress unstable high-frequency contributions at silhouettes, thin geometry, and other screen-space discontinuities instead of allowing the indirect term to amplify subpixel edge variation.
+For each receiver, the path:
 
-Each sampled source surface also contributes through a bounded reconstructed
-source-facing response, so back-facing depth samples do not contribute as if
-they were valid emitters. This reduces screen-space light leaks while keeping
-the approximation conservative when source-neighbor depth is unavailable.
+- reconstructs current position and normal from depth;
+- samples nearby visible HDR surfaces in eight directions;
+- rejects samples outside bounded distance and thickness limits;
+- caps source radiance;
+- adds gathered indirect contribution in HDR before bloom and tone mapping.
 
-The close-reference image guard checks subject-edge brightness against a paired
-outward background sample rather than treating every bright sky or ground pixel
-in a fixed annulus as a halo. A localized bright annulus still fails the guard;
-ordinary scene illumination and background gradients do not.
+The gather uses:
 
-This is not full global illumination. The screen-space method cannot see geometry that is outside the current view, hidden behind another surface, or otherwise absent from the depth/color buffers. It is single-frame and bounded; it does not claim multi-bounce transport, probe-volume GI, hardware ray tracing, or path tracing.
+- symmetric receiver-depth reconstruction;
+- depth-edge confidence;
+- a small cross-filter on source radiance;
+- bounded reconstructed source-facing response.
+
+Back-facing depth samples do not contribute as valid emitters. Source-neighbor depth failure keeps the approximation conservative.
+
+The close-reference image guard compares subject-edge brightness with a paired outward background sample. A localized bright annulus fails the guard. Normal scene illumination and background gradients remain valid.
+
+Current screen-space indirect diffuse cannot see geometry that is outside the current view, hidden behind another surface, or absent from the depth/color buffers. Multi-bounce transport, probe-volume GI, hardware ray tracing, and path tracing are not implemented by this path.
 
 ## Scene-probe diffuse transfer
 
-When the Rendered path has a captured scene-reflection probe, opaque scene
-materials can also receive a bounded local diffuse color-transfer approximation
-from five clamped cubemap samples around the receiver normal. This reuses the
-existing scene-probe capture boundary and is reported through
-`rendered_reflection_probe_diffuse_active`; the SSGI reference metadata requires
-the screen-space indirect path, probe-diffuse path, seven-level probe prefilter,
-and bounded two-probe overlap path to be active.
+Captured scene-reflection probes can provide opaque materials with a bounded local diffuse color-transfer approximation.
 
-This is scene-space support for the current reference fixture, not a full
-irradiance volume or global-illumination solution. It does not provide
-probe-grid blending, production irradiance filtering, multi-bounce transport,
-or guaranteed hidden/off-screen contribution beyond what the captured probe
-contains. Missing shader support or an unavailable probe fails closed to the
-existing environment-lighting path.
+The path uses five clamped cubemap samples around the receiver normal and reports activation through `rendered_reflection_probe_diffuse_active`.
 
-Local reflection-probe specular now allocates and generates seven cubemap mip
-levels (64, 32, 16, 8, 4, 2, and 1 pixels per face). The material roughness LOD
-selection therefore has a real bounded filtered source instead of requesting
-roughness levels from a level-zero-only texture. The generated chain is a
-stability and plausibility improvement for the supported OpenGL path; it is
-not a production GGX convolution or probe-grid system. When two captured probe
-volumes contain a receiver, the renderer deterministically ranks a primary and
-secondary probe and blends their specular and diffuse contributions with a
-bounded inverse-score weight. If only one capture is valid, it promotes that
-capture and uses the shared environment fallback otherwise. This is a bounded
-overlap path, not a production probe-grid or multi-probe filtering solution.
+SSGI reference readiness requires:
 
-## Direction
+- screen-space indirect diffuse active;
+- probe diffuse active;
+- seven-level probe prefilter active;
+- bounded two-probe overlap active.
 
-The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes deterministic normal-map, color-space, energy-response, IBL, exposure-range, and bounded subsurface-response fixtures in addition to the PBR and lighting fixtures. Important follow-up tracks are:
+Missing shader support or unavailable probe data falls back to the existing environment-lighting path.
 
-1. extend the PBR, lighting, and HDR reference scenes to validate roughness/metallic response, deeper IBL calibration, and light/shadow stability; dedicated normal-map, color-space, bounded energy-response, and initial IBL activation foundations are now in place;
-2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined; the current SSS fixture only guards the existing bounded response;
-3. extend the bounded screen-space indirect diffuse validation for leaks, halos, over-brightening, and deeper hardware-specific performance characterization; current activation, camera-motion, and gross fixed-reference performance guards are in place;
-4. extend the current scene-probe diffuse foundation into a bounded
-   irradiance-probe or probe-grid solution that can represent off-screen and
-   hidden contributors with explicit capture, filtering, blending, and
-   performance contracts;
+### Probe overlap behavior
 
-5. extend local reflection-probe placement, capture policy, and interaction with
-   indirect diffuse lighting; bounded two-probe overlap blending is now part of
-   the supported OpenGL foundation, while probe-grid scale and production
-   filtering remain future work. The current bounded SSR path now consumes
-   per-pixel roughness, while planar, hierarchical, and off-screen reflection
-   coverage remain future work;
-6. retain rasterization as the broad hardware baseline while designing future renderer-backend boundaries for optional hardware ray tracing;
-7. consider a path-traced reference renderer later as a visual ground-truth tool, even if production games continue to use hybrid real-time rendering.
+When two captured probe volumes contain a receiver, the renderer:
+
+1. deterministically ranks a primary and secondary probe;
+2. computes bounded inverse-score weights;
+3. blends specular contributions;
+4. blends diffuse contributions.
+
+When one capture is valid, that probe is used. The shared environment path remains the fallback when no local capture is valid.
+
+This is a bounded overlap implementation. Production probe-grid filtering, irradiance volumes, guaranteed hidden/off-screen contribution, and multi-bounce transport remain future work.
 
 ## Exposure and HDR-range reference
 
-The renderer applies viewport exposure in linear HDR before the final ACES-style tone map. The public engine boundary accepts finite exposure values from -16 to +16 stops and rejects invalid values. The deterministic HDR-range reference captures the same nine-subject fixture, camera, layout, environment, and rendered path at three explicit settings:
+The renderer applies viewport exposure in linear HDR before the final ACES-style tone map.
+
+The public engine boundary accepts finite exposure values from `-16` to `+16` stops and rejects invalid values.
+
+The deterministic HDR-range reference captures the same nine-subject fixture, camera, layout, environment, and Rendered path at:
 
 ```text
 --capture-realism-reference hdr close -2 rendered
@@ -384,6 +539,44 @@ The renderer applies viewport exposure in linear HDR before the final ACES-style
 --capture-realism-reference hdr close 2 rendered
 ```
 
-The `HDR_RANGE_REFERENCE` profile records the requested exposure in readiness metadata and `scripts/check_hdr_range_visual_evidence_windows.ps1` verifies that the captures retain the same composition, show a monotonic luminance response, remain spatially non-flat, and do not become overwhelmingly clipped at +2 stops. This proves bounded exposure/HDR response in the supported OpenGL presentation path; it does not claim automatic exposure, HDR display calibration, or full HDR mastering.
+`HDR_RANGE_REFERENCE` readiness records the requested exposure.
 
-Spectral rendering is not part of the current implementation. It should remain research work until RGB PBR, indirect lighting, material import, color management, and reference-scene validation are mature.
+`scripts/check_hdr_range_visual_evidence_windows.ps1` verifies:
+
+- identical composition;
+- monotonic luminance response;
+- spatially non-flat output;
+- bounded clipping at `+2` stops.
+
+This validates the supported OpenGL exposure/HDR response. Automatic exposure, HDR display calibration, and full HDR mastering remain future work.
+
+Spectral rendering is not part of the current implementation. It remains research work until RGB PBR, indirect lighting, material import, color management, and reference-scene validation are mature.
+
+## Direction
+
+Future realism work should continue to use deterministic reference scenes and concrete visual defects as its evidence base.
+
+Current reference coverage includes:
+
+- PBR material response;
+- lighting and shadows;
+- normal mapping;
+- texture color space;
+- bounded energy response;
+- IBL activation and roughness response;
+- local scene probes;
+- exposure/HDR range;
+- bounded subsurface response;
+- SSGI activation;
+- SSGI motion continuity;
+- bounded fixed-reference SSGI performance.
+
+### Follow-up tracks
+
+1. Extend PBR, lighting, and HDR references for roughness/metallic response, deeper IBL calibration, and light/shadow stability.
+2. Replace the bounded subsurface approximation when production SSS profile, thickness, ownership, and performance contracts are defined.
+3. Extend screen-space indirect-diffuse validation for leaks, halos, over-brightening, and deeper hardware-specific performance characterization.
+4. Extend scene-probe diffuse transfer into a bounded irradiance-probe or probe-grid system with explicit capture, filtering, blending, and performance contracts.
+5. Extend local reflection-probe placement, capture policy, and indirect-diffuse integration. Bounded two-probe overlap and roughness-aware SSR remain current foundations. Planar, hierarchical, off-screen, and production probe-grid reflection remain future work.
+6. Retain rasterization as the broad hardware baseline while future renderer backends prepare for optional hardware ray tracing.
+7. Evaluate a path-traced reference renderer later as a visual ground-truth tool for renderer development.
