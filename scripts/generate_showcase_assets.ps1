@@ -799,6 +799,67 @@ function New-Material {
     return $material
 }
 
+function Get-ShowcaseLatticeValue {
+    param(
+        [int]$X,
+        [int]$Y,
+        [int]$CellsX,
+        [int]$CellsY,
+        [int]$Seed
+    )
+    if ($CellsX -lt 1 -or $CellsY -lt 1) {
+        throw "Showcase texture noise requires positive lattice dimensions."
+    }
+    $wrappedX = $X % $CellsX
+    $wrappedY = $Y % $CellsY
+    if ($wrappedX -lt 0) { $wrappedX += $CellsX }
+    if ($wrappedY -lt 0) { $wrappedY += $CellsY }
+    $hash = [Math]::Sin(
+        ($wrappedX * 127.1) +
+        ($wrappedY * 311.7) +
+        ($Seed * 74.3)) * 43758.5453
+    return $hash - [Math]::Floor($hash)
+}
+
+function Get-ShowcaseTileableNoise {
+    param(
+        [double]$U,
+        [double]$V,
+        [int]$CellsX,
+        [int]$CellsY,
+        [int]$Seed
+    )
+    if ($U -lt 0.0 -or $U -gt 1.0 -or $V -lt 0.0 -or $V -gt 1.0) {
+        throw "Showcase texture noise coordinates must be normalized."
+    }
+    $x = $U * $CellsX
+    $y = $V * $CellsY
+    $x0 = [int][Math]::Floor($x)
+    $y0 = [int][Math]::Floor($y)
+    $tx = $x - $x0
+    $ty = $y - $y0
+    $fadeX = $tx * $tx * (3.0 - (2.0 * $tx))
+    $fadeY = $ty * $ty * (3.0 - (2.0 * $ty))
+    $v00 = Get-ShowcaseLatticeValue $x0 $y0 $CellsX $CellsY $Seed
+    $v10 = Get-ShowcaseLatticeValue ($x0 + 1) $y0 $CellsX $CellsY $Seed
+    $v01 = Get-ShowcaseLatticeValue $x0 ($y0 + 1) $CellsX $CellsY $Seed
+    $v11 = Get-ShowcaseLatticeValue ($x0 + 1) ($y0 + 1) $CellsX $CellsY $Seed
+    $xTop = $v00 + (($v10 - $v00) * $fadeX)
+    $xBottom = $v01 + (($v11 - $v01) * $fadeX)
+    return $xTop + (($xBottom - $xTop) * $fadeY)
+}
+
+function Get-ShowcaseDetailNoise {
+    param(
+        [double]$U,
+        [double]$V,
+        [int]$Seed
+    )
+    $coarse = Get-ShowcaseTileableNoise $U $V 7 5 $Seed
+    $fine = Get-ShowcaseTileableNoise $U $V 19 17 ($Seed + 17)
+    return (0.62 * $coarse) + (0.38 * $fine)
+}
+
 function Write-ShowcaseTexture {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -911,21 +972,25 @@ function Write-ShowcaseTexture {
                     }
                 }
                 elseif ($Kind -eq "normal") {
-                    $frequency = if ($Subject -eq "giraffe") { 0.34 } else { 0.52 }
-                    $nx = 0.12 * [Math]::Sin(($x + 3) * $frequency) * [Math]::Cos(($y + 7) * ($frequency * 0.73))
-                    $ny = 0.10 * [Math]::Cos(($y + 5) * ($frequency * 0.91)) * [Math]::Sin(($x + 11) * ($frequency * 0.61))
+                    $seed = if ($Subject -eq "giraffe") { 19 } else { 47 }
+                    $nxField = Get-ShowcaseDetailNoise $u $v $seed
+                    $nyField = Get-ShowcaseDetailNoise $v $u ($seed + 13)
+                    $nx = 0.10 * (($nxField * 2.0) - 1.0)
+                    $ny = 0.08 * (($nyField * 2.0) - 1.0)
                     $nz = [Math]::Sqrt([Math]::Max(0.0, 1.0 - ($nx * $nx) - ($ny * $ny)))
                     $red = [int][Math]::Round(128.0 + (127.0 * $nx))
                     $green = [int][Math]::Round(128.0 + (127.0 * $ny))
                     $blue = [int][Math]::Round(255.0 * $nz)
                 }
                 else {
-                    $variation = 0.5 + (0.5 * [Math]::Sin(($x + 2) * 0.24 + ($y + 5) * 0.17))
+                    $variation = Get-ShowcaseDetailNoise $u $v $(if ($Subject -eq "giraffe") { 73 } else { 101 })
+                    $microVariation = Get-ShowcaseTileableNoise $u $v 43 37 $(if ($Subject -eq "giraffe") { 89 } else { 127 })
+                    $variation = (0.78 * $variation) + (0.22 * $microVariation)
                     $roughness = if ($Subject -eq "giraffe") {
-                        120.0 + (58.0 * $variation)
+                        118.0 + (64.0 * $variation)
                     }
                     else {
-                        82.0 + (78.0 * $variation)
+                        88.0 + (86.0 * $variation)
                     }
                     $red = 255
                     $green = [int][Math]::Round($roughness)
