@@ -1300,15 +1300,15 @@ function New-Giraffe {
         # Profiled joint collars bridge the upper and lower limb volumes;
         # a rounded ball made the leg read as a toy connector in close views.
         Add-AnatomicalLoft $joint `
-            @(0.76, 0.81, 0.88, 0.95, 1.00) `
-            @(0.100, 0.115, 0.120, 0.110, 0.090) `
-            @(0.095, 0.110, 0.120, 0.110, 0.090) `
+            @(0.80, 0.84, 0.89, 0.94, 0.98) `
+            @(0.070, 0.082, 0.090, 0.082, 0.065) `
+            @(0.070, 0.082, 0.090, 0.082, 0.065) `
             $legXBase `
             @(
                 ($legZBase + 0.010),
-                ($legZBase + 0.020),
-                ($legZBase + 0.026),
-                ($legZBase + 0.020),
+                ($legZBase + 0.015),
+                ($legZBase + 0.018),
+                ($legZBase + 0.015),
                 ($legZBase + 0.010)) 48
     }
     # Model the ears as tapered, leaf-like profiles in the head plane. The

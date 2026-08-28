@@ -73,8 +73,8 @@ if ($giraffeGeneratorText -notmatch 'foreach \(\$hoofSide in @\(-1\.0, 1\.0\)\)'
 }
 if ($giraffeGeneratorText -notmatch 'Add-AnatomicalLoft \$joint' -or
     $giraffeGeneratorText -match 'Add-Ellipsoid \$joint' -or
-    $giraffeGeneratorText -notmatch '0\.76, 0\.81, 0\.88, 0\.95, 1\.00' -or
-    $giraffeGeneratorText -notmatch '0\.100, 0\.115, 0\.120, 0\.110, 0\.090') {
+    $giraffeGeneratorText -notmatch '0\.80, 0\.84, 0\.89, 0\.94, 0\.98' -or
+    $giraffeGeneratorText -notmatch '0\.070, 0\.082, 0\.090, 0\.082, 0\.065') {
     throw "Showcase giraffe leg joints must use a tapered authored transition rather than rounded ellipsoid connectors."
 }
 
