@@ -241,6 +241,13 @@ henka_result henka_audio_emitter_get_config(
 henka_result henka_audio_emitter_get_voice_info(
     const henka_audio_emitter* emitter,
     henka_audio_voice_info* out_info);
+/* Controls the voice owned by an emitter. Stop is idempotent for an already
+ * stopped emitter; restart recreates the generation-checked voice from the
+ * retained resident clip and authored configuration. Both operations reject
+ * a destroyed scene entity and preserve the borrowed-object lifetime rules. */
+henka_result henka_audio_emitter_stop(henka_audio_emitter* emitter);
+henka_result henka_audio_emitter_restart(henka_audio_emitter* emitter);
+bool henka_audio_emitter_is_playing(const henka_audio_emitter* emitter);
 
 /* Mixes bounded stereo float PCM. output_interleaved must contain at least
  * frame_count * HENKA_AUDIO_OUTPUT_CHANNELS floats. The buffer is cleared

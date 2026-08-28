@@ -160,8 +160,8 @@ static henka_lua_token_class henka_lua_word_class(
         "while"
     };
     static const char* const builtins[] = {
-        "Entity", "Events", "Input", "Interaction", "Physics", "State",
-        "Transform"
+        "Audio", "Entity", "Events", "Input", "Interaction", "Physics",
+        "State", "Transform"
     };
     size_t index;
     if (source == NULL)

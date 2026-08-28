@@ -438,6 +438,72 @@ static int henka_lua_interaction_try(lua_State* state)
     return 1;
 }
 
+static int henka_lua_audio_stop(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value argument;
+    henka_script_api_value output;
+    uint64_t entity;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity))
+    {
+        return luaL_error(state, "Audio.Stop requires a non-negative integer entity ID");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    if (henka_lua_invoke_host(
+            backend, HENKA_SCRIPT_API_AUDIO_STOP, &argument, 1U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT)
+    {
+        return luaL_error(state, "Audio.Stop failed");
+    }
+    lua_pushinteger(state, (lua_Integer)output.as.result);
+    return 1;
+}
+
+static int henka_lua_audio_restart(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value argument;
+    henka_script_api_value output;
+    uint64_t entity;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity))
+    {
+        return luaL_error(state, "Audio.Restart requires a non-negative integer entity ID");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    if (henka_lua_invoke_host(
+            backend, HENKA_SCRIPT_API_AUDIO_RESTART, &argument, 1U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT)
+    {
+        return luaL_error(state, "Audio.Restart failed");
+    }
+    lua_pushinteger(state, (lua_Integer)output.as.result);
+    return 1;
+}
+
+static int henka_lua_audio_is_playing(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value argument;
+    henka_script_api_value output;
+    uint64_t entity;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity))
+    {
+        return luaL_error(state, "Audio.IsPlaying requires a non-negative integer entity ID");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    if (henka_lua_invoke_host(
+            backend, HENKA_SCRIPT_API_AUDIO_IS_PLAYING, &argument, 1U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_BOOL)
+    {
+        return luaL_error(state, "Audio.IsPlaying is unavailable in this runtime");
+    }
+    lua_pushboolean(state, output.as.boolean);
+    return 1;
+}
+
 static int henka_lua_events_emit(lua_State* state)
 {
     henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
@@ -606,6 +672,12 @@ static void henka_lua_register_api(henka_lua_behavior_backend* backend)
         backend->state, backend, "Physics", "ApplyImpulse", henka_lua_physics_apply_impulse);
     henka_lua_register_api_function(
         backend->state, backend, "Interaction", "Try", henka_lua_interaction_try);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "Stop", henka_lua_audio_stop);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "Restart", henka_lua_audio_restart);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "IsPlaying", henka_lua_audio_is_playing);
     henka_lua_register_api_function(
         backend->state, backend, "Events", "Emit", henka_lua_events_emit);
     henka_lua_register_api_function(

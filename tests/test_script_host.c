@@ -214,7 +214,7 @@ int main(void)
     int result = 1;
 
     if (henka_script_api_schema_get(&functions, &count) != HENKA_SUCCESS ||
-        functions == NULL || count != 11U)
+        functions == NULL || count != 14U)
     {
         goto cleanup;
     }

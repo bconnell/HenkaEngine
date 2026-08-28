@@ -706,6 +706,87 @@ static void test_input_and_interaction_host_contract(void)
         HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH);
 }
 
+static henka_result test_audio_dispatch(
+    void* user_data,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value)
+{
+    bool* playing = (bool*)user_data;
+    if (playing == NULL || arguments == NULL || out_value == NULL ||
+        argument_count != 1U ||
+        arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+        arguments[0].as.entity != 99U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (api_id == HENKA_SCRIPT_API_AUDIO_STOP)
+    {
+        *playing = false;
+    }
+    else if (api_id == HENKA_SCRIPT_API_AUDIO_RESTART)
+    {
+        *playing = true;
+    }
+    else if (api_id == HENKA_SCRIPT_API_AUDIO_IS_PLAYING)
+    {
+        out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
+        out_value->as.boolean = *playing;
+        return HENKA_SUCCESS;
+    }
+    else
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+    out_value->as.result = HENKA_SUCCESS;
+    return HENKA_SUCCESS;
+}
+
+static void test_audio_host_contract(void)
+{
+    henka_hks_program* program = compile_program(
+        "fn Control() { "
+        "entity target = event_other_entity(); "
+        "audio_stop(target); "
+        "audio_restart(target); "
+        "bool playing = audio_is_playing(target); "
+        "if (playing) { return 1; } "
+        "return 0; "
+        "}");
+    henka_script_host* host = NULL;
+    henka_hks_execution_context context;
+    henka_hks_execution_report report;
+    henka_hks_value value;
+    bool playing = true;
+    const uint32_t api_ids[] = {
+        HENKA_SCRIPT_API_AUDIO_STOP,
+        HENKA_SCRIPT_API_AUDIO_RESTART,
+        HENKA_SCRIPT_API_AUDIO_IS_PLAYING};
+
+    assert(henka_script_host_create(&host) == HENKA_SUCCESS);
+    for (size_t index = 0U; index < sizeof(api_ids) / sizeof(api_ids[0]); ++index)
+    {
+        assert(henka_script_host_bind_api(
+                   host, api_ids[index], &(size_t){0U}) == HENKA_SUCCESS);
+    }
+    assert(henka_script_host_set_dispatcher(
+               host, test_audio_dispatch, &playing) == HENKA_SUCCESS);
+    context = (henka_hks_execution_context){
+        host, 42U, 3U, 11U, false, 0U, 99U, 99U, 7U, true};
+    assert(henka_hks_execute_with_context(
+               program, 0U, 256U, &context, &value, &report) ==
+           HENKA_HKS_EXECUTION_COMPLETED);
+    assert(value.type == HENKA_HKS_TYPE_I32 && value.as.i32 == 1);
+    assert(playing);
+    henka_script_host_destroy(host);
+    henka_hks_program_destroy(program);
+    expect_diagnostic(
+        "fn Control() { audio_stop(1); }",
+        HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
@@ -725,6 +806,7 @@ int main(void)
     test_transform_and_physics_host_contract();
     test_state_host_contract();
     test_input_and_interaction_host_contract();
+    test_audio_host_contract();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_henkascript_tests: PASS");
     return 0;

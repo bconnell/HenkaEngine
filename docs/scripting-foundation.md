@@ -8,8 +8,8 @@ execution adapters for both languages.
 ## What is available
 
 - An immutable, versioned API schema with stable numeric IDs.
-- Explicit domains for Entity, Transform, Input, Physics, Interaction, and
-  Events.
+- Explicit domains for Entity, Transform, Input, Physics, Interaction, Events,
+  and Audio.
 - Fixed typed signatures with bounded parameter counts.
 - Bind-time lookup by numeric ID or diagnostic name.
 - A bounded Script Host that deduplicates resolved API bindings.
@@ -27,6 +27,9 @@ execution adapters for both languages.
   and non-reentrant; runtime mutation from a callback is rejected.
 - A bounded HenkaScript lexer/parser/type checker exposed through
   `<henka/henkascript.h>`.
+- The shared typed host surface includes `Audio.Stop(entity)`,
+  `Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` for persisted
+  object-attached emitters in Play; missing or stale targets fail closed.
 - The editor consumes HenkaScript token spans and compiler-owned lexical
   presentation classes from that same public API. Lua uses the corresponding
   bounded token and indentation APIs owned by its scripting backend. The editor
@@ -103,23 +106,27 @@ execution adapters for both languages.
   event queue.
 - The isolated Sandbox Play session binds the host to persistent Scene
   Document IDs for Entity validity, Transform position access, Physics impulse
-  application, and Events.Emit. Unsupported domains return safe deterministic
-  results rather than reaching through renderer or authoring pointers.
+  application, Audio emitter controls, and Events.Emit. Unsupported domains
+  return safe deterministic results rather than reaching through renderer or
+  authoring pointers.
 - The external-game template consumes the same public Scene Document behavior
   runtime without Sandbox source. Its packaged smoke path loads one `.hks`
   publisher and one `.lua` subscriber, then verifies a shared Henka event and
   typed state delivery from the external executable.
-- Lua behaviors can call the shared host surface through checked `Entity`,
-  `Transform`, `Input`, `Physics`, `Interaction`, and `Events` tables. In the
-  current Sandbox Play dispatcher all six domains are operational when the
-  coordinator supplies the live input engine and camera observer snapshot.
+- Lua behaviors can call the shared host surface through checked `Audio`,
+  `Entity`, `Transform`, `Input`, `Physics`, `Interaction`, and `Events` tables.
+  In the current Sandbox Play dispatcher all seven domains are exposed; Input and
+  Interaction require their live providers, while Audio requires a configured
+  system and persisted enabled emitter.
   Without those providers, `Input.IsActionDown` is fail-closed to `false` and
   `Interaction.Try` is unavailable, returning the stable `UNAVAILABLE` result.
   HenkaScript has the matching
   `input_is_action_down(action_id)` and `interaction_try(entity)` host calls
   with the same provider requirements. The HenkaScript surface can call the
-  shared `Entity.IsValid` operation and exposes the same event identity through
-  the bounded `emit(i32_event_id);` builtin. Both languages can receive the same
+  shared `Entity.IsValid` operation, the `audio_stop(entity)`,
+  `audio_restart(entity)`, and `audio_is_playing(entity)` emitter controls, and
+  exposes the same event identity through the bounded `emit(i32_event_id);`
+  builtin. Both languages can receive the same
   queued event through `OnEvent`; Lua receives `(event_id, source_entity)` and
   HenkaScript reads the event ID through `event_id()`.
 - The Scene behavior runtime drains only the events present at the beginning

@@ -971,6 +971,39 @@ henka_result henka_audio_emitter_create_with_clip(
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_audio_emitter_play_internal(
+    henka_audio_emitter* emitter)
+{
+    henka_audio_voice_desc voice_desc;
+    if (emitter == NULL || emitter->system == NULL || emitter->scene == NULL ||
+        emitter->clip == NULL || emitter->clip->samples == NULL ||
+        emitter->clip->frame_count == 0U ||
+        !henka_scene_is_entity_valid(emitter->scene, emitter->entity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (emitter->voice != HENKA_INVALID_AUDIO_VOICE_ID &&
+        henka_audio_voice_is_valid(emitter->system, emitter->voice))
+    {
+        return HENKA_SUCCESS;
+    }
+    voice_desc = (henka_audio_voice_desc){
+        emitter->config.bus,
+        emitter->config.gain,
+        emitter->config.pitch,
+        emitter->config.min_distance,
+        emitter->config.max_distance,
+        emitter->config.looping,
+        emitter->config.spatial};
+    return henka_audio_voice_play(
+        emitter->system,
+        emitter->scene,
+        emitter->entity,
+        emitter->clip,
+        &voice_desc,
+        &emitter->voice);
+}
+
 henka_result henka_audio_emitter_create(
     henka_audio_system* system,
     const char* project_root,
@@ -1035,6 +1068,55 @@ bool henka_audio_emitter_is_valid(const henka_audio_emitter* emitter)
     return emitter != NULL && emitter->system != NULL && emitter->scene != NULL &&
         henka_scene_is_entity_valid(emitter->scene, emitter->entity) &&
         henka_audio_voice_is_valid(emitter->system, emitter->voice);
+}
+
+henka_result henka_audio_emitter_stop(henka_audio_emitter* emitter)
+{
+    henka_result result;
+    if (emitter == NULL || emitter->system == NULL || emitter->scene == NULL ||
+        !henka_scene_is_entity_valid(emitter->scene, emitter->entity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (emitter->voice == HENKA_INVALID_AUDIO_VOICE_ID)
+    {
+        return HENKA_SUCCESS;
+    }
+    result = henka_audio_voice_stop(emitter->system, emitter->voice);
+    if (result == HENKA_SUCCESS ||
+        !henka_audio_voice_is_valid(emitter->system, emitter->voice))
+    {
+        emitter->voice = HENKA_INVALID_AUDIO_VOICE_ID;
+        return HENKA_SUCCESS;
+    }
+    return result;
+}
+
+henka_result henka_audio_emitter_restart(henka_audio_emitter* emitter)
+{
+    henka_result result;
+    if (emitter == NULL || emitter->system == NULL || emitter->scene == NULL ||
+        emitter->clip == NULL || !henka_scene_is_entity_valid(
+            emitter->scene, emitter->entity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (emitter->voice != HENKA_INVALID_AUDIO_VOICE_ID)
+    {
+        result = henka_audio_voice_stop(emitter->system, emitter->voice);
+        if (result != HENKA_SUCCESS &&
+            henka_audio_voice_is_valid(emitter->system, emitter->voice))
+        {
+            return result;
+        }
+        emitter->voice = HENKA_INVALID_AUDIO_VOICE_ID;
+    }
+    return henka_audio_emitter_play_internal(emitter);
+}
+
+bool henka_audio_emitter_is_playing(const henka_audio_emitter* emitter)
+{
+    return henka_audio_emitter_is_valid(emitter);
 }
 
 henka_result henka_audio_emitter_get_config(

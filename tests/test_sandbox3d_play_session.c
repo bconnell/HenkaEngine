@@ -195,6 +195,43 @@ int main(void)
             goto cleanup;
         }
     }
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = object_id}};
+    if (henka_script_host_invoke(
+            script_host,
+            HENKA_SCRIPT_API_AUDIO_STOP,
+            arguments,
+            1U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+        output.as.result != HENKA_SUCCESS ||
+        henka_audio_system_get_active_voice_count(audio_system) != 0U ||
+        henka_script_host_invoke(
+            script_host,
+            HENKA_SCRIPT_API_AUDIO_IS_PLAYING,
+            arguments,
+            1U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_BOOL || output.as.boolean ||
+        henka_script_host_invoke(
+            script_host,
+            HENKA_SCRIPT_API_AUDIO_RESTART,
+            arguments,
+            1U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+        output.as.result != HENKA_SUCCESS ||
+        henka_audio_system_get_active_voice_count(audio_system) != 1U ||
+        henka_script_host_invoke(
+            script_host,
+            HENKA_SCRIPT_API_AUDIO_IS_PLAYING,
+            arguments,
+            1U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_BOOL || !output.as.boolean)
+    {
+        goto cleanup;
+    }
     if (sandbox3d_play_session_reload_behavior(
             session, object_id, 10U, &reload_diagnostic) != HENKA_SUCCESS ||
         reload_diagnostic.result != HENKA_SUCCESS ||

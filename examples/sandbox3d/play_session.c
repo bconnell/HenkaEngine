@@ -366,6 +366,42 @@ static henka_result sandbox3d_play_session_script_dispatch(
                 session->observer_position);
             return HENKA_SUCCESS;
 
+        case HENKA_SCRIPT_API_AUDIO_STOP:
+        case HENKA_SCRIPT_API_AUDIO_RESTART:
+        case HENKA_SCRIPT_API_AUDIO_IS_PLAYING:
+            if (argument_count != 1U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            snapshot_index = sandbox3d_play_session_find_snapshot(
+                session, arguments[0].as.entity);
+            if (snapshot_index == SIZE_MAX ||
+                session->audio_emitters[snapshot_index] == NULL)
+            {
+                if (api_id == HENKA_SCRIPT_API_AUDIO_IS_PLAYING)
+                {
+                    out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
+                    out_value->as.boolean = false;
+                    return HENKA_SUCCESS;
+                }
+                sandbox3d_play_session_set_result_value(
+                    out_value, HENKA_ERROR_INVALID_ARGUMENT);
+                return HENKA_SUCCESS;
+            }
+            if (api_id == HENKA_SCRIPT_API_AUDIO_IS_PLAYING)
+            {
+                out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
+                out_value->as.boolean = henka_audio_emitter_is_playing(
+                    session->audio_emitters[snapshot_index]);
+                return HENKA_SUCCESS;
+            }
+            result = api_id == HENKA_SCRIPT_API_AUDIO_STOP
+                ? henka_audio_emitter_stop(session->audio_emitters[snapshot_index])
+                : henka_audio_emitter_restart(session->audio_emitters[snapshot_index]);
+            sandbox3d_play_session_set_result_value(out_value, result);
+            return HENKA_SUCCESS;
+
         default:
             return HENKA_ERROR_INVALID_ARGUMENT;
     }

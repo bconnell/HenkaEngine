@@ -45,6 +45,15 @@ static henka_result lua_host_dispatch(
             out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
             out_value->as.boolean = false;
             return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_AUDIO_STOP:
+        case HENKA_SCRIPT_API_AUDIO_RESTART:
+            out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+            out_value->as.result = HENKA_SUCCESS;
+            return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_AUDIO_IS_PLAYING:
+            out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
+            out_value->as.boolean = true;
+            return HENKA_SUCCESS;
         case HENKA_SCRIPT_API_EVENTS_EMIT:
             if (argument_count != 2U ||
                 henka_script_host_emit_event(
@@ -187,6 +196,9 @@ static void test_lua_shared_host_api(void)
         "Physics.ApplyImpulse(9, {x = 0, y = -1, z = 0}); "
         "Input.IsActionDown(1); "
         "Interaction.Try(9); "
+        "Audio.Stop(9); "
+        "Audio.Restart(9); "
+        "Audio.IsPlaying(9); "
         "Events.Emit(7, 9) "
         "end end";
     henka_lua_behavior_backend* backend = NULL;
@@ -209,7 +221,7 @@ static void test_lua_shared_host_api(void)
         0.016f, 3U, 128U, host};
     assert(henka_lua_behavior_backend_callback(
                &context, backend, &used) == HENKA_SCRIPT_CALLBACK_COMPLETED);
-    assert(used > 0U && fixture.calls == 7U);
+    assert(used > 0U && fixture.calls == 10U);
     assert(henka_script_host_poll_event(host, &event) == HENKA_SUCCESS);
     assert(event.event_id == 7U && event.source_entity == 9U && event.frame_index == 3U);
     henka_script_host_destroy(host);

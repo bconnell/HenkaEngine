@@ -52,9 +52,16 @@ integrations must preserve the
 renderer-free dedicated-server path and add real imported or authored-object
 coverage rather than test-only entities.
 
+The shared Script Host exposes typed `Audio.Stop(entity)`,
+`Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` bindings to both Lua and
+HenkaScript in Play. They operate on the persisted object-to-emitter mapping;
+missing or stale emitter bindings fail closed, while `IsPlaying` reports false.
+
 ## Future work
 
 Streaming long-form assets, broader decoder coverage, mixer effects, broader hot
-reload policy, editor controls, scripting bindings, package/runtime proof, device-loss
+reload policy, editor controls, package/runtime proof, device-loss
 notification/hot-plug policy, and broader spatial/occlusion features remain
-future work. None of those gaps are hidden by the current Foundation status.
+future work. The current script bindings cover only the three typed emitter
+controls above; broader Audio scripting remains unfinished. None of those gaps
+are hidden by the current Foundation status.

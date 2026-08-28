@@ -380,9 +380,14 @@ authoritative section below.
   budgets, device diagnostics, authored-listener application, production-camera
   listener mapping, transactional stream recovery after device loss, and
   manager-owned resident WAV reload that preserves borrowed clip identity.
-  Streamed long-form assets, broader decoder support, scripting/editor integration,
-  packaged runtime proof, and broader format support remain in progress. The
-  current runtime core and output boundary are single-owner for voice commands
+  The shared Script Host exposes typed `Audio.Stop(entity)`,
+  `Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` bindings to both Lua
+  and HenkaScript in Play. They resolve the same persisted object-to-emitter
+  mapping used by the runtime and fail closed for missing or stale action
+  targets. Streamed long-form assets, broader decoder support, editor
+  integration, packaged runtime proof, and broader format support remain in
+  progress. The current runtime core and output boundary are single-owner for
+  voice commands
   and mixing; device-thread synchronization remains outside this scope.
 
 ## Known Gaps
