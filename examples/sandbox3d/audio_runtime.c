@@ -16,6 +16,7 @@ struct sandbox3d_audio_runtime
     henka_result output_result;
     double frame_accumulator;
     uint32_t max_pump_frames;
+    henka_audio_emitter* preview_emitter;
 };
 
 static bool sandbox3d_audio_runtime_has_signal(
@@ -92,9 +93,69 @@ void sandbox3d_audio_runtime_destroy(
     {
         return;
     }
+    henka_audio_emitter_destroy(runtime->preview_emitter);
+    runtime->preview_emitter = NULL;
     henka_audio_output_destroy(runtime->output);
     henka_audio_system_destroy(runtime->system);
     henka_free(runtime);
+}
+
+henka_result sandbox3d_audio_runtime_start_preview(
+    sandbox3d_audio_runtime* runtime,
+    henka_scene* scene,
+    henka_asset_manager* assets,
+    henka_entity entity,
+    const henka_audio_emitter_config* config)
+{
+    henka_audio_clip* clip = NULL;
+    henka_audio_emitter* candidate = NULL;
+    henka_result result;
+
+    if (runtime == NULL || scene == NULL || assets == NULL ||
+        !sandbox3d_audio_runtime_is_output_available(runtime) ||
+        !henka_scene_is_entity_valid(scene, entity) || config == NULL ||
+        !config->enabled ||
+        henka_audio_emitter_config_validate(config) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_assets_load_audio_clip(assets, config->clip_path, &clip);
+    if (result != HENKA_SUCCESS || clip == NULL)
+    {
+        return result != HENKA_SUCCESS ? result : HENKA_ERROR_ASSET_SOURCE;
+    }
+    result = henka_audio_emitter_create_with_clip(
+        runtime->system,
+        scene,
+        entity,
+        clip,
+        config,
+        &candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    henka_audio_emitter_destroy(runtime->preview_emitter);
+    runtime->preview_emitter = candidate;
+    return HENKA_SUCCESS;
+}
+
+void sandbox3d_audio_runtime_stop_preview(
+    sandbox3d_audio_runtime* runtime)
+{
+    if (runtime == NULL)
+    {
+        return;
+    }
+    henka_audio_emitter_destroy(runtime->preview_emitter);
+    runtime->preview_emitter = NULL;
+}
+
+bool sandbox3d_audio_runtime_is_preview_playing(
+    const sandbox3d_audio_runtime* runtime)
+{
+    return runtime != NULL && runtime->preview_emitter != NULL &&
+        henka_audio_emitter_is_playing(runtime->preview_emitter);
 }
 
 bool sandbox3d_audio_runtime_is_output_available(

@@ -53,9 +53,16 @@ asset manager, attaches it to a real scene entity, mixes it through the live
 emitter, and reaches the SDL output boundary. This is deterministic
 production-path coverage for one resident PCM WAV fixture, not broad packaged
 content coverage.
-Those integrations must preserve the
-renderer-free dedicated-server path and add real imported or authored-object
-coverage rather than test-only entities.
+Audio integrations preserve the renderer-free dedicated-server path. Integration
+coverage includes real imported or authored objects.
+
+The Sandbox Object Details panel provides an Audio group for authored scene
+objects. It edits the persisted clip path, enabled, looping, and spatial
+settings through the existing Game Authoring transaction. Preview and Stop
+Preview use the reusable Audio runtime helper: the asset manager owns the
+resident clip, the scene owns the entity, and the Audio runtime owns the
+temporary emitter. Preview replacement is transactional and failed asset
+loads leave the active preview unchanged.
 
 The shared Script Host exposes typed `Audio.Stop(entity)`,
 `Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` bindings to both Lua and
@@ -65,7 +72,7 @@ missing or stale emitter bindings fail closed, while `IsPlaying` reports false.
 ## Future work
 
 Streaming long-form assets, broader decoder coverage, mixer effects, broader hot
-reload policy, editor controls, expanded packaged-content coverage,
+reload policy, expanded packaged-content coverage,
 device-loss notification/hot-plug policy, and broader spatial/occlusion features
 remain future work. The current script bindings cover only the three typed emitter
 controls above; broader Audio scripting remains unfinished. None of those gaps

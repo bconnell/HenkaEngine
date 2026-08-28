@@ -74,6 +74,7 @@ void henka_test_sandbox3d_editor_ui(void)
     HENKA_TEST_ASSERT(state.details_overview_expanded);
     HENKA_TEST_ASSERT(state.details_transform_expanded);
     HENKA_TEST_ASSERT(state.details_materials_expanded);
+    HENKA_TEST_ASSERT(!state.details_audio_expanded);
     HENKA_TEST_ASSERT(!state.details_physics_expanded);
     HENKA_TEST_ASSERT(!state.details_interaction_expanded);
     HENKA_TEST_ASSERT(!state.details_actions_expanded);
@@ -86,7 +87,7 @@ void henka_test_sandbox3d_editor_ui(void)
     HENKA_TEST_ASSERT(
         state.details_group_order[
             SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT - 1U] ==
-            SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS);
+            SANDBOX3D_EDITOR_DETAILS_GROUP_AUDIO);
 
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         state.controls_scroll_offset, 0.0f, 0.0001f);
@@ -142,6 +143,7 @@ void henka_test_sandbox3d_editor_ui(void)
     stored.details_overview_expanded = false;
     stored.details_transform_expanded = false;
     stored.details_materials_expanded = true;
+    stored.details_audio_expanded = true;
     stored.details_physics_expanded = true;
     stored.details_interaction_expanded = true;
     stored.details_actions_expanded = true;
@@ -220,6 +222,11 @@ void henka_test_sandbox3d_editor_ui(void)
     HENKA_TEST_ASSERT(
         henka_settings_get_bool(
             settings,
+            "ui.object_details.audio.expanded",
+            false));
+    HENKA_TEST_ASSERT(
+        henka_settings_get_bool(
+            settings,
             "ui.object_details.physics.expanded",
             false));
     HENKA_TEST_ASSERT(
@@ -249,10 +256,11 @@ void henka_test_sandbox3d_editor_ui(void)
     HENKA_TEST_ASSERT(
         henka_settings_get_int(
             settings,
-            "ui.object_details.group_order.6",
+            "ui.object_details.group_order.7",
             -1) == SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS);
 
     sandbox3d_editor_ui_state_load(settings, &state);
+    HENKA_TEST_ASSERT(state.details_audio_expanded);
     HENKA_TEST_ASSERT(
         state.details_group_order[
             SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT - 1U] ==
@@ -489,6 +497,7 @@ void henka_test_sandbox3d_editor_ui(void)
     HENKA_TEST_ASSERT(!state.controls_workspace_expanded);
     HENKA_TEST_ASSERT(state.controls_viewer_expanded);
     HENKA_TEST_ASSERT(!state.details_actions_expanded);
+    HENKA_TEST_ASSERT(!state.details_audio_expanded);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(state.controls_scroll_offset, 0.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(state.controls_content_height, 0.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(state.details_scroll_offset, 0.0f, 0.0001f);

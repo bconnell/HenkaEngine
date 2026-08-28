@@ -10354,6 +10354,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Tools QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
+    printf("  Select an authored scene object and open Object Details > Audio to edit its persisted clip path, enabled, looping, and spatial settings; Preview and Stop Preview use the real scene entity and manager-owned Audio asset.\n");
      printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, bounded loose Vertex/Edge Extrude, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge. The same Edge-mode amount control routes one open boundary edge through bounded face-normal surface-connected Edge Extrude; broader surface-connected Vertex/Edge Extrude remains unfinished. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Tools panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
@@ -24214,6 +24215,7 @@ static void sandbox3d_draw_object_details_panel(
     char action_label[32];
     char add_hks_action_id[64];
     char add_lua_action_id[64];
+    char audio_summary[128];
     char authoring_face_text[48];
     char behavior_summary[64];
     char clear_action_id[64];
@@ -24824,6 +24826,8 @@ details_group_dispatch:
             goto details_group_authoring;
         case SANDBOX3D_EDITOR_DETAILS_GROUP_PHYSICS:
             goto details_group_physics;
+        case SANDBOX3D_EDITOR_DETAILS_GROUP_AUDIO:
+            goto details_group_audio;
         case SANDBOX3D_EDITOR_DETAILS_GROUP_INTERACTION:
             goto details_group_interaction;
         case SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS:
@@ -29719,6 +29723,225 @@ details_group_physics:
                         stop_play_requested = true;
                         goto details_groups_complete;
                     }
+                }
+            }
+        }
+    }
+    }
+    goto details_group_dispatch;
+
+details_group_audio:
+    {
+    bool clip_changed = false;
+    (void)sandbox3d_details_flow_disclosure(
+        state,
+        flow_desc.bounds,
+        "object_details.audio",
+        "Audio",
+        SANDBOX3D_EDITOR_DETAILS_GROUP_AUDIO,
+        details_display_order,
+        &state->editor_ui.details_audio_expanded,
+        &disclosure_changed);
+    if (state->editor_ui.details_audio_expanded)
+    {
+        if (!authored_object_available)
+        {
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    22.0f,
+                    1U,
+                    &row))
+            {
+                sandbox3d_draw_value_row(
+                    state->ui,
+                    row.x,
+                    row.y,
+                    row.width,
+                    "Emitter",
+                    "No authored scene object");
+            }
+        }
+        else
+        {
+            (void)snprintf(
+                audio_summary,
+                sizeof(audio_summary),
+                "%s / %s%s",
+                authored_object.audio.enabled ? "Enabled" : "Disabled",
+                authored_object.audio.spatial ? "Spatial" : "2D",
+                sandbox3d_audio_runtime_is_preview_playing(state->audio_runtime)
+                    ? " / Previewing"
+                    : "");
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    22.0f,
+                    1U,
+                    &row))
+            {
+                sandbox3d_draw_value_row(
+                    state->ui,
+                    row.x,
+                    row.y,
+                    row.width,
+                    "Emitter",
+                    audio_summary);
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    26.0f,
+                    1U,
+                    &row))
+            {
+                const float label_width = 66.0f;
+                (void)henka_ui_label(
+                    state->ui,
+                    row.x,
+                    row.y + 5.0f,
+                    0.9f,
+                    "Clip Path");
+                if (henka_ui_text_field(
+                        state->ui,
+                        "game_authoring_audio_clip_path",
+                        (henka_ui_rect){
+                            row.x + label_width,
+                            row.y,
+                            row.width - label_width,
+                            row.height},
+                        authored_object.audio.clip_path,
+                        sizeof(authored_object.audio.clip_path),
+                        &clip_changed) != HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(
+                        state,
+                        true,
+                        "Audio clip path was rejected; use a confined project-relative path.");
+                }
+                if (clip_changed &&
+                    !sandbox3d_commit_game_authoring_object(
+                        state,
+                        entity,
+                        &authored_object))
+                {
+                    sandbox3d_set_status(
+                        state,
+                        true,
+                        "Audio clip path was rejected; authored Audio remains unchanged.");
+                }
+                else if (clip_changed)
+                {
+                    sandbox3d_set_status(
+                        state,
+                        false,
+                        "Audio clip path updated; Save Scene to persist it.");
+                }
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    26.0f,
+                    1U,
+                    &row))
+            {
+                const float gap = 6.0f;
+                const float button_width = (row.width - gap * 2.0f) / 3.0f;
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_audio_enabled",
+                        (henka_ui_rect){row.x, row.y, button_width, row.height},
+                        authored_object.audio.enabled ? "Disable" : "Enable") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    authored_object.audio.enabled = !authored_object.audio.enabled;
+                    if (!sandbox3d_commit_game_authoring_object(
+                            state,
+                            entity,
+                            &authored_object))
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Audio enable change was rejected; authored Audio remains unchanged.");
+                    }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_audio_looping",
+                        (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
+                        authored_object.audio.looping ? "Loop On" : "Loop Off") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    authored_object.audio.looping = !authored_object.audio.looping;
+                    if (!sandbox3d_commit_game_authoring_object(
+                            state,
+                            entity,
+                            &authored_object))
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Audio looping change was rejected; authored Audio remains unchanged.");
+                    }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_audio_spatial",
+                        (henka_ui_rect){row.x + (button_width + gap) * 2.0f, row.y, button_width, row.height},
+                        authored_object.audio.spatial ? "3D On" : "2D On") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    authored_object.audio.spatial = !authored_object.audio.spatial;
+                    if (!sandbox3d_commit_game_authoring_object(
+                            state,
+                            entity,
+                            &authored_object))
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Audio spatial-mode change was rejected; authored Audio remains unchanged.");
+                    }
+                }
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    26.0f,
+                    1U,
+                    &row))
+            {
+                const float gap = 6.0f;
+                const float button_width = (row.width - gap) * 0.5f;
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_audio_preview",
+                        (henka_ui_rect){row.x, row.y, button_width, row.height},
+                        "Preview") &&
+                    sandbox3d_audio_runtime_start_preview(
+                        state->audio_runtime,
+                        state->scene,
+                        henka_engine_get_asset_manager(engine),
+                        entity,
+                        &authored_object.audio) != HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(
+                        state,
+                        true,
+                        "Audio preview failed; check that the enabled clip path is valid.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_audio_stop_preview",
+                        (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
+                        "Stop Preview"))
+                {
+                    sandbox3d_audio_runtime_stop_preview(state->audio_runtime);
+                    sandbox3d_set_status(
+                        state,
+                        false,
+                        "Audio preview stopped.");
                 }
             }
         }

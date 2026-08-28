@@ -44,4 +44,19 @@ henka_result sandbox3d_audio_runtime_validate_fixture(
     henka_asset_manager* assets,
     const henka_camera* camera);
 
+/* Starts a preview on a real scene entity using a manager-owned resident clip.
+ * A successful start replaces the prior preview atomically; failed validation
+ * leaves the existing preview unchanged. The runtime owns the emitter while
+ * the asset manager owns the borrowed clip. */
+henka_result sandbox3d_audio_runtime_start_preview(
+    sandbox3d_audio_runtime* runtime,
+    henka_scene* scene,
+    henka_asset_manager* assets,
+    henka_entity entity,
+    const henka_audio_emitter_config* config);
+void sandbox3d_audio_runtime_stop_preview(
+    sandbox3d_audio_runtime* runtime);
+bool sandbox3d_audio_runtime_is_preview_playing(
+    const sandbox3d_audio_runtime* runtime);
+
 #endif

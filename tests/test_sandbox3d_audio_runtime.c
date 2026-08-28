@@ -1,12 +1,15 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <henka/henka.h>
 #include <henka/audio.h>
+#include <henka/memory.h>
 #include <henka/scene.h>
 
 #include "../examples/sandbox3d/audio_runtime.h"
+#include "../engine/src/henka_internal.h"
 
 int main(void)
 {
@@ -18,6 +21,8 @@ int main(void)
     henka_audio_emitter_config emitter_config =
         henka_audio_emitter_config_default();
     henka_audio_system* audio_system = NULL;
+    henka_asset_manager* assets = NULL;
+    henka_engine engine;
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_audio_output_info output_info;
     float mixed_samples[16U * HENKA_AUDIO_OUTPUT_CHANNELS];
@@ -97,11 +102,61 @@ int main(void)
         fprintf(stderr, "sandbox audio runtime output failed: result=%d open=%d rate=%u pumped=%llu\n", (int)audio_result, output_info.device_open, (unsigned int)output_info.sample_rate, (unsigned long long)output_info.pumped_frames);
         goto cleanup;
     }
+
+    henka_audio_emitter_destroy(emitter);
+    emitter = NULL;
+    memset(&engine, 0, sizeof(engine));
+    engine.asset_base_path = ".";
+    assets = (henka_asset_manager*)henka_malloc(sizeof(*assets));
+    if (assets == NULL)
+    {
+        fprintf(stderr, "sandbox audio runtime preview manager allocation failed\n");
+        goto cleanup;
+    }
+    memset(assets, 0, sizeof(*assets));
+    assets->engine = &engine;
+    audio_result = sandbox3d_audio_runtime_start_preview(
+        runtime,
+        scene,
+        assets,
+        entity,
+        &emitter_config);
+    if (audio_result != HENKA_SUCCESS ||
+        !sandbox3d_audio_runtime_is_preview_playing(runtime))
+    {
+        fprintf(stderr, "sandbox audio runtime preview start failed: %d\n", (int)audio_result);
+        goto cleanup;
+    }
+    (void)snprintf(
+        emitter_config.clip_path,
+        sizeof(emitter_config.clip_path),
+        "%s",
+        "assets/audio/missing-preview.wav");
+    audio_result = sandbox3d_audio_runtime_start_preview(
+        runtime,
+        scene,
+        assets,
+        entity,
+        &emitter_config);
+    if (audio_result == HENKA_SUCCESS ||
+        !sandbox3d_audio_runtime_is_preview_playing(runtime))
+    {
+        fprintf(stderr, "sandbox audio runtime preview replacement was not transactional: %d\n", (int)audio_result);
+        goto cleanup;
+    }
+    sandbox3d_audio_runtime_stop_preview(runtime);
+    if (sandbox3d_audio_runtime_is_preview_playing(runtime))
+    {
+        fprintf(stderr, "sandbox audio runtime preview stop failed\n");
+        goto cleanup;
+    }
     exit_code = 0;
 
 cleanup:
+    sandbox3d_audio_runtime_stop_preview(runtime);
     henka_audio_emitter_destroy(emitter);
     henka_audio_clip_destroy(clip);
+    henka_asset_manager_destroy(assets);
     sandbox3d_audio_runtime_destroy(runtime);
     if (scene != NULL && entity != HENKA_INVALID_ENTITY)
     {
