@@ -79,7 +79,8 @@ Current Action API v1 coverage includes:
 - camera focus when a camera context exists
 - dry-run validation with structured results
 
-The engine still owns authority. Tests, tools, and future workspace panels request actions through a context instead of reaching into scene state blindly.
+The engine still owns authority. Tests, tools, and future workspace panels
+request actions through a context that validates access to scene state.
 
 ### Engine lifecycle and authoring ownership
 
@@ -87,7 +88,7 @@ Each engine instance owns copied application, asset-base, and user-data path str
 
 Close and explicit exit requests stop before another update or render. The renderer retains frame ownership after a failed main swap so the engine can attempt a checked abort. Detached-window UI is drawn and presented before the main window is presented; a detached-window failure therefore aborts the still-unpresented main frame. This is a best-effort multi-window commit boundary. Atomic operating-system presentation is not claimed.
 
-These ownership and transaction boundaries also prepare future 2.5D and modeling work. Editable authoring data should retain stable identities and undoable source state, then compile into runtime rendering and physics data instead of sharing low-level GPU-resource lifetime directly.
+These ownership and transaction boundaries also prepare future 2.5D and modeling work. Editable authoring data should retain stable identities and undoable source state, then compile into runtime rendering and physics data with separate low-level GPU-resource lifetimes.
 
 The sandbox authoring wrapper now exposes a bounded Edge-mode loop selection
 operation. Starting from the active edge, it walks opposite edges through both

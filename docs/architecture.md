@@ -45,7 +45,7 @@ later layers above this boundary. Candidate reload failures preserve bounded
 compiler/backend source diagnostics through this boundary. The current
 Sandbox exposes bounded transactional template attachment and a source-panel
 Reload action above it; that action delegates to the same candidate-first
-coordinator seam rather than defining a second runtime path.
+coordinator seam.
 
 ### Network boundary
 
@@ -249,7 +249,8 @@ The current interaction rules pause camera movement and mouse look while the UI 
 - The engine also owns the asset manager and fallback assets.
 - The engine resolves runtime assets relative to the executable directory by default, which keeps packaged sandbox runs independent from the repository root.
 - The engine also resolves a local user data base path beside the executable by default, which keeps sandbox settings local to the runnable folder.
-- The engine can also draw an optional UI context after the 3D scene, which keeps sandbox overlays inside the engine render path instead of requiring an external UI dependency.
+- The engine can also draw an optional UI context after the 3D scene, keeping
+  sandbox overlays inside the engine render path through its own UI context.
 - The sandbox reads object selection and details from the scene plus sandbox-owned descriptors. Saved scene files and editor-only data models are not used for this path.
 - The sandbox does not include SDL, Windows, or OpenGL headers.
 - OpenGL stays in renderer implementation files.
@@ -274,13 +275,13 @@ The next steps should continue building upward from these boundaries:
   modeling, UV, rigging, and animation workflows
 ## Viewport shading
 
-The Scene View owns an explicit shading mode. It does not rely on a global polygon toggle. Wireframe draws neutral geometry edges without texture sampling. Solid draws neutral filled surfaces under a neutral editor surface policy while preserving explicit unlit line materials for the editor grid. Material Preview uses the same bounded Cook–Torrance material evaluation and Scene View-sized linear HDR-to-display presentation as Rendered, with deterministic editor lighting instead of scene lighting. Both HDR modes use validated scene-owned environment controls for visible surroundings and diffuse/specular response; Rendered derives its transactional IBL resources from the same environment texture. Rendered uses scene light policy, optional bounded scene fog, exposure, tone mapping, bloom, camera- and object-motion history reprojection, two fitted directional shadow cascades with an overlap blend at their transition, a second bounded depth map for the first enabled spot light, and a bounded cubemap for the first enabled point light. The built-in material shader supplies bounded camera- and object-motion plus reactive attachments; the presentation pass performs depth rejection, history clamping, and bounded reconstruction sharpening, while temporal invalidation and fallback state remain observable. Production TAA remains future work until its documented visual cases are validated. Blended materials render after opaque and masked geometry through a bounded back-to-front queue with deterministic entity-order overflow fallback. Unlit materials bypass lighting, reserved procedural materials are rejected until a real shader model exists, and helper overlays retain their own materials. Mode changes do not rewrite scene materials, and the renderer restores a filled polygon baseline before UI and detached-window presentation. The sandbox studio environment is generated as a linear periodic equirectangular source and validated before IBL ownership, avoiding presentation seams from discontinuous fixture pixels.
+The Scene View owns an explicit shading mode. It does not rely on a global polygon toggle. Wireframe draws neutral geometry edges without texture sampling. Solid draws neutral filled surfaces under a neutral editor surface policy while preserving explicit unlit line materials for the editor grid. Material Preview uses the same bounded Cook–Torrance material evaluation and Scene View-sized linear HDR-to-display presentation as Rendered, with deterministic editor lighting. Both HDR modes use validated scene-owned environment controls for visible surroundings and diffuse/specular response; Rendered derives its transactional IBL resources from the same environment texture. Rendered uses scene light policy, optional bounded scene fog, exposure, tone mapping, bloom, camera- and object-motion history reprojection, two fitted directional shadow cascades with an overlap blend at their transition, a second bounded depth map for the first enabled spot light, and a bounded cubemap for the first enabled point light. The built-in material shader supplies bounded camera- and object-motion plus reactive attachments; the presentation pass performs depth rejection, history clamping, and bounded reconstruction sharpening, while temporal invalidation and fallback state remain observable. Production TAA remains future work until its documented visual cases are validated. Blended materials render after opaque and masked geometry through a bounded back-to-front queue with deterministic entity-order overflow fallback. Unlit materials bypass lighting, reserved procedural materials are rejected until a real shader model exists, and helper overlays retain their own materials. Mode changes do not rewrite scene materials, and the renderer restores a filled polygon baseline before UI and detached-window presentation. The sandbox studio environment is generated as a linear periodic equirectangular source and validated before IBL ownership, avoiding presentation seams from discontinuous fixture pixels.
 
 Directional shadow receiver filtering uses a bounded 3x3 PCF kernel and expands
 to 5x5 only around a detected near-cascade blocker. It does not inject a
 minimum visibility value into confirmed occlusion, so contact shadows do not
 retain an artificial light leak. Cascade selection uses interpolated forward
-view-space depth rather than radial camera distance, so the bounded near/far
+view-space depth, so the bounded near/far
 overlap remains stable when the camera looks across a wide scene. This improves
 cascade presentation without changing the fitted map ownership or the
 documented bounded-shadow fallback policy.

@@ -25,7 +25,7 @@
 
 - Keep files focused on a single responsibility.
 - Prefer small headers with explicit includes over tangled transitive dependencies.
-- Remove dead code instead of parking it for later.
+- Remove dead code.
 - Do not add future-only stubs that are not wired into the engine or tests.
 
 ## Rendering boundaries
@@ -43,6 +43,6 @@
 
 ## Scope discipline
 
-- Build the next useful layer without pretending later systems already exist.
+- Build the next useful layer and document later systems as future work.
 - Avoid speculative abstractions that are not needed by the current code.
 - Prefer a small real scene path over a large unfinished framework.

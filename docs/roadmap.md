@@ -94,7 +94,7 @@ These features should appear only when they are wired into the engine, tested, d
 
 ## Agent and automation interface
 
-Henka already has the beginning of the right architectural seam for agent-driven development: the local Action API lets tools and tests request validated engine operations and receive structured results without pretending to be a human operating the editor with a mouse.
+Henka already has the beginning of the right architectural seam for agent-driven development: the local Action API lets tools and tests request validated engine operations and receive structured results through semantic engine requests.
 
 The next goal is not to expose every editor control immediately. The agent surface should grow only as the underlying engine contracts become stable enough to make machine-driven operations deterministic, inspectable, and safe.
 
@@ -104,7 +104,7 @@ An MCP-compatible agent adapter becomes appropriate once the following foundatio
 
 1. Action targets use persistent Scene Document identities rather than relying on transient runtime entity handles.
 2. Action schemas and capability discovery are versioned so external agents can determine what the running Henka build actually supports.
-3. Authoring, scene, asset, play-session, and inspection operations have explicit authority and transaction boundaries instead of bypassing engine ownership.
+3. Authoring, scene, asset, play-session, and inspection operations have explicit authority and transaction boundaries owned by the engine.
 4. Requests support bounded validation, dry-run behavior where meaningful, structured failures, and enough result state to prove what changed.
 5. Local permission and user-approval boundaries prevent arbitrary code execution or silent access to capabilities outside the exposed tool surface.
 6. Agent actions produce auditable diagnostics suitable for the same executable validation harness used for normal development and regression testing.
@@ -112,11 +112,11 @@ An MCP-compatible agent adapter becomes appropriate once the following foundatio
 
 ### Planned integration
 
-Once those gates are met, Henka should expose the Action API through a thin standards-oriented adapter rather than building a second automation system. The preferred direction is an MCP-compatible semantic tool surface for desktop development agents, with WebMCP-compatible exposure considered where Henka later has an appropriate browser or web-hosted surface.
+Once those gates are met, Henka should expose the Action API through a thin standards-oriented adapter that reuses the engine's semantic operation surface. The preferred direction is an MCP-compatible semantic tool surface for desktop development agents, with WebMCP-compatible exposure considered where Henka later has an appropriate browser or web-hosted surface.
 
 The adapter should remain transport-level infrastructure. Engine authority, validation, transactions, identity, undo boundaries, diagnostics, and test evidence stay inside Henka so changing agent protocols does not change the engine's correctness model.
 
-Because MCP and WebMCP are evolving ecosystems, Henka should track their stable capability-discovery, schema, permission, and transport conventions and implement the adapter when doing so reduces custom automation instead of forcing premature compatibility work.
+Because MCP and WebMCP are evolving ecosystems, Henka should track their stable capability-discovery, schema, permission, and transport conventions and implement the adapter when doing so reduces custom automation. Compatibility work should follow a stable, justified integration boundary.
 
 Foreground mouse and keyboard automation remains useful for testing the human interface itself. It should not be the primary control path for an agent performing ordinary scene, authoring, inspection, or validation work when an equivalent semantic engine action exists.
 
@@ -201,7 +201,7 @@ Procedural shader work should come after the material system is stable enough to
 
 ## 2D and 2.5D direction
 
-Henka is planned to support 2D and 2.5D as first-class workflows, not as afterthoughts.
+Henka is planned to support 2D and 2.5D as first-class workflows.
 
 Planned 2D work includes:
 

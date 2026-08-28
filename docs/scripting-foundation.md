@@ -20,8 +20,8 @@ execution adapters for both languages.
   disabled/unbound/faulted states, and batch dispatch reports.
 - The same header exposes an immutable versioned lifecycle registry containing
   callback names and bounded argument shapes. Lua and HenkaScript adapters
-  consume that registry for callback discovery instead of maintaining separate
-  public lifecycle-name contracts.
+  consume that registry for callback discovery, keeping one public
+  lifecycle-name contract.
 - Behavior callbacks receive the shared language, entity, lifecycle event,
   frame, delta-time, and instruction-budget context. Dispatch is synchronous
   and non-reentrant; runtime mutation from a callback is rejected.

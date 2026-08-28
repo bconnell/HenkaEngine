@@ -113,7 +113,7 @@ region snapshots, restores revision/generation/dirty state transactionally, and
 provides deterministic Undo/Redo without owning the Terrain world. The Sandbox
 direct viewport mode emits one command per bounded cursor segment and refreshes
 collision and render owners after history actions; strokes stop at nonresident
-terrain rather than editing hidden data. Brush settings remain persisted through
+terrain and do not edit hidden data. Brush settings remain persisted through
 the existing Sandbox settings path, while asynchronous persistence scheduling
 is separate. The server authority path
 persists accepted commands synchronously through the storage transaction

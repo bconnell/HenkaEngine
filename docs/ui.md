@@ -46,7 +46,8 @@ The UI overlay draws through the existing renderer after the 3D scene.
 - OpenGL details stay inside renderer implementation files.
 - SDL details stay inside the platform layer.
 
-This keeps the public UI-facing API small and engine-oriented instead of exposing backend types directly.
+This keeps the public UI-facing API small and engine-oriented, with backend
+types kept private.
 
 ## Frame and transaction contract
 
@@ -78,7 +79,7 @@ If you hide the panels, a small in-window recall hint stays visible so the viewp
 The sandbox now uses a movable workspace layout with a restrained graphite and slate shell, mixed-case built-in text, lower-contrast one-pixel framing, flat secondary controls, underline-only tabs, compact switch toggles, quieter data-row separators, compact single-tab headers with icon-like drag grips, and docks that do not reserve large empty regions for sections hidden by the active workspace mode. The workspace model also has a bounded, validated single-root split topology: internal split nodes own their divider and ratio, leaf sections retain stable panel identity, and divider edits can be committed or rolled back transactionally. A right-click on section header chrome opens the required context menu; tool content retains right-click authority. Close, merge/tab-group, equalize, maximize/restore, native-detach, last-closed restoration, and available-singleton split actions are wired to the bounded topology/native-window paths. `Close this section` removes a complete multi-tab section, while the separate tab-close path removes only the active tab and a final-tab close removes the containing section; the previous topology is retained for last-closed restoration. The dock stack now projects visible section order from the validated topology, so closed and merged-away leaves no longer remain in legacy dock ordering. Merged sections expose bounded header tab controls, project the selected tab's content into the section, and support same-section tab reordering with click-preserving release and rollback on cancellation; the remaining topology editor workflow is still open:
 
 - left and right dock regions for panels
-- stacked multi-panel side docks that share space instead of covering each other
+- stacked multi-panel side docks that share space without overlap
 - a dedicated scene viewport in the center
 - a viewport frame that keeps the scene visually separate from the docked tools
 - header dragging that redocks across valid zones or opens native detached windows
@@ -196,7 +197,8 @@ The viewport now also supports direct navigation while mouse capture is released
 - `F`: frame the selected object
 - `Home`: reset the default camera view
 
-Mouse wheel input over the `Tools` or `Scene Objects` panels is routed to panel paging instead of the viewport, so panel interaction does not leak into scene zooming.
+Mouse wheel input over the `Tools` or `Scene Objects` panels is routed to panel
+paging; panel interaction does not leak into scene zooming.
 
 Normal startup and `Home` share the same scene-first framing path after the final Scene View size is known. When the default showcase pair is present, that path looks at the front side of the Giraffe and rocket around their shared midpoint. Capture mode reapplies its deterministic framing once after the final docked or full-viewport aspect is known, so laptop layouts do not crop one model. The sandbox keeps movement speed and other validated editor settings, but it no longer restores older transient camera-pose keys automatically on launch.
 

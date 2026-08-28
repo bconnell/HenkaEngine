@@ -1,8 +1,7 @@
 # Scene authoring architecture
 
 This document describes the durable ownership boundaries for Henka's Game
-Authoring Foundation. It is an architecture document, not an editor workflow
-checklist.
+Authoring Foundation and serves as an architecture reference for contributors.
 
 ## Two identities for one authored object
 
@@ -55,8 +54,7 @@ versioning, checksums, bounded records, and atomic replacement.
 
 For that reason, Scene Document V1 uses a deterministic little-endian binary
 format with the `HSCN` magic. This is a deliberate format choice based on the
-current repository capabilities, not an assumption that binary is inherently
-preferable.
+current repository capabilities.
 
 The V1 contract is:
 

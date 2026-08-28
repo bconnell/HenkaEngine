@@ -168,7 +168,8 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Open `Physics QA`. `Enable` starts the arranged multi-body demonstration. `Make Dynamic + Drop` instead activates only the selected supported body at its current transform, leaving unrelated samples still.
 - Open Utility > Terrain to inspect the live manager-owned Grass, Dirt, Rock, and Wet layer texture triplets. The Material layers section reports dimensions, GPU format, and resident/total mip counts for base color, normal, and metallic/roughness sources; it is read-only dependency inspection, while viewport material-preview authoring remains outside this bounded workflow.
 - `DRAG` marks a live panel header. Drag a docked panel header and release over a valid left or right outline to dock there.
-- If a side dock already contains a panel, the incoming panel stacks into the same side instead of covering it.
+- If a side dock already contains a panel, the incoming panel stacks into the
+  same side and shares its space.
 - Release away from the dock outlines to open a separate native tool window. Move or resize that window with the operating-system frame.
 - Close a detached tool window to return its panel to its last valid dock. Detached windows show matching controls, and a focused title-bar move into the main-window envelope requests bounded drag-back docking. `Reset Layout` recovers defaults.
 - Drag the narrow bars beside Scene View to resize occupied docks.
@@ -182,7 +183,7 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
 - Select each scene object and confirm the Object Details panel updates.
 - Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
-- Use the controls panel to reset the camera, save settings, and reset sandbox settings. Normal startup and `Home` share scene-first framing; older transient camera-pose settings are ignored rather than restored automatically.
+- Use the controls panel to reset the camera, save settings, and reset sandbox settings. Normal startup and `Home` share scene-first framing; older transient camera-pose settings are not restored automatically.
 - Use Add Cube in the object tools and confirm the new cube appears as a solid lit object, not just a selection outline. The core action remains renderer-independent; the sandbox attaches the visible mesh and material.
 - Select an object and use `M` or `G`, `R`, or `S` to start a move, rotate, or scale transform. Use `X`, `Y`, or `Z` to constrain it, then confirm or cancel.
 
@@ -195,7 +196,8 @@ Press `F4` to open the in-window sandbox panels. Press `F5` to cycle between:
 - Saved/custom layouts: preserve user-controlled panel topology and placement
 
 If you hide the panels, a small in-window hint stays in the viewport corner so you can still see that `F4` restores panels and `F5` changes layout.
-When the panels are visible, the scene stays inside its own dedicated viewport region instead of drawing underneath the docked panels.
+When the panels are visible, the scene stays inside its own dedicated viewport
+region, separate from the docked panels.
 
 If the panels do not appear when you expect them to, refresh the packaged sandbox with `.\scripts\package_sandbox3d_windows.ps1`, confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed, and try again.
 
@@ -317,7 +319,7 @@ Fixed physics substeps commit atomically. Scratch allocation failure and finite 
 The compact strip below Scene View keeps essential input-gate, gizmo, hovered-panel, panel-header, and workspace drag state visible while testing, so a rejected viewport or panel gesture can be diagnosed without switching views.
 `Object Use` in Object Details reports the optional object interaction prompt and range only; it is separate from transform tools and gizmo state.
 
-Workspace panel placement, dock sizes, bounded named layout slots, and the bounded scroll offsets for Controls Main and Object Details persist through the local settings file. Production panels can detach into separate OS-level windows with matching controls, safe close-to-redock recovery, bounded saved placement, title-bar drag-back recognition when a focused detached window enters the main-window envelope, and the same wheel/scrollbar behavior through detached-window input; shared side docks stack panels vertically instead of overlapping them. Detachable Scene View remains future work. `Native Panel Test` remains available for focused multi-window verification.
+Workspace panel placement, dock sizes, bounded named layout slots, and the bounded scroll offsets for Controls Main and Object Details persist through the local settings file. Production panels can detach into separate OS-level windows with matching controls, safe close-to-redock recovery, bounded saved placement, title-bar drag-back recognition when a focused detached window enters the main-window envelope, and the same wheel/scrollbar behavior through detached-window input; shared side docks stack panels vertically. Detachable Scene View remains future work. `Native Panel Test` remains available for focused multi-window verification.
 
 When the UI is open:
 
@@ -328,7 +330,8 @@ When the UI is open:
 - `Escape` closes the panel before it returns to the normal mouse-capture and exit flow
 
 Picking and gizmo hit testing both use the dedicated scene viewport. Clicks in docked panels or detached tool windows do not count as viewport picks or transform drags.
-Mouse wheel input over paged panels stays with those panels instead of zooming the scene.
+Mouse wheel input over paged panels stays with those panels and does not zoom
+the scene.
 
 ## Packaged runs
 

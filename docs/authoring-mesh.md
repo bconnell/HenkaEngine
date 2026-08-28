@@ -96,7 +96,7 @@ median transforms, while callers can select the other policies explicitly.
 Soft Move X+, Soft Move Y+, and Soft Move Z+ apply a bounded
 one-ring linear falloff: the active selection receives the full translation and
 directly adjacent vertices receive half strength. These are bounded generic
-selection/modeling operations rather than showcase-specific geometry rules, and
+selection/modeling operations with generic geometry rules, and
 the falloff is a foundation for shaping rather than final anatomy or mechanical
 topology proof.
 Face mode also exposes the selected face plus transactional material-region

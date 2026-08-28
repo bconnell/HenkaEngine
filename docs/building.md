@@ -165,9 +165,8 @@ same public Sandbox path to seed the bounded 2x2 fixture, prove the active
 camera's one-region CPU/physics/render demand window, cross into generated
 regions, and return to the original rendered region and collision patch while
 reporting request failures and resident-region capacity; collision validation
-uses the bounded overlap patch rather than claiming residency-wide coverage.
-This is a runtime streaming foundation check, not a claim of broad-world
-streaming or automatic background regeneration.
+uses the bounded overlap patch. Residency-wide coverage, broad-world streaming,
+and automatic background regeneration remain outside this check.
 
 ## Capture same-camera shading evidence
 
@@ -203,8 +202,8 @@ With `-IncludeTerrain`, the helper validates the three application-only
 Terrain images plus deterministic close-material and four-seeded-region corner
 views with the bounded Scene View guards. This proves packaged launch,
 Rendered-path distinction, and non-flat terrain framing at wide, material-scale,
-and corner views; it remains automated evidence rather than human visual
-approval or complete topology QA.
+and corner views. It is automated evidence; human visual approval and complete
+topology QA remain separate gates.
 
 If any runtime DLLs are needed beside the executable, the package script copies them into the same folder.
 
@@ -267,7 +266,7 @@ beside the executable, and runs the public-API Terrain consumer smokes. The
 test covers the Terrain material contract, shared edits, collision raycast, CPU
 render-mesh rebuild, transactional persistence, restart reload, and a
 graphical Rendered draw with HDR/shadow diagnostics. Repeated validation reuses
-that root instead of creating a complete timestamped nested build each time.
+that root, keeping temporary build structure stable and bounded.
 
 The packaged sandbox does not rely on the repository root as its working directory. Assets resolve relative to the executable folder by default.
 

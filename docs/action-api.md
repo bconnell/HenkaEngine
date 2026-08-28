@@ -79,7 +79,8 @@ That means internal gizmo helper pieces are not valid targets for:
 - visibility actions
 - camera focus
 
-This is one of the guardrails that keeps scene tools manipulating the real selected object instead of an internal helper.
+This guardrail keeps scene tools manipulating the real selected object through
+the engine-owned scene path.
 
 ## Current limitations
 

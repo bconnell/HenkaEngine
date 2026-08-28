@@ -234,7 +234,7 @@ authoritative section below.
   authoring sources now have bounded renderer-backed line and point evaluation.
   Mixed surface-plus-loose and no-face wire-plus-point sources now use bounded
   renderer-backed multi-primitive ownership, preserving triangle, wire, and
-  isolated-point parts instead of dropping or rejecting valid source geometry.
+  isolated-point parts from valid source geometry.
   Vertex-mode controls now add a loose vertex from finite X/Y/Z coordinates or
   add a standalone edge from exactly two selected vertices through the same
   transactional source/render/history boundary. Broader loose-component

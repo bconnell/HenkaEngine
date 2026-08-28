@@ -101,7 +101,7 @@ shaded mode. It writes generated images plus per-mode logs under
 40. Confirm window resize keeps a valid viewport and workspace layout.
 41. Confirm panel text is readable by eye.
 42. Confirm panel background contrast is readable against the workspace.
-43. Confirm the graphite and slate theme feels neutral and tool-focused instead of a black-and-blue personal theme.
+43. Confirm the graphite and slate theme feels neutral and tool-focused.
 44. Confirm the Tools panel `Main` and `Panels/Status` pages are readable and that page switching is obvious.
 45. Confirm the Scene Objects panel can reach every sample object through its page buttons or mouse wheel paging.
 46. Confirm utility tabs are readable and the active utility state is obvious.
@@ -258,7 +258,7 @@ Use `--primitive-gallery` when the engineering samples are specifically under te
 
 - Resize the window wider and taller.
 - The scene should remain visible and readable.
-- The camera view should continue to feel stable instead of stretching unpredictably.
+- The camera view should remain stable across the resize.
 
 ## What to record
 

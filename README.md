@@ -78,8 +78,8 @@ inspection, physics QA, materials, terrain, authoring, and layout tools. Panels
 can be docked or detached, and the workspace has validated split topology,
 tabs, named layout slots, bounded layout history, and reset-layout recovery.
 
-The Compass is a viewport instrument rather than a separate application: it
-tracks the active camera, supports axis snapping and orbit drag, and exposes
+The Compass is an integrated viewport instrument that tracks the active camera,
+supports axis snapping and orbit drag, and exposes
 projection and info-strip controls. Detailed controls are in
 [docs/help/sandbox3d.md](docs/help/sandbox3d.md) and
 [docs/editor-controls.md](docs/editor-controls.md).

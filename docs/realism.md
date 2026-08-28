@@ -65,13 +65,13 @@ The PBR, normal-map, color-space, energy, IBL, and scene-probe reference
 profiles add a restrained neutral, shadowless fixture fill so every evaluated
 subject remains readable while the directional key, shadows, falloff, and
 probe contrast remain visible. The lighting and subsurface profiles retain
-their dedicated spatial-light arrangements instead of using this fill.
+their dedicated spatial-light arrangements.
 
 The reference fixture's deterministic detail maps are generated at 64x64: the
 normal map is linear normal data, the macro and wood maps are color textures,
 and the wet/dry map is linear metallic/roughness data. The maps use tileable
-multi-scale value noise with bounded mid-scale octaves rather than periodic
-stripe signals or broad block-like bands, keeping authored material variation
+multi-scale value noise with bounded mid-scale octaves that avoid periodic
+stripe signals and broad block-like bands, keeping authored material variation
 readable at close range. Capture
 readiness reads the runtime texture dimensions and fails closed below that
 minimum.
@@ -155,7 +155,7 @@ also requires all nine evaluated subjects to remain readable, so an unlit or
 otherwise lost subject cannot be mistaken for a valid roughness response.
 The shared UV-sphere fixture keeps its triangle winding aligned with its
 authored outward normals, preserving the view-aware BRDF contract used by this
-reference rather than compensating for inverted geometry in the shader.
+reference, and the shader expects outward-wound geometry.
 
 ```text
 --capture-realism-reference ibl wide|close rendered
@@ -318,8 +318,7 @@ they were valid emitters. This reduces screen-space light leaks while keeping
 the approximation conservative when source-neighbor depth is unavailable.
 
 The close-reference image guard checks subject-edge brightness against a paired
-outward background sample rather than treating every bright sky or ground pixel
-in a fixed annulus as a halo. A localized bright annulus still fails the guard;
+outward background sample. Only a localized bright annulus fails the guard;
 ordinary scene illumination and background gradients do not.
 
 This is not full global illumination. The screen-space method cannot see geometry that is outside the current view, hidden behind another surface, or otherwise absent from the depth/color buffers. It is single-frame and bounded; it does not claim multi-bounce transport, probe-volume GI, hardware ray tracing, or path tracing.
@@ -343,8 +342,8 @@ existing environment-lighting path.
 
 Local reflection-probe specular now allocates and generates seven cubemap mip
 levels (64, 32, 16, 8, 4, 2, and 1 pixels per face). The material roughness LOD
-selection therefore has a real bounded filtered source instead of requesting
-roughness levels from a level-zero-only texture. The generated chain is a
+selection therefore has a real bounded filtered source for roughness levels.
+The generated chain is a
 stability and plausibility improvement for the supported OpenGL path; it is
 not a production GGX convolution or probe-grid system. When two captured probe
 volumes contain a receiver, the renderer deterministically ranks a primary and
