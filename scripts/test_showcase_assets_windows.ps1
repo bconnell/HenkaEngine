@@ -42,6 +42,13 @@ if (([regex]::Matches($giraffeGeneratorText, 'Add-HorizontalLoft \$tan')).Count 
     $giraffeGeneratorText -notmatch 'Add-HorizontalLoft \$earInner') {
     throw "Showcase giraffe ears must use continuous tapered profiles rather than round primitive lobes."
 }
+$muzzleMatch = [regex]::Match(
+    $giraffeGeneratorText,
+    'Add-HorizontalLoft \$cream `\s+@\((?<stations>[^)]*)\)')
+if (-not $muzzleMatch.Success -or
+    @($muzzleMatch.Groups["stations"].Value -split ',' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count -lt 10) {
+    throw "Showcase giraffe muzzle profile is too coarse for a natural tapered face transition."
+}
 
 function Get-ShowcaseFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)
