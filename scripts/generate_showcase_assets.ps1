@@ -1118,7 +1118,9 @@ function New-Giraffe {
         (New-Material "Giraffe Hoof" @(0.055, 0.012, 0.004, 1.0) 0.0 0.66 0.01 0.26 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Mane" @(0.075, 0.014, 0.003, 1.0) 0.0 0.74 0.01 0.30 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Nose" @(0.055, 0.006, 0.002, 1.0) 0.0 0.58 0.01 0.22 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Joint" @(0.20, 0.085, 0.022, 1.0) 0.0 0.64 0.01 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1))
+        (New-Material "Giraffe Joint" @(0.20, 0.085, 0.022, 1.0) 0.0 0.64 0.01 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Shoulder" @(1.0, 1.0, 1.0, 1.0) 0.0 0.80 0.0 0.58 -BaseColorTextureIndex 2 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Tail Tuft" @(0.060, 0.012, 0.003, 1.0) 0.0 0.78 0.01 0.28 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1))
     $tan = New-Part 0
     $spots = New-Part 1
     $cream = New-Part 2
@@ -1132,6 +1134,8 @@ function New-Giraffe {
     $mane = New-Part 10
     $nose = New-Part 11
     $joint = New-Part 12
+    $shoulder = New-Part 13
+    $tailTuft = New-Part 14
     # Keep the mascot identity restrained, but use continuous profiles and
     # believable curvature so the silhouette does not read as primitive
     # assembly when inspected from the authored front and three-quarter views.
@@ -1148,6 +1152,19 @@ function New-Giraffe {
         @(0.34, 0.30, 0.265, 0.235, 0.215, 0.205, 0.22) `
         @(0.36, 0.32, 0.28, 0.245, 0.22, 0.205, 0.24) `
         0.0 @(0.60, 0.67, 0.74, 0.80, 0.86, 0.92, 0.98) 112
+    # Shoulder and haunch transitions are integrated lofts, not floating
+    # spheres. They add the broad muscle planes that keep the torso from
+    # reading as a single inflated mascot body in close views.
+    Add-AnatomicalLoft $shoulder `
+        @(0.82, 1.02, 1.22, 1.42, 1.58, 1.68) `
+        @(0.20, 0.28, 0.34, 0.32, 0.24, 0.12) `
+        @(0.22, 0.31, 0.38, 0.34, 0.24, 0.12) `
+        0.0 @(0.45, 0.52, 0.58, 0.58, 0.55, 0.50) 64
+    Add-AnatomicalLoft $shoulder `
+        @(0.72, 0.94, 1.18, 1.40, 1.56, 1.66) `
+        @(0.22, 0.30, 0.37, 0.36, 0.28, 0.14) `
+        @(0.26, 0.36, 0.43, 0.40, 0.30, 0.14) `
+        0.0 @(-0.68, -0.72, -0.74, -0.72, -0.68, -0.62) 64
     # Keep the head subordinate to the long neck and torso. The earlier
     # mascot-scale head overwhelmed the silhouette even after the torso loft
     # was made continuous.
@@ -1219,6 +1236,7 @@ function New-Giraffe {
     # introducing a disconnected decorative peg.
     Add-OrientedCone $tan @(0.0, 1.56, -1.16) @(0.08, 1.84, -1.42) 0.060 16
     Add-OrientedCone $spots @(0.08, 1.84, -1.42) @(0.10, 2.02, -1.52) 0.075 16
+    Add-OrientedCone $tailTuft @(0.10, 2.02, -1.52) @(0.11, 2.28, -1.59) 0.115 20
     # The face is built as an elongated muzzle with small, recessed dark eyes
     # and a neutral lip crease. The model intentionally avoids oversized
     # highlights or a smiling mouth so its expression remains anatomical.
@@ -1238,7 +1256,7 @@ function New-Giraffe {
     Add-Ellipsoid $smile @(0.0, 3.53, 1.855) @(0.065, 0.008, 0.006) 8 16
     Add-Ellipsoid $nose @(-0.075, 3.69, 1.915) @(0.024, 0.018, 0.012) 10 20
     Add-Ellipsoid $nose @(0.075, 3.69, 1.915) @(0.024, 0.018, 0.012) 10 20
-    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone, $hoof, $mane, $nose, $joint); Materials = $materials }
+    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone, $hoof, $mane, $nose, $joint, $shoulder, $tailTuft); Materials = $materials }
 }
 
 function New-Rocket {

@@ -184,7 +184,7 @@ function Get-DarkPixelRowCoverage {
 $giraffe = Get-Content -LiteralPath (Join-Path $OutputDirectory "cheeky_giraffe.gltf") -Raw | ConvertFrom-Json
 $giraffeMaterialNames = @($giraffe.materials | ForEach-Object { $_.name })
 $giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "cheeky_giraffe.bin"))
-foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye Detail", "Giraffe Ear Inner", "Giraffe Ossicone Cap", "Giraffe Hoof", "Giraffe Mane", "Giraffe Nose", "Giraffe Joint")) {
+foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye Detail", "Giraffe Ear Inner", "Giraffe Ossicone Cap", "Giraffe Hoof", "Giraffe Mane", "Giraffe Nose", "Giraffe Joint", "Giraffe Shoulder", "Giraffe Tail Tuft")) {
     if ($giraffeMaterialNames -notcontains $requiredName) {
         throw "Showcase giraffe is missing authored feature material '$requiredName'."
     }
@@ -239,7 +239,7 @@ foreach ($material in $giraffe.materials) {
         throw "Showcase giraffe detail-normal scale is too strong for restrained surface response."
     }
 }
-if ($giraffe.meshes[0].primitives.Count -lt 13) {
+if ($giraffe.meshes[0].primitives.Count -lt 15) {
     throw "Showcase giraffe does not contain enough independently shaded anatomical feature geometry."
 }
 $earPrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq 7 })[0]
@@ -284,6 +284,26 @@ $giraffeEyePrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.mater
 $giraffeEyeBounds = Get-PositionBounds -Gltf $giraffe -Binary $giraffeBinary -Primitive $giraffeEyePrimitive
 if (($giraffeEyeBounds.Maximum[0] - $giraffeEyeBounds.Minimum[0]) -gt 0.48) {
     throw "Showcase giraffe eyes remain too wide-set or oversized for the restrained anatomical face."
+}
+$giraffeShoulderMaterialIndex = [array]::IndexOf($giraffeMaterialNames, "Giraffe Shoulder")
+$giraffeShoulderPrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq $giraffeShoulderMaterialIndex })[0]
+if ($giraffeShoulderMaterialIndex -lt 0 -or $null -eq $giraffeShoulderPrimitive) {
+    throw "Showcase giraffe is missing the integrated shoulder and chest mass detail."
+}
+$giraffeShoulderBounds = Get-PositionBounds -Gltf $giraffe -Binary $giraffeBinary -Primitive $giraffeShoulderPrimitive
+if (($giraffeShoulderBounds.Maximum[1] - $giraffeShoulderBounds.Minimum[1]) -lt 0.75 -or
+    ($giraffeShoulderBounds.Maximum[2] - $giraffeShoulderBounds.Minimum[2]) -lt 0.80) {
+    throw "Showcase giraffe shoulder detail is too shallow to establish an anatomical chest transition."
+}
+$giraffeTailTuftMaterialIndex = [array]::IndexOf($giraffeMaterialNames, "Giraffe Tail Tuft")
+$giraffeTailTuftPrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq $giraffeTailTuftMaterialIndex })[0]
+if ($giraffeTailTuftMaterialIndex -lt 0 -or $null -eq $giraffeTailTuftPrimitive) {
+    throw "Showcase giraffe is missing its separately shaded tail tuft."
+}
+$giraffeTailTuftBounds = Get-PositionBounds -Gltf $giraffe -Binary $giraffeBinary -Primitive $giraffeTailTuftPrimitive
+if (($giraffeTailTuftBounds.Maximum[1] - $giraffeTailTuftBounds.Minimum[1]) -lt 0.16 -or
+    ($giraffeTailTuftBounds.Maximum[2] - $giraffeTailTuftBounds.Minimum[2]) -lt 0.08) {
+    throw "Showcase giraffe tail tuft does not establish a readable terminal feature."
 }
 $rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
 $rocketBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "original_realistic_rocket.bin"))
