@@ -55,7 +55,7 @@ Audio metadata is available through:
 - `henka_assets_get_audio_metadata_for_path`;
 - the shared indexed asset-metadata inventory.
 
-Current Audio metadata reports a resident PCM WAV loaded from the canonical asset path. Audio reload support is not implemented yet.
+Current Audio metadata reports a resident PCM WAV loaded from the canonical asset path. Audio reload remains future work.
 
 ## Voices and buses
 
@@ -84,7 +84,7 @@ Legacy behavior is explicit:
 
 - v1 documents load with Audio disabled by default;
 - v2 documents load with Audio disabled by default;
-- loading a legacy document does not rewrite it.
+- loading a legacy document preserves its stored version and bytes.
 
 `henka_audio_emitter_create_with_clip` creates emitters from borrowed clips, including manager-owned assets. The Audio system and borrowed clip must outlive the emitter.
 
@@ -106,13 +106,13 @@ The client-only SDL3 output owner:
 - reports queue diagnostics;
 - is pumped by the caller.
 
-The current output path does not create a background mixer thread. The caller owns scene and Audio synchronization.
+The current output path is caller-pumped. The caller owns scene and Audio synchronization.
 
 The renderer-free dedicated-server path remains device-free.
 
 ## External-project validation
 
-The external game template now exercises Audio through Henka's public API boundary.
+The external game template exercises Audio through Henka's public API boundary.
 
 The validation workflow:
 
@@ -164,4 +164,4 @@ Planned Audio maturity includes:
 - broader performance and memory controls;
 - advanced mixer/effect capabilities after the core game-audio workflow is mature.
 
-Advanced DAW-style editing is outside the current runtime Audio campaign.
+Advanced DAW-style editing sits outside the current runtime Audio campaign scope.
