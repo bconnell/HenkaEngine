@@ -378,26 +378,28 @@ authoritative section below.
   WAV fixture through both resident and metadata-first streamed asset-manager
   paths, live emitters, the mixer, and the SDL output boundary; broader
   packaged content coverage remains in progress.
-- This is an engine foundation, not a complete game-audio workflow. The public
-  runtime also has a bounded, metadata-first PCM-WAV streaming API with
-  caller-owned frame reads and stream-backed voices/emitters. The asset manager
-  now caches those streams by canonical path alongside resident clips; packaged
-  long-form workflow integration remains unfinished.
+- The decoder boundary also validates resident and metadata-first streamed Ogg
+  Vorbis, MP3, and FLAC sources through the private miniaudio boundary. The
+  public runtime has a bounded, metadata-first streaming API with caller-owned
+  frame reads and stream-backed voices/emitters. The asset manager caches those
+  streams by canonical path alongside resident clips; in-place stream reload is
+  validated for file-backed PCM WAV sources.
   Authored
   emitter configuration, authored listener, and resident/streamed storage mode
   now persist in v5 Scene Documents, and the Sandbox Play session can instantiate those emitters
   through the normal Game Authoring coordinator. The graphical Sandbox owns a
   client-only, caller-pumped SDL3 playback boundary with bounded queue/pump
-  budgets, device diagnostics, authored-listener application, production-camera
-  listener mapping, transactional stream recovery after device loss, and
+  budgets, device diagnostics, event-driven hotplug/format recovery with a
+  bounded automatic retry budget, authored-listener application,
+  production-camera listener mapping, transactional stream recovery after device loss, and
   manager-owned resident WAV reload that preserves borrowed clip identity.
   The shared Script Host exposes typed `Audio.Stop(entity)`,
   `Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` bindings to both Lua
   and HenkaScript in Play. They resolve the same persisted object-to-emitter
   mapping used by the runtime and fail closed for missing or stale action
-  targets. Packaged long-form streamed-content coverage, broader decoder
-  support, packaged content coverage, and broader format support remain
-  in progress. The current runtime core and output boundary are
+  targets. Packaged long-form streamed-content coverage, compressed stream hot
+  reload, packaged compressed-content coverage, effects, and broader
+  spatial/occlusion support remain in progress. The current runtime core and output boundary are
   single-owner for voice commands and mixing; device-thread synchronization
   remains outside this scope.
 

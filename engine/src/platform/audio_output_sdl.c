@@ -20,7 +20,32 @@ struct henka_audio_output
     uint32_t sample_rate;
     uint64_t pumped_frames;
     uint64_t rejected_frames;
+    SDL_AtomicInt device_event_serial;
+    SDL_AtomicInt recovery_pending;
+    int observed_device_event_serial;
+    uint32_t recovery_attempts;
+    bool recovery_exhausted;
+    bool event_watch_registered;
 };
+
+static bool henka_audio_output_event_watch(void* userdata, SDL_Event* event)
+{
+    henka_audio_output* output = (henka_audio_output*)userdata;
+
+    if (output == NULL || event == NULL)
+    {
+        return true;
+    }
+    if ((event->type == SDL_EVENT_AUDIO_DEVICE_ADDED ||
+            event->type == SDL_EVENT_AUDIO_DEVICE_REMOVED ||
+            event->type == SDL_EVENT_AUDIO_DEVICE_FORMAT_CHANGED) &&
+        !event->adevice.recording)
+    {
+        SDL_SetAtomicInt(&output->recovery_pending, 1);
+        SDL_AddAtomicInt(&output->device_event_serial, 1);
+    }
+    return true;
+}
 
 static bool henka_audio_output_size_multiply(
     size_t left,
@@ -102,6 +127,58 @@ static henka_result henka_audio_output_open_stream(
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_audio_output_recover_internal(
+    henka_audio_output* output,
+    bool automatic)
+{
+    SDL_AudioStream* replacement_stream;
+    henka_result result;
+
+    if (output == NULL || output->stream == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (automatic && output->recovery_attempts >=
+            HENKA_AUDIO_OUTPUT_MAX_AUTO_RECOVERY_ATTEMPTS)
+    {
+        SDL_SetAtomicInt(&output->recovery_pending, 0);
+        output->recovery_exhausted = true;
+        return HENKA_ERROR_PLATFORM;
+    }
+    if (!automatic)
+    {
+        output->recovery_attempts = 0U;
+        output->recovery_exhausted = false;
+    }
+    result = henka_audio_output_open_stream(output, &replacement_stream);
+    if (result != HENKA_SUCCESS)
+    {
+        if (automatic)
+        {
+            ++output->recovery_attempts;
+            if (output->recovery_attempts >=
+                    HENKA_AUDIO_OUTPUT_MAX_AUTO_RECOVERY_ATTEMPTS)
+            {
+                SDL_SetAtomicInt(&output->recovery_pending, 0);
+                output->recovery_exhausted = true;
+            }
+        }
+        else
+        {
+            SDL_SetAtomicInt(&output->recovery_pending, 0);
+        }
+        return result;
+    }
+    SDL_DestroyAudioStream(output->stream);
+    output->stream = replacement_stream;
+    output->recovery_attempts = 0U;
+    output->recovery_exhausted = false;
+    output->observed_device_event_serial = SDL_GetAtomicInt(
+        &output->device_event_serial);
+    SDL_SetAtomicInt(&output->recovery_pending, 0);
+    return HENKA_SUCCESS;
+}
+
 henka_audio_output_config henka_audio_output_config_default(void)
 {
     henka_audio_output_config config;
@@ -168,6 +245,8 @@ henka_result henka_audio_output_create(
     output->max_pump_frames = effective_config.max_pump_frames;
     output->max_queued_frames = effective_config.max_queued_frames;
     output->sample_rate = sample_rate;
+    SDL_SetAtomicInt(&output->device_event_serial, 0);
+    SDL_SetAtomicInt(&output->recovery_pending, 0);
 
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
     {
@@ -182,6 +261,15 @@ henka_result henka_audio_output_create(
         henka_free(output);
         return HENKA_ERROR_PLATFORM;
     }
+    if (!SDL_AddEventWatch(henka_audio_output_event_watch, output))
+    {
+        SDL_DestroyAudioStream(output->stream);
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+        henka_free(output->mix_buffer);
+        henka_free(output);
+        return HENKA_ERROR_PLATFORM;
+    }
+    output->event_watch_registered = true;
     *out_output = output;
     return HENKA_SUCCESS;
 }
@@ -191,6 +279,11 @@ void henka_audio_output_destroy(henka_audio_output* output)
     if (output == NULL)
     {
         return;
+    }
+    if (output->event_watch_registered)
+    {
+        SDL_RemoveEventWatch(henka_audio_output_event_watch, output);
+        output->event_watch_registered = false;
     }
     if (output->stream != NULL)
     {
@@ -203,21 +296,7 @@ void henka_audio_output_destroy(henka_audio_output* output)
 
 henka_result henka_audio_output_recover(henka_audio_output* output)
 {
-    SDL_AudioStream* replacement_stream;
-    henka_result result;
-
-    if (output == NULL || output->stream == NULL)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    result = henka_audio_output_open_stream(output, &replacement_stream);
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
-    }
-    SDL_DestroyAudioStream(output->stream);
-    output->stream = replacement_stream;
-    return HENKA_SUCCESS;
+    return henka_audio_output_recover_internal(output, false);
 }
 
 henka_result henka_audio_output_pump(
@@ -232,8 +311,21 @@ henka_result henka_audio_output_pump(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (SDL_GetAudioStreamDevice(output->stream) == 0U &&
-        henka_audio_output_recover(output) != HENKA_SUCCESS)
+    if (SDL_GetAtomicInt(&output->device_event_serial) !=
+        output->observed_device_event_serial)
+    {
+        output->observed_device_event_serial =
+            SDL_GetAtomicInt(&output->device_event_serial);
+        output->recovery_attempts = 0U;
+        output->recovery_exhausted = false;
+        SDL_SetAtomicInt(&output->recovery_pending, 1);
+    }
+    if (SDL_GetAudioStreamDevice(output->stream) == 0U)
+    {
+        SDL_SetAtomicInt(&output->recovery_pending, 1);
+    }
+    if (SDL_GetAtomicInt(&output->recovery_pending) != 0 &&
+        henka_audio_output_recover_internal(output, true) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_PLATFORM;
     }
@@ -306,5 +398,9 @@ henka_result henka_audio_output_get_info(
     out_info->queued_frames = queued_frames;
     out_info->pumped_frames = output->pumped_frames;
     out_info->rejected_frames = output->rejected_frames;
+    out_info->recovery_attempts = output->recovery_attempts;
+    out_info->recovery_pending = SDL_GetAtomicInt(
+        (SDL_AtomicInt*)&output->recovery_pending) != 0;
+    out_info->recovery_exhausted = output->recovery_exhausted;
     return HENKA_SUCCESS;
 }

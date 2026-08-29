@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <SDL3/SDL.h>
+
 #include <henka/audio.h>
 #include <henka/audio_output.h>
 #include <henka/scene.h>
@@ -122,6 +124,8 @@ int main(void)
     HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(info.device_open);
     HENKA_TEST_ASSERT(info.sample_rate == HENKA_AUDIO_DEFAULT_SAMPLE_RATE);
+    HENKA_TEST_ASSERT(!info.recovery_pending && info.recovery_attempts == 0U &&
+        !info.recovery_exhausted);
     HENKA_TEST_ASSERT(info.pumped_frames == 64U);
     HENKA_TEST_ASSERT(info.queued_frames > 0U);
     HENKA_TEST_ASSERT(henka_audio_output_recover(output) == HENKA_SUCCESS);
@@ -129,7 +133,18 @@ int main(void)
     HENKA_TEST_ASSERT(info.device_open);
     HENKA_TEST_ASSERT(info.queued_frames == 0U);
     HENKA_TEST_ASSERT(info.pumped_frames == 64U);
-    HENKA_TEST_ASSERT(henka_audio_output_pump(output, 32U) == HENKA_SUCCESS);
+    {
+        SDL_Event device_event = {0};
+        device_event.type = SDL_EVENT_AUDIO_DEVICE_FORMAT_CHANGED;
+        device_event.adevice.recording = false;
+        HENKA_TEST_ASSERT(SDL_PushEvent(&device_event) == 1);
+        HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(info.recovery_pending);
+        HENKA_TEST_ASSERT(henka_audio_output_pump(output, 32U) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(info.device_open && !info.recovery_pending &&
+            info.recovery_attempts == 0U && !info.recovery_exhausted);
+    }
     HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(info.pumped_frames == 96U);
     HENKA_TEST_ASSERT(info.queued_frames > 0U);

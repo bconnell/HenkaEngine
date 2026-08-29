@@ -12,6 +12,7 @@
 #define HENKA_AUDIO_OUTPUT_DEFAULT_MAX_QUEUED_FRAMES 4096U
 #define HENKA_AUDIO_OUTPUT_MAX_PUMP_FRAMES 16384U
 #define HENKA_AUDIO_OUTPUT_MAX_QUEUED_FRAMES 65536U
+#define HENKA_AUDIO_OUTPUT_MAX_AUTO_RECOVERY_ATTEMPTS 3U
 
 typedef struct henka_audio_output henka_audio_output;
 
@@ -28,6 +29,9 @@ typedef struct henka_audio_output_info
     uint32_t queued_frames;
     uint64_t pumped_frames;
     uint64_t rejected_frames;
+    uint32_t recovery_attempts;
+    bool recovery_pending;
+    bool recovery_exhausted;
 } henka_audio_output_info;
 
 henka_audio_output_config henka_audio_output_config_default(void);
@@ -39,7 +43,9 @@ henka_result henka_audio_output_create(
 void henka_audio_output_destroy(henka_audio_output* output);
 /* Reopens the playback device through a replacement stream. The prior stream
  * remains live if reopening fails; a successful recovery clears only queued
- * device data and preserves mixer state and diagnostics counters. */
+ * device data and preserves mixer state and diagnostics counters. SDL audio
+ * hotplug and format events request caller-thread recovery automatically; the
+ * automatic retry budget is HENKA_AUDIO_OUTPUT_MAX_AUTO_RECOVERY_ATTEMPTS. */
 henka_result henka_audio_output_recover(henka_audio_output* output);
 /* Mixes and queues at most the configured frame budget. This is deliberately
  * caller-pumped: the caller owns scene/audio-system synchronization and must

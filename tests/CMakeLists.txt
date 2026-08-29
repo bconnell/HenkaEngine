@@ -589,6 +589,10 @@ target_link_libraries(henka_audio_output_tests
     PRIVATE
         henka
 )
+target_include_directories(henka_audio_output_tests
+    PRIVATE
+        ${SDL3_SOURCE_DIR}/include
+)
 henka_enable_project_warnings(henka_audio_output_tests)
 add_test(NAME henka_audio_output_tests COMMAND henka_audio_output_tests)
 

@@ -48,10 +48,13 @@ service in `engine/include/henka/audio.h`.
 The headless-safe mixer is the deterministic production-output boundary for
 the renderer-independent portion of this slice. A client-only, caller-pumped
 SDL3 output owner now opens a playback stream, accepts bounded stereo
-float-PCM frames, and reports device/queue diagnostics. It can transactionally
-reopen its SDL stream after device loss and retry one failed queue submission;
-successful recovery clears only queued device data. It does not create a
-background mixer thread; the caller owns scene and Audio synchronization.
+float-PCM frames, and reports device/queue diagnostics. SDL3 audio hotplug and
+format events are observed through an event watch that publishes atomic state;
+the caller performs transactional recovery on its owner thread. Automatic
+recovery is bounded to three attempts per event epoch, while explicit recovery
+remains available. Successful recovery clears only queued device data. The
+output owner does not create a background mixer thread; the caller owns scene
+and Audio synchronization.
 
 ## Current development
 
@@ -64,8 +67,7 @@ Play applies the persisted Scene Document listener before creating runtime
 emitters; the graphical camera remains the live listener source during normal
 interactive runtime.
 Play pause and resume now propagate to its live emitter voices without
-advancing their source positions. The next Audio slices must connect it to
-broader device-lifecycle policy. A packaged `--audio-smoke-test` loads the
+advancing their source positions. A packaged `--audio-smoke-test` loads the
 repository-owned `assets/audio/henka_audio_fixture.wav` through the real asset
 manager in both resident and metadata-first streamed modes. Each mode attaches
 the payload to a real scene entity, mixes it through a live emitter, and
@@ -94,9 +96,11 @@ bindings fail closed, while `IsPlaying` reports false.
 
 ## Future work
 
-Mixer effects, broader hot reload policy, expanded packaged long-form content
-coverage, device-loss notification/hot-plug policy, and broader
-spatial/occlusion features remain future work. The supported decoder boundary
-is intentionally limited to mono/stereo PCM WAV, Ogg Vorbis, MP3, and FLAC;
-additional codecs and multichannel routing are outside the current Audio
-scope.
+Mixer effects, user-facing device selection/notification, expanded packaged
+long-form content coverage, and broader spatial/occlusion features remain
+future work. The supported decoder boundary is intentionally limited to
+mono/stereo PCM WAV, Ogg Vorbis, MP3, and FLAC; additional codecs and
+multichannel routing are outside the current Audio scope. Compressed stream
+replacement while the source file is held open is not part of the current hot
+reload guarantee; the validated in-place stream reload contract is the
+file-backed PCM-WAV path.
