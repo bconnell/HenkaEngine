@@ -8372,7 +8372,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
             capture_ibl_details,
             sizeof(capture_ibl_details),
             "%s",
-            " ibl_reference=1 ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_levels=7 ibl_brdf_resolution=128");
+            " ibl_reference=1 ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128");
     }
     else if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SCENE_PROBE)
     {

@@ -26,10 +26,11 @@ void sandbox3d_generate_studio_environment(float* pixels, size_t pixel_count)
         float latitude = ((float)y + 0.5f) /
             (float)SANDBOX3D_STUDIO_ENVIRONMENT_HEIGHT;
         float horizon = sandbox3d_smoothstep((latitude - 0.12f) / 0.50f);
-        /* Keep the lower hemisphere as a real studio-floor contribution, but
-         * make its sky-to-ground transition broad enough that the reflection
-         * benchmark does not turn a single fixture horizon into a hard band. */
-        float ground = sandbox3d_smoothstep((latitude - 0.68f) / 0.32f);
+        /* Keep the lower hemisphere continuous and luminous enough to read as
+         * a studio enclosure. The visible sandbox floor is a separate scene
+         * surface; the IBL source must not stamp a localized dark basin into
+         * every reflected sphere. */
+        float lower_gradient = sandbox3d_smoothstep((latitude - 0.38f) / 0.62f);
         for (x = 0U; x < SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH; ++x)
         {
             const float longitude = 2.0f * (float)HENKA_PI *
@@ -41,36 +42,24 @@ void sandbox3d_generate_studio_environment(float* pixels, size_t pixel_count)
              * instead of measuring a uniformly dark back hemisphere. */
             float key_delta = fabsf(longitude - 4.35f);
             float fill_delta = fabsf(longitude - 1.05f);
-            float key_lobe;
-            float fill_lobe;
-            float r = 0.045f + 0.075f * horizon + ground * 0.015f;
-            float g = 0.065f + 0.105f * horizon + ground * 0.020f;
-            float b = 0.115f + 0.155f * horizon + ground * 0.030f;
+            float key_field;
+            float fill_field;
+            float r = 0.070f + 0.065f * horizon + 0.045f * lower_gradient;
+            float g = 0.090f + 0.090f * horizon + 0.060f * lower_gradient;
+            float b = 0.140f + 0.120f * horizon + 0.080f * lower_gradient;
             size_t offset = (y * SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH + x) *
                 SANDBOX3D_STUDIO_ENVIRONMENT_CHANNELS;
 
             if (key_delta > (float)HENKA_PI) key_delta = 2.0f * (float)HENKA_PI - key_delta;
             if (fill_delta > (float)HENKA_PI) fill_delta = 2.0f * (float)HENKA_PI - fill_delta;
-            key_lobe = expf(
-                -0.5f * (key_delta / 1.15f) * (key_delta / 1.15f) -
-                0.5f * ((latitude - 0.45f) / 0.62f) * ((latitude - 0.45f) / 0.62f));
-            fill_lobe = expf(
-                -0.5f * (fill_delta / 1.20f) * (fill_delta / 1.20f) -
-                0.5f * ((latitude - 0.32f) / 0.45f) * ((latitude - 0.32f) / 0.45f));
-            /* The lobes are broad area-light structure, not a baked direct
-             * light. Their asymmetric warm/cool energy gives clearcoat and
-             * brushed metal a stable highlight to resolve through the same
-             * derived IBL path as imported consumer materials. */
-            r += key_lobe * 2.20f + fill_lobe * 0.28f;
-            g += key_lobe * 1.35f + fill_lobe * 0.34f;
-            b += key_lobe * 0.76f + fill_lobe * 0.48f;
-
-            if (ground > 0.0f)
-            {
-                r = r * (1.0f - ground) + 0.055f * ground;
-                g = g * (1.0f - ground) + 0.075f * ground;
-                b = b * (1.0f - ground) + 0.105f * ground;
-            }
+            /* Cosine fields model broad studio softboxes. They retain
+             * directional color and roughness contrast without a compact
+             * Gaussian maximum that can project as a pinched sphere lobe. */
+            key_field = 0.60f + 0.40f * cosf(key_delta);
+            fill_field = 0.78f + 0.22f * cosf(fill_delta);
+            r += key_field * 1.75f + fill_field * 0.24f;
+            g += key_field * 1.08f + fill_field * 0.30f;
+            b += key_field * 0.62f + fill_field * 0.42f;
             pixels[offset + 0U] = r;
             pixels[offset + 1U] = g;
             pixels[offset + 2U] = b;

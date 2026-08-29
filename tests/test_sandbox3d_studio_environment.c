@@ -1,5 +1,6 @@
 #include "test_suite.h"
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 
@@ -12,7 +13,10 @@ void henka_test_sandbox3d_studio_environment(void)
     size_t x;
     size_t peak_x = 0U;
     size_t broad_span = 0U;
+    size_t lower_row = 50U;
     float peak_luma = 0.0f;
+    float lower_min_luma = FLT_MAX;
+    float lower_max_luma = 0.0f;
     int valid = 1;
 
     pixels = (float*)malloc(
@@ -45,6 +49,29 @@ void henka_test_sandbox3d_studio_environment(void)
             peak_luma = luma;
             peak_x = x;
         }
+        if (x < SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH)
+        {
+            const size_t lower_offset =
+                (lower_row * SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH + x) *
+                SANDBOX3D_STUDIO_ENVIRONMENT_CHANNELS;
+            const float lower_luma =
+                pixels[lower_offset + 0U] * 0.2126f +
+                pixels[lower_offset + 1U] * 0.7152f +
+                pixels[lower_offset + 2U] * 0.0722f;
+
+            if (!isfinite(lower_luma) || lower_luma < 0.0f)
+            {
+                valid = 0;
+            }
+            if (lower_luma < lower_min_luma)
+            {
+                lower_min_luma = lower_luma;
+            }
+            if (lower_luma > lower_max_luma)
+            {
+                lower_max_luma = lower_luma;
+            }
+        }
     }
     if (!(peak_luma > 0.0f))
     {
@@ -67,5 +94,9 @@ void henka_test_sandbox3d_studio_environment(void)
         }
     }
     free(pixels);
-    HENKA_TEST_ASSERT(valid && broad_span >= 40U);
+    HENKA_TEST_ASSERT(
+        valid &&
+        broad_span >= 72U &&
+        lower_max_luma > 0.0f &&
+        lower_min_luma >= lower_max_luma * 0.45f);
 }

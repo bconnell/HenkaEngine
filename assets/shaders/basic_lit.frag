@@ -1,5 +1,7 @@
 #version 330 core
 
+const float HENKA_PREFILTER_MAX_LOD = 6.0;
+
 in vec3 fragNormal;
 in vec3 fragWorldPosition;
 in vec2 fragUv;
@@ -924,6 +926,8 @@ void main()
             vec3 blurredReflectionDirection = reflectionDirection;
             blurredReflectionDirection = parallaxCorrectReflectionDirection(blurredReflectionDirection);
             vec3 environmentSpecular = sampleEnvironment(blurredReflectionDirection);
+            float environmentPrefilterLod =
+                clamp(surfaceRoughness, 0.0, 1.0) * HENKA_PREFILTER_MAX_LOD;
             if (useIBL)
             {
                 if (useReflectionProbeMap)
@@ -931,7 +935,7 @@ void main()
                     environmentSpecular = textureLod(
                         reflectionProbeMap,
                         blurredReflectionDirection,
-                        min(surfaceRoughness * 6.0, 2.0)).rgb;
+                        environmentPrefilterLod).rgb;
                     if (useReflectionProbeMapSecondary)
                     {
                         vec3 secondaryReflectionDirection = parallaxCorrectSecondaryReflectionDirection(
@@ -941,7 +945,7 @@ void main()
                             textureLod(
                                 reflectionProbeMapSecondary,
                                 secondaryReflectionDirection,
-                                min(surfaceRoughness * 6.0, 2.0)).rgb,
+                                environmentPrefilterLod).rgb,
                             clamp(reflectionProbeBlendWeight, 0.0, 1.0));
                     }
                 }
@@ -950,7 +954,7 @@ void main()
                     environmentSpecular = textureLod(
                         iblPrefilterMap,
                         blurredReflectionDirection,
-                        min(surfaceRoughness * 6.0, 2.0)).rgb;
+                        environmentPrefilterLod).rgb;
                 }
             }
             vec2 brdf = useIBL ? texture(iblBrdfLut, vec2(nDotV, 1.0 - surfaceRoughness)).rg : vec2(1.0, 0.0);

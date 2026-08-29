@@ -2123,6 +2123,7 @@ bloom_target_failure:
 
 #define HENKA_IBL_ENVIRONMENT_RESOLUTION 128
 #define HENKA_IBL_IRRADIANCE_RESOLUTION 32
+#define HENKA_IBL_PREFILTER_RESOLUTION 256
 #define HENKA_IBL_PREFILTER_LEVELS 7
 #define HENKA_IBL_BRDF_RESOLUTION 128
 #define HENKA_REFLECTION_PROBE_RESOLUTION 64
@@ -2208,7 +2209,7 @@ static void henka_opengl_delete_ibl_resources(henka_opengl_renderer_state* state
         return;
     for (mip = 0; mip < HENKA_IBL_PREFILTER_LEVELS; ++mip)
     {
-        int size = HENKA_IBL_ENVIRONMENT_RESOLUTION >> mip;
+        int size = HENKA_IBL_PREFILTER_RESOLUTION >> mip;
         bytes += (uint64_t)size * (uint64_t)size * 6U * 8U;
     }
     bytes += (uint64_t)HENKA_IBL_ENVIRONMENT_RESOLUTION * HENKA_IBL_ENVIRONMENT_RESOLUTION * 6U * 8U;
@@ -2336,7 +2337,7 @@ static henka_result henka_opengl_build_ibl_resources(
     if (framebuffer == 0U ||
         !henka_opengl_allocate_ibl_cube(&environment_cube, HENKA_IBL_ENVIRONMENT_RESOLUTION, 1) ||
         !henka_opengl_allocate_ibl_cube(&irradiance_cube, HENKA_IBL_IRRADIANCE_RESOLUTION, 1) ||
-        !henka_opengl_allocate_ibl_cube(&prefilter_cube, HENKA_IBL_ENVIRONMENT_RESOLUTION, HENKA_IBL_PREFILTER_LEVELS))
+        !henka_opengl_allocate_ibl_cube(&prefilter_cube, HENKA_IBL_PREFILTER_RESOLUTION, HENKA_IBL_PREFILTER_LEVELS))
         goto ibl_failure;
     glGenTextures(1, &brdf_lut);
     if (brdf_lut == 0U)
@@ -2401,7 +2402,7 @@ static henka_result henka_opengl_build_ibl_resources(
     henka_set_uniform_int_owned(state->ibl_prefilter_program, &state->ibl_prefilter_shader_data, "environmentCube", 0);
     for (mip = 0; mip < HENKA_IBL_PREFILTER_LEVELS; ++mip)
     {
-        int resolution = HENKA_IBL_ENVIRONMENT_RESOLUTION >> mip;
+        int resolution = HENKA_IBL_PREFILTER_RESOLUTION >> mip;
         float roughness = (float)mip / (float)(HENKA_IBL_PREFILTER_LEVELS - 1);
         if (resolution < 1) resolution = 1;
         glViewport(0, 0, resolution, resolution);
@@ -2484,7 +2485,7 @@ static henka_result henka_opengl_build_ibl_resources(
         uint64_t bytes = 0U;
         for (mip = 0; mip < HENKA_IBL_PREFILTER_LEVELS; ++mip)
         {
-            int size = HENKA_IBL_ENVIRONMENT_RESOLUTION >> mip;
+            int size = HENKA_IBL_PREFILTER_RESOLUTION >> mip;
             bytes += (uint64_t)size * (uint64_t)size * 6U * 8U;
         }
         bytes += (uint64_t)HENKA_IBL_ENVIRONMENT_RESOLUTION * HENKA_IBL_ENVIRONMENT_RESOLUTION * 6U * 8U;

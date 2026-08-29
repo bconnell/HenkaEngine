@@ -19,7 +19,7 @@ if ($indexText -notmatch "(?m)^Evidence profile: PBR_IBL_REFERENCE\s*$") {
     throw "PBR IBL reference evidence does not declare its dedicated profile."
 }
 
-$metadataPattern = "(?m)^.*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_levels=7 ibl_brdf_resolution=128 .*viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
+$metadataPattern = "(?m)^.*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128 .*viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
 $metadata = @([regex]::Matches($indexText, $metadataPattern))
 if ($metadata.Count -ne 1) {
     throw "PBR IBL reference evidence must contain exactly one rendered readiness record."
@@ -111,6 +111,19 @@ function Get-SubjectLuma {
     }
 }
 
+function Get-PixelLuma {
+    param(
+        [Parameter(Mandatory = $true)][System.Drawing.Bitmap]$Bitmap,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y
+    )
+
+    $pixelX = [Math]::Max(0, [Math]::Min($Bitmap.Width - 1, [int][Math]::Round($X)))
+    $pixelY = [Math]::Max(0, [Math]::Min($Bitmap.Height - 1, [int][Math]::Round($Y)))
+    $pixel = $Bitmap.GetPixel($pixelX, $pixelY)
+    return 0.2126 * $pixel.R + 0.7152 * $pixel.G + 0.0722 * $pixel.B
+}
+
 $statistics = Get-ImageStatistics -Path $renderedPath
 if ($statistics.Width -lt 160 -or $statistics.Height -lt 120 -or
     $statistics.StandardDeviation -lt 12.0 -or
@@ -129,8 +142,8 @@ $centers = if ($expectedView -eq "close") {
 else {
     @(
         @(0.125, 0.520), @(0.234, 0.520), @(0.344, 0.520),
-        @(0.453, 0.520), @(0.562, 0.520), @(0.672, 0.520),
-        @(0.781, 0.520), @(0.891, 0.520), @(0.500, 0.735)
+        @(0.453, 0.520), @(0.500, 0.520), @(0.562, 0.520),
+        @(0.672, 0.520), @(0.781, 0.520), @(0.891, 0.520)
     )
 }
 $lumas = @()
@@ -148,8 +161,46 @@ for ($i = 1; $i -lt $lumas.Count; ++$i) {
         ++$resolvedSteps
     }
 }
-if ($ladderRange -lt 8.0 -or $resolvedSteps -lt 5) {
-    throw "PBR IBL roughness ladder was not visibly resolved (range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, luma=$([string]::Join(',', ($lumas | ForEach-Object { [Math]::Round($_, 1) }))))."
+$bitmap = [System.Drawing.Bitmap]::new($renderedPath)
+try {
+    $lowerBlemishes = 0
+    $concentratedHighlights = 0
+    $sphereRadius = if ($expectedView -eq "close") {
+        [Math]::Floor([Math]::Min($bitmap.Width, $bitmap.Height) * 0.125)
+    }
+    else {
+        [Math]::Floor([Math]::Min($bitmap.Width, $bitmap.Height) * 0.055)
+    }
+    foreach ($center in $centers) {
+        $centerX = $bitmap.Width * $center[0]
+        $centerY = $bitmap.Height * $center[1]
+        $bottomCenter = Get-PixelLuma -Bitmap $bitmap -X $centerX -Y ($centerY + $sphereRadius * 0.55)
+        $bottomShoulders = (
+            (Get-PixelLuma -Bitmap $bitmap -X ($centerX - $sphereRadius * 0.32) -Y ($centerY + $sphereRadius * 0.42)) +
+            (Get-PixelLuma -Bitmap $bitmap -X ($centerX + $sphereRadius * 0.32) -Y ($centerY + $sphereRadius * 0.42))
+        ) / 2.0
+        if ($bottomCenter / [Math]::Max($bottomShoulders, 1.0) -lt 0.82) {
+            ++$lowerBlemishes
+        }
+
+        $topCenter = Get-PixelLuma -Bitmap $bitmap -X $centerX -Y ($centerY - $sphereRadius * 0.22)
+        $topShoulders = (
+            (Get-PixelLuma -Bitmap $bitmap -X ($centerX - $sphereRadius * 0.28) -Y ($centerY - $sphereRadius * 0.12)) +
+            (Get-PixelLuma -Bitmap $bitmap -X ($centerX + $sphereRadius * 0.28) -Y ($centerY - $sphereRadius * 0.12))
+        ) / 2.0
+        if ($topCenter / [Math]::Max($topShoulders, 1.0) -gt 1.18) {
+            ++$concentratedHighlights
+        }
+    }
+}
+finally {
+    $bitmap.Dispose()
+}
+if ($lowerBlemishes -gt 0 -or $concentratedHighlights -gt 0) {
+    throw "PBR IBL reference contains localized sphere defects (lower-blemishes=$lowerBlemishes, concentrated-highlights=$concentratedHighlights)."
+}
+if ($ladderRange -lt 8.0 -or $resolvedSteps -lt 7) {
+    throw "PBR IBL roughness ladder was not visibly resolved across the full range (range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, luma=$([string]::Join(',', ($lumas | ForEach-Object { [Math]::Round($_, 1) }))))."
 }
 
-Write-Output "PBR IBL reference validation: passed (rendered-mean=$([Math]::Round($statistics.Mean, 2)), rendered-sd=$([Math]::Round($statistics.StandardDeviation, 2)), clipped-fraction=$([Math]::Round($statistics.ClippedFraction, 4)), visible-subjects=$($lumas.Count - $unreadableSubjects)/$($lumas.Count), roughness-ladder-range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps)."
+Write-Output "PBR IBL reference validation: passed (rendered-mean=$([Math]::Round($statistics.Mean, 2)), rendered-sd=$([Math]::Round($statistics.StandardDeviation, 2)), clipped-fraction=$([Math]::Round($statistics.ClippedFraction, 4)), visible-subjects=$($lumas.Count - $unreadableSubjects)/$($lumas.Count), roughness-ladder-range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, lower-blemishes=$lowerBlemishes, concentrated-highlights=$concentratedHighlights)."
