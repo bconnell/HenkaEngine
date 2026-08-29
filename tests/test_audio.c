@@ -10,7 +10,7 @@
     { \
         if (!(condition)) \
         { \
-            fprintf(stderr, "audio assertion failed: %s\\n", #condition); \
+            fprintf(stderr, "audio assertion failed at line %d: %s\\n", __LINE__, #condition); \
             return EXIT_FAILURE; \
         } \
     } while (0)
@@ -282,15 +282,54 @@ int main(void)
         &emitter_info) == HENKA_SUCCESS);
     voice = emitter_info.id;
     HENKA_TEST_ASSERT(henka_audio_voice_is_valid(system, voice));
+    HENKA_TEST_ASSERT(henka_audio_emitter_seek(emitter, 64U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_play(emitter) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_get_voice_info(
+        emitter,
+        &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(emitter_info.source_frame == 64U);
+    HENKA_TEST_ASSERT(henka_audio_emitter_restart(emitter) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_get_voice_info(
+        emitter,
+        &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(emitter_info.source_frame == 0U);
     HENKA_TEST_ASSERT(henka_audio_emitter_stop(emitter) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(!henka_audio_emitter_is_playing(emitter));
     HENKA_TEST_ASSERT(henka_audio_system_get_active_voice_count(system) == 0U);
     HENKA_TEST_ASSERT(henka_audio_emitter_restart(emitter) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_emitter_is_playing(emitter));
+    HENKA_TEST_ASSERT(henka_audio_emitter_pause(emitter) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_resume(emitter) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_set_gain(emitter, 0.5f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_set_pitch(emitter, 1.25f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_set_looping(emitter, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_set_spatial(emitter, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_set_bus(
+        emitter, HENKA_AUDIO_BUS_DIALOGUE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_seek(emitter, 64U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_emitter_get_voice_info(
         emitter,
         &emitter_info) == HENKA_SUCCESS);
     voice = emitter_info.id;
+    HENKA_TEST_ASSERT(emitter_info.gain == 0.5f && emitter_info.pitch == 1.25f &&
+        !emitter_info.looping && !emitter_info.spatial &&
+        emitter_info.bus == HENKA_AUDIO_BUS_DIALOGUE &&
+        emitter_info.source_frame == 64U);
+    HENKA_TEST_ASSERT(henka_audio_emitter_set_gain(emitter, 1.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_set_pitch(emitter, 1.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_set_looping(emitter, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_set_spatial(emitter, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_set_bus(
+        emitter, HENKA_AUDIO_BUS_SFX) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_stop(emitter) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_play(emitter) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_get_voice_info(
+        emitter,
+        &emitter_info) == HENKA_SUCCESS);
+    voice = emitter_info.id;
+    HENKA_TEST_ASSERT(emitter_info.gain == 1.0f && emitter_info.pitch == 1.0f &&
+        emitter_info.looping && emitter_info.spatial &&
+        emitter_info.bus == HENKA_AUDIO_BUS_SFX);
     HENKA_TEST_ASSERT(henka_audio_voice_pause(system, voice) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_voice_get_info(
         system, voice, &emitter_info) == HENKA_SUCCESS);

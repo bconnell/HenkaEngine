@@ -80,7 +80,16 @@ typedef enum henka_hks_opcode
     HENKA_HKS_OPCODE_JUMP_IF_FALSE,
     HENKA_HKS_OPCODE_AUDIO_STOP,
     HENKA_HKS_OPCODE_AUDIO_RESTART,
-    HENKA_HKS_OPCODE_AUDIO_IS_PLAYING
+    HENKA_HKS_OPCODE_AUDIO_IS_PLAYING,
+    HENKA_HKS_OPCODE_AUDIO_PLAY,
+    HENKA_HKS_OPCODE_AUDIO_PAUSE,
+    HENKA_HKS_OPCODE_AUDIO_RESUME,
+    HENKA_HKS_OPCODE_AUDIO_SET_GAIN,
+    HENKA_HKS_OPCODE_AUDIO_SET_PITCH,
+    HENKA_HKS_OPCODE_AUDIO_SET_LOOPING,
+    HENKA_HKS_OPCODE_AUDIO_SET_SPATIAL,
+    HENKA_HKS_OPCODE_AUDIO_SET_BUS,
+    HENKA_HKS_OPCODE_AUDIO_SEEK
 } henka_hks_opcode;
 
 typedef struct henka_hks_instruction
@@ -231,6 +240,15 @@ static henka_hks_token_kind henka_hks_keyword_kind(
         {"audio_stop", HENKA_HKS_TOKEN_KW_AUDIO_STOP},
         {"audio_restart", HENKA_HKS_TOKEN_KW_AUDIO_RESTART},
         {"audio_is_playing", HENKA_HKS_TOKEN_KW_AUDIO_IS_PLAYING},
+        {"audio_play", HENKA_HKS_TOKEN_KW_AUDIO_PLAY},
+        {"audio_pause", HENKA_HKS_TOKEN_KW_AUDIO_PAUSE},
+        {"audio_resume", HENKA_HKS_TOKEN_KW_AUDIO_RESUME},
+        {"audio_set_gain", HENKA_HKS_TOKEN_KW_AUDIO_SET_GAIN},
+        {"audio_set_pitch", HENKA_HKS_TOKEN_KW_AUDIO_SET_PITCH},
+        {"audio_set_looping", HENKA_HKS_TOKEN_KW_AUDIO_SET_LOOPING},
+        {"audio_set_spatial", HENKA_HKS_TOKEN_KW_AUDIO_SET_SPATIAL},
+        {"audio_set_bus", HENKA_HKS_TOKEN_KW_AUDIO_SET_BUS},
+        {"audio_seek", HENKA_HKS_TOKEN_KW_AUDIO_SEEK},
         {"event_id", HENKA_HKS_TOKEN_KW_EVENT_ID},
         {"event_other_entity", HENKA_HKS_TOKEN_KW_EVENT_OTHER_ENTITY},
         {"event_type", HENKA_HKS_TOKEN_KW_EVENT_TYPE},
@@ -304,6 +322,15 @@ henka_hks_token_class henka_hks_token_kind_get_class(
         case HENKA_HKS_TOKEN_KW_AUDIO_STOP:
         case HENKA_HKS_TOKEN_KW_AUDIO_RESTART:
         case HENKA_HKS_TOKEN_KW_AUDIO_IS_PLAYING:
+        case HENKA_HKS_TOKEN_KW_AUDIO_PLAY:
+        case HENKA_HKS_TOKEN_KW_AUDIO_PAUSE:
+        case HENKA_HKS_TOKEN_KW_AUDIO_RESUME:
+        case HENKA_HKS_TOKEN_KW_AUDIO_SET_GAIN:
+        case HENKA_HKS_TOKEN_KW_AUDIO_SET_PITCH:
+        case HENKA_HKS_TOKEN_KW_AUDIO_SET_LOOPING:
+        case HENKA_HKS_TOKEN_KW_AUDIO_SET_SPATIAL:
+        case HENKA_HKS_TOKEN_KW_AUDIO_SET_BUS:
+        case HENKA_HKS_TOKEN_KW_AUDIO_SEEK:
         case HENKA_HKS_TOKEN_KW_EVENT_ID:
         case HENKA_HKS_TOKEN_KW_EVENT_OTHER_ENTITY:
         case HENKA_HKS_TOKEN_KW_EVENT_TYPE:
@@ -1286,6 +1313,66 @@ static henka_result henka_hks_parse_audio_statement(
                 HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
                 henka_hks_current(parser),
                 "%s requires an entity expression",
+                name);
+    }
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_RPAREN, "audio operation requires ')'") != HENKA_SUCCESS ||
+        henka_hks_expect(parser, HENKA_HKS_TOKEN_SEMICOLON, "audio operation requires a semicolon") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_hks_add_node(parser, HENKA_HKS_AST_HOST_CALL, HENKA_HKS_TYPE_VOID) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return henka_hks_emit(parser, opcode, HENKA_HKS_TYPE_VOID, 0U, 0, 0.0F);
+}
+
+static henka_result henka_hks_parse_audio_value_statement(
+    henka_hks_parser* parser,
+    henka_hks_opcode opcode,
+    henka_hks_value_type expected_value_type,
+    const char* name)
+{
+    henka_hks_value_type entity_type;
+    henka_hks_value_type value_type;
+    henka_result result;
+    if (parser == NULL || name == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    ++parser->index;
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_LPAREN, "audio operation requires '('") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_hks_parse_expression(parser, &entity_type);
+    if (result != HENKA_SUCCESS || entity_type != HENKA_HKS_TYPE_ENTITY)
+    {
+        return result != HENKA_SUCCESS
+            ? result
+            : henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                henka_hks_current(parser),
+                "%s requires an entity expression",
+                name);
+    }
+    if (henka_hks_expect(
+            parser, HENKA_HKS_TOKEN_COMMA,
+            "audio operation requires an entity and value") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_hks_parse_expression(parser, &value_type);
+    if (result != HENKA_SUCCESS || value_type != expected_value_type)
+    {
+        return result != HENKA_SUCCESS
+            ? result
+            : henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                henka_hks_current(parser),
+                "%s requires the expected value type",
                 name);
     }
     if (henka_hks_expect(parser, HENKA_HKS_TOKEN_RPAREN, "audio operation requires ')'") != HENKA_SUCCESS ||
@@ -2374,16 +2461,71 @@ static henka_result henka_hks_parse_statement(henka_hks_parser* parser)
                 : "physics_apply_impulse");
     }
     if (token->kind == HENKA_HKS_TOKEN_KW_AUDIO_STOP ||
-        token->kind == HENKA_HKS_TOKEN_KW_AUDIO_RESTART)
+        token->kind == HENKA_HKS_TOKEN_KW_AUDIO_RESTART ||
+        token->kind == HENKA_HKS_TOKEN_KW_AUDIO_PLAY ||
+        token->kind == HENKA_HKS_TOKEN_KW_AUDIO_PAUSE ||
+        token->kind == HENKA_HKS_TOKEN_KW_AUDIO_RESUME)
     {
         return henka_hks_parse_audio_statement(
             parser,
             token->kind == HENKA_HKS_TOKEN_KW_AUDIO_STOP
                 ? HENKA_HKS_OPCODE_AUDIO_STOP
-                : HENKA_HKS_OPCODE_AUDIO_RESTART,
+                : token->kind == HENKA_HKS_TOKEN_KW_AUDIO_RESTART
+                    ? HENKA_HKS_OPCODE_AUDIO_RESTART
+                    : token->kind == HENKA_HKS_TOKEN_KW_AUDIO_PLAY
+                        ? HENKA_HKS_OPCODE_AUDIO_PLAY
+                        : token->kind == HENKA_HKS_TOKEN_KW_AUDIO_PAUSE
+                            ? HENKA_HKS_OPCODE_AUDIO_PAUSE
+                            : HENKA_HKS_OPCODE_AUDIO_RESUME,
             token->kind == HENKA_HKS_TOKEN_KW_AUDIO_STOP
                 ? "audio_stop"
-                : "audio_restart");
+                : token->kind == HENKA_HKS_TOKEN_KW_AUDIO_RESTART
+                    ? "audio_restart"
+                    : token->kind == HENKA_HKS_TOKEN_KW_AUDIO_PLAY
+                        ? "audio_play"
+                        : token->kind == HENKA_HKS_TOKEN_KW_AUDIO_PAUSE
+                            ? "audio_pause"
+                            : "audio_resume");
+    }
+    if (token->kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_GAIN ||
+        token->kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_PITCH ||
+        token->kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_LOOPING ||
+        token->kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_SPATIAL ||
+        token->kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_BUS ||
+        token->kind == HENKA_HKS_TOKEN_KW_AUDIO_SEEK)
+    {
+        const henka_hks_token_kind audio_kind = token->kind;
+        return henka_hks_parse_audio_value_statement(
+            parser,
+            audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_GAIN
+                ? HENKA_HKS_OPCODE_AUDIO_SET_GAIN
+                : audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_PITCH
+                    ? HENKA_HKS_OPCODE_AUDIO_SET_PITCH
+                    : audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_LOOPING
+                        ? HENKA_HKS_OPCODE_AUDIO_SET_LOOPING
+                        : audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_SPATIAL
+                            ? HENKA_HKS_OPCODE_AUDIO_SET_SPATIAL
+                            : audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_BUS
+                                ? HENKA_HKS_OPCODE_AUDIO_SET_BUS
+                                : HENKA_HKS_OPCODE_AUDIO_SEEK,
+            (audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_GAIN ||
+             audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_PITCH)
+                ? HENKA_HKS_TYPE_F32
+                : (audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_LOOPING ||
+                   audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_SPATIAL)
+                    ? HENKA_HKS_TYPE_BOOL
+                    : HENKA_HKS_TYPE_I32,
+            audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_GAIN
+                ? "audio_set_gain"
+                : audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_PITCH
+                    ? "audio_set_pitch"
+                    : audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_LOOPING
+                        ? "audio_set_looping"
+                        : audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_SPATIAL
+                            ? "audio_set_spatial"
+                            : audio_kind == HENKA_HKS_TOKEN_KW_AUDIO_SET_BUS
+                                ? "audio_set_bus"
+                                : "audio_seek");
     }
     if (henka_hks_is_state_set_token(token->kind))
     {
@@ -3423,14 +3565,26 @@ henka_hks_execution_result henka_hks_execute_with_context(
                 break;
             case HENKA_HKS_OPCODE_AUDIO_STOP:
             case HENKA_HKS_OPCODE_AUDIO_RESTART:
+            case HENKA_HKS_OPCODE_AUDIO_PLAY:
+            case HENKA_HKS_OPCODE_AUDIO_PAUSE:
+            case HENKA_HKS_OPCODE_AUDIO_RESUME:
+            case HENKA_HKS_OPCODE_AUDIO_SET_GAIN:
+            case HENKA_HKS_OPCODE_AUDIO_SET_PITCH:
+            case HENKA_HKS_OPCODE_AUDIO_SET_LOOPING:
+            case HENKA_HKS_OPCODE_AUDIO_SET_SPATIAL:
+            case HENKA_HKS_OPCODE_AUDIO_SET_BUS:
+            case HENKA_HKS_OPCODE_AUDIO_SEEK:
                 {
-                    henka_script_api_value argument;
+                    const bool unary = instruction->opcode == HENKA_HKS_OPCODE_AUDIO_STOP ||
+                        instruction->opcode == HENKA_HKS_OPCODE_AUDIO_RESTART ||
+                        instruction->opcode == HENKA_HKS_OPCODE_AUDIO_PLAY ||
+                        instruction->opcode == HENKA_HKS_OPCODE_AUDIO_PAUSE ||
+                        instruction->opcode == HENKA_HKS_OPCODE_AUDIO_RESUME;
+                    henka_script_api_value arguments[2];
                     henka_script_api_value output;
                     henka_result host_result;
-                    const uint32_t api_id = instruction->opcode == HENKA_HKS_OPCODE_AUDIO_STOP
-                        ? HENKA_SCRIPT_API_AUDIO_STOP
-                        : HENKA_SCRIPT_API_AUDIO_RESTART;
-                    if (stack_depth == 0U)
+                    uint32_t api_id = 0U;
+                    if (stack_depth < (unary ? 1U : 2U))
                     {
                         return henka_hks_vm_finish(
                             out_report,
@@ -3439,27 +3593,111 @@ henka_hks_execution_result henka_hks_execute_with_context(
                             stack_depth);
                     }
                     value = stack[--stack_depth];
-                    if (value.type != HENKA_HKS_TYPE_ENTITY ||
-                        context == NULL || context->host == NULL)
+                    if (unary)
                     {
-                        if (out_report != NULL)
+                        if (value.type != HENKA_HKS_TYPE_ENTITY)
                         {
-                            out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                            if (out_report != NULL)
+                            {
+                                out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                            }
+                            return henka_hks_vm_finish(
+                                out_report,
+                                HENKA_HKS_EXECUTION_HOST_ERROR,
+                                instructions_executed,
+                                stack_depth);
                         }
-                        return henka_hks_vm_finish(
-                            out_report,
-                            HENKA_HKS_EXECUTION_HOST_ERROR,
-                            instructions_executed,
-                            stack_depth);
+                        arguments[0] = (henka_script_api_value){
+                            HENKA_SCRIPT_API_VALUE_ENTITY,
+                            {.entity = value.as.entity}};
                     }
-                    argument = (henka_script_api_value){
-                        HENKA_SCRIPT_API_VALUE_ENTITY,
-                        {.entity = value.as.entity}};
+                    else
+                    {
+                        henka_hks_value entity_value;
+                        if (stack_depth == 0U)
+                        {
+                            return henka_hks_vm_finish(
+                                out_report,
+                                HENKA_HKS_EXECUTION_STACK_UNDERFLOW,
+                                instructions_executed,
+                                stack_depth);
+                        }
+                        entity_value = stack[--stack_depth];
+                        if (entity_value.type != HENKA_HKS_TYPE_ENTITY)
+                        {
+                            if (out_report != NULL)
+                            {
+                                out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                            }
+                            return henka_hks_vm_finish(
+                                out_report,
+                                HENKA_HKS_EXECUTION_HOST_ERROR,
+                                instructions_executed,
+                                stack_depth);
+                        }
+                        arguments[0] = (henka_script_api_value){
+                            HENKA_SCRIPT_API_VALUE_ENTITY,
+                            {.entity = entity_value.as.entity}};
+                        switch (instruction->opcode)
+                        {
+                            case HENKA_HKS_OPCODE_AUDIO_SET_GAIN:
+                            case HENKA_HKS_OPCODE_AUDIO_SET_PITCH:
+                                if (value.type != HENKA_HKS_TYPE_F32)
+                                {
+                                    goto audio_host_argument_error;
+                                }
+                                arguments[1] = (henka_script_api_value){
+                                    HENKA_SCRIPT_API_VALUE_FLOAT32,
+                                    {.f32 = value.as.f32}};
+                                break;
+                            case HENKA_HKS_OPCODE_AUDIO_SET_LOOPING:
+                            case HENKA_HKS_OPCODE_AUDIO_SET_SPATIAL:
+                                if (value.type != HENKA_HKS_TYPE_BOOL)
+                                {
+                                    goto audio_host_argument_error;
+                                }
+                                arguments[1] = (henka_script_api_value){
+                                    HENKA_SCRIPT_API_VALUE_BOOL,
+                                    {.boolean = value.as.boolean}};
+                                break;
+                            case HENKA_HKS_OPCODE_AUDIO_SET_BUS:
+                            case HENKA_HKS_OPCODE_AUDIO_SEEK:
+                                if (value.type != HENKA_HKS_TYPE_I32)
+                                {
+                                    goto audio_host_argument_error;
+                                }
+                                arguments[1] = (henka_script_api_value){
+                                    HENKA_SCRIPT_API_VALUE_I32,
+                                    {.i32 = value.as.i32}};
+                                break;
+                            default:
+                                goto audio_host_argument_error;
+                        }
+                    }
+                    switch (instruction->opcode)
+                    {
+                        case HENKA_HKS_OPCODE_AUDIO_STOP: api_id = HENKA_SCRIPT_API_AUDIO_STOP; break;
+                        case HENKA_HKS_OPCODE_AUDIO_RESTART: api_id = HENKA_SCRIPT_API_AUDIO_RESTART; break;
+                        case HENKA_HKS_OPCODE_AUDIO_PLAY: api_id = HENKA_SCRIPT_API_AUDIO_PLAY; break;
+                        case HENKA_HKS_OPCODE_AUDIO_PAUSE: api_id = HENKA_SCRIPT_API_AUDIO_PAUSE; break;
+                        case HENKA_HKS_OPCODE_AUDIO_RESUME: api_id = HENKA_SCRIPT_API_AUDIO_RESUME; break;
+                        case HENKA_HKS_OPCODE_AUDIO_SET_GAIN: api_id = HENKA_SCRIPT_API_AUDIO_SET_GAIN; break;
+                        case HENKA_HKS_OPCODE_AUDIO_SET_PITCH: api_id = HENKA_SCRIPT_API_AUDIO_SET_PITCH; break;
+                        case HENKA_HKS_OPCODE_AUDIO_SET_LOOPING: api_id = HENKA_SCRIPT_API_AUDIO_SET_LOOPING; break;
+                        case HENKA_HKS_OPCODE_AUDIO_SET_SPATIAL: api_id = HENKA_SCRIPT_API_AUDIO_SET_SPATIAL; break;
+                        case HENKA_HKS_OPCODE_AUDIO_SET_BUS: api_id = HENKA_SCRIPT_API_AUDIO_SET_BUS; break;
+                        case HENKA_HKS_OPCODE_AUDIO_SEEK: api_id = HENKA_SCRIPT_API_AUDIO_SEEK; break;
+                        default: goto audio_host_argument_error;
+                    }
+                    if (context == NULL || context->host == NULL)
+                    {
+                        goto audio_host_argument_error;
+                    }
                     host_result = henka_script_host_invoke(
                         context->host,
                         api_id,
-                        &argument,
-                        1U,
+                        arguments,
+                        unary ? 1U : 2U,
                         &output);
                     if (host_result != HENKA_SUCCESS ||
                         output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
@@ -3477,6 +3715,17 @@ henka_hks_execution_result henka_hks_execute_with_context(
                             instructions_executed,
                             stack_depth);
                     }
+                    break;
+audio_host_argument_error:
+                    if (out_report != NULL)
+                    {
+                        out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                    }
+                    return henka_hks_vm_finish(
+                        out_report,
+                        HENKA_HKS_EXECUTION_HOST_ERROR,
+                        instructions_executed,
+                        stack_depth);
                 }
                 break;
             case HENKA_HKS_OPCODE_AUDIO_IS_PLAYING:

@@ -243,6 +243,18 @@ henka_result henka_audio_voice_set_pitch(
     henka_audio_system* system,
     henka_audio_voice_id voice,
     float pitch);
+henka_result henka_audio_voice_set_looping(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    bool looping);
+henka_result henka_audio_voice_set_spatial(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    bool spatial);
+henka_result henka_audio_voice_set_bus(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    henka_audio_bus bus);
 bool henka_audio_voice_is_valid(
     const henka_audio_system* system,
     henka_audio_voice_id voice);
@@ -308,6 +320,27 @@ henka_result henka_audio_emitter_get_voice_info(
  * a destroyed scene entity and preserve the borrowed-object lifetime rules. */
 henka_result henka_audio_emitter_stop(henka_audio_emitter* emitter);
 henka_result henka_audio_emitter_restart(henka_audio_emitter* emitter);
+henka_result henka_audio_emitter_play(henka_audio_emitter* emitter);
+henka_result henka_audio_emitter_pause(henka_audio_emitter* emitter);
+henka_result henka_audio_emitter_resume(henka_audio_emitter* emitter);
+henka_result henka_audio_emitter_seek(
+    henka_audio_emitter* emitter,
+    size_t source_frame);
+henka_result henka_audio_emitter_set_gain(
+    henka_audio_emitter* emitter,
+    float gain);
+henka_result henka_audio_emitter_set_pitch(
+    henka_audio_emitter* emitter,
+    float pitch);
+henka_result henka_audio_emitter_set_looping(
+    henka_audio_emitter* emitter,
+    bool looping);
+henka_result henka_audio_emitter_set_spatial(
+    henka_audio_emitter* emitter,
+    bool spatial);
+henka_result henka_audio_emitter_set_bus(
+    henka_audio_emitter* emitter,
+    henka_audio_bus bus);
 bool henka_audio_emitter_is_playing(const henka_audio_emitter* emitter);
 
 /* Mixes bounded stereo float PCM. output_interleaved must contain at least

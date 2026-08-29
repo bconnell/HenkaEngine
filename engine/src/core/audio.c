@@ -1285,6 +1285,49 @@ henka_result henka_audio_voice_set_pitch(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_audio_voice_set_looping(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    bool looping)
+{
+    henka_audio_voice_slot* slot = henka_audio_find_voice(system, voice);
+    if (slot == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->desc.looping = looping;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_voice_set_spatial(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    bool spatial)
+{
+    henka_audio_voice_slot* slot = henka_audio_find_voice(system, voice);
+    if (slot == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->desc.spatial = spatial;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_voice_set_bus(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    henka_audio_bus bus)
+{
+    henka_audio_voice_slot* slot = henka_audio_find_voice(system, voice);
+    if (slot == NULL || !henka_audio_bus_is_valid(bus) ||
+        bus <= HENKA_AUDIO_BUS_MASTER)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->desc.bus = bus;
+    return HENKA_SUCCESS;
+}
+
 bool henka_audio_voice_is_valid(
     const henka_audio_system* system,
     henka_audio_voice_id voice)
@@ -1654,6 +1697,163 @@ henka_result henka_audio_emitter_restart(henka_audio_emitter* emitter)
         emitter->voice = HENKA_INVALID_AUDIO_VOICE_ID;
     }
     return henka_audio_emitter_play_internal(emitter);
+}
+
+henka_result henka_audio_emitter_play(henka_audio_emitter* emitter)
+{
+    return henka_audio_emitter_play_internal(emitter);
+}
+
+henka_result henka_audio_emitter_pause(henka_audio_emitter* emitter)
+{
+    henka_audio_voice_info info;
+    if (emitter == NULL ||
+        henka_audio_emitter_get_voice_info(emitter, &info) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_audio_voice_pause(emitter->system, info.id);
+}
+
+henka_result henka_audio_emitter_resume(henka_audio_emitter* emitter)
+{
+    henka_audio_voice_info info;
+    if (emitter == NULL ||
+        henka_audio_emitter_get_voice_info(emitter, &info) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_audio_voice_resume(emitter->system, info.id);
+}
+
+henka_result henka_audio_emitter_seek(
+    henka_audio_emitter* emitter,
+    size_t source_frame)
+{
+    henka_audio_voice_info info;
+    if (emitter == NULL ||
+        henka_audio_emitter_get_voice_info(emitter, &info) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_audio_voice_seek(emitter->system, info.id, source_frame);
+}
+
+static bool henka_audio_emitter_owner_is_valid(
+    const henka_audio_emitter* emitter)
+{
+    return emitter != NULL && emitter->system != NULL && emitter->scene != NULL &&
+        (emitter->clip != NULL || emitter->stream != NULL) &&
+        henka_scene_is_entity_valid(emitter->scene, emitter->entity);
+}
+
+henka_result henka_audio_emitter_set_gain(
+    henka_audio_emitter* emitter,
+    float gain)
+{
+    henka_result result;
+    if (!henka_audio_emitter_owner_is_valid(emitter) ||
+        !henka_audio_float_is_valid(gain) || gain < 0.0f ||
+        gain > HENKA_AUDIO_MAX_GAIN)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_audio_voice_is_valid(emitter->system, emitter->voice))
+    {
+        result = henka_audio_voice_set_gain(emitter->system, emitter->voice, gain);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    emitter->config.gain = gain;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_emitter_set_pitch(
+    henka_audio_emitter* emitter,
+    float pitch)
+{
+    henka_result result;
+    if (!henka_audio_emitter_owner_is_valid(emitter) ||
+        !henka_audio_float_is_valid(pitch) || pitch < 0.25f || pitch > 4.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_audio_voice_is_valid(emitter->system, emitter->voice))
+    {
+        result = henka_audio_voice_set_pitch(emitter->system, emitter->voice, pitch);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    emitter->config.pitch = pitch;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_emitter_set_looping(
+    henka_audio_emitter* emitter,
+    bool looping)
+{
+    henka_result result;
+    if (!henka_audio_emitter_owner_is_valid(emitter))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_audio_voice_is_valid(emitter->system, emitter->voice))
+    {
+        result = henka_audio_voice_set_looping(emitter->system, emitter->voice, looping);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    emitter->config.looping = looping;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_emitter_set_spatial(
+    henka_audio_emitter* emitter,
+    bool spatial)
+{
+    henka_result result;
+    if (!henka_audio_emitter_owner_is_valid(emitter))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_audio_voice_is_valid(emitter->system, emitter->voice))
+    {
+        result = henka_audio_voice_set_spatial(emitter->system, emitter->voice, spatial);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    emitter->config.spatial = spatial;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_emitter_set_bus(
+    henka_audio_emitter* emitter,
+    henka_audio_bus bus)
+{
+    henka_result result;
+    if (!henka_audio_emitter_owner_is_valid(emitter) ||
+        !henka_audio_bus_is_valid(bus) || bus <= HENKA_AUDIO_BUS_MASTER)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_audio_voice_is_valid(emitter->system, emitter->voice))
+    {
+        result = henka_audio_voice_set_bus(emitter->system, emitter->voice, bus);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    emitter->config.bus = bus;
+    return HENKA_SUCCESS;
 }
 
 bool henka_audio_emitter_is_playing(const henka_audio_emitter* emitter)

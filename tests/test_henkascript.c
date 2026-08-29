@@ -714,10 +714,36 @@ static henka_result test_audio_dispatch(
     henka_script_api_value* out_value)
 {
     bool* playing = (bool*)user_data;
+    bool unary;
     if (playing == NULL || arguments == NULL || out_value == NULL ||
-        argument_count != 1U ||
         arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
         arguments[0].as.entity != 99U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    unary = api_id == HENKA_SCRIPT_API_AUDIO_STOP ||
+        api_id == HENKA_SCRIPT_API_AUDIO_RESTART ||
+        api_id == HENKA_SCRIPT_API_AUDIO_IS_PLAYING ||
+        api_id == HENKA_SCRIPT_API_AUDIO_PLAY ||
+        api_id == HENKA_SCRIPT_API_AUDIO_PAUSE ||
+        api_id == HENKA_SCRIPT_API_AUDIO_RESUME;
+    if ((unary && argument_count != 1U) || (!unary && argument_count != 2U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!unary &&
+        ((api_id == HENKA_SCRIPT_API_AUDIO_SET_GAIN &&
+            arguments[1].type != HENKA_SCRIPT_API_VALUE_FLOAT32) ||
+         (api_id == HENKA_SCRIPT_API_AUDIO_SET_PITCH &&
+            arguments[1].type != HENKA_SCRIPT_API_VALUE_FLOAT32) ||
+         (api_id == HENKA_SCRIPT_API_AUDIO_SET_LOOPING &&
+            arguments[1].type != HENKA_SCRIPT_API_VALUE_BOOL) ||
+         (api_id == HENKA_SCRIPT_API_AUDIO_SET_SPATIAL &&
+            arguments[1].type != HENKA_SCRIPT_API_VALUE_BOOL) ||
+         (api_id == HENKA_SCRIPT_API_AUDIO_SET_BUS &&
+            arguments[1].type != HENKA_SCRIPT_API_VALUE_I32) ||
+         (api_id == HENKA_SCRIPT_API_AUDIO_SEEK &&
+            arguments[1].type != HENKA_SCRIPT_API_VALUE_I32)))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -728,6 +754,18 @@ static henka_result test_audio_dispatch(
     else if (api_id == HENKA_SCRIPT_API_AUDIO_RESTART)
     {
         *playing = true;
+    }
+    else if (api_id == HENKA_SCRIPT_API_AUDIO_PLAY ||
+        api_id == HENKA_SCRIPT_API_AUDIO_PAUSE ||
+        api_id == HENKA_SCRIPT_API_AUDIO_RESUME ||
+        api_id == HENKA_SCRIPT_API_AUDIO_SET_GAIN ||
+        api_id == HENKA_SCRIPT_API_AUDIO_SET_PITCH ||
+        api_id == HENKA_SCRIPT_API_AUDIO_SET_LOOPING ||
+        api_id == HENKA_SCRIPT_API_AUDIO_SET_SPATIAL ||
+        api_id == HENKA_SCRIPT_API_AUDIO_SET_BUS ||
+        api_id == HENKA_SCRIPT_API_AUDIO_SEEK)
+    {
+        /* The focused contract test validates routing and value types. */
     }
     else if (api_id == HENKA_SCRIPT_API_AUDIO_IS_PLAYING)
     {
@@ -749,6 +787,15 @@ static void test_audio_host_contract(void)
     henka_hks_program* program = compile_program(
         "fn Control() { "
         "entity target = event_other_entity(); "
+        "audio_play(target); "
+        "audio_pause(target); "
+        "audio_resume(target); "
+        "audio_set_gain(target, 0.5); "
+        "audio_set_pitch(target, 1.25); "
+        "audio_set_looping(target, false); "
+        "audio_set_spatial(target, true); "
+        "audio_set_bus(target, 2); "
+        "audio_seek(target, 3); "
         "audio_stop(target); "
         "audio_restart(target); "
         "bool playing = audio_is_playing(target); "
@@ -761,6 +808,15 @@ static void test_audio_host_contract(void)
     henka_hks_value value;
     bool playing = true;
     const uint32_t api_ids[] = {
+        HENKA_SCRIPT_API_AUDIO_PLAY,
+        HENKA_SCRIPT_API_AUDIO_PAUSE,
+        HENKA_SCRIPT_API_AUDIO_RESUME,
+        HENKA_SCRIPT_API_AUDIO_SET_GAIN,
+        HENKA_SCRIPT_API_AUDIO_SET_PITCH,
+        HENKA_SCRIPT_API_AUDIO_SET_LOOPING,
+        HENKA_SCRIPT_API_AUDIO_SET_SPATIAL,
+        HENKA_SCRIPT_API_AUDIO_SET_BUS,
+        HENKA_SCRIPT_API_AUDIO_SEEK,
         HENKA_SCRIPT_API_AUDIO_STOP,
         HENKA_SCRIPT_API_AUDIO_RESTART,
         HENKA_SCRIPT_API_AUDIO_IS_PLAYING};

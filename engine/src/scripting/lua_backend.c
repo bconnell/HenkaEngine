@@ -504,6 +504,198 @@ static int henka_lua_audio_is_playing(lua_State* state)
     return 1;
 }
 
+static int henka_lua_audio_result_call(
+    lua_State* state,
+    uint32_t api_id,
+    const char* error_message,
+    const henka_script_api_value* arguments,
+    size_t argument_count)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value output;
+    if (henka_lua_invoke_host(
+            backend, api_id, arguments, argument_count, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT)
+    {
+        return luaL_error(state, "%s", error_message);
+    }
+    lua_pushinteger(state, (lua_Integer)output.as.result);
+    return 1;
+}
+
+static bool henka_lua_get_audio_float(
+    lua_State* state,
+    int index,
+    float* out_value)
+{
+    int is_number = 0;
+    lua_Number value;
+    if (state == NULL || out_value == NULL)
+    {
+        return false;
+    }
+    value = lua_tonumberx(state, index, &is_number);
+    if (!is_number || !isfinite((double)value) ||
+        !isfinite((double)(float)value))
+    {
+        return false;
+    }
+    *out_value = (float)value;
+    return true;
+}
+
+static int henka_lua_audio_play(lua_State* state)
+{
+    uint64_t entity;
+    henka_script_api_value argument;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity))
+    {
+        return luaL_error(state, "Audio.Play requires a non-negative integer entity ID");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    return henka_lua_audio_result_call(
+        state, HENKA_SCRIPT_API_AUDIO_PLAY, "Audio.Play failed", &argument, 1U);
+}
+
+static int henka_lua_audio_pause(lua_State* state)
+{
+    uint64_t entity;
+    henka_script_api_value argument;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity))
+    {
+        return luaL_error(state, "Audio.Pause requires a non-negative integer entity ID");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    return henka_lua_audio_result_call(
+        state, HENKA_SCRIPT_API_AUDIO_PAUSE, "Audio.Pause failed", &argument, 1U);
+}
+
+static int henka_lua_audio_resume(lua_State* state)
+{
+    uint64_t entity;
+    henka_script_api_value argument;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity))
+    {
+        return luaL_error(state, "Audio.Resume requires a non-negative integer entity ID");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    return henka_lua_audio_result_call(
+        state, HENKA_SCRIPT_API_AUDIO_RESUME, "Audio.Resume failed", &argument, 1U);
+}
+
+static int henka_lua_audio_set_gain_or_pitch(
+    lua_State* state,
+    uint32_t api_id,
+    const char* function_name,
+    const char* error_message)
+{
+    uint64_t entity;
+    float value;
+    henka_script_api_value arguments[2];
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity) ||
+        !henka_lua_get_audio_float(state, 2, &value))
+    {
+        return luaL_error(
+            state, "%s requires an entity ID and finite number", function_name);
+    }
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_FLOAT32, {.f32 = value}};
+    return henka_lua_audio_result_call(
+        state, api_id, error_message, arguments, 2U);
+}
+
+static int henka_lua_audio_set_gain(lua_State* state)
+{
+    return henka_lua_audio_set_gain_or_pitch(
+        state, HENKA_SCRIPT_API_AUDIO_SET_GAIN,
+        "Audio.SetGain", "Audio.SetGain failed");
+}
+
+static int henka_lua_audio_set_pitch(lua_State* state)
+{
+    return henka_lua_audio_set_gain_or_pitch(
+        state, HENKA_SCRIPT_API_AUDIO_SET_PITCH,
+        "Audio.SetPitch", "Audio.SetPitch failed");
+}
+
+static int henka_lua_audio_set_bool(
+    lua_State* state,
+    uint32_t api_id,
+    const char* function_name,
+    const char* error_message)
+{
+    uint64_t entity;
+    henka_script_api_value arguments[2];
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity) ||
+        !lua_isboolean(state, 2))
+    {
+        return luaL_error(
+            state, "%s requires an entity ID and boolean", function_name);
+    }
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_BOOL, {.boolean = lua_toboolean(state, 2) != 0}};
+    return henka_lua_audio_result_call(
+        state, api_id, error_message, arguments, 2U);
+}
+
+static int henka_lua_audio_set_looping(lua_State* state)
+{
+    return henka_lua_audio_set_bool(
+        state, HENKA_SCRIPT_API_AUDIO_SET_LOOPING,
+        "Audio.SetLooping", "Audio.SetLooping failed");
+}
+
+static int henka_lua_audio_set_spatial(lua_State* state)
+{
+    return henka_lua_audio_set_bool(
+        state, HENKA_SCRIPT_API_AUDIO_SET_SPATIAL,
+        "Audio.SetSpatial", "Audio.SetSpatial failed");
+}
+
+static int henka_lua_audio_set_i32(
+    lua_State* state,
+    uint32_t api_id,
+    const char* function_name,
+    const char* error_message)
+{
+    uint64_t entity;
+    int32_t value;
+    henka_script_api_value arguments[2];
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity) ||
+        !henka_lua_get_i32(state, 2, &value))
+    {
+        return luaL_error(
+            state, "%s requires an entity ID and 32-bit integer", function_name);
+    }
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_I32, {.i32 = value}};
+    return henka_lua_audio_result_call(
+        state, api_id, error_message, arguments, 2U);
+}
+
+static int henka_lua_audio_set_bus(lua_State* state)
+{
+    return henka_lua_audio_set_i32(
+        state, HENKA_SCRIPT_API_AUDIO_SET_BUS,
+        "Audio.SetBus", "Audio.SetBus failed");
+}
+
+static int henka_lua_audio_seek(lua_State* state)
+{
+    return henka_lua_audio_set_i32(
+        state, HENKA_SCRIPT_API_AUDIO_SEEK,
+        "Audio.Seek", "Audio.Seek failed");
+}
+
 static int henka_lua_events_emit(lua_State* state)
 {
     henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
@@ -678,6 +870,24 @@ static void henka_lua_register_api(henka_lua_behavior_backend* backend)
         backend->state, backend, "Audio", "Restart", henka_lua_audio_restart);
     henka_lua_register_api_function(
         backend->state, backend, "Audio", "IsPlaying", henka_lua_audio_is_playing);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "Play", henka_lua_audio_play);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "Pause", henka_lua_audio_pause);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "Resume", henka_lua_audio_resume);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "SetGain", henka_lua_audio_set_gain);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "SetPitch", henka_lua_audio_set_pitch);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "SetLooping", henka_lua_audio_set_looping);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "SetSpatial", henka_lua_audio_set_spatial);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "SetBus", henka_lua_audio_set_bus);
+    henka_lua_register_api_function(
+        backend->state, backend, "Audio", "Seek", henka_lua_audio_seek);
     henka_lua_register_api_function(
         backend->state, backend, "Events", "Emit", henka_lua_events_emit);
     henka_lua_register_api_function(

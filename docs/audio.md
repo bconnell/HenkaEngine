@@ -26,7 +26,8 @@ foundation in `engine/include/henka/audio.h`.
   The current mixer supports per-bus gains, listener orientation, distance
   attenuation, stereo panning, looping, pitch, and deterministic interleaved
   stereo float-PCM output. Resident voices also support bounded pause, resume,
-  restart, seek, gain, and pitch controls with generation-checked IDs.
+  restart, seek, gain, pitch, looping, spatial, and bus controls with
+  generation-checked IDs.
 - Destroyed or stale scene entities are rejected before they contribute audio.
   Scene and clip owners must stop dependent voices before destroying those
   borrowed objects.
@@ -56,7 +57,7 @@ emitters; the graphical camera remains the live listener source during normal
 interactive runtime.
 Play pause and resume now propagate to its live emitter voices without
 advancing their source positions. The next Audio slices must connect it to
-  broader device-lifecycle policy. A packaged `--audio-smoke-test` now loads
+broader device-lifecycle policy. A packaged `--audio-smoke-test` now loads
   the repository-owned `assets/audio/henka_audio_fixture.wav` through the real
   asset manager in both resident and metadata-first streamed modes. Each mode
   attaches the payload to a real scene entity, mixes it through a live emitter,
@@ -75,16 +76,20 @@ resident clip, the scene owns the entity, and the Audio runtime owns the
 temporary emitter. Preview replacement is transactional and failed asset
 loads leave the active preview unchanged.
 
-The shared Script Host exposes typed `Audio.Stop(entity)`,
-`Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` bindings to both Lua and
-HenkaScript in Play. They operate on the persisted object-to-emitter mapping;
-missing or stale emitter bindings fail closed, while `IsPlaying` reports false.
+The shared Script Host exposes typed `Audio.Play(entity)`,
+`Audio.Stop(entity)`, `Audio.Restart(entity)`, `Audio.Pause(entity)`,
+`Audio.Resume(entity)`, `Audio.IsPlaying(entity)`, `Audio.SetGain(entity, gain)`,
+`Audio.SetPitch(entity, pitch)`, `Audio.SetLooping(entity, looping)`,
+`Audio.SetSpatial(entity, spatial)`, `Audio.SetBus(entity, bus)`, and
+`Audio.Seek(entity, frame)` bindings to both Lua and HenkaScript in Play. They
+operate on the persisted object-to-emitter mapping; missing or stale emitter
+bindings fail closed, while `IsPlaying` reports false.
 
 ## Future work
 
 Packaged long-form streamed-content coverage, broader decoder coverage, mixer
-effects, broader hot reload policy, and expanded packaged-content coverage,
-device-loss notification/hot-plug policy, and broader spatial/occlusion features
-remain future work. The current script bindings cover only the three typed emitter
-controls above; broader Audio scripting remains unfinished. None of those gaps
-are hidden by the current Foundation status.
+effects, broader hot reload policy, expanded packaged-content coverage,
+device-loss notification/hot-plug policy, and broader spatial/occlusion
+features remain future work. The current production asset scope is PCM WAV;
+compressed Ogg Vorbis, MP3, and FLAC decoding remains unfinished. None of
+those gaps are hidden by the current Foundation status.

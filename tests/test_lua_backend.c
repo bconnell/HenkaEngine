@@ -47,6 +47,47 @@ static henka_result lua_host_dispatch(
             return HENKA_SUCCESS;
         case HENKA_SCRIPT_API_AUDIO_STOP:
         case HENKA_SCRIPT_API_AUDIO_RESTART:
+        case HENKA_SCRIPT_API_AUDIO_PLAY:
+        case HENKA_SCRIPT_API_AUDIO_PAUSE:
+        case HENKA_SCRIPT_API_AUDIO_RESUME:
+            if (argument_count != 1U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+            out_value->as.result = HENKA_SUCCESS;
+            return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_AUDIO_SET_GAIN:
+        case HENKA_SCRIPT_API_AUDIO_SET_PITCH:
+            if (argument_count != 2U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+                arguments[1].type != HENKA_SCRIPT_API_VALUE_FLOAT32)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+            out_value->as.result = HENKA_SUCCESS;
+            return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_AUDIO_SET_LOOPING:
+        case HENKA_SCRIPT_API_AUDIO_SET_SPATIAL:
+            if (argument_count != 2U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+                arguments[1].type != HENKA_SCRIPT_API_VALUE_BOOL)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+            out_value->as.result = HENKA_SUCCESS;
+            return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_AUDIO_SET_BUS:
+        case HENKA_SCRIPT_API_AUDIO_SEEK:
+            if (argument_count != 2U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+                arguments[1].type != HENKA_SCRIPT_API_VALUE_I32)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
             out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
             out_value->as.result = HENKA_SUCCESS;
             return HENKA_SUCCESS;
@@ -196,6 +237,15 @@ static void test_lua_shared_host_api(void)
         "Physics.ApplyImpulse(9, {x = 0, y = -1, z = 0}); "
         "Input.IsActionDown(1); "
         "Interaction.Try(9); "
+        "Audio.Play(9); "
+        "Audio.Pause(9); "
+        "Audio.Resume(9); "
+        "Audio.SetGain(9, 0.5); "
+        "Audio.SetPitch(9, 1.25); "
+        "Audio.SetLooping(9, false); "
+        "Audio.SetSpatial(9, true); "
+        "Audio.SetBus(9, 2); "
+        "Audio.Seek(9, 3); "
         "Audio.Stop(9); "
         "Audio.Restart(9); "
         "Audio.IsPlaying(9); "
@@ -221,7 +271,7 @@ static void test_lua_shared_host_api(void)
         0.016f, 3U, 128U, host};
     assert(henka_lua_behavior_backend_callback(
                &context, backend, &used) == HENKA_SCRIPT_CALLBACK_COMPLETED);
-    assert(used > 0U && fixture.calls == 10U);
+    assert(used > 0U && fixture.calls == 19U);
     assert(henka_script_host_poll_event(host, &event) == HENKA_SUCCESS);
     assert(event.event_id == 7U && event.source_entity == 9U && event.frame_index == 3U);
     henka_script_host_destroy(host);
