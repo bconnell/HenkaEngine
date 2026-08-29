@@ -171,14 +171,21 @@ henka_result henka_audio_clip_get_info(
     const henka_audio_clip* clip,
     henka_audio_clip_info* out_info);
 
-/* Opens a PCM WAV stream beneath project_root without decoding the complete
- * payload. The stream owns one file handle and a bounded read buffer; callers
- * must serialize reads and keep the stream alive for every voice that borrows
- * it. Only the validated WAV metadata and file handle remain resident. */
+/* Opens a supported audio stream beneath project_root without decoding the
+ * complete payload. The stream owns one decoder/file handle; callers must
+ * serialize reads and keep the stream alive for every voice that borrows it.
+ * Only validated metadata and bounded decoder state remain resident. */
 henka_result henka_audio_stream_load_file(
     const char* project_root,
     const char* relative_path,
     henka_audio_stream** out_stream);
+/* Replaces a stream payload only after the complete replacement source has
+ * validated. The stream pointer remains stable for borrowed voices, and a
+ * failed replacement leaves the prior decoder/file and metadata live. */
+henka_result henka_audio_stream_reload_file(
+    henka_audio_stream* stream,
+    const char* project_root,
+    const char* relative_path);
 void henka_audio_stream_destroy(henka_audio_stream* stream);
 henka_result henka_audio_stream_get_info(
     const henka_audio_stream* stream,
@@ -218,10 +225,10 @@ henka_result henka_audio_voice_play_stream(
 henka_result henka_audio_voice_stop(
     henka_audio_system* system,
     henka_audio_voice_id voice);
-/* Voice controls operate on resident clips. Pausing preserves the current
- * source position; restart clears it and resumes playback. Seeking to the
- * clip frame count is valid and lets the next mix complete a non-looping
- * voice deterministically. */
+/* Voice controls operate on resident and streamed sources. Pausing preserves
+ * the current source position; restart clears it and resumes playback.
+ * Seeking to the source frame count is valid and lets the next mix complete a
+ * non-looping voice deterministically. */
 henka_result henka_audio_voice_pause(
     henka_audio_system* system,
     henka_audio_voice_id voice);

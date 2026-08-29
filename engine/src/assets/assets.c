@@ -513,26 +513,26 @@ static void henka_asset_update_audio_metadata(
     entry->metadata.type = HENKA_ASSET_TYPE_AUDIO;
     entry->metadata.loaded = entry->clip != NULL || entry->stream != NULL;
     entry->metadata.fallback = false;
-    entry->metadata.reload_supported = entry->clip != NULL;
+    entry->metadata.reload_supported = entry->clip != NULL || entry->stream != NULL;
     if (entry->clip != NULL && entry->stream != NULL)
     {
         henka_asset_set_summary(
             &entry->metadata,
-            "Resident and metadata-first streamed PCM WAV payloads share the canonical asset path.",
+            "Resident and metadata-first streamed supported audio payloads share the canonical asset path.",
             "");
     }
     else if (entry->clip != NULL)
     {
         henka_asset_set_summary(
             &entry->metadata,
-            "Resident PCM WAV loaded from the canonical asset path.",
+            "Resident supported audio loaded from the canonical asset path.",
             "");
     }
     else
     {
         henka_asset_set_summary(
             &entry->metadata,
-            "Metadata-first streamed PCM WAV loaded from the canonical asset path.",
+            "Metadata-first streamed supported audio loaded from the canonical asset path.",
             "");
     }
 }
@@ -1904,6 +1904,49 @@ henka_result henka_assets_reload_audio_clip(
         "Resident PCM WAV reloaded transactionally through the canonical asset path.",
         "");
     *out_clip = entry->clip;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_reload_audio_stream(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_audio_stream** out_stream)
+{
+    char* key = NULL;
+    henka_asset_audio_entry* entry;
+    henka_result result;
+
+    if (out_stream != NULL)
+    {
+        *out_stream = NULL;
+    }
+    if (manager == NULL || manager->engine == NULL || path == NULL ||
+        out_stream == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    entry = henka_asset_manager_find_audio_entry(manager, key);
+    henka_free(key);
+    if (entry == NULL || entry->stream == NULL || entry->source_path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_audio_stream_reload_file(
+        entry->stream,
+        henka_engine_get_asset_base_path(manager->engine),
+        entry->source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    henka_asset_update_audio_metadata(entry);
+    *out_stream = entry->stream;
     return HENKA_SUCCESS;
 }
 

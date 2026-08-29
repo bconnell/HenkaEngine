@@ -23,10 +23,10 @@ service in `engine/include/henka/audio.h`.
   mixer contract.
 - The asset manager caches resident clips and metadata-first streams by
   canonical path. A path may expose both borrowed payload forms through one
-  manager-owned asset identity; resident clips can be reloaded transactionally
-  in place, while streamed payloads retain bounded decoder/file-backed
-  ownership. Malformed or unreadable resident replacements leave the prior
-  payload and metadata live.
+  manager-owned asset identity; resident clips and streamed payloads can be
+  reloaded transactionally in place while retaining bounded ownership.
+  Malformed or unreadable replacements leave the prior payload and metadata
+  live.
 - A fixed-capacity voice pool uses generation-checked voice IDs. Voices bind to
   borrowed `henka_scene` and `henka_entity` objects and read the live entity
   transform while mixing.

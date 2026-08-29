@@ -3,6 +3,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
+#include <share.h>
+#include <windows.h>
+#endif
 
 #include <henka/memory.h>
 #include <henka/persistence.h>
@@ -32,6 +38,7 @@ typedef struct henka_audio_voice_slot
     bool paused;
     size_t stream_window_start;
     size_t stream_window_frame_count;
+    uint64_t stream_revision;
     float stream_window[HENKA_AUDIO_STREAM_WINDOW_FRAMES * HENKA_AUDIO_OUTPUT_CHANNELS];
 } henka_audio_voice_slot;
 
@@ -58,6 +65,7 @@ struct henka_audio_stream
     uint16_t format_tag;
     uint16_t block_align;
     size_t frame_count;
+    uint64_t content_revision;
 };
 
 struct henka_audio_system
@@ -160,9 +168,40 @@ static FILE* henka_audio_open_file(const char* path, const char* mode)
 {
     FILE* file = NULL;
 #if defined(_WIN32)
-    if (path == NULL || mode == NULL || fopen_s(&file, path, mode) != 0)
+    if (path == NULL || mode == NULL)
     {
         return NULL;
+    }
+    if (strcmp(mode, "rb") == 0)
+    {
+        HANDLE handle = CreateFileA(
+            path,
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            NULL,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            NULL);
+        int descriptor;
+        if (handle == INVALID_HANDLE_VALUE)
+        {
+            return NULL;
+        }
+        descriptor = _open_osfhandle((intptr_t)handle, _O_RDONLY | _O_BINARY);
+        if (descriptor == -1)
+        {
+            CloseHandle(handle);
+            return NULL;
+        }
+        file = _fdopen(descriptor, mode);
+        if (file == NULL)
+        {
+            _close(descriptor);
+        }
+    }
+    else
+    {
+        file = _fsopen(path, mode, _SH_DENYNO);
     }
 #else
     file = fopen(path, mode);
@@ -678,6 +717,7 @@ static void henka_audio_release_voice(
     slot->paused = false;
     slot->stream_window_start = 0U;
     slot->stream_window_frame_count = 0U;
+    slot->stream_revision = 0U;
     if (system->active_voice_count > 0U)
     {
         --system->active_voice_count;
@@ -1069,17 +1109,11 @@ henka_result henka_audio_stream_load_file(
         stream->channels = info.channels;
         stream->bits_per_sample = info.bits_per_sample;
         stream->frame_count = info.frame_count;
+        stream->content_revision = 1U;
         *out_stream = stream;
         return HENKA_SUCCESS;
     }
-#if defined(_WIN32)
-    if (fopen_s(&file, resolved_path, "rb") != 0)
-    {
-        file = NULL;
-    }
-#else
-    file = fopen(resolved_path, "rb");
-#endif
+    file = henka_audio_open_file(resolved_path, "rb");
     if (file == NULL || fseek(file, 0L, SEEK_END) != 0)
     {
         if (file != NULL)
@@ -1122,7 +1156,57 @@ henka_result henka_audio_stream_load_file(
     stream->format_tag = layout.format_tag;
     stream->block_align = layout.block_align;
     stream->frame_count = layout.frame_count;
+    stream->content_revision = 1U;
     *out_stream = stream;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_stream_reload_file(
+    henka_audio_stream* stream,
+    const char* project_root,
+    const char* relative_path)
+{
+    henka_audio_stream* replacement = NULL;
+    char* old_source_path;
+    FILE* old_file;
+    henka_audio_decoder* old_decoder;
+    uint64_t next_revision;
+    henka_result result;
+
+    if (stream == NULL || project_root == NULL || project_root[0] == '\0' ||
+        relative_path == NULL || relative_path[0] == '\0' ||
+        (stream->file == NULL && stream->decoder == NULL))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_audio_stream_load_file(
+        project_root,
+        relative_path,
+        &replacement);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    old_source_path = stream->source_path;
+    old_file = stream->file;
+    old_decoder = stream->decoder;
+    next_revision = stream->content_revision == UINT64_MAX
+        ? 1U
+        : stream->content_revision + 1U;
+    *stream = *replacement;
+    stream->content_revision = next_revision;
+    replacement->source_path = NULL;
+    replacement->file = NULL;
+    replacement->decoder = NULL;
+    henka_audio_stream_destroy(replacement);
+
+    if (old_file != NULL)
+    {
+        fclose(old_file);
+    }
+    henka_audio_decoder_destroy(old_decoder);
+    henka_free(old_source_path);
     return HENKA_SUCCESS;
 }
 
@@ -1310,6 +1394,7 @@ henka_result henka_audio_voice_play(
         slot->paused = false;
         slot->stream_window_start = 0U;
         slot->stream_window_frame_count = 0U;
+        slot->stream_revision = 0U;
         ++system->active_voice_count;
         *out_voice = henka_audio_make_voice_id(index, slot->generation);
         return HENKA_SUCCESS;
@@ -1358,6 +1443,7 @@ henka_result henka_audio_voice_play_stream(
         slot->paused = false;
         slot->stream_window_start = 0U;
         slot->stream_window_frame_count = 0U;
+        slot->stream_revision = stream->content_revision;
         ++system->active_voice_count;
         *out_voice = henka_audio_make_voice_id(index, slot->generation);
         return HENKA_SUCCESS;
@@ -2170,6 +2256,7 @@ static henka_result henka_audio_stream_fill_window(
     }
     slot->stream_window_start = source_frame;
     slot->stream_window_frame_count = frames_read;
+    slot->stream_revision = slot->stream->content_revision;
     return HENKA_SUCCESS;
 }
 
@@ -2184,6 +2271,12 @@ static henka_result henka_audio_stream_get_frame_samples(
         source_frame >= slot->stream->frame_count)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (slot->stream_revision != slot->stream->content_revision)
+    {
+        slot->stream_window_start = 0U;
+        slot->stream_window_frame_count = 0U;
+        slot->stream_revision = 0U;
     }
     if (source_frame < slot->stream_window_start ||
         source_frame - slot->stream_window_start >= slot->stream_window_frame_count)

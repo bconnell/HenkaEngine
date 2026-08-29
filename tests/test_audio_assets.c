@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#include <share.h>
+#endif
 
 #include <henka/assets.h>
 #include <henka/audio.h>
@@ -69,10 +72,7 @@ static bool test_write_wav_with_sample(
             (uint16_t)sample_value);
     }
 #if defined(_WIN32)
-    if (fopen_s(&file, path, "wb") != 0)
-    {
-        file = NULL;
-    }
+    file = _fsopen(path, "wb", _SH_DENYNO);
 #else
     file = fopen(path, "wb");
 #endif
@@ -111,9 +111,9 @@ int main(void)
     henka_asset_manager* manager;
     henka_audio_clip* clip = NULL;
     henka_audio_clip* same_clip = NULL;
-    henka_audio_clip* stream_clip = NULL;
     henka_audio_stream* stream = NULL;
     henka_audio_stream* same_stream = NULL;
+    henka_audio_emitter* stream_emitter = NULL;
     henka_asset_metadata metadata;
     henka_audio_system* system = NULL;
     henka_scene* scene = NULL;
@@ -149,7 +149,7 @@ int main(void)
         manager, stream, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(metadata.type == HENKA_ASSET_TYPE_AUDIO);
     HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback);
-    HENKA_TEST_ASSERT(!metadata.reload_supported);
+    HENKA_TEST_ASSERT(metadata.reload_supported);
     HENKA_TEST_ASSERT(strcmp(metadata.source_path, stream_wav_path) == 0);
     HENKA_TEST_ASSERT(henka_audio_stream_get_info(stream, &stream_info) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(stream_info.frame_count == 64U);
@@ -158,10 +158,38 @@ int main(void)
         stream, 0U, 4U, stream_samples, 4U, &stream_frames) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(stream_frames == 4U);
     HENKA_TEST_ASSERT(test_nonzero_mix(stream_samples, 4U));
-    HENKA_TEST_ASSERT(henka_assets_load_audio_clip(
-        manager, "build\\test_tmp\\audio_manager_stream.wav", &stream_clip) ==
-        HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(stream_clip != NULL);
+    HENKA_TEST_ASSERT(test_write_wav_with_sample(stream_wav_path, 96U, 16384));
+    same_stream = NULL;
+    HENKA_TEST_ASSERT(henka_assets_reload_audio_stream(
+        manager,
+        stream_wav_path,
+        &same_stream) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(same_stream == stream);
+    HENKA_TEST_ASSERT(henka_audio_stream_get_info(stream, &stream_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stream_info.frame_count == 96U);
+    HENKA_TEST_ASSERT(henka_assets_get_audio_stream_metadata(
+        manager, stream, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.reload_supported);
+    {
+        FILE* file = NULL;
+        const unsigned char malformed[] = {'O', 'g', 'g', 'S', 0U, 0U, 0U, 0U};
+#if defined(_WIN32)
+        file = _fsopen(stream_wav_path, "wb", _SH_DENYNO);
+#else
+        file = fopen(stream_wav_path, "wb");
+#endif
+        HENKA_TEST_ASSERT(file != NULL);
+        HENKA_TEST_ASSERT(fwrite(malformed, 1U, sizeof(malformed), file) == sizeof(malformed));
+        HENKA_TEST_ASSERT(fclose(file) == 0);
+    }
+    same_stream = (henka_audio_stream*)1;
+    HENKA_TEST_ASSERT(henka_assets_reload_audio_stream(
+        manager,
+        stream_wav_path,
+        &same_stream) == HENKA_ERROR_ASSET_SOURCE);
+    HENKA_TEST_ASSERT(same_stream == NULL);
+    HENKA_TEST_ASSERT(henka_audio_stream_get_info(stream, &stream_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stream_info.frame_count == 96U);
     HENKA_TEST_ASSERT(henka_assets_get_audio_stream_metadata(
         manager, stream, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(metadata.reload_supported);
@@ -250,6 +278,31 @@ int main(void)
     HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(test_nonzero_mix(samples, 1U));
 
+    HENKA_TEST_ASSERT(test_write_wav_with_sample(stream_wav_path, 128U, 24576));
+    HENKA_TEST_ASSERT(henka_assets_reload_audio_stream(
+        manager, stream_wav_path, &same_stream) == HENKA_SUCCESS);
+    emitter_config.streaming = true;
+    (void)snprintf(
+        emitter_config.clip_path,
+        sizeof(emitter_config.clip_path),
+        "%s",
+        stream_wav_path);
+    HENKA_TEST_ASSERT(henka_audio_emitter_create_with_stream(
+        system,
+        scene,
+        entity,
+        stream,
+        &emitter_config,
+        &stream_emitter) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(test_nonzero_mix(samples, 1U));
+    HENKA_TEST_ASSERT(test_write_wav_with_sample(stream_wav_path, 160U, 3276));
+    HENKA_TEST_ASSERT(henka_assets_reload_audio_stream(
+        manager, stream_wav_path, &same_stream) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(same_stream == stream);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_emitter_is_valid(stream_emitter));
+
     henka_scene_destroy_entity(scene, entity);
     HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_system_get_active_voice_count(system) == 0U);
@@ -258,6 +311,7 @@ int main(void)
     remove(wav_path);
     remove(stream_wav_path);
     henka_audio_emitter_destroy(emitter);
+    henka_audio_emitter_destroy(stream_emitter);
     henka_audio_system_destroy(system);
     henka_scene_destroy(scene);
     henka_asset_manager_destroy(manager);

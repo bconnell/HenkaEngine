@@ -231,6 +231,13 @@ henka_result henka_assets_reload_audio_clip(
     henka_asset_manager* manager,
     const char* path,
     henka_audio_clip** out_clip);
+/* Reloads an existing manager-owned stream in place. Borrowed stream identity
+ * remains stable for active voices; a failed source validation leaves the
+ * prior decoder/file and metadata live. */
+henka_result henka_assets_reload_audio_stream(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_audio_stream** out_stream);
 /* Adopts one caller-created GPU texture under a stable confined runtime
  * identity. Ownership transfers only on success; the manager then owns the
  * borrowed texture pointer and destroys it with the other texture assets.
