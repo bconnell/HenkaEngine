@@ -15,6 +15,8 @@ void henka_test_sandbox3d_studio_environment(void)
     size_t broad_span = 0U;
     size_t lower_row = 50U;
     float peak_luma = 0.0f;
+    float row_min_luma = FLT_MAX;
+    float row_max_luma = 0.0f;
     float lower_min_luma = FLT_MAX;
     float lower_max_luma = 0.0f;
     int valid = 1;
@@ -48,6 +50,14 @@ void henka_test_sandbox3d_studio_environment(void)
         {
             peak_luma = luma;
             peak_x = x;
+        }
+        if (luma < row_min_luma)
+        {
+            row_min_luma = luma;
+        }
+        if (luma > row_max_luma)
+        {
+            row_max_luma = luma;
         }
         if (x < SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH)
         {
@@ -97,6 +107,8 @@ void henka_test_sandbox3d_studio_environment(void)
     HENKA_TEST_ASSERT(
         valid &&
         broad_span >= 72U &&
+        row_min_luma > 0.0f &&
+        row_max_luma <= row_min_luma * 1.75f &&
         lower_max_luma > 0.0f &&
         lower_min_luma >= lower_max_luma * 0.45f);
 }

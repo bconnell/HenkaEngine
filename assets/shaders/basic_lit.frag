@@ -60,6 +60,11 @@ uniform samplerCube iblIrradianceMap;
 uniform samplerCube iblPrefilterMap;
 uniform sampler2D iblBrdfLut;
 uniform bool useIBL;
+uniform int iblDiagnosticMode;
+const int IBL_DIAGNOSTIC_NORMAL_COLOR = 1;
+const int IBL_DIAGNOSTIC_DIFFUSE_ONLY = 2;
+const int IBL_DIAGNOSTIC_SPECULAR_ONLY = 3;
+const int IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT = 4;
 uniform vec3 reflectionProbePosition;
 uniform vec3 reflectionProbeExtents;
 uniform bool useReflectionProbe;
@@ -542,6 +547,14 @@ vec3 sampleEnvironment(vec3 direction)
     return min(max(color, vec3(0.0)) * max(environmentIntensity, 0.0), vec3(65504.0));
 }
 
+vec3 sampleSimpleDiagnosticEnvironment(vec3 direction)
+{
+    float height = clamp(direction.y * 0.5 + 0.5, 0.0, 1.0);
+    vec3 lower = vec3(0.06, 0.07, 0.09);
+    vec3 upper = vec3(0.18, 0.23, 0.30);
+    return mix(lower, upper, smoothstep(0.08, 0.92, height));
+}
+
 vec3 sampleSceneProbeDiffuse(vec3 direction)
 {
     vec3 normal = safeNormalize(direction, vec3(0.0, 1.0, 0.0));
@@ -795,6 +808,44 @@ void main()
     vec3 f0 = mix(clamp(specularColor, vec3(0.0), vec3(1.0)) *
         dielectricF0 * saturate(specularFactor), albedo, surfaceMetallic);
     vec3 color = vec3(0.0);
+
+    if (iblDiagnosticMode == IBL_DIAGNOSTIC_NORMAL_COLOR)
+    {
+        color = normal * 0.5 + 0.5;
+    }
+    else if (iblDiagnosticMode == IBL_DIAGNOSTIC_DIFFUSE_ONLY)
+    {
+        /* Display irradiance directly so the control remains informative for
+         * the all-metal IBL ladder, whose physically diffuse response is zero. */
+        color = min(texture(iblIrradianceMap, normal).rgb, vec3(65504.0));
+    }
+    else if (iblDiagnosticMode == IBL_DIAGNOSTIC_SPECULAR_ONLY ||
+        iblDiagnosticMode == IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT)
+    {
+        float diagnosticNDotV = saturate(dot(normal, viewDirection));
+        vec3 diagnosticReflectionDirection = reflect(-viewDirection, normal);
+        vec3 diagnosticEnvironment = iblDiagnosticMode == IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT
+            ? sampleSimpleDiagnosticEnvironment(diagnosticReflectionDirection)
+            : textureLod(
+                iblPrefilterMap,
+                parallaxCorrectReflectionDirection(diagnosticReflectionDirection),
+                clamp(surfaceRoughness, 0.0, 1.0) * HENKA_PREFILTER_MAX_LOD).rgb;
+        vec3 diagnosticFresnel = fresnelSchlick(diagnosticNDotV, f0);
+        vec2 diagnosticBrdf = texture(
+            iblBrdfLut,
+            vec2(diagnosticNDotV, 1.0 - surfaceRoughness)).rg;
+        color = diagnosticEnvironment *
+            (diagnosticFresnel * diagnosticBrdf.x + diagnosticBrdf.y) *
+            (0.35 + 0.65 * (1.0 - surfaceRoughness));
+    }
+    if (iblDiagnosticMode != 0)
+    {
+        outColor = vec4(min(max(color, vec3(0.0)), vec3(65504.0)), surfaceColor.a);
+        outReactive = 0.0;
+        outRoughness = clamp(surfaceRoughness, 0.045, 1.0);
+        outMotion = vec2(0.0);
+        return;
+    }
 
     if (useLighting)
     {

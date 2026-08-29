@@ -1410,6 +1410,7 @@ static void henka_add_optional_shader_locations(
     static const char* optional_names[] =
     {
         "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
+        "iblDiagnosticMode",
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
         "useReflectionProbeBoxProjection", "reflectionProbeMapSecondary",
         "useReflectionProbeMapSecondary", "reflectionProbePositionSecondary",
@@ -6288,6 +6289,11 @@ henka_result henka_opengl_renderer_draw_scene(
             (!helper_entity || entity->material.terrain_layers_enabled) &&
             scene->environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
             state->ibl_ready);
+        henka_set_uniform_int_owned(
+            program,
+            shader_data,
+            "iblDiagnosticMode",
+            (int)renderer->ibl_diagnostic_mode);
         henka_set_uniform_vec3_owned(
             program,
             shader_data,

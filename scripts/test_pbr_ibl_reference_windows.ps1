@@ -5,12 +5,19 @@ $sandbox = Get-Content (Join-Path $repoRoot 'examples/sandbox3d/main.c') -Raw
 $capture = Get-Content (Join-Path $repoRoot 'scripts/capture_visual_evidence_windows.ps1') -Raw
 $shader = Get-Content (Join-Path $repoRoot 'assets/shaders/basic_lit.frag') -Raw
 $renderer = Get-Content (Join-Path $repoRoot 'engine/src/renderer/renderer_opengl.c') -Raw
+$rendererCore = Get-Content (Join-Path $repoRoot 'engine/src/renderer/renderer.c') -Raw
 $mesh = Get-Content (Join-Path $repoRoot 'engine/src/renderer/mesh.c') -Raw
 $checkerPath = Join-Path $repoRoot 'scripts/check_pbr_ibl_reference_windows.ps1'
 $missing = @()
 
 if ($sandbox -notmatch 'SANDBOX3D_REALISM_REFERENCE_KIND_IBL') {
     $missing += 'IBL reference kind'
+}
+if ($sandbox -notmatch 'SANDBOX3D_REALISM_REFERENCE_KIND_IBL_NORMAL_COLOR' -or
+    $sandbox -notmatch 'SANDBOX3D_REALISM_REFERENCE_KIND_IBL_DIFFUSE_ONLY' -or
+    $sandbox -notmatch 'SANDBOX3D_REALISM_REFERENCE_KIND_IBL_SPECULAR_ONLY' -or
+    $sandbox -notmatch 'SANDBOX3D_REALISM_REFERENCE_KIND_IBL_SIMPLE_ENVIRONMENT') {
+    $missing += 'IBL diagnostic reference kinds'
 }
 if ($sandbox -notmatch 'strcmp\(\s*value, "ibl"\)') {
     $missing += 'IBL reference parser'
@@ -26,12 +33,10 @@ if ($sandbox -notmatch 'IBL Roughness 0\.05' -or
     $sandbox -notmatch 'ibl_roughness_ladder') {
     $missing += 'IBL roughness ladder fixture'
 }
-if ([regex]::Matches(
-        $sandbox,
-        'state->realism_reference_kind != SANDBOX3D_REALISM_REFERENCE_KIND_IBL').Count -lt 2) {
+if ($sandbox -notmatch 'sandbox3d_is_ibl_reference_kind\(') {
     $missing += 'IBL reference isolation from local reflection probes'
 }
-if ($sandbox -notmatch 'if \(state->realism_reference_kind != SANDBOX3D_REALISM_REFERENCE_KIND_IBL\)') {
+if ($sandbox -notmatch 'if \(!sandbox3d_is_ibl_reference_kind\(') {
     $missing += 'IBL reference isolation from direct local lights'
 }
 if ($sandbox -notmatch 'henka_scene_set_light_intensity\(state->scene, 0\.0f\)') {
@@ -59,8 +64,8 @@ if ($studioSource -notmatch 'lower_gradient = sandbox3d_smoothstep\(\(latitude -
 }
 if ($studioSource -notmatch 'key_delta = fabsf\(longitude - 4\.35f\)' -or
     $studioSource -notmatch 'fill_delta = fabsf\(longitude - 1\.05f\)' -or
-    $studioSource -notmatch 'key_field = 0\.60f \+ 0\.40f \* cosf\(key_delta\)' -or
-    $studioSource -notmatch 'fill_field = 0\.78f \+ 0\.22f \* cosf\(fill_delta\)' -or
+    $studioSource -notmatch 'key_field = 0\.78f \+ 0\.22f \* cosf\(key_delta\)' -or
+    $studioSource -notmatch 'fill_field = 0\.88f \+ 0\.12f \* cosf\(fill_delta\)' -or
     $studioSource -notmatch 'key_field \* 1\.75f') {
     $missing += 'broad cosine studio key/fill reflection field'
 }
@@ -71,6 +76,13 @@ if ($shader -notmatch 'iblIrradianceMap' -or
     $shader -notmatch 'iblPrefilterMap' -or
     $shader -notmatch 'iblBrdfLut') {
     $missing += 'IBL shader inputs'
+}
+if ($shader -notmatch 'iblDiagnosticMode' -or
+    $shader -notmatch 'IBL_DIAGNOSTIC_NORMAL_COLOR' -or
+    $shader -notmatch 'IBL_DIAGNOSTIC_DIFFUSE_ONLY' -or
+    $shader -notmatch 'IBL_DIAGNOSTIC_SPECULAR_ONLY' -or
+    $shader -notmatch 'IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT') {
+    $missing += 'IBL diagnostic shader controls'
 }
 if ($shader -notmatch 'const float HENKA_PREFILTER_MAX_LOD = 6\.0;' -or
     $shader -notmatch 'float environmentPrefilterLod =\s*clamp\(surfaceRoughness, 0\.0, 1\.0\) \* HENKA_PREFILTER_MAX_LOD;' -or
@@ -99,9 +111,20 @@ if ($renderer -notmatch 'HENKA_IBL_ENVIRONMENT_RESOLUTION 128' -or
     $renderer -match 'reflect\(normalize\(-position\),normal\)') {
     $missing += 'validated IBL integration resources and non-self-intersecting SSR ray direction'
 }
+if ($renderer -notmatch 'iblDiagnosticMode' -or
+    $rendererCore -notmatch 'henka_renderer_set_ibl_diagnostic_mode') {
+    $missing += 'renderer-owned IBL diagnostic mode'
+}
 if ($capture -notmatch 'PBR_IBL_REFERENCE' -or
     $capture -notmatch '--capture-realism-reference", "ibl"') {
     $missing += 'IBL evidence profile'
+}
+if ($capture -notmatch 'PBR_IBL_DIAGNOSTICS' -or
+    $capture -notmatch 'ibl_normal' -or
+    $capture -notmatch 'ibl_diffuse' -or
+    $capture -notmatch 'ibl_specular' -or
+    $capture -notmatch 'ibl_simple') {
+    $missing += 'IBL diagnostic evidence profile'
 }
 if (-not (Test-Path -LiteralPath $checkerPath -PathType Leaf)) {
     $missing += 'IBL evidence checker'

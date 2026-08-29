@@ -55,8 +55,8 @@ void sandbox3d_generate_studio_environment(float* pixels, size_t pixel_count)
             /* Cosine fields model broad studio softboxes. They retain
              * directional color and roughness contrast without a compact
              * Gaussian maximum that can project as a pinched sphere lobe. */
-            key_field = 0.60f + 0.40f * cosf(key_delta);
-            fill_field = 0.78f + 0.22f * cosf(fill_delta);
+            key_field = 0.78f + 0.22f * cosf(key_delta);
+            fill_field = 0.88f + 0.12f * cosf(fill_delta);
             r += key_field * 1.75f + fill_field * 0.24f;
             g += key_field * 1.08f + fill_field * 0.30f;
             b += key_field * 0.62f + fill_field * 0.42f;

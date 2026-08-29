@@ -19,7 +19,7 @@ if ($indexText -notmatch "(?m)^Evidence profile: PBR_IBL_REFERENCE\s*$") {
     throw "PBR IBL reference evidence does not declare its dedicated profile."
 }
 
-$metadataPattern = "(?m)^.*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128 .*viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
+$metadataPattern = "(?m)^.*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 (?:ibl_diagnostic=(?<diagnostic>[a-z_]+) )?ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128 .*viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
 $metadata = @([regex]::Matches($indexText, $metadataPattern))
 if ($metadata.Count -ne 1) {
     throw "PBR IBL reference evidence must contain exactly one rendered readiness record."

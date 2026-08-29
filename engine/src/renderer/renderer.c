@@ -88,6 +88,7 @@ henka_result henka_renderer_create(struct henka_platform* platform, bool enable_
     renderer->scene_view.overlays_visible = true;
     renderer->scene_view.xray_enabled = false;
     renderer->last_non_wireframe_mode = HENKA_VIEWPORT_SHADING_SOLID;
+    renderer->ibl_diagnostic_mode = HENKA_IBL_DIAGNOSTIC_NONE;
     renderer->exposure = 0.0f;
 
     result = henka_opengl_renderer_create(renderer, platform, enable_vsync);
@@ -411,6 +412,32 @@ henka_viewport_shading_mode henka_renderer_get_viewport_shading_mode(
     }
 
     return renderer->scene_view.shading_mode;
+}
+
+henka_result henka_renderer_set_ibl_diagnostic_mode(
+    struct henka_renderer* renderer,
+    henka_ibl_diagnostic_mode mode)
+{
+    if (renderer == NULL || mode < HENKA_IBL_DIAGNOSTIC_NONE ||
+        mode >= HENKA_IBL_DIAGNOSTIC_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    renderer->ibl_diagnostic_mode = mode;
+    return HENKA_SUCCESS;
+}
+
+henka_ibl_diagnostic_mode henka_renderer_get_ibl_diagnostic_mode(
+    const struct henka_renderer* renderer)
+{
+    if (renderer == NULL || renderer->ibl_diagnostic_mode < HENKA_IBL_DIAGNOSTIC_NONE ||
+        renderer->ibl_diagnostic_mode >= HENKA_IBL_DIAGNOSTIC_COUNT)
+    {
+        return HENKA_IBL_DIAGNOSTIC_NONE;
+    }
+
+    return renderer->ibl_diagnostic_mode;
 }
 
 henka_result henka_renderer_set_viewport_exposure(

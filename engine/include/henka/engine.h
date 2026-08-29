@@ -79,6 +79,18 @@ typedef enum henka_viewport_shading_mode
     HENKA_VIEWPORT_SHADING_COUNT
 } henka_viewport_shading_mode;
 
+/* Opt-in renderer diagnostics used to isolate the authored IBL response. The
+ * default NONE mode leaves the production material path unchanged. */
+typedef enum henka_ibl_diagnostic_mode
+{
+    HENKA_IBL_DIAGNOSTIC_NONE = 0,
+    HENKA_IBL_DIAGNOSTIC_NORMAL_COLOR,
+    HENKA_IBL_DIAGNOSTIC_DIFFUSE_ONLY,
+    HENKA_IBL_DIAGNOSTIC_SPECULAR_ONLY,
+    HENKA_IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT,
+    HENKA_IBL_DIAGNOSTIC_COUNT
+} henka_ibl_diagnostic_mode;
+
 typedef struct henka_scene_view_render_desc
 {
     henka_viewport viewport;
@@ -312,6 +324,11 @@ henka_result henka_engine_set_viewport_shading_mode(
     henka_engine* engine,
     henka_viewport_shading_mode mode);
 henka_viewport_shading_mode henka_engine_get_viewport_shading_mode(
+    const henka_engine* engine);
+henka_result henka_engine_set_ibl_diagnostic_mode(
+    henka_engine* engine,
+    henka_ibl_diagnostic_mode mode);
+henka_ibl_diagnostic_mode henka_engine_get_ibl_diagnostic_mode(
     const henka_engine* engine);
 henka_result henka_engine_set_viewport_exposure(henka_engine* engine, float exposure_stops);
 float henka_engine_get_viewport_exposure(const henka_engine* engine);
