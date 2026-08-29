@@ -285,15 +285,9 @@ int main(void)
     {
         goto cleanup;
     }
-    if (test_typed_dispatch_and_non_reentrancy(host) != 0)
-    {
-        goto cleanup;
-    }
-    if (test_bounded_event_queue() != 0)
-    {
-        goto cleanup;
-    }
-    if (test_state_api_context_isolation() != 0)
+    if (test_typed_dispatch_and_non_reentrancy(host) != 0 ||
+        test_bounded_event_queue() != 0 ||
+        test_state_api_context_isolation() != 0)
     {
         goto cleanup;
     }
