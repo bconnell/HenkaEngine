@@ -8191,7 +8191,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
     const char* capture_color_space_details;
     const char* capture_energy_details;
     const char* capture_ibl_control;
-    char capture_ibl_details[256];
+    char capture_ibl_details[768];
     const char* capture_shadow_details;
     float capture_exposure_stops;
 
