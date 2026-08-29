@@ -3582,7 +3582,8 @@ static void henka_opengl_draw_bloom(
 static henka_mat4 henka_opengl_get_light_matrix(
     const henka_scene* scene,
     float shadow_extent,
-    float shadow_distance)
+    float shadow_distance,
+    int shadow_resolution)
 {
     henka_vec3 direction = henka_vec3_normalize(scene->light_direction);
     henka_vec3 up = fabsf(direction.y) > 0.94f ?
@@ -3591,7 +3592,8 @@ static henka_mat4 henka_opengl_get_light_matrix(
     henka_vec3 light_right = henka_vec3_normalize(henka_vec3_cross(direction, up));
     henka_vec3 target;
     henka_vec3 eye;
-    float texel_size = (shadow_extent * 2.0f) / 1024.0f;
+    float texel_size = (shadow_extent * 2.0f) /
+        (float)(shadow_resolution > 0 ? shadow_resolution : 1);
     float target_right;
     float target_up;
 
@@ -5635,8 +5637,10 @@ henka_result henka_opengl_renderer_draw_scene(
 
     rendered = henka_renderer_get_viewport_shading_mode(renderer) ==
         HENKA_VIEWPORT_SHADING_RENDERED;
-    light_matrix = henka_opengl_get_light_matrix(scene, 24.0f, 36.0f);
-    cascade_shadow_matrix = henka_opengl_get_light_matrix(scene, 72.0f, 96.0f);
+    light_matrix = henka_opengl_get_light_matrix(
+        scene, 12.0f, 24.0f, state->shadow_resolution);
+    cascade_shadow_matrix = henka_opengl_get_light_matrix(
+        scene, 72.0f, 96.0f, state->cascade_shadow_resolution);
     local_shadow_matrix = henka_mat4_identity();
     if (local_shadow_light_index >= 0)
     {
