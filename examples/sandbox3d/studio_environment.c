@@ -52,11 +52,11 @@ void sandbox3d_generate_studio_environment(float* pixels, size_t pixel_count)
             if (key_delta > (float)HENKA_PI) key_delta = 2.0f * (float)HENKA_PI - key_delta;
             if (fill_delta > (float)HENKA_PI) fill_delta = 2.0f * (float)HENKA_PI - fill_delta;
             key_lobe = expf(
-                -0.5f * (key_delta / 0.58f) * (key_delta / 0.58f) -
-                0.5f * ((latitude - 0.45f) / 0.32f) * ((latitude - 0.45f) / 0.32f));
+                -0.5f * (key_delta / 1.15f) * (key_delta / 1.15f) -
+                0.5f * ((latitude - 0.45f) / 0.62f) * ((latitude - 0.45f) / 0.62f));
             fill_lobe = expf(
-                -0.5f * (fill_delta / 0.70f) * (fill_delta / 0.70f) -
-                0.5f * ((latitude - 0.32f) / 0.24f) * ((latitude - 0.32f) / 0.24f));
+                -0.5f * (fill_delta / 1.20f) * (fill_delta / 1.20f) -
+                0.5f * ((latitude - 0.32f) / 0.45f) * ((latitude - 0.32f) / 0.45f));
             /* The lobes are broad area-light structure, not a baked direct
              * light. Their asymmetric warm/cool energy gives clearcoat and
              * brushed metal a stable highlight to resolve through the same

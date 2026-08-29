@@ -31,6 +31,7 @@ int main(void)
     henka_test_sandbox3d_authoring_asset_document();
     henka_test_sandbox3d_authoring_asset_ui();
     henka_test_sandbox3d_asset_browser();
+    henka_test_sandbox3d_studio_environment();
     henka_test_scene();
     henka_test_shader();
     henka_test_ui();

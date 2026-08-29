@@ -660,6 +660,7 @@ add_executable(henka_tests
     test_sandbox3d_authoring_asset_document.c
     test_sandbox3d_authoring_asset_ui.c
     test_sandbox3d_asset_browser.c
+    test_sandbox3d_studio_environment.c
     test_main.c
     test_math.c
     test_material.c

@@ -61,6 +61,7 @@ void henka_test_sandbox3d_object_authoring(void);
 void henka_test_sandbox3d_authoring_asset_document(void);
 void henka_test_sandbox3d_authoring_asset_ui(void);
 void henka_test_sandbox3d_asset_browser(void);
+void henka_test_sandbox3d_studio_environment(void);
 void henka_test_scene(void);
 void henka_test_shader(void);
 void henka_test_ui(void);
