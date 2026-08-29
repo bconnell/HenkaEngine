@@ -43,17 +43,9 @@ henka_result sandbox3d_audio_runtime_validate_fixture(
     henka_scene* scene,
     henka_asset_manager* assets,
     const henka_camera* camera);
-/* Validates the same packaged WAV through the manager-owned streamed payload,
- * real scene/entity, emitter, mixer, and SDL output boundaries. The stream
- * and temporary scene entity are cleaned up before return. */
-henka_result sandbox3d_audio_runtime_validate_stream_fixture(
-    sandbox3d_audio_runtime* runtime,
-    henka_scene* scene,
-    henka_asset_manager* assets,
-    const henka_camera* camera);
-/* Validates the same packaged WAV through the manager-owned streamed payload,
- * real scene/entity, emitter, mixer, and SDL output boundaries. The stream
- * and temporary scene entity are cleaned up before return. */
+/* Validates the packaged WAV and compressed fixtures through manager-owned
+ * streamed payloads, real scene/entities, emitters, the mixer, and the SDL
+ * output boundary. Temporary scene entities are cleaned up before return. */
 henka_result sandbox3d_audio_runtime_validate_stream_fixture(
     sandbox3d_audio_runtime* runtime,
     henka_scene* scene,

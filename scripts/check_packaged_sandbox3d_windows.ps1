@@ -973,6 +973,13 @@ foreach ($showcaseFile in @(
     Assert-PathExists -Path (Join-Path $showcaseModelsDir $showcaseFile) -Description "Packaged showcase asset $showcaseFile"
 }
 Assert-PathExists -Path (Join-Path $assetsDir "audio\henka_audio_fixture.wav") -Description "Packaged Audio fixture"
+foreach ($audioFixture in @(
+    "henka_audio_fixture.ogg",
+    "henka_audio_fixture.mp3",
+    "henka_audio_fixture.flac"
+)) {
+    Assert-PathExists -Path (Join-Path $assetsDir ("audio\{0}" -f $audioFixture)) -Description "Packaged compressed Audio fixture $audioFixture"
+}
 foreach ($authoringFile in @(
     "showcase_giraffe.hams",
     "showcase_rocket.hams"

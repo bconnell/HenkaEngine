@@ -2,6 +2,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#if defined(_WIN32)
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
 
 #include <henka/henka.h>
 #include <henka/audio.h>
@@ -10,6 +16,156 @@
 
 #include "../examples/sandbox3d/audio_runtime.h"
 #include "../engine/src/henka_internal.h"
+
+static const char test_compressed_ogg_base64[] =
+#include "fixtures/audio_fixture_ogg.b64"
+;
+static const char test_compressed_mp3_base64[] =
+#include "fixtures/audio_fixture_mp3.b64"
+;
+static const char test_compressed_flac_base64[] =
+#include "fixtures/audio_fixture_flac.b64"
+;
+
+#define TEST_AUDIO_PACKAGE_ROOT "build/test_tmp/audio_runtime_package"
+#define TEST_AUDIO_PACKAGE_AUDIO_ROOT \
+    TEST_AUDIO_PACKAGE_ROOT "/assets/audio"
+
+static int test_base64_value(char value)
+{
+    if (value >= 'A' && value <= 'Z') return value - 'A';
+    if (value >= 'a' && value <= 'z') return value - 'a' + 26;
+    if (value >= '0' && value <= '9') return value - '0' + 52;
+    if (value == '+') return 62;
+    if (value == '/') return 63;
+    return -1;
+}
+
+static bool test_make_directory(const char* path)
+{
+#if defined(_WIN32)
+    return _mkdir(path) == 0 || errno == EEXIST;
+#else
+    return mkdir(path, 0700) == 0 || errno == EEXIST;
+#endif
+}
+
+static bool test_write_base64_file(const char* path, const char* encoded)
+{
+    FILE* file = NULL;
+    size_t length;
+    size_t index;
+    bool success = true;
+
+    if (path == NULL || encoded == NULL)
+        return false;
+    length = strlen(encoded);
+    if (length == 0U || length % 4U != 0U)
+        return false;
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "wb") != 0) file = NULL;
+#else
+    file = fopen(path, "wb");
+#endif
+    if (file == NULL)
+        return false;
+    for (index = 0U; index < length && success; index += 4U)
+    {
+        const int first = test_base64_value(encoded[index]);
+        const int second = test_base64_value(encoded[index + 1U]);
+        const int third = encoded[index + 2U] == '=' ? 0 :
+            test_base64_value(encoded[index + 2U]);
+        const int fourth = encoded[index + 3U] == '=' ? 0 :
+            test_base64_value(encoded[index + 3U]);
+        const unsigned char bytes[3U] = {
+            (unsigned char)((first << 2) | (second >> 4)),
+            (unsigned char)((second << 4) | (third >> 2)),
+            (unsigned char)((third << 6) | fourth)};
+        size_t byte_count = 3U;
+        if (first < 0 || second < 0 || third < 0 || fourth < 0 ||
+            (encoded[index + 2U] == '=' && encoded[index + 3U] != '=') ||
+            (index + 4U != length &&
+                (encoded[index + 2U] == '=' || encoded[index + 3U] == '=')))
+        {
+            success = false;
+            break;
+        }
+        if (encoded[index + 3U] == '=') byte_count = 2U;
+        if (encoded[index + 2U] == '=') byte_count = 1U;
+        success = fwrite(bytes, 1U, byte_count, file) == byte_count;
+    }
+    if (fclose(file) != 0) success = false;
+    return success;
+}
+
+static bool test_copy_file(const char* source_path, const char* destination_path)
+{
+    FILE* source = NULL;
+    FILE* destination = NULL;
+    unsigned char buffer[4096U];
+    size_t bytes_read;
+    bool success = true;
+
+#if defined(_WIN32)
+    if (fopen_s(&source, source_path, "rb") != 0) source = NULL;
+    if (source != NULL && fopen_s(&destination, destination_path, "wb") != 0)
+        destination = NULL;
+#else
+    source = fopen(source_path, "rb");
+    if (source != NULL) destination = fopen(destination_path, "wb");
+#endif
+    if (source == NULL || destination == NULL) success = false;
+    while (success && (bytes_read = fread(buffer, 1U, sizeof(buffer), source)) > 0U)
+    {
+        success = fwrite(buffer, 1U, bytes_read, destination) == bytes_read;
+    }
+    if (source != NULL && fclose(source) != 0) success = false;
+    if (destination != NULL && fclose(destination) != 0) success = false;
+    return success;
+}
+
+static bool test_prepare_package_audio(void)
+{
+    static const struct
+    {
+        const char* name;
+        const char* encoded;
+    } fixtures[] = {
+        {"henka_audio_fixture.ogg", test_compressed_ogg_base64},
+        {"henka_audio_fixture.mp3", test_compressed_mp3_base64},
+        {"henka_audio_fixture.flac", test_compressed_flac_base64}};
+    size_t index;
+
+    if (!test_make_directory("build/test_tmp"))
+        return false;
+    if (!test_make_directory(TEST_AUDIO_PACKAGE_ROOT))
+        return false;
+    if (!test_make_directory(TEST_AUDIO_PACKAGE_ROOT "/assets"))
+        return false;
+    if (!test_make_directory(TEST_AUDIO_PACKAGE_AUDIO_ROOT))
+        return false;
+    if (!test_copy_file(
+            "assets/audio/henka_audio_fixture.wav",
+            TEST_AUDIO_PACKAGE_AUDIO_ROOT "/henka_audio_fixture.wav"))
+    {
+        return false;
+    }
+    for (index = 0U; index < sizeof(fixtures) / sizeof(fixtures[0]); ++index)
+    {
+        char path[256U];
+        (void)snprintf(
+            path,
+            sizeof(path),
+            "%s/%s",
+            TEST_AUDIO_PACKAGE_AUDIO_ROOT,
+            fixtures[index].name);
+        if (!test_write_base64_file(path, fixtures[index].encoded))
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
 int main(void)
 {
@@ -55,7 +211,7 @@ int main(void)
     emitter_config.enabled = true;
     emitter_config.looping = true;
     emitter_config.spatial = true;
-    emitter_config.streaming = true;
+    emitter_config.streaming = false;
     (void)snprintf(
         emitter_config.clip_path,
         sizeof(emitter_config.clip_path),
@@ -116,6 +272,12 @@ int main(void)
     }
     memset(assets, 0, sizeof(*assets));
     assets->engine = &engine;
+    if (!test_prepare_package_audio())
+    {
+        fprintf(stderr, "sandbox audio runtime compressed fixture setup failed\n");
+        goto cleanup;
+    }
+    engine.asset_base_path = TEST_AUDIO_PACKAGE_ROOT;
     audio_result = sandbox3d_audio_runtime_validate_stream_fixture(
         runtime,
         scene,
@@ -173,6 +335,13 @@ cleanup:
     {
         henka_scene_destroy_entity(scene, entity);
     }
+    remove(TEST_AUDIO_PACKAGE_AUDIO_ROOT "/henka_audio_fixture.wav");
+    remove(TEST_AUDIO_PACKAGE_AUDIO_ROOT "/henka_audio_fixture.ogg");
+    remove(TEST_AUDIO_PACKAGE_AUDIO_ROOT "/henka_audio_fixture.mp3");
+    remove(TEST_AUDIO_PACKAGE_AUDIO_ROOT "/henka_audio_fixture.flac");
+    remove(TEST_AUDIO_PACKAGE_AUDIO_ROOT);
+    remove(TEST_AUDIO_PACKAGE_ROOT "/assets");
+    remove(TEST_AUDIO_PACKAGE_ROOT);
     henka_scene_destroy(scene);
     return exit_code;
 }

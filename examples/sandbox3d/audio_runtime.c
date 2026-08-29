@@ -7,7 +7,7 @@
 #include "audio_runtime.h"
 
 #define SANDBOX3D_AUDIO_FIXTURE_PATH "assets/audio/henka_audio_fixture.wav"
-#define SANDBOX3D_AUDIO_SMOKE_FRAME_COUNT 32U
+#define SANDBOX3D_AUDIO_SMOKE_FRAME_COUNT 2048U
 
 struct sandbox3d_audio_runtime
 {
@@ -264,7 +264,9 @@ static henka_result sandbox3d_audio_runtime_validate_fixture_mode(
     henka_scene* scene,
     henka_asset_manager* assets,
     const henka_camera* camera,
-    bool streaming)
+    const char* fixture_path,
+    bool streaming,
+    bool require_signal)
 {
     henka_audio_clip* clip = NULL;
     henka_audio_stream* stream = NULL;
@@ -280,6 +282,7 @@ static henka_result sandbox3d_audio_runtime_validate_fixture_mode(
     henka_result result;
 
     if (runtime == NULL || scene == NULL || assets == NULL || camera == NULL ||
+        fixture_path == NULL || fixture_path[0] == '\0' ||
         !henka_camera_is_valid(camera) ||
         !sandbox3d_audio_runtime_is_output_available(runtime))
     {
@@ -296,7 +299,7 @@ static henka_result sandbox3d_audio_runtime_validate_fixture_mode(
     {
         result = henka_assets_load_audio_stream(
             assets,
-            SANDBOX3D_AUDIO_FIXTURE_PATH,
+            fixture_path,
             &stream);
         if (result != HENKA_SUCCESS || stream == NULL)
         {
@@ -308,7 +311,7 @@ static henka_result sandbox3d_audio_runtime_validate_fixture_mode(
     {
         result = henka_assets_load_audio_clip(
             assets,
-            SANDBOX3D_AUDIO_FIXTURE_PATH,
+            fixture_path,
             &clip);
         if (result != HENKA_SUCCESS || clip == NULL)
         {
@@ -319,7 +322,7 @@ static henka_result sandbox3d_audio_runtime_validate_fixture_mode(
     if (result != HENKA_SUCCESS || metadata.type != HENKA_ASSET_TYPE_AUDIO ||
         !metadata.loaded || metadata.fallback ||
         metadata.source_path == NULL ||
-        strcmp(metadata.source_path, SANDBOX3D_AUDIO_FIXTURE_PATH) != 0)
+        strcmp(metadata.source_path, fixture_path) != 0)
     {
         result = HENKA_ERROR_ASSET_SOURCE;
         goto cleanup;
@@ -348,7 +351,7 @@ static henka_result sandbox3d_audio_runtime_validate_fixture_mode(
         emitter_config.clip_path,
         sizeof(emitter_config.clip_path),
         "%s",
-        SANDBOX3D_AUDIO_FIXTURE_PATH);
+        fixture_path);
     if (streaming)
     {
         result = henka_audio_emitter_create_with_stream(
@@ -383,15 +386,16 @@ static henka_result sandbox3d_audio_runtime_validate_fixture_mode(
         system,
         mixed_samples,
         SANDBOX3D_AUDIO_SMOKE_FRAME_COUNT);
-    if (result != HENKA_SUCCESS || !sandbox3d_audio_runtime_has_signal(
+    if (result != HENKA_SUCCESS ||
+        (require_signal && !sandbox3d_audio_runtime_has_signal(
             mixed_samples,
-            SANDBOX3D_AUDIO_SMOKE_FRAME_COUNT) ||
+            SANDBOX3D_AUDIO_SMOKE_FRAME_COUNT)) ||
         !henka_audio_emitter_is_playing(emitter))
     {
         result = HENKA_ERROR_UNKNOWN;
         goto cleanup;
     }
-    result = sandbox3d_audio_runtime_pump(runtime, 1.0 / 60.0);
+    result = sandbox3d_audio_runtime_pump(runtime, 1.0 / 240.0);
     if (result != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -433,7 +437,7 @@ henka_result sandbox3d_audio_runtime_validate_fixture(
     const henka_camera* camera)
 {
     return sandbox3d_audio_runtime_validate_fixture_mode(
-        runtime, scene, assets, camera, false);
+        runtime, scene, assets, camera, SANDBOX3D_AUDIO_FIXTURE_PATH, false, true);
 }
 
 henka_result sandbox3d_audio_runtime_validate_stream_fixture(
@@ -442,6 +446,24 @@ henka_result sandbox3d_audio_runtime_validate_stream_fixture(
     henka_asset_manager* assets,
     const henka_camera* camera)
 {
-    return sandbox3d_audio_runtime_validate_fixture_mode(
-        runtime, scene, assets, camera, true);
+    static const char* const compressed_paths[] = {
+        "assets/audio/henka_audio_fixture.ogg",
+        "assets/audio/henka_audio_fixture.mp3",
+        "assets/audio/henka_audio_fixture.flac"};
+    size_t index;
+    henka_result result = sandbox3d_audio_runtime_validate_fixture_mode(
+        runtime, scene, assets, camera, SANDBOX3D_AUDIO_FIXTURE_PATH, true, true);
+
+    for (index = 0U; result == HENKA_SUCCESS &&
+            index < sizeof(compressed_paths) / sizeof(compressed_paths[0]); ++index)
+    {
+        result = sandbox3d_audio_runtime_validate_fixture_mode(
+            runtime, scene, assets, camera, compressed_paths[index], false, false);
+        if (result == HENKA_SUCCESS)
+        {
+            result = sandbox3d_audio_runtime_validate_fixture_mode(
+                runtime, scene, assets, camera, compressed_paths[index], true, false);
+        }
+    }
+    return result;
 }

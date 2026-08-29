@@ -67,12 +67,12 @@ Play applies the persisted Scene Document listener before creating runtime
 emitters; the graphical camera remains the live listener source during normal
 interactive runtime.
 Play pause and resume now propagate to its live emitter voices without
-advancing their source positions. A packaged `--audio-smoke-test` loads the
-repository-owned `assets/audio/henka_audio_fixture.wav` through the real asset
+advancing their source positions. A packaged `--audio-smoke-test` loads
+repository-owned WAV, Ogg Vorbis, MP3, and FLAC fixtures through the real asset
 manager in both resident and metadata-first streamed modes. Each mode attaches
-the payload to a real scene entity, mixes it through a live emitter, and
-reaches the SDL output boundary. The focused decoder tests also exercise
-repository-traceable Ogg, MP3, and FLAC inputs through both storage modes.
+each payload to a real scene entity, mixes it through a live emitter, and
+reaches the SDL output boundary. The focused decoder tests additionally cover
+malformed inputs and direct decoder contracts.
 Audio integrations preserve the renderer-free dedicated-server path. Integration
 coverage includes real imported or authored objects.
 

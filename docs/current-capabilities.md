@@ -374,10 +374,10 @@ authoritative section below.
   while the graphical Sandbox may update it from the live production camera.
   The first integration coverage uses a real scene entity created through the
   public scene API and a WAV loaded through the confined file path. The
-  packaged `--audio-smoke-test` additionally proves the repository-owned
-  WAV fixture through both resident and metadata-first streamed asset-manager
-  paths, live emitters, the mixer, and the SDL output boundary; broader
-  packaged content coverage remains in progress.
+  packaged `--audio-smoke-test` additionally proves repository-owned WAV, Ogg
+  Vorbis, MP3, and FLAC fixtures through both resident and metadata-first
+  streamed asset-manager paths, live emitters, the mixer, and the SDL output
+  boundary. Long-form packaged streamed-content coverage remains in progress.
 - The decoder boundary also validates resident and metadata-first streamed Ogg
   Vorbis, MP3, and FLAC sources through the private miniaudio boundary. The
   public runtime has a bounded, metadata-first streaming API with caller-owned
@@ -397,9 +397,9 @@ authoritative section below.
   `Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` bindings to both Lua
   and HenkaScript in Play. They resolve the same persisted object-to-emitter
   mapping used by the runtime and fail closed for missing or stale action
-  targets. Packaged long-form streamed-content coverage, compressed stream hot
-  reload, packaged compressed-content coverage, effects, and broader
-  spatial/occlusion support remain in progress. The current runtime core and output boundary are
+  targets. Packaged WAV and compressed-fixture smoke coverage is available.
+  Compressed stream hot reload, long-form streamed-content coverage, effects,
+  and broader spatial/occlusion support remain in progress. The current runtime core and output boundary are
   single-owner for voice commands and mixing; device-thread synchronization
   remains outside this scope.
 

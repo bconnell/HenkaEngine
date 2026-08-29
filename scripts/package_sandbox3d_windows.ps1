@@ -96,6 +96,40 @@ function Assert-NoReparsePoints {
     }
 }
 
+function Write-PackagedAudioFixture {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourcePath,
+        [Parameter(Mandatory = $true)][string]$DestinationPath,
+        [Parameter(Mandatory = $true)][string]$ExpectedSha256,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    if (-not (Test-Path -LiteralPath $SourcePath -PathType Leaf)) {
+        throw "$Description source is missing: $SourcePath"
+    }
+    $encoded = [System.IO.File]::ReadAllText($SourcePath).Trim()
+    if ($encoded.Length -eq 0 -or $encoded.Length -gt 16777216) {
+        throw "$Description source exceeds the bounded Base64 input contract."
+    }
+    if ($encoded.StartsWith('"') -and $encoded.EndsWith('"')) {
+        $encoded = $encoded.Substring(1, $encoded.Length - 2)
+    }
+    try {
+        $bytes = [Convert]::FromBase64String($encoded)
+    }
+    catch {
+        throw "$Description source is not valid Base64: $SourcePath"
+    }
+    if ($bytes.Length -eq 0 -or $bytes.Length -gt 8388608) {
+        throw "$Description decoded payload exceeds the bounded package contract."
+    }
+    [System.IO.File]::WriteAllBytes($DestinationPath, $bytes)
+    $actualSha256 = (Get-FileHash -LiteralPath $DestinationPath -Algorithm SHA256).Hash
+    if ($actualSha256 -ne $ExpectedSha256) {
+        throw "$Description hash does not match its checked-in source contract."
+    }
+}
+
 function Test-HenkaPackageDirectoryComplete {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -104,6 +138,9 @@ function Test-HenkaPackageDirectoryComplete {
         "assets",
         "assets\branding\henka_engine_emblem.png",
         "assets\branding\henka_engine_lockup.png",
+        "assets\audio\henka_audio_fixture.ogg",
+        "assets\audio\henka_audio_fixture.mp3",
+        "assets\audio\henka_audio_fixture.flac",
         "docs\help\sandbox3d.md",
         "README.txt",
         "PACKAGE_INFO.txt"
@@ -215,6 +252,19 @@ try {
 
     Copy-Item -LiteralPath $expectedExeFull -Destination $stagingExe
     Copy-Item -LiteralPath $assetsSource -Destination $stagingRoot -Recurse
+    $stagingAudioDir = Join-Path $stagingRoot "assets\audio"
+    [System.IO.Directory]::CreateDirectory($stagingAudioDir) | Out-Null
+    foreach ($fixture in @(
+        @{ Name = "henka_audio_fixture.ogg"; Source = "audio_fixture_ogg.b64"; Sha256 = "87900F83DE1ECCEF7D79199AB336C77186458CDF1718593E6A7E9518FCDA812A" },
+        @{ Name = "henka_audio_fixture.mp3"; Source = "audio_fixture_mp3.b64"; Sha256 = "F252E5A6F10FFBEF00D80095AA6FFEFA231AD7232B8E37AEEA7CFFD760DE0713" },
+        @{ Name = "henka_audio_fixture.flac"; Source = "audio_fixture_flac.b64"; Sha256 = "8730C5E7672781DBA7EF3105DD7BD222425537CAE3D3C5AB237CFDF918B86483" }
+    )) {
+        Write-PackagedAudioFixture `
+            -SourcePath (Join-Path $repoRoot ("tests\fixtures\{0}" -f $fixture.Source)) `
+            -DestinationPath (Join-Path $stagingAudioDir $fixture.Name) `
+            -ExpectedSha256 $fixture.Sha256 `
+            -Description ("Packaged Audio fixture {0}" -f $fixture.Name)
+    }
     $stagingModelsDir = Join-Path $stagingRoot "assets\models"
     [System.IO.Directory]::CreateDirectory($stagingModelsDir) | Out-Null
     foreach ($showcaseFile in @(
