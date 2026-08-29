@@ -55,7 +55,7 @@ Other operating systems are not currently claimed as supported.
 | External projects | Foundation | Current separate game/server templates with Windows validation |
 | Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, Save/Reload, and isolated runtime Play scenes |
 | 2D | Planned | No dedicated 2D scope yet; renderer, sprites, layers, parallax, and animation remain open |
-| Audio | Foundation | Bounded resident/streamed WAV clips, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, authored listener/editor controls, and graphical Sandbox camera/listener plus caller-pumped SDL3 output integration; broader end-user workflows remain in progress |
+| Audio | Available | Bounded resident/streamed PCM WAV, Ogg Vorbis, MP3, and FLAC playback, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, authored listener/editor controls, supported Lua/HenkaScript controls, and caller-pumped SDL3 output/recovery |
 | Scripting/behaviors | In Progress | Current bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, persistence, and cross-language events |
 
 Status labels are contractual: **Foundation** means core architecture exists but
@@ -90,9 +90,9 @@ Henka is not only a modeling application. Its runtime includes scenes/entities,
 camera and input actions, asset management, rendering, physics, terrain,
 persistence, and a renderer-independent headless boundary. Full Game/Play
 authoring, character controllers, end-user scripting, and mature project
-serialization are not yet available. Audio has a bounded headless runtime and a
-graphical Sandbox client output foundation with camera/listener integration;
-editor and end-user audio workflows remain in progress.
+serialization are not yet available. Audio provides a bounded headless runtime,
+graphical Sandbox client output, camera/listener integration, editor authoring,
+persistence, and supported scripting controls.
 
 ## Modeling and content authoring
 
@@ -185,7 +185,7 @@ bounded consumer validation paths, not complete game project serializers. See
 - [Model loading](docs/model-loading.md)
 - [Terrain](docs/terrain.md)
 - [Physics](docs/physics.md)
-- [Audio foundation](docs/audio.md)
+- [Audio runtime](docs/audio.md)
 - [Editor controls and Sandbox help](docs/editor-controls.md) · [offline help](docs/help/sandbox3d.md)
 - [External game projects](docs/external-game-projects.md)
 - [Showcase asset provenance](docs/showcase-assets.md)
@@ -201,7 +201,7 @@ The limitations below are evaluated against that scope; future expansion beyond
 it does not lower the current status, while unfinished work inside it does.
 
 - Henka and its editor are early-stage; the native workspace is not a complete production editor.
-- 2D, broader end-user audio workflows, scripting/behaviors, character controllers, advanced physics, broader renderer backends, and mature Game/Play workflows are unfinished.
+- 2D, broader scripting/behavior authoring, character controllers, advanced physics, broader renderer backends, mature Game/Play workflows, and advanced audio effects/occlusion remain unfinished.
 - Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
 - The default Giraffe and Rocket are deterministic imported/generated fixtures and editor-owned dogfood derivatives, not proof of user-authored production assets.
 - Automated evidence does not replace human visual QA for editor feel, detached windows, terrain corners, rendering, or modeling quality.
@@ -215,7 +215,7 @@ contracts owned by the linked documentation above.
 Current priorities are runtime and editor integrity, integrated authoring,
 terrain/world usability, renderer and asset hardening, and the next layers of
 2.5D workflow. Longer-term work includes complete Game authoring, 2D,
-animation, audio, scripting, additional renderer backends, and broader release
+animation, advanced audio expansion, scripting, additional renderer backends, and broader release
 distribution. See the [roadmap](docs/roadmap.md) for the maintained direction.
 
 ## Support Henka Engine

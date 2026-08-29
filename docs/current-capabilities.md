@@ -357,8 +357,8 @@ authoritative section below.
 
 ## Audio
 
-- The renderer-independent runtime now provides a bounded Audio foundation:
-  confined resident PCM WAV loading, fixed-capacity generation-checked voices,
+- The renderer-independent runtime provides the supported Audio scope:
+  confined resident PCM WAV, Ogg Vorbis, MP3, and FLAC loading, fixed-capacity generation-checked voices,
   Master/Music/SFX/Dialogue/Ambience/UI bus gains, listener orientation,
   distance attenuation and stereo panning, deterministic interleaved stereo
   float-PCM mixing, and resident voice pause/resume/restart/seek/gain/pitch
@@ -377,13 +377,14 @@ authoritative section below.
   packaged `--audio-smoke-test` additionally proves repository-owned WAV, Ogg
   Vorbis, MP3, and FLAC fixtures through both resident and metadata-first
   streamed asset-manager paths, live emitters, the mixer, and the SDL output
-  boundary. Long-form packaged streamed-content coverage remains in progress.
+  boundary. The packaged fixture is short; long-form packaged-content coverage
+  is a validation expansion rather than a separate runtime storage mode.
 - The decoder boundary also validates resident and metadata-first streamed Ogg
   Vorbis, MP3, and FLAC sources through the private miniaudio boundary. The
   public runtime has a bounded, metadata-first streaming API with caller-owned
   frame reads and stream-backed voices/emitters. The asset manager caches those
   streams by canonical path alongside resident clips; in-place stream reload is
-  validated for file-backed PCM WAV sources.
+  validated for PCM WAV, Ogg Vorbis, MP3, and FLAC sources.
   Authored
   emitter configuration, authored listener, and resident/streamed storage mode
   now persist in v5 Scene Documents, and the Sandbox Play session can instantiate those emitters
@@ -392,12 +393,14 @@ authoritative section below.
   budgets, device diagnostics, event-driven hotplug/format recovery with a
   bounded automatic retry budget, authored-listener application,
   production-camera listener mapping, transactional stream recovery after device loss, and
-  manager-owned resident WAV reload that preserves borrowed clip identity.
-  The shared Script Host exposes typed `Audio.Stop(entity)`,
-  `Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` bindings to both Lua
-  and HenkaScript in Play. They resolve the same persisted object-to-emitter
-  mapping used by the runtime and fail closed for missing or stale action
-  targets. Packaged WAV and compressed-fixture smoke coverage is available.
+  manager-owned resident supported-format reload that preserves borrowed clip
+  identity. The shared Script Host exposes typed `Audio.Play`, `Audio.Stop`,
+  `Audio.Restart`, `Audio.Pause`, `Audio.Resume`, `Audio.IsPlaying`,
+  `Audio.SetGain`, `Audio.SetPitch`, `Audio.SetLooping`, `Audio.SetSpatial`,
+  `Audio.SetBus`, and `Audio.Seek` bindings to both Lua and HenkaScript in Play.
+  They resolve the same persisted object-to-emitter mapping used by the runtime
+  and fail closed for missing or stale action targets. Packaged WAV and
+  compressed-fixture smoke coverage is available.
   Transactional compressed stream hot reload is covered for Ogg Vorbis, MP3,
   and FLAC as well as WAV. Long-form packaged content coverage, effects, and
   broader spatial/occlusion support remain in progress. The current runtime core and output boundary are
@@ -408,8 +411,9 @@ authoritative section below.
 
 - Henka remains early-stage. The native workspace is not a complete production
   editor or project-authoring suite.
-- 2D workflow, complete audio workflows, end-user project script behaviors, character controllers,
-  advanced physics, broader renderer backends, and mature Game/Play workflows
+- 2D workflow, broader end-user project script behaviors, character controllers,
+  advanced physics, broader renderer backends, mature Game/Play workflows, and
+  advanced audio effects/occlusion
   remain future work beyond the current bounded authoring/play foundation.
 - Advanced asset authoring, hierarchy authoring, animation/rigging, texture
   painting, automatic UV unwrap, complete scene serialization, and some

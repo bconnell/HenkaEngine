@@ -27,8 +27,12 @@ execution adapters for both languages.
   and non-reentrant; runtime mutation from a callback is rejected.
 - A bounded HenkaScript lexer/parser/type checker exposed through
   `<henka/henkascript.h>`.
-- The shared typed host surface includes `Audio.Stop(entity)`,
-  `Audio.Restart(entity)`, and `Audio.IsPlaying(entity)` for persisted
+- The shared typed host surface includes `Audio.Play(entity)`,
+  `Audio.Stop(entity)`, `Audio.Restart(entity)`, `Audio.Pause(entity)`,
+  `Audio.Resume(entity)`, `Audio.IsPlaying(entity)`,
+  `Audio.SetGain(entity, gain)`, `Audio.SetPitch(entity, pitch)`,
+  `Audio.SetLooping(entity, looping)`, `Audio.SetSpatial(entity, spatial)`,
+  `Audio.SetBus(entity, bus)`, and `Audio.Seek(entity, frame)` for persisted
   object-attached emitters in Play; missing or stale targets fail closed.
 - The editor consumes HenkaScript token spans and compiler-owned lexical
   presentation classes from that same public API. Lua uses the corresponding

@@ -402,9 +402,10 @@ and V1 `.hscene` foundations.
 Longer-term work may include:
 
 1. Expanded physics features such as joints, controllers, and additional collider types.
-2. Broader game-audio workflows beyond the current resident/streamed
+2. Advanced game-audio expansion beyond the current resident/streamed
    WAV/Ogg Vorbis/MP3/FLAC, authored-listener/editor, mixer, event-driven SDL3
-   output, and bounded recovery foundation.
+   output, and bounded recovery scope, including effects, broader occlusion,
+   and user-facing device selection.
 3. Additional scripting languages or extension support beyond the bounded V1
    Lua and HenkaScript foundations.
 4. Additional renderer backends.

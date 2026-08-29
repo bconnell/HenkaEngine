@@ -1901,7 +1901,7 @@ henka_result henka_assets_reload_audio_clip(
     entry->metadata.reload_supported = true;
     henka_asset_set_summary(
         &entry->metadata,
-        "Resident PCM WAV reloaded transactionally through the canonical asset path.",
+        "Resident supported-format audio reloaded transactionally through the canonical asset path.",
         "");
     *out_clip = entry->clip;
     return HENKA_SUCCESS;
