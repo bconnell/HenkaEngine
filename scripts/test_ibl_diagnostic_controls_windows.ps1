@@ -43,6 +43,11 @@ if (-not $sandbox.Contains('ibl_rotation_radians = state->ibl_rotation_degrees *
     -not $sandbox.Contains('environment.hdr_rotation = ibl_rotation_radians')) {
     $missing += 'environment rotation application'
 }
+$environmentLoadIndex = $sandbox.IndexOf('sandbox3d_load_environment_parameters(state->settings, &environment)')
+$rotationApplyIndex = $sandbox.IndexOf('ibl_rotation_radians = state->ibl_rotation_degrees * HENKA_DEG_TO_RAD')
+if ($environmentLoadIndex -lt 0 -or $rotationApplyIndex -le $environmentLoadIndex) {
+    $missing += 'rotation applied after loaded environment settings'
+}
 if ($sandbox -notmatch 'henka_engine_set_ibl_diagnostic_prefilter_lod') {
     $missing += 'mip capture diagnostic installation'
 }

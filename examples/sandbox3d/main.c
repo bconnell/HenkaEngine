@@ -16027,17 +16027,6 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         (void)henka_engine_set_viewport_exposure(engine, 0.0f);
     }
 
-    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_ROTATION &&
-        henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
-    {
-        ibl_rotation_radians = state->ibl_rotation_degrees * HENKA_DEG_TO_RAD;
-        environment.hdr_rotation = ibl_rotation_radians;
-        if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
-        {
-            HENKA_LOG_ERROR("IBL rotation control could not be applied.");
-        }
-    }
-
     if (henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
     {
         sandbox3d_load_environment_parameters(state->settings, &environment);
@@ -16088,6 +16077,16 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
         {
             HENKA_LOG_WARN("Deterministic capture environment could not be installed; retaining the loaded environment.");
+        }
+    }
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_ROTATION &&
+        henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
+    {
+        ibl_rotation_radians = state->ibl_rotation_degrees * HENKA_DEG_TO_RAD;
+        environment.hdr_rotation = ibl_rotation_radians;
+        if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR("IBL rotation control could not be applied.");
         }
     }
     if (state->environment_stress &&
