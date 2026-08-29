@@ -7,6 +7,8 @@
 #include <henka/memory.h>
 #include <henka/persistence.h>
 
+#include "audio_decoder.h"
+
 #define HENKA_AUDIO_MIN_SAMPLE_RATE 8000U
 #define HENKA_AUDIO_MAX_SAMPLE_RATE 192000U
 #define HENKA_AUDIO_MAX_GAIN 8.0f
@@ -47,6 +49,7 @@ struct henka_audio_stream
 {
     char* source_path;
     FILE* file;
+    henka_audio_decoder* decoder;
     size_t data_offset;
     uint32_t data_size;
     uint32_t sample_rate;
@@ -520,6 +523,113 @@ static bool henka_audio_parse_wav(
     return true;
 }
 
+static bool henka_audio_samples_are_valid(
+    const float* samples,
+    size_t frame_count,
+    uint16_t channels)
+{
+    size_t sample_count;
+    size_t sample_index;
+
+    if (samples == NULL || channels == 0U ||
+        !henka_audio_size_multiply(frame_count, channels, &sample_count))
+    {
+        return false;
+    }
+    for (sample_index = 0U; sample_index < sample_count; ++sample_index)
+    {
+        if (!henka_audio_float_is_valid(samples[sample_index]) ||
+            samples[sample_index] < -1.0f || samples[sample_index] > 1.0f)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static henka_result henka_audio_load_compressed_clip(
+    const char* path,
+    henka_audio_clip* clip)
+{
+    henka_audio_decoder* decoder = NULL;
+    henka_audio_decoder_info info;
+    size_t sample_count;
+    size_t sample_bytes;
+    size_t total_frames = 0U;
+    henka_result result;
+
+    if (path == NULL || clip == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_audio_decoder_open(
+        path,
+        HENKA_AUDIO_MAX_CLIP_BYTES,
+        &decoder);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_audio_decoder_get_info(decoder, &info);
+    if (result != HENKA_SUCCESS ||
+        !henka_audio_size_multiply(info.frame_count, info.channels, &sample_count) ||
+        !henka_audio_size_multiply(sample_count, sizeof(float), &sample_bytes) ||
+        sample_bytes > HENKA_AUDIO_MAX_CLIP_BYTES)
+    {
+        henka_audio_decoder_destroy(decoder);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    clip->samples = (float*)henka_malloc(sample_bytes);
+    if (clip->samples == NULL)
+    {
+        henka_audio_decoder_destroy(decoder);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    while (total_frames < info.frame_count)
+    {
+        size_t frames_requested = info.frame_count - total_frames;
+        size_t frames_read = 0U;
+        size_t sample_offset;
+        if (frames_requested > HENKA_AUDIO_STREAM_WINDOW_FRAMES)
+        {
+            frames_requested = HENKA_AUDIO_STREAM_WINDOW_FRAMES;
+        }
+        if (!henka_audio_size_multiply(
+                total_frames,
+                info.channels,
+                &sample_offset) ||
+            henka_audio_decoder_read_frames(
+                decoder,
+                clip->samples + sample_offset,
+                frames_requested,
+                &frames_read) != HENKA_SUCCESS ||
+            frames_read == 0U)
+        {
+            henka_audio_decoder_destroy(decoder);
+            henka_free(clip->samples);
+            clip->samples = NULL;
+            return HENKA_ERROR_ASSET_SOURCE;
+        }
+        if (!henka_audio_samples_are_valid(
+                clip->samples + sample_offset,
+                frames_read,
+                info.channels))
+        {
+            henka_audio_decoder_destroy(decoder);
+            henka_free(clip->samples);
+            clip->samples = NULL;
+            return HENKA_ERROR_ASSET_SOURCE;
+        }
+        total_frames += frames_read;
+    }
+    henka_audio_decoder_destroy(decoder);
+    clip->sample_rate = info.sample_rate;
+    clip->channels = info.channels;
+    clip->bits_per_sample = info.bits_per_sample;
+    clip->frame_count = info.frame_count;
+    return HENKA_SUCCESS;
+}
+
 static henka_audio_voice_id henka_audio_make_voice_id(
     size_t slot_index,
     uint32_t generation)
@@ -799,6 +909,24 @@ henka_result henka_audio_clip_load_file(
     {
         return result;
     }
+    if (henka_audio_decoder_is_supported_path(resolved_path))
+    {
+        clip = (henka_audio_clip*)henka_calloc(1U, sizeof(*clip));
+        if (clip == NULL)
+        {
+            henka_free(resolved_path);
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        clip->source_path = resolved_path;
+        result = henka_audio_load_compressed_clip(resolved_path, clip);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_audio_clip_destroy(clip);
+            return result;
+        }
+        *out_clip = clip;
+        return HENKA_SUCCESS;
+    }
     if (!henka_audio_read_file(resolved_path, &bytes, &byte_count))
     {
         henka_free(resolved_path);
@@ -915,6 +1043,35 @@ henka_result henka_audio_stream_load_file(
     {
         return result;
     }
+    if (henka_audio_decoder_is_supported_path(resolved_path))
+    {
+        henka_audio_decoder_info info;
+        stream = (henka_audio_stream*)henka_calloc(1U, sizeof(*stream));
+        if (stream == NULL)
+        {
+            henka_free(resolved_path);
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        stream->source_path = resolved_path;
+        result = henka_audio_decoder_open(
+            resolved_path,
+            HENKA_AUDIO_MAX_STREAM_BYTES,
+            &stream->decoder);
+        if (result != HENKA_SUCCESS ||
+            henka_audio_decoder_get_info(stream->decoder, &info) != HENKA_SUCCESS)
+        {
+            henka_audio_stream_destroy(stream);
+            return result == HENKA_ERROR_OUT_OF_MEMORY
+                ? result
+                : HENKA_ERROR_ASSET_SOURCE;
+        }
+        stream->sample_rate = info.sample_rate;
+        stream->channels = info.channels;
+        stream->bits_per_sample = info.bits_per_sample;
+        stream->frame_count = info.frame_count;
+        *out_stream = stream;
+        return HENKA_SUCCESS;
+    }
 #if defined(_WIN32)
     if (fopen_s(&file, resolved_path, "rb") != 0)
     {
@@ -979,6 +1136,7 @@ void henka_audio_stream_destroy(henka_audio_stream* stream)
     {
         fclose(stream->file);
     }
+    henka_audio_decoder_destroy(stream->decoder);
     henka_free(stream->source_path);
     henka_free(stream);
 }
@@ -987,7 +1145,8 @@ henka_result henka_audio_stream_get_info(
     const henka_audio_stream* stream,
     henka_audio_stream_info* out_info)
 {
-    if (stream == NULL || out_info == NULL || stream->file == NULL)
+    if (stream == NULL || out_info == NULL ||
+        (stream->file == NULL && stream->decoder == NULL))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1022,7 +1181,9 @@ henka_result henka_audio_stream_read_frames(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_frames = 0U;
-    if (stream == NULL || stream->file == NULL || source_frame > stream->frame_count ||
+    if (stream == NULL ||
+        (stream->file == NULL && stream->decoder == NULL) ||
+        source_frame > stream->frame_count ||
         frame_capacity > out_frame_capacity ||
         (frame_capacity != 0U && out_samples == NULL) ||
         !henka_audio_size_multiply(
@@ -1042,6 +1203,28 @@ henka_result henka_audio_stream_read_frames(
     }
     available_frames = stream->frame_count - source_frame;
     frames_requested = frame_capacity < available_frames ? frame_capacity : available_frames;
+    if (stream->decoder != NULL)
+    {
+        if (henka_audio_decoder_seek(stream->decoder, source_frame) != HENKA_SUCCESS ||
+            henka_audio_decoder_read_frames(
+                stream->decoder,
+                out_samples,
+                frames_requested,
+                out_frames) != HENKA_SUCCESS)
+        {
+            *out_frames = 0U;
+            return HENKA_ERROR_ASSET_SOURCE;
+        }
+        if (!henka_audio_samples_are_valid(
+                out_samples,
+                *out_frames,
+                stream->channels))
+        {
+            *out_frames = 0U;
+            return HENKA_ERROR_ASSET_SOURCE;
+        }
+        return HENKA_SUCCESS;
+    }
     if (!henka_audio_size_multiply(source_frame, stream->block_align, &byte_offset) ||
         byte_offset > SIZE_MAX - stream->data_offset ||
         fseek(stream->file, (long)(stream->data_offset + byte_offset), SEEK_SET) != 0)
@@ -1150,7 +1333,8 @@ henka_result henka_audio_voice_play_stream(
     }
     *out_voice = HENKA_INVALID_AUDIO_VOICE_ID;
     effective_desc = desc == NULL ? henka_audio_voice_desc_default() : *desc;
-    if (system == NULL || scene == NULL || stream == NULL || stream->file == NULL ||
+    if (system == NULL || scene == NULL || stream == NULL ||
+        (stream->file == NULL && stream->decoder == NULL) ||
         stream->frame_count == 0U || !henka_scene_is_entity_valid(scene, entity) ||
         !henka_audio_validate_voice_desc(&effective_desc))
     {
@@ -1462,7 +1646,8 @@ henka_result henka_audio_emitter_create_with_stream(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_emitter = NULL;
-    if (system == NULL || scene == NULL || stream == NULL || stream->file == NULL ||
+    if (system == NULL || scene == NULL || stream == NULL ||
+        (stream->file == NULL && stream->decoder == NULL) ||
         !henka_scene_is_entity_valid(scene, entity) || config == NULL ||
         !config->enabled || henka_audio_emitter_config_validate(config) != HENKA_SUCCESS ||
         stream->frame_count == 0U)
@@ -1510,7 +1695,8 @@ static henka_result henka_audio_emitter_play_internal(
         (emitter->clip != NULL &&
             (emitter->clip->samples == NULL || emitter->clip->frame_count == 0U)) ||
         (emitter->stream != NULL &&
-            (emitter->stream->file == NULL || emitter->stream->frame_count == 0U)) ||
+            (emitter->stream->file == NULL && emitter->stream->decoder == NULL)) ||
+        (emitter->stream != NULL && emitter->stream->frame_count == 0U) ||
         !henka_scene_is_entity_valid(emitter->scene, emitter->entity))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -1958,7 +2144,8 @@ static henka_result henka_audio_stream_fill_window(
     size_t frames_to_read;
     size_t frames_read = 0U;
 
-    if (slot == NULL || slot->stream == NULL || slot->stream->file == NULL ||
+    if (slot == NULL || slot->stream == NULL ||
+        (slot->stream->file == NULL && slot->stream->decoder == NULL) ||
         source_frame >= slot->stream->frame_count)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;

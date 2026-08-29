@@ -1,0 +1,9 @@
+stb_vorbis
+==========
+
+Henka pins stb at commit 2c980bb59875b0d32144a71867fbdebb2f77cd20 from
+https://github.com/nothings/stb and uses stb_vorbis through miniaudio's
+decoder adapter.
+
+stb_vorbis is in the public domain. The complete upstream notice is
+distributed with the fetched source.

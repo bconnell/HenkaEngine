@@ -65,6 +65,7 @@ target_include_directories(henka_runtime
 
 target_compile_definitions(henka_runtime PRIVATE HENKA_RUNTIME_HEADLESS=1)
 target_compile_definitions(henka_runtime PRIVATE HENKA_ENABLE_LUA=$<BOOL:${HENKA_ENABLE_LUA}>)
+target_link_libraries(henka_runtime PRIVATE henka_audio_decoder)
 henka_enable_project_warnings(henka_runtime)
 
 if(HENKA_BUILD_CLIENT)

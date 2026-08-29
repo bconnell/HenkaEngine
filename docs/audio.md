@@ -1,24 +1,32 @@
-# Audio Foundation
+# Audio Runtime
 
-Henka's first Audio slice is a renderer-independent, headless-safe runtime
-foundation in `engine/include/henka/audio.h`.
+Henka's Audio subsystem is a renderer-independent, headless-safe runtime
+service in `engine/include/henka/audio.h`.
 
-## Available foundation
+## Available
 
-- Resident PCM WAV clips are loaded through the same confined project-relative
-  path boundary used by other file-backed runtime data.
-- A bounded PCM WAV stream API is available for long-form content. It validates
-  the file metadata without decoding the full payload, keeps a file-backed
-  handle, reads caller-owned float frames in bounded chunks, and can drive
-  generation-checked voices or object-attached emitters without loading the
-  entire source into resident sample memory. Stream reads are single-owner and
-  caller-synchronized, matching the current deterministic mixer contract.
-- The asset manager caches resident WAV clips and metadata-first WAV streams by
+- Henka accepts PCM WAV, Ogg Vorbis (`.ogg` and `.oga`), MP3, and FLAC files
+  through one bounded private decoder boundary. The production mixer receives
+  validated mono or stereo float PCM with a sample rate between 8 kHz and
+  192 kHz. Unsupported extensions, malformed containers, invalid metadata,
+  non-finite decoded samples, and sources above the configured file or
+  resident-memory limits fail with an asset-source error.
+
+- Resident clips are loaded through the same confined project-relative path
+  boundary used by other file-backed runtime data.
+- A bounded stream API is available for long-form content in every supported
+  format. It validates source metadata without decoding the full payload,
+  keeps decoder state file-backed, reads caller-owned float frames in bounded
+  windows, and can drive generation-checked voices or object-attached emitters
+  without loading the entire source into resident sample memory. Stream reads
+  are single-owner and caller-synchronized, matching the current deterministic
+  mixer contract.
+- The asset manager caches resident clips and metadata-first streams by
   canonical path. A path may expose both borrowed payload forms through one
   manager-owned asset identity; resident clips can be reloaded transactionally
-  in place, while streamed payloads retain bounded file-backed ownership.
-  Malformed or unreadable resident replacements leave the prior payload and
-  metadata live.
+  in place, while streamed payloads retain bounded decoder/file-backed
+  ownership. Malformed or unreadable resident replacements leave the prior
+  payload and metadata live.
 - A fixed-capacity voice pool uses generation-checked voice IDs. Voices bind to
   borrowed `henka_scene` and `henka_entity` objects and read the live entity
   transform while mixing.
@@ -57,13 +65,12 @@ emitters; the graphical camera remains the live listener source during normal
 interactive runtime.
 Play pause and resume now propagate to its live emitter voices without
 advancing their source positions. The next Audio slices must connect it to
-broader device-lifecycle policy. A packaged `--audio-smoke-test` now loads
-  the repository-owned `assets/audio/henka_audio_fixture.wav` through the real
-  asset manager in both resident and metadata-first streamed modes. Each mode
-  attaches the payload to a real scene entity, mixes it through a live emitter,
-  and reaches the SDL output boundary. This is deterministic production-path
-  coverage for one packaged PCM WAV fixture in both storage modes, not broad
-  long-form or packaged-content coverage.
+broader device-lifecycle policy. A packaged `--audio-smoke-test` loads the
+repository-owned `assets/audio/henka_audio_fixture.wav` through the real asset
+manager in both resident and metadata-first streamed modes. Each mode attaches
+the payload to a real scene entity, mixes it through a live emitter, and
+reaches the SDL output boundary. The focused decoder tests also exercise
+repository-traceable Ogg, MP3, and FLAC inputs through both storage modes.
 Audio integrations preserve the renderer-free dedicated-server path. Integration
 coverage includes real imported or authored objects.
 
@@ -87,9 +94,9 @@ bindings fail closed, while `IsPlaying` reports false.
 
 ## Future work
 
-Packaged long-form streamed-content coverage, broader decoder coverage, mixer
-effects, broader hot reload policy, expanded packaged-content coverage,
-device-loss notification/hot-plug policy, and broader spatial/occlusion
-features remain future work. The current production asset scope is PCM WAV;
-compressed Ogg Vorbis, MP3, and FLAC decoding remains unfinished. None of
-those gaps are hidden by the current Foundation status.
+Mixer effects, broader hot reload policy, expanded packaged long-form content
+coverage, device-loss notification/hot-plug policy, and broader
+spatial/occlusion features remain future work. The supported decoder boundary
+is intentionally limited to mono/stereo PCM WAV, Ogg Vorbis, MP3, and FLAC;
+additional codecs and multichannel routing are outside the current Audio
+scope.

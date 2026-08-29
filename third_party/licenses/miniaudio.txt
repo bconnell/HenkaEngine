@@ -1,0 +1,9 @@
+miniaudio
+=========
+
+Henka pins miniaudio at commit 9634bedb5b5a2ca38c1ee7108a9358a4e233f14d
+from https://github.com/mackron/miniaudio.
+
+miniaudio is available under a choice of public-domain dedication or MIT
+No Attribution license. The complete license text is distributed with the
+upstream source.

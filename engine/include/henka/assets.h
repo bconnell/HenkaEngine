@@ -217,16 +217,16 @@ henka_result henka_assets_load_audio_clip(
     henka_asset_manager* manager,
     const char* path,
     henka_audio_clip** out_clip);
-/* Metadata-first PCM WAV streams returned by the manager are borrowed and
+/* Metadata-first streams for supported audio files are borrowed and
  * manager-owned. Their canonical cache identity is shared with resident
  * clips for the same path, while the stream remains a separate payload. */
 henka_result henka_assets_load_audio_stream(
     henka_asset_manager* manager,
     const char* path,
     henka_audio_stream** out_stream);
-/* Reloads an existing manager-owned resident WAV clip in place. The borrowed
- * clip identity remains stable for emitters, and a failed source read or WAV
- * validation leaves both the prior payload and metadata live. */
+/* Reloads an existing manager-owned resident audio clip in place. The
+ * borrowed clip identity remains stable for emitters, and a failed source
+ * read or format validation leaves both the prior payload and metadata live. */
 henka_result henka_assets_reload_audio_clip(
     henka_asset_manager* manager,
     const char* path,

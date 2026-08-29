@@ -71,8 +71,70 @@ if(HENKA_BUILD_CLIENT AND HENKA_ENABLE_KTX2_TRANSCODER)
     enable_language(CXX)
 endif()
 
-if(HENKA_BUILD_CLIENT OR HENKA_ENABLE_NETWORK OR HENKA_ENABLE_LUA)
-    include(FetchContent)
+include(FetchContent)
+
+# Audio decoding is a runtime dependency even for headless builds. Keep the
+# decoder source pinned and static so supported compressed formats do not add
+# a platform DLL or a machine-wide installation requirement.
+FetchContent_Declare(
+    miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG 9634bedb5b5a2ca38c1ee7108a9358a4e233f14d
+    GIT_SHALLOW TRUE
+    GIT_SUBMODULES ""
+    GIT_SUBMODULES_RECURSE FALSE
+)
+FetchContent_GetProperties(miniaudio)
+if(NOT miniaudio_POPULATED)
+    if(POLICY CMP0169)
+        cmake_policy(PUSH)
+        cmake_policy(SET CMP0169 OLD)
+    endif()
+    FetchContent_Populate(miniaudio)
+    if(POLICY CMP0169)
+        cmake_policy(POP)
+    endif()
+endif()
+
+# miniaudio exposes a small stb_vorbis adapter rather than bundling the
+# Vorbis decoder. Pin the public-domain stb source separately and keep both
+# dependencies behind Henka's private decoder wrapper.
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG 2c980bb59875b0d32144a71867fbdebb2f77cd20
+    GIT_SHALLOW TRUE
+    GIT_SUBMODULES ""
+    GIT_SUBMODULES_RECURSE FALSE
+)
+FetchContent_GetProperties(stb)
+if(NOT stb_POPULATED)
+    if(POLICY CMP0169)
+        cmake_policy(PUSH)
+        cmake_policy(SET CMP0169 OLD)
+    endif()
+    FetchContent_Populate(stb)
+    if(POLICY CMP0169)
+        cmake_policy(POP)
+    endif()
+endif()
+
+add_library(henka_audio_decoder STATIC
+    engine/src/core/audio_decoder.c
+)
+target_include_directories(henka_audio_decoder
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/engine/include
+        ${miniaudio_SOURCE_DIR}
+        ${stb_SOURCE_DIR}
+)
+# The translation unit contains upstream single-file decoder implementations.
+# Their warning policy is not part of Henka's first-party warning surface; the
+# wrapper and all callers remain covered by Henka's normal warning gates.
+if(MSVC)
+    target_compile_options(henka_audio_decoder PRIVATE /W0)
+else()
+    target_compile_options(henka_audio_decoder PRIVATE -w)
 endif()
 
 if(HENKA_BUILD_CLIENT AND (TARGET SDL3::SDL3 OR TARGET SDL3::SDL3-static))

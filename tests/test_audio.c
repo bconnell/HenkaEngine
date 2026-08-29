@@ -5,6 +5,16 @@
 
 #include <henka/audio.h>
 
+static const char test_compressed_ogg_base64[] =
+#include "fixtures/audio_fixture_ogg.b64"
+;
+static const char test_compressed_mp3_base64[] =
+#include "fixtures/audio_fixture_mp3.b64"
+;
+static const char test_compressed_flac_base64[] =
+#include "fixtures/audio_fixture_flac.b64"
+;
+
 #define HENKA_TEST_ASSERT(condition) \
     do \
     { \
@@ -92,6 +102,189 @@ static bool test_write_bytes(const char* path, const unsigned char* bytes, size_
         success = false;
     }
     return success;
+}
+
+static int test_base64_value(char value)
+{
+    if (value >= 'A' && value <= 'Z')
+    {
+        return value - 'A';
+    }
+    if (value >= 'a' && value <= 'z')
+    {
+        return value - 'a' + 26;
+    }
+    if (value >= '0' && value <= '9')
+    {
+        return value - '0' + 52;
+    }
+    if (value == '+')
+    {
+        return 62;
+    }
+    if (value == '/')
+    {
+        return 63;
+    }
+    return -1;
+}
+
+static bool test_write_base64_file(const char* path, const char* encoded)
+{
+    FILE* file = NULL;
+    size_t length;
+    size_t index;
+    bool success = true;
+
+    if (path == NULL || encoded == NULL)
+    {
+        return false;
+    }
+    length = strlen(encoded);
+    if (length == 0U || length % 4U != 0U)
+    {
+        return false;
+    }
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "wb") != 0)
+    {
+        file = NULL;
+    }
+#else
+    file = fopen(path, "wb");
+#endif
+    if (file == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < length && success; index += 4U)
+    {
+        const char first = encoded[index];
+        const char second = encoded[index + 1U];
+        const char third = encoded[index + 2U];
+        const char fourth = encoded[index + 3U];
+        const int first_value = test_base64_value(first);
+        const int second_value = test_base64_value(second);
+        const int third_value = third == '=' ? 0 : test_base64_value(third);
+        const int fourth_value = fourth == '=' ? 0 : test_base64_value(fourth);
+        const unsigned char bytes[3U] = {
+            (unsigned char)((first_value << 2) | (second_value >> 4)),
+            (unsigned char)((second_value << 4) | (third_value >> 2)),
+            (unsigned char)((third_value << 6) | fourth_value)};
+        size_t byte_count = 3U;
+
+        if (first_value < 0 || second_value < 0 || third_value < 0 ||
+            fourth_value < 0 || (third == '=' && fourth != '=') ||
+            (index + 4U != length && (third == '=' || fourth == '=')))
+        {
+            success = false;
+            break;
+        }
+        if (fourth == '=')
+        {
+            byte_count = 2U;
+        }
+        if (third == '=')
+        {
+            byte_count = 1U;
+        }
+        success = fwrite(bytes, 1U, byte_count, file) == byte_count;
+    }
+    if (fclose(file) != 0)
+    {
+        success = false;
+    }
+    return success;
+}
+
+static int test_compressed_format_contract(void)
+{
+    static const struct
+    {
+        const char* path;
+        const char* base64;
+    } cases[] = {
+        {"build/test_tmp/audio_fixture.ogg", test_compressed_ogg_base64},
+        {"build/test_tmp/audio_fixture.mp3", test_compressed_mp3_base64},
+        {"build/test_tmp/audio_fixture.flac", test_compressed_flac_base64}};
+    henka_audio_system* system = NULL;
+    henka_scene* scene = NULL;
+    henka_entity entity;
+    henka_audio_voice_desc desc = henka_audio_voice_desc_default();
+    float samples[HENKA_AUDIO_OUTPUT_CHANNELS * 4U] = {0.0f};
+    const unsigned char malformed[] = {'O', 'g', 'g', 'S', 0U, 0U, 0U, 0U};
+    size_t index;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Compressed Audio Object");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_audio_system_create(NULL, &system) == HENKA_SUCCESS);
+    desc.spatial = false;
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index)
+    {
+        henka_audio_clip* clip = NULL;
+        henka_audio_stream* stream = NULL;
+        henka_audio_clip_info clip_info;
+        henka_audio_stream_info stream_info;
+        henka_audio_voice_id voice = HENKA_INVALID_AUDIO_VOICE_ID;
+        size_t frames_read = 0U;
+
+        HENKA_TEST_ASSERT(test_write_base64_file(cases[index].path, cases[index].base64));
+        HENKA_TEST_ASSERT(henka_audio_clip_load_file(
+            ".", cases[index].path, &clip) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_clip_get_info(clip, &clip_info) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(clip_info.resident && clip_info.channels >= 1U &&
+            clip_info.channels <= HENKA_AUDIO_OUTPUT_CHANNELS &&
+            clip_info.sample_rate >= 8000U && clip_info.sample_rate <= 192000U &&
+            clip_info.bits_per_sample == 32U && clip_info.frame_count > 0U);
+        HENKA_TEST_ASSERT(henka_audio_voice_play(
+            system, scene, entity, clip, &desc, &voice) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_voice_stop(system, voice) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_stream_load_file(
+            ".", cases[index].path, &stream) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_stream_get_info(
+            stream, &stream_info) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!stream_info.resident &&
+            stream_info.channels == clip_info.channels &&
+            stream_info.sample_rate == clip_info.sample_rate &&
+            stream_info.frame_count == clip_info.frame_count);
+        HENKA_TEST_ASSERT(henka_audio_stream_read_frames(
+            stream,
+            0U,
+            4U,
+            samples,
+            4U,
+            &frames_read) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(frames_read > 0U);
+        HENKA_TEST_ASSERT(henka_audio_voice_play_stream(
+            system, scene, entity, stream, &desc, &voice) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_voice_stop(system, voice) == HENKA_SUCCESS);
+        henka_audio_stream_destroy(stream);
+        henka_audio_clip_destroy(clip);
+    }
+    HENKA_TEST_ASSERT(test_write_bytes(
+        "build/test_tmp/audio_malformed.ogg",
+        malformed,
+        sizeof(malformed)));
+    {
+        henka_audio_clip* malformed_clip = (henka_audio_clip*)1;
+        henka_audio_stream* malformed_stream = (henka_audio_stream*)1;
+        HENKA_TEST_ASSERT(henka_audio_clip_load_file(
+            ".",
+            "build/test_tmp/audio_malformed.ogg",
+            &malformed_clip) == HENKA_ERROR_ASSET_SOURCE);
+        HENKA_TEST_ASSERT(malformed_clip == NULL);
+        HENKA_TEST_ASSERT(henka_audio_stream_load_file(
+            ".",
+            "build/test_tmp/audio_malformed.ogg",
+            &malformed_stream) == HENKA_ERROR_ASSET_SOURCE);
+        HENKA_TEST_ASSERT(malformed_stream == NULL);
+    }
+    henka_audio_system_destroy(system);
+    henka_scene_destroy(scene);
+    return EXIT_SUCCESS;
 }
 
 static bool test_nonzero_mix(const float* samples, size_t frame_count)
@@ -228,6 +421,7 @@ int main(void)
 
     HENKA_TEST_ASSERT(test_write_real_wav(wav_path, 128U));
     HENKA_TEST_ASSERT(test_write_real_wav(stream_path, 8192U));
+    HENKA_TEST_ASSERT(test_compressed_format_contract() == EXIT_SUCCESS);
     HENKA_TEST_ASSERT(test_streaming_wav_contract(stream_path) == EXIT_SUCCESS);
     HENKA_TEST_ASSERT(test_write_bytes(malformed_path, malformed, sizeof(malformed)));
     {
