@@ -68,6 +68,8 @@ $localSdlSource = Join-Path $repoRoot "build\_deps\sdl3-src"
 $localKtxSource = Join-Path $repoRoot "build\_deps\ktxsoftware-src"
 $localEnetSource = Join-Path $repoRoot "build\_deps\enet-src"
 $localLuaSource = Join-Path $repoRoot "build\_deps\lua-src"
+$localMiniaudioSource = Join-Path $repoRoot "build\_deps\miniaudio-src"
+$localStbSource = Join-Path $repoRoot "build\_deps\stb-src"
 $offlineProviderCount = 0
 $configureArguments = @(
     "-S", $validationSource,
@@ -118,7 +120,29 @@ else {
     Write-Host "Lua provider: FetchContent network fallback"
 }
 
-if ($offlineProviderCount -eq 4) {
+if (-not $NoLocalProviders -and (Test-Path -LiteralPath (Join-Path $localMiniaudioSource "miniaudio.h") -PathType Leaf)) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_MINIAUDIO=$localMiniaudioSource"
+    $offlineProviderCount += 1
+    Write-Host "miniaudio provider: repository-local populated source"
+}
+else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_MINIAUDIO="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
+    Write-Host "miniaudio provider: FetchContent network fallback"
+}
+
+if (-not $NoLocalProviders -and (Test-Path -LiteralPath (Join-Path $localStbSource "stb_vorbis.c") -PathType Leaf)) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_STB=$localStbSource"
+    $offlineProviderCount += 1
+    Write-Host "stb provider: repository-local populated source"
+}
+else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_STB="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
+    Write-Host "stb provider: FetchContent network fallback"
+}
+
+if ($offlineProviderCount -eq 6) {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
     Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
 }
