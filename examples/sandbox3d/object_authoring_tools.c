@@ -29,6 +29,7 @@ struct sandbox3d_authoring_object
     henka_authoring_mesh_history* history;
     size_t history_steps;
     henka_mesh* render_mesh;
+    uint64_t geometry_revision;
     henka_mesh* previous_scene_mesh;
     bool had_previous_bounds;
     henka_bounds previous_bounds;
@@ -81,6 +82,18 @@ static henka_result sandbox3d_authoring_allocate_id_scratch(
 static int64_t sandbox3d_authoring_import_weld_quantize(float value)
 {
     return (int64_t)floorf(value / SANDBOX3D_AUTHORING_IMPORT_WELD_EPSILON + 0.5f);
+}
+
+static void sandbox3d_authoring_advance_geometry_revision(
+    sandbox3d_authoring_object* object)
+{
+    if (object == NULL)
+    {
+        return;
+    }
+    object->geometry_revision = object->geometry_revision == UINT64_MAX
+        ? 1U
+        : object->geometry_revision + 1U;
 }
 
 static size_t sandbox3d_authoring_import_weld_bucket(henka_vec3 position)
@@ -1449,6 +1462,7 @@ static henka_result sandbox3d_authoring_publish_candidate(
     henka_mesh_destroy(object->render_mesh);
     object->mesh = candidate;
     object->render_mesh = candidate_render;
+    sandbox3d_authoring_advance_geometry_revision(object);
     object->selected_face = selected_after;
     sandbox3d_authoring_repair_selection(object);
     sandbox3d_authoring_remove_invalid_component_selection(object);
@@ -1581,6 +1595,7 @@ static henka_result sandbox3d_authoring_replace_loaded_source(
     object->mesh = candidate;
     object->history = candidate_history;
     object->render_mesh = candidate_render;
+    sandbox3d_authoring_advance_geometry_revision(object);
     sandbox3d_authoring_repair_selection(object);
     sandbox3d_authoring_reset_selection_history(object);
     return HENKA_SUCCESS;
@@ -1756,6 +1771,7 @@ static henka_result sandbox3d_authoring_object_create_from_owned_mesh(
     object->scene = scene;
     object->entity = entity;
     object->mesh = mesh;
+    object->geometry_revision = 1U;
     object->history_steps = history_steps;
     /* New authoring objects enter object-selection state. Component overlays
      * are opt-in after the user picks a vertex, edge, or face; seeding face 1
@@ -2153,6 +2169,12 @@ henka_entity sandbox3d_authoring_object_get_entity(const sandbox3d_authoring_obj
     return object == NULL ? HENKA_INVALID_ENTITY : object->entity;
 }
 
+uint64_t sandbox3d_authoring_object_get_geometry_revision(
+    const sandbox3d_authoring_object* object)
+{
+    return object == NULL ? 0U : object->geometry_revision;
+}
+
 const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_authoring_object* object)
 {
     return object == NULL ? NULL : object->mesh;
@@ -2269,6 +2291,7 @@ henka_result sandbox3d_authoring_object_commit_preview(
     previous_render_mesh = object->render_mesh;
     object->mesh = object->preview_mesh;
     object->render_mesh = object->preview_render_mesh;
+    sandbox3d_authoring_advance_geometry_revision(object);
     object->preview_active = false;
     object->preview_mesh = NULL;
     object->preview_render_mesh = NULL;

@@ -781,6 +781,100 @@ static bool sandbox3d_projected_triangle_depth_at(
     return isfinite(*out_depth);
 }
 
+static bool sandbox3d_projected_triangle_contains_strict(
+    const sandbox3d_projected_triangle* triangle,
+    henka_vec2 point)
+{
+    float first_weight;
+    float second_weight;
+    float third_weight;
+
+    if (!sandbox3d_projected_triangle_barycentric_at(
+            triangle,
+            point,
+            &first_weight,
+            &second_weight,
+            &third_weight))
+    {
+        return false;
+    }
+    return first_weight > 0.0005f &&
+        second_weight > 0.0005f &&
+        third_weight > 0.0005f;
+}
+
+static bool sandbox3d_segment_is_interior_to_projected_union(
+    const sandbox3d_projected_triangle* triangles,
+    size_t triangle_count,
+    henka_vec2 start,
+    henka_vec2 end)
+{
+    static const float sample_parameters[3] = {0.25f, 0.5f, 0.75f};
+    size_t sample_index;
+
+    if (triangles == NULL || triangle_count == 0U ||
+        !isfinite(start.x) || !isfinite(start.y) ||
+        !isfinite(end.x) || !isfinite(end.y))
+    {
+        return false;
+    }
+
+    for (sample_index = 0U; sample_index < 3U; ++sample_index)
+    {
+        const float parameter = sample_parameters[sample_index];
+        const henka_vec2 sample = {
+            start.x + (end.x - start.x) * parameter,
+            start.y + (end.y - start.y) * parameter};
+        size_t triangle_index;
+        bool covered = false;
+
+        for (triangle_index = 0U; triangle_index < triangle_count; ++triangle_index)
+        {
+            if (sandbox3d_projected_triangle_contains_strict(
+                    &triangles[triangle_index], sample))
+            {
+                covered = true;
+                break;
+            }
+        }
+        if (!covered)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool sandbox3d_append_exposed_silhouette_segment(
+    const sandbox3d_projected_triangle* triangles,
+    size_t triangle_count,
+    henka_vec2 start,
+    henka_vec2 end,
+    sandbox3d_silhouette_segment* out_segments,
+    size_t segment_capacity,
+    size_t* inout_output_count)
+{
+    if (out_segments == NULL || inout_output_count == NULL)
+    {
+        return false;
+    }
+    /* Object-mode selection is a union boundary. A child-mesh boundary that
+     * is covered through the full segment by another projected surface is an
+     * interior seam, not part of the logical object's silhouette. */
+    if (sandbox3d_segment_is_interior_to_projected_union(
+            triangles, triangle_count, start, end))
+    {
+        return true;
+    }
+    if (*inout_output_count >= segment_capacity)
+    {
+        return false;
+    }
+    out_segments[*inout_output_count] = (sandbox3d_silhouette_segment){start, end};
+    ++*inout_output_count;
+    return true;
+}
+
 static bool sandbox3d_clip_affine_interval(
     float base,
     float slope,
@@ -978,13 +1072,17 @@ size_t sandbox3d_build_topology_silhouette(
         }
         if (triangle_count > 4096U && !visibility_grid_valid)
         {
-            if (output_count >= segment_capacity)
+            if (!sandbox3d_append_exposed_silhouette_segment(
+                    triangles,
+                    triangle_count,
+                    edge->start,
+                    edge->end,
+                    out_segments,
+                    segment_capacity,
+                    &output_count))
             {
                 return 0U;
             }
-            out_segments[output_count++] = (sandbox3d_silhouette_segment){
-                edge->start,
-                edge->end};
             continue;
         }
         {
@@ -1155,33 +1253,41 @@ size_t sandbox3d_build_topology_silhouette(
                 }
                 else if (visible_run)
                 {
-                    if (output_count >= segment_capacity)
+                    if (!sandbox3d_append_exposed_silhouette_segment(
+                            triangles,
+                            triangle_count,
+                            (henka_vec2){
+                                edge->start.x + (edge->end.x - edge->start.x) * visible_start,
+                                edge->start.y + (edge->end.y - edge->start.y) * visible_start},
+                            (henka_vec2){
+                                edge->start.x + (edge->end.x - edge->start.x) * visible_end,
+                                edge->start.y + (edge->end.y - edge->start.y) * visible_end},
+                            out_segments,
+                            segment_capacity,
+                            &output_count))
                     {
                         return 0U;
                     }
-                    out_segments[output_count++] = (sandbox3d_silhouette_segment){
-                        {
-                            edge->start.x + (edge->end.x - edge->start.x) * visible_start,
-                            edge->start.y + (edge->end.y - edge->start.y) * visible_start},
-                        {
-                            edge->start.x + (edge->end.x - edge->start.x) * visible_end,
-                            edge->start.y + (edge->end.y - edge->start.y) * visible_end}};
                     visible_run = false;
                 }
             }
             if (visible_run)
             {
-                if (output_count >= segment_capacity)
+                if (!sandbox3d_append_exposed_silhouette_segment(
+                        triangles,
+                        triangle_count,
+                        (henka_vec2){
+                            edge->start.x + (edge->end.x - edge->start.x) * visible_start,
+                            edge->start.y + (edge->end.y - edge->start.y) * visible_start},
+                        (henka_vec2){
+                            edge->start.x + (edge->end.x - edge->start.x) * visible_end,
+                            edge->start.y + (edge->end.y - edge->start.y) * visible_end},
+                        out_segments,
+                        segment_capacity,
+                        &output_count))
                 {
                     return 0U;
                 }
-                out_segments[output_count++] = (sandbox3d_silhouette_segment){
-                    {
-                        edge->start.x + (edge->end.x - edge->start.x) * visible_start,
-                        edge->start.y + (edge->end.y - edge->start.y) * visible_start},
-                    {
-                        edge->start.x + (edge->end.x - edge->start.x) * visible_end,
-                        edge->start.y + (edge->end.y - edge->start.y) * visible_end}};
             }
             }
         }

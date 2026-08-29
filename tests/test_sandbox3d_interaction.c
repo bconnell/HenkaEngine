@@ -546,6 +546,25 @@ void henka_test_sandbox3d_interaction(void)
         topology_triangles + 4U, 2U, topology_segments, 32U);
     HENKA_TEST_ASSERT(topology_segment_count == 3U);
 
+    /* A child boundary fully covered by a nearer projected surface is an
+     * interior seam of the logical object and must not be presented as its
+     * object-mode outline. */
+    topology_triangles[0].points[0] = (henka_vec2){0.0f, 0.0f};
+    topology_triangles[0].points[1] = (henka_vec2){4.0f, 0.0f};
+    topology_triangles[0].points[2] = (henka_vec2){0.0f, 4.0f};
+    topology_triangles[0].vertex_ids[0] = UINT64_C(101);
+    topology_triangles[0].vertex_ids[1] = UINT64_C(102);
+    topology_triangles[0].vertex_ids[2] = UINT64_C(103);
+    topology_triangles[1].points[0] = (henka_vec2){0.5f, 0.5f};
+    topology_triangles[1].points[1] = (henka_vec2){3.0f, 0.5f};
+    topology_triangles[1].points[2] = (henka_vec2){0.5f, 3.0f};
+    topology_triangles[1].vertex_ids[0] = UINT64_C(201);
+    topology_triangles[1].vertex_ids[1] = UINT64_C(202);
+    topology_triangles[1].vertex_ids[2] = UINT64_C(203);
+    topology_segment_count = sandbox3d_build_topology_silhouette(
+        topology_triangles, 2U, topology_segments, 32U);
+    HENKA_TEST_ASSERT(topology_segment_count == 3U);
+
     memset(topology_triangles, 0, sizeof(topology_triangles));
     topology_triangles[0].points[0] = (henka_vec2){0.0f, 0.0f};
     topology_triangles[0].points[1] = (henka_vec2){10.0f, 0.0f};

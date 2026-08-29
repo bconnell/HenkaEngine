@@ -175,11 +175,12 @@ bool sandbox3d_build_ground_selection_highlight_model(
     float half_extent,
     float y_offset,
     sandbox3d_selection_highlight_model* out_model);
-/* Builds boundary/front-back silhouette segments from projected indexed
- * triangles. Internal diagonals and invented convex-hull chords are omitted.
- * The bounded implementation also suppresses samples hidden by nearer
- * projected triangles; exact renderer-owned stencil/mask outlines remain a
- * separate presentation path. The caller owns the bounded output storage. */
+/* Builds the exposed logical-object silhouette from projected indexed
+ * triangles. Internal diagonals, child seams covered by the projected union,
+ * and invented convex-hull chords are omitted. The bounded implementation
+ * also suppresses samples hidden by nearer projected triangles; exact
+ * renderer-owned stencil/mask outlines remain a separate presentation path.
+ * The caller owns the bounded output storage. */
 size_t sandbox3d_build_topology_silhouette(
     const sandbox3d_projected_triangle* triangles,
     size_t triangle_count,

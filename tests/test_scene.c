@@ -22,10 +22,20 @@ static void henka_test_scene_capacity_growth(void)
     int index;
 
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) != 0U);
     for (index = 0; index < ENTITY_COUNT; ++index)
     {
         entities[index] = henka_scene_create_entity(scene);
         HENKA_TEST_ASSERT(entities[index] != HENKA_INVALID_ENTITY);
+    }
+
+    {
+        const uint64_t initial_revision = henka_scene_get_render_revision(scene);
+        HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+            scene,
+            entities[0],
+            henka_transform_identity()) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) > initial_revision);
     }
 
     HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == (size_t)ENTITY_COUNT);

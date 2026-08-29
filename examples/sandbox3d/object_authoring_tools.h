@@ -120,6 +120,10 @@ henka_result sandbox3d_authoring_object_create_from_model_primitive(
 void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object);
 henka_entity sandbox3d_authoring_object_get_entity(const sandbox3d_authoring_object* object);
 const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_authoring_object* object);
+/* Identifies the published source/evaluated-render pair.  It advances only
+ * after a successful transactional authoring publication or reload. */
+uint64_t sandbox3d_authoring_object_get_geometry_revision(
+    const sandbox3d_authoring_object* object);
 /* Presents an owned candidate without replacing the authoritative source or
  * creating an undo entry.  The candidate is retained only after success; the
  * caller retains ownership on failure. */

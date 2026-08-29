@@ -312,6 +312,8 @@ static void henka_test_sandbox3d_modeling_operator_session(void)
     const henka_authoring_vertex* vertex;
     henka_authoring_mesh_counts bevel_counts;
     henka_vec3 original_position;
+    uint64_t geometry_revision_before_preview;
+    uint64_t geometry_revision_after_commit;
 
     config.application_name = "Henka Modeling Operator Test";
     config.window_width = 320;
@@ -325,6 +327,9 @@ static void henka_test_sandbox3d_modeling_operator_session(void)
     HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(scene, entity, previous_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
         engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_geometry_revision(object) == 1U);
+    geometry_revision_before_preview =
+        sandbox3d_authoring_object_get_geometry_revision(object);
     HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &original_render_mesh) == HENKA_SUCCESS);
 
     sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
@@ -343,6 +348,9 @@ static void henka_test_sandbox3d_modeling_operator_session(void)
         &session, 0.1f, false, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(session.state == SANDBOX3D_MODELING_OPERATOR_STATE_PREVIEW);
     HENKA_TEST_ASSERT(session.preview_rebuild_count == 1U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_geometry_revision(object) ==
+        geometry_revision_before_preview);
     HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &preview_render_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(preview_render_mesh != original_render_mesh);
     vertex = henka_authoring_mesh_get_vertex(
@@ -380,11 +388,17 @@ static void henka_test_sandbox3d_modeling_operator_session(void)
     HENKA_TEST_ASSERT(session.state == SANDBOX3D_MODELING_OPERATOR_STATE_PREVIEW);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(session.amount, 0.1f, 0.0001f);
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    geometry_revision_after_commit =
+        sandbox3d_authoring_object_get_geometry_revision(object);
+    HENKA_TEST_ASSERT(geometry_revision_after_commit > geometry_revision_before_preview);
     vertex = henka_authoring_mesh_get_vertex(
         sandbox3d_authoring_object_get_mesh(object), 1U);
     HENKA_TEST_ASSERT(vertex != NULL);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->position.x, original_position.x + 0.1f, 0.0001f);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_geometry_revision(object) >
+        geometry_revision_after_commit);
     vertex = henka_authoring_mesh_get_vertex(
         sandbox3d_authoring_object_get_mesh(object), 1U);
     HENKA_TEST_ASSERT(vertex != NULL);

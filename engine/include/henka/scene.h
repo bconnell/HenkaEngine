@@ -297,6 +297,10 @@ henka_result henka_scene_clone(
     const henka_scene* source,
     henka_scene** out_clone);
 void henka_scene_destroy(henka_scene* scene);
+/* Returns the monotonically changing scene render revision.  Any public scene
+ * mutation that can change visible geometry, transforms, materials, bounds,
+ * visibility, or render settings advances this revision. */
+uint64_t henka_scene_get_render_revision(const henka_scene* scene);
 henka_entity henka_scene_create_entity(henka_scene* scene);
 henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* name);
 void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity);

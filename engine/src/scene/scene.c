@@ -970,6 +970,11 @@ void henka_scene_destroy(henka_scene* scene)
     henka_free(scene);
 }
 
+uint64_t henka_scene_get_render_revision(const henka_scene* scene)
+{
+    return scene == NULL ? 0U : scene->render_revision;
+}
+
 henka_entity henka_scene_create_entity(henka_scene* scene)
 {
     return henka_scene_create_entity_named(scene, NULL);
