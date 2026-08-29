@@ -108,7 +108,7 @@ void henka_test_sandbox3d_studio_environment(void)
         valid &&
         broad_span >= 72U &&
         row_min_luma > 0.0f &&
-        row_max_luma <= row_min_luma * 1.75f &&
+        row_max_luma <= row_min_luma * 1.20f &&
         lower_max_luma > 0.0f &&
         lower_min_luma >= lower_max_luma * 0.45f);
 }
