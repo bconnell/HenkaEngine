@@ -138,6 +138,9 @@ typedef enum sandbox3d_realism_reference_kind
     SANDBOX3D_REALISM_REFERENCE_KIND_IBL_DIFFUSE_ONLY,
     SANDBOX3D_REALISM_REFERENCE_KIND_IBL_SPECULAR_ONLY,
     SANDBOX3D_REALISM_REFERENCE_KIND_IBL_SIMPLE_ENVIRONMENT,
+    SANDBOX3D_REALISM_REFERENCE_KIND_IBL_EMPTY_ENVIRONMENT,
+    SANDBOX3D_REALISM_REFERENCE_KIND_IBL_ROTATION,
+    SANDBOX3D_REALISM_REFERENCE_KIND_IBL_MIP,
     SANDBOX3D_REALISM_REFERENCE_KIND_SCENE_PROBE
 } sandbox3d_realism_reference_kind;
 
@@ -664,6 +667,8 @@ typedef struct sandbox3d_state
     sandbox3d_sss_reference_variant sss_reference_variant;
     bool capture_exposure_override;
     float capture_exposure_stops;
+    float ibl_rotation_degrees;
+    float ibl_prefilter_lod_override;
     henka_viewport_shading_mode capture_mode;
     char capture_output_directory[SANDBOX3D_CAPTURE_OUTPUT_PATH_BYTES];
 } sandbox3d_state;
@@ -4320,6 +4325,21 @@ static bool sandbox3d_parse_realism_reference_kind(
         *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_IBL_SIMPLE_ENVIRONMENT;
         return true;
     }
+    if (strcmp(value, "ibl_empty") == 0)
+    {
+        *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_IBL_EMPTY_ENVIRONMENT;
+        return true;
+    }
+    if (strcmp(value, "ibl_rotation") == 0)
+    {
+        *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_IBL_ROTATION;
+        return true;
+    }
+    if (strcmp(value, "ibl_mip") == 0)
+    {
+        *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_IBL_MIP;
+        return true;
+    }
     if (strcmp(value, "scene_probe") == 0)
     {
         *out_kind = SANDBOX3D_REALISM_REFERENCE_KIND_SCENE_PROBE;
@@ -4335,7 +4355,10 @@ static bool sandbox3d_is_ibl_reference_kind(
         kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_NORMAL_COLOR ||
         kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_DIFFUSE_ONLY ||
         kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_SPECULAR_ONLY ||
-        kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_SIMPLE_ENVIRONMENT;
+        kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_SIMPLE_ENVIRONMENT ||
+        kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_EMPTY_ENVIRONMENT ||
+        kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_ROTATION ||
+        kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_MIP;
 }
 
 static henka_ibl_diagnostic_mode sandbox3d_get_ibl_diagnostic_mode(
@@ -4351,6 +4374,10 @@ static henka_ibl_diagnostic_mode sandbox3d_get_ibl_diagnostic_mode(
             return HENKA_IBL_DIAGNOSTIC_SPECULAR_ONLY;
         case SANDBOX3D_REALISM_REFERENCE_KIND_IBL_SIMPLE_ENVIRONMENT:
             return HENKA_IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT;
+        case SANDBOX3D_REALISM_REFERENCE_KIND_IBL_EMPTY_ENVIRONMENT:
+            return HENKA_IBL_DIAGNOSTIC_EMPTY_ENVIRONMENT;
+        case SANDBOX3D_REALISM_REFERENCE_KIND_IBL_MIP:
+            return HENKA_IBL_DIAGNOSTIC_SPECULAR_ONLY;
         case SANDBOX3D_REALISM_REFERENCE_KIND_IBL:
         default:
             return HENKA_IBL_DIAGNOSTIC_NONE;
@@ -4370,6 +4397,12 @@ static const char* sandbox3d_ibl_diagnostic_label(
             return "specular_only";
         case SANDBOX3D_REALISM_REFERENCE_KIND_IBL_SIMPLE_ENVIRONMENT:
             return "simple_environment";
+        case SANDBOX3D_REALISM_REFERENCE_KIND_IBL_EMPTY_ENVIRONMENT:
+            return "empty_environment";
+        case SANDBOX3D_REALISM_REFERENCE_KIND_IBL_ROTATION:
+            return "environment_rotation";
+        case SANDBOX3D_REALISM_REFERENCE_KIND_IBL_MIP:
+            return "forced_prefilter_mip";
         case SANDBOX3D_REALISM_REFERENCE_KIND_IBL:
         default:
             return "none";
@@ -7838,7 +7871,11 @@ static henka_result sandbox3d_prepare_realism_reference_capture(
         }
     }
     if (state->ground_entity == HENKA_INVALID_ENTITY ||
-        henka_scene_set_entity_visible(state->scene, state->ground_entity, true) != HENKA_SUCCESS)
+        henka_scene_set_entity_visible(
+            state->scene,
+            state->ground_entity,
+            state->realism_reference_kind !=
+                SANDBOX3D_REALISM_REFERENCE_KIND_IBL_EMPTY_ENVIRONMENT) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_UNKNOWN;
     }
@@ -8153,6 +8190,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
     const char* capture_normal_map_details;
     const char* capture_color_space_details;
     const char* capture_energy_details;
+    const char* capture_ibl_control;
     char capture_ibl_details[256];
     const char* capture_shadow_details;
     float capture_exposure_stops;
@@ -8229,6 +8267,14 @@ static void sandbox3d_report_realism_reference_capture_ready(
     capture_exposure_stops = state->capture_exposure_override
         ? state->capture_exposure_stops
         : 0.0f;
+    capture_ibl_control = state->realism_reference_kind ==
+            SANDBOX3D_REALISM_REFERENCE_KIND_IBL_EMPTY_ENVIRONMENT
+        ? "empty_procedural"
+        : state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_ROTATION
+        ? "environment_rotation"
+        : state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_MIP
+        ? "forced_prefilter_mip"
+        : "production_studio";
     viewport = state->frame_layout.scene_viewport;
     if (state->detail_normal_texture == NULL ||
         state->macro_variation_texture == NULL ||
@@ -8443,8 +8489,11 @@ static void sandbox3d_report_realism_reference_capture_ready(
         (void)snprintf(
             capture_ibl_details,
             sizeof(capture_ibl_details),
-            " ibl_reference=1 ibl_diagnostic=%s ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128",
-            sandbox3d_ibl_diagnostic_label(state->realism_reference_kind));
+            " ibl_reference=1 ibl_diagnostic=%s ibl_control=%s ibl_rotation_degrees=%.2f ibl_prefilter_lod_override=%.2f ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128",
+            sandbox3d_ibl_diagnostic_label(state->realism_reference_kind),
+            capture_ibl_control,
+            state->ibl_rotation_degrees,
+            state->ibl_prefilter_lod_override);
     }
     else if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SCENE_PROBE)
     {
@@ -15894,6 +15943,7 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     float environment_time_hours;
     float environment_time_scale;
     bool environment_time_enabled;
+    float ibl_rotation_radians;
     henka_scene_environment_desc environment;
     henka_result result;
     henka_viewport_shading_mode shading_mode;
@@ -15975,6 +16025,17 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     {
         HENKA_LOG_WARN("HDR reference capture exposure was rejected; retaining a safe default.");
         (void)henka_engine_set_viewport_exposure(engine, 0.0f);
+    }
+
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_ROTATION &&
+        henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
+    {
+        ibl_rotation_radians = state->ibl_rotation_degrees * HENKA_DEG_TO_RAD;
+        environment.hdr_rotation = ibl_rotation_radians;
+        if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR("IBL rotation control could not be applied.");
+        }
     }
 
     if (henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
@@ -33842,6 +33903,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         HENKA_LOG_ERROR("IBL diagnostic mode could not be installed.");
         goto fail;
     }
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_MIP &&
+        henka_engine_set_ibl_diagnostic_prefilter_lod(
+            engine,
+            state->ibl_prefilter_lod_override) != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR("IBL prefilter mip control could not be installed.");
+        goto fail;
+    }
     if (sandbox3d_is_ibl_reference_kind(state->realism_reference_kind))
     {
         /* The public setter validates and clamps its input. In this bounded
@@ -36835,6 +36904,8 @@ int main(int argc, char** argv)
     sandbox3d_sss_reference_variant sss_reference_variant;
     bool capture_exposure_override;
     float capture_exposure_stops;
+    float ibl_rotation_degrees;
+    float ibl_prefilter_lod_override;
     henka_viewport_shading_mode capture_mode;
     char capture_output_directory[SANDBOX3D_CAPTURE_OUTPUT_PATH_BYTES];
 
@@ -36859,6 +36930,8 @@ int main(int argc, char** argv)
     sss_reference_variant = SANDBOX3D_SSS_REFERENCE_VARIANT_OPAQUE;
     capture_exposure_override = false;
     capture_exposure_stops = 0.0f;
+    ibl_rotation_degrees = 0.0f;
+    ibl_prefilter_lod_override = -1.0f;
     capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
     capture_output_directory[0] = '\0';
     if (argc == 2 && strcmp(argv[1], "--audio-smoke-test") == 0)
@@ -36988,6 +37061,34 @@ int main(int argc, char** argv)
         capture_mode_requested = true;
         realism_reference_capture_requested = true;
     }
+    else if (argc == 6 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
+        sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
+        realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_ROTATION &&
+        sandbox3d_parse_finite_float(argv[3], &ibl_rotation_degrees) &&
+        ibl_rotation_degrees >= -360.0f && ibl_rotation_degrees <= 360.0f &&
+        sandbox3d_parse_realism_reference_capture_view(
+            argv[4],
+            &realism_reference_capture_view) &&
+        henka_viewport_shading_mode_parse(argv[5], &capture_mode) == HENKA_SUCCESS &&
+        capture_mode == HENKA_VIEWPORT_SHADING_RENDERED)
+    {
+        capture_mode_requested = true;
+        realism_reference_capture_requested = true;
+    }
+    else if (argc == 6 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
+        sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
+        realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_MIP &&
+        sandbox3d_parse_finite_float(argv[3], &ibl_prefilter_lod_override) &&
+        ibl_prefilter_lod_override >= 0.0f && ibl_prefilter_lod_override <= 6.0f &&
+        sandbox3d_parse_realism_reference_capture_view(
+            argv[4],
+            &realism_reference_capture_view) &&
+        henka_viewport_shading_mode_parse(argv[5], &capture_mode) == HENKA_SUCCESS &&
+        capture_mode == HENKA_VIEWPORT_SHADING_RENDERED)
+    {
+        capture_mode_requested = true;
+        realism_reference_capture_requested = true;
+    }
     else if (argc == 5 && strcmp(argv[1], "--capture-realism-reference") == 0 &&
         sandbox3d_parse_realism_reference_kind(argv[2], &realism_reference_kind) &&
         realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SCENE_PROBE &&
@@ -37091,7 +37192,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference ibl_normal|ibl_diffuse|ibl_specular|ibl_simple wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference ibl_normal|ibl_diffuse|ibl_specular|ibl_simple|ibl_empty wide|close rendered | --capture-realism-reference ibl_rotation -360..360 wide|close rendered | --capture-realism-reference ibl_mip 0..6 wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -37171,6 +37272,8 @@ int main(int argc, char** argv)
     state.sss_reference_variant = sss_reference_variant;
     state.capture_exposure_override = capture_exposure_override;
     state.capture_exposure_stops = capture_exposure_stops;
+    state.ibl_rotation_degrees = ibl_rotation_degrees;
+    state.ibl_prefilter_lod_override = ibl_prefilter_lod_override;
     state.capture_mode = capture_mode;
     (void)snprintf(
         state.capture_output_directory,

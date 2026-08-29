@@ -1542,6 +1542,25 @@ henka_ibl_diagnostic_mode henka_engine_get_ibl_diagnostic_mode(
         : henka_renderer_get_ibl_diagnostic_mode(engine->renderer);
 }
 
+henka_result henka_engine_set_ibl_diagnostic_prefilter_lod(
+    henka_engine* engine,
+    float lod)
+{
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_renderer_set_ibl_diagnostic_prefilter_lod(engine->renderer, lod);
+}
+
+float henka_engine_get_ibl_diagnostic_prefilter_lod(const henka_engine* engine)
+{
+    return engine == NULL || engine->renderer == NULL
+        ? -1.0f
+        : henka_renderer_get_ibl_diagnostic_prefilter_lod(engine->renderer);
+}
+
 henka_result henka_engine_set_viewport_exposure(henka_engine* engine, float exposure_stops)
 {
     if (engine == NULL || engine->renderer == NULL)

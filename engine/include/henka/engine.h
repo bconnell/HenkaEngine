@@ -88,6 +88,7 @@ typedef enum henka_ibl_diagnostic_mode
     HENKA_IBL_DIAGNOSTIC_DIFFUSE_ONLY,
     HENKA_IBL_DIAGNOSTIC_SPECULAR_ONLY,
     HENKA_IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT,
+    HENKA_IBL_DIAGNOSTIC_EMPTY_ENVIRONMENT,
     HENKA_IBL_DIAGNOSTIC_COUNT
 } henka_ibl_diagnostic_mode;
 
@@ -330,6 +331,13 @@ henka_result henka_engine_set_ibl_diagnostic_mode(
     henka_ibl_diagnostic_mode mode);
 henka_ibl_diagnostic_mode henka_engine_get_ibl_diagnostic_mode(
     const henka_engine* engine);
+/* A non-negative value forces the IBL prefilter level for diagnostic captures.
+ * Pass -1.0f to restore roughness-derived selection. This is opt-in diagnostic
+ * state and does not persist into scene or material data. */
+henka_result henka_engine_set_ibl_diagnostic_prefilter_lod(
+    henka_engine* engine,
+    float lod);
+float henka_engine_get_ibl_diagnostic_prefilter_lod(const henka_engine* engine);
 henka_result henka_engine_set_viewport_exposure(henka_engine* engine, float exposure_stops);
 float henka_engine_get_viewport_exposure(const henka_engine* engine);
 henka_package_mode henka_engine_get_package_mode(const henka_engine* engine);

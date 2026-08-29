@@ -89,6 +89,7 @@ henka_result henka_renderer_create(struct henka_platform* platform, bool enable_
     renderer->scene_view.xray_enabled = false;
     renderer->last_non_wireframe_mode = HENKA_VIEWPORT_SHADING_SOLID;
     renderer->ibl_diagnostic_mode = HENKA_IBL_DIAGNOSTIC_NONE;
+    renderer->ibl_diagnostic_prefilter_lod = -1.0f;
     renderer->exposure = 0.0f;
 
     result = henka_opengl_renderer_create(renderer, platform, enable_vsync);
@@ -438,6 +439,27 @@ henka_ibl_diagnostic_mode henka_renderer_get_ibl_diagnostic_mode(
     }
 
     return renderer->ibl_diagnostic_mode;
+}
+
+henka_result henka_renderer_set_ibl_diagnostic_prefilter_lod(
+    struct henka_renderer* renderer,
+    float lod)
+{
+    if (renderer == NULL || !isfinite(lod) || lod < -1.0f || lod > 1024.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    renderer->ibl_diagnostic_prefilter_lod = lod;
+    return HENKA_SUCCESS;
+}
+
+float henka_renderer_get_ibl_diagnostic_prefilter_lod(
+    const struct henka_renderer* renderer)
+{
+    return renderer != NULL && isfinite(renderer->ibl_diagnostic_prefilter_lod)
+        ? renderer->ibl_diagnostic_prefilter_lod
+        : -1.0f;
 }
 
 henka_result henka_renderer_set_viewport_exposure(

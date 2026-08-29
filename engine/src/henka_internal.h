@@ -439,6 +439,7 @@ struct henka_renderer
     henka_scene_view_render_desc scene_view;
     henka_viewport_shading_mode last_non_wireframe_mode;
     henka_ibl_diagnostic_mode ibl_diagnostic_mode;
+    float ibl_diagnostic_prefilter_lod;
     float exposure;
     bool frame_capture_requested;
     char frame_capture_path[HENKA_RENDERER_FRAME_CAPTURE_PATH_BYTES];
@@ -620,6 +621,11 @@ henka_result henka_renderer_set_ibl_diagnostic_mode(
     struct henka_renderer* renderer,
     henka_ibl_diagnostic_mode mode);
 henka_ibl_diagnostic_mode henka_renderer_get_ibl_diagnostic_mode(
+    const struct henka_renderer* renderer);
+henka_result henka_renderer_set_ibl_diagnostic_prefilter_lod(
+    struct henka_renderer* renderer,
+    float lod);
+float henka_renderer_get_ibl_diagnostic_prefilter_lod(
     const struct henka_renderer* renderer);
 henka_result henka_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);
 henka_result henka_renderer_create_mesh_from_data(

@@ -6,7 +6,7 @@ param(
 
     [string]$ExecutablePath = "",
 
-    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "PBR_NORMAL_MAP_REFERENCE", "PBR_COLOR_SPACE_REFERENCE", "PBR_ENERGY_REFERENCE", "PBR_IBL_REFERENCE", "PBR_IBL_DIAGNOSTICS", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SCENE_PROBE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE", "SSGI_PERFORMANCE_REFERENCE")]
+    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "PBR_NORMAL_MAP_REFERENCE", "PBR_COLOR_SPACE_REFERENCE", "PBR_ENERGY_REFERENCE", "PBR_IBL_REFERENCE", "PBR_IBL_DIAGNOSTICS", "PBR_IBL_ISOLATION", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE", "SUBSURFACE_REFERENCE", "SCENE_PROBE_REFERENCE", "SSGI_REFERENCE", "SSGI_MOTION_REFERENCE", "SSGI_PERFORMANCE_REFERENCE")]
     [string]$EvidenceProfile = "FULL_SHOWCASE",
 
     [ValidateSet("wide", "close")]
@@ -64,7 +64,7 @@ if ($EvidenceProfile -eq "GEOMETRY_SOLID" -and -not $IncludeStartupShowcase) {
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $IncludeGiraffeInspection = $true
 }
-if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE" -or $EvidenceProfile -eq "PBR_COLOR_SPACE_REFERENCE" -or $EvidenceProfile -eq "PBR_ENERGY_REFERENCE" -or $EvidenceProfile -eq "PBR_IBL_REFERENCE" -or $EvidenceProfile -eq "PBR_IBL_DIAGNOSTICS" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "HDR_RANGE_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SCENE_PROBE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE" -or $EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") -and
+if (($EvidenceProfile -eq "REALISM_REFERENCE" -or $EvidenceProfile -eq "PBR_NORMAL_MAP_REFERENCE" -or $EvidenceProfile -eq "PBR_COLOR_SPACE_REFERENCE" -or $EvidenceProfile -eq "PBR_ENERGY_REFERENCE" -or $EvidenceProfile -eq "PBR_IBL_REFERENCE" -or $EvidenceProfile -eq "PBR_IBL_DIAGNOSTICS" -or $EvidenceProfile -eq "PBR_IBL_ISOLATION" -or $EvidenceProfile -eq "LIGHTING_REFERENCE" -or $EvidenceProfile -eq "HDR_RANGE_REFERENCE" -or $EvidenceProfile -eq "SUBSURFACE_REFERENCE" -or $EvidenceProfile -eq "SCENE_PROBE_REFERENCE" -or $EvidenceProfile -eq "SSGI_REFERENCE" -or $EvidenceProfile -eq "SSGI_MOTION_REFERENCE" -or $EvidenceProfile -eq "SSGI_PERFORMANCE_REFERENCE") -and
     ($IncludeStartupShowcase -or $IncludeGiraffeInspection -or $IncludeTerrain)) {
     throw "REALISM_REFERENCE evidence is a dedicated reference-scene capture and cannot include showcase or terrain extras."
 }
@@ -717,7 +717,7 @@ function Assert-HenkaIblReferenceCaptureMetadata {
         [string]$ExpectedDiagnostic = "none"
     )
 
-    $pattern = '^\s*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 (?:ibl_diagnostic=(?<diagnostic>[a-z_]+) )?ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 (?:ibl_diagnostic=(?<diagnostic>[a-z_]+) )?(?:ibl_control=(?<control>[a-z_]+) ibl_rotation_degrees=(?<rotation>-?[0-9.]+) ibl_prefilter_lod_override=(?<override>-?[0-9.]+) )?ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128 viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success -or
         $match.Groups["view"].Value -ne $ExpectedView -or
@@ -729,11 +729,42 @@ function Assert-HenkaIblReferenceCaptureMetadata {
         throw "PBR IBL reference capture readiness metadata was malformed for $Label."
     }
     return [pscustomobject]@{
-        Canonical = (($Line -replace 'mode=[^ ]+', 'mode=shared') -replace 'ibl_diagnostic=[^ ]+ ', 'ibl_diagnostic=shared ')
+        Canonical = (($Line -replace 'mode=[^ ]+', 'mode=shared') -replace 'ibl_diagnostic=[^ ]+ ', 'ibl_diagnostic=shared ' -replace 'ibl_control=[^ ]+ ', 'ibl_control=shared ' -replace 'ibl_rotation_degrees=[^ ]+ ', 'ibl_rotation_degrees=shared ' -replace 'ibl_prefilter_lod_override=[^ ]+ ', 'ibl_prefilter_lod_override=shared ')
         Mode = "rendered"
         View = $match.Groups["view"].Value
         Layout = $match.Groups["layout"].Value
     }
+}
+
+function Assert-HenkaIblIsolationCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ExpectedView,
+        [Parameter(Mandatory = $true)][string]$ExpectedControl,
+        [Parameter(Mandatory = $true)][string]$ExpectedDiagnostic,
+        [Parameter(Mandatory = $true)][double]$ExpectedRotation,
+        [Parameter(Mandatory = $true)][double]$ExpectedOverride
+    )
+
+    $metadata = Assert-HenkaIblReferenceCaptureMetadata `
+        -Line $Line `
+        -Label $Label `
+        -ExpectedView $ExpectedView `
+        -ExpectedDiagnostic $ExpectedDiagnostic
+    $pattern = 'ibl_control=(?<control>[a-z_]+) ibl_rotation_degrees=(?<rotation>-?[0-9.]+) ibl_prefilter_lod_override=(?<override>-?[0-9.]+)'
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success -or $match.Groups["control"].Value -ne $ExpectedControl) {
+        throw "IBL isolation control metadata was malformed for $Label."
+    }
+    $rotation = [double]::Parse($match.Groups["rotation"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $override = [double]::Parse($match.Groups["override"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    if ([Math]::Abs($rotation - $ExpectedRotation) -gt 0.01 -or
+        [Math]::Abs($override - $ExpectedOverride) -gt 0.01) {
+        throw "IBL isolation control values were malformed for $Label."
+    }
+    $metadata.Canonical = $metadata.Canonical
+    return $metadata
 }
 
 function Assert-HenkaSceneProbeReferenceCaptureMetadata {
@@ -811,6 +842,23 @@ if ($EvidenceProfile -eq "PBR_IBL_DIAGNOSTICS") {
         @{ Label = "ibl_diffuse_only"; Diagnostic = "diffuse_only"; Arguments = @("--capture-realism-reference", "ibl_diffuse", $ReferenceView, "rendered"); File = "ibl-diffuse-only-$ReferenceView-rendered.png" },
         @{ Label = "ibl_specular_only"; Diagnostic = "specular_only"; Arguments = @("--capture-realism-reference", "ibl_specular", $ReferenceView, "rendered"); File = "ibl-specular-only-$ReferenceView-rendered.png" },
         @{ Label = "ibl_simple_environment"; Diagnostic = "simple_environment"; Arguments = @("--capture-realism-reference", "ibl_simple", $ReferenceView, "rendered"); File = "ibl-simple-environment-$ReferenceView-rendered.png" }
+    )
+}
+if ($EvidenceProfile -eq "PBR_IBL_ISOLATION") {
+    $modes = @(
+        @{ Label = "ibl_isolation_studio_candidate"; Control = "production_studio"; Diagnostic = "none"; Rotation = 0.0; Override = -1.0; Arguments = @("--capture-realism-reference", "ibl", $ReferenceView, "rendered"); File = "ibl-isolation-studio-candidate-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_empty_environment"; Control = "empty_procedural"; Diagnostic = "empty_environment"; Rotation = 0.0; Override = -1.0; Arguments = @("--capture-realism-reference", "ibl_empty", $ReferenceView, "rendered"); File = "ibl-isolation-empty-environment-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_rotation_0"; Control = "environment_rotation"; Diagnostic = "environment_rotation"; Rotation = 0.0; Override = -1.0; Arguments = @("--capture-realism-reference", "ibl_rotation", "0", $ReferenceView, "rendered"); File = "ibl-isolation-rotation-000-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_rotation_90"; Control = "environment_rotation"; Diagnostic = "environment_rotation"; Rotation = 90.0; Override = -1.0; Arguments = @("--capture-realism-reference", "ibl_rotation", "90", $ReferenceView, "rendered"); File = "ibl-isolation-rotation-090-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_rotation_180"; Control = "environment_rotation"; Diagnostic = "environment_rotation"; Rotation = 180.0; Override = -1.0; Arguments = @("--capture-realism-reference", "ibl_rotation", "180", $ReferenceView, "rendered"); File = "ibl-isolation-rotation-180-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_rotation_270"; Control = "environment_rotation"; Diagnostic = "environment_rotation"; Rotation = 270.0; Override = -1.0; Arguments = @("--capture-realism-reference", "ibl_rotation", "270", $ReferenceView, "rendered"); File = "ibl-isolation-rotation-270-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_mip_0"; Control = "forced_prefilter_mip"; Diagnostic = "forced_prefilter_mip"; Rotation = 0.0; Override = 0.0; Arguments = @("--capture-realism-reference", "ibl_mip", "0", $ReferenceView, "rendered"); File = "ibl-isolation-mip-0-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_mip_1"; Control = "forced_prefilter_mip"; Diagnostic = "forced_prefilter_mip"; Rotation = 0.0; Override = 1.0; Arguments = @("--capture-realism-reference", "ibl_mip", "1", $ReferenceView, "rendered"); File = "ibl-isolation-mip-1-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_mip_2"; Control = "forced_prefilter_mip"; Diagnostic = "forced_prefilter_mip"; Rotation = 0.0; Override = 2.0; Arguments = @("--capture-realism-reference", "ibl_mip", "2", $ReferenceView, "rendered"); File = "ibl-isolation-mip-2-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_mip_3"; Control = "forced_prefilter_mip"; Diagnostic = "forced_prefilter_mip"; Rotation = 0.0; Override = 3.0; Arguments = @("--capture-realism-reference", "ibl_mip", "3", $ReferenceView, "rendered"); File = "ibl-isolation-mip-3-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_mip_4"; Control = "forced_prefilter_mip"; Diagnostic = "forced_prefilter_mip"; Rotation = 0.0; Override = 4.0; Arguments = @("--capture-realism-reference", "ibl_mip", "4", $ReferenceView, "rendered"); File = "ibl-isolation-mip-4-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_mip_5"; Control = "forced_prefilter_mip"; Diagnostic = "forced_prefilter_mip"; Rotation = 0.0; Override = 5.0; Arguments = @("--capture-realism-reference", "ibl_mip", "5", $ReferenceView, "rendered"); File = "ibl-isolation-mip-5-$ReferenceView-rendered.png" },
+        @{ Label = "ibl_isolation_mip_6"; Control = "forced_prefilter_mip"; Diagnostic = "forced_prefilter_mip"; Rotation = 0.0; Override = 6.0; Arguments = @("--capture-realism-reference", "ibl_mip", "6", $ReferenceView, "rendered"); File = "ibl-isolation-mip-6-$ReferenceView-rendered.png" }
     )
 }
 if ($EvidenceProfile -eq "SCENE_PROBE_REFERENCE") {
@@ -904,6 +952,9 @@ if ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
 }
 if ($EvidenceProfile -eq "PBR_IBL_DIAGNOSTICS") {
     $records.Add("PBR IBL diagnostics: matched normal-color, irradiance-only, prefiltered-specular-only, and smooth-environment controls on the nine-subject roughness ladder; view=$ReferenceView")
+}
+if ($EvidenceProfile -eq "PBR_IBL_ISOLATION") {
+    $records.Add("PBR IBL causal isolation: production candidate, empty environment, four environment rotations, and exact prefilter levels 0-6; view=$ReferenceView")
 }
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
     $records.Add("Lighting reference: nine deterministic same-material subjects with scene-owned key, fill, and rim sources; view=$ReferenceView")
@@ -1002,6 +1053,10 @@ foreach ($mode in $modes) {
         elseif ($EvidenceProfile -eq "PBR_IBL_DIAGNOSTICS") {
             [void]$captureMetadata.Add(
                 (Assert-HenkaIblReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView -ExpectedDiagnostic $mode.Diagnostic))
+        }
+        elseif ($EvidenceProfile -eq "PBR_IBL_ISOLATION") {
+            [void]$captureMetadata.Add(
+                (Assert-HenkaIblIsolationCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView -ExpectedControl $mode.Control -ExpectedDiagnostic $mode.Diagnostic -ExpectedRotation $mode.Rotation -ExpectedOverride $mode.Override))
         }
         elseif ($EvidenceProfile -eq "SCENE_PROBE_REFERENCE") {
             [void]$captureMetadata.Add(
@@ -1163,6 +1218,9 @@ if ($captureMetadata.Count -gt 1) {
     }
     if ($EvidenceProfile -eq "PBR_IBL_DIAGNOSTICS") {
         $records.Add("Composition metadata: identical across the four IBL diagnostic modes")
+    }
+    elseif ($EvidenceProfile -eq "PBR_IBL_ISOLATION") {
+        $records.Add("Composition metadata: identical across the production, empty-environment, rotation, and exact-mip controls")
     }
     else {
         $records.Add("Composition metadata: identical across Solid, Material Preview, and Rendered")
@@ -1366,6 +1424,9 @@ if ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
     & (Join-Path $PSScriptRoot "check_pbr_ibl_reference_windows.ps1") `
         -InputDirectory $OutputDirectory
 }
+if ($EvidenceProfile -eq "PBR_IBL_ISOLATION") {
+    $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
+}
 if ($EvidenceProfile -eq "SCENE_PROBE_REFERENCE") {
     $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
     & (Join-Path $PSScriptRoot "check_scene_probe_reference_windows.ps1") `
@@ -1429,6 +1490,9 @@ elseif ($EvidenceProfile -eq "PBR_COLOR_SPACE_REFERENCE") {
 }
 elseif ($EvidenceProfile -eq "PBR_IBL_REFERENCE") {
     "PBR IBL reference evidence"
+}
+elseif ($EvidenceProfile -eq "PBR_IBL_ISOLATION") {
+    "PBR IBL causal isolation evidence"
 }
 elseif ($EvidenceProfile -eq "SCENE_PROBE_REFERENCE") {
     "Scene-probe diffuse and overlap reference evidence"

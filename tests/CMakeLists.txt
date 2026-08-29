@@ -290,6 +290,12 @@ if(WIN32)
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_ibl_prefilter_lod_authority_windows.ps1
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
+        NAME henka_ibl_diagnostic_control_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_ibl_diagnostic_controls_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
 endif()
 
 add_executable(henka_terrain_tests

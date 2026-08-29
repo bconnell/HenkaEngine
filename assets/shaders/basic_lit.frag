@@ -61,12 +61,14 @@ uniform sampler2D iblBrdfLut;
  * environment/probe resource. Keeping this value in the resource owner
  * prevents shader lookup from silently going stale when level counts change. */
 uniform float iblPrefilterMaxLod;
+uniform float iblDiagnosticPrefilterLod;
 uniform bool useIBL;
 uniform int iblDiagnosticMode;
 const int IBL_DIAGNOSTIC_NORMAL_COLOR = 1;
 const int IBL_DIAGNOSTIC_DIFFUSE_ONLY = 2;
 const int IBL_DIAGNOSTIC_SPECULAR_ONLY = 3;
 const int IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT = 4;
+const int IBL_DIAGNOSTIC_EMPTY_ENVIRONMENT = 5;
 uniform vec3 reflectionProbePosition;
 uniform vec3 reflectionProbeExtents;
 uniform bool useReflectionProbe;
@@ -822,17 +824,22 @@ void main()
         color = min(texture(iblIrradianceMap, normal).rgb, vec3(65504.0));
     }
     else if (iblDiagnosticMode == IBL_DIAGNOSTIC_SPECULAR_ONLY ||
-        iblDiagnosticMode == IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT)
+        iblDiagnosticMode == IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT ||
+        iblDiagnosticMode == IBL_DIAGNOSTIC_EMPTY_ENVIRONMENT)
     {
         float diagnosticNDotV = saturate(dot(normal, viewDirection));
         vec3 diagnosticReflectionDirection = reflect(-viewDirection, normal);
-        vec3 diagnosticEnvironment = iblDiagnosticMode == IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT
+        vec3 diagnosticEnvironment =
+            (iblDiagnosticMode == IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT ||
+             iblDiagnosticMode == IBL_DIAGNOSTIC_EMPTY_ENVIRONMENT)
             ? sampleSimpleDiagnosticEnvironment(diagnosticReflectionDirection)
             : textureLod(
                 iblPrefilterMap,
                 parallaxCorrectReflectionDirection(diagnosticReflectionDirection),
-                clamp(surfaceRoughness, 0.0, 1.0) *
-                clamp(iblPrefilterMaxLod, 0.0, 1024.0)).rgb;
+                iblDiagnosticPrefilterLod >= 0.0
+                    ? clamp(iblDiagnosticPrefilterLod, 0.0, 1024.0)
+                    : clamp(surfaceRoughness, 0.0, 1.0) *
+                      clamp(iblPrefilterMaxLod, 0.0, 1024.0)).rgb;
         vec3 diagnosticFresnel = fresnelSchlick(diagnosticNDotV, f0);
         vec2 diagnosticBrdf = texture(
             iblBrdfLut,
