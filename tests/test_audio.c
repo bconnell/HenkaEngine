@@ -3,6 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_WIN32)
+#include <io.h>
+#else
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+
 #include <henka/audio.h>
 
 static const char test_compressed_ogg_base64[] =
@@ -81,6 +88,54 @@ static bool test_write_real_wav(const char* path, size_t frame_count)
         success = false;
     }
     free(bytes);
+    return success;
+}
+
+static bool test_write_large_stream_wav(const char* path, size_t data_size)
+{
+    unsigned char header[44U] = {0};
+    const size_t file_size = 44U + data_size;
+    FILE* file = NULL;
+    bool success;
+
+    if (path == NULL || data_size == 0U || (data_size & 1U) != 0U ||
+        data_size > (size_t)UINT32_MAX - 44U)
+    {
+        return false;
+    }
+    memcpy(header, "RIFF", 4U);
+    test_write_u32(header, 4U, (uint32_t)(file_size - 8U));
+    memcpy(header + 8U, "WAVEfmt ", 8U);
+    test_write_u32(header, 16U, 16U);
+    test_write_u16(header, 20U, 1U);
+    test_write_u16(header, 22U, 1U);
+    test_write_u32(header, 24U, HENKA_AUDIO_DEFAULT_SAMPLE_RATE);
+    test_write_u32(header, 28U, HENKA_AUDIO_DEFAULT_SAMPLE_RATE * 2U);
+    test_write_u16(header, 32U, 2U);
+    test_write_u16(header, 34U, 16U);
+    memcpy(header + 36U, "data", 4U);
+    test_write_u32(header, 40U, (uint32_t)data_size);
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "wb") != 0)
+    {
+        file = NULL;
+    }
+#else
+    file = fopen(path, "wb");
+#endif
+    success = file != NULL && fwrite(header, 1U, sizeof(header), file) == sizeof(header);
+    if (success)
+    {
+#if defined(_WIN32)
+        success = _chsize_s(_fileno(file), (__int64)file_size) == 0;
+#else
+        success = ftruncate(fileno(file), (off_t)file_size) == 0;
+#endif
+    }
+    if (file != NULL && fclose(file) != 0)
+    {
+        success = false;
+    }
     return success;
 }
 
@@ -385,10 +440,42 @@ static int test_streaming_wav_contract(const char* wav_path)
     return EXIT_SUCCESS;
 }
 
+static int test_large_stream_wav_contract(const char* wav_path)
+{
+    const size_t data_size = (size_t)HENKA_AUDIO_MAX_CLIP_BYTES + 4096U;
+    henka_audio_clip* clip = NULL;
+    henka_audio_stream* stream = NULL;
+    henka_audio_stream_info info;
+    float samples[8U] = {0.0f};
+    size_t frames_read = 0U;
+    int exit_code = EXIT_FAILURE;
+
+    if (!test_write_large_stream_wav(wav_path, data_size) ||
+        henka_audio_clip_load_file(".", wav_path, &clip) != HENKA_ERROR_ASSET_SOURCE ||
+        clip != NULL ||
+        henka_audio_stream_load_file(".", wav_path, &stream) != HENKA_SUCCESS ||
+        henka_audio_stream_get_info(stream, &info) != HENKA_SUCCESS ||
+        info.resident || info.frame_count != data_size / 2U ||
+        henka_audio_stream_read_frames(
+            stream, 0U, 4U, samples, 4U, &frames_read) != HENKA_SUCCESS ||
+        frames_read != 4U || samples[0] != 0.0f || samples[1] != 0.0f)
+    {
+        goto cleanup;
+    }
+    exit_code = EXIT_SUCCESS;
+
+cleanup:
+    henka_audio_stream_destroy(stream);
+    henka_audio_clip_destroy(clip);
+    (void)remove(wav_path);
+    return exit_code;
+}
+
 int main(void)
 {
     const char* wav_path = "build/test_tmp/audio_foundation.wav";
     const char* stream_path = "build/test_tmp/audio_stream.wav";
+    const char* large_stream_path = "build/test_tmp/audio_large_stream.wav";
     const char* malformed_path = "build/test_tmp/audio_malformed.wav";
     const unsigned char malformed[] = {'R', 'I', 'F', 'F', 0U, 0U, 0U, 0U};
     henka_audio_clip* clip = NULL;
@@ -423,6 +510,7 @@ int main(void)
     HENKA_TEST_ASSERT(test_write_real_wav(stream_path, 8192U));
     HENKA_TEST_ASSERT(test_compressed_format_contract() == EXIT_SUCCESS);
     HENKA_TEST_ASSERT(test_streaming_wav_contract(stream_path) == EXIT_SUCCESS);
+    HENKA_TEST_ASSERT(test_large_stream_wav_contract(large_stream_path) == EXIT_SUCCESS);
     HENKA_TEST_ASSERT(test_write_bytes(malformed_path, malformed, sizeof(malformed)));
     {
         henka_audio_stream* malformed_stream = (henka_audio_stream*)1;
