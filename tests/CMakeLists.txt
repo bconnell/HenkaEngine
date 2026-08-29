@@ -714,3 +714,20 @@ add_test(
     NAME henka_authoring_quad_recovery_tests
     COMMAND henka_authoring_quad_recovery_tests
 )
+
+add_executable(henka_sandbox3d_realism_detail_tests
+    ../examples/sandbox3d/realism_detail.c
+    test_realism_detail.c
+)
+
+target_include_directories(henka_sandbox3d_realism_detail_tests
+    PRIVATE
+        ../examples/sandbox3d
+)
+
+henka_enable_project_warnings(henka_sandbox3d_realism_detail_tests)
+
+add_test(
+    NAME henka_sandbox3d_realism_detail_tests
+    COMMAND henka_sandbox3d_realism_detail_tests
+)

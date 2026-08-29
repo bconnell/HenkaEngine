@@ -28,6 +28,7 @@ add_executable(henka_sandbox3d
     audio_runtime.c
     script_editor_model.c
     script_editor.c
+    realism_detail.c
     main.c
 )
 

@@ -2,11 +2,13 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $sandbox = Get-Content (Join-Path $repoRoot 'examples/sandbox3d/main.c') -Raw
+$detail = Get-Content (Join-Path $repoRoot 'examples/sandbox3d/realism_detail.c') -Raw
+$detailHeader = Get-Content (Join-Path $repoRoot 'examples/sandbox3d/realism_detail.h') -Raw
 $generator = Get-Content (Join-Path $repoRoot 'scripts/generate_showcase_assets.ps1') -Raw
 $checker = Get-Content (Join-Path $repoRoot 'scripts/check_realism_reference_visual_evidence_windows.ps1') -Raw
 $missing = @()
 
-if ($sandbox -notmatch '#define SANDBOX3D_REALISM_TEXTURE_EDGE 128U') {
+if ($detailHeader -notmatch '#define SANDBOX3D_REALISM_TEXTURE_EDGE 128U') {
     $missing += '128-pixel realism texture edge'
 }
 if ($sandbox -match 'unsigned char detail_normal_pixels\[SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT\]' -or
@@ -27,19 +29,26 @@ foreach ($buffer in @('detail_normal_pixels', 'macro_variation_pixels', 'wood_gr
         $missing += "$buffer cleanup"
     }
 }
-if ($sandbox -notmatch 'static float sandbox3d_realism_value_noise\(') {
+if ($detail -notmatch 'static float sandbox3d_realism_value_noise\(') {
     $missing += 'tileable deterministic value noise helper'
 }
-if ($sandbox -notmatch 'sandbox3d_realism_value_noise\(u, v,') {
+if ($detail -notmatch 'sandbox3d_realism_value_noise\(detail_u, v,') {
     $missing += 'noise-driven realism texture generation'
 }
-if ($sandbox -match 'const float macro_signal = 0\.5f \+ 0\.5f \* sinf' -or
-    $sandbox -match 'const float grain_signal = 0\.5f \+ 0\.5f \* sinf') {
+if ($sandbox -match 'static\s+void\s+sandbox3d_generate_realism_detail_textures\(' -or
+    $sandbox -match 'static\s+float\s+sandbox3d_realism_value_noise\(') {
+    $missing += 'duplicate inline realism detail implementation'
+}
+if (($sandbox | Select-String -Pattern 'sandbox3d_generate_realism_detail_textures\(' -AllMatches).Matches.Count -ne 1) {
+    $missing += 'single production realism detail call site'
+}
+if ($detail -match 'const float macro_signal = 0\.5f \+ 0\.5f \* sinf' -or
+    $detail -match 'const float grain_signal = 0\.5f \+ 0\.5f \* sinf') {
     $missing += 'legacy periodic macro or grain bands'
 }
-if ($sandbox -match '101U, 3U, 3U' -or
-    $sandbox -match '131U, 7U, 3U' -or
-    $sandbox -match '157U, 5U, 9U') {
+if ($detail -match '101U, 3U, 3U' -or
+    $detail -match '131U, 7U, 3U' -or
+    $detail -match '157U, 5U, 9U') {
     $missing += 'former very-low-frequency detail octaves'
 }
 if ($generator -notmatch 'function Get-ShowcaseTileableNoise') {

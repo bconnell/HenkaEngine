@@ -37,6 +37,7 @@
 #include "physics_tools.h"
 #include "game_authoring.h"
 #include "audio_runtime.h"
+#include "realism_detail.h"
 #include "script_editor.h"
 #include "studio_environment.h"
 #include "workspace_tools.h"
@@ -381,11 +382,6 @@ typedef struct sandbox3d_physics_state
 
 #define SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT 65U
 #define SANDBOX3D_REALISM_ENTITY_COUNT 9U
-#define SANDBOX3D_REALISM_TEXTURE_EDGE 128U
-#define SANDBOX3D_REALISM_TEXTURE_CHANNEL_COUNT 4U
-#define SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT \
-    (SANDBOX3D_REALISM_TEXTURE_EDGE * SANDBOX3D_REALISM_TEXTURE_EDGE * \
-        SANDBOX3D_REALISM_TEXTURE_CHANNEL_COUNT)
 #define SANDBOX3D_TERRAIN_TEXTURE_SIZE 64U
 
 /* Keep the interactive Terrain working set small and deterministic.  The
@@ -3899,151 +3895,6 @@ static void sandbox3d_generate_terrain_fixture(
             sample->material_weights[2] = (uint8_t)(rock_weight > 1 ? rock_weight : 1);
             sample->material_weights[3] = (uint8_t)(wet_weight > 1 ? wet_weight : 1);
             (void)henka_terrain_normalize_weights(sample->material_weights);
-        }
-    }
-}
-
-static unsigned char sandbox3d_encode_realism_texture_channel(float value)
-{
-    return (unsigned char)lroundf(fmaxf(0.0f, fminf(255.0f, value)));
-}
-
-static uint32_t sandbox3d_realism_texture_hash(
-    uint32_t x,
-    uint32_t y,
-    uint32_t seed)
-{
-    uint32_t value = x * 374761393U ^ y * 668265263U ^ seed * 2246822519U;
-
-    value ^= value >> 13U;
-    value *= 1274126177U;
-    value ^= value >> 16U;
-    return value;
-}
-
-static float sandbox3d_realism_value_noise(
-    float u,
-    float v,
-    uint32_t seed,
-    uint32_t x_period,
-    uint32_t y_period)
-{
-    float x;
-    float y;
-    float x_floor;
-    float y_floor;
-    float x_fraction;
-    float y_fraction;
-    float x_smooth;
-    float y_smooth;
-    uint32_t x0;
-    uint32_t x1;
-    uint32_t y0;
-    uint32_t y1;
-    float lower;
-    float upper;
-
-    if (x_period == 0U || y_period == 0U)
-    {
-        return 0.5f;
-    }
-    x = fmaxf(0.0f, fminf(1.0f, u)) * (float)x_period;
-    y = fmaxf(0.0f, fminf(1.0f, v)) * (float)y_period;
-    x_floor = floorf(x);
-    y_floor = floorf(y);
-    x_fraction = x - x_floor;
-    y_fraction = y - y_floor;
-    x_smooth = x_fraction * x_fraction * (3.0f - 2.0f * x_fraction);
-    y_smooth = y_fraction * y_fraction * (3.0f - 2.0f * y_fraction);
-    x0 = (uint32_t)x_floor % x_period;
-    y0 = (uint32_t)y_floor % y_period;
-    x1 = (x0 + 1U) % x_period;
-    y1 = (y0 + 1U) % y_period;
-    lower = (float)(sandbox3d_realism_texture_hash(x0, y0, seed) & 0xffffffU) /
-        16777215.0f * (1.0f - x_smooth) +
-        (float)(sandbox3d_realism_texture_hash(x1, y0, seed) & 0xffffffU) /
-        16777215.0f * x_smooth;
-    upper = (float)(sandbox3d_realism_texture_hash(x0, y1, seed) & 0xffffffU) /
-        16777215.0f * (1.0f - x_smooth) +
-        (float)(sandbox3d_realism_texture_hash(x1, y1, seed) & 0xffffffU) /
-        16777215.0f * x_smooth;
-    return lower * (1.0f - y_smooth) + upper * y_smooth;
-}
-
-static void sandbox3d_generate_realism_detail_textures(
-    unsigned char* normal_pixels,
-    unsigned char* macro_variation_pixels,
-    unsigned char* wood_grain_pixels,
-    unsigned char* wet_dry_roughness_pixels)
-{
-    uint32_t x;
-    uint32_t y;
-
-    if (normal_pixels == NULL || macro_variation_pixels == NULL ||
-        wood_grain_pixels == NULL || wet_dry_roughness_pixels == NULL)
-    {
-        return;
-    }
-    for (y = 0U; y < SANDBOX3D_REALISM_TEXTURE_EDGE; ++y)
-    {
-        for (x = 0U; x < SANDBOX3D_REALISM_TEXTURE_EDGE; ++x)
-        {
-            const float u = ((float)x + 0.5f) /
-                (float)SANDBOX3D_REALISM_TEXTURE_EDGE;
-            const float v = ((float)y + 0.5f) /
-                (float)SANDBOX3D_REALISM_TEXTURE_EDGE;
-            const float normal_x =
-                (sandbox3d_realism_value_noise(u, v, 11U, 17U, 13U) - 0.5f) * 0.30f +
-                (sandbox3d_realism_value_noise(u, v, 29U, 31U, 23U) - 0.5f) * 0.14f;
-            const float normal_y =
-                (sandbox3d_realism_value_noise(u, v, 47U, 19U, 29U) - 0.5f) * 0.28f +
-                (sandbox3d_realism_value_noise(u, v, 71U, 37U, 17U) - 0.5f) * 0.12f;
-            const float normal_z = sqrtf(fmaxf(
-                0.0f, 1.0f - normal_x * normal_x - normal_y * normal_y));
-            const float macro_signal =
-                sandbox3d_realism_value_noise(u, v, 101U, 5U, 5U) * 0.52f +
-                sandbox3d_realism_value_noise(u, v, 103U, 13U, 11U) * 0.30f +
-                sandbox3d_realism_value_noise(u, v, 107U, 29U, 23U) * 0.18f;
-            const float grain_signal =
-                sandbox3d_realism_value_noise(u, v, 131U, 9U, 5U) * 0.48f +
-                sandbox3d_realism_value_noise(u, v, 137U, 23U, 9U) * 0.32f +
-                sandbox3d_realism_value_noise(u, v, 139U, 43U, 17U) * 0.20f;
-            const float wet_signal =
-                sandbox3d_realism_value_noise(u, v, 157U, 7U, 11U) * 0.55f +
-                sandbox3d_realism_value_noise(u, v, 163U, 17U, 29U) * 0.30f +
-                sandbox3d_realism_value_noise(u, v, 167U, 37U, 53U) * 0.15f;
-            const size_t pixel = ((size_t)y * SANDBOX3D_REALISM_TEXTURE_EDGE + x) *
-                SANDBOX3D_REALISM_TEXTURE_CHANNEL_COUNT;
-
-            normal_pixels[pixel + 0U] = sandbox3d_encode_realism_texture_channel(
-                128.0f + normal_x * 127.0f);
-            normal_pixels[pixel + 1U] = sandbox3d_encode_realism_texture_channel(
-                128.0f + normal_y * 127.0f);
-            normal_pixels[pixel + 2U] = sandbox3d_encode_realism_texture_channel(
-                normal_z * 127.0f + 128.0f);
-            normal_pixels[pixel + 3U] = 255U;
-
-            macro_variation_pixels[pixel + 0U] = sandbox3d_encode_realism_texture_channel(
-                96.0f + macro_signal * 82.0f);
-            macro_variation_pixels[pixel + 1U] = sandbox3d_encode_realism_texture_channel(
-                58.0f + macro_signal * 54.0f);
-            macro_variation_pixels[pixel + 2U] = sandbox3d_encode_realism_texture_channel(
-                32.0f + macro_signal * 32.0f);
-            macro_variation_pixels[pixel + 3U] = 255U;
-
-            wood_grain_pixels[pixel + 0U] = sandbox3d_encode_realism_texture_channel(
-                96.0f + grain_signal * 48.0f);
-            wood_grain_pixels[pixel + 1U] = sandbox3d_encode_realism_texture_channel(
-                46.0f + grain_signal * 28.0f);
-            wood_grain_pixels[pixel + 2U] = sandbox3d_encode_realism_texture_channel(
-                20.0f + grain_signal * 16.0f);
-            wood_grain_pixels[pixel + 3U] = 255U;
-
-            wet_dry_roughness_pixels[pixel + 0U] = 255U;
-            wet_dry_roughness_pixels[pixel + 1U] = sandbox3d_encode_realism_texture_channel(
-                34.0f + wet_signal * 206.0f);
-            wet_dry_roughness_pixels[pixel + 2U] = 255U;
-            wet_dry_roughness_pixels[pixel + 3U] = 255U;
         }
     }
 }
@@ -32249,11 +32100,19 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             sandbox3d_generate_ground_surface_texture(
                 ground_surface_pixels,
                 SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT);
-            sandbox3d_generate_realism_detail_textures(
-                detail_normal_pixels,
-                macro_variation_pixels,
-                wood_grain_pixels,
-                wet_dry_roughness_pixels);
+            if (!sandbox3d_generate_realism_detail_textures(
+                    detail_normal_pixels,
+                    SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT,
+                    macro_variation_pixels,
+                    SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT,
+                    wood_grain_pixels,
+                    SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT,
+                    wet_dry_roughness_pixels,
+                    SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto fail;
+            }
             if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_COLOR_SPACE &&
                 !sandbox3d_generate_color_space_reference_pixels(
                     color_space_reference_pixels,
