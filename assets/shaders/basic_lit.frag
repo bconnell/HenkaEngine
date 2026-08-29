@@ -1,7 +1,5 @@
 #version 330 core
 
-const float HENKA_PREFILTER_MAX_LOD = 6.0;
-
 in vec3 fragNormal;
 in vec3 fragWorldPosition;
 in vec2 fragUv;
@@ -59,6 +57,10 @@ uniform float environmentRotation;
 uniform samplerCube iblIrradianceMap;
 uniform samplerCube iblPrefilterMap;
 uniform sampler2D iblBrdfLut;
+/* The renderer supplies the highest allocated level for the selected
+ * environment/probe resource. Keeping this value in the resource owner
+ * prevents shader lookup from silently going stale when level counts change. */
+uniform float iblPrefilterMaxLod;
 uniform bool useIBL;
 uniform int iblDiagnosticMode;
 const int IBL_DIAGNOSTIC_NORMAL_COLOR = 1;
@@ -829,7 +831,8 @@ void main()
             : textureLod(
                 iblPrefilterMap,
                 parallaxCorrectReflectionDirection(diagnosticReflectionDirection),
-                clamp(surfaceRoughness, 0.0, 1.0) * HENKA_PREFILTER_MAX_LOD).rgb;
+                clamp(surfaceRoughness, 0.0, 1.0) *
+                clamp(iblPrefilterMaxLod, 0.0, 1024.0)).rgb;
         vec3 diagnosticFresnel = fresnelSchlick(diagnosticNDotV, f0);
         vec2 diagnosticBrdf = texture(
             iblBrdfLut,
@@ -978,7 +981,8 @@ void main()
             blurredReflectionDirection = parallaxCorrectReflectionDirection(blurredReflectionDirection);
             vec3 environmentSpecular = sampleEnvironment(blurredReflectionDirection);
             float environmentPrefilterLod =
-                clamp(surfaceRoughness, 0.0, 1.0) * HENKA_PREFILTER_MAX_LOD;
+                clamp(surfaceRoughness, 0.0, 1.0) *
+                clamp(iblPrefilterMaxLod, 0.0, 1024.0);
             if (useIBL)
             {
                 if (useReflectionProbeMap)

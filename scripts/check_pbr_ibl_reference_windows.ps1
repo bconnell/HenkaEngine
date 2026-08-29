@@ -124,6 +124,32 @@ function Get-PixelLuma {
     return 0.2126 * $pixel.R + 0.7152 * $pixel.G + 0.0722 * $pixel.B
 }
 
+function Get-RegionLuma {
+    param(
+        [Parameter(Mandatory = $true)][System.Drawing.Bitmap]$Bitmap,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [Parameter(Mandatory = $true)][int]$Radius
+    )
+
+    $centerX = [int][Math]::Round($X)
+    $centerY = [int][Math]::Round($Y)
+    $minimumX = [Math]::Max(0, $centerX - $Radius)
+    $maximumX = [Math]::Min($Bitmap.Width, $centerX + $Radius + 1)
+    $minimumY = [Math]::Max(0, $centerY - $Radius)
+    $maximumY = [Math]::Min($Bitmap.Height, $centerY + $Radius + 1)
+    [double]$sum = 0.0
+    [int]$count = 0
+    for ($y = $minimumY; $y -lt $maximumY; ++$y) {
+        for ($x = $minimumX; $x -lt $maximumX; ++$x) {
+            $pixel = $Bitmap.GetPixel($x, $y)
+            $sum += 0.2126 * $pixel.R + 0.7152 * $pixel.G + 0.0722 * $pixel.B
+            ++$count
+        }
+    }
+    return $sum / [Math]::Max($count, 1)
+}
+
 $statistics = Get-ImageStatistics -Path $renderedPath
 if ($statistics.Width -lt 160 -or $statistics.Height -lt 120 -or
     $statistics.StandardDeviation -lt 12.0 -or
@@ -164,6 +190,8 @@ for ($i = 1; $i -lt $lumas.Count; ++$i) {
 $bitmap = [System.Drawing.Bitmap]::new($renderedPath)
 try {
     $lowerBlemishes = 0
+    $lowerCenterLobes = 0
+    $upperCenterLobes = 0
     $concentratedHighlights = 0
     $sphereRadius = if ($expectedView -eq "close") {
         [Math]::Floor([Math]::Min($bitmap.Width, $bitmap.Height) * 0.125)
@@ -183,6 +211,55 @@ try {
             ++$lowerBlemishes
         }
 
+        if ($expectedView -eq "close") {
+            # A lower-center reflection lobe can remain brighter than both
+            # lateral shoulders without forming the dark-blemish signature
+            # above. Sample small regions so the check follows the visual
+            # cue rather than a single-pixel noise value.
+            $regionRadius = [Math]::Max(2, [int][Math]::Round($sphereRadius * 0.035))
+            $lobePeak = 0.0
+            foreach ($offset in @(0.42, 0.50, 0.58)) {
+                $centerRegion = Get-RegionLuma -Bitmap $bitmap `
+                    -X $centerX -Y ($centerY + $sphereRadius * $offset) `
+                    -Radius $regionRadius
+                $shoulderRegion = (
+                    (Get-RegionLuma -Bitmap $bitmap `
+                        -X ($centerX - $sphereRadius * 0.30) `
+                        -Y ($centerY + $sphereRadius * $offset) `
+                        -Radius $regionRadius) +
+                    (Get-RegionLuma -Bitmap $bitmap `
+                        -X ($centerX + $sphereRadius * 0.30) `
+                        -Y ($centerY + $sphereRadius * $offset) `
+                        -Radius $regionRadius)
+                ) / 2.0
+                $lobePeak = [Math]::Max($lobePeak, $centerRegion - $shoulderRegion)
+            }
+            if ($lobePeak -gt 3.25) {
+                ++$lowerCenterLobes
+            }
+
+            $upperLobePeak = 0.0
+            foreach ($offset in @(-0.58, -0.50, -0.42)) {
+                $centerRegion = Get-RegionLuma -Bitmap $bitmap `
+                    -X $centerX -Y ($centerY + $sphereRadius * $offset) `
+                    -Radius $regionRadius
+                $shoulderRegion = (
+                    (Get-RegionLuma -Bitmap $bitmap `
+                        -X ($centerX - $sphereRadius * 0.30) `
+                        -Y ($centerY + $sphereRadius * $offset) `
+                        -Radius $regionRadius) +
+                    (Get-RegionLuma -Bitmap $bitmap `
+                        -X ($centerX + $sphereRadius * 0.30) `
+                        -Y ($centerY + $sphereRadius * $offset) `
+                        -Radius $regionRadius)
+                ) / 2.0
+                $upperLobePeak = [Math]::Max($upperLobePeak, $centerRegion - $shoulderRegion)
+            }
+            if ($upperLobePeak -gt 3.25) {
+                ++$upperCenterLobes
+            }
+        }
+
         $topCenter = Get-PixelLuma -Bitmap $bitmap -X $centerX -Y ($centerY - $sphereRadius * 0.22)
         $topShoulders = (
             (Get-PixelLuma -Bitmap $bitmap -X ($centerX - $sphereRadius * 0.28) -Y ($centerY - $sphereRadius * 0.12)) +
@@ -196,11 +273,11 @@ try {
 finally {
     $bitmap.Dispose()
 }
-if ($lowerBlemishes -gt 0 -or $concentratedHighlights -gt 0) {
-    throw "PBR IBL reference contains localized sphere defects (lower-blemishes=$lowerBlemishes, concentrated-highlights=$concentratedHighlights)."
+if ($lowerBlemishes -gt 0 -or $lowerCenterLobes -gt 0 -or $upperCenterLobes -gt 0 -or $concentratedHighlights -gt 0) {
+    throw "PBR IBL reference contains localized sphere defects (lower-blemishes=$lowerBlemishes, lower-center-lobes=$lowerCenterLobes, upper-center-lobes=$upperCenterLobes, concentrated-highlights=$concentratedHighlights)."
 }
 if ($ladderRange -lt 8.0 -or $resolvedSteps -lt 7) {
     throw "PBR IBL roughness ladder was not visibly resolved across the full range (range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, luma=$([string]::Join(',', ($lumas | ForEach-Object { [Math]::Round($_, 1) }))))."
 }
 
-Write-Output "PBR IBL reference validation: passed (rendered-mean=$([Math]::Round($statistics.Mean, 2)), rendered-sd=$([Math]::Round($statistics.StandardDeviation, 2)), clipped-fraction=$([Math]::Round($statistics.ClippedFraction, 4)), visible-subjects=$($lumas.Count - $unreadableSubjects)/$($lumas.Count), roughness-ladder-range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, lower-blemishes=$lowerBlemishes, concentrated-highlights=$concentratedHighlights)."
+Write-Output "PBR IBL reference validation: passed (rendered-mean=$([Math]::Round($statistics.Mean, 2)), rendered-sd=$([Math]::Round($statistics.StandardDeviation, 2)), clipped-fraction=$([Math]::Round($statistics.ClippedFraction, 4)), visible-subjects=$($lumas.Count - $unreadableSubjects)/$($lumas.Count), roughness-ladder-range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, lower-blemishes=$lowerBlemishes, lower-center-lobes=$lowerCenterLobes, upper-center-lobes=$upperCenterLobes, concentrated-highlights=$concentratedHighlights)."

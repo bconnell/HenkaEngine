@@ -84,8 +84,8 @@ if ($shader -notmatch 'iblDiagnosticMode' -or
     $shader -notmatch 'IBL_DIAGNOSTIC_SIMPLE_ENVIRONMENT') {
     $missing += 'IBL diagnostic shader controls'
 }
-if ($shader -notmatch 'const float HENKA_PREFILTER_MAX_LOD = 6\.0;' -or
-    $shader -notmatch 'float environmentPrefilterLod =\s*clamp\(surfaceRoughness, 0\.0, 1\.0\) \* HENKA_PREFILTER_MAX_LOD;' -or
+if ($shader -notmatch 'uniform float iblPrefilterMaxLod;' -or
+    $shader -notmatch 'float environmentPrefilterLod =\s*clamp\(surfaceRoughness, 0\.0, 1\.0\) \*\s*clamp\(iblPrefilterMaxLod, 0\.0, 1024\.0\);' -or
     $shader -notmatch 'vec3 blurredReflectionDirection = reflectionDirection;' -or
     $shader -match 'mix\(reflectionDirection, normal, surfaceRoughness' -or
     $shader -notmatch 'textureLod\(\s*iblPrefilterMap,\s*blurredReflectionDirection,\s*environmentPrefilterLod\)' -or

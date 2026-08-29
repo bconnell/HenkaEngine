@@ -1409,7 +1409,7 @@ static void henka_add_optional_shader_locations(
 {
     static const char* optional_names[] =
     {
-        "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
+        "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "iblPrefilterMaxLod", "useIBL",
         "iblDiagnosticMode",
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
         "useReflectionProbeBoxProjection", "reflectionProbeMapSecondary",
@@ -2130,6 +2130,20 @@ bloom_target_failure:
 #define HENKA_REFLECTION_PROBE_RESOLUTION 64
 #define HENKA_REFLECTION_PROBE_PREFILTER_LEVELS 7
 
+static int henka_opengl_full_mip_count(int resolution)
+{
+    int levels = 0;
+
+    if (resolution <= 0)
+        return 0;
+    do
+    {
+        ++levels;
+        resolution = resolution / 2 + resolution % 2;
+    } while (resolution > 1);
+    return levels;
+}
+
 static uint64_t henka_opengl_reflection_probe_storage_bytes(void)
 {
     uint64_t bytes = 0U;
@@ -2205,15 +2219,22 @@ static void henka_opengl_delete_ibl_resources(henka_opengl_renderer_state* state
 {
     uint64_t bytes = 0U;
     int mip;
+    int environment_levels;
 
     if (state == NULL)
         return;
+    environment_levels = henka_opengl_full_mip_count(HENKA_IBL_ENVIRONMENT_RESOLUTION);
     for (mip = 0; mip < HENKA_IBL_PREFILTER_LEVELS; ++mip)
     {
         int size = HENKA_IBL_PREFILTER_RESOLUTION >> mip;
         bytes += (uint64_t)size * (uint64_t)size * 6U * 8U;
     }
-    bytes += (uint64_t)HENKA_IBL_ENVIRONMENT_RESOLUTION * HENKA_IBL_ENVIRONMENT_RESOLUTION * 6U * 8U;
+    for (mip = 0; mip < environment_levels; ++mip)
+    {
+        int size = HENKA_IBL_ENVIRONMENT_RESOLUTION >> mip;
+        if (size < 1) size = 1;
+        bytes += (uint64_t)size * (uint64_t)size * 6U * 8U;
+    }
     bytes += (uint64_t)HENKA_IBL_IRRADIANCE_RESOLUTION * HENKA_IBL_IRRADIANCE_RESOLUTION * 6U * 8U;
     bytes += (uint64_t)HENKA_IBL_BRDF_RESOLUTION * HENKA_IBL_BRDF_RESOLUTION * 8U;
     if (state->ibl_environment_cube != 0U || state->ibl_irradiance_cube != 0U ||
@@ -2275,6 +2296,11 @@ static bool henka_opengl_allocate_ibl_cube(GLuint* out_texture, int resolution, 
                 NULL);
         }
     }
+    if (glGetError() != GL_NO_ERROR)
+    {
+        glDeleteTextures(1, &texture);
+        return false;
+    }
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0U);
     *out_texture = texture;
     return true;
@@ -2315,6 +2341,7 @@ static henka_result henka_opengl_build_ibl_resources(
     henka_mat4 projection;
     int face;
     int mip;
+    int environment_levels;
 
     if (state == NULL || scene == NULL || scene->environment.hdr_texture == NULL ||
         scene->environment.hdr_texture->backend_data == NULL ||
@@ -2323,6 +2350,9 @@ static henka_result henka_opengl_build_ibl_resources(
         return HENKA_ERROR_RENDERER;
     source_data = (const henka_opengl_texture_data*)scene->environment.hdr_texture->backend_data;
     if (source_data->texture_id == 0U)
+        return HENKA_ERROR_RENDERER;
+    environment_levels = henka_opengl_full_mip_count(HENKA_IBL_ENVIRONMENT_RESOLUTION);
+    if (environment_levels <= 0)
         return HENKA_ERROR_RENDERER;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
@@ -2336,7 +2366,7 @@ static henka_result henka_opengl_build_ibl_resources(
     previous_blend_enabled = glIsEnabled(GL_BLEND);
     g_gl.GenFramebuffers(1, &framebuffer);
     if (framebuffer == 0U ||
-        !henka_opengl_allocate_ibl_cube(&environment_cube, HENKA_IBL_ENVIRONMENT_RESOLUTION, 1) ||
+        !henka_opengl_allocate_ibl_cube(&environment_cube, HENKA_IBL_ENVIRONMENT_RESOLUTION, environment_levels) ||
         !henka_opengl_allocate_ibl_cube(&irradiance_cube, HENKA_IBL_IRRADIANCE_RESOLUTION, 1) ||
         !henka_opengl_allocate_ibl_cube(&prefilter_cube, HENKA_IBL_PREFILTER_RESOLUTION, HENKA_IBL_PREFILTER_LEVELS))
         goto ibl_failure;
@@ -2379,6 +2409,13 @@ static henka_result henka_opengl_build_ibl_resources(
         g_gl.BindVertexArray(state->tone_vertex_array);
         glDrawArrays(GL_TRIANGLES, 0, 3);
     }
+    glBindTexture(GL_TEXTURE_CUBE_MAP, environment_cube);
+    g_gl.GenerateMipmap(GL_TEXTURE_CUBE_MAP);
+    if (glGetError() != GL_NO_ERROR)
+    {
+        (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "environment cube mip generation failed");
+        goto ibl_failure;
+    }
     g_gl.UseProgram(state->ibl_irradiance_program);
     henka_set_uniform_int_owned(state->ibl_irradiance_program, &state->ibl_irradiance_shader_data, "environmentCube", 0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, environment_cube);
@@ -2401,6 +2438,16 @@ static henka_result henka_opengl_build_ibl_resources(
     }
     g_gl.UseProgram(state->ibl_prefilter_program);
     henka_set_uniform_int_owned(state->ibl_prefilter_program, &state->ibl_prefilter_shader_data, "environmentCube", 0);
+    henka_set_uniform_float_owned(
+        state->ibl_prefilter_program,
+        &state->ibl_prefilter_shader_data,
+        "sourceResolution",
+        (float)HENKA_IBL_ENVIRONMENT_RESOLUTION);
+    henka_set_uniform_float_owned(
+        state->ibl_prefilter_program,
+        &state->ibl_prefilter_shader_data,
+        "sourceMipMaxLod",
+        (float)(environment_levels - 1));
     for (mip = 0; mip < HENKA_IBL_PREFILTER_LEVELS; ++mip)
     {
         int resolution = HENKA_IBL_PREFILTER_RESOLUTION >> mip;
@@ -2489,7 +2536,12 @@ static henka_result henka_opengl_build_ibl_resources(
             int size = HENKA_IBL_PREFILTER_RESOLUTION >> mip;
             bytes += (uint64_t)size * (uint64_t)size * 6U * 8U;
         }
-        bytes += (uint64_t)HENKA_IBL_ENVIRONMENT_RESOLUTION * HENKA_IBL_ENVIRONMENT_RESOLUTION * 6U * 8U;
+        for (mip = 0; mip < environment_levels; ++mip)
+        {
+            int size = HENKA_IBL_ENVIRONMENT_RESOLUTION >> mip;
+            if (size < 1) size = 1;
+            bytes += (uint64_t)size * (uint64_t)size * 6U * 8U;
+        }
         bytes += (uint64_t)HENKA_IBL_IRRADIANCE_RESOLUTION * HENKA_IBL_IRRADIANCE_RESOLUTION * 6U * 8U;
         bytes += (uint64_t)HENKA_IBL_BRDF_RESOLUTION * HENKA_IBL_BRDF_RESOLUTION * 8U;
         henka_opengl_memory_add_category(state, &state->tracked_render_target_bytes, bytes);
@@ -3191,7 +3243,7 @@ static henka_result henka_opengl_create_render_programs(
     static const char* bloom_blur_uniforms[] = {"sourceTexture", "direction"};
     static const char* ibl_conversion_uniforms[] = {"equirectangularTexture", "rotation", "viewProjection"};
     static const char* ibl_cube_uniforms[] = {"environmentCube", "viewProjection"};
-    static const char* ibl_prefilter_uniforms[] = {"environmentCube", "roughness", "viewProjection"};
+    static const char* ibl_prefilter_uniforms[] = {"environmentCube", "roughness", "sourceResolution", "sourceMipMaxLod", "viewProjection"};
     static const char* ibl_brdf_uniforms[] = {"brdfScale"};
     static const char* environment_uniforms[] =
         {"groundColor", "horizonColor", "zenithColor", "intensity",
@@ -3254,12 +3306,13 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ vec2 ndc=uv*2.0-1.0; vec4 world=inverse(viewProjection)*vec4(ndc,1.0,1.0); vec3 n=normalize(world.xyz/world.w); vec3 color=vec3(0.0); const uint sampleCount=32u; for(uint i=0u;i<sampleCount;++i){ color+=textureLod(environmentCube,cosineSample(hammersley(i,sampleCount),n),0.0).rgb; } outColor=vec4(color*(PI/float(sampleCount)),1.0); }\n";
     static const char* ibl_prefilter_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform samplerCube environmentCube; uniform float roughness; uniform mat4 viewProjection; out vec4 outColor;\n"
+        "in vec2 uv; uniform samplerCube environmentCube; uniform float roughness; uniform float sourceResolution; uniform float sourceMipMaxLod; uniform mat4 viewProjection; out vec4 outColor;\n"
         "const float PI=3.14159265359;\n"
         "float radicalInverseVdc(uint bits){ bits=(bits<<16u)|(bits>>16u); bits=((bits&0x55555555u)<<1u)|((bits&0xAAAAAAAAu)>>1u); bits=((bits&0x33333333u)<<2u)|((bits&0xCCCCCCCCu)>>2u); bits=((bits&0x0F0F0F0Fu)<<4u)|((bits&0xF0F0F0F0u)>>4u); return float(bits)*2.3283064365386963e-10; }\n"
         "vec2 hammersley(uint i,uint count){ return vec2(float(i)/float(count),radicalInverseVdc(i)); }\n"
         "vec3 importanceSampleGGX(vec2 xi,vec3 n,float alpha){ float phi=2.0*PI*xi.x; float cosTheta=sqrt((1.0-xi.y)/max(1.0+(alpha*alpha-1.0)*xi.y,0.0001)); float sinTheta=sqrt(max(1.0-cosTheta*cosTheta,0.0)); vec3 h=vec3(cos(phi)*sinTheta,sin(phi)*sinTheta,cosTheta); vec3 up=abs(n.y)<0.95?vec3(0.0,1.0,0.0):vec3(1.0,0.0,0.0); vec3 t=normalize(cross(up,n)); vec3 b=cross(n,t); return normalize(t*h.x+b*h.y+n*h.z); }\n"
-        "void main(){ vec2 ndc=uv*2.0-1.0; vec4 world=inverse(viewProjection)*vec4(ndc,1.0,1.0); vec3 n=normalize(world.xyz/world.w); vec3 v=n; float boundedRoughness=clamp(roughness,0.0,1.0); float alpha=max(boundedRoughness*boundedRoughness,0.001); vec3 color=vec3(0.0); float totalWeight=0.0; const uint sampleCount=128u; for(uint i=0u;i<sampleCount;++i){ vec3 h=importanceSampleGGX(hammersley(i,sampleCount),n,alpha); vec3 l=normalize(2.0*dot(v,h)*h-v); float nDotL=max(dot(n,l),0.0); if(nDotL>0.0){ color+=textureLod(environmentCube,l,0.0).rgb*nDotL; totalWeight+=nDotL; } } outColor=vec4(color/max(totalWeight,0.0001),1.0); }\n";
+        "float sourceMipLevel(vec3 n,vec3 h,float nDotH,float vDotH,float alpha,float boundedRoughness){ float distribution=alpha*alpha/max(PI*pow(nDotH*nDotH*(alpha*alpha-1.0)+1.0,2.0),0.0001); float pdf=max(distribution*nDotH/max(4.0*vDotH,0.0001),0.0001); float omegaS=1.0/(128.0*pdf); float omegaP=4.0*PI/(6.0*max(sourceResolution,1.0)*max(sourceResolution,1.0)); float mip=boundedRoughness<=0.001?0.0:0.5*log2(max(omegaS/omegaP,1.0)); return clamp(mip,0.0,max(sourceMipMaxLod,0.0)); }\n"
+        "void main(){ vec2 ndc=uv*2.0-1.0; vec4 world=inverse(viewProjection)*vec4(ndc,1.0,1.0); vec3 n=normalize(world.xyz/world.w); vec3 v=n; float boundedRoughness=clamp(roughness,0.0,1.0); float alpha=max(boundedRoughness*boundedRoughness,0.001); vec3 color=vec3(0.0); float totalWeight=0.0; const uint sampleCount=128u; for(uint i=0u;i<sampleCount;++i){ vec3 h=importanceSampleGGX(hammersley(i,sampleCount),n,alpha); vec3 l=normalize(2.0*dot(v,h)*h-v); float nDotL=max(dot(n,l),0.0); float nDotH=max(dot(n,h),0.0); float vDotH=max(dot(v,h),0.0); if(nDotL>0.0){ float sourceMip=sourceMipLevel(n,h,nDotH,vDotH,alpha,boundedRoughness); color+=textureLod(environmentCube,l,sourceMip).rgb*nDotL; totalWeight+=nDotL; } } outColor=vec4(color/max(totalWeight,0.0001),1.0); }\n";
     static const char* ibl_brdf_fragment =
         "#version 330 core\n"
         "in vec2 uv; uniform float brdfScale; out vec4 outColor;\n"
@@ -5017,6 +5070,16 @@ static bool henka_opengl_prefilter_reflection_probe(
         &state->ibl_prefilter_shader_data,
         "environmentCube",
         0);
+    henka_set_uniform_float_owned(
+        state->ibl_prefilter_program,
+        &state->ibl_prefilter_shader_data,
+        "sourceResolution",
+        (float)HENKA_REFLECTION_PROBE_RESOLUTION);
+    henka_set_uniform_float_owned(
+        state->ibl_prefilter_program,
+        &state->ibl_prefilter_shader_data,
+        "sourceMipMaxLod",
+        (float)(HENKA_REFLECTION_PROBE_PREFILTER_LEVELS - 1));
     for (mip = 1; mip < HENKA_REFLECTION_PROBE_PREFILTER_LEVELS; ++mip)
     {
         int resolution = HENKA_REFLECTION_PROBE_RESOLUTION >> mip;
@@ -5861,6 +5924,7 @@ henka_result henka_opengl_renderer_draw_scene(
         bool use_reflection_probe_map;
         bool use_reflection_probe_map_secondary;
         bool use_reflection_probe_diffuse;
+        float ibl_prefilter_max_lod;
         float reflection_probe_blend_weight = 0.0f;
         size_t instance_count = 1U;
          bool occlusion_query_active = false;
@@ -5991,6 +6055,9 @@ henka_result henka_opengl_renderer_draw_scene(
             reflection_probe_index < HENKA_SCENE_MAX_REFLECTION_PROBES &&
             state->reflection_probe_capture_ready[reflection_probe_index] &&
             state->reflection_probe_cubes[reflection_probe_index] != 0U;
+        ibl_prefilter_max_lod = use_reflection_probe_map ?
+            (float)(HENKA_REFLECTION_PROBE_PREFILTER_LEVELS - 1) :
+            (float)(HENKA_IBL_PREFILTER_LEVELS - 1);
         use_reflection_probe_map_secondary = use_reflection_probe &&
             reflection_probe_secondary_index < HENKA_SCENE_MAX_REFLECTION_PROBES &&
             state->reflection_probe_capture_ready[reflection_probe_secondary_index] &&
@@ -6282,6 +6349,11 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_int_owned(program, shader_data, "iblIrradianceMap", 7);
         henka_set_uniform_int_owned(program, shader_data, "iblPrefilterMap", 8);
         henka_set_uniform_int_owned(program, shader_data, "iblBrdfLut", 9);
+        henka_set_uniform_float_owned(
+            program,
+            shader_data,
+            "iblPrefilterMaxLod",
+            ibl_prefilter_max_lod);
         henka_set_uniform_bool_owned(
             program,
             shader_data,
