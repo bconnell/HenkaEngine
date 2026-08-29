@@ -94,13 +94,15 @@ The shared Script Host exposes typed `Audio.Play(entity)`,
 operate on the persisted object-to-emitter mapping; missing or stale emitter
 bindings fail closed, while `IsPlaying` reports false.
 
+Compressed Ogg Vorbis, MP3, and FLAC streams also support the same transactional
+in-place reload contract as WAV streams. Replacement metadata and decoder state
+are validated before adoption; a malformed replacement leaves the existing
+stream and its active voices unchanged.
+
 ## Future work
 
 Mixer effects, user-facing device selection/notification, expanded packaged
 long-form content coverage, and broader spatial/occlusion features remain
 future work. The supported decoder boundary is intentionally limited to
 mono/stereo PCM WAV, Ogg Vorbis, MP3, and FLAC; additional codecs and
-multichannel routing are outside the current Audio scope. Compressed stream
-replacement while the source file is held open is not part of the current hot
-reload guarantee; the validated in-place stream reload contract is the
-file-backed PCM-WAV path.
+multichannel routing are outside the current Audio scope.

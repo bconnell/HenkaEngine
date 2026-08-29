@@ -342,6 +342,58 @@ static int test_compressed_format_contract(void)
     return EXIT_SUCCESS;
 }
 
+static int test_compressed_stream_reload_contract(void)
+{
+    static const struct
+    {
+        const char* path;
+        const char* base64;
+    } cases[] = {
+        {"build/test_tmp/audio_reload.ogg", test_compressed_ogg_base64},
+        {"build/test_tmp/audio_reload.mp3", test_compressed_mp3_base64},
+        {"build/test_tmp/audio_reload.flac", test_compressed_flac_base64}};
+    const char* malformed_path = "build/test_tmp/audio_reload_malformed.ogg";
+    const unsigned char malformed[] = {'O', 'g', 'g', 'S', 0U, 0U, 0U, 0U};
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index)
+    {
+        henka_audio_stream* stream = NULL;
+        henka_audio_stream_info original_info;
+        henka_audio_stream_info reloaded_info;
+        size_t frames_read = 0U;
+
+        HENKA_TEST_ASSERT(test_write_base64_file(cases[index].path, cases[index].base64));
+        HENKA_TEST_ASSERT(henka_audio_stream_load_file(
+            ".", cases[index].path, &stream) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_stream_get_info(
+            stream, &original_info) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_stream_read_frames(
+            stream, 0U, 4U, (float[8U]){0.0f}, 4U, &frames_read) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(frames_read > 0U);
+        HENKA_TEST_ASSERT(henka_audio_stream_reload_file(
+            stream, ".", cases[index].path) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_stream_get_info(
+            stream, &reloaded_info) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(reloaded_info.sample_rate == original_info.sample_rate &&
+            reloaded_info.channels == original_info.channels &&
+            reloaded_info.frame_count == original_info.frame_count);
+        HENKA_TEST_ASSERT(test_write_bytes(
+            malformed_path, malformed, sizeof(malformed)));
+        HENKA_TEST_ASSERT(henka_audio_stream_reload_file(
+            stream, ".", malformed_path) == HENKA_ERROR_ASSET_SOURCE);
+        HENKA_TEST_ASSERT(henka_audio_stream_get_info(
+            stream, &reloaded_info) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(reloaded_info.sample_rate == original_info.sample_rate &&
+            reloaded_info.channels == original_info.channels &&
+            reloaded_info.frame_count == original_info.frame_count);
+        henka_audio_stream_destroy(stream);
+        (void)remove(cases[index].path);
+    }
+    (void)remove(malformed_path);
+    return EXIT_SUCCESS;
+}
+
 static bool test_nonzero_mix(const float* samples, size_t frame_count)
 {
     size_t index;
@@ -509,6 +561,7 @@ int main(void)
     HENKA_TEST_ASSERT(test_write_real_wav(wav_path, 128U));
     HENKA_TEST_ASSERT(test_write_real_wav(stream_path, 8192U));
     HENKA_TEST_ASSERT(test_compressed_format_contract() == EXIT_SUCCESS);
+    HENKA_TEST_ASSERT(test_compressed_stream_reload_contract() == EXIT_SUCCESS);
     HENKA_TEST_ASSERT(test_streaming_wav_contract(stream_path) == EXIT_SUCCESS);
     HENKA_TEST_ASSERT(test_large_stream_wav_contract(large_stream_path) == EXIT_SUCCESS);
     HENKA_TEST_ASSERT(test_write_bytes(malformed_path, malformed, sizeof(malformed)));

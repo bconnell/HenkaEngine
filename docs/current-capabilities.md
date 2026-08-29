@@ -398,8 +398,9 @@ authoritative section below.
   and HenkaScript in Play. They resolve the same persisted object-to-emitter
   mapping used by the runtime and fail closed for missing or stale action
   targets. Packaged WAV and compressed-fixture smoke coverage is available.
-  Compressed stream hot reload, long-form streamed-content coverage, effects,
-  and broader spatial/occlusion support remain in progress. The current runtime core and output boundary are
+  Transactional compressed stream hot reload is covered for Ogg Vorbis, MP3,
+  and FLAC as well as WAV. Long-form packaged content coverage, effects, and
+  broader spatial/occlusion support remain in progress. The current runtime core and output boundary are
   single-owner for voice commands and mixing; device-thread synchronization
   remains outside this scope.
 
