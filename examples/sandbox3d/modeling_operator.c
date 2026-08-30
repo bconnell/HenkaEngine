@@ -563,14 +563,30 @@ henka_result sandbox3d_modeling_operator_preview(
         }
         if (session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
         {
-            result = henka_authoring_mesh_extrude_loose_vertex(
-                candidate,
-                (henka_authoring_vertex_id)session->selection_ids[0U],
-                direction,
-                applied_amount,
-                &extrude_result_vertex,
-                &extrude_result_edge,
-                &report);
+            const henka_authoring_vertex_id vertex_id =
+                (henka_authoring_vertex_id)session->selection_ids[0U];
+
+            if (henka_authoring_mesh_get_vertex_edge_count(
+                    session->source_snapshot, vertex_id) == 0U)
+            {
+                result = henka_authoring_mesh_extrude_loose_vertex(
+                    candidate,
+                    vertex_id,
+                    direction,
+                    applied_amount,
+                    &extrude_result_vertex,
+                    &extrude_result_edge,
+                    &report);
+            }
+            else
+            {
+                result = henka_authoring_mesh_extrude_vertex(
+                    candidate,
+                    vertex_id,
+                    applied_amount,
+                    &extrude_result_vertex,
+                    &report);
+            }
         }
         else
         {
