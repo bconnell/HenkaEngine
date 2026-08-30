@@ -235,6 +235,39 @@ static void henka_test_mixed_loose_authoring_renderer_bridge(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_gltf_mixed_normal_primitives_preserve_imported_normals(void)
+{
+    static const char* mixed_normals_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8"
+        "AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":72}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36},"
+        "{\"buffer\":0,\"byteOffset\":36,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"},"
+        "{\"bufferView\":1,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":["
+        "{\"attributes\":{\"POSITION\":0,\"NORMAL\":1}},"
+        "{\"attributes\":{\"POSITION\":0}}]}]}";
+    henka_model_data model;
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        mixed_normals_gltf,
+        strlen(mixed_normals_gltf),
+        "mixed-normal-primitives.gltf",
+        &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 6U);
+    HENKA_TEST_ASSERT(model.index_count == 6U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].normal.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].normal.y, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].normal.z, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[3].normal.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[3].normal.y, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[3].normal.z, 1.0f, 0.0001f);
+    henka_model_data_destroy(&model);
+}
+
 static void henka_test_gltf_scene_import(void)
 {
     static const char* scene_gltf =
@@ -816,5 +849,6 @@ void henka_test_model(void)
     henka_test_authoring_mesh_renderer_bridge();
     henka_test_loose_authoring_renderer_bridge();
     henka_test_mixed_loose_authoring_renderer_bridge();
+    henka_test_gltf_mixed_normal_primitives_preserve_imported_normals();
     henka_test_gltf_scene_import();
 }

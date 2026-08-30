@@ -755,7 +755,7 @@ static bool henka_gltf_parse_primitive(const henka_gltf_context* context, const 
 {
     const char* attributes; const char* attributes_end; const char* value; const char* value_end;
     int position_accessor; int normal_accessor = -1; int uv_accessor = -1; int uv1_accessor = -1; int color_accessor = -1; int tangent_accessor = -1; int index_accessor = -1; int mode = 4;
-    size_t index_count; size_t index;
+    size_t base_vertex_count; size_t index_count; size_t index;
     if (henka_gltf_find_member(primitive, primitive_end, "mode", &value, &value_end) && !henka_gltf_integer(value, value_end, &mode)) return false;
     if (mode != 4 || !henka_gltf_find_member(primitive, primitive_end, "attributes", &attributes, &attributes_end) ||
         !henka_gltf_member_int(attributes, attributes_end, "POSITION", &position_accessor)) return false;
@@ -796,6 +796,7 @@ static bool henka_gltf_parse_primitive(const henka_gltf_context* context, const 
           context->accessors[index_accessor].component_type != 5125))) return false;
     index_count = index_accessor >= 0 ? context->accessors[index_accessor].count : context->accessors[position_accessor].count;
     if (index_count == 0U || index_count % 3U != 0U || (index_accessor >= 0 && (size_t)index_accessor >= context->accessor_count)) return false;
+    base_vertex_count = builder->count;
     for (index = 0U; index < index_count; ++index)
     {
         size_t source_index = index;
@@ -820,7 +821,7 @@ static bool henka_gltf_parse_primitive(const henka_gltf_context* context, const 
     }
     if (normal_accessor < 0)
     {
-        for (index = 0U; index < builder->count; index += 3U)
+        for (index = base_vertex_count; index < builder->count; index += 3U)
         {
             henka_model_vertex* a = &builder->vertices[index]; henka_model_vertex* b = &builder->vertices[index + 1U]; henka_model_vertex* c = &builder->vertices[index + 2U];
             henka_vec3 ab = {b->position.x - a->position.x, b->position.y - a->position.y, b->position.z - a->position.z};
