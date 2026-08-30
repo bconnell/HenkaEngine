@@ -1,5 +1,7 @@
 #include "test_suite.h"
 
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <henka/authoring_mesh.h>
@@ -18,6 +20,49 @@ static void henka_test_write_u32(unsigned char* destination, uint32_t value)
     destination[1] = (unsigned char)((value >> 8U) & 0xffU);
     destination[2] = (unsigned char)((value >> 16U) & 0xffU);
     destination[3] = (unsigned char)((value >> 24U) & 0xffU);
+}
+
+static bool henka_test_write_f32_le(
+    unsigned char* destination,
+    size_t capacity,
+    size_t* offset,
+    float value)
+{
+    unsigned char host_bytes[sizeof(float)];
+    uint16_t endian_marker = 1U;
+
+    if (destination == NULL || offset == NULL || sizeof(float) != 4U ||
+        *offset > capacity || capacity - *offset < sizeof(float)) return false;
+    memcpy(host_bytes, &value, sizeof(host_bytes));
+    if (*(const unsigned char*)&endian_marker == 1U)
+    {
+        memcpy(destination + *offset, host_bytes, sizeof(host_bytes));
+    }
+    else
+    {
+        size_t index;
+        for (index = 0U; index < sizeof(host_bytes); ++index)
+            destination[*offset + index] = host_bytes[sizeof(host_bytes) - index - 1U];
+    }
+    *offset += sizeof(host_bytes);
+    return true;
+}
+
+static bool henka_test_write_file(const char* path, const void* data, size_t size)
+{
+    FILE* file = NULL;
+    bool success;
+
+    if (path == NULL || (data == NULL && size > 0U)) return false;
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "wb") != 0) file = NULL;
+#else
+    file = fopen(path, "wb");
+#endif
+    if (file == NULL) return false;
+    success = fwrite(data, 1U, size, file) == size;
+    if (fclose(file) != 0) success = false;
+    return success;
 }
 
 static void henka_test_model_rejects_unsafe_bounds(void)
@@ -84,6 +129,80 @@ static void henka_test_model_rejects_unsafe_bounds(void)
     HENKA_TEST_ASSERT(model.vertices == NULL);
     HENKA_TEST_ASSERT(model.indices == NULL);
     henka_free(oversized_source);
+}
+
+static void henka_test_gltf_external_buffer_file_load(void)
+{
+    enum { position_count = 3U, position_component_count = 3U, position_component_type = 5126 };
+    static const float positions[position_count * position_component_count] =
+    {
+        0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f
+    };
+    const size_t position_byte_offset = 0U;
+    const size_t position_byte_stride = 0U;
+    const size_t position_byte_length = position_count * position_component_count * sizeof(float);
+    unsigned char position_buffer[sizeof(positions)];
+    char valid_gltf[512];
+    char traversal_gltf[512];
+    size_t position_buffer_size = 0U;
+    int valid_gltf_length;
+    int traversal_gltf_length;
+    size_t index;
+    const char* buffer_path = "build/test_tmp/external-buffer.bin";
+    const char* valid_path = "build/test_tmp/external-buffer.gltf";
+    const char* traversal_path = "build/test_tmp/external-buffer-traversal.gltf";
+    henka_model_data model;
+    henka_result result;
+
+    HENKA_TEST_ASSERT(sizeof(float) == 4U);
+    HENKA_TEST_ASSERT(position_byte_length == 36U);
+    HENKA_TEST_ASSERT(position_byte_offset == 0U);
+    HENKA_TEST_ASSERT(position_byte_stride == 0U);
+    for (index = 0U; index < sizeof(positions) / sizeof(positions[0]); ++index)
+        HENKA_TEST_ASSERT(henka_test_write_f32_le(
+            position_buffer, sizeof(position_buffer), &position_buffer_size, positions[index]));
+    HENKA_TEST_ASSERT(position_buffer_size == 36U);
+    valid_gltf_length = snprintf(
+        valid_gltf, sizeof(valid_gltf),
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"external-buffer.bin\",\"byteLength\":%zu}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteOffset\":%zu,\"byteLength\":%zu}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":%d,\"count\":%zu,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}",
+        position_byte_length, position_byte_offset, position_byte_length,
+        position_component_type, (size_t)position_count);
+    traversal_gltf_length = snprintf(
+        traversal_gltf, sizeof(traversal_gltf),
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"../external-buffer.bin\",\"byteLength\":%zu}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteOffset\":%zu,\"byteLength\":%zu}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":%d,\"count\":%zu,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}",
+        position_byte_length, position_byte_offset, position_byte_length,
+        position_component_type, (size_t)position_count);
+    HENKA_TEST_ASSERT(valid_gltf_length > 0 && (size_t)valid_gltf_length < sizeof(valid_gltf));
+    HENKA_TEST_ASSERT(traversal_gltf_length > 0 && (size_t)traversal_gltf_length < sizeof(traversal_gltf));
+    HENKA_TEST_ASSERT(henka_test_write_file(buffer_path, position_buffer, position_buffer_size));
+    HENKA_TEST_ASSERT(henka_test_write_file(valid_path, valid_gltf, (size_t)valid_gltf_length));
+    memset(&model, 0, sizeof(model));
+    result = henka_model_data_load_gltf(valid_path, &model);
+    HENKA_TEST_ASSERT(result == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U);
+    HENKA_TEST_ASSERT(model.index_count == 3U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].position.x, 1.0f, 0.0001f);
+    henka_model_data_destroy(&model);
+
+    HENKA_TEST_ASSERT(henka_test_write_file(traversal_path, traversal_gltf, (size_t)traversal_gltf_length));
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf(traversal_path, &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+    henka_model_data_destroy(&model);
+    (void)remove(buffer_path);
+    (void)remove(valid_path);
+    (void)remove(traversal_path);
 }
 
 static void henka_test_authoring_mesh_renderer_bridge(void)
@@ -846,6 +965,7 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.indices == NULL);
 
     henka_test_model_rejects_unsafe_bounds();
+    henka_test_gltf_external_buffer_file_load();
     henka_test_authoring_mesh_renderer_bridge();
     henka_test_loose_authoring_renderer_bridge();
     henka_test_mixed_loose_authoring_renderer_bridge();
