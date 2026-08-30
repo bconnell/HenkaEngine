@@ -98,6 +98,27 @@ Authored interaction data includes enabled state, prompt, and interaction
 distance through the existing scene descriptor. It is not duplicated in a
 second interaction runtime.
 
+## Runtime hierarchy foundation
+
+The public runtime scene supports a bounded parent/child relationship using the
+same generation-checked `henka_entity` handles used for ordinary scene access.
+Each entity retains a local transform and a derived world transform. Local
+updates propagate through the active subtree, while world-transform updates
+derive a validated local transform relative to the current parent.
+
+Reparenting explicitly selects `HENKA_SCENE_PARENT_KEEP_LOCAL` or
+`HENKA_SCENE_PARENT_KEEP_WORLD`. Invalid parents, stale handles, cycles, and
+updates that would make a bounded TRS transform non-representable are rejected
+before the relationship changes. The current TRS foundation accepts uniform
+parent scale for hierarchy composition; shear-producing non-uniform parent
+scale is not approximated. Destroying a parent promotes its direct children to
+roots while preserving their world transforms, and stale parent handles cannot
+be reused.
+
+Sandbox hierarchy editing, hierarchy persistence, and participation by every
+runtime subsystem remain subsequent work. The runtime foundation is independent
+of the selection-owner relationship used for editor presentation.
+
 ## Play-session lifecycle
 
 Play is owned by a focused Play-session module rather than `main.c`. It has an

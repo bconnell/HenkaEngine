@@ -38,12 +38,13 @@ After the current Audio campaign reaches a coherent clean boundary and the
 Character Controller work reaches its appropriate maturity target, the next
 two major foundational projects are planned in this order:
 
-1. **Scene Hierarchy / Parenting Maturity** — establish an authoritative,
-   stable-ID parent/child scene model with deterministic traversal, cycle and
-   stale-parent rejection, correct local/world transform propagation,
-   explicit keep-world and keep-local reparenting, safe destruction,
+1. **Scene Hierarchy / Parenting Maturity** — extend the available runtime
+   stable-ID parent/child transform foundation with deterministic traversal,
    persistence, undo/redo, editor/runtime agreement, and shared participation
-   by rendering, physics, Audio, cameras, scripting, and Play sessions.
+   by rendering, physics, Audio, cameras, scripting, and Play sessions. The
+   current foundation already rejects cycles and stale parents, propagates
+   local/world transforms, supports explicit keep-world and keep-local
+   reparenting, and promotes children safely when a parent is destroyed.
 2. **Prefabs / Reusable Scene Objects** — build reusable authored objects and
    hierarchies on that scene foundation, with stable prefab identity and
    revision data, real scene instantiation, explicit inherited-versus-

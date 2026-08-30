@@ -751,6 +751,224 @@ static const henka_scene_entity_record* henka_scene_get_entity_record_const(cons
     return henka_scene_get_entity_record((henka_scene*)scene, entity);
 }
 
+#define HENKA_SCENE_MAX_HIERARCHY_DEPTH 256U
+
+static bool henka_scene_transform_scale_is_uniform(henka_transform transform)
+{
+    const float tolerance = 0.00001f;
+    const float scale_x = fabsf(transform.scale.x);
+    const float scale_y = fabsf(transform.scale.y);
+    const float scale_z = fabsf(transform.scale.z);
+    const float maximum = fmaxf(scale_x, fmaxf(scale_y, scale_z));
+
+    return henka_transform_is_valid(transform) &&
+        fabsf(scale_x - scale_y) <= tolerance * fmaxf(1.0f, maximum) &&
+        fabsf(scale_x - scale_z) <= tolerance * fmaxf(1.0f, maximum);
+}
+
+static henka_transform henka_scene_compose_hierarchy_transform(
+    henka_transform parent,
+    henka_transform local)
+{
+    henka_transform result;
+
+    result.position = henka_vec3_add(
+        parent.position,
+        henka_quat_rotate_vec3(
+            parent.rotation,
+            (henka_vec3){
+                local.position.x * parent.scale.x,
+                local.position.y * parent.scale.y,
+                local.position.z * parent.scale.z}));
+    result.rotation = henka_quat_normalize(
+        henka_quat_multiply(parent.rotation, local.rotation));
+    result.scale = (henka_vec3){
+        parent.scale.x * local.scale.x,
+        parent.scale.y * local.scale.y,
+        parent.scale.z * local.scale.z};
+    return result;
+}
+
+static bool henka_scene_try_world_to_local_transform(
+    henka_transform parent,
+    henka_transform world,
+    henka_transform* out_local)
+{
+    henka_quat inverse_rotation;
+    henka_vec3 offset;
+    henka_vec3 unrotated_offset;
+    henka_transform local;
+
+    if (out_local == NULL || !henka_transform_is_valid(parent) ||
+        !henka_transform_is_valid(world) ||
+        !henka_scene_transform_scale_is_uniform(parent) ||
+        parent.scale.x == 0.0f || parent.scale.y == 0.0f || parent.scale.z == 0.0f)
+    {
+        return false;
+    }
+
+    inverse_rotation = (henka_quat){
+        -parent.rotation.x,
+        -parent.rotation.y,
+        -parent.rotation.z,
+        parent.rotation.w};
+    offset = henka_vec3_subtract(world.position, parent.position);
+    unrotated_offset = henka_quat_rotate_vec3(inverse_rotation, offset);
+    local.position = (henka_vec3){
+        unrotated_offset.x / parent.scale.x,
+        unrotated_offset.y / parent.scale.y,
+        unrotated_offset.z / parent.scale.z};
+    local.rotation = henka_quat_normalize(
+        henka_quat_multiply(inverse_rotation, world.rotation));
+    local.scale = (henka_vec3){
+        world.scale.x / parent.scale.x,
+        world.scale.y / parent.scale.y,
+        world.scale.z / parent.scale.z};
+    if (!henka_transform_is_valid(local))
+    {
+        return false;
+    }
+
+    *out_local = local;
+    return true;
+}
+
+static bool henka_scene_entity_has_child(
+    const henka_scene* scene,
+    henka_entity parent)
+{
+    size_t index;
+
+    if (scene == NULL || parent == HENKA_INVALID_ENTITY)
+    {
+        return false;
+    }
+    for (index = 0U; index < scene->entity_capacity; ++index)
+    {
+        if (scene->entities[index].active && scene->entities[index].parent == parent)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool henka_scene_parent_chain_allows(
+    const henka_scene* scene,
+    henka_entity child,
+    henka_entity parent)
+{
+    size_t depth;
+    henka_entity cursor;
+
+    cursor = parent;
+    for (depth = 0U; depth < HENKA_SCENE_MAX_HIERARCHY_DEPTH; ++depth)
+    {
+        const henka_scene_entity_record* record;
+
+        if (cursor == HENKA_INVALID_ENTITY)
+        {
+            return true;
+        }
+        if (cursor == child)
+        {
+            return false;
+        }
+        record = henka_scene_get_entity_record_const(scene, cursor);
+        if (record == NULL)
+        {
+            return false;
+        }
+        cursor = record->parent;
+    }
+    return false;
+}
+
+static bool henka_scene_validate_hierarchy_subtree(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_transform world,
+    size_t depth)
+{
+    size_t index;
+    henka_bounds world_bounds;
+
+    if (scene == NULL || depth >= HENKA_SCENE_MAX_HIERARCHY_DEPTH ||
+        !henka_transform_is_valid(world) ||
+        (henka_scene_entity_has_child(scene, entity) &&
+            !henka_scene_transform_scale_is_uniform(world)) ||
+        (henka_scene_get_entity_record_const(scene, entity) == NULL))
+    {
+        return false;
+    }
+
+    if (henka_scene_get_entity_record_const(scene, entity)->has_local_bounds &&
+        !henka_scene_try_transform_bounds(
+            henka_scene_get_entity_record_const(scene, entity)->local_bounds,
+            world,
+            &world_bounds))
+    {
+        return false;
+    }
+
+    for (index = 0U; index < scene->entity_capacity; ++index)
+    {
+        const henka_scene_entity_record* child = &scene->entities[index];
+        henka_entity child_entity;
+        henka_transform child_world;
+
+        if (!child->active || child->parent != entity)
+        {
+            continue;
+        }
+        child_entity = henka_scene_make_entity(index, child->generation);
+        child_world = henka_scene_compose_hierarchy_transform(world, child->local_transform);
+        if (!henka_scene_validate_hierarchy_subtree(
+                scene,
+                child_entity,
+                child_world,
+                depth + 1U))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void henka_scene_apply_hierarchy_subtree(
+    henka_scene* scene,
+    henka_entity entity,
+    henka_transform world,
+    size_t depth)
+{
+    size_t index;
+
+    if (scene == NULL || depth >= HENKA_SCENE_MAX_HIERARCHY_DEPTH)
+    {
+        return;
+    }
+    {
+        henka_scene_entity_record* record = henka_scene_get_entity_record(scene, entity);
+        if (record == NULL)
+        {
+            return;
+        }
+        record->transform = world;
+    }
+    for (index = 0U; index < scene->entity_capacity; ++index)
+    {
+        henka_scene_entity_record* child = &scene->entities[index];
+        if (child->active && child->parent == entity)
+        {
+            henka_scene_apply_hierarchy_subtree(
+                scene,
+                henka_scene_make_entity(index, child->generation),
+                henka_scene_compose_hierarchy_transform(world, child->local_transform),
+                depth + 1U);
+        }
+    }
+}
+
 static henka_result henka_scene_grow(henka_scene* scene)
 {
     size_t allocation_size;
@@ -784,8 +1002,10 @@ static henka_result henka_scene_grow(henka_scene* scene)
         new_entities[index].generation = 1U;
         new_entities[index].visible = true;
         new_entities[index].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
+        new_entities[index].parent = HENKA_INVALID_ENTITY;
         new_entities[index].name = NULL;
         new_entities[index].tag = NULL;
+        new_entities[index].local_transform = henka_transform_identity();
         new_entities[index].transform = henka_transform_identity();
         new_entities[index].previous_transform = henka_transform_identity();
         new_entities[index].previous_transform_valid = false;
@@ -998,7 +1218,9 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
             scene->entities[index].active = true;
             scene->entities[index].visible = true;
             scene->entities[index].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
+            scene->entities[index].parent = HENKA_INVALID_ENTITY;
             scene->entities[index].transform = henka_transform_identity();
+            scene->entities[index].local_transform = henka_transform_identity();
             scene->entities[index].previous_transform = henka_transform_identity();
             scene->entities[index].previous_transform_valid = false;
             scene->entities[index].mesh = NULL;
@@ -1044,7 +1266,9 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
     scene->entities[scene->entity_count].active = true;
     scene->entities[scene->entity_count].visible = true;
     scene->entities[scene->entity_count].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
+    scene->entities[scene->entity_count].parent = HENKA_INVALID_ENTITY;
     scene->entities[scene->entity_count].transform = henka_transform_identity();
+    scene->entities[scene->entity_count].local_transform = henka_transform_identity();
     scene->entities[scene->entity_count].previous_transform = henka_transform_identity();
     scene->entities[scene->entity_count].previous_transform_valid = false;
     scene->entities[scene->entity_count].lod = (henka_scene_lod_desc){0};
@@ -1090,6 +1314,11 @@ void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
         if (child->active && child->selection_owner == entity)
         {
             child->selection_owner = henka_scene_make_entity(index, child->generation);
+        }
+        if (child->active && child->parent == entity)
+        {
+            child->parent = HENKA_INVALID_ENTITY;
+            child->local_transform = child->transform;
         }
     }
 
@@ -1310,6 +1539,56 @@ henka_result henka_scene_get_entity_transform(const henka_scene* scene, henka_en
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_get_entity_local_transform(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_transform* out_transform)
+{
+    const henka_scene_entity_record* record;
+
+    if (out_transform == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_transform = henka_transform_identity();
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_transform = record->local_transform;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_entity_world_transform(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_transform* out_transform)
+{
+    return henka_scene_get_entity_transform(scene, entity, out_transform);
+}
+
+henka_result henka_scene_get_entity_parent(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_entity* out_parent)
+{
+    const henka_scene_entity_record* record;
+
+    if (out_parent == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_parent = HENKA_INVALID_ENTITY;
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_parent = record->parent;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_get_entity_mesh(const henka_scene* scene, henka_entity entity, henka_mesh** out_mesh)
 {
     const henka_scene_entity_record* record;
@@ -1499,6 +1778,8 @@ henka_result henka_scene_set_entity_selection_owner(
 henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity entity, henka_transform transform)
 {
     henka_scene_entity_record* record;
+    const henka_scene_entity_record* parent_record;
+    henka_transform local_transform;
     henka_transform sanitized_transform;
     henka_bounds world_bounds;
 
@@ -1515,7 +1796,150 @@ henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity e
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    record->transform = sanitized_transform;
+    parent_record = henka_scene_get_entity_record_const(scene, record->parent);
+    if (record->parent == HENKA_INVALID_ENTITY)
+    {
+        local_transform = sanitized_transform;
+    }
+    else if (parent_record == NULL ||
+        !henka_scene_try_world_to_local_transform(
+            parent_record->transform,
+            sanitized_transform,
+            &local_transform))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_validate_hierarchy_subtree(
+            scene,
+            entity,
+            sanitized_transform,
+            0U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->local_transform = local_transform;
+    henka_scene_apply_hierarchy_subtree(scene, entity, sanitized_transform, 0U);
+    henka_scene_bump_render_revision(scene);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_entity_local_transform(
+    henka_scene* scene,
+    henka_entity entity,
+    henka_transform transform)
+{
+    henka_scene_entity_record* record;
+    const henka_scene_entity_record* parent_record;
+    henka_transform sanitized_transform;
+    henka_transform world_transform;
+
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL || !henka_transform_is_valid(transform))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    sanitized_transform = henka_transform_sanitize(transform);
+    parent_record = henka_scene_get_entity_record_const(scene, record->parent);
+    if (record->parent == HENKA_INVALID_ENTITY)
+    {
+        world_transform = sanitized_transform;
+    }
+    else if (parent_record == NULL ||
+        !henka_scene_transform_scale_is_uniform(parent_record->transform))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    else
+    {
+        world_transform = henka_scene_compose_hierarchy_transform(
+            parent_record->transform,
+            sanitized_transform);
+    }
+    if (!henka_scene_validate_hierarchy_subtree(
+            scene,
+            entity,
+            world_transform,
+            0U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->local_transform = sanitized_transform;
+    henka_scene_apply_hierarchy_subtree(scene, entity, world_transform, 0U);
+    henka_scene_bump_render_revision(scene);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_entity_parent(
+    henka_scene* scene,
+    henka_entity entity,
+    henka_entity parent,
+    henka_scene_parenting_mode mode)
+{
+    henka_scene_entity_record* record;
+    const henka_scene_entity_record* parent_record;
+    henka_transform local_transform;
+    henka_transform world_transform;
+
+    if (mode != HENKA_SCENE_PARENT_KEEP_LOCAL &&
+        mode != HENKA_SCENE_PARENT_KEEP_WORLD)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL ||
+        (parent != HENKA_INVALID_ENTITY &&
+            henka_scene_get_entity_record_const(scene, parent) == NULL) ||
+        !henka_scene_parent_chain_allows(scene, entity, parent))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    parent_record = henka_scene_get_entity_record_const(scene, parent);
+    if (parent_record != NULL &&
+        !henka_scene_transform_scale_is_uniform(parent_record->transform))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (mode == HENKA_SCENE_PARENT_KEEP_WORLD)
+    {
+        world_transform = record->transform;
+        if (parent_record == NULL)
+        {
+            local_transform = world_transform;
+        }
+        else if (!henka_scene_try_world_to_local_transform(
+                parent_record->transform,
+                world_transform,
+                &local_transform))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    else
+    {
+        local_transform = record->local_transform;
+        world_transform = parent_record == NULL
+            ? local_transform
+            : henka_scene_compose_hierarchy_transform(
+                parent_record->transform,
+                local_transform);
+    }
+
+    if (!henka_scene_validate_hierarchy_subtree(
+            scene,
+            entity,
+            world_transform,
+            0U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->parent = parent;
+    record->local_transform = local_transform;
+    henka_scene_apply_hierarchy_subtree(scene, entity, world_transform, 0U);
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
 }

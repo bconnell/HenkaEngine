@@ -53,7 +53,7 @@ Other operating systems are not currently claimed as supported.
 | 2.5D | Foundation | Camera-side foundation only: perspective/side/top/isometric workflows and orthographic zoom |
 | Networking/server | Foundation | Current renderer-free runtime, dedicated host, and bounded Terrain authority paths |
 | External projects | Foundation | Current separate game/server templates with Windows validation |
-| Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, Save/Reload, and isolated runtime Play scenes |
+| Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, runtime hierarchy foundation, Save/Reload, and isolated runtime Play scenes |
 | 2D | Planned | No dedicated 2D scope yet; renderer, sprites, layers, parallax, and animation remain open |
 | Audio | Available | Bounded resident/streamed PCM WAV, Ogg Vorbis, MP3, and FLAC playback, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, authored listener/editor controls, supported Lua/HenkaScript controls, and caller-pumped SDL3 output/recovery |
 | Scripting/behaviors | In Progress | Current bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, persistence, and cross-language events |

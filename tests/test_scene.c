@@ -79,6 +79,152 @@ static void henka_test_scene_capacity_growth(void)
     henka_scene_destroy(scene);
 }
 
+static void henka_test_scene_hierarchy(void)
+{
+    henka_scene* scene;
+    henka_scene* clone;
+    henka_entity root;
+    henka_entity child;
+    henka_entity grandchild;
+    henka_entity alternate_root;
+    henka_entity nonuniform_root;
+    henka_entity parent;
+    henka_transform transform;
+    henka_transform world_before;
+    henka_transform child_world_before_destroy;
+    henka_transform local;
+    henka_transform expected_world;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    root = henka_scene_create_entity_named(scene, "Hierarchy Root");
+    child = henka_scene_create_entity_named(scene, "Hierarchy Child");
+    grandchild = henka_scene_create_entity_named(scene, "Hierarchy Grandchild");
+    alternate_root = henka_scene_create_entity_named(scene, "Alternate Root");
+    nonuniform_root = henka_scene_create_entity_named(scene, "Nonuniform Root");
+    HENKA_TEST_ASSERT(root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(grandchild != HENKA_INVALID_ENTITY);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){10.0f, 2.0f, -3.0f};
+    transform.scale = (henka_vec3){2.0f, 2.0f, 2.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, root, transform) == HENKA_SUCCESS);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){1.0f, 2.0f, 3.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(scene, child, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, child, root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, child, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &world_before) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.position.x, 12.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.position.y, 6.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.position.z, 3.0f, 0.0001f);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){1.0f, 2.0f, 3.0f};
+    transform.rotation = henka_quat_from_axis_angle(
+        (henka_vec3){0.0f, 1.0f, 0.0f}, 45.0f * HENKA_DEG_TO_RAD);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(scene, child, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &world_before) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.rotation.y, transform.rotation.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.rotation.w, transform.rotation.w, 0.0001f);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){10.0f, 2.0f, -3.0f};
+    transform.rotation = henka_quat_from_axis_angle(
+        (henka_vec3){0.0f, 1.0f, 0.0f}, 90.0f * HENKA_DEG_TO_RAD);
+    transform.scale = (henka_vec3){2.0f, 2.0f, 2.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, root, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &world_before) == HENKA_SUCCESS);
+    expected_world = henka_transform_identity();
+    expected_world.position = henka_vec3_add(
+        transform.position,
+        henka_quat_rotate_vec3(
+            transform.rotation,
+            (henka_vec3){2.0f, 4.0f, 6.0f}));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.position.x, expected_world.position.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.position.y, expected_world.position.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.position.z, expected_world.position.z, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, grandchild, child, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, root, grandchild, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, root, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == HENKA_INVALID_ENTITY);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){-5.0f, 0.0f, 4.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, alternate_root, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, child, alternate_root, HENKA_SCENE_PARENT_KEEP_WORLD) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, world_before.position.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, world_before.position.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, world_before.position.z, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_transform(scene, child, &local) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        local.position.x,
+        world_before.position.x - (-5.0f),
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        local.position.y,
+        world_before.position.y,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        local.position.z,
+        world_before.position.z - 4.0f,
+        0.0001f);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){-7.0f, 1.0f, 4.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, child, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &world_before) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.position.x, -7.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.position.y, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_before.position.z, 4.0f, 0.0001f);
+
+    transform = henka_transform_identity();
+    transform.scale = (henka_vec3){2.0f, 1.0f, 2.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, nonuniform_root, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, grandchild, nonuniform_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, child, HENKA_INVALID_ENTITY, HENKA_SCENE_PARENT_KEEP_WORLD) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, child, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, -7.0f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, child, HENKA_INVALID_ENTITY, (henka_scene_parenting_mode)99) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, child, (henka_entity)0x1234U, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, HENKA_INVALID_ENTITY, &parent) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, child, alternate_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &world_before) == HENKA_SUCCESS);
+    clone = NULL;
+    HENKA_TEST_ASSERT(henka_scene_clone(scene, &clone) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(clone, child, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == alternate_root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(clone, child, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, world_before.position.x, 0.0001f);
+    henka_scene_destroy(clone);
+
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(
+        scene, child, &child_world_before_destroy) == HENKA_SUCCESS);
+    henka_scene_destroy_entity(scene, alternate_root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, child, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, child_world_before_destroy.position.x, 0.0001f);
+    henka_scene_destroy(scene);
+}
+
 void henka_test_scene(void)
 {
     henka_bounds bounds;
@@ -562,4 +708,5 @@ void henka_test_scene(void)
     henka_scene_destroy(scene);
 
     henka_test_scene_capacity_growth();
+    henka_test_scene_hierarchy();
 }

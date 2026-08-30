@@ -14,8 +14,10 @@ typedef struct henka_scene_entity_record
     bool visible;
     uint32_t flags;
     henka_entity selection_owner;
+    henka_entity parent;
     char* name;
     char* tag;
+    henka_transform local_transform;
     henka_transform transform;
     henka_transform previous_transform;
     bool previous_transform_valid;

@@ -23,6 +23,12 @@ typedef uint64_t henka_entity;
 
 #define HENKA_INVALID_ENTITY ((henka_entity)0)
 
+typedef enum henka_scene_parenting_mode
+{
+    HENKA_SCENE_PARENT_KEEP_LOCAL = 0,
+    HENKA_SCENE_PARENT_KEEP_WORLD
+} henka_scene_parenting_mode;
+
 typedef enum henka_material_type
 {
     HENKA_MATERIAL_TYPE_LIT = 0,
@@ -314,6 +320,30 @@ henka_result henka_scene_find_entity_by_name(const henka_scene* scene, const cha
 henka_result henka_scene_find_entity_by_tag(const henka_scene* scene, const char* tag, henka_entity* out_entity);
 henka_result henka_scene_get_entity_info(const henka_scene* scene, henka_entity entity, henka_scene_object_info* out_info);
 henka_result henka_scene_get_entity_transform(const henka_scene* scene, henka_entity entity, henka_transform* out_transform);
+henka_result henka_scene_get_entity_local_transform(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_transform* out_transform);
+henka_result henka_scene_get_entity_world_transform(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_transform* out_transform);
+henka_result henka_scene_get_entity_parent(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_entity* out_parent);
+/* Reparents a subtree transactionally. KEEP_LOCAL preserves the child's local
+ * transform; KEEP_WORLD preserves its current world transform. The bounded
+ * v1 TRS model rejects parent scales that would require shear representation. */
+henka_result henka_scene_set_entity_parent(
+    henka_scene* scene,
+    henka_entity entity,
+    henka_entity parent,
+    henka_scene_parenting_mode mode);
+henka_result henka_scene_set_entity_local_transform(
+    henka_scene* scene,
+    henka_entity entity,
+    henka_transform transform);
 henka_result henka_scene_get_entity_mesh(const henka_scene* scene, henka_entity entity, henka_mesh** out_mesh);
 henka_result henka_scene_get_entity_material(const henka_scene* scene, henka_entity entity, henka_material* out_material);
 /* Borrowed manager-owned definition identity, when the effective material

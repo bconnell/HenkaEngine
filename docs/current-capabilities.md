@@ -104,9 +104,13 @@ authoritative section below.
   and simulation transforms remain outside persistence; Stop destroys the
   runtime scene, leaving the authored scene unchanged. Active Play rejects
   authoring changes and scene save/reload.
-- This is a foundation, not a complete game editor. Hierarchy authoring,
-  broader imported-object registration, complete source/material/project
-  serialization, and production gameplay workflows remain open. The shared
+- This is a foundation, not a complete game editor. The public runtime scene
+  now provides a bounded generation-checked parent/child transform foundation
+  with cycle rejection, keep-local/keep-world reparenting, subtree propagation,
+  and parent-destruction promotion. Hierarchy editing in the Sandbox, hierarchy
+  persistence, broader imported-object registration, complete
+  source/material/project serialization, and production gameplay workflows
+  remain open. The shared
   scripting API/host schema and bounded HenkaScript lexer/parser/type-checking
   foundation are available through [scripting-foundation.md](scripting-foundation.md),
    including bounded HenkaScript callable bytecode/VM execution, bounded Lua
