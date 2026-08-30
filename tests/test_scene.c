@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <henka/core.h>
+#include <henka/prefab.h>
 #include <henka/scene.h>
 
 #include "../engine/src/core/checked.h"
@@ -223,6 +224,81 @@ static void henka_test_scene_hierarchy(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &transform) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, child_world_before_destroy.position.x, 0.0001f);
     henka_scene_destroy(scene);
+}
+
+static void henka_test_prefab_snapshot_and_transaction(void)
+{
+    henka_scene* source;
+    henka_scene* target;
+    henka_prefab* prefab;
+    henka_entity source_root;
+    henka_entity source_child;
+    henka_entity instance_root;
+    henka_entity instance_child;
+    henka_entity parent;
+    henka_transform transform;
+    henka_bounds bounds;
+    henka_interaction_desc interaction;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
+    source_child = henka_scene_create_entity_named(source, "Prefab Child");
+    source_root = henka_scene_create_entity_named(source, "Prefab Root");
+    HENKA_TEST_ASSERT(source_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_child != HENKA_INVALID_ENTITY);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){10.0f, 2.0f, -4.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(source, source_root, transform) == HENKA_SUCCESS);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){2.0f, 3.0f, 4.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(source, source_child, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        source, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_tag(source, source_child, "prefab-part") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_visible(source, source_child, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
+        source, source_child, HENKA_SCENE_ENTITY_FLAG_HELPER) == HENKA_SUCCESS);
+    bounds = (henka_bounds){{-1.0f, -2.0f, -3.0f}, {1.0f, 2.0f, 3.0f}};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(source, source_child, bounds) == HENKA_SUCCESS);
+    interaction = (henka_interaction_desc){true, 6.0f, "Inspect prefab part"};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_interaction(source, source_child, &interaction) == HENKA_SUCCESS);
+
+    prefab = NULL;
+    HENKA_TEST_ASSERT(henka_prefab_create_from_scene(source, source_root, &prefab) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_entity_count(prefab) == 2U);
+    henka_scene_destroy(source);
+
+    HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){30.0f, 5.0f, 7.0f};
+    transform.scale.x = 0.0f;
+    HENKA_TEST_ASSERT(henka_prefab_instantiate(prefab, target, transform, &instance_root) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == 0U);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){30.0f, 5.0f, 7.0f};
+    HENKA_TEST_ASSERT(henka_prefab_instantiate(prefab, target, transform, &instance_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == 2U);
+    HENKA_TEST_ASSERT(henka_scene_find_entity_by_name(
+        target, "Prefab Child", &instance_child) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(target, instance_root), "Prefab Root") == 0);
+    HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(target, instance_child), "Prefab Child") == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(target, instance_child, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == instance_root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(target, instance_child, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 32.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, 8.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, 11.0f, 0.0001f);
+    HENKA_TEST_ASSERT(!henka_scene_is_entity_visible(target, instance_child));
+    HENKA_TEST_ASSERT(henka_scene_is_entity_helper(target, instance_child));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(target, instance_child, &bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_interaction(target, instance_child, &interaction) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(interaction.enabled && strcmp(interaction.prompt, "Inspect prefab part") == 0);
+
+    henka_prefab_destroy(prefab);
+    henka_scene_destroy(target);
 }
 
 void henka_test_scene(void)
@@ -709,4 +785,5 @@ void henka_test_scene(void)
 
     henka_test_scene_capacity_growth();
     henka_test_scene_hierarchy();
+    henka_test_prefab_snapshot_and_transaction();
 }

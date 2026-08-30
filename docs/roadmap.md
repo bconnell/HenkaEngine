@@ -36,7 +36,7 @@ The next development work remains bounded repair and verification.
 
 After the current Audio campaign reaches a coherent clean boundary and the
 Character Controller work reaches its appropriate maturity target, the next
-two major foundational projects are planned in this order:
+composition foundations are sequenced in this order:
 
 1. **Scene Hierarchy / Parenting Maturity** — extend the available runtime
    stable-ID parent/child transform foundation with deterministic traversal,
@@ -45,11 +45,11 @@ two major foundational projects are planned in this order:
    current foundation already rejects cycles and stale parents, propagates
    local/world transforms, supports explicit keep-world and keep-local
    reparenting, and promotes children safely when a parent is destroyed.
-2. **Prefabs / Reusable Scene Objects** — build reusable authored objects and
-   hierarchies on that scene foundation, with stable prefab identity and
-   revision data, real scene instantiation, explicit inherited-versus-
-   overridden values, persistence, duplication, unpacking, and source-change
-   behavior.
+2. **Prefabs / Reusable Scene Objects** — mature the available bounded runtime
+   snapshot and instantiation foundation into reusable authored objects and
+   hierarchies with stable prefab identity and revision data, explicit
+   inherited-versus-overridden values, persistence, duplication, unpacking,
+   and source-change behavior.
 
 Both projects must use ordinary production scene objects and remain bounded,
 transactional, fail-closed, and package/external-project verifiable. Nested
@@ -84,7 +84,8 @@ Planned workspace improvements include:
 3. A detachable Scene View after multi-window rendering and viewport input are dependable.
 4. Scene Hierarchy / Parenting Maturity as the sequenced next composition
    project after the current Audio and Character Controller priorities.
-5. Prefabs / Reusable Scene Objects on top of the mature hierarchy.
+5. Prefab editor authoring, persistence, and source-change behavior on top of
+   the available runtime snapshot foundation and mature hierarchy.
 6. Numeric transform editing.
 7. Extend undo and redo beyond the current bounded workspace-layout,
    authoring, and material histories to more basic scene operations.
@@ -147,11 +148,13 @@ roadmap is finished.
    serialization while retaining runtime-resource ownership boundaries.
 3. Numeric inspector editing, richer gameplay components, and expanded manual
    packaged validation.
+4. Prefab editor authoring, persistence, identity/revision tracking, and
+   inherited-versus-overridden value workflows.
 
 ### Planned
 
-1. Hierarchy/scene-graph authoring, full Inspector behavior authoring, and a
-   complete project serializer. The bounded HenkaScript/Lua lifecycle
+1. Hierarchy/scene-graph authoring, full Inspector behavior authoring, prefab
+   persistence, and a complete project serializer. The bounded HenkaScript/Lua lifecycle
    adapters, callable VM, language-neutral host schema, typed host dispatch,
    isolated Play Scene Document binding, bounded behavior state, and explicit
    mixed-language event routing are foundation work already available; editor

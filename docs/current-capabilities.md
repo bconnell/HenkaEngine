@@ -146,6 +146,24 @@ authoritative section below.
    path; broader runtime/resource mapping, full Inspector authoring, and project
    scripting workflows remain unfinished.
 
+## Prefabs / Reusable Scene Objects
+
+- A bounded runtime prefab foundation is available through the public API.
+  `henka_prefab_create_from_scene` captures a selected scene root and its active
+  descendants in deterministic scene order; `henka_prefab_instantiate` creates
+  independent production scene entities, preserves local transforms and
+  hierarchy, and applies names, tags, visibility, flags, bounds, interaction,
+  and material state through the normal scene APIs.
+- Snapshot text is owned by the prefab. Meshes, shaders, textures, and material
+  definitions remain borrowed from their existing owners and must outlive the
+  prefab and its instances. Instantiation is bounded to 4096 entries and rolls
+  back all newly created entities if validation or allocation fails.
+- Persistent prefab identities and revisions, inherited-versus-overridden
+  values, source-change propagation, duplication, unpacking, serialized
+  prefab assets, editor authoring, and packaged/external-project workflows
+  remain in progress. The current runtime snapshot is a foundation rather than
+  a complete prefab authoring system.
+
 ## Modeling / Content Authoring
 
 - Object, Vertex, Edge, and Face workflows are integrated into the sandbox.

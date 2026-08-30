@@ -5,6 +5,7 @@ add_library(henka_runtime STATIC
     src/core/persistence.c
     src/core/physics.c
     src/core/character_controller.c
+    src/core/prefab.c
     src/core/result.c
     src/core/scene_document.c
     src/core/time.c
