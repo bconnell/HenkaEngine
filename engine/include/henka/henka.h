@@ -8,6 +8,7 @@
 #include <henka/authoring_modeling.h>
 #include <henka/assets.h>
 #include <henka/camera.h>
+#include <henka/character_controller.h>
 #include <henka/core.h>
 #include <henka/engine.h>
 #include <henka/gizmo.h>

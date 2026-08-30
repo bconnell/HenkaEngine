@@ -18,6 +18,9 @@ The public physics API provides:
 - collision and trigger enter, stay, and exit events
 - raycasts against every supported collider shape, including bounded heightfield traversal
 - optional links from physics bodies to real scene entities
+- a bounded public character-controller foundation backed by a real dynamic
+  sphere body, with planar velocity limits, grounded jump queuing, and
+  explicit prepare/synchronize integration around the shared fixed-step world
 - debug-shape and contact data for truthful runtime visualization
 - transform validation that rejects non-finite and collapsed scale components
 - physics allocations included in Henka's debug memory accounting
@@ -74,7 +77,9 @@ Physics simulation writes linked-body transforms to the real scene entities. Edi
 - Integration validates acceleration, damping, velocity, position, angular delta, and quaternion state before commit. Collision geometry, contact normals, penetration, contact points, impulses, friction, and positional correction are likewise required to remain finite and representable.
 - There are no arbitrary mesh or concave colliders; heightfields are the only
   supported terrain-shaped collider.
-- There are no constraints, character controllers, vehicles, cloth, soft bodies, fluids, or ragdolls.
+- The character-controller foundation does not yet provide capsule geometry,
+  swept movement, sliding, slope handling, step offsets, vehicles, cloth, soft
+  bodies, fluids, or ragdolls.
 - Continuous collision detection is not implemented; the demo and tests use normal fixed-step conditions.
 - Physics state is runtime state, not scene-authoring or save-data support.
 

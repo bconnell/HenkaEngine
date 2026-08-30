@@ -161,8 +161,10 @@ roadmap is finished.
     transactional behavior reload and the source-panel Edit, Save, Revert, and
     Reload actions and bounded compiler/backend reload diagnostics are
     available; debugger presentation remains open.
-2. Broader gameplay systems, input mapping, controllers, animation, and
-   production game-debugging workflows.
+2. Broader gameplay systems, input mapping, full character-controller
+   movement, animation, and production game-debugging workflows. The current
+   dynamic-body controller foundation is available; capsule, sweep, slope,
+   and step-offset behavior remain planned.
 
 ## Asset and material workflow
 
@@ -401,7 +403,8 @@ and V1 `.hscene` foundations.
 
 Longer-term work may include:
 
-1. Expanded physics features such as joints, controllers, and additional collider types.
+1. Expanded physics features such as joints, full character-controller movement,
+   and additional collider types beyond the current dynamic-body foundation.
 2. Advanced game-audio expansion beyond the current resident/streamed
    WAV/Ogg Vorbis/MP3/FLAC, authored-listener/editor, mixer, event-driven SDL3
    output, and bounded recovery scope, including effects, broader occlusion,

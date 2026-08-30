@@ -48,6 +48,7 @@ void henka_test_material(void);
 void henka_test_model(void);
 void henka_test_persistence(void);
 void henka_test_physics(void);
+void henka_test_character_controller(void);
 void henka_test_sandbox3d_interaction(void);
 void henka_test_sandbox3d_physics(void);
 void henka_test_sandbox3d_workspace(void);

@@ -89,7 +89,7 @@ projection and info-strip controls. Detailed controls are in
 Henka is not only a modeling application. Its runtime includes scenes/entities,
 camera and input actions, asset management, rendering, physics, terrain,
 persistence, and a renderer-independent headless boundary. Full Game/Play
-authoring, character controllers, end-user scripting, and mature project
+authoring, full character-controller movement, end-user scripting, and mature project
 serialization are not yet available. Audio provides a bounded headless runtime,
 graphical Sandbox client output, camera/listener integration, editor authoring,
 persistence, and supported scripting controls.
@@ -201,7 +201,11 @@ The limitations below are evaluated against that scope; future expansion beyond
 it does not lower the current status, while unfinished work inside it does.
 
 - Henka and its editor are early-stage; the native workspace is not a complete production editor.
-- 2D, broader scripting/behavior authoring, character controllers, advanced physics, broader renderer backends, mature Game/Play workflows, and advanced audio effects/occlusion remain unfinished.
+- 2D, broader scripting/behavior authoring, full character-controller movement,
+  advanced physics, broader renderer backends, mature Game/Play workflows, and
+  advanced audio effects/occlusion remain unfinished. A bounded dynamic-body
+  character-controller foundation is available; capsule, sweep, slope, and
+  step-offset behavior remain open.
 - Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
 - The default Giraffe and Rocket are deterministic imported/generated fixtures and editor-owned dogfood derivatives, not proof of user-authored production assets.
 - Automated evidence does not replace human visual QA for editor feel, detached windows, terrain corners, rendering, or modeling quality.

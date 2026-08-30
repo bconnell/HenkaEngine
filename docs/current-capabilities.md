@@ -288,8 +288,14 @@ authoritative section below.
 - Sandbox Physics QA and selected-body activation are available. Numeric,
   allocation, and body-replacement failures preserve prior simulation state
   where the contract requires retry safety.
-- Mesh collision, constraints, character controllers, and advanced simulation
-  are not currently implemented.
+- The public character-controller foundation is available for a real dynamic
+  sphere body. It validates bounded planar input, supports grounded jump
+  queuing, rejects stale physics bodies, and participates in the caller-owned
+  fixed-step lifecycle.
+- Full character-controller movement remains unfinished: capsule geometry,
+  swept movement, sliding, slope handling, and step offsets are not currently
+  implemented. Mesh collision, constraints, and advanced simulation also
+  remain open.
 - See [physics.md](physics.md) and [help/sandbox3d.md](help/sandbox3d.md).
 
 ## 2.5D
@@ -411,8 +417,8 @@ authoritative section below.
 
 - Henka remains early-stage. The native workspace is not a complete production
   editor or project-authoring suite.
-- 2D workflow, broader end-user project script behaviors, character controllers,
-  advanced physics, broader renderer backends, mature Game/Play workflows, and
+- 2D workflow, broader end-user project script behaviors, full character-controller
+  movement, advanced physics, broader renderer backends, mature Game/Play workflows, and
   advanced audio effects/occlusion
   remain future work beyond the current bounded authoring/play foundation.
 - Advanced asset authoring, hierarchy authoring, animation/rigging, texture
