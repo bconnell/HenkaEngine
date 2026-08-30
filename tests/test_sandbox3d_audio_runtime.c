@@ -124,6 +124,25 @@ static bool test_copy_file(const char* source_path, const char* destination_path
     return success;
 }
 
+static float test_audio_channel_energy(
+    const float* samples,
+    size_t frame_count,
+    size_t channel)
+{
+    float energy = 0.0f;
+    size_t frame_index;
+    if (samples == NULL || channel >= HENKA_AUDIO_OUTPUT_CHANNELS)
+    {
+        return 0.0f;
+    }
+    for (frame_index = 0U; frame_index < frame_count; ++frame_index)
+    {
+        energy += fabsf(samples[
+            frame_index * HENKA_AUDIO_OUTPUT_CHANNELS + channel]);
+    }
+    return energy;
+}
+
 static bool test_prepare_package_audio(void)
 {
     static const struct
@@ -182,7 +201,12 @@ int main(void)
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_audio_output_info output_info;
     float mixed_samples[16U * HENKA_AUDIO_OUTPUT_CHANNELS];
+    float spatial_samples[256U * HENKA_AUDIO_OUTPUT_CHANNELS];
+    float rotated_listener_samples[256U * HENKA_AUDIO_OUTPUT_CHANNELS];
     henka_camera camera;
+    henka_transform entity_transform;
+    float left_energy;
+    float right_energy;
     henka_result audio_result;
     int exit_code = 1;
 
@@ -229,6 +253,15 @@ int main(void)
         fprintf(stderr, "sandbox audio runtime emitter create failed: %d\n", (int)audio_result);
         goto cleanup;
     }
+    camera.position = (henka_vec3){0.0f, 0.0f, 0.0f};
+    camera.yaw_radians = 0.0f;
+    camera.pitch_radians = 0.0f;
+    audio_result = sandbox3d_audio_runtime_update_listener(runtime, &camera);
+    if (audio_result != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "sandbox audio runtime initial listener update failed: %d\n", (int)audio_result);
+        goto cleanup;
+    }
     audio_result = henka_audio_system_mix(audio_system, mixed_samples, 16U);
     if (audio_result != HENKA_SUCCESS || fabsf(mixed_samples[4]) <= 0.0001f)
     {
@@ -240,6 +273,57 @@ int main(void)
         fprintf(stderr, "sandbox audio runtime emitter is not playing\n");
         goto cleanup;
     }
+    entity_transform = (henka_transform){
+        {0.0f, 0.0f, -4.0f},
+        {0.0f, 0.0f, 0.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f}};
+    if (henka_scene_set_entity_transform(
+            scene, entity, entity_transform) != HENKA_SUCCESS ||
+        henka_audio_emitter_restart(emitter) != HENKA_SUCCESS ||
+        henka_audio_system_mix(audio_system, spatial_samples, 256U) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "sandbox audio runtime left-object spatial mix failed\n");
+        goto cleanup;
+    }
+    left_energy = test_audio_channel_energy(spatial_samples, 256U, 0U);
+    right_energy = test_audio_channel_energy(spatial_samples, 256U, 1U);
+    if (left_energy <= right_energy * 1.25f)
+    {
+        fprintf(stderr, "sandbox audio runtime left-object panning failed: left=%f right=%f\n", left_energy, right_energy);
+        goto cleanup;
+    }
+    entity_transform.position.z = 4.0f;
+    if (henka_scene_set_entity_transform(
+            scene, entity, entity_transform) != HENKA_SUCCESS ||
+        henka_audio_emitter_restart(emitter) != HENKA_SUCCESS ||
+        henka_audio_system_mix(audio_system, spatial_samples, 256U) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "sandbox audio runtime right-object spatial mix failed\n");
+        goto cleanup;
+    }
+    left_energy = test_audio_channel_energy(spatial_samples, 256U, 0U);
+    right_energy = test_audio_channel_energy(spatial_samples, 256U, 1U);
+    if (right_energy <= left_energy * 1.25f)
+    {
+        fprintf(stderr, "sandbox audio runtime right-object panning failed: left=%f right=%f\n", left_energy, right_energy);
+        goto cleanup;
+    }
+    camera.yaw_radians = HENKA_PI;
+    if (sandbox3d_audio_runtime_update_listener(runtime, &camera) != HENKA_SUCCESS ||
+        henka_audio_emitter_restart(emitter) != HENKA_SUCCESS ||
+        henka_audio_system_mix(audio_system, rotated_listener_samples, 256U) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "sandbox audio runtime rotated-listener mix failed\n");
+        goto cleanup;
+    }
+    left_energy = test_audio_channel_energy(rotated_listener_samples, 256U, 0U);
+    right_energy = test_audio_channel_energy(rotated_listener_samples, 256U, 1U);
+    if (left_energy <= right_energy * 1.25f)
+    {
+        fprintf(stderr, "sandbox audio runtime listener rotation failed: left=%f right=%f\n", left_energy, right_energy);
+        goto cleanup;
+    }
+    camera.yaw_radians = 0.0f;
     audio_result = sandbox3d_audio_runtime_update_listener(runtime, &camera);
     if (audio_result != HENKA_SUCCESS)
     {
