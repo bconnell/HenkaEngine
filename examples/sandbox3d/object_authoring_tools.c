@@ -79,9 +79,23 @@ static henka_result sandbox3d_authoring_allocate_id_scratch(
     size_t capacity,
     uint32_t** out_ids);
 
-static int64_t sandbox3d_authoring_import_weld_quantize(float value)
+static bool sandbox3d_authoring_import_weld_quantize(
+    float value,
+    int64_t* out_quantized)
 {
-    return (int64_t)floorf(value / SANDBOX3D_AUTHORING_IMPORT_WELD_EPSILON + 0.5f);
+    const double max_safe_quantized = 9000000000000000000.0;
+    const double scaled =
+        (double)value / (double)SANDBOX3D_AUTHORING_IMPORT_WELD_EPSILON;
+    const double rounded = floor(scaled + 0.5);
+
+    if (out_quantized == NULL || !isfinite(value) || !isfinite(scaled) ||
+        !isfinite(rounded) || rounded <= -max_safe_quantized ||
+        rounded >= max_safe_quantized)
+    {
+        return false;
+    }
+    *out_quantized = (int64_t)rounded;
+    return true;
 }
 
 static void sandbox3d_authoring_advance_geometry_revision(
@@ -96,16 +110,34 @@ static void sandbox3d_authoring_advance_geometry_revision(
         : object->geometry_revision + 1U;
 }
 
-static size_t sandbox3d_authoring_import_weld_bucket(henka_vec3 position)
+static bool sandbox3d_authoring_import_weld_bucket(
+    henka_vec3 position,
+    size_t* out_bucket)
 {
-    const uint64_t x = (uint64_t)sandbox3d_authoring_import_weld_quantize(position.x);
-    const uint64_t y = (uint64_t)sandbox3d_authoring_import_weld_quantize(position.y);
-    const uint64_t z = (uint64_t)sandbox3d_authoring_import_weld_quantize(position.z);
-    const uint64_t hash =
+    int64_t quantized_x;
+    int64_t quantized_y;
+    int64_t quantized_z;
+    uint64_t x;
+    uint64_t y;
+    uint64_t z;
+    uint64_t hash;
+
+    if (out_bucket == NULL ||
+        !sandbox3d_authoring_import_weld_quantize(position.x, &quantized_x) ||
+        !sandbox3d_authoring_import_weld_quantize(position.y, &quantized_y) ||
+        !sandbox3d_authoring_import_weld_quantize(position.z, &quantized_z))
+    {
+        return false;
+    }
+    x = (uint64_t)quantized_x;
+    y = (uint64_t)quantized_y;
+    z = (uint64_t)quantized_z;
+    hash =
         x * UINT64_C(73856093) ^
         y * UINT64_C(19349663) ^
         z * UINT64_C(83492791);
-    return (size_t)(hash % SANDBOX3D_AUTHORING_IMPORT_WELD_BUCKET_COUNT);
+    *out_bucket = (size_t)(hash % SANDBOX3D_AUTHORING_IMPORT_WELD_BUCKET_COUNT);
+    return true;
 }
 
 static bool sandbox3d_authoring_import_weld_positions_match(
@@ -1978,9 +2010,15 @@ henka_result sandbox3d_authoring_object_create_from_model_primitive(
     for (vertex_index = 0U; vertex_index < primitive->vertex_count; ++vertex_index)
     {
         const henka_model_vertex* source = &primitive->vertices[vertex_index];
-        const size_t bucket = sandbox3d_authoring_import_weld_bucket(source->position);
+        size_t bucket;
         size_t candidate_index;
         size_t welded_index = SIZE_MAX;
+
+        if (!sandbox3d_authoring_import_weld_bucket(source->position, &bucket))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto import_failure;
+        }
 
         for (candidate_index = weld_hash_heads[bucket];
              candidate_index != SIZE_MAX;
