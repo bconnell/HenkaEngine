@@ -484,6 +484,7 @@ static bool henka_gltf_decode_base64(const char* source, size_t source_length, u
     if (data == NULL) return false;
     for (index = 0U; index < source_length; index += 4U)
     {
+        bool final_quartet = index + 4U == source_length;
         size_t component;
         for (component = 0U; component < 4U; ++component)
         {
@@ -493,10 +494,18 @@ static bool henka_gltf_decode_base64(const char* source, size_t source_length, u
             else if (value >= '0' && value <= '9') values[component] = value - '0' + 52;
             else if (value == '+') values[component] = 62;
             else if (value == '/') values[component] = 63;
-            else if (value == '=' && component >= 2U) values[component] = -1;
+            else if (value == '=' && final_quartet && component >= 2U) values[component] = -1;
             else { henka_free(data); return false; }
         }
-        if (values[0] < 0 || values[1] < 0 || (values[2] < 0 && values[3] >= 0)) { henka_free(data); return false; }
+        if (values[0] < 0 || values[1] < 0 ||
+            (values[2] < 0 && values[3] >= 0) ||
+            (!final_quartet && (values[2] < 0 || values[3] < 0)) ||
+            (values[2] < 0 && (values[1] & 0x0F) != 0) ||
+            (values[3] < 0 && values[2] >= 0 && (values[2] & 0x03) != 0))
+        {
+            henka_free(data);
+            return false;
+        }
         data[output_index++] = (unsigned char)((values[0] << 2) | (values[1] >> 4));
         if (values[2] >= 0)
         {

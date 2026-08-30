@@ -71,6 +71,20 @@ static void henka_test_model_rejects_unsafe_bounds(void)
         "{\"asset\":{\"version\":\"2.0\"},\"extensionsUsed\":[\"KHR_draco_mesh_compression\"]}";
     static const char* malformed_gltf_trailing_comma =
         "{\"asset\":{\"version\":\"2.0\",},\"buffers\":[]}";
+    static const char* noncanonical_gltf_base64_padding =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAB==\",\"byteLength\":37}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
+    static const char* nonterminal_gltf_base64_padding =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAB==AAAA\",\"byteLength\":40}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
     static const char* non_finite_obj =
         "v nan 0.0 0.0\n"
         "v 1.0 0.0 0.0\n"
@@ -91,6 +105,26 @@ static void henka_test_model_rejects_unsafe_bounds(void)
             unsupported_gltf_extension,
             strlen(unsupported_gltf_extension),
             "unsupported-extension.gltf",
+            &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_gltf_from_memory(
+            noncanonical_gltf_base64_padding,
+            strlen(noncanonical_gltf_base64_padding),
+            "noncanonical-base64-padding.gltf",
+            &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_gltf_from_memory(
+            nonterminal_gltf_base64_padding,
+            strlen(nonterminal_gltf_base64_padding),
+            "nonterminal-base64-padding.gltf",
             &model) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.vertices == NULL);
     HENKA_TEST_ASSERT(model.indices == NULL);
