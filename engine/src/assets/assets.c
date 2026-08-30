@@ -3788,6 +3788,12 @@ henka_result henka_assets_load_gltf_material_asset(
     asset = henka_asset_manager_find_material_entry(manager, key);
     if (asset != NULL)
     {
+        if (asset->material.shader != shader)
+        {
+            henka_free(key);
+            henka_free(source_path);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
         *out_asset = asset;
         henka_free(key);
         henka_free(source_path);
@@ -4837,6 +4843,12 @@ henka_result henka_assets_load_gltf_scene_asset(
     asset = henka_asset_manager_find_gltf_scene_entry(manager, key);
     if (asset != NULL)
     {
+        if (asset->shader != shader)
+        {
+            henka_free(key);
+            henka_free(source_path);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
         *out_asset = asset;
         henka_free(key);
         henka_free(source_path);

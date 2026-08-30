@@ -395,6 +395,7 @@ void henka_test_assets(void)
     henka_mesh* mesh;
     char* resolved_path;
     henka_shader managed_shader;
+    henka_shader alternate_shader;
     henka_texture fallback_texture;
     henka_texture transmission_texture;
     henka_texture thickness_texture;
@@ -1009,6 +1010,21 @@ void henka_test_assets(void)
     manager.material_entries = material_entry_array;
     manager.material_count = 1U;
     manager.material_capacity = 1U;
+    memset(&alternate_shader, 0, sizeof(alternate_shader));
+    material_asset = (henka_material_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_material_asset(
+        &manager,
+        "assets/models/reload.gltf",
+        &alternate_shader,
+        &material_asset) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(material_asset == NULL);
+    material_asset = NULL;
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_material_asset(
+        &manager,
+        "assets/models/reload.gltf",
+        &managed_shader,
+        &material_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_asset == &material_entry);
     material_asset = (henka_material_asset*)1;
     HENKA_TEST_ASSERT(henka_assets_reload_gltf_material_asset(
         &manager,
@@ -1296,6 +1312,20 @@ void henka_test_assets(void)
     manager.gltf_scene_entries = scene_entry_array;
     manager.gltf_scene_count = 1U;
     manager.gltf_scene_capacity = 1U;
+    scene_asset = (henka_gltf_scene_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_scene_asset(
+        &manager,
+        "assets/models/reload-scene.gltf",
+        &alternate_shader,
+        &scene_asset) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(scene_asset == NULL);
+    scene_asset = NULL;
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_scene_asset(
+        &manager,
+        "assets/models/reload-scene.gltf",
+        &managed_shader,
+        &scene_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_asset == scene_entry);
     material_asset = (henka_material_asset*)1;
     HENKA_TEST_ASSERT(henka_assets_reload_material_asset(
         &manager,
