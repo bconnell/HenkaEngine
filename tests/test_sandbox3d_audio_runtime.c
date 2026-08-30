@@ -193,6 +193,7 @@ int main(void)
     sandbox3d_audio_runtime* runtime = NULL;
     henka_audio_clip* clip = NULL;
     henka_audio_emitter* emitter = NULL;
+    henka_audio_emitter* stale_emitter = NULL;
     henka_audio_emitter_config emitter_config =
         henka_audio_emitter_config_default();
     henka_audio_system* audio_system = NULL;
@@ -407,11 +408,42 @@ int main(void)
         fprintf(stderr, "sandbox audio runtime preview stop failed\n");
         goto cleanup;
     }
+    emitter_config.enabled = true;
+    emitter_config.looping = true;
+    emitter_config.spatial = true;
+    emitter_config.streaming = false;
+    (void)snprintf(
+        emitter_config.clip_path,
+        sizeof(emitter_config.clip_path),
+        "%s",
+        audio_asset_path);
+    if (henka_audio_emitter_create_with_clip(
+            audio_system,
+            scene,
+            entity,
+            clip,
+            &emitter_config,
+            &stale_emitter) != HENKA_SUCCESS ||
+        stale_emitter == NULL)
+    {
+        fprintf(stderr, "sandbox audio runtime stale-emitter setup failed\n");
+        goto cleanup;
+    }
+    henka_scene_destroy_entity(scene, entity);
+    entity = HENKA_INVALID_ENTITY;
+    if (henka_audio_system_mix(audio_system, mixed_samples, 16U) != HENKA_SUCCESS ||
+        henka_audio_system_get_active_voice_count(audio_system) != 0U ||
+        henka_audio_emitter_is_playing(stale_emitter))
+    {
+        fprintf(stderr, "sandbox audio runtime stale-emitter cleanup failed\n");
+        goto cleanup;
+    }
     exit_code = 0;
 
 cleanup:
     sandbox3d_audio_runtime_stop_preview(runtime);
     henka_audio_emitter_destroy(emitter);
+    henka_audio_emitter_destroy(stale_emitter);
     henka_audio_clip_destroy(clip);
     henka_asset_manager_destroy(assets);
     sandbox3d_audio_runtime_destroy(runtime);
