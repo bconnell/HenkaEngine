@@ -58,6 +58,13 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id);
 
+/* Applies all persisted parent links to bound runtime entities in parent-first
+ * order while preserving each entity's authored world transform. The bridge
+ * rejects bound children whose document parent is not bound and restores the
+ * prior runtime parent links if a runtime parenting operation fails. */
+henka_result sandbox3d_scene_document_bridge_apply_hierarchy(
+    const sandbox3d_scene_document_bridge* bridge);
+
 /* Copies only runtime-owned presentation values back into a candidate object
  * and commits them through the Scene Document validation boundary. */
 henka_result sandbox3d_scene_document_bridge_sync_object(

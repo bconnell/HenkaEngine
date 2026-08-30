@@ -12,10 +12,14 @@ int main(void)
     sandbox3d_scene_document_bridge* bridge = NULL;
     henka_scene* scene = NULL;
     henka_scene_document_object object = henka_scene_document_object_default();
+    henka_scene_document_object child_object = henka_scene_document_object_default();
     henka_physics_body_desc body_desc;
     henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_entity child_entity = HENKA_INVALID_ENTITY;
     henka_entity helper = HENKA_INVALID_ENTITY;
+    henka_entity parent_entity = HENKA_INVALID_ENTITY;
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     int exit_code = 1;
 
     if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
@@ -34,23 +38,39 @@ int main(void)
     object.physics.box_half_extents = (henka_vec3){1.0f, 2.0f, 3.0f};
     object.physics.mass = 4.0f;
     object.physics.is_trigger = true;
-    if (henka_scene_document_add_object(document, &object, &object_id) != HENKA_SUCCESS ||
+    (void)snprintf(child_object.name, sizeof(child_object.name), "%s", "Bridge Child");
+    child_object.transform.position = (henka_vec3){8.0f, 3.0f, 4.0f};
+    if (henka_scene_document_add_object(document, &object, &object_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    child_object.parent_id = object_id;
+    if (henka_scene_document_add_object(document, &child_object, &child_id) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_create(document, scene, &bridge) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
     entity = henka_scene_create_entity_named(scene, "Runtime Object");
+    child_entity = henka_scene_create_entity_named(scene, "Runtime Child");
     helper = henka_scene_create_entity(scene);
-    if (entity == HENKA_INVALID_ENTITY || helper == HENKA_INVALID_ENTITY ||
+    if (entity == HENKA_INVALID_ENTITY || child_entity == HENKA_INVALID_ENTITY ||
+        helper == HENKA_INVALID_ENTITY ||
         henka_scene_set_entity_flags(scene, helper, HENKA_SCENE_ENTITY_FLAG_HELPER) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_bind(bridge, object_id, helper) == HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_bind(bridge, object_id, entity) != HENKA_SUCCESS ||
-        sandbox3d_scene_document_bridge_get_binding_count(bridge) != 1U ||
+        sandbox3d_scene_document_bridge_bind(bridge, child_id, child_entity) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_get_binding_count(bridge) != 2U ||
         sandbox3d_scene_document_bridge_bind(bridge, object_id, entity) == HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_object(bridge, child_id) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_hierarchy(bridge) != HENKA_SUCCESS ||
         strcmp(henka_scene_get_entity_name(scene, entity), "Bridge Object") != 0 ||
         henka_scene_get_entity_transform(scene, entity, &object.transform) != HENKA_SUCCESS ||
         object.transform.position.x != 2.0f ||
+        henka_scene_get_entity_parent(scene, child_entity, &parent_entity) != HENKA_SUCCESS ||
+        parent_entity != entity ||
+        henka_scene_get_entity_local_transform(scene, child_entity, &object.transform) != HENKA_SUCCESS ||
+        object.transform.position.x != 6.0f ||
         sandbox3d_scene_document_bridge_make_physics_body_desc(
             bridge, object_id, &body_desc) != HENKA_SUCCESS ||
         body_desc.linked_entity != entity ||
@@ -77,6 +97,16 @@ int main(void)
     {
         goto cleanup;
     }
+    if (sandbox3d_scene_document_bridge_unbind(bridge, object_id) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_hierarchy(bridge) == HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_bind(bridge, object_id, entity) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_hierarchy(bridge) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_unbind(bridge, child_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_scene_destroy_entity(scene, child_entity);
+    child_entity = HENKA_INVALID_ENTITY;
     henka_scene_destroy_entity(scene, entity);
     entity = HENKA_INVALID_ENTITY;
     if (sandbox3d_scene_document_bridge_get_entity(bridge, object_id, &entity) == HENKA_SUCCESS ||

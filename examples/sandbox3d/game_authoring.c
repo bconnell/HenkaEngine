@@ -464,10 +464,15 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
         return result;
     }
     result = sandbox3d_scene_document_bridge_apply_object(authoring->bridge, document_id);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge);
+    }
     if (result != HENKA_SUCCESS)
     {
         (void)henka_scene_document_set_object(authoring->document, &previous);
         (void)sandbox3d_scene_document_bridge_apply_object(authoring->bridge, document_id);
+        (void)sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge);
     }
     return result;
 }
@@ -834,6 +839,11 @@ henka_result sandbox3d_game_authoring_load(
             goto load_rollback;
         }
     }
+    result = sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge);
+    if (result != HENKA_SUCCESS)
+    {
+        goto load_rollback;
+    }
     henka_scene_document_destroy(candidate);
     henka_scene_document_destroy(previous);
     (void)sandbox3d_game_authoring_set_project_root(authoring, project_root);
@@ -856,6 +866,7 @@ load_rollback:
             authoring->bridge,
             previous_ids[index]);
     }
+    (void)sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge);
 load_cleanup:
     henka_scene_document_destroy(candidate);
     henka_scene_document_destroy(previous);

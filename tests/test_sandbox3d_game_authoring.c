@@ -77,6 +77,7 @@ int main(void)
     henka_scene_document_object restored;
     henka_scene_document* replacement_document = NULL;
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id restored_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id duplicate_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_behavior_id behavior_id =
@@ -86,12 +87,18 @@ int main(void)
     henka_scene_document_behavior behavior;
     henka_scene_document_behavior loaded_behavior;
     henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_entity child_entity = HENKA_INVALID_ENTITY;
+    henka_entity restored_parent = HENKA_INVALID_ENTITY;
     henka_interaction_desc interaction;
     henka_transform transform;
     henka_scene* play_scene;
     henka_script_state_value state_value;
     henka_script_source_diagnostic reload_diagnostic;
     bool state_present;
+    henka_result save_result;
+    henka_result detach_result;
+    henka_result load_result;
+    henka_result parent_result;
     int exit_code = 1;
 
     play_scene = NULL;
@@ -503,6 +510,68 @@ int main(void)
             fprintf(stderr, "game authoring test failed during script template cleanup\n");
             goto cleanup;
         }
+    }
+    if (sandbox3d_game_authoring_get_object_for_entity(
+            authoring, entity, &object_id, &object) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "game authoring test failed refreshing parent identity\n");
+        goto cleanup;
+    }
+    child_entity = henka_scene_create_entity_named(scene, "Game Authoring Child");
+    if (child_entity == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_transform(
+            scene,
+            child_entity,
+            (henka_transform){{8.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}}) != HENKA_SUCCESS ||
+        henka_scene_set_entity_parent(
+            scene,
+            child_entity,
+            entity,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, child_entity, &child_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child_entity, &restored_id, &restored) != HENKA_SUCCESS ||
+        restored_id != child_id)
+    {
+        fprintf(stderr, "game authoring test failed during hierarchy setup\n");
+        goto cleanup;
+    }
+    restored.parent_id = object_id;
+    if (sandbox3d_game_authoring_update_object_for_entity(
+            authoring, child_entity, &restored) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(
+            scene, child_entity, &restored_parent) != HENKA_SUCCESS ||
+        restored_parent != entity)
+    {
+        fprintf(stderr, "game authoring test failed during hierarchy update\n");
+        goto cleanup;
+    }
+    save_result = sandbox3d_game_authoring_save(authoring, ".");
+    detach_result = henka_scene_set_entity_parent(
+        scene,
+        child_entity,
+        HENKA_INVALID_ENTITY,
+        HENKA_SCENE_PARENT_KEEP_WORLD);
+    load_result = sandbox3d_game_authoring_load(authoring, ".");
+    parent_result = henka_scene_get_entity_parent(
+        scene, child_entity, &restored_parent);
+    if (save_result != HENKA_SUCCESS ||
+        detach_result != HENKA_SUCCESS ||
+        load_result != HENKA_SUCCESS ||
+        parent_result != HENKA_SUCCESS ||
+        restored_parent != entity)
+    {
+        fprintf(
+            stderr,
+            "game authoring test failed during hierarchy reload (save=%d detach=%d load=%d parent=%d restored=%llu expected=%llu)\n",
+            (int)save_result,
+            (int)detach_result,
+            (int)load_result,
+            (int)parent_result,
+            (unsigned long long)restored_parent,
+            (unsigned long long)entity);
+        goto cleanup;
     }
     exit_code = 0;
 
