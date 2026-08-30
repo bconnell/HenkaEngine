@@ -1,385 +1,989 @@
 # Sandbox 3D Help
 
-`henka_sandbox3d` is the current visible Henka Engine example. It opens a small 3D showcase with:
+`henka_sandbox3d` is Henka Engine's current visible example, editor workspace, and QA surface.
 
-- the original Anatomical Giraffe Study
-- the original realistic rocket sample
-- a restrained manager-owned graphite ground surface with subtle albedo, normal, and wet/dry roughness variation, plus a visible editor grid
-- a debug grid
+> **Default startup:** The Sandbox opens the `Standard` workspace with no selected scene object. The normal scene contains the Anatomical Giraffe Study, the realistic rocket fixture, a manager-owned graphite ground surface, and the editor grid.
 
-The glTF files are deterministic repo-owned fixture assets generated during the Windows build and packaged beside their binary buffers. Normal non-smoke startup first loads and instantiates that glTF scene/material path, then restores checked-in HAMS geometry when available; smoke-test behavior is separate. The HAMS files are persisted editor-owned derivatives of fixture geometry, not independent user-authored geometry proof. They use their own material factors rather than the primitive-gallery cube texture. Use `henka_sandbox3d.exe --primitive-gallery` to show the engineering primitives, OBJ marker, fallback samples, foliage, and realism material row again.
+## Contents
 
-The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera preset, camera pose, orthographic zoom, and panel visibility can carry across runs.
-It now also includes small in-window developer panels for inspection and settings tasks.
-The docked workspace opens in the stable `Standard` shell with no selected scene object. `Focus Viewport` is temporary and does not become the startup state.
+- [Default scene](#default-scene)
+- [Quick controls](#quick-controls)
+- [Compass and camera](#compass-and-camera)
+- [Scene legend](#scene-legend)
+- [Primitive gallery](#primitive-gallery)
+- [Authoring workflow](#authoring-workflow)
+- [Viewport tools and transforms](#viewport-tools-and-transforms)
+- [Sandbox panels](#sandbox-panels)
+- [Game authoring and Play](#game-authoring-and-play)
+- [Scripting source panel](#scripting-source-panel)
+- [Physics QA](#physics-qa)
+- [Terrain tools](#terrain-tools)
+- [Workspace docking and detached windows](#workspace-docking-and-detached-windows)
+- [Diagnostics](#diagnostics)
+- [Viewport shading](#viewport-shading)
+- [Stress and validation modes](#stress-and-validation-modes)
+- [Packaged runs](#packaged-runs)
+- [Current limitations](#current-limitations)
 
-The Scene View includes a compact procedural Compass overlay in the upper-right
-by default. It is owned by the Scene View and uses the current camera basis: the
-globe shows N/E/S/W plus Top and Bottom, click targets perform canonical view
-snaps, dragging the globe orbits around the current navigation target, and the
-`P`/`O` marker toggles Perspective and Orthographic projection. The info strip
-cycles orientation, position, and target modes on click. Utility > Settings
-controls visibility, left/right placement, size, info-strip visibility, info
-mode, and smooth snap navigation. These preferences are one shared editor
-model, save transactionally to the local settings file, and restore on the next
-launch. A missing navigation target leaves snap/projection actions disabled and
-reports no target rather than inventing state.
+## Default scene
 
-For a bounded non-interactive streaming check, run
-`henka_sandbox3d.exe --terrain-stream-stress`. It seeds or reuses four
-procedural regions in the local `terrain-sandbox-v2` data root, verifies the
-active camera requests a bounded one-region CPU/physics/render window, then
-crosses from `(0,0)` to generated regions `(2,0)` and `(2,2)` before returning.
-It verifies rendered return on both axes plus a bounded collision-patch overlap
-across the return, and reports request failures and resident-region capacity.
-The active camera region is prioritized for bounded collision coverage. This is
-a small runtime foundation check, not residency-wide collision
-coverage, broad-world streaming, or human visual approval.
+The normal showcase contains:
 
-## Tools
+- **Showcase Giraffe** — Anatomical Giraffe Study;
+- **Showcase Rocket** — realistic rocket fixture;
+- **Ground** — restrained graphite/slate surface with subtle albedo, normal, and wet/dry roughness variation;
+- **Debug Grid** — floor grid for scale, depth, and movement reference.
 
-- `W A S D`: move across the scene
-- `Q / E`: move down / up
-- `Shift`: move faster
-- `Mouse`: look around while mouse capture is active
-- `Right Mouse / Tab`: toggle mouse capture
-- `Left Mouse`: uses the active viewport tool when mouse capture is released
-- `Alt + Left Mouse`: optional orbit shortcut around the selected object or current view target
-- `Middle Mouse`: optional pan shortcut
-- `Mouse Wheel`: dolly the Perspective 3D view or change orthographic height in Side, Top-down, and Isometric views when the cursor is over Scene View
-- `Compass click`: snap to Front, Back, Left, Right, Top, or Bottom
-- `Compass drag`: orbit around the current navigation target
-- `Compass P/O`: toggle Perspective and Orthographic projection
-- `F1`: toggle wireframe
-- `F2`: print the scene legend to the console again
-- `F3`: show or hide the debug grid
-- `F4`: show or hide the sandbox panels
-- `F5`: switch Standard and Focus Viewport layouts
-- `F`: frame the selected object
-- `H`: print controls and the scene legend to the console again
-- `Home`: reset the camera view
-- `Escape`: close the sandbox UI first, then release the mouse, then exit
-- Window close: exit
+The glTF files are deterministic repository-owned fixture assets generated during the Windows build and packaged beside their binary buffers.
 
-In `--primitive-gallery`, selecting `Textured Cube` exposes the shared
-authoring source in Object Details. The Authoring section shows the selected
-topology face and provides bounded `Extrude`, `Inset`, `Undo`, `Redo`, `Save
-Source`, and `Reload Source` actions. Clicking the cube in the viewport resolves
-the hit against the authoring polygons and updates the real face identity used
-by the modeling commands. Save and reload use the sandbox's confined user-data
-authoring slot; the evaluated mesh and scene bounds are replaced only after the
-candidate succeeds. Vertex, edge, and face modes are bounded component-selection
-tools: selected vertices show amber cross markers, selected edges show cyan
-segments with endpoint markers, and selected faces show a thicker orange outline
-with a center marker. The most recently picked vertex, edge, or face is the
-active edit target and receives a stronger mode-specific highlight, so the
-component acted on next remains clear even when Ctrl-click has added a
-multi-selection. Grow Selection adds one topology-adjacent ring to the
-active component selection, Select Connected expands it to the complete
-reachable topology component within the bounded editor selection budget, and
-Select All, Select None, Invert, and Shrink provide deterministic bounded
-selection-set operations. Rotate and Scale apply bounded transactional
-component transforms around the median pivot in the sandbox controls; the
-authoring API also exposes active-component and per-face individual pivots plus
-world, local, and face-normal rotation orientation. These commands publish
-through the same mesh, bounds, physics, and undo path.
-Dragging a box in Scene View replaces the active-mode selection; Ctrl-drag adds
-and Shift-drag subtracts. Normal selection accepts visible front-facing source
-components. The X-Ray toolbar toggle selects front-facing source components
-through occluding mesh surfaces without changing materials or asset data.
-General mesh-file
-open/save remains unfinished. Soft Move X+, Soft Move Y+, and Soft Move Z+ apply
-a bounded one-ring linear falloff: the active selection receives the full
-translation and directly adjacent vertices receive half strength. This reduces
-hard seams while shaping imported fixture regions; it is a modeling foundation,
-not final anatomy or mechanical-topology proof.
+Normal startup follows this content path:
 
-The authoring mesh represents validated polygonal surfaces plus explicit loose
-source vertices and standalone wire edges. The Sandbox exposes bounded
-loose-component create/edit controls and renders authored loose vertices and
-standalone edges as viewport point/line primitives. This remains a foundation,
-not a claim of complete loose-component editor UX or generalized topology
-coverage.
+1. load and instantiate the packaged glTF scene/material data;
+2. restore checked-in HAMS geometry when available;
+3. restore valid saved local Sandbox/editor state.
 
-The Authoring section also reports the evaluated render-mesh material-region
-range after each successful edit, undo, redo, save, or reload. This is metadata
-continuity diagnostics; region values do not yet select multiple renderer
-material instances. Face selection is part of the bounded authoring history:
-topology edits select their resulting face, undo/redo restores the matching
-face identity where valid, and editing after undo clears the redo branch.
+The HAMS files are persisted editor-owned derivatives of fixture geometry. Their provenance does not establish independent user-authored geometry proof.
+
+The default showcase materials use their own material factors. The primitive-gallery cube texture belongs to the engineering sample path.
+
+### Local settings
+
+The Sandbox stores local settings for:
+
+- wireframe/shading state;
+- grid visibility;
+- mouse sensitivity;
+- camera preset;
+- camera pose where currently supported;
+- orthographic zoom;
+- panel visibility;
+- workspace state;
+- supported Compass settings;
+- saved layout and panel presentation state.
+
+`Focus Viewport` is a temporary layout and is not the startup state.
+
+## Quick controls
+
+| Input | Action |
+| --- | --- |
+| `W A S D` | Move across the scene |
+| `Q / E` | Move down / up |
+| `Shift` | Move faster |
+| Mouse | Look while mouse capture is active |
+| `Right Mouse` / `Tab` | Toggle mouse capture |
+| `Left Mouse` | Use the active viewport tool while capture is released |
+| `Alt + Left Mouse` | Orbit around the selected object or current view target |
+| `Middle Mouse` | Pan |
+| Mouse Wheel | Dolly Perspective view or change orthographic height when over Scene View |
+| Compass click | Snap to Front, Back, Left, Right, Top, or Bottom |
+| Compass drag | Orbit around the navigation target |
+| Compass `P/O` | Toggle Perspective / Orthographic projection |
+| `F1` | Toggle legacy wireframe state |
+| `F2` | Print scene legend to console |
+| `F3` | Show/hide debug grid |
+| `F4` | Show/hide Sandbox panels |
+| `F5` | Switch Standard / Focus Viewport layouts |
+| `F` | Frame selected object |
+| `H` | Print controls and scene legend |
+| `Home` | Reset camera view |
+| `Escape` | Close UI, release mouse, then exit through the normal sequence |
+| Window close | Exit |
+
+### Transform hotkeys
+
+With a visible unlocked selection:
+
+| Input | Action |
+| --- | --- |
+| `M` / `G` | Start Move |
+| `R` | Start Rotate |
+| `S` | Start Scale |
+| `X`, `Y`, `Z` | Choose transform axis |
+| `Enter` / `Left Mouse` | Confirm |
+| `Escape` / `Right Mouse` | Cancel and restore original transform |
+| `Left Ctrl` | Stepped adjustment |
+| `Left Shift` | Finer movement |
+
+Changing selection, clearing selection, hiding or locking the target, or changing tools cancels the active transform session.
+
+Custom profiles are documented in [editor-controls.md](../editor-controls.md).
+
+## Compass and camera
+
+The Scene View contains a procedural Compass overlay in the upper-right by default.
+
+The Compass uses the active camera basis and provides:
+
+- `N/E/S/W` orientation;
+- Top and Bottom targets;
+- canonical view snaps;
+- drag orbit around the current navigation target;
+- `P/O` projection toggle;
+- an info strip for orientation, position, and target modes.
+
+Utility > Settings controls:
+
+- visibility;
+- left/right placement;
+- size;
+- info-strip visibility;
+- info mode;
+- smooth snap navigation.
+
+Compass preferences share one editor settings model and save transactionally to the local settings file.
+
+A missing navigation target disables target-dependent snap/projection actions and reports the missing target directly.
+
+### Camera presets
+
+`Camera/Status` exposes:
+
+- Perspective 3D;
+- Side 2.5D;
+- Top-down 2.5D;
+- Isometric 2.5D.
+
+Use Orbit, Pan, Mouse Wheel or touchpad scrolling, `F`, and `Home` to test framing, projection-aware zoom, navigation, and preset reset.
+
+Normal startup and `Home` share the scene-first framing path. Old transient camera-pose settings are not automatically restored.
 
 ## Scene legend
 
-- `Showcase Giraffe`: the Anatomical Giraffe Study loaded through the packaged glTF scene/material path.
-- `Showcase Rocket`: the Original Realistic Rocket loaded through the packaged glTF scene/material path.
-- `Ground`: under the showcase, provides a restrained slate surface for scale and lighting.
-- `Debug Grid`: spans the floor so you can judge position, depth, and movement.
+| Object | Purpose |
+| --- | --- |
+| `Showcase Giraffe` | Anatomical Giraffe Study through the packaged glTF scene/material path |
+| `Showcase Rocket` | Realistic rocket fixture through the packaged glTF scene/material path |
+| `Ground` | Slate/graphite receiver for scale and lighting |
+| `Debug Grid` | Floor reference for position, depth, and movement |
 
-The engineering sample legend is available with `--primitive-gallery`:
+## Primitive gallery
 
-- `Textured Cube`, `Material Ball`, `glTF Marker`, `Missing Texture`, and `Missing Model` retain their diagnostic roles.
+Run:
 
-## What to try
+```text
+henka_sandbox3d.exe --primitive-gallery
+```
 
-- Walk around the giraffe, rocket, and grid to confirm the normal showcase is active.
-- Run `--primitive-gallery` and walk around the OBJ marker to confirm the diagnostic model path is active.
-- Toggle wireframe to inspect the scene layout.
-- Toggle mouse capture and use the mouse to look around.
-- In `--primitive-gallery`, find the fallback-texture example to confirm that missing textures fail visibly without stopping the engine.
-- In `--primitive-gallery`, find the fallback-model example to confirm that missing OBJ assets fail visibly without stopping the engine.
-- In `--primitive-gallery`, compare the material ball, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
-- Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
-- Press `F4` to open the sandbox panels, then use `F5` to compare the Standard shell and temporary Focus Viewport.
-- Release mouse capture, then use the Viewport Tool buttons to switch between Select, Orbit, Pan, Move, Rotate, and Scale.
-- Open `Camera/Status` and compare Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D. Use `Orbit` and `Pan` with left drag, plus `Mouse Wheel` or two-finger touchpad scroll, `F`, and `Home`, to test customization, pan, projection-aware zoom, frame selected, and preset reset.
-- In Select mode, left-drag empty Scene View space past the small drag threshold to pan on laptop touchpads without turning ordinary clicks into camera movement.
-- Use the optional `Alt + Left Mouse` orbit and `Middle Mouse` pan shortcuts if you want to compare them with the explicit tool modes.
-- Switch the Viewport Tool section between Select, Move, Rotate, and Scale, then drag the gizmo on a selected object.
-- In `--primitive-gallery`, select `Textured Cube`, expand Object Details > Authoring, and use Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo, and Redo to verify the source topology, scene mesh, bounds, and renderer stay connected.
-- For an imported Showcase Giraffe or Showcase Rocket, use Object Details > Authoring > Make Editable, select a visible topology component, and use Grow Selection or Select Connected followed by Scale Selected, Soft Move X+/Y+/Z+, Move X+/Move Y+/Move Z+, or Extrude Selection to shape a selected anatomical or mechanical patch through generic Henka tools. These operations preserve topology and material regions while updating evaluated bounds and the native undo/redo history. There is no showcase-specific profile shortcut. Own Material then promotes a manager-owned definition: its compact controls edit base color, metallic, roughness, emissive strength, IOR, transmission, subsurface amount, subsurface thickness, and subsurface tint, and create bounded procedural detail-normal plus metallic-roughness textures. Undo Mat and Redo Mat restore those material-instance states transactionally before Save Project and Reload Project.
-- The selected editable subject uses a cached projected topology outline in the Scene View; newly-created or imported authoring wrappers start with no component selected, leaving the object outline visible until a vertex, edge, or face is explicitly picked. Small and medium meshes receive projected coverage/depth subdivision, while dense imported meshes use the same filtering through a fixed screen-space spatial index; only an index-overflow case falls back to conservative topology so selection feedback remains bounded. The transform bounds remain a separate editing aid. Hidden objects are automatically transform-locked so hiding is also a safe editing boundary; showing an object does not silently unlock it, and Unlock Transform is explicit.
-- The visible native-authoring workflow is intentionally generic. Enter an asset
-  name, choose `New Asset`, then add bounded Box, Cylinder, Cone, UV Sphere, or
-  all-quad Quad Sphere parts through the primitive chooser. UV Sphere retains
-  its latitude/longitude topology and triangular pole caps; Quad Sphere uses a
-  closed shared-vertex cubed-sphere topology with only four-sided faces. The
-  resulting document is editor-owned, uses `HENKA_PRODUCT_NATIVE_AUTHORED`
-  provenance, and supports the bounded save/close/reopen path. This proves the
-  reusable authoring foundation, not that the default Giraffe or Rocket was
-  modeled by a user. The default showcase pair continues to use separately
-  labeled imported/generated fixture content until the full visible modeling,
-  material, visual-review, and packaged-asset workflow is complete.
-- The repository-owned showcase authoring sources are refreshed only from the visible workflow by `scripts/capture_editor_owned_authoring_sources_windows.ps1`; it uses an isolated executable copy, never generates or directly assembles showcase geometry, and reports SHA-256 hashes for the resulting `.hams` files.
-- After Make Editable, switch the imported showcase to Face mode and use Bevel on the selected nontrivial mesh face; the evaluated render, bounds, and later project save/reload follow the native source.
-- The active topology mode and selected-component count are visible in the viewport while editing. The overlay is derived from the selected source vertices, edges, or face corners: vertices use amber crosses, edges use cyan segments with endpoint markers, and faces use orange borders with a center marker. It is clipped to Scene View, so it follows resize and docking changes without changing scene materials or renderer lighting.
-- With the native source active, click a visible showcase component in Scene View to select its face, edge, or vertex. Frontmost same-showcase spot/decal primitives are routed back through the selected source mesh so layered materials do not make ordinary visible picks appear unresponsive.
-- Save Project writes the bounded native source and optional owned-material sidecar—including supported PBR scalars, colors, flags, alpha mode, and material texture identities—into the confined sandbox user slot; a later normal sandbox launch restores valid saved showcase authoring state transactionally, while malformed or missing state keeps the imported render.
-- Click different visible faces of `Textured Cube` to verify the selected face identity follows the authoring topology before using a modeling command.
-- Use Save Source, make another edit, then use Reload Source to verify the saved editable topology replaces the scene render and bounds transactionally; an invalid or missing source retains the prior render.
-- With the optional Physics QA body enabled, use Extrude and Undo and inspect Diagnostics/Physics QA to verify the linked Textured Cube box collider follows the evaluated bounds.
-- Toggle snapping on and off to compare free movement with stepped adjustments.
-- Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
-- Open Help, Scene Legend, Paths, Settings, Diagnostics, and Transform QA in the Utility panel so you can inspect the sandbox without relying on the console.
-- Choose `Open Native Panel Test` in Tools to open a separate OS-level window that shows its identifier, focus, size, last routed event, and close guidance.
-- The in-window panels open on startup and after reset-style launches. `F4` hides or shows them; it is not required for first discovery.
-- Starts have no selected scene object; Object Details, Physics QA, Diagnostics, and the compact strip report no selection until you choose one.
-- Watch the compact strip below Scene View while testing; it reports tool, selection, selected-highlight state, pointer ownership, gizmo, hover, drag, and rejection state live.
-- Use Transform QA first to confirm whether selected-object mutation works even if gizmo dragging or viewport input is failing.
-- Open `Physics QA`. `Enable` starts the arranged multi-body demonstration. `Make Dynamic + Drop` instead activates only the selected supported body at its current transform, leaving unrelated samples still.
-- Open Utility > Terrain to inspect the live manager-owned Grass, Dirt, Rock, and Wet layer texture triplets. The Material layers section reports dimensions, GPU format, and resident/total mip counts for base color, normal, and metallic/roughness sources; it is read-only dependency inspection, while viewport material-preview authoring remains outside this bounded workflow.
-- `DRAG` marks a live panel header. Drag a docked panel header and release over a valid left or right outline to dock there.
-- If a side dock already contains a panel, the incoming panel stacks into the
-  same side and shares its space.
-- Release away from the dock outlines to open a separate native tool window. Move or resize that window with the operating-system frame.
-- Close a detached tool window to return its panel to its last valid dock. Detached windows show matching controls, and a focused title-bar move into the main-window envelope requests bounded drag-back docking. `Reset Layout` recovers defaults.
-- Drag the narrow bars beside Scene View to resize occupied docks.
-- Use `Save Custom` and `Restore Custom` in Tools for the primary named workspace. The adjacent Studio and Assembly slot buttons provide two additional bounded local snapshots; restoring any slot redocks detached panels first.
-- Press `Tab` or `Shift+Tab` to cycle focus across visible workspace panels; the focused header is marked with a green accent.
-- Hover a merged workspace tab for a compact guide: click to activate, drag to reorder within the group, or drop a panel at the center to join tabs.
-- Use Tools > Undo Layout and Redo Layout for the bounded workspace layout history; detached panels are redocked before a snapshot is restored.
-- With panels visible, `Ctrl+Z` undoes and `Ctrl+Y` or `Ctrl+Shift+Z` redoes the bounded workspace layout history.
-- Reset Layout returns to the default topology and panel disclosure/scroll state, redocks detached panels, and preserves valid saved named layout slots.
-- Hover a topology divider or dock splitter to see the matching horizontal or vertical system resize cursor; the cursor returns to normal when the viewport or a tool owns the pointer.
-- Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
-- Select each scene object and confirm the Object Details panel updates.
-- Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
-- Use the controls panel to reset the camera, save settings, and reset sandbox settings. Normal startup and `Home` share scene-first framing; older transient camera-pose settings are not restored automatically.
-- Use Add Cube in the object tools and confirm the new cube appears as a solid lit object, not just a selection outline. The core action remains renderer-independent; the sandbox attaches the visible mesh and material.
-- Select an object and use `M` or `G`, `R`, or `S` to start a move, rotate, or scale transform. Use `X`, `Y`, or `Z` to constrain it, then confirm or cancel.
+This opens the engineering sample content, including:
+
+- `Textured Cube`;
+- `Material Ball`;
+- `glTF Marker`;
+- `Missing Texture`;
+- `Missing Model`;
+- foliage;
+- realism material row;
+- engineering primitives.
+
+The fallback-texture and fallback-model examples prove visible failure behavior without stopping the engine.
+
+## Authoring workflow
+
+### Textured Cube
+
+In `--primitive-gallery`, select `Textured Cube` and open Object Details > Authoring.
+
+The current authoring workflow provides:
+
+- Vertex mode;
+- Edge mode;
+- Face mode;
+- Extrude;
+- Inset;
+- Bevel;
+- Subdivide;
+- Project UV;
+- Pack UV;
+- Undo;
+- Redo;
+- Save Source;
+- Reload Source.
+
+Viewport picking resolves directly against authored polygons and component identities.
+
+### Selection presentation
+
+| Mode | Visual presentation |
+| --- | --- |
+| Vertex | Amber cross markers |
+| Edge | Cyan segments with endpoint markers |
+| Face | Orange outline with center marker |
+
+The most recently picked component is the active edit target and receives a stronger mode-specific highlight.
+
+The viewport also shows:
+
+- active topology mode;
+- selected-component count;
+- cached projected topology outline for editable subjects.
+
+Newly created or imported authoring wrappers begin with no component selection. The whole-object outline remains visible until a component is selected.
+
+### Selection operations
+
+Current bounded selection operations include:
+
+- click select;
+- `Ctrl`-click add;
+- box replace;
+- `Ctrl`-drag add;
+- `Shift`-drag subtract;
+- Grow Selection;
+- Select Connected;
+- Select All;
+- Select None;
+- Invert;
+- Shrink.
+
+Normal selection accepts visible front-facing authored components. X-Ray permits front-facing source selection through occluding mesh surfaces while preserving material and asset data.
+
+Small and medium meshes use projected coverage/depth subdivision. Dense imported meshes use a fixed screen-space spatial index. Index overflow uses conservative topology presentation to keep selection feedback bounded.
+
+Frontmost same-showcase spot/decal primitives route back through the selected source mesh so visible layered content remains pickable through the authoring representation.
+
+### Component transforms
+
+Current bounded component transforms include:
+
+- Move X+;
+- Move Y+;
+- Move Z+;
+- Rotate Selected;
+- Scale Selected;
+- Soft Move X+;
+- Soft Move Y+;
+- Soft Move Z+;
+- face-normal translation;
+- selected extrusion workflows supported by the active component domain.
+
+Sandbox Rotate and Scale use the median pivot. The authoring API also exposes active-component and per-face individual pivots plus world, local, and face-normal rotation orientation.
+
+Soft Move uses a one-ring linear falloff:
+
+- selected vertices receive full movement;
+- directly adjacent vertices receive half movement.
+
+All successful operations publish through the shared topology, evaluated mesh, bounds, linked physics, and undo path.
+
+### Imported showcase editing
+
+For Showcase Giraffe or Showcase Rocket:
+
+1. Open Object Details > Authoring.
+2. Choose `Make Editable`.
+3. Select a visible Vertex, Edge, or Face component.
+4. Use Grow Selection or Select Connected as needed.
+5. Apply supported Move, Scale, Soft Move, Bevel, or Extrude operations.
+6. Use Undo/Redo to verify authoring history.
+7. Use Save Project / Reload Project to verify persisted authoring state.
+
+The visible workflow uses generic Henka authoring tools. Showcase-specific geometry shortcuts are not part of the production authoring path.
+
+### Own Material
+
+`Own Material` promotes the selected manager-owned definition into the bounded editable material-instance path.
+
+Current compact controls include:
+
+- base color;
+- metallic;
+- roughness;
+- emissive strength;
+- IOR;
+- transmission;
+- subsurface amount;
+- subsurface thickness;
+- subsurface tint;
+- bounded procedural detail-normal texture creation;
+- bounded metallic-roughness texture creation;
+- Undo Mat;
+- Redo Mat.
+
+Save Project can persist the supported owned-material sidecar with PBR scalars, colors, flags, alpha mode, and material texture identities.
+
+### Native authored assets
+
+The visible native-authoring workflow supports:
+
+1. enter an asset name;
+2. choose `New Asset`;
+3. add bounded primitive parts.
+
+Available primitive parts include:
+
+- Box;
+- Cylinder;
+- Cone;
+- UV Sphere;
+- all-quad Quad Sphere.
+
+UV Sphere retains latitude/longitude topology with triangular pole caps. Quad Sphere uses closed shared-vertex cubed-sphere topology with four-sided faces.
+
+The resulting document is editor-owned, uses `HENKA_PRODUCT_NATIVE_AUTHORED` provenance, and supports bounded save/close/reopen.
+
+### Repository-owned showcase source refresh
+
+`scripts/capture_editor_owned_authoring_sources_windows.ps1` refreshes repository-owned showcase authoring sources through the visible workflow.
+
+The script:
+
+- uses an isolated executable copy;
+- does not generate or directly assemble showcase geometry;
+- records SHA-256 hashes for resulting `.hams` files.
+
+### Authoring persistence and history
+
+Save Source and Reload Source use a confined Sandbox user-data slot.
+
+Candidate success is required before evaluated mesh and scene bounds are replaced.
+
+Save Project writes the bounded native source and optional owned-material sidecar. A valid saved showcase state restores transactionally on a later normal Sandbox launch. Malformed or missing saved state preserves the imported render.
+
+Face selection participates in authoring history:
+
+- topology edits select their result;
+- Undo/Redo restores matching face identity when valid;
+- editing after Undo clears the redo branch.
+
+The Authoring section reports evaluated render-mesh material-region range after successful edit, undo, redo, save, and reload. Region values currently provide metadata continuity diagnostics. Multiple renderer material-instance selection by region remains future work.
+
+General arbitrary mesh-file open/save remains unfinished.
+
+### Loose components
+
+The authoring representation supports:
+
+- polygonal surfaces;
+- loose source vertices;
+- standalone wire edges.
+
+The Sandbox renders loose vertices and standalone edges as viewport point/line primitives and exposes bounded create/edit controls.
+
+Generalized loose-component editing and broad topology coverage remain future work.
+
+## Viewport tools and transforms
+
+The Viewport Tool section exposes:
+
+- Select;
+- Orbit;
+- Pan;
+- Move;
+- Rotate;
+- Scale.
+
+### Tool behavior
+
+**Select** keeps normal object picking active.
+
+**Orbit** uses left drag around the current view target.
+
+**Pan** uses left drag to move the current view target.
+
+**Move** drags the selected object along a world axis.
+
+**Rotate** rotates the selected object around a world axis.
+
+**Scale** uses the center square for uniform scale in the current Sandbox path.
+
+The Tools panel also provides snapping state and current move, rotate, and scale snap values.
+
+### Touchpad-friendly Select behavior
+
+In Select mode, dragging empty Scene View space beyond the small drag threshold pans the camera. Ordinary clicks continue to perform selection.
+
+### Gizmo rules
+
+The transform gizmo:
+
+- uses viewport-relative framebuffer coordinates;
+- uses the same projected handle model for drawing and hit testing;
+- stays clipped to Scene View;
+- stops safely if the selected object becomes hidden or invalid;
+- stops safely when viewport state changes during drag;
+- uses internal helper pieces excluded from normal runtime selection and Scene Objects.
+
+Hidden objects are automatically transform-locked. Showing an object does not unlock it. `Unlock Transform` is explicit.
+
+Direct Transform QA controls exercise selected-object mutation through the same Action API and provide a diagnostic path when gizmo interaction needs investigation.
 
 ## Sandbox panels
 
-Press `F4` to open the in-window sandbox panels. Press `F5` to cycle between:
+Press `F4` to show or hide panels. Press `F5` to switch the primary workspace mode.
 
-- `Standard`: keeps the stable editor shell and dedicated viewport
-- `Focus Viewport`: temporarily gives the scene more room without becoming a saved startup mode
-- Saved/custom layouts: preserve user-controlled panel topology and placement
+### Workspace modes
 
-If you hide the panels, a small in-window hint stays in the viewport corner so you can still see that `F4` restores panels and `F5` changes layout.
-When the panels are visible, the scene stays inside its own dedicated viewport
-region, separate from the docked panels.
+- **Standard** — stable editor shell with dedicated Scene View.
+- **Focus Viewport** — temporary scene-dominant layout.
+- **Saved/custom layouts** — user-controlled panel topology and placement.
 
-If the panels do not appear when you expect them to, refresh the packaged sandbox with `.\scripts\package_sandbox3d_windows.ps1`, confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed, and try again.
+When panels are hidden, a small viewport hint shows the `F4` and `F5` controls.
 
-The `Tools` panel currently includes:
+If expected panels are missing after a build, refresh the package:
 
-- Build, Game, and World work-context controls plus saved/custom layouts
-- a readable `Main` page and `Panels/Status` page
-- a `Grid` toggle
-- a `Wire` toggle
-- visible `Frame Selected`, `Reset View`, `Zoom In`, and `Zoom Out` controls
-- a `Camera/Status` page with Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D preset controls
-- Viewport Tool tabs for `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`
-- a snap toggle with current move, rotate, and scale snap values
-- a `Hit Boxes` toggle for the viewport debug overlay
-- a save-settings button
-- a reset-layout button
-- panel visibility toggles for the object-inspection panels in the heavier layouts
-- utility tabs for Help, Scene Legend, Paths, Settings, Diagnostics, Transform QA, and Object Info
-- a `Physics QA` utility for opt-in rigid-body playback, debug drawing, body inspection, impulses, and raycasts
-- direct `Diagnostics`, `Transform QA`, and `Physics QA` buttons on the main page
-- an `Open Native Panel Test` button for multi-window foundation checks
-- a small in-window status area for recent actions and warnings
+```powershell
+.\scripts\package_sandbox3d_windows.ps1
+```
 
-`Standard` exposes the normal inspection controls. `Focus Viewport` is intentionally scene-dominant and temporary.
-Transform manipulation happens in the dedicated scene viewport, not inside workspace panels.
+Then verify that `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed.
 
-The `Scene Objects` panel lists the current sandbox examples by name.
+### Tools panel
 
-- Clicking a row selects that object.
-- Hidden objects stay listed and show a hidden state tag.
-- The selected row identifies the current object. Editable selected scene objects also show the yellow viewport transform highlight.
-- Locked objects, including the default Ground, remain selectable and inspectable but do not show the yellow transform highlight or a transform gizmo.
-- After moving another object and clearing selection, selecting Ground again does not inherit the prior transform session. Unlocking Ground requires an explicit Object Details action.
-- Selection overlays are clipped to the Scene View so they do not draw over panels or the status strip.
-- If the dock is too short to show the whole list at once, page buttons keep every sample object reachable.
+The Tools panel currently provides:
 
-The `Object Details` panel shows the current selection.
+- Build, Game, and World work-context controls;
+- saved/custom layouts;
+- `Main` page;
+- `Panels/Status` page;
+- Grid toggle;
+- Wire toggle;
+- Frame Selected;
+- Reset View;
+- Zoom In / Zoom Out;
+- Camera/Status;
+- Perspective / Side / Top-down / Isometric camera presets;
+- Select / Orbit / Pan / Move / Rotate / Scale viewport tools;
+- snap controls;
+- Hit Boxes toggle;
+- Save Settings;
+- Reset Layout;
+- panel visibility toggles;
+- Help;
+- Scene Legend;
+- Paths;
+- Settings;
+- Diagnostics;
+- Transform QA;
+- Object Info;
+- Physics QA;
+- Open Native Panel Test;
+- current action/warning status.
 
-- name
-- tag when available
-- visible state
-- position
-- scale
-- what the object demonstrates
-- mesh, material, texture or fallback summary, and interaction availability
-- full Object Details mode also shows the bounded effective material description for the selected object, shared definition identity, instance override values, semantic texture dependencies, and transactional reimport status; a complete authoring panel is not implemented yet
-- safe actions for visibility, camera focus, transform reset, and console info output
+### Scene Objects panel
 
-For a registered scene object in the Game authoring context, Object Details
-also shows authored Physics and Interaction groups. Physics exposes enabled or
-disabled state, Static or Dynamic body type, Box or Sphere shape, and Trigger
-or Solid Collider. Interaction exposes enabled state and the authored prompt.
-These values are Scene Document data, not live Play-session body state.
+Scene Objects lists current Sandbox examples by name.
 
-The same Object Details section provides bounded `Add Lua` and `Add
-HenkaScript` actions for registered objects. Each action creates a confined
-project-relative source template and attaches it to the authored object as one
-transaction; it never overwrites an existing source file. Save Scene is still
-required to persist the attachment. The bounded source panel now supports
-compiler-backed editing, diagnostics, Save, Revert, and Reload. Reload uses the
-underlying Play-session API while Play is running or paused and reloads the
-persisted source outside Play; failed candidates leave the active behavior
-intact, and compiler/backend line, column, and message diagnostics are
-preserved for failed candidates. Exported properties and debugger presentation
-are not part of this slice.
+- Clicking a row selects the object.
+- Hidden objects remain listed and show a hidden state.
+- The selected row identifies the current object.
+- Editable visible unlocked selections show the yellow viewport transform highlight.
+- Locked objects remain selectable and inspectable without the transform highlight or gizmo.
+- Ground begins locked.
+- Unlocking Ground requires an explicit Object Details action.
+- Selection overlays remain clipped to Scene View.
+- Paging keeps all sample objects reachable in short docks.
 
-The Actions group provides Save Scene and Reload Scene for the confined
-`sandbox3d_scene.hscene` file. While Play is running or paused, authoring edits,
-scene save/reload, and other scene mutations are rejected. Start Play creates
-an independent runtime scene clone and bounded runtime bodies from the authored
-values. Pause, Resume, and Step control the fixed session. Stop discards the
-runtime scene and leaves authored transforms, visibility, and document values
-unchanged.
+Startup has no selected scene object. Object Details, Physics QA, Diagnostics, and the compact strip report that state directly.
 
-Tools Main and Object Details use fixed panel headers and bounded scrollable
-bodies. Their property groups have stable internal identities, persistent
-expanded/collapsed state, and recomputed scroll extents after collapse or
-resize. Wheel and continuous touchpad deltas stay with the panel body, while
-Scene View retains wheel ownership for camera zoom. Detached production panels
-use the same body and scrollbar behavior through their native-window input
-path. Workspace tab reordering is supported; property-group reordering is
-available in Object Details through bounded up/down header actions and persists
-as presentation-only order; it does not duplicate the selected object's state.
+### Object Details panel
 
-The selected object also shows a visible transform gizmo in the scene viewport.
+Object Details reports:
 
-- `Select` mode keeps normal object picking active.
-- `Orbit` mode uses left drag to orbit around the current view target.
-- `Pan` mode uses left drag to pan the current view target.
-- `Move` mode drags the selected object on the chosen world axis.
-- `Rotate` mode drags the selected object around the chosen world axis.
-- `Scale` mode uses the center square for uniform scale in the current sandbox pass.
-- Snap can be enabled or disabled from the Tools panel.
-- Gizmo dragging uses viewport-relative framebuffer coordinates and the same projected handle model that the overlay draws, so the visible handles stay aligned with the mouse inside the dedicated scene viewport.
-- The current sandbox path now also shares a local validated action-command layer and deterministic gizmo interaction helpers with the test suite, which reduces manual QA for basic object-selection and transform-mutation outcomes.
-- The gizmo helper pieces are internal scene tools. They remain hidden from the normal runtime path, do not become the selected object, do not appear in Scene Objects, and are ignored by normal scene picking.
-- If the selected object becomes hidden, invalid, or the viewport changes during a drag, the drag stops safely and the selected real object remains the source of truth.
+- name;
+- tag when available;
+- visibility;
+- position;
+- scale;
+- object purpose;
+- mesh summary;
+- material summary;
+- texture/fallback summary;
+- interaction eligibility.
 
-The viewport also supports action-based transform hotkeys. `M` and `G` start move, `R` starts rotate, and `S` starts scale for the selected visible and unlocked object. Locked selections reject transform hotkeys. While active, `X`, `Y`, and `Z` choose an axis, `Enter` or `Left Mouse` confirms, and `Escape` or `Right Mouse` restores the original transform. Changing selection, clearing selection, hiding or locking the target, or changing tools cancels and clears the active transform session. `Left Ctrl` enables stepped adjustment and `Left Shift` enables finer movement. The active profile and bindings appear in Help. Custom profiles are local config entries documented in [editor-controls.md](../editor-controls.md).
+Full material detail also exposes:
 
-The `Utility` panel provides short in-window views for:
+- effective material description;
+- shared definition identity;
+- instance override values;
+- semantic texture dependencies;
+- transactional reimport status.
 
-- Help
-- Scene Legend
-- Object Info
-- Paths
-- Settings
-- Diagnostics
-- Transform QA
-- Physics QA
+Safe object actions include:
 
-Those utilities are the preferred path for normal viewer use. The console remains useful for fallback logs, warnings, and automated checks.
-Status messages also appear in-window for common actions so normal packaged use does not depend on the console.
-Diagnostics now report input ownership, viewport-local cursor state, selected object state, gizmo model validity, overlay primitive count, hovered handle, active drag target, last rejected interaction reason, last Action API result, and the native test-window open/focus/size state.
-Transform QA exposes direct move, rotate, scale, and reset controls that use the selected real object and the same Action API path as the normal object workflow.
-Physics QA exposes an opt-in fixed-step rigid-body demo with linked real scene objects, pause/resume/step/reset, gravity, body type changes, isolated Make Dynamic + Drop behavior, impulse actions, velocity clearing, camera raycast results, collision/trigger events, and truthful collider/contact overlays. Its supported colliders are sphere, axis-aligned box, and plane. Static bodies do not move from gravity, forces, or impulses; Dynamic bodies fall and respond to physics; Kinematic bodies do not fall from gravity and move only through explicit tool or code movement. Collider/contact debug overlays are separate from the selected-object highlight and are clipped to the Scene View.
+- visibility changes;
+- Focus Camera;
+- Reset Transform;
+- Print Object Info.
 
-Fixed physics substeps commit atomically. Scratch allocation failure and finite arithmetic that exceeds representable valid physics state return distinct results. In either case the prior bodies, contacts, events, pair history, accumulator, and linked scene transforms remain unchanged, with no partial event or scene update, so the caller can correct the condition and retry.
-The compact strip below Scene View keeps essential input-gate, gizmo, hovered-panel, panel-header, and workspace drag state visible while testing, so a rejected viewport or panel gesture can be diagnosed without switching views.
-`Object Use` in Object Details reports the optional object interaction prompt and range only; it is separate from transform tools and gizmo state.
+## Game authoring and Play
 
-Workspace panel placement, dock sizes, bounded named layout slots, and the bounded scroll offsets for Controls Main and Object Details persist through the local settings file. Production panels can detach into separate OS-level windows with matching controls, safe close-to-redock recovery, bounded saved placement, title-bar drag-back recognition when a focused detached window enters the main-window envelope, and the same wheel/scrollbar behavior through detached-window input; shared side docks stack panels vertically. Detachable Scene View remains future work. `Native Panel Test` remains available for focused multi-window verification.
+In the Game authoring context, registered Scene Document objects expose authored Physics and Interaction groups.
 
-When the UI is open:
+### Authored Physics
 
-- mouse capture is released
-- mouse look pauses
-- camera movement pauses
-- `Right Mouse` and `Tab` can be used again after you close the panel
-- `Escape` closes the panel before it returns to the normal mouse-capture and exit flow
+Current fields include:
 
-Picking and gizmo hit testing both use the dedicated scene viewport. Clicks in docked panels or detached tool windows do not count as viewport picks or transform drags.
-Mouse wheel input over paged panels stays with those panels and does not zoom
-the scene.
+- enabled / disabled;
+- Static / Dynamic body type;
+- Box / Sphere shape;
+- Trigger / Solid Collider.
+
+These fields are Scene Document authoring data.
+
+### Authored Interaction
+
+Current fields include:
+
+- enabled state;
+- authored prompt.
+
+### Scene save/reload
+
+The Actions group provides Save Scene and Reload Scene for the confined `sandbox3d_scene.hscene` file.
+
+While Play is running or paused, scene authoring edits, scene save/reload, and other scene mutations are rejected.
+
+### Play lifecycle
+
+`Start Play` creates:
+
+- an independent runtime scene clone;
+- bounded runtime bodies from authored values;
+- runtime behavior state;
+- persisted Audio emitters through the production Play path when configured.
+
+Available controls are:
+
+- Start;
+- Pause;
+- Resume;
+- Step;
+- Stop.
+
+Stop destroys runtime Play state and leaves authored transforms, visibility, and document values unchanged.
+
+## Scripting source panel
+
+Object Details provides bounded:
+
+- `Add Lua`;
+- `Add HenkaScript`.
+
+Each action creates a confined project-relative source template and attaches it transactionally to the authored object. Existing source files are not overwritten.
+
+Save Scene is required to persist the attachment.
+
+The source panel supports:
+
+- compiler-backed editing;
+- diagnostics;
+- Save;
+- Revert;
+- Reload.
+
+Reload uses the Play-session runtime seam while Play is running or paused and reloads persisted source through the non-Play path when Play is inactive.
+
+Failed candidate reload preserves the active behavior. Compiler/backend line, column, and message diagnostics are retained for the failed candidate.
+
+Exported properties and debugger presentation remain future work.
+
+## Physics QA
+
+Physics QA is an opt-in fixed-step rigid-body demonstration.
+
+Available controls and diagnostics include:
+
+- Enable;
+- pause/resume/step/reset;
+- gravity;
+- body type changes;
+- Make Dynamic + Drop;
+- impulse actions;
+- velocity clearing;
+- camera raycasts;
+- collision/trigger events;
+- collider overlays;
+- contact overlays.
+
+`Make Dynamic + Drop` activates only the selected supported body at its current transform. `Enable` starts the arranged multi-body demonstration.
+
+Supported current collider types are:
+
+- sphere;
+- axis-aligned box;
+- plane.
+
+Body behavior:
+
+- Static bodies ignore gravity, force, and impulse motion.
+- Dynamic bodies fall and respond to physics.
+- Kinematic bodies ignore gravity and move through explicit tool/code movement.
+
+Collider/contact overlays are separate from selection highlighting and remain clipped to Scene View.
+
+Fixed substeps commit atomically. Allocation failure and numeric-range failure preserve prior bodies, contacts, events, pair history, accumulator, and linked scene transforms. No partial event or scene update is published.
+
+With a bound Textured Cube physics body, use Extrude and Undo and inspect Physics QA to verify that collider bounds follow evaluated authoring bounds.
+
+## Terrain tools
+
+Utility > Terrain exposes current Terrain editing and dependency inspection.
+
+### Material layers
+
+The live manager-owned layer set contains:
+
+- Grass;
+- Dirt;
+- Rock;
+- Wet.
+
+The Material layers section reports, for base color, normal, and metallic/roughness textures:
+
+- dimensions;
+- GPU format;
+- resident mip count;
+- total mip count.
+
+This is read-only dependency inspection. Complete viewport material-preview authoring remains future work.
+
+### Terrain editing
+
+Current buttons include:
+
+- Raise;
+- Lower;
+- Flatten;
+- Smooth;
+- Paint.
+
+Brush controls include:
+
+- radius;
+- strength;
+- material layer;
+- falloff.
+
+Normal editor use can place the brush from viewport Terrain ray picking. When Terrain and a scene object both produce valid hits, the nearest valid hit wins.
+
+Height edits use the bounded collision-runtime queue for the full edit footprint and neighbor coverage. Paint-only edits do not rebuild collision.
+
+Dirty CPU-resident Terrain regions autosave transactionally every ten seconds. Failed saves remain Dirty and can retry later.
+
+The automated smoke path uses a fixed repeatable sample center.
+
+## Workspace docking and detached windows
+
+### Docking
+
+`DRAG` marks a live panel header.
+
+To dock a panel:
+
+1. drag the header;
+2. move over a valid left/right dock outline;
+3. release.
+
+Panels can stack in an occupied side dock.
+
+Release away from valid dock outlines to detach the panel into a separate OS-level window.
+
+### Detached windows
+
+Detached production panels support:
+
+- matching controls;
+- OS frame move/resize;
+- bounded saved placement;
+- safe close-to-redock;
+- explicit dock-return control;
+- title-bar drag-back recognition when a focused detached window enters the main-window envelope;
+- the same wheel and scrollbar behavior through the detached input path.
+
+Close returns the panel to its last valid dock.
+
+`Open Native Panel Test` creates a separate native test window that reports:
+
+- engine/native identifier;
+- focus;
+- size;
+- last routed event;
+- close guidance.
+
+Scene View remains the main viewport and is not detachable yet.
+
+### Dock resizing and layout slots
+
+- Drag the narrow bars beside Scene View to resize occupied docks.
+- `Save Custom` / `Restore Custom` manage the primary named workspace.
+- Studio and Assembly provide two additional bounded local layout snapshots.
+- Restoring a slot redocks detached panels before applying the snapshot.
+- `Tab` / `Shift+Tab` cycles focus across visible workspace panels.
+- The focused header shows a green accent.
+- Merged workspace tabs can activate, reorder, and accept dropped panels.
+- Tools > Undo Layout / Redo Layout operate on bounded workspace history.
+- With panels visible, `Ctrl+Z` undoes layout and `Ctrl+Y` or `Ctrl+Shift+Z` redoes it.
+- Reset Layout restores default topology and disclosure/scroll state, redocks detached panels, and preserves valid named layout slots.
+- Divider and splitter hover uses matching system resize cursors.
+
+### Scroll behavior
+
+Tools Main and Object Details use fixed headers with bounded scrollable bodies.
+
+Property groups have:
+
+- stable internal identity;
+- persisted expanded/collapsed state;
+- recomputed scroll extents after collapse/resize.
+
+Wheel and continuous touchpad deltas remain with the panel body while hovered. Scene View retains wheel ownership for camera zoom.
+
+Object Details supports bounded up/down property-group reordering. The order is presentation-only and persists independently of selected-object state.
+
+## Diagnostics
+
+The compact strip under Scene View reports live interaction state, including:
+
+- active tool;
+- selection;
+- selection-highlight state;
+- pointer ownership;
+- gizmo state;
+- hover state;
+- drag state;
+- rejection state;
+- hovered panel/header state;
+- workspace drag state.
+
+Full Diagnostics reports additional:
+
+- viewport-local cursor state;
+- selected-object validity;
+- gizmo-model validity;
+- overlay primitive count;
+- hovered handle;
+- active drag target;
+- last rejected interaction reason;
+- last Action API result;
+- native test-window open/focus/size state;
+- active shading/exposure state;
+- texture-residency bytes;
+- configured texture budget;
+- residency queue depth;
+- active texture pin count;
+- stale-request cancellations;
+- readable source-failure bytes;
+- unknown-size request/source failure counts.
+
+Transform QA provides direct move, rotate, scale, and reset controls using the selected real object and the normal Action API.
+
+`Object Use` reports the selected object's interaction prompt and range. It is separate from transform and gizmo state.
+
+## Viewport shading
+
+Scene View owns explicit shading modes:
+
+- Wireframe;
+- Solid;
+- Material Preview;
+- Rendered.
+
+### Wireframe
+
+Wireframe draws neutral geometry edges without texture sampling.
+
+### Solid
+
+Solid draws neutral filled surfaces.
+
+### Material Preview
+
+Material Preview evaluates supported metallic-roughness materials under stable editor lighting and the shared linear HDR-to-display presentation.
+
+### Rendered
+
+Rendered uses scene lighting and the active environment and includes:
+
+- transactional IBL from supported HDR environments;
+- bounded local reflection-probe capture;
+- ordinary and box-projection local probe sampling;
+- two fitted directional shadow cascades;
+- one bounded spot shadow map for the first enabled spot;
+- one bounded 256² point-shadow cubemap for the first enabled point light;
+- exposure;
+- bloom;
+- bounded depth-neighborhood ambient occlusion;
+- camera/object motion history reprojection;
+- current-depth consistency rejection;
+- ACES-fitted final tone mapping.
+
+One changed local reflection probe is captured at a time using deterministic six-face views. Probe sampling is disabled during capture. Shared IBL remains available when local capture is unavailable.
+
+Enabled probe volumes can be visualized as a non-scene editor overlay. Box-projection probes receive distinct presentation.
+
+### Transparency
+
+Blended materials render after opaque and masked geometry through a bounded 4,096-item back-to-front queue.
+
+Overflow uses deterministic entity order.
+
+The current transparency model is sorted straight-alpha blending. Order-independent transparency is not implemented.
+
+### AO and temporal state
+
+The AO term is a bounded four-direction, two-sided, multi-step view-space horizon search with:
+
+- radius;
+- thickness;
+- falloff;
+- bias;
+- intensity;
+- depth-agreement edge confidence.
+
+Temporal AO history, multi-frame denoise, and production GTAO validation remain unfinished.
+
+Rendered temporal presentation includes:
+
+- camera/object reprojection;
+- depth-neighborhood rejection;
+- reactive handling for transparency, transmission, and emissive pixels;
+- history clamping;
+- bounded sharpening;
+- fallback/invalidation diagnostics.
+
+Production TAA validation across cuts, resize, disocclusion, and moving-object cases remains unfinished.
+
+HDR target size, generation, completeness, shadow resolution, and resize failure are exposed through engine diagnostics.
+
+Unlit materials bypass lighting. Reserved procedural materials remain unavailable until implemented. Helper overlays keep their own materials. Mode changes preserve scene materials. The renderer restores a filled polygon baseline before UI and detached-window presentation.
+
+### Legacy wireframe API
+
+Enabling the legacy wireframe API selects Wireframe. Disabling it restores the last valid non-Wireframe mode.
+
+The Sandbox stores the authoritative mode under `ui.scene_view.shading_mode`. `wireframe_enabled` migrates only when the new key is absent.
+
+### Material inspection
+
+Standard Object Details and Object Info show the selected effective material description.
+
+Object Info also reports borrowed semantic texture dependency count.
+
+Imported scene entities can use bounded persistent material instances with:
+
+- identity-routed Reimport;
+- dependency inspection;
+- revision refresh;
+- per-override reset;
+- reset-all.
+
+Text-entry import, drag/drop, material-file authoring, and a dedicated dependency-graph panel remain future work.
+
+## Stress and validation modes
+
+### Terrain stream stress
+
+Run:
+
+```text
+henka_sandbox3d.exe --terrain-stream-stress
+```
+
+The check:
+
+1. seeds or reuses four procedural regions under local `terrain-sandbox-v2`;
+2. verifies a bounded one-region CPU/physics/render window around the active camera;
+3. moves from `(0,0)` to `(2,0)` and `(2,2)`;
+4. returns to the starting region;
+5. verifies rendered return on both axes;
+6. verifies bounded collision-patch overlap on return;
+7. reports request failures and resident-region capacity.
+
+The active camera region receives priority for bounded collision coverage.
+
+This is a runtime foundation check. Residency-wide collision coverage, broad-world streaming, and human visual approval remain outside its current scope.
+
+### Authoring checks
+
+Useful manual authoring checks include:
+
+- select multiple Textured Cube faces and verify authored IDs track visible topology;
+- run Extrude / Inset / Bevel / Subdivide / UV operations and verify source, render, bounds, and history remain connected;
+- Save Source, edit, Reload Source, and verify transactional replacement;
+- Make Editable on Giraffe or Rocket and verify generic component editing;
+- hide an object and verify transform lock;
+- show it again and verify unlock remains explicit;
+- use Physics QA to verify collider bounds after authoring changes;
+- exercise Own Material, Undo Mat, Redo Mat, Save Project, and Reload Project.
+
+### Workspace checks
+
+Useful manual workspace checks include:
+
+- `F4` panel visibility;
+- `F5` Standard / Focus Viewport;
+- dock/undock;
+- side-dock stacking;
+- detached move/resize;
+- close-to-redock;
+- title-bar drag-back;
+- splitter resize;
+- Save/Restore Custom;
+- Studio/Assembly slots;
+- layout Undo/Redo;
+- tab cycling and reordering;
+- Reset Layout recovery.
 
 ## Packaged runs
 
-Packaged Windows builds include `docs/help/sandbox3d.md` beside the executable so the same offline help stays available after you copy the runnable folder elsewhere.
-Packaged runs also save sandbox settings in `user/sandbox3d.settings` beside the executable.
-The packaged folder also includes `PACKAGE_INFO.txt` so you can confirm the package was refreshed after a new build.
-The runtime also reports whether it is running in `Development` or `Packaged` mode.
+Packaged Windows output includes this help file beside the executable.
+
+Packaged runs also include:
+
+- `user/sandbox3d.settings` for local Sandbox settings;
+- `PACKAGE_INFO.txt` for package identity/provenance;
+- runtime Development/Packaged mode reporting.
+
+The packaged folder is intended to remain usable after being copied away from the repository root.
 
 ## Current limitations
 
-- The sandbox uses built-in meshes plus bounded OBJ and glTF loading paths.
-- OBJ support includes positive and negative indices plus triangle, quad, and bounded n-gon fan triangulation; glTF adds the documented bounded geometry, node hierarchy, and shared PBR material path. OBJ material libraries and concave-polygon correction beyond basic fan triangulation remain unsupported; skeletal animation, skinning, morph targets, and editor hierarchy authoring are not available yet.
-- The current settings file is a small local key/value format. It is easy to inspect by hand, but it is not a finished save-game system.
-- A separate save-data foundation now exists for scene id, camera pose, and simple flags, but the sandbox still uses settings for its normal viewer state.
-- The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.
-- The current 2.5D support is a camera foundation. Sprites, texture regions, layers, parallax, animation, and movement-plane constraints remain future work. Blended materials use a bounded back-to-front transparent queue after opaque and masked geometry; if a scene exceeds the 4,096-item queue, the renderer keeps deterministic entity-order blending as a safe fallback. This is sorted straight-alpha blending, not order-independent transparency.
-- Docked workspace panels can detach into separate native windows, move independently, and return to their last valid dock when closed. Detachable Scene View support remains future workspace work.
-- The transform gizmo is intentionally scoped to world-axis move, rotate, and scale for the current sandbox object model. Undo, numeric editing, and broader tool surfaces remain separate future work; bounded workspace arrangements, named layout slots, layout history, and panel presentation persistence are available.
-- Scale is currently uniform-only in the viewport gizmo path. Per-axis scale handles are intentionally not shown until they are reliable enough to ship.
-- Manual desktop QA is still the best way to judge gizmo handle feel, hover clarity, and transform drag comfort.
-- Manual desktop QA is also still the best way to judge whether Orbit and Pan feel reliable in a packaged run.
-- Rigid-body physics v1 is limited to primitive sphere, axis-aligned box, and plane colliders; advanced collider and solver features remain future work, and manual desktop QA is still required for collision feel and debug overlay readability.
-- The packaged sandbox still opens a console window at this stage. In-window utilities and status are the preferred viewer workflow, while the console remains available for fallback logs.
-- Full editor project-authoring tools and broader 2D or 2.5D workflows are not available yet; the sandbox includes bounded asset, material, texture, terrain, and authoring QA surfaces.
+The current Sandbox remains an early engine/editor workspace.
 
-More detail about the current UI layer is available in [docs/ui.md](../ui.md).
+### Asset and model limits
 
-For a step-by-step manual verification flow, use [docs/qa/sandbox3d-manual-checklist.md](../qa/sandbox3d-manual-checklist.md).
-## Viewport shading
+- Built-in meshes, bounded OBJ, and bounded glTF paths are available.
+- OBJ supports positive/negative indices and triangle, quad, and bounded n-gon fan triangulation.
+- glTF supports the documented bounded geometry, node hierarchy, and shared PBR material path.
+- OBJ material libraries remain unsupported.
+- Concave-polygon correction beyond basic fan triangulation remains unsupported.
+- Skeletal animation, skinning, and morph targets remain unavailable.
+- Editor hierarchy authoring remains future work.
 
-The Scene View owns an explicit shading mode. It does not rely on a global polygon toggle. Wireframe draws neutral geometry edges without texture sampling. Solid draws neutral filled surfaces. Material Preview evaluates the supported metallic-roughness material under stable editor lighting and the same linear HDR-to-display presentation used by Rendered. Both HDR modes show validated scene-owned environment controls, while Rendered derives transactional IBL resources from that environment. Rendered also captures one changed local reflection-probe cubemap at a time using deterministic six-face views; probe sampling is disabled during capture to prevent recursion, and the shared IBL remains the fallback when a capture is unavailable. Completed probe cubemaps are sampled for both ordinary influence volumes and box-projection probes; the latter additionally correct the reflection direction against their bounded box. Enabled probe volumes can be shown in the sandbox editor as a non-scene overlay, with box-projection probes distinguished from ordinary influence volumes. Rendered draws the scene into a Scene View-sized linear HDR target, uses two fitted directional shadow cascades, a bounded map for the first enabled spot light, and a bounded 256² cubemap for the first enabled point light, then applies exposure, bloom, bounded depth-neighborhood ambient occlusion, bounded camera- and object-motion history reprojection with a current-depth consistency rejection, and an ACES-fitted final tone map. The AO term is an approximation without normal-aware GTAO or AO history; full disocclusion handling and production TAA remain unfinished. HDR target size, generation, completeness, shadow resolution, and resize failure are exposed in engine diagnostics. Unlit materials bypass lighting; reserved procedural materials are rejected until implemented. Blended materials render after opaque and masked geometry through a bounded 4,096-item back-to-front queue, with deterministic entity-order fallback beyond that bound; this is sorted straight-alpha blending and does not claim order-independent transparency. Helper overlays retain their own materials, mode changes do not rewrite scene materials, and the renderer restores a filled polygon baseline before UI and detached-window presentation.
+### Save and project limits
 
-The legacy wireframe API remains compatible: enabling it selects Wireframe, while disabling it restores the last valid non-wireframe mode. The sandbox persists the authoritative mode under `ui.scene_view.shading_mode`; older `wireframe_enabled` settings are migrated only when the new key is absent.
+- Local settings use a small key/value format.
+- Separate save-data foundations cover scene ID, camera pose, and simple flags.
+- Complete shipped-game save systems remain future work.
+- Complete scene/project authoring remains future work.
 
-The current AO term is a bounded four-direction, two-sided, multi-step view-space horizon-search approximation with safe radius, thickness, falloff, bias, and intensity controls; temporal AO history, denoise filtering, and production GTAO validation remain unfinished. Rendered temporal presentation now includes camera/object reprojection, depth-neighborhood rejection, reactive handling for transparency/transmission/emissive pixels, history clamping, bounded sharpening, and fallback/invalidation diagnostics. Production TAA visual validation across camera cuts, resize, disocclusion, and moving-object cases remains unfinished.
+### UI and 2.5D limits
 
-The Utility Diagnostics panel includes the active shading/exposure row plus current texture-residency bytes, configured budget, queue depth, active pin count, stale-request cancellations, readable source-failure bytes, and unknown-size request/source failure counts from the engine diagnostics snapshot. Standard Object Details and the Object Info utility show the selected effective material description; Object Info also reports the count of borrowed semantic texture dependencies. Object Details creates bounded persistent instances for selected imported scene entities, with identity-routed Reimport, dependency inspection, revision refresh, and per-override or all-override reset through the shared typed C asset path. Text-entry import, drag/drop, material-file authoring, and a dedicated dependency-graph panel remain unimplemented.
+- The current UI is a bounded Sandbox/editor control layer.
+- Complete runtime Game UI remains future work.
+- 2.5D currently provides camera foundations.
+- Sprites, texture regions, layers, parallax, animation, and movement-plane constraints remain future work.
 
-The Utility Terrain tab reports bounded resident/render/collision statistics,
-including active dirty regions awaiting persistence, and provides raise, lower,
-flatten, smooth, and paint buttons. During normal editor runtime, dirty
-CPU-resident Terrain regions are autosaved transactionally every ten seconds;
-failed saves leave the Dirty count pending for a later retry. Brush radius,
-strength, material layer, and falloff controls feed the same deterministic
-Terrain command API used by runtime edits. Height edits use the bounded
-collision-runtime queue for the full edit footprint plus neighbor coverage;
-paint-only edits do not rebuild collision. The automated smoke path uses a fixed
-repeatable sample center; normal editor use can place the brush from viewport
-Terrain ray-picking, with the nearest valid Terrain or scene-bound hit winning
-when both are under the cursor. Saved brush state is available, while complete
-material-layer preview is not yet claimed.
+### Workspace and transform limits
+
+- Production panels can detach into native windows.
+- Scene View is not detachable yet.
+- Current viewport gizmo scope covers world-axis move, rotate, and uniform scale.
+- Per-axis scale handles remain unavailable.
+- Numeric transform editing remains future work.
+- Manual desktop QA remains required for gizmo feel, hover clarity, orbit/pan feel, detached-window interaction, and general viewport ergonomics.
+
+### Physics limits
+
+- Physics V1 uses sphere, axis-aligned box, and plane colliders.
+- Advanced collider/solver features remain future work.
+- Manual desktop QA remains required for collision feel and debug-overlay readability.
+
+### Console
+
+The packaged Sandbox currently opens a console window. In-window utilities and status provide the primary viewer workflow. Console output remains available for logs, warnings, and automated checks.
+
+More UI detail is available in [ui.md](../ui.md).
+
+For step-by-step manual verification, use [qa/sandbox3d-manual-checklist.md](../qa/sandbox3d-manual-checklist.md).

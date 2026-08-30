@@ -1,126 +1,379 @@
-# Sandbox showcase assets
+# Sandbox Showcase Assets
 
-The normal Windows Sandbox startup presents two repo-owned sample models. The Giraffe uses a restrained face treatment with compact eyes, a flattened muzzle, and a short level mouth crease. It also applies the renderer's bounded view-aware subsurface material-instance response to the warm Giraffe regions, assigning a manager-owned linear thickness texture to those instances while leaving eyes and hard feature materials on their authored opaque response. Capture metadata proves the thickness assignments are loaded with no fallback. This is visual dogfooding of the existing material-instance path, not a claim of full multi-scatter or ray-traced subsurface transport:
+Henka's normal Windows Sandbox startup presents two repository-owned sample models: the Anatomical Giraffe Study and the realistic rocket fixture.
 
-Provenance is explicit: the glTF pair and generated detail textures are `GENERATED_TEST_FIXTURE` / `IMPORT_COMPATIBILITY_ASSET` content produced by the deterministic repository generator and consumed through the public glTF/material asset path. They remain imported fixture content, not native-authoring proof. The repository also carries `assets/authoring/showcase_giraffe.hams` and `assets/authoring/showcase_rocket.hams`, captured from the visible Make Editable, component Move, Face selection, viewport picking, Bevel, Extrude, Save Project, and Reload Project workflow. Those HAMS files contain mesh/topology/UV/material-region data but no provenance metadata; runtime sidecar/evidence labels classify the current files as `HENKA_NATIVE_EDITED_FIXTURE`, meaning persisted editor-owned derivatives of imported fixture geometry. They do not independently prove that a user designed the recognizable Giraffe or Rocket forms. The source artifacts prove the editor-owned persistence boundary, not finished anatomical or mechanical modeling quality. Generic user-directed modeling beyond the bounded tools, native multi-material binding, and a complete production-authoring workspace remain open.
+> **Purpose:** These assets are deterministic engine dogfood for imported content, material instances, native editing, persistence, packaging, and visual QA. Their provenance remains explicit throughout the workflow.
 
-## Bounded native-authoring bridge
+## Contents
 
-The normal editor now provides the shortest native dogfood path for those
-fixtures. Start in `Standard` or press `F5` for the temporary `Focus Viewport`
-layout, then select a
-`Showcase Giraffe ...` or `Showcase Rocket ...` primitive in `Scene Objects`.
-Selecting one prioritizes `Object Details > Authoring`; choose `Make Editable`.
-Henka converts
-that validated primitive into a user-owned authoring mesh connected to the
-selected scene entity; the existing component, topology, UV, undo/redo, and
-`Save Project` / `Reload Project` controls operate on that source afterward.
-While that source is active, Scene View component picks also remain usable when
-a frontmost spot or decal primitive from the same showcase asset wins the render
-ray; the visible hit is routed through the selected native source and the source
-mesh still performs the final component intersection validation.
-The saved native source is also discovered on a later normal packaged launch;
-valid mesh and owned-material sidecars are restored transactionally, while a
-malformed or missing slot retains the imported glTF render. The checked-in
-`.hams` artifacts are refreshed only by this visible workflow, using
-`scripts/capture_editor_owned_authoring_sources_windows.ps1` as bounded UI
-automation. The capture selects Face mode, picks a face in the Scene View, and
-invokes generic Bevel and Extrude before Save/Reload; it does not generate geometry or
-assemble meshes. Face mode also exposes a bounded `Delete Faces` action. It removes
-the current selected face set as one transactional source/render/bounds/history
-operation and fails closed if that would leave no renderable face. Vertex and edge
-deletion are not implied by this control.
+- [Showcase subjects](#showcase-subjects)
+- [Provenance](#provenance)
+- [Native-authoring bridge](#native-authoring-bridge)
+- [Owned material workflow](#owned-material-workflow)
+- [Native authored assets](#native-authored-assets)
+- [Generation and package ownership](#generation-and-package-ownership)
+- [Visual acceptance](#visual-acceptance)
+- [Runtime path](#runtime-path)
+- [Current limits](#current-limits)
 
-This is intentionally a bounded bridge rather than a completed content
-workspace. It currently targets the imported showcase primitives and preserves
-their borrowed glTF material identity until the user explicitly chooses
-`Own Material`. That action adopts a manager-owned runtime material definition;
-the bounded controls then exercise base-color, metallic, roughness,
-emissive-strength, IOR, transmission, subsurface amount, bounded
-subsurface-thickness, and subsurface-tint edits
-plus in-engine procedural detail-normal and
-metallic-roughness texture creation without changing the imported glTF source.
-The packaged
-Windows dogfood path exercises Make Editable, material and texture edits, a
-component move, base-color, metallic, roughness, emissive-strength, IOR, and
-transmission edits,
-in-engine procedural detail-normal and metallic-roughness texture creation,
-bounded material
-undo/redo, Face selection, bevel, Save Project, and Reload Project
-transactionally. The project
-manifest persists the mesh source,
-transform, and visibility, while its bounded `.material` sidecar persists the
-supported PBR scalars, colors, flags, alpha mode, and seven material texture
-identities; native runtime detail-normal and metallic-roughness textures are
-recreated from their bounded recipes on reload. Texture painting,
-native-authored source export, and native multi-material binding remain open.
-The packaged gate supplies bounded creation/edit API dogfood, save/reload,
-relaunch restoration, and Rendered evidence for the fixture-derived scene, while
-the editor-owned source capture proves the same controls produced persisted
-`.hams` artifacts for both showcase subjects. It does not promote the glTF
-fixture pair or those persisted derivatives to independently user-authored
-content.
+## Showcase subjects
 
-The visible native-authoring workflow is intentionally generic. Enter an asset
-name, choose `New Asset`, then add bounded Box, Cylinder, Cone, UV Sphere, or
-all-quad Quad Sphere parts through the primitive chooser. UV Sphere preserves
-its latitude/longitude topology and triangular pole caps; Quad Sphere is a
-closed shared-vertex cubed sphere containing only four-sided faces. The
-resulting document is editor-owned, uses `HENKA_PRODUCT_NATIVE_AUTHORED`
-provenance, and supports the bounded save/close/reopen path. This proves the
-reusable authoring foundation, not that the default Giraffe or Rocket was
-modeled by a user. The default showcase pair continues to use separately
-labeled imported/generated fixture content until the full visible modeling,
-material, visual-review, and packaged-asset workflow is complete.
+### Anatomical Giraffe Study
 
-`Make Editable` on an imported `Showcase Giraffe ...` or `Showcase Rocket ...`
-exposes only generic component, topology, UV, material, and transactional
-history tools. Multi-face extrusion and material-region assignment operate on
-the current selection without naming or recognizing either showcase subject.
-This is native editing dogfood, not a claim that the generated fixture pair
-itself is native-authored or that these bounded controls replace full
-anatomical or mechanical modeling tools.
+`cheeky_giraffe.gltf` is retained as the stable package filename.
 
-- `cheeky_giraffe.gltf` — the original Anatomical Giraffe Study (the stable filename is retained for package compatibility): a long-legged, narrow-bodied silhouette with a continuous chest-to-neck loft, integrated shoulder and haunch transitions, elongated head and muzzle, four articulated knee regions and grounded hooves, compact ears, ossicones, mane, a terminal tail tuft, paired nostrils, recessed dark eyes, and a neutral lip crease. Its deterministic ochre base-color texture uses many small irregular reticulated hide cells.
-- `original_realistic_rocket.gltf` — an original generic heavy-lift launch-vehicle study: a warm insulated central core, pale tapered upper vehicle, two separately shaded tapered side boosters, graphite interstages, unbranded muted markings, dark thermal separation bands, independently shaded service-panel geometry, paired avionics bays with cable trays and fasteners, layered interstage and booster insulation collars, a seven-engine bell/nozzle cluster, perimeter fasteners, restrained stabilization fins, and a bounded adjacent steel service structure above the launch-pad assembly. It intentionally contains no agency branding, mission markings, or copied mission hardware.
+The current subject includes:
 
-## Ownership and generation
+- a long-legged, narrow-bodied silhouette;
+- continuous chest-to-neck loft;
+- integrated shoulder and haunch transitions;
+- elongated head and muzzle;
+- four articulated knee regions;
+- grounded hooves;
+- compact ears;
+- ossicones;
+- mane;
+- terminal tail tuft;
+- paired nostrils;
+- recessed dark eyes;
+- a neutral short mouth crease;
+- deterministic ochre/tan base-color treatment;
+- many small irregular reticulated hide cells.
 
-The Sandbox target build runs `scripts/generate_showcase_assets.ps1` for both glTF files. The generator creates deterministic bounded geometry, UVs, normals, tangent vec4 attributes, PBR material definitions, and a sibling binary buffer. It uses no third-party model, no external authoring application at runtime, and no copyrighted vehicle or character model. It is explicitly a fixture generator; it is not the design source for the checked-in `.hams` authoring artifacts.
+The face treatment keeps compact eyes, a flattened muzzle, and a short level mouth crease.
 
-To refresh the editor-owned sources after a validated modeling session, build the
-Windows Sandbox and run `scripts/capture_editor_owned_authoring_sources_windows.ps1`.
-By default the script launches an isolated copy of the executable and processes
-both subjects. For deterministic single-subject reruns, pass
-`-Subject Giraffe` or `-Subject Rocket`; those runs use the same visible workflow
-and do not reuse stale panel coordinates from the other subject. It selects each imported
-subject, invokes the visible Make Editable, component Move, Face selection,
-viewport face-picking, Bevel, and Extrude controls, saves and reloads through the visible
-project controls, then copies only the resulting
-`.hams` files into `assets/authoring`. The resulting hashes are part of the
-validation record; runtime generated fixtures and hard-coded C constructors do
-not count as authoring provenance.
+Warm Giraffe material regions use the renderer's bounded view-aware subsurface material-instance response. Manager-owned linear thickness textures feed those instances. Eyes and hard feature materials retain their authored opaque response.
 
-The generated glTF files use material factors plus deterministic, generated base-color, tangent-space detail-normal, and metallic/roughness textures through the same manager-owned semantic texture path as imported consumer assets. The Giraffe's flush spot pattern is a 256x256 base-color texture with irregular multi-harmonic patch boundaries on its tan skin material; hooves, mane, nostrils, and remaining facial features stay independently shaded geometry. The Rocket binds the generated base-color texture to its painted ceramic surface, while fasteners, thermal details, engine bells, and other mechanical regions retain distinct material identities. Both models use the renderer-supported clearcoat, restrained sheen, and emissive-strength extensions; they do not bind the unrelated primitive-gallery cube texture. Their glTF, sibling binary buffers, and texture sidecars are copied beside the executable, so packaged execution resolves the showcase from package-owned files without a repository-root or runtime authoring dependency. These two models are the public visual reference set and should be regenerated and manually reviewed after material, lighting, geometry, and shading improvements. They are deliberately generic public samples; project-specific scenes and visual references are not part of this repository.
+Capture metadata records thickness-texture assignment and fallback state.
 
-The packaged studio HDR fixture is also generated in memory and now contains bounded asymmetric warm-key and cool-fill area-light lobes. This gives clearcoat, brushed metal, and emissive engine details a stable highlight structure through the derived IBL path while retaining the direct local-light and shadow fixtures. It is an authored lighting reference, not a claim of photographic HDRI coverage.
+### Realistic rocket fixture
 
-The Sandbox studio floor uses a bounded 64 m graphite plane beneath the
-independent debug grid. The larger surface keeps its finite far edge outside
-ordinary showcase framing, so Rendered and Material Preview do not acquire an
-unintended diagonal environment seam.
+`original_realistic_rocket.gltf` is an original generic heavy-lift launch-vehicle study.
 
-## In-engine visual acceptance
+The current subject includes:
 
-The normal Windows graphical path is the source of truth for showcase review. The
-existing same-camera capture covers Solid, Material Preview, and Rendered, while
-the dedicated mascot inspection capture launches the real Sandbox repeatedly
-with the glTF fixture scene/material path loaded and records a normal startup frame plus
-Giraffe close front, close three-quarter, close profile, and wide silhouette
-Rendered views, a Giraffe front Material Preview comparison, and Rocket close
-front, close three-quarter, and profile Rendered views. The dedicated views hide
-only editor chrome for application-only inspection; they do not replace the
-scene, material, lighting, asset-manager, or renderer path.
+- warm insulated central core;
+- pale tapered upper vehicle;
+- two separately shaded tapered side boosters;
+- graphite interstages;
+- muted unbranded markings;
+- dark thermal separation bands;
+- independently shaded service-panel geometry;
+- paired avionics bays;
+- cable trays;
+- fasteners;
+- layered interstage and booster insulation collars;
+- seven-engine bell/nozzle cluster;
+- perimeter fasteners;
+- restrained stabilization fins;
+- bounded adjacent steel service structure above the launch-pad assembly.
+
+The fixture contains no agency branding, mission markings, or copied mission hardware.
+
+## Provenance
+
+The generated glTF pair and deterministic detail textures use the following evidence classifications:
+
+- `GENERATED_TEST_FIXTURE`;
+- `IMPORT_COMPATIBILITY_ASSET`.
+
+They are produced by the repository generator and consumed through the public glTF/material asset path.
+
+The repository also carries:
+
+- `assets/authoring/showcase_giraffe.hams`;
+- `assets/authoring/showcase_rocket.hams`.
+
+Those HAMS files are captured through the visible editor workflow using:
+
+- Make Editable;
+- component Move;
+- Face selection;
+- viewport picking;
+- Bevel;
+- Extrude;
+- Save Project;
+- Reload Project.
+
+The current HAMS files contain mesh/topology/UV/material-region data and do not contain their own provenance field. Runtime sidecar/evidence classification labels them `HENKA_NATIVE_EDITED_FIXTURE`, which identifies them as persisted editor-owned derivatives of imported fixture geometry.
+
+The HAMS sources prove editor-owned persistence and native editing participation. Independent user design of the recognizable Giraffe and Rocket forms remains outside that evidence claim.
+
+## Native-authoring bridge
+
+The normal editor provides a bounded native editing path for the showcase fixtures.
+
+### Make Editable workflow
+
+1. Start in `Standard` or use `F5` for temporary `Focus Viewport`.
+2. Select a `Showcase Giraffe ...` or `Showcase Rocket ...` object in Scene Objects.
+3. Open `Object Details > Authoring`.
+4. Choose `Make Editable`.
+5. Use the normal component, topology, UV, undo/redo, and project controls.
+
+Henka converts the validated imported primitive into an editor-owned authoring mesh connected to the selected scene entity.
+
+### Component picking
+
+Scene View component picking remains active when a frontmost spot or decal primitive from the same showcase asset wins the render ray.
+
+The visible hit routes through the selected native source and the source mesh performs final component-intersection validation.
+
+### Save and restore
+
+The saved native source can be discovered during a later normal packaged launch.
+
+Valid mesh and owned-material sidecars restore transactionally. Malformed or missing saved slots preserve the imported glTF render.
+
+### Checked-in source refresh
+
+`scripts/capture_editor_owned_authoring_sources_windows.ps1` refreshes the checked-in HAMS artifacts through bounded UI automation.
+
+The capture flow performs:
+
+- Face mode selection;
+- Scene View face picking;
+- generic Bevel;
+- generic Extrude;
+- Save Project;
+- Reload Project.
+
+The script does not generate or directly assemble showcase geometry.
+
+### Delete Faces
+
+Face mode includes bounded `Delete Faces`.
+
+The command removes the current selected face set as one transactional source/render/bounds/history operation. It fails when the operation would leave no renderable face.
+
+Vertex and edge deletion use their own separate controls and contracts.
+
+## Owned material workflow
+
+Imported showcase primitives retain borrowed glTF material identity until the user selects `Own Material`.
+
+`Own Material` adopts a manager-owned runtime material definition and exposes bounded controls for:
+
+- base color;
+- metallic;
+- roughness;
+- emissive strength;
+- IOR;
+- transmission;
+- subsurface amount;
+- bounded subsurface thickness;
+- subsurface tint;
+- in-engine procedural detail-normal texture creation;
+- in-engine metallic-roughness texture creation.
+
+The imported glTF source remains unchanged.
+
+### Packaged material dogfood
+
+The packaged Windows workflow exercises:
+
+- Make Editable;
+- material edits;
+- texture edits;
+- component movement;
+- base color;
+- metallic;
+- roughness;
+- emissive strength;
+- IOR;
+- transmission;
+- procedural detail-normal creation;
+- procedural metallic-roughness creation;
+- bounded material undo/redo;
+- Face selection;
+- Bevel;
+- Save Project;
+- Reload Project.
+
+### Material sidecar persistence
+
+The project manifest persists:
+
+- mesh source;
+- transform;
+- visibility.
+
+The bounded `.material` sidecar persists:
+
+- supported PBR scalars;
+- colors;
+- flags;
+- alpha mode;
+- seven material texture identities.
+
+Native runtime detail-normal and metallic-roughness textures are recreated from bounded recipes on reload.
+
+Texture painting, native-authored source export, and native multi-material binding remain future work.
+
+## Native authored assets
+
+Henka also has a visible generic native-authoring workflow.
+
+### New Asset workflow
+
+1. Enter an asset name.
+2. Choose `New Asset`.
+3. Add bounded primitive parts through the primitive chooser.
+
+Available primitives include:
+
+- Box;
+- Cylinder;
+- Cone;
+- UV Sphere;
+- all-quad Quad Sphere.
+
+UV Sphere preserves latitude/longitude topology and triangular pole caps.
+
+Quad Sphere uses a closed shared-vertex cubed-sphere topology with four-sided faces.
+
+The resulting document:
+
+- is editor-owned;
+- uses `HENKA_PRODUCT_NATIVE_AUTHORED` provenance;
+- supports bounded save/close/reopen.
+
+This workflow establishes native asset creation through Henka's visible authoring path.
+
+The default Giraffe and Rocket remain separately classified imported/generated fixtures and editor-owned derivatives.
+
+### Generic showcase editing
+
+After `Make Editable`, the imported showcase subjects use the same generic component, topology, UV, material, and history tools available to other supported authoring meshes.
+
+Multi-face extrusion and material-region assignment operate on current selection without subject-specific Giraffe or Rocket logic.
+
+## Generation and package ownership
+
+The Sandbox target build runs `scripts/generate_showcase_assets.ps1` for both glTF files.
+
+The generator creates deterministic bounded:
+
+- geometry;
+- UVs;
+- normals;
+- tangent `vec4` attributes;
+- PBR material definitions;
+- sibling binary buffers;
+- generated texture sidecars.
+
+It uses no third-party model and no external runtime authoring application.
+
+The generator is classified as a fixture generator. It is not the design source for the checked-in HAMS editor-owned derivatives.
+
+### Refreshing editor-owned HAMS sources
+
+After a validated Windows modeling session, run:
+
+```powershell
+.\scripts\capture_editor_owned_authoring_sources_windows.ps1
+```
+
+Default behavior processes both subjects through an isolated executable copy.
+
+Single-subject runs are also available:
+
+```powershell
+.\scripts\capture_editor_owned_authoring_sources_windows.ps1 -Subject Giraffe
+.\scripts\capture_editor_owned_authoring_sources_windows.ps1 -Subject Rocket
+```
+
+Each run uses the same visible workflow and does not reuse stale panel coordinates from the other subject.
+
+The capture sequence includes:
+
+- imported-subject selection;
+- Make Editable;
+- component Move;
+- Face selection;
+- viewport face picking;
+- Bevel;
+- Extrude;
+- visible Save Project;
+- visible Reload Project;
+- copying only resulting `.hams` sources into `assets/authoring`.
+
+The resulting SHA-256 hashes form part of the validation record.
+
+### Generated textures and material features
+
+Both generated glTF files use deterministic generated base-color, tangent-space detail-normal, and metallic/roughness textures through the manager-owned semantic texture path.
+
+The Giraffe base-color spot texture is `256x256` and uses irregular multi-harmonic patch boundaries over the tan skin material. Hooves, mane, nostrils, and other facial features remain independently shaded geometry.
+
+The Rocket binds generated base color to the painted ceramic surface. Fasteners, thermal details, engine bells, and other mechanical regions keep distinct material identities.
+
+Both models use supported:
+
+- clearcoat;
+- restrained sheen;
+- emissive strength.
+
+The primitive-gallery cube texture is not used by these showcase materials.
+
+### Package files
+
+The generated glTF files, sibling binary buffers, and texture sidecars are copied beside the executable.
+
+Packaged execution therefore resolves showcase data from package-owned files without repository-root or runtime authoring dependencies.
+
+These two models form the public visual reference set and should be regenerated and manually reviewed after relevant material, lighting, geometry, and shading changes.
+
+Project-specific scenes and visual references remain outside this repository.
+
+### Studio HDR fixture
+
+The packaged studio HDR fixture is generated in memory and contains bounded asymmetric warm-key and cool-fill area-light lobes.
+
+This gives clearcoat, brushed metal, and emissive engine details stable highlight structure through the derived IBL path while preserving direct local-light and shadow fixtures.
+
+The fixture is an authored deterministic lighting reference. Photographic HDRI coverage is not part of its claim.
+
+### Studio floor
+
+The Sandbox studio floor uses a bounded 64 m graphite plane beneath the independent debug grid.
+
+The surface extends beyond ordinary showcase framing so its finite far edge remains outside normal Material Preview and Rendered composition.
+
+## Visual acceptance
+
+The normal Windows graphical path is the source of truth for showcase visual review.
+
+### Same-camera evidence
+
+The standard visual evidence set covers:
+
+- Solid;
+- Material Preview;
+- Rendered.
+
+### Dedicated inspection evidence
+
+The mascot/showcase inspection path launches the real Sandbox repeatedly with the packaged glTF scene/material path active and captures:
+
+**Giraffe**
+
+- normal startup frame;
+- close front Rendered;
+- close three-quarter Rendered;
+- close profile Rendered;
+- wide silhouette Rendered;
+- front Material Preview.
+
+**Rocket**
+
+- close front Rendered;
+- close three-quarter Rendered;
+- profile Rendered.
+
+Dedicated views hide editor chrome only for application inspection. Scene, materials, lighting, asset management, and renderer execution remain unchanged.
+
+### Capture commands
 
 ```powershell
 .\scripts\capture_visual_evidence_windows.ps1 `
@@ -128,50 +381,130 @@ scene, material, lighting, asset-manager, or renderer path.
   -OutputDirectory (Join-Path (Get-Location) "build\visual_evidence_giraffe") `
   -IncludeStartupShowcase `
   -IncludeGiraffeInspection
+
 .\scripts\check_showcase_visual_evidence_windows.ps1 `
   -InputDirectory (Join-Path (Get-Location) "build\visual_evidence_giraffe")
 ```
 
-The capture helper stages the selected executable and its adjacent assets into
-a fresh repo-local runtime for each run. This keeps generated user saves from
-an older launch out of the evidence path; the staged runtime is disposable
-build output and is not a source or package input.
+### Fresh runtime staging
 
-The capture process waits up to a bounded 20 seconds for a CAPTURE_READY record
-from the real application. Pair captures identify `capture_subject=pair` and
-prove both named subject groups are visible, their authoritative bounds and
-render meshes are ready, the final Scene View viewport is known, the front
-camera is level, the combined midpoint is centered, both projected rectangles
-have safety margins, and three settled frames have completed. Subject-specific
-captures identify `capture_subject=giraffe` or `capture_subject=rocket` and
-apply the same readiness, level-camera, centered-subject, and safety-margin
-checks only to the requested subject; the off-camera companion is not treated
-as a capture failure. Full showcase captures declare the `FULL_SHOWCASE`
-evidence profile; inspection-only runs should use `GIRAFFE_INSPECTION` and must
-not be used with this full validator. The validator also requires matching readiness metadata
-for Solid, Material Preview, and Rendered before checking the images. It then
-checks that the evidence identifies the Henka Sandbox executable,
-contains all required views, and rejects missing, flat, low-chroma, or
-dimension-invalid frames. Those objective guards are a structural capture/evidence
-guard only; they do not prove user-authored geometry, realism, completion,
-anatomical quality, or mechanical quality. Inspect the retained images for silhouette, facial-feature assembly,
-neck/head attachment, eyes, ears, ossicones, nostrils, mouth, mane, spots,
-intersections, gaps, and material/shading defects. Generated evidence remains
-repo-local and is not committed. Retained screenshots are not automatically
-evidence for a later worktree: use them only when their capture index binds the
-current executable/source commit, source hashes, and capture metadata; otherwise
-their relationship to the current implementation is not verified.
+The capture helper stages the selected executable and adjacent assets into a fresh repository-local runtime for each run.
+
+Older generated user saves therefore stay outside the evidence path.
+
+The staged runtime is disposable build output and is not a source/package input.
+
+### Readiness metadata
+
+The capture process waits up to 20 seconds for a `CAPTURE_READY` record from the real application.
+
+Pair captures use `capture_subject=pair` and verify:
+
+- both named subject groups are visible;
+- authoritative bounds are ready;
+- render meshes are ready;
+- final Scene View viewport is known;
+- front camera is level;
+- combined midpoint is centered;
+- both projected rectangles have safety margins;
+- three settled frames completed.
+
+Subject-specific captures use:
+
+- `capture_subject=giraffe`;
+- `capture_subject=rocket`.
+
+They apply the same readiness, level-camera, centering, and safety-margin checks to the requested subject.
+
+`FULL_SHOWCASE` identifies full showcase evidence. `GIRAFFE_INSPECTION` identifies inspection-only runs and is not accepted by the full validator.
+
+### Automated image guards
+
+The validator requires matching readiness metadata for Solid, Material Preview, and Rendered before image inspection.
+
+It also verifies:
+
+- Henka Sandbox executable identity;
+- all required views;
+- valid image dimensions;
+- non-flat content;
+- minimum chroma requirements where relevant.
+
+These automated checks establish structural capture integrity.
+
+### Human review
+
+Human review should inspect:
+
+- silhouette;
+- facial assembly;
+- neck/head attachment;
+- eyes;
+- ears;
+- ossicones;
+- nostrils;
+- mouth;
+- mane;
+- spots;
+- geometry intersections;
+- gaps;
+- material/shading defects;
+- rocket proportion and mechanical assembly quality.
+
+Generated evidence remains repository-local and is not committed.
+
+Retained screenshots remain useful only when the capture index binds the exact executable/source revision, source hashes, and capture metadata.
 
 ## Runtime path
 
-Sandbox loads both files through `henka_assets_load_gltf_scene_asset` and instantiates them with `henka_assets_instantiate_gltf_scene`; normal non-smoke startup may then restore a compatible checked-in HAMS derivative. A stale or invalid checked-in derivative—including one with fewer authored vertices than the current imported source—is rejected with the imported render retained, so a refreshed generator cannot be silently hidden by an older fixture. User-persisted project data remains a separate user-owned restore path. Materials and texture dependencies remain manager-owned and use the same glTF material path as imported consumer assets. A missing or corrupted generated file fails initialization through the normal bounded asset error path; it is not replaced by hardcoded geometry in `main.c`.
+Normal Sandbox loading uses:
 
-The engineering primitive gallery remains available with:
+- `henka_assets_load_gltf_scene_asset`;
+- `henka_assets_instantiate_gltf_scene`.
+
+Normal non-smoke startup can then restore a compatible checked-in HAMS derivative.
+
+A stale or invalid checked-in derivative is rejected. The validation includes authored-vertex count consistency against the current imported source. Rejection preserves the imported render.
+
+User-persisted project data remains a separate user-owned restore path.
+
+Materials and texture dependencies remain manager-owned and use the normal glTF material path.
+
+Missing or corrupt generated showcase files fail initialization through the normal bounded asset error path. `main.c` does not replace them with hardcoded showcase geometry.
+
+### Engineering primitive gallery
+
+The diagnostic gallery remains available through:
 
 ```text
 HenkaSandbox3D.exe --primitive-gallery
 ```
 
-That opt-in path preserves the cube, sphere, marker, fallback, foliage, and realism validation samples used by renderer, material, physics, and editor QA.
+It contains the cube, sphere, marker, fallback, foliage, and realism validation samples used by renderer, material, physics, and editor QA.
 
-The generator rejects non-finite vertex data, invalid frames, out-of-range indices, degenerate triangles, and inward-wound faces before writing either asset. These remain representative engine samples rather than movie-production assets; human visual QA across Solid, Material Preview, and Rendered remains a required acceptance gate.
+### Generator validation
+
+Before writing either generated asset, the generator rejects:
+
+- non-finite vertex data;
+- invalid frames;
+- out-of-range indices;
+- degenerate triangles;
+- inward-wound faces.
+
+## Current limits
+
+The showcase system currently leaves the following work open:
+
+- broader generic user-directed modeling;
+- native multi-material binding;
+- complete production authoring workspace;
+- texture painting;
+- native-authored source export;
+- advanced anatomical modeling tools;
+- advanced mechanical modeling tools;
+- full production SSS;
+- ray-traced subsurface transport;
+- production showcase quality closure.
+
+Human visual QA across Solid, Material Preview, and Rendered remains a required acceptance gate.

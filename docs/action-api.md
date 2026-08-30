@@ -1,115 +1,152 @@
 # Action API
 
-Henka Engine now includes a small local Action API for validated scene and object operations.
+> **Status:** Foundation
 
-The goal is straightforward:
+Henka Engine includes a local Action API for validated scene and object operations. The engine owns authority, tools submit requests, Henka validates them, and each request returns a structured result.
 
-- the engine owns authority
-- tools and tests request actions
-- Henka validates the request
-- the action either executes or returns a structured failure
+## Contents
 
-This is a local engine foundation. It is not a network service, cloud bridge, scripting runtime, plugin system, or arbitrary code execution path.
+- [Action flow](#action-flow)
+- [V1 capability](#v1-capability)
+- [Structured results](#structured-results)
+- [Dry-run validation](#dry-run-validation)
+- [Selection and helper safety](#selection-and-helper-safety)
+- [Creation transaction safety](#creation-transaction-safety)
+- [Viewport interaction testing](#viewport-interaction-testing)
+- [Current limitations](#current-limitations)
 
-## What Action API v1 covers
+## Action flow
+
+```mermaid
+flowchart LR
+    Tool[Tool or test]
+    Request[Action request]
+    Validate[Henka validation]
+    Authority[Engine authority]
+    Result[Structured result]
+
+    Tool --> Request --> Validate --> Authority --> Result
+```
+
+The Action API is local engine infrastructure. Network services, cloud bridges, scripting runtimes, plugin loading, and arbitrary code execution are outside the V1 boundary.
+
+## V1 capability
 
 The current action context supports:
 
-- scene summary queries
-- object listing
-- adding a primitive-backed logical scene object
-- deleting an object
-- renaming an object
-- selecting an object
-- clearing selection
-- reading the selected object
-- reading object details
-- setting position
-- setting rotation
-- setting scale
-- moving by delta
-- rotating by delta
-- scaling by multiplier
-- resetting a transform when a default transform is registered
-- hiding and showing objects
-- focusing a camera on an object when a camera context is attached
+- scene summary queries;
+- object listing;
+- primitive-backed logical scene-object creation;
+- object deletion and rename;
+- object selection and selection clearing;
+- selected-object lookup;
+- object-detail queries;
+- position, rotation, and scale assignment;
+- movement and rotation by delta;
+- scaling by multiplier;
+- transform reset when a default transform is registered;
+- visibility changes;
+- camera focus when a camera context is attached.
 
-The current primitive create path is intentionally lightweight. It creates a valid scene object with a name, tag, transform, visibility state, and local bounds. It does not assign meshes or materials automatically.
+### Primitive creation
+
+The current primitive creation path produces a valid logical scene object with:
+
+- a name;
+- a tag;
+- transform state;
+- visibility state;
+- local bounds.
+
+Mesh and material assignment remain separate responsibilities.
 
 ## Structured results
 
-Every action returns a `henka_action_result` with practical state for tools and tests:
+Every action returns a `henka_action_result` with bounded state for tools and tests.
 
-- success or failure
-- command name
-- action status
-- underlying engine result
-- affected entity
-- selected entity
-- before transform when relevant
-- after transform when relevant
-- scene summary when relevant
-- object details when relevant
-- short status message
+| Result field | Purpose |
+| --- | --- |
+| Success/failure | Reports whether the request completed. |
+| Command name | Identifies the requested operation. |
+| Action status | Reports Action API classification. |
+| Engine result | Preserves the underlying Henka result. |
+| Affected entity | Identifies the target when applicable. |
+| Selected entity | Reports selection state when applicable. |
+| Before transform | Captures the prior transform for relevant mutations. |
+| After transform | Captures the committed transform for relevant mutations. |
+| Scene summary | Carries scene-level query output. |
+| Object details | Carries object-level query output. |
+| Status message | Provides short bounded diagnostics. |
 
-This keeps tests and future tool surfaces from guessing whether a request really changed the scene.
+This result contract lets automation verify the actual outcome of a request.
 
 ## Dry-run validation
 
-`henka_action_validate` runs the same validation path as execution but does not mutate scene state.
+`henka_action_validate` runs the same validation path used by execution and leaves scene state unchanged.
 
-This is useful for:
+Useful cases include:
 
-- testing expected failures
-- checking transforms before applying them
-- making future workspace tools safer
-- proving that a command would succeed without changing the scene yet
+- expected-failure testing;
+- transform validation before mutation;
+- workspace preflight checks;
+- deterministic automation checks.
 
-Dry-run does not create objects, delete objects, move objects, or update selection.
+Dry-run leaves object count, transforms, visibility, and selection unchanged.
 
 ## Selection and helper safety
 
-Action API v1 rejects helper entities as normal user-object targets.
+Action API V1 rejects internal helper entities as normal user-object targets.
 
-That means internal gizmo helper pieces are not valid targets for:
+Protected operations include:
 
-- selection
-- rename
-- transform mutation
-- visibility actions
-- camera focus
+- selection;
+- rename;
+- transform mutation;
+- visibility changes;
+- camera focus.
 
-This guardrail keeps scene tools manipulating the real selected object through
-the engine-owned scene path.
-
-## Current limitations
-
-- Action API v1 uses current entity handles, not long-term stable project object IDs.
-- Reset transform only works when a default transform has been registered for that entity.
-- Primitive creation is a logical scene-object foundation, not a full asset-instancing workflow.
-- This is not scene saving.
-- This is not undo or redo.
-- This does not add scripting, plugins, networking, or assistant runtime control.
+This keeps viewport helpers outside ordinary user-object authority.
 
 ## Creation transaction safety
 
-Primitive creation validates the primitive enum, bounded object name, and transform before either dry-run or execution succeeds. Execution applies transform, visibility, bounds, tag, default-transform registration, and object-detail construction as one bounded operation. If any setup step fails, the new entity and any registered default transform are removed before the structured failure is returned.
+Primitive creation validates the primitive enum, bounded object name, and transform before publication.
+
+Execution applies the object setup as one bounded operation:
+
+1. create the entity;
+2. assign transform;
+3. assign visibility;
+4. assign bounds;
+5. assign tag;
+6. register the default transform;
+7. construct object details.
+
+Any setup failure removes the new entity and registered default transform before the structured failure is returned.
 
 ## Viewport interaction testing
 
-The viewport interaction test helpers now work alongside the Action API:
+The viewport interaction helpers work alongside the Action API:
 
-- viewport coordinate conversion
-- world-to-screen projection
-- projected gizmo handle models
-- screen-space gizmo hit testing
-- deterministic gizmo drag math
+- viewport coordinate conversion;
+- world-to-screen projection;
+- projected gizmo handle models;
+- screen-space gizmo hit testing;
+- deterministic gizmo drag math.
 
-Together, those foundations let tests prove outcomes such as:
+Together they let executable tests prove outcomes such as:
 
-- the selected object moved
-- the selected object rotated
-- the selected object scaled
-- a near-gizmo click did not accidentally select another object
+- the selected object moved;
+- the selected object rotated;
+- the selected object scaled;
+- a near-gizmo click preserved the intended object selection.
 
-Manual QA is still needed for visual feel, handle readability, and mouse comfort.
+Human desktop QA still covers handle readability, drag comfort, and overall interaction feel.
+
+## Current limitations
+
+- V1 uses current entity handles. Persistent project object IDs are a later authority layer.
+- Reset Transform requires a registered default transform.
+- Primitive creation does not perform full asset instancing.
+- Scene saving is outside this API.
+- Undo and redo are outside this API.
+- Scripting, plugins, networking, and assistant runtime control are separate systems.
