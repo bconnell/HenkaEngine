@@ -388,6 +388,110 @@ static void camera_hardening_perspective_motion_can_jitter(void)
             false));
 }
 
+static void camera_hardening_off_axis_sphere_projection_is_rectilinear(void)
+{
+    /* The points below are the analytic tangent-circle extrema for unit
+     * spheres centered at (0, 0, -8) and (+/-3, +/-2, -8).  Their literal
+     * pixel bounds independently protect Henka's vertical-FOV, aspect, and
+     * rectilinear projection convention.  Off-axis spheres are expected to
+     * project about 3.66 percent wider than tall at this framing. */
+    const int width = 1920;
+    const int height = 1080;
+    henka_camera camera =
+        henka_camera_create_perspective(
+            60.0f * HENKA_DEG_TO_RAD,
+            (float)width / (float)height,
+            0.1f,
+            500.0f);
+    henka_vec2 center_left;
+    henka_vec2 center_right;
+    henka_vec2 center_top;
+    henka_vec2 center_bottom;
+    float center_width;
+    float center_height;
+    int x_sign;
+    int y_sign;
+
+    camera.position = (henka_vec3){0.0f, 0.0f, 0.0f};
+    camera.yaw_radians = -HENKA_PI * 0.5f;
+    camera.pitch_radians = 0.0f;
+    camera.roll_radians = 0.0f;
+
+    HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+        &camera, width, height,
+        (henka_vec3){-0.992156742f, 0.0f, -7.875f},
+        &center_left, NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+        &camera, width, height,
+        (henka_vec3){0.992156742f, 0.0f, -7.875f},
+        &center_right, NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+        &camera, width, height,
+        (henka_vec3){0.0f, 0.992156742f, -7.875f},
+        &center_top, NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+        &camera, width, height,
+        (henka_vec3){0.0f, -0.992156742f, -7.875f},
+        &center_bottom, NULL) == HENKA_SUCCESS);
+    center_width = center_right.x - center_left.x;
+    center_height = center_bottom.y - center_top.y;
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(center_width, 235.675321f, 0.01f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(center_height, 235.675321f, 0.01f);
+
+    for (x_sign = -1; x_sign <= 1; x_sign += 2)
+    {
+        for (y_sign = -1; y_sign <= 1; y_sign += 2)
+        {
+            henka_vec2 horizontal_outward;
+            henka_vec2 horizontal_inward;
+            henka_vec2 vertical_outward;
+            henka_vec2 vertical_inward;
+            float projected_width;
+            float projected_height;
+
+            HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+                &camera, width, height,
+                (henka_vec3){
+                    (float)x_sign * 3.888800581f,
+                    (float)y_sign * 1.999975722f,
+                    -7.541705852f},
+                &horizontal_outward, NULL) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+                &camera, width, height,
+                (henka_vec3){
+                    (float)x_sign * 2.029011629f,
+                    (float)y_sign * 1.999975722f,
+                    -8.239126709f},
+                &horizontal_inward, NULL) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+                &camera, width, height,
+                (henka_vec3){
+                    (float)x_sign * 2.999978287f,
+                    (float)y_sign * 2.933573766f,
+                    -7.641614701f},
+                &vertical_outward, NULL) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+                &camera, width, height,
+                (henka_vec3){
+                    (float)x_sign * 2.999979013f,
+                    (float)y_sign * 1.007606503f,
+                    -8.123106244f},
+                &vertical_inward, NULL) == HENKA_SUCCESS);
+
+            projected_width = fabsf(
+                horizontal_outward.x - horizontal_inward.x);
+            projected_height = fabsf(
+                vertical_outward.y - vertical_inward.y);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(projected_width, 251.947513f, 0.02f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(projected_height, 243.041944f, 0.02f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                projected_width / projected_height,
+                1.036642106f,
+                0.0002f);
+        }
+    }
+}
+
 static void camera_hardening_static_history_can_jitter(void)
 {
     HENKA_TEST_ASSERT(
@@ -479,6 +583,7 @@ void henka_test_camera_hardening(void)
     camera_hardening_orbit_yaw_is_bounded();
     camera_hardening_mouse_yaw_is_bounded();
     camera_hardening_all_presets_fit_bounds();
+    camera_hardening_off_axis_sphere_projection_is_rectilinear();
 
     camera_hardening_temporal_angle_wraps();
     camera_hardening_temporal_detects_roll();
