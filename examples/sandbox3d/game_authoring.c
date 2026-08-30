@@ -351,6 +351,8 @@ henka_result sandbox3d_game_authoring_register_entity(
 {
     henka_scene_document_object object;
     henka_scene_document_id document_id;
+    henka_entity parent_entity = HENKA_INVALID_ENTITY;
+    size_t parent_index;
     henka_result result;
     if (out_document_id != NULL)
     {
@@ -363,6 +365,21 @@ henka_result sandbox3d_game_authoring_register_entity(
         sandbox3d_game_authoring_build_object(authoring->scene, entity, &object) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_scene_get_entity_parent(
+            authoring->scene, entity, &parent_entity) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (parent_entity != HENKA_INVALID_ENTITY)
+    {
+        parent_index = sandbox3d_game_authoring_find_binding(
+            authoring, parent_entity);
+        if (parent_index == SIZE_MAX)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        object.parent_id = authoring->bindings[parent_index].document_id;
     }
     result = henka_scene_document_add_object(authoring->document, &object, &document_id);
     if (result != HENKA_SUCCESS)

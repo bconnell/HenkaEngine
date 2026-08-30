@@ -532,7 +532,8 @@ int main(void)
             authoring, child_entity, &child_id) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_get_object_for_entity(
             authoring, child_entity, &restored_id, &restored) != HENKA_SUCCESS ||
-        restored_id != child_id)
+        restored_id != child_id ||
+        restored.parent_id != object_id)
     {
         fprintf(stderr, "game authoring test failed during hierarchy setup\n");
         goto cleanup;
