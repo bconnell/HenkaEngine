@@ -44,7 +44,10 @@ composition foundations are sequenced in this order:
    by rendering, physics, Audio, cameras, scripting, and Play sessions. The
    current foundation already rejects cycles and stale parents, propagates
    local/world transforms, supports explicit keep-world and keep-local
-   reparenting, and promotes children safely when a parent is destroyed.
+   reparenting, and promotes children safely when a parent is destroyed. HSCN
+   v6 now persists parent IDs with root migration for v1-v5 documents; Sandbox
+   hierarchy editing, history, and broader subsystem participation remain in
+   current development.
 2. **Prefabs / Reusable Scene Objects** — mature the available bounded runtime
    snapshot and instantiation foundation into reusable authored objects and
    hierarchies with stable prefab identity and revision data, explicit
@@ -345,7 +348,8 @@ available.
 The next persistence work is to extend these bounded foundations into broader
 scene/project data, imported-object and component coverage, more complete
 authoring history, and durable cross-workflow versioning without weakening
-transactional failure behavior.
+transactional failure behavior. HSCN v6 parent relationships are available as
+the current hierarchy persistence foundation.
 
 ### Future Work
 

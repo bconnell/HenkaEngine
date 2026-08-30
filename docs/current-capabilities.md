@@ -107,8 +107,9 @@ authoritative section below.
 - This is a foundation, not a complete game editor. The public runtime scene
   now provides a bounded generation-checked parent/child transform foundation
   with cycle rejection, keep-local/keep-world reparenting, subtree propagation,
-  and parent-destruction promotion. Hierarchy editing in the Sandbox, hierarchy
-  persistence, broader imported-object registration, complete
+  and parent-destruction promotion. HSCN v6 persists parent IDs and migrates
+  v1-v5 objects to roots in memory without rewriting the source file. Hierarchy
+  editing in the Sandbox, broader imported-object registration, complete
   source/material/project serialization, and production gameplay workflows
   remain open. The shared
   scripting API/host schema and bounded HenkaScript lexer/parser/type-checking
@@ -349,7 +350,7 @@ authoritative section below.
   record validation, same-directory temporary files, flush/close-before-replace
   behavior, and failure retention of the prior in-memory state.
 - Authoring sources use the versioned HAMS format, and the Sandbox Game
-  Authoring V1 path uses a bounded, checksummed v3 `.hscene` Scene Document
+  Authoring V1 path uses a bounded, checksummed v6 `.hscene` Scene Document
   for registered objects and bounded Lua/HenkaScript behavior attachments.
   v1 documents load with behavior defaults for migration. A complete
   scene/project serializer and remote/network-backed save policy are not yet
@@ -394,7 +395,7 @@ authoritative section below.
 - Voices bind to borrowed production `henka_scene` and `henka_entity` objects.
   The mixer reads the live entity transform each mix operation, rejects stale or
   destroyed entities before they contribute, and exposes bounded diagnostics.
-- Scene Documents v5 persist the authored Audio listener, emitter values, and
+- Scene Documents v6 persist the authored Audio listener, emitter values, and
   resident/streamed storage choice; v1-v3 load with safe listener defaults,
   while v4 loads its authored listener and defaults emitter storage to resident.
   Legacy documents are not rewritten on load. Play
@@ -415,7 +416,7 @@ authoritative section below.
   validated for PCM WAV, Ogg Vorbis, MP3, and FLAC sources.
   Authored
   emitter configuration, authored listener, and resident/streamed storage mode
-  now persist in v5 Scene Documents, and the Sandbox Play session can instantiate those emitters
+  now persist in v6 Scene Documents, and the Sandbox Play session can instantiate those emitters
   through the normal Game Authoring coordinator. The graphical Sandbox owns a
   client-only, caller-pumped SDL3 playback boundary with bounded queue/pump
   budgets, device diagnostics, event-driven hotplug/format recovery with a

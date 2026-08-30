@@ -115,7 +115,9 @@ scale is not approximated. Destroying a parent promotes its direct children to
 roots while preserving their world transforms, and stale parent handles cannot
 be reused.
 
-Sandbox hierarchy editing, hierarchy persistence, and participation by every
+HSCN v6 persists parent IDs and validates references and cycles during load;
+v1-v5 documents migrate to root objects in memory without being rewritten.
+Sandbox hierarchy editing, hierarchy history, and participation by every
 runtime subsystem remain subsequent work. The runtime foundation is independent
 of the selection-owner relationship used for editor presentation.
 

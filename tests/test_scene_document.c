@@ -173,6 +173,54 @@ static uint32_t test_scene_document_legacy_checksum(
     return ~checksum;
 }
 
+static bool test_scene_document_patch_u64_and_checksum(
+    const char* path,
+    long payload_offset,
+    uint64_t value)
+{
+    FILE* file = fopen(path, "r+b");
+    unsigned char* data = NULL;
+    long length;
+    size_t size;
+    size_t index;
+    bool result = false;
+    if (file == NULL || fseek(file, 0L, SEEK_END) != 0 ||
+        (length = ftell(file)) < 40L || fseek(file, 0L, SEEK_SET) != 0)
+    {
+        if (file != NULL) fclose(file);
+        return false;
+    }
+    size = (size_t)length;
+    if ((uint64_t)payload_offset > (uint64_t)size ||
+        size - (size_t)payload_offset < sizeof(value))
+    {
+        fclose(file);
+        return false;
+    }
+    data = (unsigned char*)malloc(size);
+    if (data != NULL && fread(data, 1U, size, file) == size)
+    {
+        for (index = 0U; index < sizeof(value); ++index)
+        {
+            data[(size_t)payload_offset + index] =
+                (unsigned char)((value >> (index * 8U)) & UINT64_C(0xFF));
+        }
+        (void)test_scene_document_legacy_write_u32(
+            data,
+            size,
+            &(size_t){32U},
+            test_scene_document_legacy_checksum(data + 40U, size - 40U));
+        result = fseek(file, 0L, SEEK_SET) == 0 &&
+            fwrite(data, 1U, size, file) == size;
+    }
+    free(data);
+    if (fclose(file) != 0)
+    {
+        result = false;
+    }
+    return result;
+}
+
 static bool test_scene_document_write_legacy_fixture(const char* path)
 {
     const henka_scene_document_object object = henka_scene_document_object_default();
@@ -588,9 +636,18 @@ int main(void)
         !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)) ||
         henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=5 objects=257") == NULL)
+        inspection_size == 0U || strstr(inspection, "HSCN version=6 objects=257") == NULL)
     {
         fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_patch_u32(first_path, 4L, UINT32_C(5)) ||
+        henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_object_at(loaded, 0U, &loaded_object) != HENKA_SUCCESS ||
+        loaded_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "scene document test failed during v5 compatibility load\n");
         goto cleanup;
     }
     if (henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
@@ -624,6 +681,50 @@ int main(void)
         strcmp(loaded_behavior.asset_path, "scripts/rotate.lua") != 0)
     {
         fprintf(stderr, "scene document test failed during round-trip load\n");
+        goto cleanup;
+    }
+    if (henka_scene_document_get_object(loaded, duplicate_id, &loaded_object) != HENKA_SUCCESS ||
+        loaded_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        fprintf(stderr, "scene document test failed during root hierarchy migration\n");
+        goto cleanup;
+    }
+    loaded_object.parent_id = first_id;
+    if (henka_scene_document_set_object(loaded, &loaded_object) != HENKA_SUCCESS ||
+        henka_scene_document_validate(loaded) != HENKA_SUCCESS ||
+        henka_scene_document_save_file(loaded, ".", first_path) != HENKA_SUCCESS ||
+        henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(loaded, duplicate_id, &loaded_object) != HENKA_SUCCESS ||
+        loaded_object.parent_id != first_id)
+    {
+        fprintf(stderr, "scene document test failed during parent hierarchy round-trip\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_patch_u64_and_checksum(first_path, 48L, duplicate_id) ||
+        henka_scene_document_load_file(loaded, ".", first_path) == HENKA_SUCCESS ||
+        henka_scene_document_get_object(loaded, duplicate_id, &loaded_object) != HENKA_SUCCESS ||
+        loaded_object.parent_id != first_id ||
+        henka_scene_document_save_file(loaded, ".", first_path) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "scene document test failed during malformed hierarchy retention\n");
+        goto cleanup;
+    }
+    loaded_object.parent_id = UINT64_C(999999999);
+    if (henka_scene_document_set_object(loaded, &loaded_object) == HENKA_SUCCESS ||
+        henka_scene_document_get_object(loaded, duplicate_id, &loaded_object) != HENKA_SUCCESS ||
+        loaded_object.parent_id != first_id ||
+        henka_scene_document_get_object(loaded, first_id, &object) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "scene document test failed during invalid parent rejection\n");
+        goto cleanup;
+    }
+    object.parent_id = duplicate_id;
+    if (henka_scene_document_set_object(loaded, &object) == HENKA_SUCCESS ||
+        henka_scene_document_get_object(loaded, first_id, &object) != HENKA_SUCCESS ||
+        object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        henka_scene_document_remove_object(loaded, first_id) == HENKA_SUCCESS)
+    {
+        fprintf(stderr, "scene document test failed during hierarchy cycle/removal checks\n");
         goto cleanup;
     }
     loaded_behavior.enabled = false;
@@ -728,9 +829,9 @@ int main(void)
         !loaded_object.audio.streaming ||
         henka_scene_document_format_inspection(
             loaded, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        strstr(inspection, "HSCN version=5") == NULL)
+        strstr(inspection, "HSCN version=6") == NULL)
     {
-        fprintf(stderr, "scene document test failed during streamed audio v5 round-trip\n");
+        fprintf(stderr, "scene document test failed during streamed audio v6 round-trip\n");
         goto cleanup;
     }
     if (!test_scene_document_patch_u32(first_path, 4L, UINT32_C(4)) ||

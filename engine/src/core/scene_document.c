@@ -83,6 +83,59 @@ static bool henka_scene_document_size_add(size_t* value, size_t addition)
     return true;
 }
 
+static henka_result henka_scene_document_validate_parent_links(
+    const henka_scene_document_storage* storage,
+    henka_scene_document_id replacement_id,
+    henka_scene_document_id replacement_parent_id,
+    bool has_replacement)
+{
+    for (size_t index = 0U; index < storage->object_count; ++index)
+    {
+        henka_scene_document_id current_id = storage->objects[index].id;
+        for (size_t depth = 0U; depth <= storage->object_count; ++depth)
+        {
+            henka_scene_document_id parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+            size_t current_index = SIZE_MAX;
+            if (current_id == HENKA_INVALID_SCENE_DOCUMENT_ID)
+            {
+                break;
+            }
+            for (size_t candidate_index = 0U;
+                 candidate_index < storage->object_count;
+                 ++candidate_index)
+            {
+                if (storage->objects[candidate_index].id == current_id)
+                {
+                    current_index = candidate_index;
+                    break;
+                }
+            }
+            if (current_index == SIZE_MAX)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            parent_id = has_replacement && current_id == replacement_id
+                ? replacement_parent_id
+                : storage->objects[current_index].parent_id;
+            if (parent_id == HENKA_INVALID_SCENE_DOCUMENT_ID)
+            {
+                current_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+                break;
+            }
+            if (parent_id == current_id)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            current_id = parent_id;
+        }
+        if (current_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
 static size_t henka_scene_document_bounded_length(const char* value, size_t capacity)
 {
     size_t length = 0U;
@@ -450,6 +503,14 @@ static henka_result henka_scene_document_validate_storage(
             }
         }
     }
+    if (henka_scene_document_validate_parent_links(
+            storage,
+            HENKA_INVALID_SCENE_DOCUMENT_ID,
+            HENKA_INVALID_SCENE_DOCUMENT_ID,
+            false) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     if ((storage->next_id != 0U && storage->next_id <= maximum_id) ||
         (storage->next_id == 0U && maximum_id != UINT64_MAX))
     {
@@ -462,6 +523,7 @@ henka_scene_document_object henka_scene_document_object_default(void)
 {
     henka_scene_document_object object;
     memset(&object, 0, sizeof(object));
+    object.parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     object.visible = true;
     object.transform = henka_transform_identity();
     object.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_NONE;
@@ -688,6 +750,15 @@ henka_result henka_scene_document_add_object(
     {
         next_id = candidate.id == UINT64_MAX ? 0U : candidate.id + 1U;
     }
+    if (candidate.parent_id == candidate.id)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (candidate.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID &&
+        henka_scene_document_find_index(document->storage, candidate.parent_id) == SIZE_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     for (behavior_index = 0U; behavior_index < candidate.behavior_count; ++behavior_index)
     {
         henka_scene_document_behavior* behavior = &candidate.behaviors[behavior_index];
@@ -808,6 +879,14 @@ henka_result henka_scene_document_set_object(
             }
         }
     }
+    if (henka_scene_document_validate_parent_links(
+            document->storage,
+            object->id,
+            object->parent_id,
+            true) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     document->storage->objects[index] = *object;
     return HENKA_SUCCESS;
 }
@@ -822,6 +901,15 @@ henka_result henka_scene_document_remove_object(
     if (index == SIZE_MAX)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (size_t child_index = 0U;
+         child_index < document->storage->object_count;
+         ++child_index)
+    {
+        if (document->storage->objects[child_index].parent_id == id)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
     }
     if (index + 1U < document->storage->object_count)
     {
@@ -1116,7 +1204,7 @@ static bool henka_scene_document_payload_size(
         if (name_length > UINT16_MAX || source_path_length > UINT16_MAX ||
             material_path_length > UINT16_MAX || prompt_length > UINT16_MAX ||
             audio_path_length > UINT16_MAX ||
-            !henka_scene_document_size_add(&size, 8U + 4U + 2U + name_length + 40U +
+            !henka_scene_document_size_add(&size, 8U + 8U + 4U + 2U + name_length + 40U +
                 4U + 4U + 12U + 2U + source_path_length + 4U +
                 2U + material_path_length + 40U + 4U + 2U + prompt_length +
                 4U + 4U + 12U + 4U + 12U + 4U + 20U + 4U + 4U +
@@ -1217,6 +1305,7 @@ static void henka_scene_document_encode_object(
     if (object->audio.streaming) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING;
 
     henka_scene_document_writer_u64(writer, object->id);
+    henka_scene_document_writer_u64(writer, object->parent_id);
     henka_scene_document_writer_u32(writer, flags);
     henka_scene_document_writer_string(writer, object->name);
     henka_scene_document_writer_float(writer, object->transform.position.x);
@@ -1369,13 +1458,15 @@ static bool henka_scene_document_decode_object(
     }
     *object = henka_scene_document_object_default();
     if (!henka_scene_document_reader_u64(reader, &object->id) ||
+        (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+            !henka_scene_document_reader_u64(reader, &object->parent_id)) ||
         !henka_scene_document_reader_u32(reader, &flags) ||
         (flags & ~HENKA_SCENE_DOCUMENT_KNOWN_FLAGS) != 0U ||
         (format_version < HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3 &&
             (flags & (HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED |
                 HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING |
                 HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL)) != 0U) ||
-        (format_version < HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        (format_version < HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 &&
             (flags & HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING) != 0U) ||
         !henka_scene_document_reader_string(reader, object->name, sizeof(object->name)) ||
         !henka_scene_document_reader_float(reader, &object->transform.position.x) ||
@@ -1741,6 +1832,7 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V2 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V4 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)

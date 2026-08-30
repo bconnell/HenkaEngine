@@ -11,7 +11,8 @@
 #include <henka/result.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(5)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(6)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 UINT32_C(5)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V4 UINT32_C(4)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3 UINT32_C(3)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V2 UINT32_C(2)
@@ -122,6 +123,7 @@ typedef struct henka_scene_document_object
     henka_audio_emitter_config audio;
     size_t behavior_count;
     henka_scene_document_behavior behaviors[HENKA_SCENE_DOCUMENT_MAX_BEHAVIORS_PER_OBJECT];
+    henka_scene_document_id parent_id;
 } henka_scene_document_object;
 
 henka_scene_document_object henka_scene_document_object_default(void);
