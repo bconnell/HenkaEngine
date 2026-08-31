@@ -32,26 +32,37 @@ static henka_material_layer henka_material_layer_default(
         1.0f};
 }
 
-static void henka_scene_bump_render_revision(henka_scene* scene)
+static bool henka_scene_render_revision_available(const henka_scene* scene)
 {
-    if (scene == NULL)
-    {
-        return;
-    }
-    scene->render_revision = scene->render_revision == UINT64_MAX ? 1U :
-        scene->render_revision + 1U;
-    scene->content_revision = scene->content_revision == UINT64_MAX ? 1U :
-        scene->content_revision + 1U;
+    return scene != NULL &&
+        scene->render_revision != UINT64_MAX &&
+        scene->content_revision != UINT64_MAX;
 }
 
-static void henka_scene_bump_camera_revision(henka_scene* scene)
+static bool henka_scene_camera_revision_available(const henka_scene* scene)
 {
-    if (scene == NULL)
+    return scene != NULL && scene->render_revision != UINT64_MAX;
+}
+
+static bool henka_scene_bump_render_revision(henka_scene* scene)
+{
+    if (!henka_scene_render_revision_available(scene))
     {
-        return;
+        return false;
     }
-    scene->render_revision = scene->render_revision == UINT64_MAX ? 1U :
-        scene->render_revision + 1U;
+    scene->render_revision += 1U;
+    scene->content_revision += 1U;
+    return true;
+}
+
+static bool henka_scene_bump_camera_revision(henka_scene* scene)
+{
+    if (!henka_scene_camera_revision_available(scene))
+    {
+        return false;
+    }
+    scene->render_revision += 1U;
+    return true;
 }
 
 henka_material henka_material_default(void)
@@ -1206,7 +1217,9 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
     char* copy;
     henka_result copy_result;
 
-    if (scene == NULL || scene->entity_count >= HENKA_MAX_SCENE_ENTITIES)
+    if (scene == NULL ||
+        scene->entity_count >= HENKA_MAX_SCENE_ENTITIES ||
+        !henka_scene_render_revision_available(scene))
     {
         return HENKA_INVALID_ENTITY;
     }
@@ -1301,6 +1314,10 @@ void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
 
     record = henka_scene_get_entity_record(scene, entity);
     if (record == NULL)
+    {
+        return;
+    }
+    if (!henka_scene_render_revision_available(scene))
     {
         return;
     }
@@ -1770,6 +1787,10 @@ henka_result henka_scene_set_entity_selection_owner(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
     record->selection_owner = owner;
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
@@ -1816,6 +1837,10 @@ henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity e
             0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
 
     record->local_transform = local_transform;
@@ -1864,6 +1889,10 @@ henka_result henka_scene_set_entity_local_transform(
             0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
 
     record->local_transform = sanitized_transform;
@@ -1935,6 +1964,10 @@ henka_result henka_scene_set_entity_parent(
             0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
 
     record->parent = parent;
@@ -2014,6 +2047,10 @@ henka_result henka_scene_set_entity_mesh(henka_scene* scene, henka_entity entity
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
 
     record->mesh = mesh;
     henka_scene_bump_render_revision(scene);
@@ -2028,6 +2065,10 @@ henka_result henka_scene_clear_entity_mesh(henka_scene* scene, henka_entity enti
     if (record == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
     record->mesh = NULL;
     henka_scene_bump_render_revision(scene);
@@ -2044,6 +2085,10 @@ henka_result henka_scene_set_entity_material(henka_scene* scene, henka_entity en
     if (record == NULL || !henka_scene_material_is_valid(material))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
 
     material_name = NULL;
@@ -2080,6 +2125,10 @@ henka_result henka_scene_set_entity_material_asset(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
 
     record->material_asset = asset;
     record->material_asset_revision = 0U;
@@ -2102,6 +2151,10 @@ henka_result henka_scene_apply_material_asset(
         !henka_scene_material_is_valid(material))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
 
     /* The asset owns the stable name storage. This allocation-free refresh
@@ -2220,6 +2273,10 @@ henka_result henka_scene_set_entity_visible(henka_scene* scene, henka_entity ent
 
     if (record->visible != visible)
     {
+        if (!henka_scene_render_revision_available(scene))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
         record->visible = visible;
         henka_scene_bump_render_revision(scene);
     }
@@ -2237,6 +2294,10 @@ henka_result henka_scene_set_entity_local_bounds(henka_scene* scene, henka_entit
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
 
     record->local_bounds = bounds;
     record->has_local_bounds = true;
@@ -2252,6 +2313,10 @@ henka_result henka_scene_clear_entity_local_bounds(henka_scene* scene, henka_ent
     if (record == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
 
     record->has_local_bounds = false;
@@ -2272,6 +2337,10 @@ henka_result henka_scene_set_entity_interaction(henka_scene* scene, henka_entity
         interaction->max_distance < 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
 
     result = henka_scene_duplicate_text(interaction->prompt, &prompt_copy);
@@ -2296,6 +2365,10 @@ henka_result henka_scene_set_entity_flags(henka_scene* scene, henka_entity entit
     if (record == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
 
     record->flags = flags;
@@ -2432,6 +2505,10 @@ henka_result henka_scene_set_camera(henka_scene* scene, const henka_camera* came
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_scene_camera_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
 
     scene->camera = *camera;
     scene->has_camera = true;
@@ -2450,6 +2527,10 @@ void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direct
     {
         return;
     }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return;
+    }
 
     normalized_direction = henka_vec3_normalize(light_direction);
     if (henka_vec3_length(normalized_direction) <= 0.000001f)
@@ -2463,7 +2544,8 @@ void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direct
 
 void henka_scene_set_light_color(henka_scene* scene, henka_vec3 light_color)
 {
-    if (scene != NULL && henka_is_finite_float(light_color.x) &&
+    if (scene != NULL && henka_scene_render_revision_available(scene) &&
+        henka_is_finite_float(light_color.x) &&
         henka_is_finite_float(light_color.y) && henka_is_finite_float(light_color.z) &&
         light_color.x >= 0.0f && light_color.y >= 0.0f && light_color.z >= 0.0f &&
         light_color.x <= 1.0f && light_color.y <= 1.0f && light_color.z <= 1.0f)
@@ -2475,7 +2557,8 @@ void henka_scene_set_light_color(henka_scene* scene, henka_vec3 light_color)
 
 void henka_scene_set_light_intensity(henka_scene* scene, float light_intensity)
 {
-    if (scene != NULL && henka_is_finite_float(light_intensity) && light_intensity >= 0.0f && light_intensity <= 10000.0f)
+    if (scene != NULL && henka_scene_render_revision_available(scene) &&
+        henka_is_finite_float(light_intensity) && light_intensity >= 0.0f && light_intensity <= 10000.0f)
     {
         scene->light_intensity = light_intensity;
         henka_scene_bump_render_revision(scene);
@@ -2484,7 +2567,7 @@ void henka_scene_set_light_intensity(henka_scene* scene, float light_intensity)
 
 void henka_scene_set_ambient_color(henka_scene* scene, henka_vec3 ambient_color)
 {
-    if (scene != NULL &&
+    if (scene != NULL && henka_scene_render_revision_available(scene) &&
         henka_is_finite_float(ambient_color.x) &&
         henka_is_finite_float(ambient_color.y) &&
         henka_is_finite_float(ambient_color.z) &&
@@ -2654,6 +2737,10 @@ henka_result henka_scene_set_environment(
         environment.stars.rotation < -1000000.0f || environment.stars.rotation > 1000000.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
 
     scene->environment = environment;
@@ -2840,6 +2927,10 @@ henka_result henka_scene_add_reflection_probe(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
     for (index = 0U; index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++index)
     {
         if (!scene->reflection_probe_active[index])
@@ -2865,6 +2956,10 @@ henka_result henka_scene_update_reflection_probe(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
     scene->reflection_probes[probe_index] = probe;
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
@@ -2878,6 +2973,10 @@ henka_result henka_scene_remove_reflection_probe(
         !scene->reflection_probe_active[probe_index])
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
     memset(&scene->reflection_probes[probe_index], 0, sizeof(scene->reflection_probes[probe_index]));
     scene->reflection_probe_active[probe_index] = false;
@@ -2942,6 +3041,10 @@ henka_result henka_scene_set_entity_lod(
     if (record == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
     record->lod = lod;
     henka_scene_bump_render_revision(scene);
@@ -3019,6 +3122,10 @@ henka_result henka_scene_add_light(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
     for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
     {
         if (!scene->local_light_active[index])
@@ -3044,6 +3151,10 @@ henka_result henka_scene_update_light(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
     scene->local_lights[light_index] = light;
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
@@ -3057,6 +3168,10 @@ henka_result henka_scene_remove_light(
         !scene->local_light_active[light_index])
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
     memset(&scene->local_lights[light_index], 0, sizeof(scene->local_lights[light_index]));
     scene->local_light_active[light_index] = false;
@@ -3097,6 +3212,10 @@ henka_result henka_scene_set_fog(henka_scene* scene, henka_scene_fog_desc fog)
         fog.density < 0.0f || fog.density > 1.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
     }
 
     scene->fog = fog;

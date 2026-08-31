@@ -305,7 +305,10 @@ henka_result henka_scene_clone(
 void henka_scene_destroy(henka_scene* scene);
 /* Returns the monotonically changing scene render revision.  Any public scene
  * mutation that can change visible geometry, transforms, materials, bounds,
- * visibility, or render settings advances this revision. */
+ * visibility, or render settings advances this revision.  Revision
+ * exhaustion is a fail-closed limit: a mutation that would exceed the
+ * revision watermark is rejected or ignored according to the mutator's
+ * return contract, and the existing scene state remains live. */
 uint64_t henka_scene_get_render_revision(const henka_scene* scene);
 henka_entity henka_scene_create_entity(henka_scene* scene);
 henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* name);

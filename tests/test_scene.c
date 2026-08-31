@@ -1,6 +1,7 @@
 #include "test_suite.h"
 
 #include <float.h>
+#include <stdint.h>
 #include <string.h>
 
 #include <henka/core.h>
@@ -76,6 +77,59 @@ static void henka_test_scene_capacity_growth(void)
         replacement_transform.position.x,
         8.0f,
         0.0001f);
+
+    henka_scene_destroy(scene);
+}
+
+static void henka_test_scene_revision_exhaustion(void)
+{
+    henka_scene* scene;
+    henka_entity entity;
+    henka_entity rejected_entity;
+    henka_camera camera;
+    henka_material material;
+    henka_transform before;
+    henka_transform attempted;
+    const float previous_light_intensity = 3.0f;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Revision Exhaustion");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+        scene, entity, &before) == HENKA_SUCCESS);
+
+    scene->render_revision = UINT64_MAX;
+    scene->content_revision = UINT64_MAX;
+    attempted = before;
+    attempted.position.x = 4.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+        scene, entity, attempted) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+        scene, entity, &attempted) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        attempted.position.x, before.position.x, 0.0001f);
+    HENKA_TEST_ASSERT(scene->render_revision == UINT64_MAX);
+    HENKA_TEST_ASSERT(scene->content_revision == UINT64_MAX);
+
+    material = henka_material_default();
+    material.shader = (henka_shader*)(uintptr_t)1U;
+    HENKA_TEST_ASSERT(henka_scene_set_entity_material(
+        scene, entity, material) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_interaction(
+        scene,
+        entity,
+        &(henka_interaction_desc){true, 5.0f, "Interact"}) == HENKA_ERROR_LIMIT);
+
+    rejected_entity = henka_scene_create_entity_named(scene, "Rejected");
+    HENKA_TEST_ASSERT(rejected_entity == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 1U);
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD, 1.0f, 0.1f, 100.0f);
+    HENKA_TEST_ASSERT(henka_scene_set_camera(scene, &camera) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(!scene->has_camera);
+    henka_scene_set_light_intensity(scene, 7.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene->light_intensity, previous_light_intensity, 0.0001f);
 
     henka_scene_destroy(scene);
 }
@@ -784,6 +838,7 @@ void henka_test_scene(void)
     henka_scene_destroy(scene);
 
     henka_test_scene_capacity_growth();
+    henka_test_scene_revision_exhaustion();
     henka_test_scene_hierarchy();
     henka_test_prefab_snapshot_and_transaction();
 }
