@@ -1,8 +1,8 @@
 # Repository Integrity
 
-Henka's public repository checks separate wording policy from technical integrity.
+Henka's public repository checks separate public-content policy from technical integrity.
 
-`check_public_repo_hygiene.ps1` checks first-party public text for the project's limited wording rules.
+`check_public_repo_hygiene.ps1` checks first-party public text for the project's bounded public-content rules.
 
 `check_repository_integrity.ps1` checks:
 
