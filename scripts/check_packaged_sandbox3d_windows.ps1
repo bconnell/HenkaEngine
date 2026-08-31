@@ -1031,8 +1031,8 @@ Assert-FileContains -Path $readmePath -Pattern "If saved live workspace geometry
 Assert-FileContains -Path $readmePath -Pattern "Close a detached tool window to return its panel to the last valid dock" -Description "Packaged workspace limitation guidance"
 Assert-FileContains -Path $readmePath -Pattern "Use M or G, R, and S for action-based transforms" -Description "Packaged transform hotkey guidance"
 Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packaged status guidance"
-Assert-FileContains -Path $helpPath -Pattern "Utility panel" -Description "Packaged utility help"
-Assert-FileContains -Path $helpPath -Pattern "Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D" -Description "Packaged camera preset help"
+Assert-FileContains -Path $helpPath -Pattern "Utility > Settings controls:" -Description "Packaged utility help"
+Assert-FileContains -Path $helpPath -Pattern "Perspective 3D|Side 2.5D|Top-down 2.5D|Isometric 2.5D" -Description "Packaged camera preset help"
 Assert-FileContains -Path $helpPath -Pattern "Showcase Giraffe" -Description "Packaged showcase help"
 
 if ($NonInteractive) {
