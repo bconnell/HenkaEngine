@@ -408,7 +408,7 @@ static bool henka_gltf_member_vec3(
         }
         ((float*)&out_value->x)[index] = (float)number;
     }
-    return true;
+    return !henka_gltf_array_item(array, array_end, 3U, &value, &value_end);
 }
 
 static bool henka_gltf_member_vec4(
@@ -434,7 +434,7 @@ static bool henka_gltf_member_vec4(
         }
         ((float*)&out_value->x)[index] = (float)number;
     }
-    return true;
+    return !henka_gltf_array_item(array, array_end, 4U, &value, &value_end);
 }
 
 static char* henka_gltf_duplicate_string(const char* value)

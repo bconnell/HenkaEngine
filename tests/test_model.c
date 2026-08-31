@@ -165,6 +165,50 @@ static void henka_test_model_rejects_unsafe_bounds(void)
     henka_free(oversized_source);
 }
 
+static void henka_test_gltf_rejects_extra_material_vector_components(void)
+{
+    static const char* extra_base_color_component =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"materials\":[{\"pbrMetallicRoughness\":{\"baseColorFactor\":[1,1,1,1,0]}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    static const char* extra_emissive_component =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"materials\":[{\"emissiveFactor\":[0,0,0,1]}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    henka_model_data model;
+    henka_result result;
+
+    memset(&model, 0, sizeof(model));
+    result = henka_model_data_load_gltf_from_memory(
+        extra_base_color_component,
+        strlen(extra_base_color_component),
+        "extra-base-color-component.gltf",
+        &model);
+    if (result == HENKA_SUCCESS) henka_model_data_destroy(&model);
+    HENKA_TEST_ASSERT(result != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+
+    memset(&model, 0, sizeof(model));
+    result = henka_model_data_load_gltf_from_memory(
+        extra_emissive_component,
+        strlen(extra_emissive_component),
+        "extra-emissive-component.gltf",
+        &model);
+    if (result == HENKA_SUCCESS) henka_model_data_destroy(&model);
+    HENKA_TEST_ASSERT(result != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+}
+
 static void henka_test_gltf_external_buffer_file_load(void)
 {
     enum { position_count = 3U, position_component_count = 3U, position_component_type = 5126 };
@@ -1069,6 +1113,7 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.indices == NULL);
 
     henka_test_model_rejects_unsafe_bounds();
+    henka_test_gltf_rejects_extra_material_vector_components();
     henka_test_gltf_external_buffer_file_load();
     henka_test_gltf_external_image_file_load();
     henka_test_authoring_mesh_renderer_bridge();
