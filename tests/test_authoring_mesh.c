@@ -1,3 +1,4 @@
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -3727,9 +3728,39 @@ cleanup:
     return result ? 1 : fail(stage);
 }
 
+static int test_extreme_bounds_remain_finite(void)
+{
+    const henka_authoring_mesh_desc desc = {2U, 1U, 1U, 3U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id first_id;
+    henka_authoring_vertex_id second_id;
+    henka_vec3 center;
+    henka_vec3 extents;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){-FLT_MAX, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 0U, &first_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){FLT_MAX, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 0U, &second_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_bounds(mesh, &center, &extents) != HENKA_SUCCESS ||
+        !isfinite(center.x) || !isfinite(center.y) || !isfinite(center.z) ||
+        !isfinite(extents.x) || !isfinite(extents.y) || !isfinite(extents.z) ||
+        center.x != 0.0f || extents.x != FLT_MAX)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("extreme authoring bounds");
+}
+
 int main(void)
 {
-    return test_topology_and_evaluation() && test_evaluation_failure_clears_output_counts() &&
+    return test_topology_and_evaluation() && test_extreme_bounds_remain_finite() &&
+        test_evaluation_failure_clears_output_counts() &&
         test_face_operation_outputs_fail_closed() &&
         test_duplicate_face_propagates_allocation_failure() &&
         test_primitive_constructor_outputs_fail_closed() &&

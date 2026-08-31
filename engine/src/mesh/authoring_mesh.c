@@ -1007,13 +1007,13 @@ henka_result henka_authoring_mesh_get_bounds(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_center = (henka_vec3){
-        (minimum.x + maximum.x) * 0.5f,
-        (minimum.y + maximum.y) * 0.5f,
-        (minimum.z + maximum.z) * 0.5f};
+        minimum.x * 0.5f + maximum.x * 0.5f,
+        minimum.y * 0.5f + maximum.y * 0.5f,
+        minimum.z * 0.5f + maximum.z * 0.5f};
     *out_extents = (henka_vec3){
-        (maximum.x - minimum.x) * 0.5f,
-        (maximum.y - minimum.y) * 0.5f,
-        (maximum.z - minimum.z) * 0.5f};
+        maximum.x * 0.5f - minimum.x * 0.5f,
+        maximum.y * 0.5f - minimum.y * 0.5f,
+        maximum.z * 0.5f - minimum.z * 0.5f};
     return HENKA_SUCCESS;
 }
 
