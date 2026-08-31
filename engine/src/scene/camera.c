@@ -142,6 +142,45 @@ static bool henka_camera_projection_matrix_is_finite(const henka_camera* camera)
     return true;
 }
 
+static bool henka_camera_view_matrix_is_valid(const henka_camera* camera)
+{
+    henka_vec3 view_direction;
+    henka_vec3 target;
+    henka_mat4 view;
+    int index;
+
+    if (!henka_camera_pose_is_valid(camera))
+    {
+        return false;
+    }
+
+    target = henka_vec3_add(camera->position, henka_camera_get_forward(camera));
+    if (!henka_vec3_is_finite(target))
+    {
+        return false;
+    }
+
+    view_direction = henka_vec3_subtract(target, camera->position);
+    if (!henka_vec3_is_finite(view_direction) ||
+        henka_vec3_length(view_direction) <= 0.000001f)
+    {
+        return false;
+    }
+
+    view = henka_mat4_look_at(
+        camera->position,
+        target,
+        henka_camera_get_up(camera));
+    for (index = 0; index < 16; ++index)
+    {
+        if (!isfinite(view.m[index]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool henka_camera_projection_is_valid(const henka_camera* camera)
 {
     if (camera == NULL ||
@@ -173,6 +212,7 @@ static bool henka_camera_projection_is_valid(const henka_camera* camera)
 bool henka_camera_is_valid(const henka_camera* camera)
 {
     return henka_camera_pose_is_valid(camera) &&
+        henka_camera_view_matrix_is_valid(camera) &&
         henka_camera_projection_is_valid(camera) &&
         isfinite(camera->movement_speed) &&
         isfinite(camera->fast_movement_multiplier) &&
@@ -444,6 +484,10 @@ henka_mat4 henka_camera_get_view_matrix(const henka_camera* camera)
     }
 
     target = henka_vec3_add(camera->position, henka_camera_get_forward(camera));
+    if (!henka_camera_view_matrix_is_valid(camera))
+    {
+        return henka_mat4_identity();
+    }
     return henka_mat4_look_at(camera->position, target, henka_camera_get_up(camera));
 }
 

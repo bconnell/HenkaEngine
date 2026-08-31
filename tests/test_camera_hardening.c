@@ -524,6 +524,31 @@ static void camera_hardening_rejects_nonfinite_projection_math(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(orthographic_projection.m[15], 1.0f, 0.0001f);
 }
 
+static void camera_hardening_rejects_degenerate_view_math(void)
+{
+    henka_camera camera =
+        henka_camera_create_perspective(
+            60.0f * HENKA_DEG_TO_RAD,
+            1.0f,
+            0.1f,
+            500.0f);
+    henka_mat4 view;
+    int index;
+
+    camera.position = (henka_vec3){FLT_MAX, FLT_MAX, FLT_MAX};
+
+    HENKA_TEST_ASSERT(!henka_camera_is_valid(&camera));
+
+    view = henka_camera_get_view_matrix(&camera);
+    for (index = 0; index < 16; ++index)
+    {
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            view.m[index],
+            index % 5 == 0 ? 1.0f : 0.0f,
+            0.0001f);
+    }
+}
+
 static void camera_hardening_static_history_can_jitter(void)
 {
     HENKA_TEST_ASSERT(
@@ -617,6 +642,7 @@ void henka_test_camera_hardening(void)
     camera_hardening_all_presets_fit_bounds();
     camera_hardening_off_axis_sphere_projection_is_rectilinear();
     camera_hardening_rejects_nonfinite_projection_math();
+    camera_hardening_rejects_degenerate_view_math();
 
     camera_hardening_temporal_angle_wraps();
     camera_hardening_temporal_detects_roll();
