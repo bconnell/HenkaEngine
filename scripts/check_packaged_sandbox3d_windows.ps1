@@ -1822,7 +1822,7 @@ try {
                 # for a missing click or a failed transaction.
                 $nativeMakeEditableObserved = Wait-FileContainsAfterOffset `
                     -Path $stdoutPath `
-                    -Pattern "Native authoring dogfood: Make Editable converted .*source_state=HENKA_NATIVE_EDITABLE_SOURCE\." `
+                    -Pattern "Native authoring workflow: Make Editable converted .*source_state=HENKA_NATIVE_EDITABLE_SOURCE\." `
                     -StartingOffset $makeEditableLogOffset `
                     -TimeoutMilliseconds 15000
             }
@@ -2380,7 +2380,7 @@ try {
             -FramebufferY ($nativeMoveY + 6.0)
         $nativeMoveObserved = Wait-FileContainsAfterOffset `
             -Path $stdoutPath `
-            -Pattern "Native authoring dogfood: component move edited" `
+            -Pattern "Native authoring workflow: component move edited" `
             -StartingOffset $nativeMoveLogOffset `
             -TimeoutMilliseconds 10000
         if (-not $nativeMoveObserved) {
@@ -2910,7 +2910,7 @@ try {
             # after this click, which proves that the native source changed.
             $nativeBevelObserved = Wait-FileContains `
                 -Path $stdoutPath `
-                -Pattern "Native authoring dogfood: bevel operator edited" `
+                -Pattern "Native authoring workflow: bevel operator edited" `
                 -TimeoutMilliseconds 15000
         }
         if (-not $nativeBevelObserved) {
@@ -2964,7 +2964,7 @@ try {
             Start-Sleep -Milliseconds 150
             $nativeFlipObserved = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
-                -Pattern "Native authoring dogfood: face winding flipped for" `
+                -Pattern "Native authoring workflow: face winding flipped for" `
                 -StartingOffset $nativeFlipLogOffset `
                 -TimeoutMilliseconds 2500
         }
@@ -3035,7 +3035,7 @@ try {
                 -FramebufferY ($nativeDeleteY + [double]$nativeDeleteOffsets[$deleteAttempt][1])
             $nativeDeleteObserved = Wait-FileContains `
                 -Path $stdoutPath `
-                -Pattern "Native authoring dogfood: selected faces deleted from" `
+                -Pattern "Native authoring workflow: selected faces deleted from" `
                 -TimeoutMilliseconds 2500
         }
         if (-not $nativeDeleteObserved) {
@@ -3110,7 +3110,7 @@ try {
                 -FramebufferY ($nativeSaveY + 12.0 + [double]$nativeSaveOffset[1])
             $nativeSaveObserved = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
-                -Pattern "Native authoring dogfood: project saved" `
+                -Pattern "Native authoring workflow: project saved" `
                 -StartingOffset $nativeSaveLogOffset `
                 -TimeoutMilliseconds 1800
             if ($nativeSaveObserved) {
@@ -3120,7 +3120,7 @@ try {
         if (-not $nativeSaveObserved) {
             throw "The user-facing native authoring project save did not complete."
         }
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: material state saved" -TimeoutMilliseconds 5000)) {
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring workflow: material state saved" -TimeoutMilliseconds 5000)) {
         throw "The user-facing native material state save did not complete."
     }
     Write-Output "[pass] User-facing native authoring project save completed"
@@ -3138,10 +3138,10 @@ try {
             -FramebufferHeight $framebufferHeight `
         -FramebufferX ($nativeReloadX + ($nativeProjectWidth * 0.5)) `
             -FramebufferY ($nativeReloadY + 12.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded" -TimeoutMilliseconds 5000)) {
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring workflow: project reloaded" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native authoring project reload did not complete transactionally."
         }
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: material state reloaded" -TimeoutMilliseconds 5000)) {
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring workflow: material state reloaded" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native material state reload did not complete transactionally."
         }
         Write-Output "[pass] User-facing native authoring project reload completed transactionally"

@@ -162,5 +162,4 @@ entity ID remain unchanged; explicit schema/version migration is future work.
 - no unrestricted filesystem access;
 - no global input blocking;
 - no implicit state migration;
-- no debugger, breakpoint, or replay system; and
-- no claim that the entire Game Authoring campaign is complete.
+- no debugger, breakpoint, or replay system in this source-authoring boundary.

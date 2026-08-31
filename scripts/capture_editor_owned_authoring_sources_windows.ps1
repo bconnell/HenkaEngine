@@ -557,7 +557,7 @@ try {
                             -FramebufferY ([double]$editable.Groups["y"].Value + $yOffset)
                         $editableClicked = Wait-FileContains `
                             -Path $stdoutPath `
-                            -Pattern "Native authoring dogfood: Make Editable converted .*Showcase $subject" `
+                            -Pattern "Native authoring workflow: Make Editable converted .*Showcase $subject" `
                             -TimeoutMilliseconds 500
                     }
                 }
@@ -571,7 +571,7 @@ try {
             throw "The visible $subject component Move control was not exposed."
         }
         Click-FramebufferPoint -Handle $handle -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -FramebufferX ([double]$move.Groups["x"].Value + 44.0) -FramebufferY ([double]$move.Groups["y"].Value + 12.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: component move edited Showcase $subject .* source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE" -TimeoutMilliseconds 10000)) {
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring workflow: component move edited Showcase $subject .* source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE" -TimeoutMilliseconds 10000)) {
             throw "The visible $subject generic modeling edit did not report the expected editor-derived fixture state."
         }
 
@@ -592,7 +592,7 @@ try {
             -FramebufferY ([double]$selectionTools.Groups["y"].Value + 12.0)
         if (-not (Wait-FileContains `
                 -Path $stdoutPath `
-                -Pattern "Native authoring dogfood: selected topology scaled Showcase $subject" `
+                -Pattern "Native authoring workflow: selected topology scaled Showcase $subject" `
                 -TimeoutMilliseconds 10000)) {
             throw "The visible $subject Scale Selected operation did not complete."
         }
@@ -637,7 +637,7 @@ try {
                                 -FramebufferY ([double]$bevel.Groups["y"].Value + $yOffset)
                             $bevelCompleted = Wait-FileContains `
                                 -Path $stdoutPath `
-                                -Pattern "Native authoring dogfood: face bevel edited Showcase $subject" `
+                                -Pattern "Native authoring workflow: face bevel edited Showcase $subject" `
                                 -TimeoutMilliseconds 500
                         }
                     }
@@ -685,7 +685,7 @@ try {
                                 -FramebufferY ([double]$faceEditTools.Groups["y"].Value + $yOffset)
                             $extrudeCompleted = Wait-FileContains `
                                 -Path $stdoutPath `
-                                -Pattern "Native authoring dogfood: face extrude edited Showcase $subject" `
+                                -Pattern "Native authoring workflow: face extrude edited Showcase $subject" `
                                 -TimeoutMilliseconds 500
                         }
                     }
@@ -761,7 +761,7 @@ try {
                                 -FramebufferY ([double]$bevel.Groups["y"].Value + $yOffset)
                             $bevelClicked = Wait-FileContains `
                                 -Path $stdoutPath `
-                                -Pattern "Native authoring dogfood: face bevel edited Showcase $subject" `
+                                -Pattern "Native authoring workflow: face bevel edited Showcase $subject" `
                                 -TimeoutMilliseconds 500
                         }
                     }
@@ -793,7 +793,7 @@ try {
             throw "The visible $subject Save Project control was not exposed."
         }
         Click-FramebufferPoint -Handle $handle -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -FramebufferX ([double]$controls.Groups["saveX"].Value + [double]$controls.Groups["width"].Value * 0.5) -FramebufferY ([double]$controls.Groups["saveY"].Value + 12.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Showcase $subject .* source_state=HENKA_NATIVE_EDITED_FIXTURE" -TimeoutMilliseconds 5000)) {
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring workflow: project saved for Showcase $subject .* source_state=HENKA_NATIVE_EDITED_FIXTURE" -TimeoutMilliseconds 5000)) {
             throw "The visible $subject Save Project operation did not persist the expected editor-derived fixture state."
         }
         $controls = Get-ProjectControls -Subject $subject
@@ -801,7 +801,7 @@ try {
             throw "The visible $subject Reload Project control was not exposed."
         }
         Click-FramebufferPoint -Handle $handle -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -FramebufferX ([double]$controls.Groups["reloadX"].Value + [double]$controls.Groups["width"].Value * 0.5) -FramebufferY ([double]$controls.Groups["reloadY"].Value + 12.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Showcase $subject .* source_state=HENKA_NATIVE_EDITED_FIXTURE" -TimeoutMilliseconds 5000)) {
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring workflow: project reloaded for Showcase $subject .* source_state=HENKA_NATIVE_EDITED_FIXTURE" -TimeoutMilliseconds 5000)) {
             throw "The visible $subject Reload Project operation did not restore the expected editor-derived fixture state."
         }
 

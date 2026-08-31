@@ -828,7 +828,7 @@ static bool sandbox3d_apply_authoring_bevel(
                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
         sandbox3d_mark_generic_modeling_applied(state, entity);
         printf(
-            "Native authoring dogfood: bevel operator edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+            "Native authoring workflow: bevel operator edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
             display_name,
             counts.vertices,
             counts.faces);
@@ -980,7 +980,7 @@ static bool sandbox3d_apply_authoring_face_delete(
                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
         sandbox3d_mark_generic_modeling_applied(state, entity);
         printf(
-            "Native authoring dogfood: selected faces deleted from %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+            "Native authoring workflow: selected faces deleted from %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
             display_name,
             counts.vertices,
             counts.faces);
@@ -3497,7 +3497,7 @@ static void sandbox3d_handle_authoring_project_request(
                 sandbox3d_authoring_object_get_mesh(
                     state->authoring_object));
         printf(
-            "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=%s design_authority=%s preset_applied=%d.\n",
+            "Native authoring workflow: project %s for %s; vertices=%zu faces=%zu source_state=%s design_authority=%s preset_applied=%d.\n",
             save_requested ? "saved" : "reloaded",
             display_name,
             counts.vertices,
@@ -3513,7 +3513,7 @@ static void sandbox3d_handle_authoring_project_request(
             state->native_authoring_material_entity == entity)
         {
             printf(
-                "Native authoring dogfood: material state %s for %s source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                "Native authoring workflow: material state %s for %s source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
                 save_requested ? "saved" : (material_present ? "reloaded" : "retained"),
                 display_name);
             fflush(stdout);
@@ -13398,7 +13398,7 @@ static bool sandbox3d_make_selected_object_editable(
         authored_counts.faces);
     fflush(stdout);
     printf(
-        "Native authoring dogfood: Make Editable converted %s inside Object Details; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+        "Native authoring workflow: Make Editable converted %s inside Object Details; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
         sandbox3d_safe_entity_name(state, entity, "showcase primitive"),
         authored_counts.vertices,
         authored_counts.faces);
@@ -24466,7 +24466,7 @@ static void sandbox3d_draw_object_details_panel(
                         sandbox3d_authoring_object_get_mesh(state->authoring_object));
                 sandbox3d_mark_generic_modeling_applied(state, entity);
                 printf(
-                    "Native authoring dogfood: face winding flipped for %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                    "Native authoring workflow: face winding flipped for %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                     display_name,
                     counts.vertices,
                     counts.faces);
@@ -25257,7 +25257,7 @@ details_group_authoring:
                                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                         printf(
-                            "Native authoring dogfood: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                            "Native authoring workflow: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                             display_name,
                             counts.vertices,
                             counts.faces);
@@ -26401,7 +26401,7 @@ details_group_authoring:
                                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                         printf(
-                            "Native authoring dogfood: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                            "Native authoring workflow: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                             display_name,
                             counts.vertices,
                             counts.faces);
@@ -26538,7 +26538,7 @@ details_group_authoring:
                                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                         printf(
-                            "Native authoring dogfood: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                            "Native authoring workflow: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                             display_name,
                             counts.vertices,
                             counts.faces);
@@ -26573,7 +26573,7 @@ details_group_authoring:
                                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                         printf(
-                            "Native authoring dogfood: face inset edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                            "Native authoring workflow: face inset edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                             display_name,
                             counts.vertices,
                             counts.faces);
@@ -26872,7 +26872,7 @@ details_group_authoring:
                                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                         printf(
-                            "Native authoring dogfood: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                            "Native authoring workflow: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                             display_name,
                             counts.vertices,
                             counts.faces);
@@ -26946,7 +26946,7 @@ details_group_authoring:
                                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                         printf(
-                            "Native authoring dogfood: selected topology scaled %s; vertices=%zu faces=%zu scale=1.08 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                            "Native authoring workflow: selected topology scaled %s; vertices=%zu faces=%zu scale=1.08 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                             display_name,
                             counts.vertices,
                             counts.faces);
@@ -27766,7 +27766,7 @@ details_group_authoring:
                             sandbox3d_authoring_object_get_mesh(state->authoring_object));
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     printf(
-                        "Native authoring dogfood: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                        "Native authoring workflow: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                         display_name,
                         counts.vertices,
                         counts.faces);
@@ -27818,7 +27818,7 @@ details_group_authoring:
                             sandbox3d_authoring_object_get_mesh(state->authoring_object));
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     printf(
-                        "Native authoring dogfood: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                        "Native authoring workflow: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                         display_name,
                         counts.vertices,
                         counts.faces);
@@ -28196,7 +28196,7 @@ details_group_authoring:
                         henka_authoring_mesh_get_counts(
                             sandbox3d_authoring_object_get_mesh(state->authoring_object));
                     printf(
-                        "Native authoring dogfood: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                        "Native authoring workflow: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                         display_name,
                         counts.vertices,
                         counts.faces);
@@ -28279,7 +28279,7 @@ details_group_authoring:
                                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                         printf(
-                            "Native authoring dogfood: selected topology scaled %s; vertices=%zu faces=%zu scale=1.08 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                            "Native authoring workflow: selected topology scaled %s; vertices=%zu faces=%zu scale=1.08 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                             display_name,
                             counts.vertices,
                             counts.faces);
@@ -28794,7 +28794,7 @@ details_group_authoring:
                 {
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     printf(
-                        "Native authoring dogfood: proportional component move edited %s; axis=X ring_count=1 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                        "Native authoring workflow: proportional component move edited %s; axis=X ring_count=1 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                         display_name);
                     fflush(stdout);
                     sandbox3d_set_status(state, false, "Selected topology moved with one-ring falloff on X.");
@@ -28809,7 +28809,7 @@ details_group_authoring:
                 {
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     printf(
-                        "Native authoring dogfood: proportional component move edited %s; axis=Y ring_count=1 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                        "Native authoring workflow: proportional component move edited %s; axis=Y ring_count=1 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                         display_name);
                     fflush(stdout);
                     sandbox3d_set_status(state, false, "Selected topology moved with one-ring falloff on Y.");
@@ -28824,7 +28824,7 @@ details_group_authoring:
                 {
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     printf(
-                        "Native authoring dogfood: proportional component move edited %s; axis=Z ring_count=1 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                        "Native authoring workflow: proportional component move edited %s; axis=Z ring_count=1 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                         display_name);
                     fflush(stdout);
                     sandbox3d_set_status(state, false, "Selected topology moved with one-ring falloff on Z.");
@@ -29113,7 +29113,7 @@ details_group_authoring:
                             sandbox3d_authoring_object_get_mesh(state->authoring_object));
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     printf(
-                        "Native authoring dogfood: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                        "Native authoring workflow: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
                         display_name,
                         counts.vertices,
                         counts.faces);
@@ -29152,7 +29152,7 @@ details_group_authoring:
                             sandbox3d_authoring_object_get_mesh(state->authoring_object));
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     printf(
-                        "Native authoring dogfood: selected-face extrude edited %s; selected_faces=%zu vertices=%zu faces=%zu.\n",
+                        "Native authoring workflow: selected-face extrude edited %s; selected_faces=%zu vertices=%zu faces=%zu.\n",
                         display_name,
                         sandbox3d_authoring_object_get_selected_component_count(state->authoring_object),
                         counts.vertices,

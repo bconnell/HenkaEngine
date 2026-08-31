@@ -343,7 +343,7 @@ HAMS v5 is required for persisted loose vertices and zero-face wire edges. Legac
 
 Imported nontrivial objects can take the Make Editable path.
 
-The bounded dogfood workflow also includes:
+The bounded native authoring workflow also includes:
 
 - native source persistence;
 - evaluated mesh replacement;

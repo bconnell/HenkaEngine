@@ -308,7 +308,7 @@ try {
         Click-LoggedControl `
             -Pattern ("Native authoring bevel control: name=" + [Regex]::Escape($partName) + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=88.0 height=24.0') `
             -XGroup "x" -YGroup "y"
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: face bevel edited" -TimeoutMilliseconds 5000)) {
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring workflow: face bevel edited" -TimeoutMilliseconds 5000)) {
             throw "Visible top profile bevel failed."
         }
         Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
