@@ -406,96 +406,122 @@ static bool test_scene_document_write_v2_fixture(const char* path)
     return result;
 }
 
-static bool test_scene_document_write_v3_fixture(
-    const char* source_path,
-    const char* target_path)
+static bool test_scene_document_write_v3_or_v4_or_v5_fixture(
+    const char* path,
+    uint32_t version)
 {
-    FILE* source = NULL;
-    FILE* target = NULL;
-    unsigned char* data = NULL;
-    long length;
-    size_t size;
-    size_t payload_size;
-    bool read_ok;
-    bool result = false;
+    const henka_scene_document_object object = henka_scene_document_object_default();
+    const henka_audio_listener listener = henka_audio_listener_default();
+    unsigned char payload[2048];
+    unsigned char header[40];
+    size_t position = 0U;
+    FILE* file;
+    bool result = true;
 
+    if (path == NULL || (version != 3U && version != 4U && version != 5U))
+    {
+        return false;
+    }
+    memset(payload, 0, sizeof(payload));
+    memset(header, 0, sizeof(header));
+    result = result && test_scene_document_legacy_write_u64(payload, sizeof(payload), &position, 1U);
+    result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, 3U);
+    result = result && test_scene_document_legacy_write_string(payload, sizeof(payload), &position, version == 3U ? "v3" : (version == 4U ? "v4" : "v5"));
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.x);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.y);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.z);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.rotation.x);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.rotation.y);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.rotation.z);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.rotation.w);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.scale.x);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.scale.y);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.scale.z);
+    result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, (uint32_t)object.source.kind);
+    result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, (uint32_t)object.source.primitive);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.source.primitive_dimensions.x);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.source.primitive_dimensions.y);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.source.primitive_dimensions.z);
+    result = result && test_scene_document_legacy_write_string(payload, sizeof(payload), &position, object.source.path);
+    result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, (uint32_t)object.source.asset_kind);
+    result = result && test_scene_document_legacy_write_string(payload, sizeof(payload), &position, object.renderer.material_path);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.renderer.base_color.x);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.renderer.base_color.y);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.renderer.base_color.z);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.renderer.base_color.w);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.renderer.metallic);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.renderer.roughness);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.renderer.emissive.x);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.renderer.emissive.y);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.renderer.emissive.z);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.renderer.emissive_strength);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.interaction.max_distance);
+    result = result && test_scene_document_legacy_write_string(payload, sizeof(payload), &position, object.interaction.prompt);
+    result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, (uint32_t)object.physics.body_type);
+    result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, (uint32_t)object.physics.shape);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.collider_offset.x);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.collider_offset.y);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.collider_offset.z);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.sphere_radius);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.box_half_extents.x);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.box_half_extents.y);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.box_half_extents.z);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.mass);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.material.restitution);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.material.static_friction);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.material.dynamic_friction);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.material.linear_damping);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.physics.material.angular_damping);
+    result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, object.physics.layer);
+    result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, object.physics.mask);
+    result = result && test_scene_document_legacy_write_string(payload, sizeof(payload), &position, object.audio.clip_path);
+    result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, (uint32_t)object.audio.bus);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.audio.gain);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.audio.pitch);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.audio.min_distance);
+    result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.audio.max_distance);
+    result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, 0U);
+    if (version >= 4U)
+    {
+        result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.position.x);
+        result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.position.y);
+        result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.position.z);
+        result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.forward.x);
+        result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.forward.y);
+        result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.forward.z);
+        result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.up.x);
+        result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.up.y);
+        result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.up.z);
+    }
+    if (!result)
+    {
+        return false;
+    }
+    header[0] = 'H'; header[1] = 'S'; header[2] = 'C'; header[3] = 'N';
+    result = test_scene_document_legacy_write_u32(header, sizeof(header), &(size_t){4U}, version) &&
+        test_scene_document_legacy_write_u32(header, sizeof(header), &(size_t){8U}, 40U) &&
+        test_scene_document_legacy_write_u64(header, sizeof(header), &(size_t){12U}, (uint64_t)position) &&
+        test_scene_document_legacy_write_u32(header, sizeof(header), &(size_t){20U}, 1U) &&
+        test_scene_document_legacy_write_u64(header, sizeof(header), &(size_t){24U}, 2U) &&
+        test_scene_document_legacy_write_u32(header, sizeof(header), &(size_t){32U}, test_scene_document_legacy_checksum(payload, position));
+    if (!result)
+    {
+        return false;
+    }
 #if defined(_WIN32)
-    if (source_path == NULL || target_path == NULL ||
-        fopen_s(&source, source_path, "rb") != 0)
+    if (fopen_s(&file, path, "wb") != 0)
     {
         return false;
     }
 #else
-    if (source_path == NULL || target_path == NULL ||
-        (source = fopen(source_path, "rb")) == NULL)
-    {
-        return false;
-    }
+    file = fopen(path, "wb");
 #endif
-    if (fseek(source, 0L, SEEK_END) != 0 ||
-        (length = ftell(source)) < 40L + 9L * (long)sizeof(uint32_t) ||
-        fseek(source, 0L, SEEK_SET) != 0)
+    if (file == NULL)
     {
-        fclose(source);
         return false;
     }
-    size = (size_t)length;
-    data = (unsigned char*)malloc(size);
-    if (data == NULL)
-    {
-        fclose(source);
-        free(data);
-        return false;
-    }
-    read_ok = fread(data, 1U, size, source) == size;
-    if (fclose(source) != 0)
-    {
-        read_ok = false;
-    }
-    source = NULL;
-    if (!read_ok)
-    {
-        free(data);
-        return false;
-    }
-    payload_size = size - 40U - 9U * sizeof(uint32_t);
-    data[4] = 3U;
-    data[5] = 0U;
-    data[6] = 0U;
-    data[7] = 0U;
-    if (!test_scene_document_legacy_write_u64(
-            data,
-            size,
-            &(size_t){12U},
-            (uint64_t)payload_size) ||
-        !test_scene_document_legacy_write_u32(
-            data,
-            size,
-            &(size_t){32U},
-            test_scene_document_legacy_checksum(data + 40U, payload_size)))
-    {
-        free(data);
-        return false;
-    }
-#if defined(_WIN32)
-    if (fopen_s(&target, target_path, "wb") != 0)
-    {
-        free(data);
-        return false;
-    }
-#else
-    target = fopen(target_path, "wb");
-#endif
-    if (target != NULL)
-    {
-        result = fwrite(data, 1U, 40U + payload_size, target) == 40U + payload_size;
-        if (fclose(target) != 0)
-        {
-            result = false;
-        }
-    }
-    free(data);
-    return result;
+    return fwrite(header, 1U, sizeof(header), file) == sizeof(header) &&
+        fwrite(payload, 1U, position, file) == position && fclose(file) == 0;
 }
 
 int main(void)
@@ -506,6 +532,8 @@ int main(void)
     const char* legacy_path = "build/test_tmp/scene_document_legacy_v1.hscene";
     const char* v2_path = "build/test_tmp/scene_document_legacy_v2.hscene";
     const char* v3_path = "build/test_tmp/scene_document_legacy_v3.hscene";
+    const char* v4_path = "build/test_tmp/scene_document_legacy_v4.hscene";
+    const char* v5_path = "build/test_tmp/scene_document_legacy_v5.hscene";
     const unsigned char malformed_data[] = {'H', 'S', 'C', 'N', 1U};
     henka_scene_document* document = NULL;
     henka_scene_document* loaded = NULL;
@@ -631,7 +659,7 @@ int main(void)
         henka_scene_document_validate(document) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", second_path) != HENKA_SUCCESS ||
-        !test_scene_document_write_v3_fixture(first_path, v3_path) ||
+        !test_scene_document_write_v3_or_v4_or_v5_fixture(v3_path, 3U) ||
         !test_scene_document_files_equal(first_path, second_path) ||
         !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)) ||
         henka_scene_document_format_inspection(
@@ -641,8 +669,8 @@ int main(void)
         fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
         goto cleanup;
     }
-    if (!test_scene_document_patch_u32(first_path, 4L, UINT32_C(5)) ||
-        henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
+    if (!test_scene_document_write_v3_or_v4_or_v5_fixture(v5_path, 5U) ||
+        henka_scene_document_load_file(loaded, ".", v5_path) != HENKA_SUCCESS ||
         henka_scene_document_get_object_at(loaded, 0U, &loaded_object) != HENKA_SUCCESS ||
         loaded_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
         henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS)
@@ -753,7 +781,8 @@ int main(void)
         fprintf(stderr, "scene document test failed during v1 migration\n");
         goto cleanup;
     }
-    if (henka_scene_document_load_file(loaded, ".", second_path) != HENKA_SUCCESS ||
+    if (!test_scene_document_write_v3_or_v4_or_v5_fixture(v4_path, 4U) ||
+        henka_scene_document_load_file(loaded, ".", v4_path) != HENKA_SUCCESS ||
         henka_scene_document_get_object(loaded, first_id, &loaded_object) != HENKA_SUCCESS ||
         loaded_object.audio.streaming)
     {
