@@ -661,6 +661,35 @@ static bool henka_gltf_parse_views(henka_gltf_context* context)
     return index > 0U && index < HENKA_MAX_GLTF_ARRAY_ITEMS;
 }
 
+static bool henka_gltf_accessor_span_is_valid(
+    const henka_gltf_buffer_view* view,
+    size_t byte_offset,
+    size_t count,
+    size_t element_size)
+{
+    size_t stride;
+    size_t last_element_offset;
+    size_t end_offset;
+
+    if (view == NULL || element_size == 0U || byte_offset > view->byte_length)
+    {
+        return false;
+    }
+    stride = view->byte_stride == 0U ? element_size : view->byte_stride;
+    if (stride < element_size)
+    {
+        return false;
+    }
+    if (count == 0U)
+    {
+        return true;
+    }
+    return henka_checked_size_multiply(count - 1U, stride, &last_element_offset) &&
+        henka_checked_size_add(last_element_offset, byte_offset, &last_element_offset) &&
+        henka_checked_size_add(last_element_offset, element_size, &end_offset) &&
+        end_offset <= view->byte_length;
+}
+
 static bool henka_gltf_parse_accessors(henka_gltf_context* context)
 {
     const char* array; const char* array_end; const char* item; const char* item_end; size_t index;
@@ -695,7 +724,9 @@ static bool henka_gltf_parse_accessors(henka_gltf_context* context)
             view = &context->views[accessor->buffer_view];
             if (accessor->byte_offset % component_size != 0U ||
                 (view->byte_stride != 0U && (view->byte_stride < element_size ||
-                    view->byte_stride > 252U || view->byte_stride % 4U != 0U))) return false;
+                    view->byte_stride > 252U || view->byte_stride % 4U != 0U)) ||
+                !henka_gltf_accessor_span_is_valid(
+                    view, accessor->byte_offset, accessor->count, element_size)) return false;
         }
     }
     context->accessor_count = index;
@@ -715,6 +746,7 @@ static bool henka_gltf_accessor_address(
     size_t element_size;
     size_t stride;
     size_t offset;
+    size_t component_offset;
     if (out_address != NULL) *out_address = NULL;
     if (context == NULL || out_address == NULL || accessor_index < 0 || (size_t)accessor_index >= context->accessor_count) return false;
     accessor = &context->accessors[accessor_index];
@@ -725,7 +757,8 @@ static bool henka_gltf_accessor_address(
     stride = view->byte_stride == 0U ? element_size : view->byte_stride;
     if (stride < element_size || !henka_checked_size_multiply(element_index, stride, &offset) ||
         !henka_checked_size_add(offset, accessor->byte_offset, &offset) ||
-        !henka_checked_size_add(offset, component_index * component_size, &offset) ||
+        !henka_checked_size_multiply(component_index, component_size, &component_offset) ||
+        !henka_checked_size_add(offset, component_offset, &offset) ||
         !henka_checked_size_add(offset, component_size, &offset) ||
         offset > view->byte_length) return false;
     *out_address = context->buffers[view->buffer].data + view->byte_offset + offset - component_size;

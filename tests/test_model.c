@@ -85,6 +85,14 @@ static void henka_test_model_rejects_unsafe_bounds(void)
         "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
         "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
+    static const char* out_of_range_unused_accessor =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"},"
+        "{\"bufferView\":0,\"byteOffset\":36,\"componentType\":5126,\"count\":1,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
     static const char* non_finite_obj =
         "v nan 0.0 0.0\n"
         "v 1.0 0.0 0.0\n"
@@ -125,6 +133,16 @@ static void henka_test_model_rejects_unsafe_bounds(void)
             nonterminal_gltf_base64_padding,
             strlen(nonterminal_gltf_base64_padding),
             "nonterminal-base64-padding.gltf",
+            &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_gltf_from_memory(
+            out_of_range_unused_accessor,
+            strlen(out_of_range_unused_accessor),
+            "out-of-range-unused-accessor.gltf",
             &model) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.vertices == NULL);
     HENKA_TEST_ASSERT(model.indices == NULL);
