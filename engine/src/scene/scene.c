@@ -251,12 +251,9 @@ static bool henka_material_color_texture_matches(const henka_texture* texture)
 }
 #endif
 
-henka_result henka_material_validate(const henka_material* material)
+henka_result henka_material_validate_values(const henka_material* material)
 {
     if (material == NULL ||
-#if !defined(HENKA_RUNTIME_HEADLESS)
-        material->shader == NULL ||
-#endif
         material->type < HENKA_MATERIAL_TYPE_LIT ||
         material->type > HENKA_MATERIAL_TYPE_VERTEX_COLOR ||
         !henka_is_finite_float(material->base_color.x) ||
@@ -334,16 +331,7 @@ henka_result henka_material_validate(const henka_material* material)
         material->sheen_color.y < 0.0f || material->sheen_color.y > 1.0f ||
         material->sheen_color.z < 0.0f || material->sheen_color.z > 1.0f ||
         material->sheen_roughness < 0.045f || material->sheen_roughness > 1.0f ||
-        material->alpha_mode > HENKA_MATERIAL_ALPHA_BLENDED ||
-        (!material->use_texture && material->base_color_texture != NULL) ||
-        (material->use_texture && material->base_color_texture == NULL) ||
-        !henka_material_color_texture_matches(material->base_color_texture) ||
-        !henka_material_texture_matches(material->normal_texture, HENKA_TEXTURE_USAGE_NORMAL, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
-        !henka_material_texture_matches(material->metallic_roughness_texture, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
-        !henka_material_texture_matches(material->occlusion_texture, HENKA_TEXTURE_USAGE_OCCLUSION, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
-        !henka_material_texture_matches(material->emissive_texture, HENKA_TEXTURE_USAGE_EMISSIVE, HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
-        !henka_material_texture_matches(material->transmission_texture, HENKA_TEXTURE_USAGE_GENERIC_DATA, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
-        !henka_material_texture_matches(material->thickness_texture, HENKA_TEXTURE_USAGE_GENERIC_DATA, HENKA_TEXTURE_COLOR_SPACE_LINEAR))
+        material->alpha_mode > HENKA_MATERIAL_ALPHA_BLENDED)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -368,8 +356,40 @@ henka_result henka_material_validate(const henka_material* material)
                 layer->metallic < 0.0f || layer->metallic > 1.0f ||
                 layer->roughness < 0.045f || layer->roughness > 1.0f ||
                 layer->texture_scale_meters <= 0.0f || layer->texture_scale_meters > 4096.0f ||
-                layer->normal_scale < 0.0f || layer->normal_scale > 4.0f ||
-                !henka_material_color_texture_matches(layer->base_color_texture) ||
+                layer->normal_scale < 0.0f || layer->normal_scale > 4.0f)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_material_validate(const henka_material* material)
+{
+    if (henka_material_validate_values(material) != HENKA_SUCCESS ||
+#if !defined(HENKA_RUNTIME_HEADLESS)
+        material->shader == NULL ||
+#endif
+        (!material->use_texture && material->base_color_texture != NULL) ||
+        (material->use_texture && material->base_color_texture == NULL) ||
+        !henka_material_color_texture_matches(material->base_color_texture) ||
+        !henka_material_texture_matches(material->normal_texture, HENKA_TEXTURE_USAGE_NORMAL, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
+        !henka_material_texture_matches(material->metallic_roughness_texture, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
+        !henka_material_texture_matches(material->occlusion_texture, HENKA_TEXTURE_USAGE_OCCLUSION, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
+        !henka_material_texture_matches(material->emissive_texture, HENKA_TEXTURE_USAGE_EMISSIVE, HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
+        !henka_material_texture_matches(material->transmission_texture, HENKA_TEXTURE_USAGE_GENERIC_DATA, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
+        !henka_material_texture_matches(material->thickness_texture, HENKA_TEXTURE_USAGE_GENERIC_DATA, HENKA_TEXTURE_COLOR_SPACE_LINEAR))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (material->terrain_layers_enabled)
+    {
+        size_t layer_index;
+        for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
+        {
+            const henka_material_layer* layer = &material->terrain_layers[layer_index];
+            if (!henka_material_color_texture_matches(layer->base_color_texture) ||
                 !henka_material_texture_matches(layer->normal_texture, HENKA_TEXTURE_USAGE_NORMAL, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
                 !henka_material_texture_matches(layer->metallic_roughness_texture, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, HENKA_TEXTURE_COLOR_SPACE_LINEAR))
             {

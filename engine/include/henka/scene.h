@@ -287,6 +287,8 @@ typedef enum henka_interaction_result
 } henka_interaction_result;
 
 const char* henka_material_type_get_label(henka_material_type type);
+/* Validates material type, scalar, UV, alpha, and terrain-layer values without renderer-owned resources. */
+henka_result henka_material_validate_values(const henka_material* material);
 henka_result henka_material_validate(const henka_material* material);
 henka_result henka_material_describe(const henka_material* material, char* buffer, size_t buffer_size);
 henka_material henka_material_default(void);

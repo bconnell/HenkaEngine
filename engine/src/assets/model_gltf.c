@@ -1167,7 +1167,7 @@ static bool henka_gltf_parse_material(
             !henka_gltf_member_float(extension, extension_end, "emissiveStrength", &out_source->material.emissive_strength)) return false;
     }
 
-    return true;
+    return henka_material_validate_values(&out_source->material) == HENKA_SUCCESS;
 }
 
 static henka_result henka_gltf_parse_context(henka_gltf_context* context, henka_model_data* out_model)

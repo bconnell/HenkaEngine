@@ -50,6 +50,10 @@ void henka_test_material(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(material.base_color.y, 1.0f, 0.0001);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(material.base_color.z, 1.0f, 0.0001);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(material.base_color.w, 1.0f, 0.0001);
+    HENKA_TEST_ASSERT(henka_material_validate_values(&material) == HENKA_SUCCESS);
+    material.roughness = 0.01f;
+    HENKA_TEST_ASSERT(henka_material_validate_values(&material) == HENKA_ERROR_INVALID_ARGUMENT);
+    material.roughness = 0.5f;
     HENKA_TEST_ASSERT(henka_material_describe(&material, description, sizeof(description)) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(strstr(description, "Material") != NULL);
     HENKA_TEST_ASSERT(henka_material_describe(&material, tiny_description, sizeof(tiny_description)) == HENKA_ERROR_UNKNOWN);

@@ -298,6 +298,31 @@ static void henka_test_gltf_rejects_extra_material_vector_components(void)
     HENKA_TEST_ASSERT(model.indices == NULL);
 }
 
+static void henka_test_gltf_rejects_material_values_outside_engine_range(void)
+{
+    static const char* invalid_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"materials\":[{\"pbrMetallicRoughness\":{\"roughnessFactor\":0.0}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    henka_model_data model;
+    henka_result result;
+
+    memset(&model, 0, sizeof(model));
+    result = henka_model_data_load_gltf_from_memory(
+        invalid_gltf,
+        strlen(invalid_gltf),
+        "invalid-material-range.gltf",
+        &model);
+    if (result == HENKA_SUCCESS) henka_model_data_destroy(&model);
+    HENKA_TEST_ASSERT(result != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+}
+
 static void henka_test_gltf_rejects_invalid_accessor_boolean(void)
 {
     static const char* invalid_normalized_type =
@@ -1385,6 +1410,7 @@ void henka_test_model(void)
     henka_test_model_rejects_unsafe_bounds();
     henka_test_model_load_failure_preserves_destination();
     henka_test_gltf_rejects_extra_material_vector_components();
+    henka_test_gltf_rejects_material_values_outside_engine_range();
     henka_test_gltf_rejects_invalid_accessor_boolean();
     henka_test_gltf_rejects_invalid_tangent_handedness();
     henka_test_gltf_external_buffer_file_load();
