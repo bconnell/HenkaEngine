@@ -82,6 +82,7 @@ if(HENKA_BUILD_CLIENT)
         src/platform/platform_sdl.c
         src/platform/audio_output_sdl.c
         src/renderer/mesh.c
+        src/renderer/mesh_validation.c
         src/renderer/terrain_render.c
         src/renderer/renderer.c
         src/renderer/temporal_camera_policy.c

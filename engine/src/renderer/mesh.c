@@ -8,6 +8,7 @@
 #include <henka/memory.h>
 
 #include "../core/checked.h"
+#include "mesh_validation.h"
 
 henka_result henka_mesh_get_material_region_range(
     const henka_mesh* mesh,
@@ -713,37 +714,24 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
             source->material_weights,
             HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT);
     }
-    for (index = 0U; index < terrain_mesh.index_count; ++index)
+    result = henka_mesh_validate_terrain_upload_data(
+        render_vertices,
+        terrain_mesh.vertex_count,
+        indices,
+        terrain_mesh.index_count);
+    if (result != HENKA_SUCCESS)
     {
-        if (indices[index] >= (unsigned int)terrain_mesh.vertex_count)
-        {
-            HENKA_LOG_WARN(
-                "Terrain fallback skirt index %u is out of range at %u/%u",
-                indices[index],
-                index,
-                terrain_mesh.index_count);
-            break;
-        }
-    }
-    for (index = 0U; index < terrain_mesh.vertex_count; ++index)
-    {
-        const henka_vertex* vertex = &render_vertices[index];
-        if (!isfinite(vertex->position.x) || !isfinite(vertex->position.y) || !isfinite(vertex->position.z) ||
-            !isfinite(vertex->normal.x) || !isfinite(vertex->normal.y) || !isfinite(vertex->normal.z) ||
-            !isfinite(vertex->uv.x) || !isfinite(vertex->uv.y) ||
-            !isfinite(vertex->tangent.x) || !isfinite(vertex->tangent.y) ||
-            !isfinite(vertex->tangent.z) || !isfinite(vertex->tangent.w) ||
-            fabsf(vertex->tangent.w) < 0.5f ||
-            !isfinite(vertex->color.x) || !isfinite(vertex->color.y) ||
-            !isfinite(vertex->color.z) || !isfinite(vertex->color.w) ||
-            vertex->color.x < 0.0f || vertex->color.x > 1.0f ||
-            vertex->color.y < 0.0f || vertex->color.y > 1.0f ||
-            vertex->color.z < 0.0f || vertex->color.z > 1.0f ||
-            vertex->color.w < 0.0f || vertex->color.w > 1.0f)
-        {
-            HENKA_LOG_WARN("Terrain fallback skirt vertex %u failed finite validation", index);
-            break;
-        }
+        HENKA_LOG_WARN(
+            "Terrain upload rejected malformed CPU data for chunk (%d,%d) LOD %u: %s",
+            chunk_id.x,
+            chunk_id.z,
+            lod_level,
+            henka_result_to_string(result));
+        henka_free(indices);
+        henka_free(terrain_weights);
+        henka_free(render_vertices);
+        henka_free(terrain_vertices);
+        return result;
     }
     result = henka_renderer_create_mesh_from_data(
         engine->renderer,

@@ -1,4 +1,5 @@
 #include <math.h>
+#include <string.h>
 #include <henka/assets.h>
 #include <henka/engine.h>
 #include <henka/memory.h>
@@ -6,6 +7,7 @@
 #include <henka/terrain_render.h>
 
 #include "../engine/src/core/memory_internal.h"
+#include "../engine/src/renderer/mesh_validation.h"
 
 typedef struct terrain_pass_test_context
 {
@@ -18,6 +20,27 @@ typedef struct terrain_pass_test_context
     henka_material_asset* terrain_material_asset;
     int passed;
 } terrain_pass_test_context;
+
+static int test_terrain_upload_validation_rejects_malformed_payload(void)
+{
+    henka_vertex vertices[3] = {
+        {{0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}}};
+    unsigned int indices[3] = {0U, 1U, 3U};
+    henka_vertex finite_vertices[3];
+
+    if (henka_mesh_validate_terrain_upload_data(
+            vertices, 3U, indices, 3U) != HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        return 0;
+    }
+    memcpy(finite_vertices, vertices, sizeof(finite_vertices));
+    finite_vertices[1].position.x = NAN;
+    indices[2] = 2U;
+    return henka_mesh_validate_terrain_upload_data(
+               finite_vertices, 3U, indices, 3U) == HENKA_ERROR_INVALID_ARGUMENT;
+}
 
 static henka_result terrain_pass_test_initialize(
     henka_engine* engine,
@@ -838,7 +861,8 @@ cleanup:
 
 int main(void)
 {
-    return test_default_descriptor() && test_invalid_boundaries() &&
+    return test_terrain_upload_validation_rejects_malformed_payload() &&
+        test_default_descriptor() && test_invalid_boundaries() &&
         test_edit_request_requires_valid_inputs() &&
         test_dirty_refresh_requires_valid_runtime() &&
         test_stale_nonresident_request_is_cancelled_before_rebuild() &&
