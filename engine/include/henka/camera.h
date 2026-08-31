@@ -55,6 +55,7 @@ henka_camera henka_camera_create_perspective(float field_of_view_radians, float 
 bool henka_camera_is_valid(const henka_camera* camera);
 henka_camera henka_camera_create_orthographic(float orthographic_height, float aspect_ratio, float near_plane, float far_plane);
 const char* henka_camera_preset_get_label(henka_camera_preset preset);
+/* Applies a preset atomically; a failed request leaves the camera unchanged. */
 henka_result henka_camera_apply_preset(henka_camera* camera, henka_camera_preset preset, henka_vec3 target);
 henka_result henka_camera_zoom_orthographic(
     henka_camera* camera,

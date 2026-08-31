@@ -19,6 +19,7 @@ void henka_test_camera(void)
     henka_vec3 preset_target;
     henka_vec3 right;
     henka_vec3 up;
+    henka_camera before;
     float depth;
     float previous_yaw;
 
@@ -194,4 +195,23 @@ void henka_test_camera(void)
     HENKA_TEST_ASSERT(henka_camera_apply_preset(&camera, HENKA_CAMERA_PRESET_PERSPECTIVE_3D, preset_target) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(camera.projection_mode == HENKA_CAMERA_PROJECTION_PERSPECTIVE);
     HENKA_TEST_ASSERT(henka_camera_zoom_orthographic(&camera, 0.5f, 2.0f, 20.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
+    camera.field_of_view_radians = HENKA_PI;
+    before = camera;
+    HENKA_TEST_ASSERT(henka_camera_apply_preset(&camera, HENKA_CAMERA_PRESET_PERSPECTIVE_3D, preset_target) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.position.x, before.position.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.position.y, before.position.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.position.z, before.position.z, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.yaw_radians, before.yaw_radians, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.pitch_radians, before.pitch_radians, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.roll_radians, before.roll_radians, 0.0001f);
+    HENKA_TEST_ASSERT(camera.projection_mode == before.projection_mode);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.field_of_view_radians, before.field_of_view_radians, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.orthographic_height, before.orthographic_height, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.near_plane, before.near_plane, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.far_plane, before.far_plane, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.aspect_ratio, before.aspect_ratio, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.movement_speed, before.movement_speed, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.fast_movement_multiplier, before.fast_movement_multiplier, 0.0001f);
 }

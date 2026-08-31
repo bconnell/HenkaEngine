@@ -235,6 +235,7 @@ const char* henka_camera_preset_get_label(henka_camera_preset preset)
 henka_result henka_camera_apply_preset(henka_camera* camera, henka_camera_preset preset, henka_vec3 target)
 {
     float distance;
+    henka_camera next_camera;
     henka_vec3 forward;
 
     if (camera == NULL ||
@@ -245,63 +246,65 @@ henka_result henka_camera_apply_preset(henka_camera* camera, henka_camera_preset
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (!isfinite(camera->aspect_ratio) || camera->aspect_ratio <= 0.0f)
+    next_camera = *camera;
+
+    if (!isfinite(next_camera.aspect_ratio) || next_camera.aspect_ratio <= 0.0f)
     {
-        camera->aspect_ratio = 1.0f;
+        next_camera.aspect_ratio = 1.0f;
     }
-    if (!isfinite(camera->near_plane) || camera->near_plane <= 0.0f)
+    if (!isfinite(next_camera.near_plane) || next_camera.near_plane <= 0.0f)
     {
-        camera->near_plane = 0.1f;
+        next_camera.near_plane = 0.1f;
     }
-    if (!isfinite(camera->far_plane) || camera->far_plane <= camera->near_plane)
+    if (!isfinite(next_camera.far_plane) || next_camera.far_plane <= next_camera.near_plane)
     {
-        camera->far_plane = camera->near_plane + 100.0f;
+        next_camera.far_plane = next_camera.near_plane + 100.0f;
     }
-    if (!isfinite(camera->field_of_view_radians) || camera->field_of_view_radians <= 0.0f)
+    if (!isfinite(next_camera.field_of_view_radians) || next_camera.field_of_view_radians <= 0.0f)
     {
-        camera->field_of_view_radians = 60.0f * HENKA_DEG_TO_RAD;
+        next_camera.field_of_view_radians = 60.0f * HENKA_DEG_TO_RAD;
     }
-    if (!isfinite(camera->movement_speed) || camera->movement_speed <= 0.0f)
+    if (!isfinite(next_camera.movement_speed) || next_camera.movement_speed <= 0.0f)
     {
-        camera->movement_speed = 4.0f;
+        next_camera.movement_speed = 4.0f;
     }
-    if (!isfinite(camera->fast_movement_multiplier) || camera->fast_movement_multiplier <= 0.0f)
+    if (!isfinite(next_camera.fast_movement_multiplier) || next_camera.fast_movement_multiplier <= 0.0f)
     {
-        camera->fast_movement_multiplier = 2.5f;
+        next_camera.fast_movement_multiplier = 2.5f;
     }
-    camera->roll_radians = 0.0f;
+    next_camera.roll_radians = 0.0f;
 
     switch (preset)
     {
         case HENKA_CAMERA_PRESET_PERSPECTIVE_3D:
-            camera->projection_mode = HENKA_CAMERA_PROJECTION_PERSPECTIVE;
-            camera->yaw_radians = -HENKA_PI * 0.5f;
-            camera->pitch_radians = -0.22f;
-            camera->orthographic_height = 6.0f;
+            next_camera.projection_mode = HENKA_CAMERA_PROJECTION_PERSPECTIVE;
+            next_camera.yaw_radians = -HENKA_PI * 0.5f;
+            next_camera.pitch_radians = -0.22f;
+            next_camera.orthographic_height = 6.0f;
             distance = 8.6f;
             break;
 
         case HENKA_CAMERA_PRESET_SIDE_2_5D:
-            camera->projection_mode = HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC;
-            camera->yaw_radians = 0.0f;
-            camera->pitch_radians = 0.0f;
-            camera->orthographic_height = 8.0f;
+            next_camera.projection_mode = HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC;
+            next_camera.yaw_radians = 0.0f;
+            next_camera.pitch_radians = 0.0f;
+            next_camera.orthographic_height = 8.0f;
             distance = 10.0f;
             break;
 
         case HENKA_CAMERA_PRESET_TOP_DOWN_2_5D:
-            camera->projection_mode = HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC;
-            camera->yaw_radians = -HENKA_PI * 0.5f;
-            camera->pitch_radians = -HENKA_PI * 0.5f;
-            camera->orthographic_height = 10.0f;
+            next_camera.projection_mode = HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC;
+            next_camera.yaw_radians = -HENKA_PI * 0.5f;
+            next_camera.pitch_radians = -HENKA_PI * 0.5f;
+            next_camera.orthographic_height = 10.0f;
             distance = 12.0f;
             break;
 
         case HENKA_CAMERA_PRESET_ISOMETRIC_2_5D:
-            camera->projection_mode = HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC;
-            camera->yaw_radians = -HENKA_PI * 0.75f;
-            camera->pitch_radians = -0.6154797087f;
-            camera->orthographic_height = 10.0f;
+            next_camera.projection_mode = HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC;
+            next_camera.yaw_radians = -HENKA_PI * 0.75f;
+            next_camera.pitch_radians = -0.6154797087f;
+            next_camera.orthographic_height = 10.0f;
             distance = 12.0f;
             break;
 
@@ -310,13 +313,14 @@ henka_result henka_camera_apply_preset(henka_camera* camera, henka_camera_preset
             return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    forward = henka_camera_get_forward(camera);
-    camera->position = henka_vec3_subtract(target, henka_vec3_scale(forward, distance));
-    if (!henka_camera_is_valid(camera))
+    forward = henka_camera_get_forward(&next_camera);
+    next_camera.position = henka_vec3_subtract(target, henka_vec3_scale(forward, distance));
+    if (!henka_camera_is_valid(&next_camera))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    *camera = next_camera;
     return HENKA_SUCCESS;
 }
 
