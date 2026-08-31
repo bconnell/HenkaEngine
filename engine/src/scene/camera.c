@@ -121,6 +121,27 @@ static bool henka_camera_pose_is_valid(const henka_camera* camera)
         camera->pitch_radians <= HENKA_PI * 0.5f + 0.0001f;
 }
 
+static bool henka_camera_projection_matrix_is_finite(const henka_camera* camera)
+{
+    henka_mat4 projection;
+    int index;
+
+    if (camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
+    {
+        const float half_height = camera->orthographic_height * 0.5f;
+        const float half_width = half_height * camera->aspect_ratio;
+        projection = henka_mat4_orthographic(
+            -half_width, half_width, -half_height, half_height,
+            camera->near_plane, camera->far_plane);
+    }
+    else projection = henka_mat4_perspective(
+        camera->field_of_view_radians, camera->aspect_ratio,
+        camera->near_plane, camera->far_plane);
+    for (index = 0; index < 16; ++index)
+        if (!isfinite(projection.m[index])) return false;
+    return true;
+}
+
 static bool henka_camera_projection_is_valid(const henka_camera* camera)
 {
     if (camera == NULL ||
@@ -139,12 +160,14 @@ static bool henka_camera_projection_is_valid(const henka_camera* camera)
     if (camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
     {
         return isfinite(camera->orthographic_height) &&
-            camera->orthographic_height > 0.0f;
+            camera->orthographic_height > 0.0f &&
+            henka_camera_projection_matrix_is_finite(camera);
     }
 
     return isfinite(camera->field_of_view_radians) &&
         camera->field_of_view_radians > 0.001f &&
-        camera->field_of_view_radians < HENKA_PI - 0.001f;
+        camera->field_of_view_radians < HENKA_PI - 0.001f &&
+        henka_camera_projection_matrix_is_finite(camera);
 }
 
 bool henka_camera_is_valid(const henka_camera* camera)

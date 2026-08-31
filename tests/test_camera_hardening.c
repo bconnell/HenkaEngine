@@ -5,6 +5,7 @@
 
 #include "../engine/src/renderer/temporal_camera_policy.h"
 
+#include <float.h>
 #include <math.h>
 
 static void camera_hardening_side_is_world_x(void)
@@ -492,6 +493,37 @@ static void camera_hardening_off_axis_sphere_projection_is_rectilinear(void)
     }
 }
 
+static void camera_hardening_rejects_nonfinite_projection_math(void)
+{
+    henka_camera perspective =
+        henka_camera_create_perspective(
+            0.002f,
+            FLT_MIN,
+            0.1f,
+            500.0f);
+    henka_camera orthographic =
+        henka_camera_create_orthographic(
+            FLT_MAX,
+            FLT_MAX,
+            0.1f,
+            500.0f);
+    henka_mat4 perspective_projection;
+    henka_mat4 orthographic_projection;
+
+    HENKA_TEST_ASSERT(!henka_camera_is_valid(&perspective));
+    HENKA_TEST_ASSERT(!henka_camera_is_valid(&orthographic));
+    perspective_projection = henka_camera_get_projection_matrix(&perspective);
+    orthographic_projection = henka_camera_get_projection_matrix(&orthographic);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(perspective_projection.m[0], 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(perspective_projection.m[5], 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(perspective_projection.m[10], 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(perspective_projection.m[15], 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(orthographic_projection.m[0], 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(orthographic_projection.m[5], 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(orthographic_projection.m[10], 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(orthographic_projection.m[15], 1.0f, 0.0001f);
+}
+
 static void camera_hardening_static_history_can_jitter(void)
 {
     HENKA_TEST_ASSERT(
@@ -584,6 +616,7 @@ void henka_test_camera_hardening(void)
     camera_hardening_mouse_yaw_is_bounded();
     camera_hardening_all_presets_fit_bounds();
     camera_hardening_off_axis_sphere_projection_is_rectilinear();
+    camera_hardening_rejects_nonfinite_projection_math();
 
     camera_hardening_temporal_angle_wraps();
     camera_hardening_temporal_detects_roll();
