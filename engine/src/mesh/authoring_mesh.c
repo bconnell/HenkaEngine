@@ -1946,6 +1946,11 @@ henka_result henka_authoring_mesh_evaluate(const henka_authoring_mesh* mesh, hen
     size_t output_vertex = 0U;
     size_t output_index = 0U;
     henka_result result = HENKA_SUCCESS;
+    if (out_data != NULL)
+    {
+        out_data->vertex_count = 0U;
+        out_data->index_count = 0U;
+    }
     if (mesh == NULL || out_data == NULL || !henka_authoring_mesh_validate(mesh) ||
         out_data->vertices == NULL || out_data->indices == NULL)
     {

@@ -257,6 +257,47 @@ cleanup:
     return result ? 1 : fail("topology/evaluation");
 }
 
+static int test_evaluation_failure_clears_output_counts(void)
+{
+    const henka_authoring_mesh_desc desc = {4U, 4U, 1U, 4U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_render_vertex vertices[4];
+    uint32_t indices[6];
+    henka_authoring_render_data render = {
+        vertices, 4U, 91U, indices, 6U, 73U};
+    henka_authoring_render_data undersized = {
+        vertices, 1U, 17U, indices, 1U, 29U};
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_evaluate(mesh, &render) != HENKA_SUCCESS ||
+        render.vertex_count != 4U || render.index_count != 6U)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_evaluate(mesh, &undersized) != HENKA_ERROR_LIMIT ||
+        undersized.vertex_count != 0U || undersized.index_count != 0U)
+    {
+        goto cleanup;
+    }
+    render.vertex_count = 31U;
+    render.index_count = 37U;
+    render.vertices = NULL;
+    if (henka_authoring_mesh_evaluate(mesh, &render) != HENKA_ERROR_INVALID_ARGUMENT ||
+        render.vertex_count != 0U || render.index_count != 0U)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("evaluation failure output state");
+}
+
 static int test_rejection_and_tombstones(void)
 {
     henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
@@ -3303,7 +3344,8 @@ cleanup:
 
 int main(void)
 {
-    return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
+    return test_topology_and_evaluation() && test_evaluation_failure_clears_output_counts() &&
+        test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
         test_vertex_merge_operations() &&
         test_vertex_topology_operations() && test_vertex_bevel_operations() &&

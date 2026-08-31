@@ -181,7 +181,8 @@ henka_result henka_authoring_mesh_recover_quads(
     size_t* out_merged_pairs);
 
 /* Converts polygons to deterministic fan triangles and computes normals from
- * winding plus smooth-face and hard-edge intent. Output buffers are borrowed. */
+ * winding plus smooth-face and hard-edge intent. Output buffers are borrowed.
+ * Counts are cleared before validation and remain zero on failure. */
 henka_result henka_authoring_mesh_evaluate(const henka_authoring_mesh* mesh, henka_authoring_render_data* out_data);
 
 /* History stores bounded topology snapshots. Checkpoint after a successful
