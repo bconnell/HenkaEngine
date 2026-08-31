@@ -773,6 +773,10 @@ henka_result henka_authoring_mesh_get_vertex_id_at(
     size_t physical_slot,
     henka_authoring_vertex_id* out_id)
 {
+    if (out_id != NULL)
+    {
+        *out_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (mesh == NULL || out_id == NULL || physical_slot >= mesh->desc.max_vertices ||
         !mesh->vertices[physical_slot].active)
     {
@@ -787,6 +791,10 @@ henka_result henka_authoring_mesh_get_edge_id_at(
     size_t physical_slot,
     henka_authoring_edge_id* out_id)
 {
+    if (out_id != NULL)
+    {
+        *out_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (mesh == NULL || out_id == NULL || physical_slot >= mesh->desc.max_edges ||
         !mesh->edges[physical_slot].active)
     {
@@ -801,6 +809,10 @@ henka_result henka_authoring_mesh_get_face_id_at(
     size_t physical_slot,
     henka_authoring_face_id* out_id)
 {
+    if (out_id != NULL)
+    {
+        *out_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (mesh == NULL || out_id == NULL || physical_slot >= mesh->desc.max_faces ||
         !mesh->faces[physical_slot].active)
     {
@@ -952,6 +964,15 @@ henka_result henka_authoring_mesh_get_bounds(
     henka_vec3 maximum = {0.0f, 0.0f, 0.0f};
     size_t index;
     bool found = false;
+
+    if (out_center != NULL)
+    {
+        *out_center = (henka_vec3){0.0f, 0.0f, 0.0f};
+    }
+    if (out_extents != NULL)
+    {
+        *out_extents = (henka_vec3){0.0f, 0.0f, 0.0f};
+    }
 
     if (mesh == NULL || out_center == NULL || out_extents == NULL ||
         !henka_authoring_mesh_validate(mesh))
@@ -1836,6 +1857,10 @@ henka_result henka_authoring_mesh_get_face_corner_uv(
     henka_vec2* out_uv)
 {
     const henka_authoring_face* face = authoring_face_const(mesh, id);
+    if (out_uv != NULL)
+    {
+        *out_uv = (henka_vec2){0.0f, 0.0f};
+    }
     if (face == NULL || !face->active || face->uvs == NULL || out_uv == NULL || corner >= face->corner_count)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -1877,6 +1902,10 @@ size_t henka_authoring_mesh_get_vertex_edge_count(const henka_authoring_mesh* me
 henka_result henka_authoring_mesh_get_vertex_edge_at(const henka_authoring_mesh* mesh, henka_authoring_vertex_id vertex_id, size_t ordinal, henka_authoring_edge_id* out_edge_id)
 {
     size_t index;
+    if (out_edge_id != NULL)
+    {
+        *out_edge_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (out_edge_id == NULL || henka_authoring_mesh_get_vertex(mesh, vertex_id) == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -1906,6 +1935,10 @@ size_t henka_authoring_mesh_get_edge_face_count(const henka_authoring_mesh* mesh
 henka_result henka_authoring_mesh_get_edge_face_at(const henka_authoring_mesh* mesh, henka_authoring_edge_id edge_id, size_t ordinal, henka_authoring_face_id* out_face_id)
 {
     const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+    if (out_face_id != NULL)
+    {
+        *out_face_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (edge == NULL || out_face_id == NULL || ordinal >= edge->face_count)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;

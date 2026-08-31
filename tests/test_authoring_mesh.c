@@ -465,6 +465,70 @@ cleanup:
     return result ? 1 : fail("topology add output state");
 }
 
+static int test_query_outputs_fail_closed(void)
+{
+    const henka_authoring_mesh_desc desc = {4U, 4U, 1U, 4U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* empty = NULL;
+    henka_authoring_vertex_id vertex_id = 123U;
+    henka_authoring_edge_id edge_id = 123U;
+    henka_authoring_face_id face_id = 123U;
+    henka_vec2 uv = {1.0f, 2.0f};
+    henka_vec3 center = {1.0f, 2.0f, 3.0f};
+    henka_vec3 extents = {4.0f, 5.0f, 6.0f};
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_create(&desc, &empty) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_get_vertex_id_at(mesh, desc.max_vertices, &vertex_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        vertex_id != HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_get_edge_id_at(mesh, desc.max_edges, &edge_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        edge_id != HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_get_face_id_at(mesh, desc.max_faces, &face_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        face_id != HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_get_face_corner_uv(
+            mesh, HENKA_AUTHORING_INVALID_ID, 0U, &uv) != HENKA_ERROR_INVALID_ARGUMENT ||
+        uv.x != 0.0f || uv.y != 0.0f)
+    {
+        goto cleanup;
+    }
+    edge_id = 123U;
+    if (henka_authoring_mesh_get_vertex_edge_at(mesh, 1U, desc.max_edges, &edge_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        edge_id != HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    face_id = 123U;
+    if (henka_authoring_mesh_get_edge_face_at(mesh, 1U, 1U, &face_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        face_id != HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_get_bounds(empty, &center, &extents) != HENKA_ERROR_INVALID_ARGUMENT ||
+        center.x != 0.0f || center.y != 0.0f || center.z != 0.0f ||
+        extents.x != 0.0f || extents.y != 0.0f || extents.z != 0.0f)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(empty);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("query output state");
+}
+
 static int test_rejection_and_tombstones(void)
 {
     henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
@@ -3525,6 +3589,7 @@ int main(void)
         test_primitive_constructor_outputs_fail_closed() &&
         test_mesh_create_output_fails_closed() &&
         test_topology_add_outputs_fail_closed() &&
+        test_query_outputs_fail_closed() &&
         test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
         test_vertex_merge_operations() &&
