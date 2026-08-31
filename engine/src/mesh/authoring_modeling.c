@@ -546,6 +546,8 @@ henka_result henka_authoring_mesh_merge_vertices_by_distance(
     int64_t* cell_y = NULL;
     int64_t* cell_z = NULL;
     modeling_spatial_cell* table = NULL;
+    const henka_authoring_mesh_desc desc = mesh != NULL
+        ? henka_authoring_mesh_get_desc(mesh) : (henka_authoring_mesh_desc){0};
     size_t table_capacity;
     size_t index;
     size_t representative_count = 0U;
@@ -560,7 +562,8 @@ henka_result henka_authoring_mesh_merge_vertices_by_distance(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (!henka_checked_size_multiply(vertex_count, sizeof(*selected), &table_capacity) ||
+    if (vertex_count > desc.max_vertices ||
+        !henka_checked_size_multiply(vertex_count, sizeof(*selected), &table_capacity) ||
         vertex_count > (SIZE_MAX - 1U) / 2U || survivor_capacity < 1U)
     {
         return HENKA_ERROR_LIMIT;

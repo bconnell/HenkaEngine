@@ -1000,6 +1000,18 @@ static int test_vertex_merge_input_limits(void)
     {
         goto cleanup;
     }
+    survivor_count = 99U;
+    if (henka_authoring_mesh_merge_vertices_by_distance(
+            mesh, oversized_selection, 5U, 0.1f, survivors, 4U,
+            &survivor_count, &report) != HENKA_ERROR_LIMIT ||
+        survivor_count != 0U ||
+        henka_authoring_mesh_get_counts(mesh).vertices != before.vertices ||
+        henka_authoring_mesh_get_counts(mesh).edges != before.edges ||
+        henka_authoring_mesh_get_counts(mesh).faces != before.faces ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
     result = 1;
 
 cleanup:
