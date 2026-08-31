@@ -2981,8 +2981,6 @@ cleanup:
 
     return result;
 }
-#define HENKA_AUTHORING_MESH_MAX_HISTORY_STEPS 64U
-
 struct henka_authoring_mesh_history
 {
     size_t max_steps;

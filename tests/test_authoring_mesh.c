@@ -8,6 +8,8 @@
 #include <henka/authoring_topology.h>
 #include <henka/authoring_uv.h>
 
+#include "../engine/src/core/memory_internal.h"
+
 /* Red-test seam for the next bounded modeling operation.  The public
  * declaration is added only after this test proves the current API is
  * missing the behavior. */
@@ -348,6 +350,53 @@ static int test_face_operation_outputs_fail_closed(void)
 cleanup:
     henka_authoring_mesh_destroy(mesh);
     return result ? 1 : fail("face operation output state");
+}
+
+static int test_duplicate_face_propagates_allocation_failure(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    bool observed_out_of_memory = false;
+    size_t failure_index;
+
+    for (failure_index = 0U; failure_index < 32U; ++failure_index)
+    {
+        henka_authoring_mesh* mesh = NULL;
+        henka_authoring_face_id output_face_id = 123U;
+        henka_authoring_mesh_counts before;
+        henka_authoring_mesh_counts after;
+        henka_result result;
+
+        if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+        {
+            return fail("duplicate face allocation-failure setup");
+        }
+        before = henka_authoring_mesh_get_counts(mesh);
+        henka_memory_test_fail_after(failure_index);
+        result = henka_authoring_mesh_duplicate_face(
+            mesh, 1U, (henka_vec3){0.0f, 1.0f, 0.0f}, &output_face_id);
+        henka_memory_test_disable_failures();
+        after = henka_authoring_mesh_get_counts(mesh);
+
+        if (result == HENKA_ERROR_OUT_OF_MEMORY)
+        {
+            observed_out_of_memory = true;
+            if (output_face_id != HENKA_AUTHORING_INVALID_ID ||
+                after.vertices != before.vertices || after.edges != before.edges ||
+                after.faces != before.faces || !henka_authoring_mesh_validate(mesh))
+            {
+                henka_authoring_mesh_destroy(mesh);
+                return fail("duplicate face allocation failure state");
+            }
+        }
+        else if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(mesh);
+            return fail("duplicate face allocation failure result");
+        }
+        henka_authoring_mesh_destroy(mesh);
+    }
+
+    return observed_out_of_memory ? 1 : fail("duplicate face allocation failure coverage");
 }
 
 static int test_primitive_constructor_outputs_fail_closed(void)
@@ -3682,6 +3731,7 @@ int main(void)
 {
     return test_topology_and_evaluation() && test_evaluation_failure_clears_output_counts() &&
         test_face_operation_outputs_fail_closed() &&
+        test_duplicate_face_propagates_allocation_failure() &&
         test_primitive_constructor_outputs_fail_closed() &&
         test_mesh_create_output_fails_closed() &&
         test_topology_add_outputs_fail_closed() &&

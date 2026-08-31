@@ -4186,7 +4186,16 @@ static henka_result modeling_add_offset_face(
     henka_authoring_face_id* out_face_id)
 {
     henka_authoring_vertex_id vertices[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_result result;
     size_t corner;
+    if (out_face_id != NULL)
+    {
+        *out_face_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (mesh == NULL || source == NULL || out_face_id == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     if (source->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
     {
         return HENKA_ERROR_LIMIT;
@@ -4194,23 +4203,31 @@ static henka_result modeling_add_offset_face(
     for (corner = 0U; corner < source->corner_count; ++corner)
     {
         const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(mesh, source->vertices[corner]);
-        if (vertex == NULL || henka_authoring_mesh_add_vertex(
-            mesh, henka_vec3_add(vertex->position, offset), vertex->uv,
-            vertex->material_region, &vertices[corner]) != HENKA_SUCCESS)
+        if (vertex == NULL)
         {
-            return HENKA_ERROR_LIMIT;
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = henka_authoring_mesh_add_vertex(
+            mesh, henka_vec3_add(vertex->position, offset), vertex->uv,
+            vertex->material_region, &vertices[corner]);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
         }
     }
-    if (henka_authoring_mesh_add_face(
-        mesh, vertices, source->corner_count, source->material_region, source->smooth, out_face_id) != HENKA_SUCCESS)
+    result = henka_authoring_mesh_add_face(
+        mesh, vertices, source->corner_count, source->material_region, source->smooth, out_face_id);
+    if (result != HENKA_SUCCESS)
     {
-        return HENKA_ERROR_LIMIT;
+        return result;
     }
     for (corner = 0U; corner < source->corner_count; ++corner)
     {
-        if (henka_authoring_mesh_set_face_corner_uv(mesh, *out_face_id, corner, source->uvs[corner]) != HENKA_SUCCESS)
+        result = henka_authoring_mesh_set_face_corner_uv(
+            mesh, *out_face_id, corner, source->uvs[corner]);
+        if (result != HENKA_SUCCESS)
         {
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            return result;
         }
     }
     return HENKA_SUCCESS;
@@ -4993,7 +5010,6 @@ henka_result henka_authoring_mesh_duplicate_face(
     henka_authoring_mesh* candidate = NULL;
     henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_result result;
-    const henka_authoring_face* source;
     if (out_face_id != NULL)
     {
         *out_face_id = HENKA_AUTHORING_INVALID_ID;
@@ -5003,7 +5019,6 @@ henka_result henka_authoring_mesh_duplicate_face(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    source = henka_authoring_mesh_get_face(mesh, face_id);
     result = henka_authoring_mesh_clone(mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
@@ -5020,7 +5035,6 @@ henka_result henka_authoring_mesh_duplicate_face(
     {
         *out_face_id = new_face_id;
     }
-    (void)source;
     return result;
 }
 
