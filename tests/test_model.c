@@ -233,6 +233,65 @@ static void henka_test_gltf_rejects_invalid_accessor_boolean(void)
     HENKA_TEST_ASSERT(model.indices == NULL);
 }
 
+static void henka_test_gltf_rejects_invalid_tangent_handedness(void)
+{
+    static const float positions[] =
+    {
+        0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f
+    };
+    static const float tangents[] =
+    {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 0.0f
+    };
+    const size_t position_byte_length = sizeof(positions);
+    const size_t tangent_byte_offset = sizeof(positions);
+    const size_t tangent_byte_length = sizeof(tangents);
+    unsigned char buffer[sizeof(positions) + sizeof(tangents)];
+    char gltf[768];
+    size_t buffer_size = 0U;
+    size_t index;
+    int gltf_length;
+    const char* buffer_path = "build/test_tmp/invalid-tangent-handedness.bin";
+    const char* gltf_path = "build/test_tmp/invalid-tangent-handedness.gltf";
+    henka_model_data model;
+
+    HENKA_TEST_ASSERT(sizeof(float) == 4U);
+    HENKA_TEST_ASSERT(position_byte_length == 36U);
+    HENKA_TEST_ASSERT(tangent_byte_offset == 36U);
+    HENKA_TEST_ASSERT(tangent_byte_length == 48U);
+    for (index = 0U; index < sizeof(positions) / sizeof(positions[0]); ++index)
+        HENKA_TEST_ASSERT(henka_test_write_f32_le(
+            buffer, sizeof(buffer), &buffer_size, positions[index]));
+    for (index = 0U; index < sizeof(tangents) / sizeof(tangents[0]); ++index)
+        HENKA_TEST_ASSERT(henka_test_write_f32_le(
+            buffer, sizeof(buffer), &buffer_size, tangents[index]));
+    HENKA_TEST_ASSERT(buffer_size == sizeof(buffer));
+    gltf_length = snprintf(
+        gltf, sizeof(gltf),
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"invalid-tangent-handedness.bin\",\"byteLength\":%zu}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteOffset\":0,\"byteLength\":%zu},"
+        "{\"buffer\":0,\"byteOffset\":%zu,\"byteLength\":%zu}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"},"
+        "{\"bufferView\":1,\"componentType\":5126,\"count\":3,\"type\":\"VEC4\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0,\"TANGENT\":1}}]}]}",
+        sizeof(buffer), position_byte_length, tangent_byte_offset, tangent_byte_length);
+    HENKA_TEST_ASSERT(gltf_length > 0 && (size_t)gltf_length < sizeof(gltf));
+    HENKA_TEST_ASSERT(henka_test_write_file(buffer_path, buffer, sizeof(buffer)));
+    HENKA_TEST_ASSERT(henka_test_write_file(gltf_path, gltf, (size_t)gltf_length));
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf(gltf_path, &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+    henka_model_data_destroy(&model);
+    (void)remove(buffer_path);
+    (void)remove(gltf_path);
+}
+
 static void henka_test_gltf_external_buffer_file_load(void)
 {
     enum { position_count = 3U, position_component_count = 3U, position_component_type = 5126 };
@@ -1139,6 +1198,7 @@ void henka_test_model(void)
     henka_test_model_rejects_unsafe_bounds();
     henka_test_gltf_rejects_extra_material_vector_components();
     henka_test_gltf_rejects_invalid_accessor_boolean();
+    henka_test_gltf_rejects_invalid_tangent_handedness();
     henka_test_gltf_external_buffer_file_load();
     henka_test_gltf_external_image_file_load();
     henka_test_authoring_mesh_renderer_bridge();

@@ -826,6 +826,7 @@ static bool henka_gltf_parse_primitive(const henka_gltf_context* context, const 
         vertex.uv1_valid = uv1_accessor >= 0 && context->accessors[uv1_accessor].component_count == 2;
         if (color_accessor >= 0 && (context->accessors[color_accessor].component_count == 3 || context->accessors[color_accessor].component_count == 4) && (!henka_gltf_read_component(context, color_accessor, source_index, 0U, &vertex.color.x) || !henka_gltf_read_component(context, color_accessor, source_index, 1U, &vertex.color.y) || !henka_gltf_read_component(context, color_accessor, source_index, 2U, &vertex.color.z) || (context->accessors[color_accessor].component_count == 4 && !henka_gltf_read_component(context, color_accessor, source_index, 3U, &vertex.color.w)))) return false;
         if (tangent_accessor >= 0 && context->accessors[tangent_accessor].component_count == 4 && (!henka_gltf_read_component(context, tangent_accessor, source_index, 0U, &vertex.tangent.x) || !henka_gltf_read_component(context, tangent_accessor, source_index, 1U, &vertex.tangent.y) || !henka_gltf_read_component(context, tangent_accessor, source_index, 2U, &vertex.tangent.z) || !henka_gltf_read_component(context, tangent_accessor, source_index, 3U, &vertex.tangent.w))) return false;
+        if (tangent_accessor >= 0 && vertex.tangent.w != 1.0f && vertex.tangent.w != -1.0f) return false;
         vertex.tangent_valid = tangent_accessor >= 0;
         if (!henka_gltf_builder_push(builder, &vertex)) return false;
     }
