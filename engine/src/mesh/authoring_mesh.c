@@ -1001,6 +1001,10 @@ henka_result henka_authoring_mesh_add_vertex(henka_authoring_mesh* mesh, henka_v
     henka_authoring_vertex* vertex;
     const henka_authoring_vertex_id previous_next_id = mesh != NULL ? mesh->next_vertex_id : 0U;
     size_t slot;
+    if (out_id != NULL)
+    {
+        *out_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (mesh == NULL || out_id == NULL || !authoring_finite_vec3(position) || !authoring_finite_vec2(uv))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -1168,6 +1172,10 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
     size_t face_slot;
     henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
     size_t corner_bytes;
+    if (out_id != NULL)
+    {
+        *out_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (mesh == NULL || vertices == NULL || out_id == NULL || corner_count < 3U ||
         corner_count > mesh->desc.max_face_corners)
     {
@@ -1177,7 +1185,6 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
     {
         return HENKA_ERROR_LIMIT;
     }
-    *out_id = HENKA_AUTHORING_INVALID_ID;
     face_slot = authoring_find_free_face_slot(mesh);
     if (face_slot == SIZE_MAX || !authoring_take_next_id(&mesh->next_face_id, out_id))
     {
@@ -1189,6 +1196,7 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
         if (henka_authoring_mesh_get_vertex(mesh, vertices[corner]) == NULL)
         {
             mesh->next_face_id = previous_next_face_id;
+            *out_id = HENKA_AUTHORING_INVALID_ID;
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
         for (other = corner + 1U; other < corner_count; ++other)
@@ -1196,6 +1204,7 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
             if (vertices[corner] == vertices[other])
             {
                 mesh->next_face_id = previous_next_face_id;
+                *out_id = HENKA_AUTHORING_INVALID_ID;
                 return HENKA_ERROR_INVALID_ARGUMENT;
             }
         }
@@ -1203,6 +1212,7 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
     if (!henka_checked_size_multiply(corner_count, sizeof(*new_vertices), &corner_bytes))
     {
         mesh->next_face_id = previous_next_face_id;
+        *out_id = HENKA_AUTHORING_INVALID_ID;
         return HENKA_ERROR_LIMIT;
     }
     new_vertices = henka_malloc(corner_bytes);
@@ -1212,6 +1222,7 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
         henka_free(new_vertices);
         henka_free(new_edges);
         mesh->next_face_id = previous_next_face_id;
+        *out_id = HENKA_AUTHORING_INVALID_ID;
         return HENKA_ERROR_LIMIT;
     }
     new_uvs = henka_malloc(corner_bytes);
@@ -1326,6 +1337,7 @@ rollback:
     henka_free(face->edges);
     henka_free(face->uvs);
     memset(face, 0, sizeof(*face));
+    *out_id = HENKA_AUTHORING_INVALID_ID;
     return result;
 }
 

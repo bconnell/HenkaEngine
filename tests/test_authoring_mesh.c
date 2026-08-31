@@ -414,6 +414,57 @@ static int test_mesh_create_output_fails_closed(void)
     return 1;
 }
 
+static int test_topology_add_outputs_fail_closed(void)
+{
+    const henka_authoring_mesh_desc desc = {3U, 3U, 1U, 3U};
+    const henka_authoring_vertex_id face[] = {1U, 2U, 3U};
+    const henka_authoring_vertex_id invalid_face[] = {1U, 1U, 2U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertex_id = 123U;
+    henka_authoring_face_id face_id = 123U;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 0.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f}, 0U, &vertex_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){1.0f, 0.0f, 0.0f},
+            (henka_vec2){1.0f, 0.0f}, 0U, &vertex_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 1.0f, 0.0f},
+            (henka_vec2){0.0f, 1.0f}, 0U, &vertex_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    vertex_id = 123U;
+    if (henka_authoring_mesh_add_vertex(mesh, (henka_vec3){NAN, 0.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f}, 0U, &vertex_id) != HENKA_ERROR_INVALID_ARGUMENT ||
+        vertex_id != HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    face_id = 123U;
+    if (henka_authoring_mesh_add_face(mesh, invalid_face, 3U, 0U, false, &face_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        face_id != HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_add_face(mesh, face, 3U, 0U, false, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    face_id = 123U;
+    if (henka_authoring_mesh_add_face(mesh, face, 3U, 0U, false, &face_id) != HENKA_ERROR_LIMIT ||
+        face_id != HENKA_AUTHORING_INVALID_ID || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("topology add output state");
+}
+
 static int test_rejection_and_tombstones(void)
 {
     henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
@@ -3473,6 +3524,7 @@ int main(void)
         test_face_operation_outputs_fail_closed() &&
         test_primitive_constructor_outputs_fail_closed() &&
         test_mesh_create_output_fails_closed() &&
+        test_topology_add_outputs_fail_closed() &&
         test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
         test_vertex_merge_operations() &&
