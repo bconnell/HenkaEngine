@@ -1,607 +1,830 @@
 # Terrain v1
 
-The renderer-independent Terrain v1 core is owned by `henka_runtime` and is
-available to both graphical clients and dedicated-server consumers through
-`<henka/terrain.h>`.
+The renderer-independent Terrain v1 core is owned by `henka_runtime` and is available to graphical clients and dedicated-server consumers through `<henka/terrain.h>`.
+
+## Contents
+
+- [World contract](#world-contract)
+- [Persistence](#persistence)
+- [Streaming](#streaming)
+- [Deterministic editing and history](#deterministic-editing-and-history)
+- [Network and authority](#network-and-authority)
+- [Client recovery and prediction](#client-recovery-and-prediction)
+- [Collision and physics](#collision-and-physics)
+- [Render ownership and LOD](#render-ownership-and-lod)
+- [Terrain materials](#terrain-materials)
+- [Sandbox authoring workflow](#sandbox-authoring-workflow)
+- [Visual evidence](#visual-evidence)
+- [Validation coverage](#validation-coverage)
+- [Current boundary](#current-boundary)
 
 ## World contract
 
-The default descriptor represents an 8192 m by 8192 m world as 16 by 16 regions.
-Each region is 512 m across and contains 8 by 8 chunks. Each chunk is 64 m
-across with 65 by 65 full-resolution samples at 1 m spacing. The authoritative
-height field is signed 32-bit integer millimeters. Rendering and physics may
-convert those values to meters at their consumption boundary.
+The default Terrain descriptor represents an 8192 m × 8192 m world.
 
-Each sample reserves exactly four active material weights. The public
-normalization helper produces a deterministic sum of 255 using integer
-arithmetic and a stable largest-remainder tie break.
+| Level | Layout | Size |
+| --- | --- | --- |
+| World | 16 × 16 regions | 8192 m × 8192 m |
+| Region | 8 × 8 chunks | 512 m × 512 m |
+| Chunk | 65 × 65 full-resolution samples | 64 m × 64 m |
+| Sample spacing | — | 1 m |
 
-## Region persistence contract
+The authoritative height field uses signed 32-bit integer millimeters. Rendering and physics convert heights to meters at their consumption boundaries.
 
-`<henka/terrain_storage.h>` defines a versioned binary region record with
-explicit little-endian fields for the world identity, packaged base identity,
-region identity, generation, revision, sample dimensions, signed millimeter
-heights, four material-weight bytes per sample, and a CRC-32 checksum. Native C
-struct layout is never written to disk, and records are bounded by
-`HENKA_TERRAIN_MAX_REGION_RECORD_BYTES`.
+Each sample reserves exactly four active material weights. The public normalization helper produces a deterministic total weight of 255 using integer arithmetic and a stable largest-remainder tie break.
 
-Runtime writes use an append-only journal containing BEGIN, bounded REGION, and
-COMMIT records. Recovery applies only complete committed transactions. Each
-region snapshot is validated and written to a temporary confined path before an
-atomic replacement, so an interrupted write retains the previous valid
-snapshot. Uncommitted records remain harmless journal history and are ignored
-by subsequent recovery.
+The world descriptor stores:
 
-`henka_terrain_storage_compact` first recovers complete transactions, rejects
-an active transaction, then atomically replaces the journal with an empty
-durable file. Successful commits also compact automatically after the bounded
-`HENKA_TERRAIN_STORAGE_AUTO_COMPACT_THRESHOLD_BYTES` threshold is reached.
-Region snapshots remain the source of truth, so compaction does not require
-loading the world-sized terrain or rewriting every region. This keeps repeated
-tests, dedicated-server sessions, and runtime saves from accumulating committed
-journal history without limit.
+- format version;
+- world identity;
+- packaged base identity;
+- world/region/chunk relationships;
+- bounded residency limits.
 
-## Streaming boundary
+World creation allocates the configured region and chunk residency tables. It does not allocate the complete 8 km height field.
 
-The Windows runtime provides a bounded worker-backed stream queue through
-`<henka/terrain_streaming.h>`. Workers borrow storage, load and validate one
-immutable region candidate at a time, and never touch renderer or live world
-objects. The runtime thread pumps bounded completions and performs the
-authoritative sample/revision swap. Duplicate requests coalesce, queued or
-active requests can be cancelled, observer records are bounded, and queue,
-completion, failure, cancellation, and dropped-completion diagnostics are
-available, including current and high-water counts for queued requests,
-active work, completions, and observers. Observer updates request a bounded CPU-radius square and reconcile
-resident regions against the union of observer unload-radius squares. Regions
-outside that union are released deterministically in row-major order only when
-they have no physics/render residency, pending I/O, or dirty edits. A zero
-unload radius preserves the CPU radius; a larger unload radius provides bounded
-movement hysteresis. Loaded regions now synchronize physics/render residency
-flags from the observer radius union. A stream descriptor may also provide a
-bounded region generator for missing (but not corrupt) snapshots; it runs on
-the worker, receives only the immutable world/layout description and one
-caller-owned sample buffer, validates every generated sample's normalized
-255-weight invariant, and publishes revision/generation one only after the
-main-thread snapshot swap. Persisted regions always win over the generator,
-and callback or validation failures remain failed requests. Renderer mesh and
-physics patch regeneration remain caller-owned asynchronous presentation work.
-Publishing a validated region snapshot also clears that region's pending-I/O
-flag and releases its corresponding world pending-I/O budget slot exactly once.
-The graphical
-render owner reports high-water pending-request, resident-chunk, and
-visible-chunk counts; the collision queue reports its high-water pending chunk
-count so callers can distinguish a bounded budget from a transient drain state.
-The renderer-owner regression also drives two render-resident regions through
-the public observer seam, verifies nearest bounded working-set replacement after
-camera relocation, and confirms that all presentation slots are removed beyond
-the outer LOD distance band while resident/visible high-water diagnostics remain
-valid. This is bounded runtime coverage, not production-scale streaming or
-human visual approval.
-Observer-driven requests are marked separately from explicit
-`henka_terrain_streamer_request_region` calls: shrinking or removing an
-observer cancels only stale observer demands, so an explicit caller request
-remains queued or active until it completes or is explicitly canceled.
+Region state tracks CPU, physics, render, pending-I/O, dirty, revision, and generation state.
 
-Before publishing a successful worker completion, the pump compares its
-region generation/revision with the currently resident authoritative state.
-An older completion is discarded instead of overwriting newer edits,
-recovery, or reload state, and is counted in `stale_completion_count` for
-diagnostics. This preserves the transactional ownership boundary without
-making a stale asynchronous load look like an I/O failure.
+## Persistence
 
-Queued completions retain whether their request came only from an observer.
-If that observer moves before the completion is pumped, the result is
-discarded and counted in `cancelled_completion_count`; explicit requests that
-were coalesced onto the same load clear that observer-only ownership and are
-still allowed to complete. An explicit request also coalesces onto a
-successful same-region completion already waiting in the bounded pump queue,
-preventing duplicate worker loads.
+`<henka/terrain_storage.h>` defines the versioned Terrain region record.
 
-## Deterministic edits
+### Region record
 
-`<henka/terrain_edit.h>` is the single command path for raise, lower, flatten,
-smooth, and paint operations. Commands carry an algorithm version, client
-nonce, integer sample center, bounded sample radius, falloff, and operation
-values. Linear and smooth falloffs use fixed-point integer weighting. The
-runtime determines every affected resident region before allocating candidate
-copies; all candidate regions pass validation before any live sample or
-revision is swapped. The same ordered command stream therefore produces
-byte-identical authoritative samples across runtimes. The Sandbox editor and
-runtime callers use this same command path. The public
-`<henka/terrain_edit_history.h>` owner records bounded before/after resident
-region snapshots, restores revision/generation/dirty state transactionally, and
-provides deterministic Undo/Redo without owning the Terrain world. The Sandbox
-direct viewport mode emits one command per bounded cursor segment and refreshes
-collision and render owners after history actions; strokes stop at nonresident
-terrain and do not edit hidden data. Brush settings remain persisted through
-the existing Sandbox settings path, while asynchronous persistence scheduling
-is separate. The server authority path
-persists accepted commands synchronously through the storage transaction
-described below.
+Each binary record contains explicit little-endian fields for:
 
-Terrain network payloads in `<henka/terrain_network.h>` use explicit bounded
-little-endian encoding for edit requests, authoritative acceptance revisions,
-rejection reasons, and deterministic edit deltas. Requests carry world/base
-identity, client nonce,
-algorithm-versioned command fields, and the expected revision for each affected
-region. Payload codecs reject unsupported command fields, negative region IDs,
-oversized region lists, and trailing/truncated bytes; transport framing and
-authority policy remain separate layers.
+- world identity;
+- packaged base identity;
+- region identity;
+- generation;
+- revision;
+- sample dimensions;
+- signed millimeter heights;
+- four material-weight bytes per sample;
+- CRC-32 checksum.
 
-## Authority contract
+Native C struct layouts are never written to disk. Records are bounded by `HENKA_TERRAIN_MAX_REGION_RECORD_BYTES`.
 
-`<henka/terrain_authority.h>` provides the renderer-independent server-side
-validation boundary. It bounds per-peer edit requests, optionally invokes a
-permission callback, verifies the world and packaged-base identities, requires
-the exact deterministic affected-region set, and rejects stale region
-revisions. An accepted command is applied to the live world, written to every
-affected region in one storage transaction, and acknowledged only after the
-transaction commits. If the edit or persistence path fails, the live samples
-and revisions are restored and the incomplete transaction is abandoned.
+### Transaction journal
 
-The authority object does not own the world or storage. The
-`<henka/terrain_server.h>` session adapter owns neither: it borrows the
-public ENet server, decodes edit messages, routes them through authority, and
-encodes the response. It also echoes control pings, sends a bounded control
-session-info message on connect, and disconnects malformed edit payloads as
-protocol errors. Session info carries the world/base identities plus up to 16
-current resident regions with revision and generation, sorted in deterministic
-row-major coordinate order before encoding so residency-slot reuse cannot
-change a capped manifest's order. The client validates
-those identities and requests snapshots for the advertised regions, so an
-empty client can enter through the same replica snapshot path used for
-recovery. This is a bounded late-join bootstrap, not a full application
-handshake, authentication layer, or relevance-based region selection; those
-remain subsequent integration work. The public client adapter can request a
-new transport connection; the connect-time session-info comparison then
-refreshes only missing or stale advertised regions. The client recovery
-coverage also forces a server-directed disconnect and validates reconnect
-after replacing the authoritative server wrapper on the same endpoint, with
-exact resident sample convergence. This is bounded reconnect recovery, not
-application authentication or relevance-driven world streaming.
+Runtime writes use an append-only journal with:
 
-For edit requests, the session lazily materializes missing persisted regions
-before authority validation, subject to the world's resident-region limit. It
-does not preload the 8 km height field; eviction and asynchronous physics or
-render regeneration remain separate work. `henka_terrain_server_diagnostics`
-reports `materialization_failure_count` when a requested region cannot be
-allocated, loaded, or published into the live world; the edit remains rejected
-and no partial authority operation is accepted. Materialization is
-all-or-nothing for the request: regions loaded by a request are released again
-when a later requested region fails.
+1. `BEGIN`;
+2. bounded `REGION` records;
+3. `COMMIT`.
 
-The dedicated server recovers complete journal transactions before opening its
-network endpoint and loads an existing reserved region snapshot into the live
-world. When `--world` is supplied, the path is opened as a validated read-only
-Terrain storage root and requires `region_0_0.htr`; the runtime save root is
-loaded afterward so committed runtime edits override the base region. Its bounded smoke mode also exercises a loopback client and commits a
-deterministic edit when the save root is empty, allowing the packaged restart
-check to verify that the same revision is restored. This does not replace a
-multi-process multiplayer soak or relevance-driven reconnect/late-join policy.
-The bounded Windows process integration soak repeats that complete scenario
-for a finite session count with isolated save roots; production-scale capacity
-is not claimed.
+Recovery publishes complete committed transactions only. Each region snapshot is validated, written to a confined temporary path, and atomically replaces the prior snapshot. Interrupted writes preserve the prior valid snapshot. Uncommitted journal records remain inert during recovery.
 
-Accepted edits also produce a bounded delta in the same terrain channel. The
-delta repeats world/base identity, client nonce, server command identity, the
-algorithm-versioned command, and the resulting revision for each affected
-region. The server broadcasts that event reliably after sending the requester
-acceptance and retains the last 64 accepted deltas in a fixed ring. The client
-session adapter applies deltas only across exact revision steps; a gap sends a
-bounded recovery request for the missing regional revision range. At most one
-pending recovery request is retained per affected region; repeated copies of
-the same or an older gap are suppressed and counted, while a newer target
-revision replaces the pending target. A successful recovered delta or snapshot
-clears that region's pending entry, and an explicit reconnect clears all
-entries before the new connection's session bootstrap. Complete retained
-history is sent as deltas, while an exhausted or incomplete range uses the
-existing transactional regional snapshot path. The bounded pending count and
-suppression count are exposed by the public client diagnostics.
-The connect-time session-info bootstrap covers only the bounded advertised
-resident set. Clients that know their interest center can opt into a second,
-bounded relevance request through `<henka/terrain_client.h>`; the server
-filters resident regions by Chebyshev radius, orders them by squared distance
-with coordinate-stable ties, and caps the response at 16 regions. The
-filtered response is transactional at the client session boundary: the
-client ignores the initial legacy summary while the opt-in request is pending,
-then requests snapshots only for the selected response. Per-region session
-snapshot requests are coalesced while a target revision/generation is pending;
-a newer advertisement replaces that bounded target, while equal or older
-advertisements are suppressed with diagnostics. Request radius and response
-count are validated before any world state is touched; malformed or
-identity-mismatched requests disconnect the peer. This is bounded selection,
-not application authentication or render/physics residency orchestration.
-The recovery test covers one bounded resident set through forced disconnect,
-reconnect, and server-wrapper restart, while a server regression covers
-coordinate-stable relevance selection. Production-scale multiplayer soak
-remains subsequent work. A separate
-public client-session regression connects two replicas to the same authoritative
-server, bootstraps the advertised region, sends one edit from each peer, and
-compares the complete resident sample arrays against the server after both
-revisions. This proves bounded two-client convergence; the finite process soak
-repeats the multi-process scenario, but neither is application-level
-authentication or production-scale capacity coverage.
-`<henka/terrain_prediction.h>` owns a separate bounded presentation
-world for local commands: it copies CPU-resident authoritative regions, applies
-pending commands in submission order, and rebuilds from authoritative state
-when a command is accepted or rejected. The authoritative replica is never
-used as prediction scratch state, and exceeding the pending-command bound fails
-closed.
+### Compaction
 
-Snapshot requests identify the world, packaged base, region, and expected
-revision. The server reads the validated region record from storage and emits
-transfer-identified fragments with the record revision, generation, total
-size, index, count, and payload bytes. The transport keeps each fragment under
-the existing 32 KiB snapshot payload limit, and the replica requires the exact
-ceil(total-size / payload-limit) fragment count plus full-size non-final
-fragments so malformed transfers fail closed instead of hanging assembly. The
-client session adapter owns the
-bounded fragment assembly through `<henka/terrain_replica.h>`; a delta gap
-first requests the retained revision range and uses a snapshot when that
-range is unavailable. Connect-time session info can request the same bounded
-snapshot path for up to 16 advertised resident regions. An opt-in
-session-interest request narrows that list before snapshot requests using a
-validated center, radius, and maximum count; the response is marked so old
-unfiltered connect summaries are not applied twice. The Windows process
-harness exercises the bounded late-observer path, explicit client reconnect,
-and restart checksum convergence; the finite process soak repeats this bounded
-policy. The selection remains a runtime transport foundation, not application
-authentication, relevance-aware render/physics residency, or production-scale
-multiplayer capacity.
+`henka_terrain_storage_compact`:
 
-`<henka/terrain_replica.h>` is the bounded client-side state owner consumed by
-`<henka/terrain_client.h>`. It applies a delta only when every affected region advances
-by exactly one revision, accepts an all-duplicate delta idempotently, and
-rejects gaps or mixed duplicate/new multi-region states before changing live
-samples. Snapshot fragments are accumulated under a configured byte budget;
-duplicate fragments, malformed sizing, world/base identity mismatches, and
-checksum/decode failures are rejected without publishing partial samples; a
-valid transfer may arrive out of order and commits only after every expected
-fragment arrives. A new transfer can retry and the validated record is decoded
-and atomically swapped into the world only after every fragment arrives. The
-replica rejects a decoded snapshot whose generation/revision is older than the
-currently resident region, counts it in `stale_snapshot_count`, and leaves the
-newer state untouched. The client diagnostics expose the same count so
-external consumers can distinguish superseded recovery packets from malformed
-or failed transfers. The
-replica does not own network transport,
-reconnect state or render/physics residency policy; the
-client adapter does not invent those missing policies. A revision-gap result
-is the only delta failure eligible for bounded recovery; identity, protocol,
-validation, and allocation failures remain hard errors and do not trigger a
-request derived from the rejected message.
+1. recovers complete transactions;
+2. rejects compaction while a transaction is active;
+3. atomically replaces the journal with an empty durable file.
 
-The replica's final decode/sample allocation is also transactional: an
-allocation failure after all fragments arrive leaves the previous resident
-region state untouched, clears the failed transfer, and permits a later
-transfer to retry cleanly.
+Successful commits also trigger compaction after `HENKA_TERRAIN_STORAGE_AUTO_COMPACT_THRESHOLD_BYTES` is reached.
 
-When a decoded fragment is rejected, the public Terrain client requests a new
-snapshot for the same region and target revision, once per transfer and up to
-four times per connection. Undecodable messages remain hard errors because
-their identity cannot be trusted for a retry; the bounded retry count is
-reported through `recovery_snapshot_request_count`. A disconnect retires all
-delta-recovery and session-snapshot suppression entries immediately, so a
-subsequent reconnect cannot inherit requests from the old transport.
+Region snapshots remain the durable state authority. Compaction does not load the full Terrain world or rewrite every region.
 
-`<henka/terrain_collision.h>` extracts a physics-resident chunk into a
-caller-owned 65×65 signed-millimeter patch without allocating or mutating the
-world. The patch carries the source revision and generation so a later physics
-owner can reject stale regeneration work. `<henka/terrain_physics.h>` provides
-that bounded owner: it copies each patch transactionally, retains at most the
-configured patch count, chooses overlapping patches in stable slot order, and
-answers bilinear height and finite normal queries with source identity. The
-`henka_terrain_physics_raycast` API adds a bounded allocation-free traversal
-over those resident patches, with normalized ray distance, hit position, and
-source identity; a miss is reported without inventing terrain outside the
-resident physics set. The
-rigid-body API additionally exposes a static heightfield collider whose signed
-millimeter source is copied into the body. Sphere and axis-aligned box
-contacts, terrain normals, layer/mask filtering, bounded heightfield raycasts,
-and transactional replacement are implemented. The renderer-free
-`<henka/terrain_collision_runtime.h>` owner provides a fixed-capacity,
-coalescing rebuild queue: the runtime thread builds full-resolution patches for
-physics-resident chunks and replaces the durable physics representation only
-after the candidate succeeds. A failed rebuild leaves the last valid patch in
-place. `henka_terrain_collision_runtime_sync_residency` tracks bounded patch
-identity, queues missing or stale physics-resident chunks in stable order, and
-removes patches when their regions leave physics residency; callers may set a
-deterministic camera/interaction focus region with
-`henka_terrain_collision_runtime_set_focus`, which admits that region's
-representative patch first and evicts one non-focus patch when the bounded
-physics capacity is full. The physics owner's patch capacity is the hard
-admission bound. `henka_terrain_collision_runtime_request_edit`
-derives height-edit coverage plus one chunk of physics-neighbor coverage;
-paint-only edits validate and return without queueing collision work because
-they change material weights rather than the heightfield. The Terrain server
-session can borrow that queue to schedule height edits after authority
-acceptance. The Sandbox graphical path owns this runtime beside the physics
-world: camera residency sync, local sculpt edits, and region reloads use the
-queue and bounded pump, while paint refreshes render material weights only.
-Height edits crossing chunk boundaries do not silently refresh only the
-fixture's first chunk. Callers still own the pump cadence.
+### Dirty-region persistence
 
-`<henka/terrain_mesh.h>` provides the corresponding renderer-independent
-geometry boundary. `henka_terrain_mesh_build_chunk` requires a render-resident
-chunk and fills caller-owned buffers for LOD 0 through LOD 3. It derives finite
-central-difference normals, an orthogonal tangent vec4 basis with deterministic
-handedness, stable world-space UV transport, and copies the four normalized
-material weights without allocating. The result carries the source revision
-and generation, so a graphics owner can discard a stale upload. GPU
-mesh ownership is provided by `<henka/terrain_render.h>` in the graphical
-client: it borrows the engine, scene, and world, keeps fixed-capacity chunk
-slots and request queues, creates owner-marked helper scene entities with bounds
-for renderer culling and depth presentation, and replaces meshes transactionally
-only after a candidate upload succeeds. Terrain chunk entities are therefore
-excluded from generic Scene Objects selection, duplicate, delete, and transform
-actions; Terrain editing remains on the Terrain command path. If an external
-operation removes a resident presentation entity, the next dirty/residency
-refresh attempts to recreate the helper entity and candidate mesh transactionally;
-a failed recreation keeps the previous slot mesh and records the rebuild failure.
-Four LOD bands use hysteresis and
-deterministic adjacent-chunk
-selection; render visibility is bounded by the configured outer band. The
-owner destroys its entities and meshes without destroying the borrowed world.
-The built-in Terrain material uses exactly four normalized painted weights as
-world-space PBR layer blends. Each layer has validated base-color, normal, and
-metallic/roughness texture semantics plus base color, metallic, roughness,
-normal-strength, and meters-per-tile factors. The normal Rendered shader
-consumes these weights; ordinary material vertex-color tint remains disabled
-for this material. The Sandbox reference fixture creates four deterministic
-64x64 asset-manager-owned runtime grass, dirt, rock, and wet base-color with
-finite-difference tangent-normal and metallic/roughness tiles using bounded
-multi-frequency variation. The Rendered Terrain shader also adds bounded
-world-space macro/detail variation to albedo, roughness, and tangent normals to
-reduce large-scale tile repetition; this does not claim authored texture
-streaming, displacement, or parallax.
-The material retains deterministic factor fallback for replacement or unavailable
-optional sources. The graphical
-owner reports the exact unique layer-texture count and resident material bytes;
-the Sandbox reference fixture therefore expects all twelve semantic layer slots
-to contribute without duplicating shared handles. The existing asset-manager dependency inspection contract
-also enumerates each of the twelve optional layer texture slots with its
-semantic usage for both material definitions and effective instances; the
-manager remains the owner of those borrowed texture handles. Terrain render
-descriptors may optionally carry a stable identity returned by
-`henka_assets_adopt_runtime_material`. When present, newly resident chunk
-entities bind that manager-owned definition identity together with the
-validated effective material value. Adoption rejects shader or texture
-dependencies that are not owned by the same manager, duplicate identities, and
-invalid material values; the manager owns the definition and its identity, but
-does not invent a source-file reload path for generated runtime definitions.
-The descriptor still borrows the manager-owned definition and its dependencies,
-so they must outlive the graphical Terrain runtime.
-Uploaded GPU meshes use a four-edge transition mask when an adjacent resident
-chunk is exactly one LOD coarser. The mesh keeps shared even edge samples and
-redirects odd fine-edge indices to those shared coarse endpoints, omitting
-triangles that collapse under the mapping. Intervening fine edge samples are
-also morphed onto the linear boundary between the shared coarse endpoints.
-Transition vertices re-normalize their interpolated normal/tangent basis and
-restore the 255-sum material-layer invariant before upload. This is bounded
-per-edge stitched topology plus geometry morphing for one-level differences; a
-missing or invalid neighbor uses a bounded downward skirt only on that edge
-until the neighbor is resident; the owner records both masks in chunk
-diagnostics. On each observer update the owner now derives a deterministic
-nearest working set from render-resident regions, removes slots whose regions
-leave render residency or the outer LOD band, and queues only bounded missing
-chunks. It also compares uploaded revision/generation identity with the
-borrowed world and queues stale resident chunks for transactional replacement;
-it does not mutate the borrowed world or allocate per-frame working arrays.
-Neighbor-aware border-normal sampling uses available authoritative regions and
-falls back to the resident edge until a neighbor streams in. Uploaded chunks
-track the bounded 3x3 region revision/generation identities used by that border
-sampling, so a neighbor edit queues dependent chunks as well; height-derived
-scene bounds are replaced with the candidate mesh and restored on failure. A
-queued graphical rebuild that reaches the pump after its source region loses
-render residency is treated as obsolete work: the owner retires that slot
-without attempting a stale upload or counting a rebuild failure, while valid
-replacement failures still retain the previous mesh and revision for retry.
-Observer synchronization runs this same stale-dependency check before working-
-set admission and propagates the first bounded queue/admission error instead of
-silently dropping it; already queued replacements remain available for a later
-pump/retry. Callers that already accepted a deterministic edit may use
-`henka_terrain_render_runtime_request_edit` to requeue resident chunks covered
-by the edit plus a one-chunk dependency border. The call validates the command,
-never admits nonresident chunks, coalesces into the fixed render queue, and
-leaves observer working-set admission and pump cadence with the caller. Region
-snapshot, remote-delta, and transactional reload owners can use
-`henka_terrain_render_runtime_refresh_dirty` before pumping to route the same
-revision/dependency check without forcing an unconditional chunk rebuild;
-successful stale-slot requeues are included in bounded render diagnostics.
-Paint-only edits use a separate four-byte-per-vertex Terrain weight stream.
-The graphical owner builds a bounded candidate weight payload and swaps its GPU
-buffer only after the upload succeeds, preserving the existing mesh VAO,
-indices, geometry, bounds, and scene entity identity. `weight_updates` and
-`failed_weight_updates` distinguish this path from geometry rebuilds. This is
-not a general-purpose mesh attribute update API, and height edits or topology,
-LOD, border-normal, and dependency changes still use transactional mesh
-replacement.
-The Sandbox resource line reports that counter alongside owner memory totals.
-`henka_terrain_render_stats.gpu_weight_bytes` reports the exact resident bytes
-owned by those weight buffers; it is kept separate from the interleaved mesh
-vertex and index totals so diagnostics do not hide the additional upload.
-The render regression suite verifies resident Terrain entities retain the
-shared material's cast/receive shadow flags, are owner-marked helpers rejected
-by generic action selection/deletion and scene picking, and that observer-driven
-removal leaves no stale
-Terrain entities after graphical-owner teardown. The mesh regression suite
-also builds an all-four-edge transition, verifies
-stitched output emits fewer indices than the regular grid, and rejects
-degenerate triangles or non-finite tangent bases at the corners. Manual visual
-corner validation remains subsequent work; the suite also compares all four
-fine/coarse boundary positions, including shared corners, and verifies that
-odd fine-edge indices redirect to shared coarse endpoints without degenerate
-triangles. The Sandbox also routes one shared
-raise command through authoritative integer mutation, refreshes the
-transactional physics patch, and refreshes the affected GPU mesh; this is a
-runtime smoke path, not persistence or network authority. It also applies a
-shared paint command, verifies the authoritative layer weight and rendered
-revision advance, and leaves collision untouched for that paint-only mutation.
-Sandbox smoke also checks the per-frame Terrain color and shadow submission
-diagnostics while the viewport is Rendered; generic depth, AO, reflection,
-temporal, fog, and HDR/IBL processing consume the same scene submission path.
-Terrain helper entities retain scene fog and Rendered environment/IBL response
-while remaining excluded from generic local reflection-probe capture. The
-engine diagnostics bitmask identifies Terrain participation in those consumers
-for the current frame, including probe capture only when a Terrain entity is
-actually submitted to that capture. It is a path diagnostic, not a claim of
-production visual validation for every effect.
-The Terrain utility reports exact world-owned CPU bytes and graphical-owner
-vertex/index/weight/material GPU bytes for resident resources; these values exclude
-borrowed renderer resources outside the Terrain owner.
-For application-only visual evidence, run
-`scripts/capture_visual_evidence_windows.ps1 -Configuration Release -IncludeTerrain`.
-The optional terrain capture uses deterministic wide, close-material, and
-four-region-corner cameras for Solid, Material Preview, and Rendered. Capture
-mode refreshes the four bounded fixture regions from their seeded samples so
-persisted editor edits cannot change the comparison; material and presentation
-comparisons do not change scene materials or scene lights. The helper can target
-the development or packaged executable. The wide set runs
-`scripts/check_terrain_visual_evidence_windows.ps1`, the corner set runs
-`scripts/check_terrain_corner_visual_evidence_windows.ps1`, and the close set
-runs `scripts/check_terrain_close_visual_evidence_windows.ps1`. All three sample
-only the normalized Scene View interior and reject missing or dimension-
-mismatched images, flat or low-chroma material content, spatially featureless
-content, and a Rendered image that is not measurably distinct from Material
-Preview. This is an automated
-presentation-path guard, not a baseline-image or human visual approval or
-complete topology QA.
-The same graphical
-smoke revokes render residency after the upload, queues the now-obsolete
-replacement, verifies it is cancelled without a rebuild failure, then restores
-residency and proves replacement recovery. This is bounded stale-work
-cancellation coverage. The renderer test suite additionally forces candidate allocation
-failure during a dirty replacement and verifies the prior mesh, revision, and
-scene bounds remain live before a retry succeeds; this is not complete stress
-or visual QA.
+The storage API provides a dirty-only transaction that skips clean resident regions. Dirty flags clear only after the bounded multi-region transaction commits.
 
-The Sandbox reference scene seeds four deterministic regions in a persistent
-`terrain-sandbox-v2` storage root, marks the initial region render-resident, and
-lets this owner discover its bounded chunk working set from the active camera.
-The fixture contains rolling ground, a valley, a steep ridge/cliff, and
-continuous grass/dirt/rock/wet four-layer weights; existing committed samples
-are retained. The same camera feeds the public streaming observer under a
-four-region CPU budget with a one-region CPU, physics, render, and unload
-window. Stream requests are admitted in deterministic priority
-order: render-radius regions first, then physics-radius regions, then the
-remaining CPU-radius regions by Chebyshev distance, with stable request
-sequence tie breaking. Updating or removing an observer re-scores queued
-requests while holding the stream lock and cancels observer-demand work that
-leaves every observer's CPU radius; an active stale observer load is canceled
-at its next worker boundary as well, so a moving camera cannot spend bounded
-capacity on obsolete requests. The opt-in Windows `--terrain-stream-stress` path
-proves the initial one-region camera window at `(0,0)`, then crosses
-`(2,0) -> (2,2) -> (0,0)`, waits only through bounded
-worker/render queues, checks rendered return at both axes and a bounded
-collision-patch overlap, and reports the resident-region bound. Normal movement remains
-observer-driven and pumps at most two render replacements per frame. The
-Sandbox also supplies the same deterministic generator to the stream worker,
-so a camera can move into a valid unpersisted region without manual region
-priming; edits become persistent only through the normal transactional storage
-path. This proves bounded procedural broad-world regeneration and a small
-persistent camera crossing fixture, not asynchronous background physics/render
-regeneration or human visual approval.
-The Utility Terrain tab now exposes bounded resident/render/collision statistics
-and raise, lower, flatten, smooth, and paint controls with radius, strength,
-layer, and falloff settings. It uses the same deterministic command API as
-runtime callers; a resident physics hit now supplies the integer sample center
-for the next command. A bounded horizontal brush preview follows a successful
-resident physics hit while the Terrain utility is active. Brush radius,
-strength, active layer, falloff, and operation are persisted through the normal
-Sandbox settings file with range validation on load. Its read-only Material
-layers section reports Grass, Dirt, Rock, and Wet base-color, normal, and
-metallic/roughness texture dimensions, GPU formats, and resident/total mip
-counts directly from the manager-owned live textures. This is dependency
-inspection and edit support, not a separate material authority or a claim of
-complete viewport material-preview authoring.
+The Sandbox uses this path for its ten-second normal-editor autosave. Failed autosaves leave dirty regions pending for a later retry. Capture and smoke modes do not schedule persistence.
 
-When Terrain is the active utility, the Scene View also shows a bounded Terrain
-Edit banner naming the active operation and its radius, strength, falloff, and
-paint layer, together with the resident-patch interaction hint. The debug strip
-repeats the active operation so a docked or resized layout does not turn the
-editor mode into an ambiguous generic sculpt state. Owner-marked Terrain chunks
-remain excluded from generic object selection and reflection-probe capture, but
-their valid terrain layer material is still bound in Material Preview and
-Rendered modes; Solid retains the neutral geometry presentation.
+## Streaming
 
-The Terrain utility also projects the scene-view cursor through the shared
-camera ray API and queries the resident physics patch owner. A successful
-resident hit is shown with chunk/source identity and becomes the integer
-sample center for the next raise, lower, flatten, smooth, or paint command;
-when a scene-bound object is also under the cursor, the nearest finite hit wins
-so a Terrain chunk does not hide an object in front of it. Nonresident terrain
-is not invented and a miss leaves the previous command center unchanged. This
-is an editor/runtime command bridge, not network authority. The same utility
-opens a user-data-local
-`terrain-sandbox-v2` storage root, recovers or loads region `(0,0)` at startup,
-and exposes transactional Save for every currently CPU-resident region plus
-committed-journal Compact actions. The storage API also provides a dirty-only
-transaction that skips clean resident regions, which is also the path used by
-the Sandbox normal-editor ten-second dirty-only autosave. Dirty flags clear
-only after the bounded multi-region transaction commits, and failed saves leave
-the live world unchanged because storage owns the transaction; a failed
-autosave leaves the regions pending for a later interval. Capture and smoke
-modes do not schedule persistence. Nonresident world authoring and general
-background persistence scheduling are not claimed.
-Reload uses a bounded temporary decode, then rebuilds the physics patch and
-render mesh; a presentation failure restores the previous samples, revision,
-generation, and collision patch.
+The Windows runtime exposes a bounded worker-backed stream queue through `<henka/terrain_streaming.h>`.
 
-`henka_terrain_world_get_stats` reports `dirty_region_count` alongside resident
-and pending-I/O counts. The Sandbox Terrain utility displays that count before
-the Render and Collision rows, so an editor user can see unsaved active regions
-without inferring it from the storage journal. This is a diagnostic only; it
-does not schedule persistence or change the transactional Save contract.
+### Worker boundary
 
-The descriptor stores the format version, world and base identities, all
-world/region/chunk relationships, and bounded residency limits. Creating a
-world allocates only the configured region and chunk residency tables; it does
-not allocate an 8 km height field. Region state separately records CPU,
-physics, render, pending-I/O, dirty, revision, and generation state.
+A worker:
+
+- borrows Terrain storage;
+- loads and validates one immutable region candidate at a time;
+- can run the configured missing-region generator;
+- does not mutate renderer state;
+- does not mutate live Terrain world state.
+
+The runtime thread pumps bounded completions and performs the authoritative sample/revision publication.
+
+### Request behavior
+
+The streaming layer supports:
+
+- duplicate request coalescing;
+- queued-request cancellation;
+- active-request cancellation at worker boundaries;
+- bounded observer records;
+- explicit caller requests;
+- observer-generated requests;
+- current and high-water diagnostics for queued requests, active work, completions, and observers;
+- completion, failure, cancellation, stale-completion, and dropped-completion counters.
+
+Observer-generated work and explicit `henka_terrain_streamer_request_region` work retain separate ownership. Removing or shrinking an observer cancels stale observer demand. Explicit requests remain active until completion or explicit cancellation.
+
+An explicit request can coalesce onto a successful same-region completion already waiting in the pump queue.
+
+### Observer residency
+
+Observer updates request a bounded CPU-radius square. Resident regions are reconciled against the union of observer unload-radius squares.
+
+Regions outside that union are released in deterministic row-major order when they have:
+
+- no physics residency;
+- no render residency;
+- no pending I/O;
+- no dirty edits.
+
+A zero unload radius uses the CPU radius. A larger unload radius provides movement hysteresis.
+
+Loaded regions synchronize their physics/render residency flags from the observer-radius union.
+
+### Missing-region generation
+
+A stream descriptor may provide a bounded generator for missing snapshots. Corrupt persisted snapshots remain errors.
+
+The generator receives:
+
+- the immutable world/layout description;
+- one caller-owned sample buffer.
+
+Every generated sample must satisfy the normalized 255-weight invariant. Successful generated regions publish at revision/generation 1 after the main-thread snapshot swap.
+
+Persisted region data has priority over generated content.
+
+### Stale completion protection
+
+Before publication, the pump compares a worker completion's generation/revision with the currently resident authoritative state.
+
+Older completions are discarded and counted in `stale_completion_count`.
+
+Observer-only completions that become irrelevant before the pump are discarded and counted in `cancelled_completion_count`. A coalesced explicit request keeps the completion eligible for publication.
+
+Publishing a validated region also clears its pending-I/O flag and releases the corresponding world pending-I/O budget slot exactly once.
+
+### Working-set diagnostics
+
+The graphical render owner reports high-water values for:
+
+- pending requests;
+- resident chunks;
+- visible chunks.
+
+The collision runtime reports its high-water pending-chunk count.
+
+The renderer regression drives two render-resident regions through the public observer seam, relocates the camera, verifies nearest bounded working-set replacement, and confirms presentation slots are removed beyond the outer LOD band.
+
+## Deterministic editing and history
+
+`<henka/terrain_edit.h>` is the shared command path for:
+
+- raise;
+- lower;
+- flatten;
+- smooth;
+- paint.
+
+Each command carries:
+
+- algorithm version;
+- client nonce;
+- integer sample center;
+- bounded sample radius;
+- falloff;
+- operation values.
+
+Linear and smooth falloffs use fixed-point integer weighting.
+
+The runtime determines every affected resident region before allocating candidates. All candidates validate before any live sample or revision changes. Identical ordered command streams therefore produce byte-identical authoritative samples across runtimes.
+
+The Sandbox editor and runtime callers use this same command path.
+
+### Edit history
+
+`<henka/terrain_edit_history.h>` records bounded before/after resident-region snapshots and restores revision, generation, and dirty state transactionally.
+
+Undo and Redo operate on this shared history owner.
+
+The Sandbox viewport brush emits one command per bounded cursor segment. Strokes stop when they reach nonresident Terrain. History operations refresh collision and render owners after publication.
+
+Brush configuration is persisted through the Sandbox settings path.
+
+### Network edit encoding
+
+`<henka/terrain_network.h>` uses bounded explicit little-endian payloads for:
+
+- edit requests;
+- authoritative acceptance revisions;
+- rejection reasons;
+- deterministic edit deltas.
+
+Requests contain world/base identity, client nonce, algorithm-versioned command fields, and the expected revision of each affected region.
+
+Payload codecs reject:
+
+- unsupported command fields;
+- negative region IDs;
+- oversized region lists;
+- truncated bytes;
+- trailing bytes.
+
+## Network and authority
+
+`<henka/terrain_authority.h>` provides the renderer-independent server validation boundary.
+
+### Authority checks
+
+The authority layer:
+
+- bounds per-peer edit requests;
+- optionally invokes a permission callback;
+- verifies world identity;
+- verifies packaged-base identity;
+- requires the exact deterministic affected-region set;
+- rejects stale region revisions.
+
+An accepted edit is applied to the live world and persisted across all affected regions in one storage transaction. The server acknowledges the edit after the transaction commits.
+
+Edit or persistence failure restores the previous live samples and revisions and abandons the incomplete transaction.
+
+The authority object borrows the world and storage.
+
+### Server session adapter
+
+`<henka/terrain_server.h>` borrows the public ENet server and authority dependencies.
+
+It handles:
+
+- edit-message decode;
+- authority dispatch;
+- response encoding;
+- control ping echo;
+- connect-time session info;
+- malformed edit-payload disconnects.
+
+Session info contains world/base identities and up to 16 current resident regions with revision and generation. Regions are sorted in deterministic row-major coordinate order before encoding.
+
+Clients validate the identities and request snapshots for missing or stale advertised regions.
+
+### Lazy region materialization
+
+Edit requests can materialize persisted regions before authority validation, subject to the world's resident-region limit.
+
+Materialization is transactional for the request. Regions created by a request are released if a later region fails to load or publish. Preexisting residency is preserved.
+
+`henka_terrain_server_diagnostics.materialization_failure_count` records failed allocation, load, or publication.
+
+### Dedicated-server recovery
+
+The dedicated server recovers complete journal transactions before opening its network endpoint.
+
+When `--world` is supplied:
+
+1. the path is validated as a read-only Terrain storage root;
+2. `region_0_0.htr` is required;
+3. the base region is loaded;
+4. the runtime save root is loaded afterward;
+5. committed runtime edits override base-region data.
+
+The bounded smoke mode connects a loopback client and commits one deterministic edit when the save root is empty. A later run verifies the same committed revision.
+
+### Accepted deltas
+
+Accepted edits emit bounded reliable deltas on the Terrain channel.
+
+Each delta includes:
+
+- world/base identity;
+- client nonce;
+- server command identity;
+- algorithm-versioned command;
+- resulting revision for each affected region.
+
+The server retains the last 64 accepted deltas in a fixed ring.
+
+## Client recovery and prediction
+
+### Delta-gap recovery
+
+The client applies deltas only across exact revision steps.
+
+A revision gap creates a bounded recovery request for the missing regional revision range. One pending recovery target is retained per affected region.
+
+The client:
+
+- suppresses repeated equal or older recovery requests;
+- counts suppressed requests;
+- replaces the pending target when a newer revision is observed;
+- clears the pending entry after a successful recovered delta or snapshot;
+- clears all pending entries on explicit reconnect.
+
+Complete retained history is returned as deltas. Missing history uses the transactional regional snapshot path.
+
+### Relevance request
+
+Clients with an interest center may submit a bounded relevance request through `<henka/terrain_client.h>`.
+
+The server:
+
+- filters resident regions by Chebyshev radius;
+- orders results by squared distance;
+- uses coordinate-stable tie breaking;
+- caps the response at 16 regions.
+
+The client treats the filtered response transactionally and requests snapshots only for the selected region set.
+
+Per-region session snapshot requests coalesce around the current target revision/generation. Newer advertisements replace the target. Equal or older advertisements are suppressed and reported in diagnostics.
+
+Malformed or identity-mismatched relevance requests disconnect the peer.
+
+### Snapshot transport
+
+Snapshot requests identify:
+
+- world;
+- packaged base;
+- region;
+- expected revision.
+
+The server reads the validated region record and emits transfer-identified fragments with revision, generation, total size, fragment index, fragment count, and payload bytes.
+
+Each fragment stays under the existing 32 KiB snapshot payload limit.
+
+The replica requires:
+
+- the exact `ceil(total-size / payload-limit)` fragment count;
+- full-size non-final fragments;
+- valid world/base identity;
+- valid checksum and decode;
+- total data within the configured byte budget.
+
+Valid fragments may arrive out of order. Publication occurs after every required fragment is present and the decoded candidate validates.
+
+Decoded snapshots older than the current resident generation/revision are rejected and counted in `stale_snapshot_count`.
+
+A failed final allocation clears the failed transfer and preserves the current resident region. A later transfer can retry.
+
+### Snapshot retry
+
+When a decoded fragment is rejected, the public Terrain client can request a new snapshot for the same region and target revision once per transfer, up to four times per connection.
+
+`recovery_snapshot_request_count` reports these retries.
+
+Undecodable messages remain hard protocol errors because a trusted retry identity is unavailable.
+
+Disconnect retires all delta-recovery and session-snapshot suppression entries.
+
+### Out-of-interest deltas
+
+A validated delta for a region absent from the client's current resident interest set is a bounded no-op. The client does not create the region or request gap recovery. A later relevance/session response acquires the authoritative snapshot.
+
+### Prediction
+
+`<henka/terrain_prediction.h>` owns a separate bounded presentation world for local commands.
+
+Prediction:
+
+- copies CPU-resident authoritative regions;
+- applies pending commands in submission order;
+- rebuilds from authoritative state after acceptance or rejection;
+- fails closed when the pending-command bound is exceeded.
+
+The authoritative replica remains unchanged by prediction.
+
+## Collision and physics
+
+### Collision patch extraction
+
+`<henka/terrain_collision.h>` extracts one physics-resident chunk into a caller-owned 65 × 65 signed-millimeter patch.
+
+The extraction allocates no memory and does not mutate the Terrain world.
+
+Each patch carries source revision and generation for stale-work rejection.
+
+### Terrain physics owner
+
+`<henka/terrain_physics.h>` owns bounded copied patches and supports:
+
+- stable overlapping-patch selection;
+- bilinear height queries;
+- finite normal queries;
+- source identity reporting;
+- allocation-free bounded ray traversal through `henka_terrain_physics_raycast`.
+
+Raycast misses remain misses outside the resident physics set.
+
+### Rigid-body heightfield
+
+The rigid-body API supports a static heightfield collider with copied signed-millimeter source data.
+
+Current heightfield interaction includes:
+
+- sphere contacts;
+- axis-aligned box contacts;
+- Terrain normals;
+- layer/mask filtering;
+- bounded heightfield raycasts;
+- transactional replacement.
+
+### Collision runtime queue
+
+`<henka/terrain_collision_runtime.h>` owns a fixed-capacity coalescing rebuild queue.
+
+The runtime thread builds full-resolution patches for physics-resident chunks and publishes each replacement after candidate success. A failed rebuild keeps the previous valid patch.
+
+`henka_terrain_collision_runtime_sync_residency`:
+
+- tracks bounded patch identity;
+- queues missing or stale physics-resident chunks in stable order;
+- removes patches after their regions leave physics residency.
+
+`henka_terrain_collision_runtime_set_focus` gives one deterministic camera/interaction focus region admission priority. When capacity is full, one non-focus patch may be evicted to admit the focus patch.
+
+The configured physics patch capacity is the hard admission bound.
+
+`henka_terrain_collision_runtime_request_edit` derives height-edit coverage plus one physics-neighbor chunk. Paint-only edits do not enqueue collision work because they leave heightfield geometry unchanged.
+
+The Terrain server can borrow the collision queue after authority acceptance. The Sandbox owns this runtime beside its physics world and uses it for camera residency, local sculpt edits, and region reload.
+
+## Render ownership and LOD
+
+### Mesh construction
+
+`<henka/terrain_mesh.h>` provides the renderer-independent mesh boundary.
+
+`henka_terrain_mesh_build_chunk` requires a render-resident chunk and fills caller-owned buffers for LOD 0 through LOD 3.
+
+Generated data includes:
+
+- finite central-difference normals;
+- orthogonal tangent `vec4` values with deterministic handedness;
+- stable world-space UV transport;
+- the four normalized material weights;
+- source revision and generation.
+
+The source identity lets a graphics owner discard stale uploads.
+
+### Graphical render owner
+
+`<henka/terrain_render.h>` owns Terrain GPU presentation in the graphical client.
+
+It borrows:
+
+- engine;
+- scene;
+- Terrain world;
+- optional manager-owned material definition and textures.
+
+It owns:
+
+- fixed-capacity chunk slots;
+- rebuild queues;
+- helper scene entities;
+- Terrain GPU meshes;
+- separate paint-weight buffers.
+
+Terrain helper entities carry owner marks and bounds used by renderer culling and depth presentation. Generic Scene Objects selection, duplicate, delete, and transform actions reject these helpers.
+
+A missing presentation helper is recreated during the next dirty/residency refresh. Failed recreation preserves the prior slot mesh and records the rebuild failure.
+
+### LOD and transitions
+
+Four LOD bands use hysteresis and deterministic adjacent-chunk selection. Visibility is bounded by the configured outer band.
+
+When an adjacent resident chunk is exactly one LOD coarser, the fine chunk receives a four-edge transition mask.
+
+The transition mesh:
+
+- keeps shared even edge samples;
+- redirects odd fine-edge indices to shared coarse endpoints;
+- omits collapsed triangles;
+- morphs intermediate fine-edge positions onto the coarse boundary;
+- renormalizes interpolated normal/tangent data;
+- restores the 255-sum material-weight invariant.
+
+A missing or invalid neighbor uses a bounded downward skirt on that edge until the neighbor becomes resident.
+
+Chunk diagnostics record transition and skirt masks.
+
+### Working-set refresh
+
+Each observer update derives a deterministic nearest render working set from render-resident regions.
+
+The owner:
+
+- removes chunks beyond the outer LOD band;
+- removes chunks whose regions lose render residency;
+- queues bounded missing chunks;
+- compares uploaded revision/generation against the world;
+- queues stale resident chunks for replacement;
+- tracks border-neighbor identity used for normal generation;
+- queues dependent chunks when relevant neighboring region identity changes.
+
+Queued work that reaches the pump after its source loses render residency is retired as obsolete without a rebuild-failure count.
+
+`henka_terrain_render_runtime_request_edit` queues resident chunks covered by an accepted edit plus a one-chunk dependency border.
+
+`henka_terrain_render_runtime_refresh_dirty` performs the same revision/dependency check for snapshot, remote-delta, and reload owners.
+
+### Paint-only GPU updates
+
+Paint edits use a separate four-byte-per-vertex Terrain weight stream.
+
+The graphical owner builds a candidate weight payload and swaps the GPU buffer only after successful upload. Mesh VAO, indices, geometry, bounds, and entity identity remain unchanged.
+
+Diagnostics expose:
+
+- `weight_updates`;
+- `failed_weight_updates`;
+- `gpu_weight_bytes`.
+
+Height edits and topology/LOD/border-normal/dependency changes use full transactional mesh replacement.
+
+## Terrain materials
+
+The built-in Terrain material blends exactly four normalized painted weights in world space.
+
+Each layer supports validated:
+
+- base-color texture;
+- normal texture;
+- metallic/roughness texture;
+- base color factor;
+- metallic factor;
+- roughness factor;
+- normal strength;
+- meters-per-tile value.
+
+The normal Rendered shader consumes the Terrain weights. Generic material vertex-color tint is disabled for this material.
+
+### Sandbox material fixture
+
+The Sandbox creates deterministic 64 × 64 manager-owned runtime textures for:
+
+- Grass;
+- Dirt;
+- Rock;
+- Wet.
+
+Each layer provides base color, finite-difference tangent normal, and metallic/roughness content with bounded multi-frequency variation.
+
+Rendered Terrain also applies bounded world-space macro/detail variation to albedo, roughness, and tangent normals.
+
+Current Terrain rendering does not provide authored texture streaming, displacement, or parallax.
+
+### Material ownership
+
+The graphical owner reports exact unique layer-texture count and resident material bytes. The Sandbox reference fixture expects all twelve semantic layer texture slots to participate without duplicate handle counting.
+
+The asset-manager dependency inspection contract enumerates all twelve optional slots and their semantic usage for material definitions and effective instances.
+
+Terrain render descriptors may carry a stable identity returned by `henka_assets_adopt_runtime_material`.
+
+Adoption validates:
+
+- material values;
+- shader ownership;
+- texture ownership;
+- duplicate identity.
+
+The asset manager owns the adopted definition and its identity. Generated runtime definitions have no source-file reload path.
+
+## Sandbox authoring workflow
+
+The Sandbox reference scene seeds four deterministic regions under the persistent `terrain-sandbox-v2` storage root.
+
+The fixture contains:
+
+- rolling ground;
+- a valley;
+- a steep ridge/cliff;
+- continuous Grass/Dirt/Rock/Wet weights.
+
+Existing committed samples are retained.
+
+### Camera-driven residency
+
+The same camera feeds the streaming observer with a bounded four-region CPU budget and one-region CPU, physics, render, and unload windows.
+
+Request priority is deterministic:
+
+1. render-radius regions;
+2. physics-radius regions;
+3. remaining CPU-radius regions ordered by Chebyshev distance;
+4. stable request sequence as the final tie break.
+
+Moving or removing an observer re-scores queued requests and cancels observer-only work that leaves all active CPU-radius demands.
+
+### Stream stress
+
+Run:
+
+```text
+--terrain-stream-stress
+```
+
+The scenario moves through:
+
+```text
+(0,0) -> (2,0) -> (2,2) -> (0,0)
+```
+
+It verifies:
+
+- the initial one-region camera window;
+- bounded worker/render queues;
+- rendered return on both movement axes;
+- a bounded collision-patch overlap on return;
+- the resident-region bound.
+
+Normal movement is observer-driven and pumps at most two render replacements per frame.
+
+The same deterministic generator supports valid unpersisted regions encountered during movement. Edits become durable through the normal Terrain storage path.
+
+### Terrain utility
+
+The Utility > Terrain panel exposes:
+
+- resident/render/collision statistics;
+- dirty-region count;
+- Raise;
+- Lower;
+- Flatten;
+- Smooth;
+- Paint;
+- brush radius;
+- strength;
+- layer;
+- falloff;
+- material-layer dependency inspection;
+- transactional Save;
+- committed-journal Compact.
+
+A resident physics hit supplies the integer sample center for the next edit command.
+
+A bounded horizontal brush preview follows a successful resident physics hit while the Terrain utility is active.
+
+The Scene View displays the current Terrain edit operation, radius, strength, falloff, and paint layer.
+
+When a scene object and Terrain are both under the cursor, the nearest finite hit wins. Nonresident Terrain is never synthesized as a hit.
+
+### Material inspection
+
+The Terrain utility reports live manager-owned texture information for Grass, Dirt, Rock, and Wet:
+
+- dimensions;
+- GPU format;
+- resident mip count;
+- total mip count.
+
+This is dependency inspection and bounded editing support. Complete Terrain material-preview authoring remains future work.
+
+### Reload
+
+Reload decodes into a bounded candidate and then rebuilds physics and render presentation.
+
+Presentation failure restores the previous samples, revision, generation, and collision patch.
+
+## Visual evidence
+
+Run application-only Terrain evidence with:
+
+```powershell
+.\scripts\capture_visual_evidence_windows.ps1 -Configuration Release -IncludeTerrain
+```
+
+The capture set includes deterministic:
+
+- wide views;
+- close material views;
+- four-region corner views;
+- Solid;
+- Material Preview;
+- Rendered.
+
+Capture mode refreshes the four fixture regions from their seeded samples so persisted editor edits do not alter the comparison set.
+
+The evidence checks use:
+
+- `scripts/check_terrain_visual_evidence_windows.ps1`;
+- `scripts/check_terrain_corner_visual_evidence_windows.ps1`;
+- `scripts/check_terrain_close_visual_evidence_windows.ps1`.
+
+The automated guards reject:
+
+- missing images;
+- dimension mismatches;
+- flat material content;
+- low-chroma material content;
+- spatially featureless content;
+- Rendered output that is not measurably distinct from Material Preview.
+
+Human visual QA remains the authority for overall Terrain appearance, seam quality, corner quality, material quality, and presentation judgment.
+
+## Validation coverage
+
+Current executable coverage includes:
+
+### Headless workflow
+
+`henka_terrain_workflow_tests` validates:
+
+- deterministic raise;
+- deterministic paint;
+- authoritative region mutation;
+- full-resolution collision refresh;
+- committed persistence into a new world and physics owner;
+- discarded uncommitted journal transactions during recovery.
+
+### Collision runtime
+
+The collision runtime regression:
+
+- fills an intentionally undersized rebuild queue;
+- verifies rejected-request accounting;
+- reuses released capacity;
+- verifies failed rebuild retention;
+- verifies successful retry.
+
+### Rendering
+
+The mesh/render regressions cover:
+
+- owner-marked helper behavior;
+- cast/receive shadow flag retention;
+- selection/delete/picking rejection for Terrain helpers;
+- teardown without stale Terrain entities;
+- all-four-edge transition generation;
+- fewer stitched indices than the regular grid;
+- no degenerate transition triangles;
+- finite tangent bases;
+- all four fine/coarse boundary positions;
+- shared-corner behavior;
+- odd fine-edge redirection to coarse endpoints;
+- failed dirty replacement retaining the prior mesh, revision, and bounds;
+- stale-work cancellation after render residency is revoked;
+- replacement recovery after residency is restored.
+
+### Sandbox smoke
+
+The Sandbox routes shared raise and paint commands through the production Terrain path.
+
+Raise validates authoritative mutation, collision refresh, and GPU mesh refresh. Paint validates authoritative material-weight and rendered-revision updates while leaving collision geometry unchanged.
+
+Rendered smoke also records Terrain participation in current-frame color, shadow, depth, AO, reflection, temporal, fog, and HDR/IBL consumers where applicable. Terrain helpers are excluded from generic local reflection-probe capture.
+
+Terrain memory reporting includes exact world-owned CPU bytes and graphical-owner vertex/index/weight/material GPU bytes. Borrowed renderer resources are outside those Terrain-owner totals.
+
+### Multiplayer recovery
+
+The public client/server tests cover:
+
+- bounded connect-time resident bootstrap;
+- coordinate-stable relevance selection;
+- two replicas connected to one authoritative server;
+- one edit from each peer;
+- complete resident sample convergence;
+- forced disconnect;
+- reconnect;
+- authoritative server-wrapper replacement;
+- late observer;
+- restart checksum convergence;
+- finite repeated process soak.
 
 ## Current boundary
 
-The current validated boundary includes bounded observer-driven render working
-set discovery, stale render identity refresh, one-level cross-LOD stitched edge
-topology and morphing, automated four-edge transition-mesh checks, and physics
-patch synchronization
-with deterministic capacity-based admission and removal. Full residency-wide
-dirty-neighbor scheduling beyond the bounded physics patch capacity, four-way
-corner visual QA, and production-scale multiplayer soak remain subsequent
-validated runtime slices; the bounded
-process integration soak now repeats the advertised resident-region scenario
-for a finite session count.
-Accepted edits can now derive
-one-chunk physics-neighbor coverage through the bounded collision queue, and
-client prediction is available through the separate presentation-world owner.
-They must use this
-same world identity, region/chunk mapping, revision, and residency ownership;
-they must not introduce a second world-sized representation.
+Current Terrain v1 includes:
 
-The collision-runtime regression target also fills a deliberately undersized
-rebuild queue, verifies a rejected request is counted and can be admitted after
-capacity is reused, and verifies that a failed rebuild retains the last valid
-physics patch until a later retry succeeds. This is bounded queue-pressure and
-transactional-failure coverage; it does not claim broad runtime collision
-stress across an unbounded world or physics capacity beyond the configured
-patch limit.
+- bounded renderer-independent world ownership;
+- deterministic region/chunk/sample mapping;
+- transactional region persistence and recovery;
+- bounded observer-driven streaming;
+- deterministic editing and history;
+- authoritative network edits;
+- bounded delta and snapshot recovery;
+- bounded relevance selection;
+- client prediction in a separate presentation owner;
+- physics-resident collision patches;
+- rigid-body heightfield interaction;
+- deterministic collision rebuild queues;
+- render-resident chunk ownership;
+- LOD 0–3;
+- one-level cross-LOD stitched edges and morphing;
+- four-layer PBR Terrain materials;
+- paint-only GPU weight updates;
+- Sandbox editing, persistence, streaming, and evidence paths.
 
-The headless `henka_terrain_workflow_tests` target exercises the runtime path
-without renderer dependencies: deterministic raise and paint commands change
-the authoritative region, a full-resolution collision patch follows the edit,
-the committed region reloads into a new world and physics owner, and an
-uncommitted journal transaction is discarded during recovery.
-Terrain server authority rate records are bounded by the configured simultaneous
-client capacity and are retired on transport disconnect before a later peer can
-reuse the slot. Request-time loading of persisted regions records the regions it
-created and releases only those regions when materialization or later authority
-validation rejects the edit; preexisting residency is preserved.
+Remaining maturity work includes:
 
-Accepted deltas remain globally delivered by the bounded transport, but a client
-that does not currently own an affected region treats a validated out-of-interest
-delta as a bounded no-op. It does not invent a region or request revision-gap
-recovery; a later relevance/session response acquires the authoritative snapshot.
-Valid snapshot requests also receive an explicit terminal failure message when
-bounded storage, allocation, or encoding work fails before the first fragment.
-Malformed or identity-invalid requests remain protocol failures, not retryable
-successes.
+- production-scale streaming and multiplayer capacity validation;
+- broader residency-wide dirty-neighbor scheduling beyond bounded physics patch capacity;
+- deeper four-way corner visual validation;
+- asynchronous background physics/render regeneration;
+- broader large-world orchestration;
+- fuller Terrain material authoring;
+- broader persistence scheduling for nonresident world authoring;
+- application authentication and higher-level gameplay networking policy.
+
+Future Terrain systems must keep the current world identity, region/chunk mapping, revision, and residency ownership contracts as the shared authority.

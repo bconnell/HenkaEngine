@@ -4,21 +4,33 @@
 
 # Henka Engine
 
-Henka Engine is an early-stage open-source game engine and integrated
-development workspace written in C. It has a native 3D runtime/editor path,
-terrain, rendering, physics, 2.5D camera foundations, modeling and content
-authoring, asset/material workflows, persistence, and external-project support.
+Henka Engine is an early-stage open-source C17 game engine and integrated
+development workspace. It has a native 3D runtime/editor path, terrain,
+rendering, physics, Audio foundations, 2.5D camera foundations, modeling and
+content authoring, asset/material workflows, persistence, and external-project
+support.
 
-It is a real engine foundation, not a production-ready game platform. The
-repository's visible Sandbox is an engine sample and QA target; games built
-with Henka should live in separate repositories.
+> **Project status:** Henka is an early-stage engine foundation. Production game-platform maturity is in progress. The repository's Sandbox is the engine sample and QA target. Games built with Henka live in separate repositories.
 
-## Current project status
+## At a glance
 
-Integrated authoring is already underway alongside runtime and workspace
-hardening. The current validated development and packaging path targets 64-bit
-Windows with MSVC, CMake, PowerShell, SDL3, and the OpenGL renderer backend.
-Other operating systems are not currently claimed as supported.
+| Area | Current direction |
+| --- | --- |
+| Language | C17 |
+| Primary validated platform | 64-bit Windows |
+| Planned desktop platforms | Linux 64-bit, then macOS |
+| Current renderer backend | OpenGL |
+| Future renderer direction | Vulkan / Direct3D 12 / Metal through backend isolation |
+| Editor | Native integrated workspace |
+| Game project boundary | Separate external projects supported through validated templates |
+| Major system sequence | Audio completion → Character Controller → Scene Hierarchy / Parenting → Prefabs |
+| License | MIT |
+
+Integrated authoring is underway alongside runtime and workspace hardening. The
+current validated development and packaging path targets 64-bit Windows with
+MSVC, CMake, PowerShell, SDL3, and the OpenGL renderer backend. Linux 64-bit and
+macOS are planned desktop targets. Platform support requires build, test,
+runtime, packaging, and external-project validation.
 
 ## Highlights
 
@@ -29,7 +41,8 @@ Other operating systems are not currently claimed as supported.
 - Integrated Object/Vertex/Edge/Face authoring with stable mesh-element identities
 - Transactional topology operations, UV foundations, and bounded undo/redo
 - Terrain streaming, editing, persistence, material layers, and collision ownership
-- Rigid-body physics foundation with sandbox inspection
+- Rigid-body physics foundation with Sandbox inspection
+- Bounded game-audio foundation with buses, spatial emitters, scene/Play integration, SDL3 output, and external public-API validation
 - Perspective, side, top-down, and isometric 2.5D camera foundations
 - Headless/dedicated-server and external-project template foundations
 - Provenanced, packaged Windows Sandbox builds
@@ -50,7 +63,7 @@ Other operating systems are not currently claimed as supported.
 | Assets and materials | In Progress | Current glTF/GLB and OBJ loading, manager-owned dependencies, and validated instances |
 | Terrain and world | Foundation | Current bounded four-layer terrain, streaming, edits, LOD, persistence, and collision paths |
 | Physics | Foundation | Current fixed-step rigid bodies, primitive colliders, contacts, events, and raycasts |
-| 2.5D | Foundation | Camera-side foundation only: perspective/side/top/isometric workflows and orthographic zoom |
+| 2.5D | Foundation | Camera-side foundation: perspective/side/top/isometric workflows and orthographic zoom |
 | Networking/server | Foundation | Current renderer-free runtime, dedicated host, and bounded Terrain authority paths |
 | External projects | Foundation | Current separate game/server templates with Windows validation |
 | Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, runtime hierarchy foundation, Save/Reload, and isolated runtime Play scenes |
@@ -58,26 +71,24 @@ Other operating systems are not currently claimed as supported.
 | Audio | Available | Bounded resident/streamed PCM WAV, Ogg Vorbis, MP3, and FLAC playback, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, authored listener/editor controls, supported Lua/HenkaScript controls, and caller-pumped SDL3 output/recovery |
 | Scripting/behaviors | In Progress | Current bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, persistence, and cross-language events |
 
-Status labels are contractual: **Foundation** means core architecture exists but
-the category is incomplete; **In Progress** means substantial implementation
-exists while major functionality remains; **Available (Unhardened)** means the
-functional category is present but hardening or validation remains; **Available**
-means the category is functionally complete and hardened; and **Planned** means
-meaningful implementation has not yet begun. The maintained status ownership and
-authoritative detailed sections are recorded in
-[docs/capability-statuses.tsv](docs/capability-statuses.tsv) and
-[docs/current-capabilities.md](docs/current-capabilities.md).
+### Status meanings
 
-For the detailed, code-backed inventory and explicit boundaries, see
+| Status | Meaning |
+| --- | --- |
+| **Foundation** | Core architecture exists; the category remains incomplete. |
+| **In Progress** | Substantial implementation exists; major functionality remains. |
+| **Available (Unhardened)** | The functional category is present; hardening or validation remains. |
+| **Available** | The category is functionally complete and hardened for its stated scope. |
+| **Planned** | Meaningful implementation has not yet begun. |
+
+The maintained status ownership and authoritative detailed sections are recorded
+in [docs/capability-statuses.tsv](docs/capability-statuses.tsv) and
 [docs/current-capabilities.md](docs/current-capabilities.md).
 
 ## Editor and development workspace
 
 The Sandbox provides a native workspace for Scene View, utilities, object
-inspection, physics QA, materials, terrain, authoring, and layout tools. Panels
-can be docked or detached, and the workspace has validated split topology,
-tabs, named layout slots, bounded layout history, and reset-layout recovery.
-
+inspection, physics QA, materials, terrain, authoring, and layout tools.
 The Compass is an integrated viewport instrument that tracks the active camera,
 supports axis snapping and orbit drag, and exposes
 projection and info-strip controls. Detailed controls are in
@@ -115,11 +126,36 @@ See [docs/authoring-mesh.md](docs/authoring-mesh.md) and
 
 Terrain provides bounded region persistence and streaming, four-layer material
 data, resident render/physics owners, sculpt/paint commands, collision patches,
-LOD transitions, and edit history. The current 2.5D foundation is camera-side:
-Perspective, Side, Top-down, and Isometric presets with orthographic zoom.
+LOD transitions, and edit history.
+
+The current 2.5D foundation is camera-side:
+
+- Perspective
+- Side
+- Top-down
+- Isometric
+- Orthographic zoom
+
 Sprites, texture regions, layered depth, parallax, animation, and movement
 constraints remain future work. See [docs/terrain.md](docs/terrain.md) and
 [docs/roadmap.md](docs/roadmap.md).
+
+## Platform direction
+
+The current validated platform is 64-bit Windows.
+
+Planned desktop support includes:
+
+- Linux 64-bit with a validated native build, test, runtime, packaging, and external-project path;
+- macOS after the portable runtime/platform boundary and renderer abstraction are ready for a Metal-oriented path.
+
+Renderer backend direction is:
+
+- Windows: OpenGL today, with future Vulkan and Direct3D 12 support;
+- Linux: Vulkan as the preferred modern backend, with OpenGL retained where practical;
+- macOS: Metal as the intended native modern backend.
+
+See [docs/platform-support.md](docs/platform-support.md) for the platform validation contract.
 
 ## Getting started
 
@@ -139,8 +175,8 @@ cd HenkaEngine
 .\scripts\test_windows.ps1 -Configuration Debug
 ```
 
-The detailed build, dependency, headless, Release, and package instructions
-are in [docs/building.md](docs/building.md).
+The detailed build, dependency, headless, Release, and package instructions are
+in [docs/building.md](docs/building.md).
 
 ### Run the Sandbox
 
@@ -171,15 +207,24 @@ cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
 .\scripts\test_external_game_template_windows.ps1
 ```
 
-The external server template links only `henka_runtime`. These templates are
-bounded consumer validation paths, not complete game project serializers. See
+The external server template links only `henka_runtime`. The external game
+template exercises bounded public runtime and authoring paths, including the
+current public Audio workflow. Complete game project serialization remains future work. See
 [docs/external-game-projects.md](docs/external-game-projects.md).
 
 ## Documentation
 
+### Start here
+
 - [Detailed current capabilities](docs/current-capabilities.md)
+- [Roadmap](docs/roadmap.md)
 - [Architecture](docs/architecture.md)
 - [Building and validation](docs/building.md)
+- [Documentation presentation standard](docs/documentation-style.md)
+- [Platform support](docs/platform-support.md)
+
+### Subsystems and workflows
+
 - [Runtime foundations](docs/runtime-foundations.md)
 - [UI and workspace](docs/ui.md)
 - [Model loading](docs/model-loading.md)
@@ -189,7 +234,7 @@ bounded consumer validation paths, not complete game project serializers. See
 - [Editor controls and Sandbox help](docs/editor-controls.md) · [offline help](docs/help/sandbox3d.md)
 - [External game projects](docs/external-game-projects.md)
 - [Showcase asset provenance](docs/showcase-assets.md)
-- [Roadmap](docs/roadmap.md)
+- [Rendering realism](docs/realism.md)
 - [Branding](docs/branding.md)
 - [Repository integrity](docs/repository-integrity.md)
 - [Contributing](CONTRIBUTING.md)
@@ -197,8 +242,8 @@ bounded consumer validation paths, not complete game project serializers. See
 ## Current limitations
 
 The supported scope for each capability row is stated in its matrix cell above.
-The limitations below are evaluated against that scope; future expansion beyond
-it does not lower the current status, while unfinished work inside it does.
+Current status applies to that stated scope. Open work inside the stated scope
+continues to affect status.
 
 - Henka and its editor are early-stage; the native workspace is not a complete production editor.
 - 2D, broader scripting/behavior authoring, full character-controller movement,
@@ -229,9 +274,9 @@ packaged builds, asset workflow work, and future workspace/tooling work. Use the
 [GitHub Sponsors page](https://github.com/sponsors/bconnell) or this repository's
 Sponsor button.
 
-Sponsorship is voluntary support. It does not purchase feature priority,
-private support, guaranteed response times, ownership, project-direction
-control, or a different license. Feature decisions remain based on stability,
+Sponsorship is voluntary support. Feature priority, private support, guaranteed
+response times, ownership, project-direction control, and alternate licensing
+are outside sponsorship terms. Feature decisions remain based on stability,
 maintainability, scope, and usefulness to the wider engine. See
 [SUPPORT.md](SUPPORT.md) for the full terms and other ways to help.
 

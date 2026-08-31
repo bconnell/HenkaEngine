@@ -107,14 +107,21 @@ foreach ($record in $statusRecords) {
         Add-Finding "docs/current-capabilities.md: missing authority section '$($record.AuthoritySection)' for '$($record.Area)'"
         continue
     }
-    if ($record.Status -in @("Available", "Available (Unhardened)")) {
+    if ($record.Status -eq "Available") {
         if ($authorityMatch.Groups[1].Value -match '(?i)\b(?:not\s+(?:a\s+)?complete|remain(?:s)?\s+(?:unfinished|incomplete|open)|future\s+work|foundation\s*(?:only|not))\b') {
             Add-Finding "docs/current-capabilities.md: authority section '$($record.AuthoritySection)' contains an incomplete-category claim for '$($record.Status)'"
         }
     }
 }
 
-$matrixMatches = [regex]::Matches($readme, '(?m)^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|')
+$capabilityMatrixMatch = [regex]::Match($readme, '(?ms)^##\s+Capability matrix\s*\r?\n(.*?)(?=^###\s+Status meanings|^##\s|\z)')
+if (-not $capabilityMatrixMatch.Success) {
+    Add-Finding "README.md: capability matrix section is missing"
+    $capabilityMatrix = ""
+} else {
+    $capabilityMatrix = $capabilityMatrixMatch.Groups[1].Value
+}
+$matrixMatches = [regex]::Matches($capabilityMatrix, '(?m)^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|')
 foreach ($matrixMatch in $matrixMatches) {
     $area = $matrixMatch.Groups[1].Value.Trim()
     $status = $matrixMatch.Groups[2].Value.Trim()

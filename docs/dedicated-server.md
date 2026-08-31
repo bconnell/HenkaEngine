@@ -1,9 +1,33 @@
-# Dedicated server
+# Dedicated Server
 
-`henka_dedicated_server` is a renderer-free C17 host for infrastructure that
-the developer or game operator controls. It links `henka_runtime` and the
-bounded ENet transport; it does not initialize SDL, OpenGL, a display, UI,
-KTX transcoding, or the graphical client.
+> **Status:** Available foundation on the validated Windows path
+
+`henka_dedicated_server` is Henka's renderer-free C17 host for developer- or operator-controlled infrastructure. It links `henka_runtime` and the bounded ENet transport.
+
+## Contents
+
+- [Runtime boundary](#runtime-boundary)
+- [Build](#build)
+- [Run](#run)
+- [Terrain storage](#terrain-storage)
+- [Smoke and integration validation](#smoke-and-integration-validation)
+- [Packaging](#packaging)
+- [Session and recovery behavior](#session-and-recovery-behavior)
+- [Bounded-duration runs](#bounded-duration-runs)
+- [Current limitations](#current-limitations)
+
+## Runtime boundary
+
+The dedicated server omits graphical-client systems.
+
+| Included | Excluded |
+| --- | --- |
+| C17 shared runtime | SDL graphical client initialization |
+| ENet transport | OpenGL rendering |
+| Fixed-tick physics | Display/window ownership |
+| Terrain authority and persistence | UI |
+| Bounded configuration | KTX transcoding |
+| Graceful client shutdown | Graphical assets |
 
 ## Build
 
@@ -13,8 +37,7 @@ The normal Windows build produces:
 build/examples/dedicated_server/Debug/henka_dedicated_server.exe
 ```
 
-The server-only configuration remains valid without a C++ compiler or client
-providers:
+A server-only configuration is also supported without a C++ compiler or graphical client providers:
 
 ```powershell
 cmake -S . -B out/server-only `
@@ -33,35 +56,75 @@ cmake --build out/server-only --config Debug --target henka_dedicated_server
   --tick-rate 60 --save-root save --config server.conf
 ```
 
-Command-line values override the optional `key=value` configuration file.
-Paths are confined by the Terrain storage layer and should normally be kept
-relative to the server working directory or package directory.
+Command-line values override matching values from the optional `key=value` configuration file.
 
-The shipped `server.conf.example` intentionally omits the optional `world`
-setting, so the packaged smoke command works with only its operator-owned
-`save/` directory. Supply `--world PATH` (or add `world=PATH` to a copied
-configuration) when deploying a validated read-only base Terrain world.
+Terrain storage confines paths. Normal deployments should keep storage paths relative to the server working directory or package directory.
 
-When `--world` is supplied, it is a read-only base Terrain storage root using
-the Terrain v1 manifest and region format. Startup validates
-`terrain.manifest`, recovers that root, and requires a valid `region_0_0.htr`
-before binding the server. The loaded base region is copied into the runtime
-world; accepted edits are written to `--save-root`, whose manifest is created
-or validated transactionally. The base root and save root should be separate
-directories.
+## Terrain storage
 
-The bounded `--smoke` mode initializes the shared runtime, recovers committed
-Terrain snapshots, binds a local ENet endpoint, connects an in-process client,
-round-trips a ping, commits one deterministic Terrain edit when the save root
-is empty, and exits cleanly. A later smoke run loads the committed region and
-reports the same revision. It is a deployment check, not a substitute for a
-two-process multiplayer soak. For a finite repeated process check, run
-`scripts/soak_terrain_process_integration_windows.ps1 -Iterations 3`; it
-repeats the complete bounded two-client, late-join, reconnect, and restart
-scenario with isolated save roots. This is repeatability and cleanup coverage,
-not production-scale multiplayer capacity.
+The shipped `server.conf.example` leaves the optional `world` setting unset. The packaged smoke command therefore needs only its operator-owned `save/` directory.
 
-## Package
+Supply `--world PATH` or add `world=PATH` to a copied configuration when deploying a validated read-only base Terrain world.
+
+### Base world
+
+When `--world` is configured:
+
+1. the path is treated as a read-only Terrain v1 storage root;
+2. startup validates `terrain.manifest`;
+3. startup runs recovery on that root;
+4. `region_0_0.htr` must be valid before the server binds;
+5. the loaded base region is copied into the runtime world.
+
+### Save root
+
+Accepted edits are written to `--save-root`. Its manifest is created or validated transactionally.
+
+Use separate directories for the base root and save root.
+
+## Smoke and integration validation
+
+### Server smoke mode
+
+The bounded `--smoke` mode exercises:
+
+- shared runtime initialization;
+- committed Terrain snapshot recovery;
+- local ENet binding;
+- one in-process client connection;
+- ping round trip;
+- one deterministic Terrain edit when the save root is empty;
+- clean shutdown.
+
+A later smoke run reloads the committed region and reports the same revision.
+
+### Multi-process integration
+
+Run the bounded multi-process authority check with:
+
+```powershell
+.\scripts\test_terrain_process_integration_windows.ps1
+```
+
+The test launches the dedicated server and two independent runtime-only clients. It verifies:
+
+- one accepted Terrain edit;
+- one stale edit rejection;
+- late-observer bootstrap;
+- resident-region checksum convergence;
+- client reconnect after an accepted edit;
+- server restart against the same save root;
+- exact committed revision and checksum recovery.
+
+### Finite repeated soak
+
+```powershell
+.\scripts\soak_terrain_process_integration_windows.ps1 -Iterations 3
+```
+
+Each iteration uses fresh server/client processes and an isolated save root. The soak covers repeatability, cleanup, late join, reconnect, and restart recovery for the bounded resident-region contract.
+
+## Packaging
 
 Create the headless deployment package with:
 
@@ -69,42 +132,67 @@ Create the headless deployment package with:
 .\scripts\package_dedicated_server_windows.ps1 -Configuration Release
 ```
 
-The package is written to `out/HenkaDedicatedServer` and contains only the
-dedicated executable, the sample configuration, server documentation, the
-provenance marker, and the operator-owned `save/` directory. Run the package
-check after packaging:
+The package is written to:
+
+```text
+out/HenkaDedicatedServer
+```
+
+It contains:
+
+- the dedicated executable;
+- sample configuration;
+- server documentation;
+- provenance marker;
+- operator-owned `save/` directory.
+
+Run the package validation afterward:
 
 ```powershell
 .\scripts\check_packaged_dedicated_server_windows.ps1
 ```
 
-The package is intended for a development PC, physical server, or VPS under
-the operator's control. It does not provide a hosted Henka service. Keep the
-package's `save/` directory backed up according to the operator's deployment
-policy; accepted Terrain edits are committed transactionally before the
-server acknowledges them.
+The package can run on a development PC, physical server, or VPS controlled by the operator. Henka does not provide hosted server infrastructure.
 
-The package check proves startup, local bind, loopback connection, clean
-shutdown, and two consecutive save-root runs with revision recovery. The
-runtime also sends a bounded connect-time Terrain session-info message that
-identifies the world/base and advertises up to 16 resident regions in
-deterministic row-major coordinate order for client snapshot bootstrap. The
-runtime client recovery test additionally covers a
-forced disconnect, explicit reconnect, replacement of the authoritative server
-wrapper on the same endpoint, a late observer, and exact resident-sample
-checksum convergence. This does not claim application authentication,
-relevance-driven reconnect or late-join selection, or production-scale
-multiplayer soak coverage. The finite process soak repeats this bounded
-scenario but does not expand its relevance policy or capacity.
+Back up the package's `save/` directory according to the deployment policy. Accepted Terrain edits are committed transactionally before acknowledgement.
 
-The server retains a fixed 64-entry authoritative Terrain delta history per
-server process. A connected client may request a bounded regional revision
-range after detecting a gap; the server sends the complete retained range or
-falls back to a transactional regional snapshot when history is unavailable.
-The history is in-memory recovery state and is not a replacement for the
-durable Terrain journal.
+## Session and recovery behavior
 
-For deterministic local integration checks, `--run-for-ms COUNT` runs the
-normal server loop for a bounded duration and then uses the same peer
-disconnect and resource-flush shutdown path as a signal-triggered stop. The
-default without this option remains an indefinite server process.
+The package check verifies startup, local bind, loopback connection, clean shutdown, and two consecutive save-root runs with revision recovery.
+
+### Connect-time Terrain session info
+
+The server sends a bounded Terrain session-info message when a client connects. The message identifies the world/base and advertises up to 16 resident regions in deterministic row-major coordinate order for snapshot bootstrap.
+
+### Client recovery coverage
+
+The runtime client recovery test covers:
+
+- forced disconnect;
+- explicit reconnect;
+- replacement of the authoritative server wrapper on the same endpoint;
+- a late observer;
+- exact resident-sample checksum convergence.
+
+### Terrain delta history
+
+The server retains a fixed 64-entry authoritative Terrain delta history per process.
+
+A connected client may request a bounded regional revision range after detecting a gap. The server sends the complete retained range when available. A transactional regional snapshot is sent when the requested history is unavailable.
+
+This history exists in memory. Durable Terrain recovery remains owned by the Terrain journal and persisted region state.
+
+## Bounded-duration runs
+
+For deterministic local integration checks, `--run-for-ms COUNT` runs the normal server loop for a bounded duration and then follows the normal peer-disconnect and resource-flush shutdown path.
+
+Without this option, the server runs indefinitely until stopped.
+
+## Current limitations
+
+- Application authentication is outside the current server foundation.
+- Relevance-driven multi-region orchestration remains future work.
+- Relevance-driven reconnect and late-join selection remain future work.
+- The current process soak is bounded and does not establish production-scale multiplayer capacity.
+- The 64-entry delta history is process-local recovery state.
+- Broad multiplayer simulation and large-scale capacity testing remain future work.
