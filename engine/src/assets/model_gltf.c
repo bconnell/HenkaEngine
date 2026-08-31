@@ -258,6 +258,37 @@ static bool henka_gltf_find_member(
     return false;
 }
 
+static bool henka_gltf_version_is_supported(const henka_gltf_context* context)
+{
+    const char* asset;
+    const char* asset_end;
+    const char* version;
+    const char* version_end;
+    char version_text[8];
+
+    return context != NULL &&
+        context->json != NULL &&
+        henka_gltf_find_member(
+            context->json,
+            context->json + context->json_size,
+            "asset",
+            &asset,
+            &asset_end) &&
+        henka_gltf_find_member(
+            asset,
+            asset_end,
+            "version",
+            &version,
+            &version_end) &&
+        henka_gltf_read_string(
+            version,
+            version_end,
+            version_text,
+            sizeof(version_text),
+            NULL) &&
+        strcmp(version_text, "2.0") == 0;
+}
+
 static bool henka_gltf_array_item(
     const char* array,
     const char* array_end,
@@ -1837,7 +1868,8 @@ static bool henka_gltf_prepare_json(
     if (henka_gltf_skip_space(context->json, context->json + json_size) >= context->json + json_size ||
         *henka_gltf_skip_space(context->json, context->json + json_size) != '{' ||
         !henka_gltf_value_end(context->json, context->json + json_size, &parsed_end) ||
-        henka_gltf_skip_space(parsed_end, context->json + json_size) != context->json + json_size)
+        henka_gltf_skip_space(parsed_end, context->json + json_size) != context->json + json_size ||
+        !henka_gltf_version_is_supported(context))
     {
         return false;
     }
