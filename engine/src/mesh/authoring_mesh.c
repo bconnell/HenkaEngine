@@ -3033,12 +3033,15 @@ henka_result henka_authoring_mesh_history_create(const henka_authoring_mesh* ini
     henka_authoring_mesh_history* history;
     henka_authoring_mesh* initial = NULL;
     henka_result result;
+    if (out_history != NULL)
+    {
+        *out_history = NULL;
+    }
     if (out_history == NULL || initial_mesh == NULL || max_steps == 0U ||
         max_steps > HENKA_AUTHORING_MESH_MAX_HISTORY_STEPS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    *out_history = NULL;
     result = authoring_mesh_clone_internal(initial_mesh, &initial);
     if (result != HENKA_SUCCESS)
     {

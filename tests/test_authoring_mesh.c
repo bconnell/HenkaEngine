@@ -529,6 +529,54 @@ cleanup:
     return result ? 1 : fail("query output state");
 }
 
+static int test_history_create_output_fail_closed(void)
+{
+    const henka_authoring_mesh_desc desc = {4U, 4U, 1U, 4U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh_history* history = NULL;
+    const henka_authoring_mesh_history* sentinel =
+        (const henka_authoring_mesh_history*)(uintptr_t)1U;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    history = (henka_authoring_mesh_history*)sentinel;
+    if (henka_authoring_mesh_history_create(NULL, 4U, &history) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        history != NULL)
+    {
+        goto cleanup;
+    }
+    history = (henka_authoring_mesh_history*)sentinel;
+    if (henka_authoring_mesh_history_create(mesh, 0U, &history) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        history != NULL)
+    {
+        goto cleanup;
+    }
+    history = (henka_authoring_mesh_history*)sentinel;
+    if (henka_authoring_mesh_history_create(
+            mesh, HENKA_AUTHORING_MESH_MAX_HISTORY_STEPS + 1U, &history) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        history != NULL)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_history_create(mesh, 1U, &history) != HENKA_SUCCESS ||
+        history == NULL)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_history_destroy(history == sentinel ? NULL : history);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("history create output state");
+}
+
 static int test_rejection_and_tombstones(void)
 {
     henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
@@ -3590,6 +3638,7 @@ int main(void)
         test_mesh_create_output_fails_closed() &&
         test_topology_add_outputs_fail_closed() &&
         test_query_outputs_fail_closed() &&
+        test_history_create_output_fail_closed() &&
         test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
         test_vertex_merge_operations() &&
