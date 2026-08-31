@@ -428,7 +428,8 @@ henka_result henka_assets_reload_gltf_material_asset(
  * Standalone glTF material assets reload through their material cache entry;
  * definitions embedded in a glTF scene reload through that scene's
  * transactional payload. Stable identity is preserved on success and the
- * prior definition remains live on failure. */
+ * prior definition remains live on failure. Revision exhaustion is a
+ * fail-closed limit: the prior definition remains live and is not replaced. */
 henka_result henka_assets_reload_material_asset(
     henka_asset_manager* manager,
     const henka_material_asset* asset,

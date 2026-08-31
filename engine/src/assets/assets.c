@@ -4664,6 +4664,23 @@ henka_result henka_assets_material_instance_set_texture(
     return henka_material_instance_commit(instance, candidate, parameter);
 }
 
+static henka_result henka_assets_advance_revision(
+    uint64_t current_revision,
+    uint64_t* out_revision)
+{
+    if (out_revision == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_revision = 0U;
+    if (current_revision == UINT64_MAX)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    *out_revision = current_revision + 1U;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_assets_reload_gltf_material_asset(
     henka_asset_manager* manager,
     const char* path,
@@ -4673,6 +4690,7 @@ henka_result henka_assets_reload_gltf_material_asset(
     henka_material_asset* asset;
     henka_material candidate;
     henka_mesh* mesh = NULL;
+    uint64_t next_revision;
     henka_result result;
 
     if (out_asset != NULL) *out_asset = NULL;
@@ -4682,12 +4700,14 @@ henka_result henka_assets_reload_gltf_material_asset(
     asset = henka_asset_manager_find_material_entry(manager, key);
     henka_free(key);
     if (asset == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    result = henka_assets_advance_revision(asset->revision, &next_revision);
+    if (result != HENKA_SUCCESS) return result;
 
     result = henka_assets_build_gltf_material_instance(
         manager, asset->source_path, asset->material.shader, &mesh, &candidate);
     if (result != HENKA_SUCCESS) return result;
     asset->material = candidate;
-    asset->revision += 1U;
+    asset->revision = next_revision;
     asset->metadata.loaded = true;
     asset->metadata.fallback = false;
     henka_asset_set_summary(&asset->metadata,
@@ -4933,6 +4953,8 @@ henka_result henka_assets_reload_gltf_scene_asset(
     henka_material* old_materials = NULL;
     henka_material_asset* old_material_assets = NULL;
     bool* old_material_ready = NULL;
+    uint64_t next_revision;
+    size_t material_index;
     henka_result result;
 
     if (out_asset != NULL) *out_asset = NULL;
@@ -4942,6 +4964,26 @@ henka_result henka_assets_reload_gltf_scene_asset(
     asset = henka_asset_manager_find_gltf_scene_entry(manager, key);
     henka_free(key);
     if (asset == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    result = henka_assets_advance_revision(asset->revision, &next_revision);
+    if (result != HENKA_SUCCESS) return result;
+    for (material_index = 0U;
+         material_index < asset->data.material_count;
+         ++material_index)
+    {
+        uint64_t next_material_revision;
+
+        if (!asset->material_ready[material_index])
+        {
+            continue;
+        }
+        result = henka_assets_advance_revision(
+            asset->material_assets[material_index].revision,
+            &next_material_revision);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
     candidate = henka_calloc(1U, sizeof(*candidate));
     old_data = henka_calloc(1U, sizeof(*old_data));
     old_meshes = henka_calloc(HENKA_MODEL_MAX_SCENE_ITEMS, sizeof(*old_meshes));
@@ -4971,6 +5013,37 @@ henka_result henka_assets_reload_gltf_scene_asset(
         return result;
     }
 
+    for (material_index = 0U;
+         material_index < candidate->data.material_count;
+         ++material_index)
+    {
+        uint64_t previous_revision = 0U;
+
+        if (!candidate->material_ready[material_index])
+        {
+            continue;
+        }
+        if (material_index < asset->data.material_count &&
+            asset->material_ready[material_index])
+        {
+            previous_revision = asset->material_assets[material_index].revision;
+        }
+        result = henka_assets_advance_revision(
+            previous_revision,
+            &candidate->material_assets[material_index].revision);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_assets_destroy_gltf_scene_payload(candidate);
+            henka_free(candidate);
+            henka_free(old_data);
+            henka_free(old_meshes);
+            henka_free(old_materials);
+            henka_free(old_material_assets);
+            henka_free(old_material_ready);
+            return result;
+        }
+    }
+
     if (asset->retired_primitive_mesh_count > HENKA_MODEL_MAX_SCENE_ITEMS -
             asset->data.primitive_count)
     {
@@ -4995,18 +5068,6 @@ henka_result henka_assets_reload_gltf_scene_asset(
     memcpy(asset->material_assets, candidate->material_assets, sizeof(asset->material_assets));
     memcpy(asset->material_ready, candidate->material_ready, sizeof(asset->material_ready));
     {
-        size_t material_index;
-        for (material_index = 0U; material_index < asset->data.material_count; ++material_index)
-        {
-            if (asset->material_ready[material_index])
-            {
-                uint64_t previous_revision = old_material_assets[material_index].revision;
-                asset->material_assets[material_index].revision =
-                    previous_revision == UINT64_MAX ? 1U : previous_revision + 1U;
-            }
-        }
-    }
-    {
         size_t mesh_index;
         for (mesh_index = 0U; mesh_index < old_data->primitive_count; ++mesh_index)
         {
@@ -5029,7 +5090,7 @@ henka_result henka_assets_reload_gltf_scene_asset(
     henka_free(old_materials);
     henka_free(old_material_assets);
     henka_free(old_material_ready);
-    asset->revision += 1U;
+    asset->revision = next_revision;
     henka_asset_set_summary(&asset->metadata,
         "glTF scene reloaded transactionally while preserving stable scene identity.", "");
     *out_asset = asset;

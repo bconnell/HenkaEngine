@@ -1064,6 +1064,15 @@ void henka_test_assets(void)
         "assets/models/reload.gltf",
         &material_asset) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(material_asset == NULL);
+    material_entry.revision = UINT64_MAX;
+    material_asset = (henka_material_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_reload_gltf_material_asset(
+        &manager,
+        "assets/models/reload.gltf",
+        &material_asset) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(material_asset == NULL);
+    HENKA_TEST_ASSERT(material_entry.revision == UINT64_MAX);
+    material_entry.revision = 4U;
     material_asset = (henka_material_asset*)1;
     HENKA_TEST_ASSERT(henka_assets_reload_material_asset(
         &manager,
@@ -1383,12 +1392,26 @@ void henka_test_assets(void)
         &managed_shader,
         &scene_asset) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene_asset == scene_entry);
+    scene_entry->revision = UINT64_MAX;
+    scene_asset = (henka_gltf_scene_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_reload_gltf_scene_asset(
+        &manager,
+        "assets/models/reload-scene.gltf",
+        &scene_asset) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(scene_asset == NULL);
+    HENKA_TEST_ASSERT(scene_entry->revision == UINT64_MAX);
+    scene_entry->revision = 1U;
+    scene_entry->material_ready[0] = true;
+    scene_entry->material_assets[0].revision = UINT64_MAX;
     material_asset = (henka_material_asset*)1;
     HENKA_TEST_ASSERT(henka_assets_reload_material_asset(
         &manager,
         &scene_entry->material_assets[0],
-        &material_asset) != HENKA_SUCCESS);
+        &material_asset) == HENKA_ERROR_LIMIT);
     HENKA_TEST_ASSERT(material_asset == NULL);
+    HENKA_TEST_ASSERT(scene_entry->material_assets[0].revision == UINT64_MAX);
+    scene_entry->material_ready[0] = false;
+    scene_entry->material_assets[0].revision = 0U;
     HENKA_TEST_ASSERT(manager.gltf_scene_entries[0] == scene_entry);
     scene_asset = (henka_gltf_scene_asset*)1;
     HENKA_TEST_ASSERT(henka_assets_reload_gltf_scene_asset(
