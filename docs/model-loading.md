@@ -168,6 +168,8 @@ Texture semantic validation remains centralized in `henka_material_validate`.
 
 `henka_assets_load_gltf_material_asset` caches a material by canonical glTF source identity and returns a stable manager-owned asset.
 
+Material loads require an initialized empty output slot. Rejected or failed loads preserve a non-empty caller slot, and composite mesh-plus-material loads commit both outputs only after the complete operation succeeds.
+
 Scenes can copy the current material value through `henka_assets_get_material_asset_material`.
 
 Reload follows a candidate-first transaction:

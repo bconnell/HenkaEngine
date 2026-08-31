@@ -534,7 +534,21 @@ void henka_test_assets(void)
     material_asset = (henka_material_asset*)1;
     HENKA_TEST_ASSERT(henka_assets_load_gltf_material_asset(
         NULL, "assets/models/sample.gltf", NULL, &material_asset) == HENKA_ERROR_INVALID_ARGUMENT);
-    HENKA_TEST_ASSERT(material_asset == NULL);
+    HENKA_TEST_ASSERT(material_asset == (henka_material_asset*)1);
+    {
+        henka_mesh* composite_mesh = (henka_mesh*)1;
+        henka_material composite_material = henka_material_default();
+        composite_material.shader = &managed_shader;
+        HENKA_TEST_ASSERT(henka_assets_load_gltf_mesh_with_material(
+            NULL,
+            "assets/models/sample.gltf",
+            &managed_shader,
+            &composite_mesh,
+            &composite_material) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(composite_mesh == (henka_mesh*)1);
+        HENKA_TEST_ASSERT(composite_material.shader == &managed_shader);
+        HENKA_TEST_ASSERT(composite_material.roughness == henka_material_default().roughness);
+    }
     material_asset = (henka_material_asset*)1;
     HENKA_TEST_ASSERT(henka_assets_reload_gltf_material_asset(
         NULL, "assets/models/sample.gltf", &material_asset) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -545,7 +559,7 @@ void henka_test_assets(void)
     scene_asset = (henka_gltf_scene_asset*)1;
     HENKA_TEST_ASSERT(henka_assets_load_gltf_scene_asset(
         NULL, "assets/models/sample.gltf", NULL, &scene_asset) == HENKA_ERROR_INVALID_ARGUMENT);
-    HENKA_TEST_ASSERT(scene_asset == NULL);
+    HENKA_TEST_ASSERT(scene_asset == (henka_gltf_scene_asset*)1);
     scene_asset = (henka_gltf_scene_asset*)1;
     HENKA_TEST_ASSERT(henka_assets_reload_gltf_scene_asset(
         NULL, "assets/models/sample.gltf", &scene_asset) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -1109,7 +1123,7 @@ void henka_test_assets(void)
         "assets/models/reload.gltf",
         &alternate_shader,
         &material_asset) == HENKA_ERROR_INVALID_ARGUMENT);
-    HENKA_TEST_ASSERT(material_asset == NULL);
+    HENKA_TEST_ASSERT(material_asset == (henka_material_asset*)1);
     material_asset = NULL;
     HENKA_TEST_ASSERT(henka_assets_load_gltf_material_asset(
         &manager,
@@ -1244,7 +1258,7 @@ void henka_test_assets(void)
             "runtime/terrain/foreign-dependency",
             &invalid_runtime_material,
             &runtime_asset) == HENKA_ERROR_INVALID_ARGUMENT);
-        HENKA_TEST_ASSERT(runtime_asset == NULL);
+        HENKA_TEST_ASSERT(runtime_asset == (henka_material_asset*)1);
         HENKA_TEST_ASSERT(henka_assets_adopt_runtime_material(
             &runtime_material_manager,
             "runtime/terrain/reference",
@@ -1443,7 +1457,7 @@ void henka_test_assets(void)
         "assets/models/reload-scene.gltf",
         &alternate_shader,
         &scene_asset) == HENKA_ERROR_INVALID_ARGUMENT);
-    HENKA_TEST_ASSERT(scene_asset == NULL);
+    HENKA_TEST_ASSERT(scene_asset == (henka_gltf_scene_asset*)1);
     scene_asset = NULL;
     HENKA_TEST_ASSERT(henka_assets_load_gltf_scene_asset(
         &manager,

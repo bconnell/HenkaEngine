@@ -3764,8 +3764,7 @@ henka_result henka_assets_load_gltf_material_asset(
     henka_mesh* mesh = NULL;
     henka_result result;
 
-    if (out_asset != NULL) *out_asset = NULL;
-    if (manager == NULL || path == NULL || shader == NULL || out_asset == NULL)
+    if (manager == NULL || path == NULL || shader == NULL || out_asset == NULL || *out_asset != NULL)
         return HENKA_ERROR_INVALID_ARGUMENT;
     result = henka_assets_make_canonical_key(path, &key);
     if (result != HENKA_SUCCESS) return result;
@@ -3851,8 +3850,7 @@ henka_result henka_assets_adopt_runtime_material(
     henka_material_asset* asset = NULL;
     henka_result result;
 
-    if (out_asset != NULL) *out_asset = NULL;
-    if (manager == NULL || identity == NULL || material == NULL || out_asset == NULL ||
+    if (manager == NULL || identity == NULL || material == NULL || out_asset == NULL || *out_asset != NULL ||
         henka_material_validate(material) != HENKA_SUCCESS ||
         !henka_asset_manager_owns_material_dependencies(manager, material))
     {
@@ -4765,9 +4763,7 @@ henka_result henka_assets_load_gltf_mesh_with_material(
     henka_material_asset* asset = NULL;
     henka_result result;
 
-    if (out_mesh != NULL) *out_mesh = NULL;
-    if (out_material != NULL) *out_material = henka_material_default();
-    if (manager == NULL || path == NULL || shader == NULL || out_mesh == NULL || out_material == NULL)
+    if (manager == NULL || path == NULL || shader == NULL || out_mesh == NULL || *out_mesh != NULL || out_material == NULL)
         return HENKA_ERROR_INVALID_ARGUMENT;
     result = henka_assets_load_gltf_material_asset(manager, path, shader, &asset);
     if (result != HENKA_SUCCESS) return result;
@@ -4840,8 +4836,8 @@ henka_result henka_assets_load_gltf_scene_asset(
     henka_gltf_scene_asset* asset = NULL;
     henka_result result;
 
-    if (out_asset != NULL) *out_asset = NULL;
-    if (manager == NULL || path == NULL || shader == NULL || out_asset == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    if (manager == NULL || path == NULL || shader == NULL || out_asset == NULL || *out_asset != NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
     result = henka_assets_make_canonical_key(path, &key);
     if (result != HENKA_SUCCESS) return result;
     result = henka_assets_normalize_source_path(path, &source_path);

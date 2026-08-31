@@ -340,12 +340,18 @@ henka_result henka_assets_enforce_texture_residency_budget(
  * caller slot and leave an empty slot empty. */
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
+/* Composite glTF loads require an initialized empty mesh output slot. The
+ * material value and mesh pointer are committed only after the complete load
+ * succeeds; rejected or failed loads preserve both caller outputs. */
 henka_result henka_assets_load_gltf_mesh_with_material(
     henka_asset_manager* manager,
     const char* path,
     henka_shader* shader,
     henka_mesh** out_mesh,
     henka_material* out_material);
+/* glTF material loads require an initialized empty output slot. The returned
+ * asset is borrowed and manager-owned; rejected or failed loads preserve a
+ * non-empty caller slot and leave an empty slot empty. */
 henka_result henka_assets_load_gltf_material_asset(
     henka_asset_manager* manager,
     const char* path,
@@ -355,7 +361,8 @@ henka_result henka_assets_load_gltf_material_asset(
  * identity. The manager owns the definition and its identity; textures and
  * shader pointers remain borrowed manager-owned dependencies. Runtime
  * definitions have no source-file reload path and identity collisions are
- * rejected without changing the existing entry. */
+ * rejected without changing the existing entry. The output slot must be empty;
+ * rejected operations preserve a non-empty caller slot. */
 henka_result henka_assets_adopt_runtime_material(
     henka_asset_manager* manager,
     const char* identity,
@@ -446,6 +453,9 @@ henka_result henka_assets_reload_material_asset(
     henka_asset_manager* manager,
     const henka_material_asset* asset,
     henka_material_asset** out_asset);
+/* glTF scene loads require an initialized empty output slot. The returned scene
+ * asset is borrowed and manager-owned; rejected or failed loads preserve a
+ * non-empty caller slot and leave an empty slot empty. */
 henka_result henka_assets_load_gltf_scene_asset(
     henka_asset_manager* manager,
     const char* path,
