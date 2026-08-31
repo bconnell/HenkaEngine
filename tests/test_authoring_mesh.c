@@ -397,6 +397,23 @@ cleanup:
     return result ? 1 : fail("primitive constructor output state");
 }
 
+static int test_mesh_create_output_fails_closed(void)
+{
+    const henka_authoring_mesh_desc invalid_desc = {0U, 4U, 1U, 3U};
+    henka_authoring_mesh* mesh = (henka_authoring_mesh*)1;
+
+    if (henka_authoring_mesh_create(&invalid_desc, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
+        mesh != NULL)
+    {
+        if (mesh != NULL && mesh != (henka_authoring_mesh*)1)
+        {
+            henka_authoring_mesh_destroy(mesh);
+        }
+        return fail("mesh create output state");
+    }
+    return 1;
+}
+
 static int test_rejection_and_tombstones(void)
 {
     henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
@@ -3455,6 +3472,7 @@ int main(void)
     return test_topology_and_evaluation() && test_evaluation_failure_clears_output_counts() &&
         test_face_operation_outputs_fail_closed() &&
         test_primitive_constructor_outputs_fail_closed() &&
+        test_mesh_create_output_fails_closed() &&
         test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
         test_vertex_merge_operations() &&

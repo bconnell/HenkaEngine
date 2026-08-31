@@ -670,11 +670,14 @@ henka_result henka_authoring_mesh_create(const henka_authoring_mesh_desc* desc, 
     size_t edge_id_lookup_capacity;
     size_t face_lookup_capacity;
     size_t edge_lookup_capacity;
+    if (out_mesh != NULL)
+    {
+        *out_mesh = NULL;
+    }
     if (!authoring_desc_valid(desc) || out_mesh == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    *out_mesh = NULL;
     vertex_lookup_capacity = authoring_lookup_capacity_for(desc->max_vertices);
     edge_id_lookup_capacity = authoring_lookup_capacity_for(desc->max_edges);
     face_lookup_capacity = authoring_lookup_capacity_for(desc->max_faces);
