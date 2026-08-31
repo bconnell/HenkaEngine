@@ -4216,12 +4216,15 @@ henka_result henka_authoring_mesh_create_plane(
     henka_authoring_vertex_id face[] = {1U, 2U, 3U, 4U};
     size_t index;
     henka_result result;
+    if (out_mesh != NULL)
+    {
+        *out_mesh = NULL;
+    }
     if (out_mesh == NULL || !modeling_finite_scalar(width) || !modeling_finite_scalar(depth) ||
         width <= 0.0f || depth <= 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    *out_mesh = NULL;
     result = henka_authoring_mesh_create(desc, &mesh);
     if (result != HENKA_SUCCESS)
     {
@@ -4269,12 +4272,15 @@ henka_result henka_authoring_mesh_create_box(
     size_t index;
     size_t face_index;
     henka_result result;
+    if (out_mesh != NULL)
+    {
+        *out_mesh = NULL;
+    }
     if (out_mesh == NULL || !modeling_finite_scalar(width) || !modeling_finite_scalar(height) ||
         !modeling_finite_scalar(depth) || width <= 0.0f || height <= 0.0f || depth <= 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    *out_mesh = NULL;
     result = henka_authoring_mesh_create(desc, &mesh);
     if (result != HENKA_SUCCESS)
     {
@@ -4355,13 +4361,16 @@ henka_result henka_authoring_mesh_create_cylinder(
     const float half_height = height * 0.5f;
     size_t index;
     henka_result result;
+    if (out_mesh != NULL)
+    {
+        *out_mesh = NULL;
+    }
 
     if (out_mesh == NULL || !modeling_finite_scalar(radius) || !modeling_finite_scalar(height) ||
         radius <= 0.0f || height <= 0.0f || !modeling_primitive_segments_are_valid(segments))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    *out_mesh = NULL;
     result = henka_authoring_mesh_create(desc, &mesh);
     if (result != HENKA_SUCCESS)
     {
@@ -4430,13 +4439,16 @@ henka_result henka_authoring_mesh_create_cone(
     const float half_height = height * 0.5f;
     size_t index;
     henka_result result;
+    if (out_mesh != NULL)
+    {
+        *out_mesh = NULL;
+    }
 
     if (out_mesh == NULL || !modeling_finite_scalar(radius) || !modeling_finite_scalar(height) ||
         radius <= 0.0f || height <= 0.0f || !modeling_primitive_segments_are_valid(segments))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    *out_mesh = NULL;
     result = henka_authoring_mesh_create(desc, &mesh);
     if (result != HENKA_SUCCESS)
     {
@@ -4497,6 +4509,10 @@ henka_result henka_authoring_mesh_create_uv_sphere(
     size_t latitude;
     size_t longitude;
     henka_result result;
+    if (out_mesh != NULL)
+    {
+        *out_mesh = NULL;
+    }
 
     if (out_mesh == NULL || !modeling_finite_scalar(radius) || radius <= 0.0f ||
         !modeling_primitive_segments_are_valid(longitude_segments) ||
@@ -4504,7 +4520,6 @@ henka_result henka_authoring_mesh_create_uv_sphere(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    *out_mesh = NULL;
     result = henka_authoring_mesh_create(desc, &mesh);
     if (result != HENKA_SUCCESS)
     {

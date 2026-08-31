@@ -350,6 +350,53 @@ cleanup:
     return result ? 1 : fail("face operation output state");
 }
 
+static int test_primitive_constructor_outputs_fail_closed(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    henka_authoring_mesh* mesh;
+    henka_authoring_mesh* const sentinel = (henka_authoring_mesh*)1;
+    int result = 0;
+
+    mesh = sentinel;
+    if (henka_authoring_mesh_create_plane(&desc, 0.0f, 2.0f, &mesh) !=
+            HENKA_ERROR_INVALID_ARGUMENT || mesh != NULL)
+    {
+        goto cleanup;
+    }
+    mesh = sentinel;
+    if (henka_authoring_mesh_create_box(&desc, 2.0f, 0.0f, 2.0f, &mesh) !=
+            HENKA_ERROR_INVALID_ARGUMENT || mesh != NULL)
+    {
+        goto cleanup;
+    }
+    mesh = sentinel;
+    if (henka_authoring_mesh_create_cylinder(&desc, 0.0f, 2.0f, 8U, &mesh) !=
+            HENKA_ERROR_INVALID_ARGUMENT || mesh != NULL)
+    {
+        goto cleanup;
+    }
+    mesh = sentinel;
+    if (henka_authoring_mesh_create_cone(&desc, 1.0f, -2.0f, 8U, &mesh) !=
+            HENKA_ERROR_INVALID_ARGUMENT || mesh != NULL)
+    {
+        goto cleanup;
+    }
+    mesh = sentinel;
+    if (henka_authoring_mesh_create_uv_sphere(&desc, 1.0f, 2U, 4U, &mesh) !=
+            HENKA_ERROR_INVALID_ARGUMENT || mesh != NULL)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    if (mesh != sentinel)
+    {
+        henka_authoring_mesh_destroy(mesh);
+    }
+    return result ? 1 : fail("primitive constructor output state");
+}
+
 static int test_rejection_and_tombstones(void)
 {
     henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
@@ -3407,6 +3454,7 @@ int main(void)
 {
     return test_topology_and_evaluation() && test_evaluation_failure_clears_output_counts() &&
         test_face_operation_outputs_fail_closed() &&
+        test_primitive_constructor_outputs_fail_closed() &&
         test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
         test_vertex_merge_operations() &&
