@@ -70,10 +70,43 @@ static void henka_test_mesh_renderer_failure_is_not_cached_as_fallback(void)
     HENKA_TEST_ASSERT(contract_ok);
 }
 
+static void henka_test_mesh_source_failure_requires_fallback(void)
+{
+    henka_asset_manager manager;
+    henka_asset_mesh_entry entries[1];
+    henka_engine engine;
+    henka_mesh* mesh;
+
+    memset(&manager, 0, sizeof(manager));
+    memset(entries, 0, sizeof(entries));
+    memset(&engine, 0, sizeof(engine));
+    engine.asset_base_path = "";
+    manager.engine = &engine;
+    manager.mesh_entries = entries;
+    manager.mesh_capacity = 1U;
+
+    mesh = (henka_mesh*)1;
+    HENKA_TEST_ASSERT(henka_assets_load_obj_mesh(
+        &manager,
+        "assets/models/henka-missing-fallback.obj",
+        &mesh) == HENKA_ERROR_PLATFORM);
+    HENKA_TEST_ASSERT(mesh == NULL);
+    HENKA_TEST_ASSERT(manager.mesh_count == 0U);
+
+    mesh = (henka_mesh*)1;
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_mesh(
+        &manager,
+        "assets/models/henka-missing-fallback.gltf",
+        &mesh) == HENKA_ERROR_PLATFORM);
+    HENKA_TEST_ASSERT(mesh == NULL);
+    HENKA_TEST_ASSERT(manager.mesh_count == 0U);
+}
+
 
 void henka_test_assets(void)
 {
     henka_test_mesh_renderer_failure_is_not_cached_as_fallback();
+    henka_test_mesh_source_failure_requires_fallback();
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
     HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.Ktx2"));
     HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.kTX2"));

@@ -3248,6 +3248,12 @@ henka_result henka_assets_load_obj_mesh(
             henka_free(source_path);
             return result;
         }
+        if (manager->fallback_mesh == NULL)
+        {
+            henka_free(key);
+            henka_free(source_path);
+            return result;
+        }
         HENKA_LOG_ERROR(
             "Using the fallback mesh because '%s' could not be loaded",
             source_path);
@@ -3352,6 +3358,12 @@ henka_result henka_assets_load_gltf_mesh(
     if (result != HENKA_SUCCESS)
     {
         if (!henka_asset_mesh_load_failure_uses_fallback(result))
+        {
+            henka_free(key);
+            henka_free(source_path);
+            return result;
+        }
+        if (manager->fallback_mesh == NULL)
         {
             henka_free(key);
             henka_free(source_path);
