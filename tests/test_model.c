@@ -798,6 +798,12 @@ static void henka_test_gltf_scene_import(void)
         "{\"type\":\"point\",\"range\":0.0}]}},"
         "\"nodes\":[{\"extensions\":{\"KHR_lights_punctual\":{\"light\":0}}}],"
         "\"scenes\":[{\"nodes\":[0]}]}";
+    static const char* unrepresentable_orthographic_scene_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"cameras\":[{\"name\":\"Oversized Camera\",\"type\":\"orthographic\","
+        "\"orthographic\":{\"xmag\":1.0,\"ymag\":2.0e38,\"znear\":0.1,\"zfar\":50.0}}],"
+        "\"nodes\":[{\"name\":\"Camera Node\",\"camera\":0}],"
+        "\"scenes\":[{\"nodes\":[0]}]}";
     henka_model_scene_data scene;
     char* invalid_scene;
     char* selected_roots;
@@ -870,6 +876,18 @@ static void henka_test_gltf_scene_import(void)
         zero_range_scene_gltf, strlen(zero_range_scene_gltf), "zero-range-light.gltf", &scene) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene.node_count == 0U);
     HENKA_TEST_ASSERT(scene.light_count == 0U);
+    henka_model_scene_data_destroy(&scene);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_scene);
+
+    allocations_before_scene = henka_memory_get_allocation_count();
+    memset(&scene, 0, sizeof(scene));
+    HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
+        unrepresentable_orthographic_scene_gltf,
+        strlen(unrepresentable_orthographic_scene_gltf),
+        "unrepresentable-orthographic.gltf",
+        &scene) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene.camera_count == 0U);
+    HENKA_TEST_ASSERT(scene.node_count == 0U);
     henka_model_scene_data_destroy(&scene);
     HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_scene);
 

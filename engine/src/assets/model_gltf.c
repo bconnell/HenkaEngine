@@ -1431,7 +1431,8 @@ static bool henka_gltf_parse_scene_cameras(
         float zfar = 10000.0f;
         float xmag = 1.0f;
         float ymag = 1.0f;
-        float number;
+        double orthographic_height;
+        double orthographic_aspect;
 
         if (scene->camera_count != index) return false;
         scene->camera_count = index + 1U;
@@ -1459,10 +1460,16 @@ static bool henka_gltf_parse_scene_cameras(
                 !henka_gltf_member_float(projection, projection_end, "ymag", &ymag) ||
                 !henka_gltf_member_float(projection, projection_end, "znear", &znear) ||
                 !henka_gltf_member_float(projection, projection_end, "zfar", &zfar)) return false;
-            number = ymag * 2.0f;
             if (!isfinite(xmag) || !isfinite(ymag) || xmag <= 0.0f || ymag <= 0.0f ||
                 !isfinite(znear) || znear <= 0.0f || !isfinite(zfar) || zfar <= znear) return false;
-            scene->cameras[index].camera = henka_camera_create_orthographic(number, xmag / ymag, znear, zfar);
+            orthographic_height = (double)ymag * 2.0;
+            orthographic_aspect = (double)xmag / (double)ymag;
+            if (
+                !isfinite(orthographic_height) || orthographic_height <= 0.0 || orthographic_height > (double)FLT_MAX ||
+                !isfinite(orthographic_aspect) || orthographic_aspect <= 0.0 || orthographic_aspect > (double)FLT_MAX ||
+                (float)orthographic_height <= 0.0f || (float)orthographic_aspect <= 0.0f) return false;
+            scene->cameras[index].camera = henka_camera_create_orthographic(
+                (float)orthographic_height, (float)orthographic_aspect, znear, zfar);
         }
         else return false;
     }
