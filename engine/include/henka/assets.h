@@ -84,7 +84,7 @@ typedef struct henka_texture_residency_diagnostics
 
 #define HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS 64U
 
-#define HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES 18U
+#define HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES 19U
 
 typedef enum henka_material_instance_parameter
 {

@@ -1105,6 +1105,30 @@ void henka_test_assets(void)
             HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_METALLIC_ROUGHNESS);
     }
     {
+        henka_material_asset complete_asset = {0};
+        henka_material_dependency_info complete_dependencies;
+        size_t layer_index;
+
+        complete_asset.material = henka_material_terrain_default();
+        complete_asset.material.base_color_texture = &fallback_texture;
+        complete_asset.material.normal_texture = &fallback_texture;
+        complete_asset.material.metallic_roughness_texture = &fallback_texture;
+        complete_asset.material.occlusion_texture = &fallback_texture;
+        complete_asset.material.emissive_texture = &fallback_texture;
+        complete_asset.material.transmission_texture = &fallback_texture;
+        complete_asset.material.thickness_texture = &fallback_texture;
+        for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
+        {
+            complete_asset.material.terrain_layers[layer_index].base_color_texture = &fallback_texture;
+            complete_asset.material.terrain_layers[layer_index].normal_texture = &fallback_texture;
+            complete_asset.material.terrain_layers[layer_index].metallic_roughness_texture = &fallback_texture;
+        }
+        complete_asset.revision = 12U;
+        HENKA_TEST_ASSERT(henka_assets_get_material_asset_dependencies(
+            &complete_asset, &complete_dependencies) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(complete_dependencies.dependency_count == 19U);
+    }
+    {
         henka_material runtime_material = henka_material_terrain_default();
         henka_material invalid_runtime_material;
         henka_material_asset* runtime_asset = NULL;
