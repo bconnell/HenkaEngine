@@ -1217,6 +1217,47 @@ cleanup:
     return result ? 1 : fail("vertex bevel operations");
 }
 
+static int test_history_rejects_foreign_mesh(void)
+{
+    const henka_authoring_mesh_desc desc = {8U, 12U, 4U, 4U};
+    henka_authoring_mesh* owner = NULL;
+    henka_authoring_mesh* foreign = NULL;
+    henka_authoring_mesh_history* history = NULL;
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    const henka_authoring_face* foreign_face;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &owner) != HENKA_SUCCESS ||
+        henka_authoring_mesh_history_create(owner, 4U, &history) != HENKA_SUCCESS ||
+        henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &foreign) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_id_at(owner, 0U, &face_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_remove_face(owner, face_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_history_checkpoint(history, owner) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    foreign_face = henka_authoring_mesh_get_face(foreign, 1U);
+    if (foreign_face != NULL)
+    {
+        face_id = foreign_face->id;
+    }
+    if (foreign_face == NULL ||
+        henka_authoring_mesh_history_checkpoint(history, foreign) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_authoring_mesh_history_undo(history, foreign) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_authoring_mesh_get_face(foreign, face_id) == NULL ||
+        !henka_authoring_mesh_validate(foreign))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_history_destroy(history);
+    henka_authoring_mesh_destroy(foreign);
+    henka_authoring_mesh_destroy(owner);
+    return result ? 1 : fail("history rejects foreign mesh");
+}
+
 static int test_boundary_edge_bevel_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -3773,6 +3814,7 @@ int main(void)
         test_vertex_merge_operations() &&
         test_vertex_merge_input_limits() &&
         test_vertex_topology_operations() && test_vertex_bevel_operations() &&
+        test_history_rejects_foreign_mesh() &&
         test_boundary_edge_bevel_operation() && test_boundary_edge_batch_bevel_operation() &&
         test_same_face_boundary_edge_batch_bevel_operation() &&
         test_single_quad_face_cut_operation() &&

@@ -186,8 +186,10 @@ henka_result henka_authoring_mesh_recover_quads(
  * Counts are cleared before validation and remain zero on failure. */
 henka_result henka_authoring_mesh_evaluate(const henka_authoring_mesh* mesh, henka_authoring_render_data* out_data);
 
-/* History stores bounded topology snapshots. Checkpoint after a successful
- * edit; the initial mesh is captured at history creation. */
+/* History stores bounded topology snapshots for the mesh passed at creation.
+ * Checkpoint after a successful edit; the initial mesh is captured at history
+ * creation. Other mesh instances are rejected even when their descriptors
+ * match. */
 henka_result henka_authoring_mesh_history_create(const henka_authoring_mesh* initial_mesh, size_t max_steps, henka_authoring_mesh_history** out_history);
 void henka_authoring_mesh_history_destroy(henka_authoring_mesh_history* history);
 henka_result henka_authoring_mesh_history_checkpoint(henka_authoring_mesh_history* history, const henka_authoring_mesh* mesh);
