@@ -1453,16 +1453,11 @@ henka_result henka_assets_load_shader_with_contract(
     char* vertex_key;
     char* vertex_source_path;
 
-    if (out_shader != NULL)
-    {
-        *out_shader = NULL;
-    }
-
     if (manager == NULL ||
         vertex_path == NULL ||
         fragment_path == NULL ||
         henka_shader_contract_desc_validate(contract) != HENKA_SUCCESS ||
-        out_shader == NULL)
+        out_shader == NULL || *out_shader != NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1660,13 +1655,8 @@ henka_result henka_assets_load_audio_clip(
     henka_audio_clip* clip;
     henka_result result;
 
-    if (out_clip != NULL)
-    {
-        *out_clip = NULL;
-    }
-
     if (manager == NULL || manager->engine == NULL || path == NULL ||
-        out_clip == NULL)
+        out_clip == NULL || *out_clip != NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1765,13 +1755,8 @@ henka_result henka_assets_load_audio_stream(
     henka_audio_stream* stream;
     henka_result result;
 
-    if (out_stream != NULL)
-    {
-        *out_stream = NULL;
-    }
-
     if (manager == NULL || manager->engine == NULL || path == NULL ||
-        out_stream == NULL)
+        out_stream == NULL || *out_stream != NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }

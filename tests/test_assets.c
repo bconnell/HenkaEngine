@@ -122,12 +122,50 @@ static void henka_test_texture_loader_preserves_nonempty_output(void)
     HENKA_TEST_ASSERT(texture == (henka_texture*)1);
 }
 
+static void henka_test_shader_and_audio_loaders_preserve_nonempty_output(void)
+{
+    henka_shader_contract_desc contract =
+        henka_shader_contract_desc_default(HENKA_SHADER_CONTRACT_MATERIAL);
+    henka_shader* shader = (henka_shader*)1;
+    henka_audio_clip* clip = (henka_audio_clip*)1;
+    henka_audio_stream* stream = (henka_audio_stream*)1;
+
+    HENKA_TEST_ASSERT(henka_assets_load_shader(
+        NULL,
+        "assets/shaders/basic_lit.vert",
+        "assets/shaders/basic_lit.frag",
+        &shader) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(shader == (henka_shader*)1);
+
+    shader = (henka_shader*)1;
+    HENKA_TEST_ASSERT(henka_assets_load_shader_with_contract(
+        NULL,
+        "assets/shaders/basic_lit.vert",
+        "assets/shaders/basic_lit.frag",
+        &contract,
+        &shader) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(shader == (henka_shader*)1);
+
+    HENKA_TEST_ASSERT(henka_assets_load_audio_clip(
+        NULL,
+        "build/test_tmp/audio_manager.wav",
+        &clip) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(clip == (henka_audio_clip*)1);
+
+    HENKA_TEST_ASSERT(henka_assets_load_audio_stream(
+        NULL,
+        "build/test_tmp/audio_manager_stream.wav",
+        &stream) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(stream == (henka_audio_stream*)1);
+}
+
 
 void henka_test_assets(void)
 {
     henka_test_mesh_loader_preserves_nonempty_output();
     henka_test_mesh_source_failure_requires_fallback();
     henka_test_texture_loader_preserves_nonempty_output();
+    henka_test_shader_and_audio_loaders_preserve_nonempty_output();
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
     HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.Ktx2"));
     HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.kTX2"));

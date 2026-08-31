@@ -186,6 +186,9 @@ const henka_asset_manager* henka_engine_get_asset_manager_const(const henka_engi
  * device, drive-qualified, traversal, and URI-like inputs are rejected.
  */
 henka_result henka_assets_resolve_path(const char* base_path, const char* asset_path, char** out_path);
+/* Shader loads require an initialized empty output slot. The returned shader
+ * is borrowed and manager-owned; rejected or failed loads preserve a
+ * non-empty caller slot and leave an empty slot empty. */
 henka_result henka_assets_load_shader(
     henka_asset_manager* manager,
     const char* vertex_path,
@@ -213,15 +216,19 @@ henka_result henka_assets_load_texture_with_descriptor(
     const henka_texture_descriptor* descriptor,
     henka_texture** out_texture);
 /* Audio clips returned by the manager are borrowed and remain manager-owned.
- * The cache identity is the same confined, canonical project-relative path
- * contract used by the other file-backed asset types. */
+ * Loads require an initialized empty output slot and preserve a non-empty
+ * caller slot when rejected or failed. The cache identity is the same
+ * confined, canonical project-relative path contract used by the other
+ * file-backed asset types. */
 henka_result henka_assets_load_audio_clip(
     henka_asset_manager* manager,
     const char* path,
     henka_audio_clip** out_clip);
 /* Metadata-first streams for supported audio files are borrowed and
- * manager-owned. Their canonical cache identity is shared with resident
- * clips for the same path, while the stream remains a separate payload. */
+ * manager-owned. Loads require an initialized empty output slot and preserve
+ * a non-empty caller slot when rejected or failed. Their canonical cache
+ * identity is shared with resident clips for the same path, while the stream
+ * remains a separate payload. */
 henka_result henka_assets_load_audio_stream(
     henka_asset_manager* manager,
     const char* path,

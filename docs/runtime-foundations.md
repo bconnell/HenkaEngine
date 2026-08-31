@@ -232,7 +232,7 @@ Equivalent slash and dot-segment spellings resolve to one cache entry.
 
 Windows cache identity folds ASCII case while retaining the normalized spelling from the first successful load in metadata. Case-sensitive platforms keep case-sensitive identity.
 
-Returned asset pointers are borrowed and manager-owned. Public destroy calls ignore manager-owned borrowed resources. Manager shutdown performs the owning destruction.
+Returned asset pointers are borrowed and manager-owned. Public destroy calls ignore manager-owned borrowed resources. Manager shutdown performs the owning destruction. Shader, texture, mesh, and Audio loads require empty output slots and preserve non-empty caller slots when rejected or failed.
 
 ### Texture fallback and retry
 
