@@ -59,6 +59,7 @@ struct henka_authoring_mesh
 {
     henka_authoring_mesh_desc desc;
     uint64_t instance_id;
+    uint64_t lineage_id;
     henka_authoring_vertex* vertices;
     henka_authoring_edge* edges;
     henka_authoring_face* faces;
@@ -764,6 +765,7 @@ henka_result henka_authoring_mesh_create(const henka_authoring_mesh_desc* desc, 
     }
     mesh->desc = *desc;
     mesh->instance_id = instance_id;
+    mesh->lineage_id = instance_id;
     mesh->vertices = henka_calloc(desc->max_vertices, sizeof(*mesh->vertices));
     mesh->edges = henka_calloc(desc->max_edges, sizeof(*mesh->edges));
     mesh->faces = henka_calloc(desc->max_faces, sizeof(*mesh->faces));
@@ -899,7 +901,8 @@ bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh)
     size_t active_vertices = 0U;
     size_t active_edges = 0U;
     size_t active_faces = 0U;
-    if (mesh == NULL || mesh->instance_id == 0U || !authoring_desc_valid(&mesh->desc) ||
+    if (mesh == NULL || mesh->instance_id == 0U || mesh->lineage_id == 0U ||
+        !authoring_desc_valid(&mesh->desc) ||
         mesh->vertex_lookup == NULL || mesh->edge_id_lookup == NULL || mesh->face_lookup == NULL ||
         mesh->vertex_lookup_capacity == 0U || mesh->edge_id_lookup_capacity == 0U ||
         mesh->face_lookup_capacity == 0U || mesh->next_vertex_id == 0U ||
@@ -2223,6 +2226,7 @@ static henka_result authoring_mesh_clone_internal(const henka_authoring_mesh* so
     clone->next_vertex_id = source->next_vertex_id;
     clone->next_edge_id = source->next_edge_id;
     clone->next_face_id = source->next_face_id;
+    clone->lineage_id = source->lineage_id;
     memcpy(clone->vertices, source->vertices, source->desc.max_vertices * sizeof(*source->vertices));
     memcpy(clone->edges, source->edges, source->desc.max_edges * sizeof(*source->edges));
     clone->edge_lookup_ready = false;
@@ -2274,11 +2278,15 @@ static void authoring_mesh_swap(henka_authoring_mesh* left, henka_authoring_mesh
 {
     const uint64_t left_instance_id = left->instance_id;
     const uint64_t right_instance_id = right->instance_id;
+    const uint64_t left_lineage_id = left->lineage_id;
+    const uint64_t right_lineage_id = right->lineage_id;
     henka_authoring_mesh temporary = *left;
     *left = *right;
     *right = temporary;
     left->instance_id = left_instance_id;
     right->instance_id = right_instance_id;
+    left->lineage_id = left_lineage_id;
+    right->lineage_id = right_lineage_id;
 }
 
 henka_result henka_authoring_mesh_copy(henka_authoring_mesh* destination, const henka_authoring_mesh* source)
@@ -3061,7 +3069,7 @@ struct henka_authoring_mesh_history
     size_t max_steps;
     size_t undo_count;
     size_t redo_count;
-    uint64_t owner_instance_id;
+    uint64_t owner_lineage_id;
     henka_authoring_mesh** undo;
     henka_authoring_mesh** redo;
 };
@@ -3099,8 +3107,8 @@ static bool authoring_history_mesh_matches(
     const henka_authoring_mesh* mesh)
 {
     return history != NULL && mesh != NULL && history->undo_count > 0U &&
-        history->owner_instance_id != 0U &&
-        history->owner_instance_id == mesh->instance_id &&
+        history->owner_lineage_id != 0U &&
+        history->owner_lineage_id == mesh->lineage_id &&
         authoring_desc_equal(&history->undo[0]->desc, &mesh->desc);
 }
 
@@ -3141,7 +3149,7 @@ henka_result henka_authoring_mesh_history_create(const henka_authoring_mesh* ini
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
     history->max_steps = max_steps;
-    history->owner_instance_id = initial_mesh->instance_id;
+    history->owner_lineage_id = initial_mesh->lineage_id;
     history->undo[0] = initial;
     history->undo_count = 1U;
     *out_history = history;
