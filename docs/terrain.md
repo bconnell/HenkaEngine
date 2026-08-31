@@ -477,6 +477,13 @@ It borrows:
 - Terrain world;
 - optional manager-owned material definition and textures.
 
+The manager-owned material definition and every referenced texture dependency
+must remain alive for at least as long as the graphical Terrain render owner.
+The owner retains borrowed pointers and may dereference them during chunk
+creation, refresh, statistics, rendering, and destruction. Destroy the
+graphical render owner before releasing its borrowed material definition or
+texture dependencies.
+
 It owns:
 
 - fixed-capacity chunk slots;

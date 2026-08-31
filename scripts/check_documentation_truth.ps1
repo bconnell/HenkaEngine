@@ -228,6 +228,34 @@ if ($readme -notmatch "(?im)^>\s*\*\*Support Henka Engine\*\*" -or
     Add-Finding "README.md: sponsorship callout, dedicated section, SUPPORT.md, and direct Sponsors link are all required"
 }
 
+function Get-MarkdownHeadingAnchors {
+    param([string]$Text)
+
+    $anchors = New-Object System.Collections.Generic.List[string]
+    $counts = @{}
+    foreach ($headingMatch in [regex]::Matches(
+            $Text,
+            '(?m)^\s*#{1,6}\s+(.+?)\s*#*\s*$')) {
+        $heading = $headingMatch.Groups[1].Value.Trim()
+        $heading = [regex]::Replace($heading, '\[([^\]]+)\]\([^)]+\)', '$1')
+        $heading = $heading.Replace('`', '')
+        $heading = [regex]::Replace($heading, '<[^>]+>', '')
+        $anchor = [regex]::Replace($heading.ToLowerInvariant(), '[^a-z0-9\s-]', '')
+        $anchor = [regex]::Replace($anchor, '\s', '-').Trim('-')
+        if ([string]::IsNullOrWhiteSpace($anchor)) {
+            continue
+        }
+        if ($counts.ContainsKey($anchor)) {
+            $counts[$anchor] += 1
+            $anchor = '{0}-{1}' -f $anchor, $counts[$anchor]
+        } else {
+            $counts[$anchor] = 0
+        }
+        $anchors.Add($anchor)
+    }
+    return $anchors.ToArray()
+}
+
 if ($scripting -notmatch "(?i)Input\.IsActionDown.{0,180}fail-closed" -or
     $scripting -notmatch "(?i)Interaction\.Try.{0,180}unavailable" -or
     $scripting -notmatch "(?i)entity_is_valid\(entity\)" -or
@@ -276,17 +304,34 @@ foreach ($rawPath in $trackedMarkdown) {
     foreach ($match in [regex]::Matches($text, '\[[^\]]+\]\(([^)]+)\)')) {
         $target = $match.Groups[1].Value.Trim()
         if ([string]::IsNullOrWhiteSpace($target) -or
-            $target.StartsWith("#") -or
             $target -match '^[A-Za-z][A-Za-z0-9+.-]*://') {
             continue
         }
-        $localTarget = ($target -split '#', 2)[0]
-        if ([string]::IsNullOrWhiteSpace($localTarget)) {
-            continue
+        $targetParts = $target -split '#', 2
+        $localTarget = $targetParts[0]
+        $fragment = if ($targetParts.Count -eq 2) { $targetParts[1] } else { $null }
+        $resolvedTarget = $absolutePath
+        if (-not [string]::IsNullOrWhiteSpace($localTarget)) {
+            $resolvedTarget = Join-Path (Split-Path -Parent $absolutePath) $localTarget.Replace("/", "\")
         }
-        $resolvedTarget = Join-Path (Split-Path -Parent $absolutePath) $localTarget.Replace("/", "\")
         if (-not (Test-Path -LiteralPath $resolvedTarget)) {
             Add-Finding "${relativePath}: broken local Markdown link '$target'"
+            continue
+        }
+        if ($null -ne $fragment -and
+            ([string]::IsNullOrWhiteSpace($localTarget) -or
+             [IO.Path]::GetExtension($resolvedTarget) -ieq '.md')) {
+            try {
+                $decodedFragment = [Uri]::UnescapeDataString($fragment).ToLowerInvariant()
+            } catch {
+                Add-Finding "${relativePath}: invalid Markdown heading anchor '$target'"
+                continue
+            }
+            $destinationText = [System.IO.File]::ReadAllText($resolvedTarget)
+            $anchors = Get-MarkdownHeadingAnchors $destinationText
+            if ($anchors -notcontains $decodedFragment) {
+                Add-Finding "${relativePath}: broken Markdown heading anchor '$target'"
+            }
         }
     }
 }

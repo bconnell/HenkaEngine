@@ -78,6 +78,21 @@ try {
     Write-Host "[pass] Documentation truth regression rejected an unsupported capability status escalation."
     [System.IO.File]::WriteAllText($readmePath, $readmeSource)
 
+    $modelLoadingPath = Join-Path $probeRoot "docs\model-loading.md"
+    $modelLoadingSource = [System.IO.File]::ReadAllText($modelLoadingPath)
+    [System.IO.File]::AppendAllText(
+        $modelLoadingPath,
+        [Environment]::NewLine + "[Broken anchor regression](#deliberately-missing-heading)" + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted a deliberately broken Markdown heading anchor."
+    }
+    Write-Host "[pass] Documentation truth regression rejected a broken Markdown heading anchor."
+    [System.IO.File]::WriteAllText($modelLoadingPath, $modelLoadingSource)
+    if ((Invoke-TruthCheck) -ne 0) {
+        throw "Documentation truth remained failed after the broken Markdown heading anchor probe was removed."
+    }
+    Write-Host "[pass] Documentation truth returned green after the broken Markdown heading anchor probe was removed."
+
     $authoringMeshSourcePath = Join-Path $probeRoot "engine\src\mesh\authoring_mesh.c"
     $authoringMeshSource = [System.IO.File]::ReadAllText($authoringMeshSourcePath)
     $writerVersionMatch = [regex]::Match(
