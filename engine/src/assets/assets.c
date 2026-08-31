@@ -3186,12 +3186,7 @@ henka_result henka_assets_load_obj_mesh(
     henka_mesh* mesh;
     henka_result result;
 
-    if (out_mesh != NULL)
-    {
-        *out_mesh = NULL;
-    }
-
-    if (manager == NULL || path == NULL || out_mesh == NULL)
+    if (manager == NULL || path == NULL || out_mesh == NULL || *out_mesh != NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -3339,8 +3334,7 @@ henka_result henka_assets_load_gltf_mesh(
     henka_mesh* mesh = NULL;
     henka_result result;
 
-    if (out_mesh != NULL) *out_mesh = NULL;
-    if (manager == NULL || path == NULL || out_mesh == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    if (manager == NULL || path == NULL || out_mesh == NULL || *out_mesh != NULL) return HENKA_ERROR_INVALID_ARGUMENT;
     result = henka_assets_make_canonical_key(path, &key);
     if (result != HENKA_SUCCESS) return result;
     result = henka_assets_normalize_source_path(path, &source_path);

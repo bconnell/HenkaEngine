@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #endif
 
-static void henka_test_mesh_renderer_failure_is_not_cached_as_fallback(void)
+static void henka_test_mesh_loader_preserves_nonempty_output(void)
 {
     henka_asset_manager manager;
     henka_asset_mesh_entry entries[1];
@@ -41,7 +41,7 @@ static void henka_test_mesh_renderer_failure_is_not_cached_as_fallback(void)
         "assets/models/henka_marker.obj",
         &mesh);
     contract_ok = result == HENKA_ERROR_INVALID_ARGUMENT &&
-        mesh == NULL && manager.mesh_count == 0U;
+        mesh == (henka_mesh*)1 && manager.mesh_count == 0U;
     if (manager.mesh_count > 0U)
     {
         henka_free(entries[0].display_name);
@@ -58,7 +58,7 @@ static void henka_test_mesh_renderer_failure_is_not_cached_as_fallback(void)
         "assets/models/henka_marker.gltf",
         &mesh);
     contract_ok = result == HENKA_ERROR_INVALID_ARGUMENT &&
-        mesh == NULL && manager.mesh_count == 0U;
+        mesh == (henka_mesh*)1 && manager.mesh_count == 0U;
     if (manager.mesh_count > 0U)
     {
         henka_free(entries[0].display_name);
@@ -85,7 +85,7 @@ static void henka_test_mesh_source_failure_requires_fallback(void)
     manager.mesh_entries = entries;
     manager.mesh_capacity = 1U;
 
-    mesh = (henka_mesh*)1;
+    mesh = NULL;
     HENKA_TEST_ASSERT(henka_assets_load_obj_mesh(
         &manager,
         "assets/models/henka-missing-fallback.obj",
@@ -93,7 +93,7 @@ static void henka_test_mesh_source_failure_requires_fallback(void)
     HENKA_TEST_ASSERT(mesh == NULL);
     HENKA_TEST_ASSERT(manager.mesh_count == 0U);
 
-    mesh = (henka_mesh*)1;
+    mesh = NULL;
     HENKA_TEST_ASSERT(henka_assets_load_gltf_mesh(
         &manager,
         "assets/models/henka-missing-fallback.gltf",
@@ -105,7 +105,7 @@ static void henka_test_mesh_source_failure_requires_fallback(void)
 
 void henka_test_assets(void)
 {
-    henka_test_mesh_renderer_failure_is_not_cached_as_fallback();
+    henka_test_mesh_loader_preserves_nonempty_output();
     henka_test_mesh_source_failure_requires_fallback();
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
     HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.Ktx2"));
@@ -463,7 +463,7 @@ void henka_test_assets(void)
 
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_SHADER), "Shader") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_TEXTURE), "Texture") == 0);
-    gltf_mesh = (henka_mesh*)1;
+    gltf_mesh = NULL;
     HENKA_TEST_ASSERT(henka_assets_load_gltf_mesh(NULL, "assets/models/sample.gltf", &gltf_mesh) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(gltf_mesh == NULL);
     gltf_mesh = (henka_mesh*)1;

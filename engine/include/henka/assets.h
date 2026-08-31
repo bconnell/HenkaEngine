@@ -326,6 +326,9 @@ henka_result henka_assets_enforce_texture_residency_budget(
     henka_asset_manager* manager,
     size_t max_evictions,
     size_t* out_evicted_textures);
+/* Mesh loads require an initialized empty output slot. The returned mesh is
+ * borrowed and manager-owned; rejected or failed loads preserve a non-empty
+ * caller slot and leave an empty slot empty. */
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh_with_material(

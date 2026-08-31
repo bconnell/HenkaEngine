@@ -58,6 +58,10 @@ The OBJ loader accepts:
 - cached mesh loading through the asset manager;
 - explicit retry after a failed cached source load is corrected.
 
+Asset-manager OBJ and glTF mesh loads require an empty output slot. Returned
+meshes are borrowed manager-owned resources. A rejected or failed load
+preserves a non-empty caller slot and leaves an empty slot empty.
+
 ### OBJ limits
 
 OBJ input is treated as untrusted file content.
