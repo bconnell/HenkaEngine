@@ -749,6 +749,12 @@ add_test(
 
 if(WIN32)
     add_test(
+        NAME henka_sandbox3d_fixture_scope_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_sandbox3d_fixture_scope_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_ctest_working_directory_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_ctest_working_directory_windows.ps1

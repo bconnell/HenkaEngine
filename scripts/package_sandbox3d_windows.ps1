@@ -225,6 +225,7 @@ if ($manifest.executable_sha256 -ne $currentHash) {
 $assetsSource = Join-Path $repoRoot "assets"
 $helpSource = Join-Path $repoRoot "docs\help\sandbox3d.md"
 $residencyFixtureSource = Join-Path $repoRoot "build\examples\sandbox3d\$Configuration\assets\textures\residency"
+$residencyGenerator = Join-Path $repoRoot "scripts\generate_residency_fixtures_windows.ps1"
 $showcaseModelSource = Join-Path $repoRoot "build\examples\sandbox3d\$Configuration\assets\models"
 Assert-NoReparsePoints -Path $expectedExeFull -Description "Sandbox executable input"
 Assert-NoReparsePoints -Path $assetsSource -Description "Asset input"
@@ -233,8 +234,22 @@ if (-not (Test-Path -LiteralPath $showcaseModelSource -PathType Container)) {
     throw "The $Configuration sandbox showcase model output was not found beside the validated executable. Rebuild before packaging."
 }
 Assert-NoReparsePoints -Path $showcaseModelSource -Description "Sandbox showcase model input"
+
+Invoke-HenkaNative `
+    -FilePath "powershell.exe" `
+    -Arguments @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $residencyGenerator,
+        "-OutputDirectory",
+        $residencyFixtureSource) `
+    -WorkingDirectory $repoRoot `
+    -Label "Generate opt-in Sandbox residency fixtures without rebuilding"
+
 if (-not (Test-Path -LiteralPath $residencyFixtureSource -PathType Container)) {
-    throw "The $Configuration sandbox residency fixtures were not found beside the validated executable. Rebuild before packaging."
+    throw "The opt-in $Configuration sandbox residency fixtures were not generated."
 }
 Assert-NoReparsePoints -Path $residencyFixtureSource -Description "Sandbox residency fixture input"
 if ((-not $ResetUserData) -and (Test-Path -LiteralPath $packageUserDir)) {
@@ -294,9 +309,13 @@ try {
 
     $sourceDir = Split-Path $expectedExeFull
     $stagingResidencyDir = Join-Path $stagingRoot "assets\textures\residency"
-    Copy-Item -LiteralPath $residencyFixtureSource -Destination (Join-Path $stagingRoot "assets\textures") -Recurse
-    if (-not (Test-Path -LiteralPath $stagingResidencyDir -PathType Container)) {
-        throw "The staged package is missing the bounded sandbox residency fixtures."
+    [System.IO.Directory]::CreateDirectory($stagingResidencyDir) | Out-Null
+    for ($residencyIndex = 0; $residencyIndex -lt 65; $residencyIndex++) {
+        $residencySource = Join-Path $residencyFixtureSource ("residency_{0}.png" -f $residencyIndex)
+        if (-not (Test-Path -LiteralPath $residencySource -PathType Leaf)) {
+            throw "The generated residency fixture set is missing residency_$residencyIndex.png."
+        }
+        Copy-Item -LiteralPath $residencySource -Destination $stagingResidencyDir
     }
     foreach ($dll in @(Get-ChildItem -LiteralPath $sourceDir -Filter *.dll -File -ErrorAction SilentlyContinue)) {
         Assert-NoReparsePoints -Path $dll.FullName -Description "Runtime library input"
