@@ -455,6 +455,57 @@ static void henka_test_gltf_external_buffer_file_load(void)
     (void)remove(traversal_path);
 }
 
+static void henka_test_gltf_external_interleaved_position_file_load(void)
+{
+    enum { position_count = 3U, position_component_count = 3U, position_stride_floats = 4U };
+    static const float interleaved_positions[position_count * position_stride_floats] =
+    {
+        0.0f, 0.0f, 0.0f, 11.0f,
+        1.0f, 0.0f, 0.0f, 22.0f,
+        0.0f, 1.0f, 0.0f, 33.0f
+    };
+    const size_t position_byte_length = sizeof(interleaved_positions);
+    const size_t position_byte_stride = position_stride_floats * sizeof(float);
+    unsigned char position_buffer[sizeof(interleaved_positions)];
+    char gltf[512];
+    size_t position_buffer_size = 0U;
+    size_t index;
+    int gltf_length;
+    const char* buffer_path = "build/test_tmp/external-interleaved-buffer.bin";
+    const char* gltf_path = "build/test_tmp/external-interleaved-buffer.gltf";
+    henka_model_data model;
+
+    HENKA_TEST_ASSERT(sizeof(float) == 4U);
+    HENKA_TEST_ASSERT(position_byte_length == 48U);
+    HENKA_TEST_ASSERT(position_byte_stride == 16U);
+    for (index = 0U; index < sizeof(interleaved_positions) / sizeof(interleaved_positions[0]); ++index)
+        HENKA_TEST_ASSERT(henka_test_write_f32_le(
+            position_buffer, sizeof(position_buffer), &position_buffer_size, interleaved_positions[index]));
+    HENKA_TEST_ASSERT(position_buffer_size == position_byte_length);
+    gltf_length = snprintf(
+        gltf, sizeof(gltf),
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"external-interleaved-buffer.bin\",\"byteLength\":%zu}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteOffset\":0,\"byteLength\":%zu,\"byteStride\":%zu}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":%u,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}",
+        position_byte_length, position_byte_length, position_byte_stride, position_count);
+    HENKA_TEST_ASSERT(gltf_length > 0 && (size_t)gltf_length < sizeof(gltf));
+    HENKA_TEST_ASSERT(henka_test_write_file(buffer_path, position_buffer, position_buffer_size));
+    HENKA_TEST_ASSERT(henka_test_write_file(gltf_path, gltf, (size_t)gltf_length));
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf(gltf_path, &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == position_count);
+    HENKA_TEST_ASSERT(model.index_count == position_count);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].position.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[2].position.y, 1.0f, 0.0001f);
+    henka_model_data_destroy(&model);
+    (void)remove(buffer_path);
+    (void)remove(gltf_path);
+}
+
 static void henka_test_gltf_external_image_file_load(void)
 {
     enum { position_count = 3U, position_component_count = 3U, position_component_type = 5126 };
@@ -1304,6 +1355,7 @@ void henka_test_model(void)
     henka_test_gltf_rejects_invalid_accessor_boolean();
     henka_test_gltf_rejects_invalid_tangent_handedness();
     henka_test_gltf_external_buffer_file_load();
+    henka_test_gltf_external_interleaved_position_file_load();
     henka_test_gltf_external_image_file_load();
     henka_test_authoring_mesh_renderer_bridge();
     henka_test_loose_authoring_renderer_bridge();
