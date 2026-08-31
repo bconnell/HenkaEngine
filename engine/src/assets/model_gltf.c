@@ -652,7 +652,8 @@ static bool henka_gltf_parse_accessors(henka_gltf_context* context)
         if (accessor->count > HENKA_MAX_MESH_ELEMENTS || (accessor->component_count = henka_gltf_component_count(type, type + strlen(type))) == 0 || henka_gltf_component_size(accessor->component_type) == 0) return false;
         { const char* value; const char* value_end; if (henka_gltf_find_member(item, item_end, "bufferView", &value, &value_end) && !henka_gltf_member_int(item, item_end, "bufferView", &accessor->buffer_view)) return false; }
         { const char* value; const char* value_end; if (henka_gltf_find_member(item, item_end, "byteOffset", &value, &value_end) && !henka_gltf_size_number(value, value_end, &accessor->byte_offset)) return false; }
-        { const char* value; const char* value_end; if (henka_gltf_find_member(item, item_end, "normalized", &value, &value_end)) accessor->normalized = strncmp(henka_gltf_skip_space(value, value_end), "true", 4U) == 0; }
+        if (henka_gltf_find_member(item, item_end, "normalized", &type_value, &type_end) &&
+            !henka_gltf_member_bool(item, item_end, "normalized", &accessor->normalized)) return false;
         if (accessor->buffer_view >= 0)
         {
             size_t component_size = henka_gltf_component_size(accessor->component_type);
