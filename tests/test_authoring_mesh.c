@@ -519,6 +519,15 @@ static int test_modeling_operations(void)
     {
         goto cleanup;
     }
+    center_id = 123U;
+    if (henka_authoring_mesh_subdivide_face(
+            mesh, HENKA_AUTHORING_INVALID_ID, &center_id) != HENKA_ERROR_INVALID_ARGUMENT ||
+        center_id != HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_get_counts(mesh).faces != 4U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
     result = 1;
 
 cleanup:

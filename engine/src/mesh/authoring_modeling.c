@@ -6166,6 +6166,10 @@ henka_result henka_authoring_mesh_subdivide_face(
     size_t corner_count;
     uint32_t material_region;
     bool smooth;
+    if (out_center_vertex_id != NULL)
+    {
+        *out_center_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (mesh == NULL || out_center_vertex_id == NULL || !modeling_face_is_valid(mesh, face_id))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
