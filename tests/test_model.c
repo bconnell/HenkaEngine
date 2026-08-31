@@ -656,6 +656,55 @@ static void henka_test_authoring_mesh_renderer_bridge(void)
     engine = NULL;
 }
 
+static void henka_test_mesh_creation_preserves_nonempty_output(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_mesh* mesh = NULL;
+    henka_mesh* original = NULL;
+    bool passed = true;
+
+    config.application_name = "Henka Mesh Output Ownership Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS ||
+        henka_mesh_create_cube(engine, &mesh) != HENKA_SUCCESS)
+    {
+        passed = false;
+        goto cleanup;
+    }
+    original = mesh;
+
+    if (henka_mesh_create_cube(engine, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
+        mesh != original ||
+        henka_mesh_create_from_model_data(engine, NULL, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
+        mesh != original ||
+        henka_mesh_create_from_obj(engine, NULL, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
+        mesh != original ||
+        henka_mesh_create_from_gltf(engine, NULL, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
+        mesh != original)
+    {
+        passed = false;
+    }
+
+cleanup:
+    if (mesh != NULL && mesh != original)
+    {
+        henka_mesh_destroy(mesh);
+    }
+    if (original != NULL)
+    {
+        henka_mesh_destroy(original);
+    }
+    henka_engine_destroy(engine);
+    if (!passed)
+    {
+        fprintf(stderr, "mesh creation must reject a non-empty output slot\n");
+        ++g_henka_test_failures;
+    }
+}
+
 static void henka_test_loose_authoring_renderer_bridge(void)
 {
     henka_engine_config config = {0};
@@ -1417,6 +1466,7 @@ void henka_test_model(void)
     henka_test_gltf_external_interleaved_position_file_load();
     henka_test_gltf_external_image_file_load();
     henka_test_authoring_mesh_renderer_bridge();
+    henka_test_mesh_creation_preserves_nonempty_output();
     henka_test_loose_authoring_renderer_bridge();
     henka_test_mixed_loose_authoring_renderer_bridge();
     henka_test_gltf_mixed_normal_primitives_preserve_imported_normals();

@@ -2102,8 +2102,7 @@ henka_result henka_mesh_create_from_gltf(
     henka_model_data model;
     henka_result result;
     memset(&model, 0, sizeof(model));
-    if (out_mesh != NULL) *out_mesh = NULL;
-    if (engine == NULL || path == NULL || out_mesh == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    if (engine == NULL || path == NULL || out_mesh == NULL || *out_mesh != NULL) return HENKA_ERROR_INVALID_ARGUMENT;
     result = henka_model_data_load_gltf(path, &model);
     if (result == HENKA_SUCCESS) result = henka_mesh_create_from_model_data(engine, &model, out_mesh);
     henka_model_data_destroy(&model);

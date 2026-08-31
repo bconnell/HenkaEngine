@@ -163,6 +163,8 @@ henka_result henka_model_scene_data_set_active_scene(
     size_t scene_index);
 void henka_model_scene_data_destroy(henka_model_scene_data* scene);
 void henka_model_data_destroy(henka_model_data* model);
+/* Mesh creation requires an initialized empty output slot and assigns it only
+ * after a successful upload. A non-empty slot is rejected and preserved. */
 henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka_model_data* model, henka_mesh** out_mesh);
 henka_result henka_mesh_create_from_obj(henka_engine* engine, const char* path, henka_mesh** out_mesh);
 henka_result henka_mesh_create_from_gltf(henka_engine* engine, const char* path, henka_mesh** out_mesh);

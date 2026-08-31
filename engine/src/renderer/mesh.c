@@ -183,7 +183,7 @@ henka_result henka_mesh_create_cube(henka_engine* engine, henka_mesh** out_mesh)
         20U, 21U, 22U, 22U, 23U, 20U
     };
 
-    if (engine == NULL || out_mesh == NULL)
+    if (engine == NULL || out_mesh == NULL || *out_mesh != NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -220,7 +220,7 @@ henka_result henka_mesh_create_uv_sphere(
     int vertex_count;
     int index_count;
 
-    if (engine == NULL || out_mesh == NULL || !isfinite(radius) || radius <= 0.0f ||
+    if (engine == NULL || out_mesh == NULL || *out_mesh != NULL || !isfinite(radius) || radius <= 0.0f ||
         segments < 12 || segments > 128 || rings < 6 || rings > 64 ||
         !henka_checked_size_multiply((size_t)(rings - 1), (size_t)(segments + 1), &interior_vertex_count) ||
         !henka_checked_size_add(interior_vertex_count, (size_t)segments * 2U, &vertex_count_size) ||
@@ -362,7 +362,7 @@ henka_result henka_mesh_create_plane(henka_engine* engine, float width, float de
     unsigned int indices[6];
     henka_vertex vertices[4];
 
-    if (engine == NULL || out_mesh == NULL ||
+    if (engine == NULL || out_mesh == NULL || *out_mesh != NULL ||
         !isfinite(width) || !isfinite(depth) || width <= 0.0f || depth <= 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -413,7 +413,7 @@ henka_result henka_mesh_create_debug_grid(henka_engine* engine, int half_extent,
     size_t vertex_count_size;
     henka_vertex* vertices;
 
-    if (engine == NULL || out_mesh == NULL || half_extent <= 0 ||
+    if (engine == NULL || out_mesh == NULL || *out_mesh != NULL || half_extent <= 0 ||
         half_extent > HENKA_MAX_DEBUG_GRID_HALF_EXTENT ||
         !isfinite(spacing) || spacing <= 0.0f)
     {
@@ -484,7 +484,7 @@ henka_result henka_mesh_create_line(henka_engine* engine, henka_vec3 start, henk
     unsigned int indices[2];
     henka_vertex vertices[2];
 
-    if (engine == NULL || out_mesh == NULL ||
+    if (engine == NULL || out_mesh == NULL || *out_mesh != NULL ||
         !henka_mesh_vec3_is_finite(start) || !henka_mesh_vec3_is_finite(end))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -513,7 +513,7 @@ henka_result henka_mesh_create_circle_ring(henka_engine* engine, float radius, i
     henka_result result;
     henka_vertex* vertices;
 
-    if (engine == NULL || out_mesh == NULL || !isfinite(radius) || radius <= 0.0f ||
+    if (engine == NULL || out_mesh == NULL || *out_mesh != NULL || !isfinite(radius) || radius <= 0.0f ||
         segments < 8 || segments > HENKA_MAX_CIRCLE_SEGMENTS ||
         !henka_checked_size_multiply((size_t)segments, 2U, &index_count_size) ||
         !henka_checked_size_to_int(index_count_size, &index_count))
@@ -585,7 +585,7 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
     uint64_t total_indices;
     uint32_t index;
 
-    if (out_mesh == NULL || engine == NULL || world == NULL)
+    if (out_mesh == NULL || engine == NULL || world == NULL || *out_mesh != NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }

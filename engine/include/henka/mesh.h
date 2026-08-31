@@ -10,6 +10,8 @@ typedef struct henka_mesh henka_mesh;
 typedef struct henka_authoring_mesh henka_authoring_mesh;
 typedef struct henka_model_data henka_model_data;
 
+/* Mesh creation requires an initialized empty output slot and assigns it only
+ * after a successful upload. A non-empty slot is rejected and preserved. */
 henka_result henka_mesh_create_cube(henka_engine* engine, henka_mesh** out_mesh);
 henka_result henka_mesh_create_uv_sphere(
     henka_engine* engine,

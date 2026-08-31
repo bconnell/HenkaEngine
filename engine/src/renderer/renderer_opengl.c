@@ -8023,7 +8023,7 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     henka_vertex* upload_vertices;
     size_t vertex_bytes;
 
-    if (renderer == NULL || vertices == NULL || indices == NULL || out_mesh == NULL ||
+    if (renderer == NULL || vertices == NULL || indices == NULL || out_mesh == NULL || *out_mesh != NULL ||
         vertex_count <= 0 || index_count <= 0 ||
         (primitive != HENKA_MESH_PRIMITIVE_TRIANGLES &&
             primitive != HENKA_MESH_PRIMITIVE_LINES &&

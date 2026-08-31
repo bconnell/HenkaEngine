@@ -1184,7 +1184,7 @@ henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka
     int vertex_count;
     uint32_t vertex_index;
 
-    if (engine == NULL || model == NULL || out_mesh == NULL ||
+    if (engine == NULL || model == NULL || out_mesh == NULL || *out_mesh != NULL ||
         model->vertices == NULL || model->indices == NULL ||
         model->vertex_count == 0U || model->index_count == 0U ||
         model->vertex_count > HENKA_MAX_MESH_ELEMENTS ||
@@ -1459,11 +1459,8 @@ static henka_result henka_mesh_create_from_authoring_surface_source(
     henka_result result;
     henka_authoring_mesh_counts counts;
 
-    if (out_mesh == NULL)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    if (*out_mesh != NULL || engine == NULL || source == NULL || !henka_authoring_mesh_validate(source))
+    if (out_mesh == NULL || *out_mesh != NULL ||
+        engine == NULL || source == NULL || !henka_authoring_mesh_validate(source))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1755,6 +1752,10 @@ henka_result henka_mesh_create_from_obj(henka_engine* engine, const char* path, 
     henka_model_data model;
     henka_result result;
 
+    if (engine == NULL || path == NULL || out_mesh == NULL || *out_mesh != NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     memset(&model, 0, sizeof(model));
     result = henka_model_data_load_obj(path, &model);
     if (result != HENKA_SUCCESS)
