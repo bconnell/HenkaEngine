@@ -958,13 +958,14 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
     henka_obj_vertex_array vertices;
     uint32_t index_count = 0U;
     uint32_t vertex_count = 0U;
+    henka_model_data candidate;
 
     if (source == NULL || out_model == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    memset(out_model, 0, sizeof(*out_model));
+    memset(&candidate, 0, sizeof(candidate));
 
     source_length = 0U;
     while (source[source_length] != '\0')
@@ -1102,12 +1103,15 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
 
     if (result == HENKA_SUCCESS)
     {
-        out_model->vertices = vertices.items;
-        out_model->vertex_count = vertex_count;
-        out_model->indices = indices.items;
-        out_model->index_count = index_count;
+        candidate.vertices = vertices.items;
+        candidate.vertex_count = vertex_count;
+        candidate.indices = indices.items;
+        candidate.index_count = index_count;
         vertices.items = NULL;
         indices.items = NULL;
+        henka_model_data_destroy(out_model);
+        *out_model = candidate;
+        memset(&candidate, 0, sizeof(candidate));
     }
 
     henka_obj_vec3_array_destroy(&positions);
@@ -1115,6 +1119,7 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
     henka_obj_vec3_array_destroy(&normals);
     henka_obj_vertex_array_destroy(&vertices);
     henka_obj_index_array_destroy(&indices);
+    henka_model_data_destroy(&candidate);
     return result;
 }
 

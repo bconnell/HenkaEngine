@@ -55,6 +55,13 @@ assets expose the same operation through
 `henka_assets_set_gltf_scene_active_scene`, without transferring scene or
 dependency ownership to the caller.
 
+All model and scene loader destinations must be zero-initialized before their
+first load. A later successful load replaces the destination's owned data only
+after the complete input has been validated. Invalid input, unreadable files,
+and allocation failures leave an existing destination unchanged; callers can
+therefore retry a failed reload without losing the previously loaded model or
+scene.
+
 ## Supported input
 
 The loader currently supports:

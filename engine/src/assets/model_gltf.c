@@ -1882,27 +1882,35 @@ henka_result henka_model_data_load_gltf_from_memory(
     const char* label,
     henka_model_data* out_model)
 {
+    henka_model_data candidate;
     henka_gltf_context context;
     henka_result result;
     (void)label;
-    if (out_model != NULL) memset(out_model, 0, sizeof(*out_model));
     if (data == NULL || out_model == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    memset(&candidate, 0, sizeof(candidate));
     memset(&context, 0, sizeof(context));
     if (!henka_gltf_prepare_json((const unsigned char*)data, data_size, &context))
     {
         henka_gltf_context_destroy(&context);
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = henka_gltf_parse_context(&context, out_model);
+    result = henka_gltf_parse_context(&context, &candidate);
     henka_gltf_context_destroy(&context);
+    if (result == HENKA_SUCCESS)
+    {
+        henka_model_data_destroy(out_model);
+        *out_model = candidate;
+        memset(&candidate, 0, sizeof(candidate));
+    }
+    henka_model_data_destroy(&candidate);
     return result;
 }
 
 henka_result henka_model_data_load_gltf(const char* path, henka_model_data* out_model)
 {
-    char* data; size_t data_size; henka_gltf_context context; henka_result result; const char* separator; size_t directory_length;
-    if (out_model != NULL) memset(out_model, 0, sizeof(*out_model));
+    char* data; size_t data_size; henka_gltf_context context; henka_result result; const char* separator; size_t directory_length; henka_model_data candidate;
     if (path == NULL || out_model == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    memset(&candidate, 0, sizeof(candidate));
     data = henka_gltf_read_file(path, &data_size);
     if (data == NULL) return HENKA_ERROR_PLATFORM;
     memset(&context, 0, sizeof(context));
@@ -1913,9 +1921,16 @@ henka_result henka_model_data_load_gltf(const char* path, henka_model_data* out_
     if (context.base_directory == NULL) { henka_free(data); return HENKA_ERROR_OUT_OF_MEMORY; }
     memcpy(context.base_directory, path, directory_length); context.base_directory[directory_length] = '\0';
     if (!henka_gltf_prepare_json((const unsigned char*)data, data_size, &context)) result = HENKA_ERROR_INVALID_ARGUMENT;
-    else result = henka_gltf_parse_context(&context, out_model);
+    else result = henka_gltf_parse_context(&context, &candidate);
     henka_gltf_context_destroy(&context);
     henka_free(data);
+    if (result == HENKA_SUCCESS)
+    {
+        henka_model_data_destroy(out_model);
+        *out_model = candidate;
+        memset(&candidate, 0, sizeof(candidate));
+    }
+    henka_model_data_destroy(&candidate);
     return result;
 }
 
@@ -1960,21 +1975,28 @@ henka_result henka_model_scene_data_load_gltf_from_memory(
     const char* label,
     henka_model_scene_data* out_scene)
 {
+    henka_model_scene_data candidate;
     henka_gltf_context context;
     henka_result result;
     (void)label;
 
-    if (out_scene != NULL) memset(out_scene, 0, sizeof(*out_scene));
     if (data == NULL || out_scene == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    memset(&candidate, 0, sizeof(candidate));
     memset(&context, 0, sizeof(context));
     if (!henka_gltf_prepare_json((const unsigned char*)data, data_size, &context))
     {
         henka_gltf_context_destroy(&context);
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = henka_gltf_parse_scene_context(&context, out_scene);
+    result = henka_gltf_parse_scene_context(&context, &candidate);
     henka_gltf_context_destroy(&context);
-    if (result != HENKA_SUCCESS) henka_model_scene_data_destroy(out_scene);
+    if (result == HENKA_SUCCESS)
+    {
+        henka_model_scene_data_destroy(out_scene);
+        *out_scene = candidate;
+        memset(&candidate, 0, sizeof(candidate));
+    }
+    henka_model_scene_data_destroy(&candidate);
     return result;
 }
 
@@ -1995,11 +2017,12 @@ henka_result henka_model_scene_data_load_gltf(
     size_t data_size;
     henka_gltf_context context;
     henka_result result;
+    henka_model_scene_data candidate;
     const char* separator;
     size_t directory_length;
 
-    if (out_scene != NULL) memset(out_scene, 0, sizeof(*out_scene));
     if (path == NULL || out_scene == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    memset(&candidate, 0, sizeof(candidate));
     data = henka_gltf_read_file(path, &data_size);
     if (data == NULL) return HENKA_ERROR_PLATFORM;
     memset(&context, 0, sizeof(context));
@@ -2018,10 +2041,16 @@ henka_result henka_model_scene_data_load_gltf(
     memcpy(context.base_directory, path, directory_length);
     context.base_directory[directory_length] = '\0';
     if (!henka_gltf_prepare_json((const unsigned char*)data, data_size, &context)) result = HENKA_ERROR_INVALID_ARGUMENT;
-    else result = henka_gltf_parse_scene_context(&context, out_scene);
+    else result = henka_gltf_parse_scene_context(&context, &candidate);
     henka_gltf_context_destroy(&context);
     henka_free(data);
-    if (result != HENKA_SUCCESS) henka_model_scene_data_destroy(out_scene);
+    if (result == HENKA_SUCCESS)
+    {
+        henka_model_scene_data_destroy(out_scene);
+        *out_scene = candidate;
+        memset(&candidate, 0, sizeof(candidate));
+    }
+    henka_model_scene_data_destroy(&candidate);
     return result;
 }
 

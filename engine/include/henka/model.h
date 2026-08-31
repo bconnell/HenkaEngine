@@ -136,6 +136,11 @@ typedef struct henka_model_data
     henka_model_material_source material_source;
 } henka_model_data;
 
+/*
+ * Loaders require a zero-initialized destination before its first load. A
+ * later successful load replaces the owned destination data; a failed load
+ * leaves the previous destination data unchanged.
+ */
 /* OBJ loading enforces bounded source, record, output, numeric, and renderer-count limits. */
 henka_result henka_model_data_load_obj(const char* path, henka_model_data* out_model);
 henka_result henka_model_data_load_obj_from_memory(const char* source, const char* label, henka_model_data* out_model);

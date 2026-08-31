@@ -165,6 +165,77 @@ static void henka_test_model_rejects_unsafe_bounds(void)
     henka_free(oversized_source);
 }
 
+static void henka_test_model_load_failure_preserves_destination(void)
+{
+    static const char* valid_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
+    static const char* invalid_gltf = "{\"asset\":{\"version\":\"2.0\",}}";
+    static const char* valid_obj =
+        "v 0.0 0.0 0.0\n"
+        "v 1.0 0.0 0.0\n"
+        "v 0.0 1.0 0.0\n"
+        "f 1 2 3\n";
+    static const char* invalid_obj =
+        "v 0.0 0.0 0.0\n"
+        "v 1.0 0.0 0.0\n"
+        "f 1 2 3\n";
+    static const char* valid_scene =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"nodes\":[{\"name\":\"preserved-node\"}]}";
+    static const char* invalid_scene = "{\"asset\":{\"version\":\"2.0\",}}";
+    henka_model_data model;
+    henka_model_data snapshot;
+    henka_model_scene_data scene;
+    henka_model_scene_data scene_snapshot;
+    bool preserved;
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(valid_obj, "transactional.obj", &model) == HENKA_SUCCESS);
+    snapshot = model;
+    preserved = henka_model_data_load_obj_from_memory(invalid_obj, "transactional-invalid.obj", &model) != HENKA_SUCCESS &&
+        model.vertices == snapshot.vertices && model.vertex_count == snapshot.vertex_count &&
+        model.indices == snapshot.indices && model.index_count == snapshot.index_count;
+    if (!preserved)
+    {
+        model.vertices = snapshot.vertices;
+        model.vertex_count = snapshot.vertex_count;
+        model.indices = snapshot.indices;
+        model.index_count = snapshot.index_count;
+    }
+    henka_model_data_destroy(&model);
+    HENKA_TEST_ASSERT(preserved);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        valid_gltf, strlen(valid_gltf), "transactional.gltf", &model) == HENKA_SUCCESS);
+    snapshot = model;
+    preserved = henka_model_data_load_gltf_from_memory(
+        invalid_gltf, strlen(invalid_gltf), "transactional-invalid.gltf", &model) != HENKA_SUCCESS &&
+        model.vertices == snapshot.vertices && model.vertex_count == snapshot.vertex_count &&
+        model.indices == snapshot.indices && model.index_count == snapshot.index_count;
+    if (!preserved) model = snapshot;
+    henka_model_data_destroy(&model);
+    HENKA_TEST_ASSERT(preserved);
+
+    memset(&scene, 0, sizeof(scene));
+    HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
+        valid_scene, strlen(valid_scene), "transactional-scene.gltf", &scene) == HENKA_SUCCESS);
+    scene_snapshot = scene;
+    preserved = henka_model_scene_data_load_gltf_from_memory(
+        invalid_scene, strlen(invalid_scene), "transactional-invalid-scene.gltf", &scene) != HENKA_SUCCESS &&
+        scene.node_count == scene_snapshot.node_count && scene.nodes[0].name == scene_snapshot.nodes[0].name &&
+        scene.scene_count == scene_snapshot.scene_count &&
+        scene.active_scene_index == scene_snapshot.active_scene_index;
+    if (!preserved) scene = scene_snapshot;
+    henka_model_scene_data_destroy(&scene);
+    HENKA_TEST_ASSERT(preserved);
+}
+
 static void henka_test_gltf_rejects_extra_material_vector_components(void)
 {
     static const char* extra_base_color_component =
@@ -1210,6 +1281,7 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.indices == NULL);
 
     henka_test_model_rejects_unsafe_bounds();
+    henka_test_model_load_failure_preserves_destination();
     henka_test_gltf_rejects_extra_material_vector_components();
     henka_test_gltf_rejects_invalid_accessor_boolean();
     henka_test_gltf_rejects_invalid_tangent_handedness();
