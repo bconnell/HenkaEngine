@@ -62,6 +62,9 @@ Asset-manager OBJ and glTF mesh loads require an empty output slot. Returned
 meshes are borrowed manager-owned resources. A rejected or failed load
 preserves a non-empty caller slot and leaves an empty slot empty.
 
+Texture loads use the same output-slot rule and return borrowed manager-owned
+textures. Texture fallback and residency behavior remain manager-controlled.
+
 ### OBJ limits
 
 OBJ input is treated as untrusted file content.

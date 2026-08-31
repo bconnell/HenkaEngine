@@ -200,9 +200,11 @@ henka_result henka_assets_load_shader_with_contract(
 /*
  * Assets returned by the manager are borrowed and remain owned by the manager.
  * Do not pass them to the public mesh, shader, or texture destroy functions.
- * Equivalent confined path spellings share one canonical cache identity.
- * Windows identities are ASCII case-insensitive while metadata preserves the
- * normalized source spelling first used to create the cache entry.
+ * Texture loads require an initialized empty output slot and preserve a
+ * non-empty caller slot when rejected or failed. Equivalent confined path
+ * spellings share one canonical cache identity. Windows identities are ASCII
+ * case-insensitive while metadata preserves the normalized source spelling
+ * first used to create the cache entry.
  */
 henka_result henka_assets_load_texture(henka_asset_manager* manager, const char* path, henka_texture** out_texture);
 henka_result henka_assets_load_texture_with_descriptor(

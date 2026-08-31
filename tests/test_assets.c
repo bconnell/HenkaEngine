@@ -102,11 +102,32 @@ static void henka_test_mesh_source_failure_requires_fallback(void)
     HENKA_TEST_ASSERT(manager.mesh_count == 0U);
 }
 
+static void henka_test_texture_loader_preserves_nonempty_output(void)
+{
+    henka_texture_descriptor descriptor = henka_texture_descriptor_default_color();
+    henka_texture* texture = (henka_texture*)1;
+
+    HENKA_TEST_ASSERT(henka_assets_load_texture(
+        NULL,
+        "assets/textures/white.png",
+        &texture) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(texture == (henka_texture*)1);
+
+    texture = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_assets_load_texture_with_descriptor(
+        NULL,
+        "assets/textures/white.png",
+        &descriptor,
+        &texture) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(texture == (henka_texture*)1);
+}
+
 
 void henka_test_assets(void)
 {
     henka_test_mesh_loader_preserves_nonempty_output();
     henka_test_mesh_source_failure_requires_fallback();
+    henka_test_texture_loader_preserves_nonempty_output();
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
     HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.Ktx2"));
     HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.kTX2"));

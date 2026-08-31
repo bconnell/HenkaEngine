@@ -1970,14 +1970,9 @@ henka_result henka_assets_load_texture_with_descriptor(
     size_t index;
     henka_result result;
 
-    if (out_texture != NULL)
-    {
-        *out_texture = NULL;
-    }
-
     if (manager == NULL ||
         path == NULL ||
-        out_texture == NULL || descriptor == NULL ||
+        out_texture == NULL || *out_texture != NULL || descriptor == NULL ||
         henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
