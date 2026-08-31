@@ -4,6 +4,7 @@
 
 #include "test_suite.h"
 
+#include <henka/memory.h>
 #include <henka/model.h>
 
 #include "../examples/sandbox3d/modeling_operator.h"
@@ -316,6 +317,7 @@ static void henka_test_sandbox3d_modeling_operator_session(void)
     henka_vec3 original_position;
     uint64_t geometry_revision_before_preview;
     uint64_t geometry_revision_after_commit;
+    const size_t allocations_before = henka_memory_get_allocation_count();
 
     config.application_name = "Henka Modeling Operator Test";
     config.window_width = 320;
@@ -459,8 +461,10 @@ static void henka_test_sandbox3d_modeling_operator_session(void)
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
 
     sandbox3d_authoring_object_destroy(object);
+    henka_mesh_destroy(previous_mesh);
     henka_scene_destroy(scene);
     henka_engine_destroy(engine);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before);
 }
 
 static void henka_test_sandbox3d_modeling_operator_loose_extrude(void)
