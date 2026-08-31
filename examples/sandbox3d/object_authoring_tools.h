@@ -124,6 +124,12 @@ const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_
  * after a successful transactional authoring publication or reload. */
 uint64_t sandbox3d_authoring_object_get_geometry_revision(
     const sandbox3d_authoring_object* object);
+#if defined(HENKA_SANDBOX3D_TEST_SEAM)
+/* Test-only seam for deterministic revision-exhaustion coverage. */
+henka_result sandbox3d_authoring_object_force_geometry_revision_for_testing(
+    sandbox3d_authoring_object* object,
+    uint64_t revision);
+#endif
 /* Presents an owned candidate without replacing the authoritative source or
  * creating an undo entry.  The candidate is retained only after success; the
  * caller retains ownership on failure. */

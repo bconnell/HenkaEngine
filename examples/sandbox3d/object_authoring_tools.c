@@ -99,16 +99,26 @@ static bool sandbox3d_authoring_import_weld_quantize(
     return true;
 }
 
-static void sandbox3d_authoring_advance_geometry_revision(
-    sandbox3d_authoring_object* object)
+static henka_result sandbox3d_authoring_next_geometry_revision(
+    const sandbox3d_authoring_object* object,
+    uint64_t* out_revision)
 {
-    if (object == NULL)
+    if (out_revision != NULL)
     {
-        return;
+        *out_revision = 0U;
     }
-    object->geometry_revision = object->geometry_revision == UINT64_MAX
-        ? 1U
-        : object->geometry_revision + 1U;
+    if (object == NULL || out_revision == NULL || object->geometry_revision == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (object->geometry_revision == UINT64_MAX)
+    {
+        HENKA_LOG_ERROR(
+            "authoring geometry revision exhausted; refusing publication");
+        return HENKA_ERROR_LIMIT;
+    }
+    *out_revision = object->geometry_revision + 1U;
+    return HENKA_SUCCESS;
 }
 
 static bool sandbox3d_authoring_import_weld_bucket(
@@ -1625,6 +1635,7 @@ static henka_result sandbox3d_authoring_publish_candidate(
     henka_mesh* candidate_render = NULL;
     henka_mesh* old_scene_mesh = NULL;
     sandbox3d_authoring_face_selection_plan selection_plan = {0};
+    uint64_t next_geometry_revision = 0U;
     henka_bounds candidate_bounds = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     henka_bounds old_bounds;
     henka_physics_collider_desc old_collider = {0};
@@ -1643,6 +1654,12 @@ static henka_result sandbox3d_authoring_publish_candidate(
         !henka_scene_is_entity_valid(object->scene, object->entity))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_authoring_next_geometry_revision(
+        object, &next_geometry_revision);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
     result = sandbox3d_authoring_evaluate_render(object, candidate,
         &candidate_render, &candidate_bounds);
@@ -1706,7 +1723,7 @@ static henka_result sandbox3d_authoring_publish_candidate(
         henka_mesh* old_render_mesh = object->render_mesh;
         object->mesh = candidate;
         object->render_mesh = candidate_render;
-        sandbox3d_authoring_advance_geometry_revision(object);
+        object->geometry_revision = next_geometry_revision;
         if (selection_plan.ready)
         {
             sandbox3d_authoring_commit_face_selection_plan(object, &selection_plan);
@@ -1781,6 +1798,7 @@ static henka_result sandbox3d_authoring_replace_loaded_source(
     henka_mesh* candidate_render = NULL;
     henka_mesh* old_scene_mesh = NULL;
     sandbox3d_authoring_face_selection_plan selection_plan = {0};
+    uint64_t next_geometry_revision = 0U;
     henka_bounds candidate_bounds = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     henka_bounds old_bounds;
     henka_physics_collider_desc old_collider = {0};
@@ -1794,6 +1812,12 @@ static henka_result sandbox3d_authoring_replace_loaded_source(
     if (object == NULL || candidate == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_authoring_next_geometry_revision(
+        object, &next_geometry_revision);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
     result = henka_authoring_mesh_history_create(
         candidate, object->history_steps, &candidate_history);
@@ -1865,7 +1889,7 @@ static henka_result sandbox3d_authoring_replace_loaded_source(
         object->mesh = candidate;
         object->history = candidate_history;
         object->render_mesh = candidate_render;
-        sandbox3d_authoring_advance_geometry_revision(object);
+        object->geometry_revision = next_geometry_revision;
         if (selection_plan.ready)
         {
             sandbox3d_authoring_commit_face_selection_plan(object, &selection_plan);
@@ -2464,6 +2488,20 @@ uint64_t sandbox3d_authoring_object_get_geometry_revision(
     return object == NULL ? 0U : object->geometry_revision;
 }
 
+#if defined(HENKA_SANDBOX3D_TEST_SEAM)
+henka_result sandbox3d_authoring_object_force_geometry_revision_for_testing(
+    sandbox3d_authoring_object* object,
+    uint64_t revision)
+{
+    if (object == NULL || revision == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    object->geometry_revision = revision;
+    return HENKA_SUCCESS;
+}
+#endif
+
 const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_authoring_object* object)
 {
     return object == NULL ? NULL : object->mesh;
@@ -2564,6 +2602,7 @@ henka_result sandbox3d_authoring_object_commit_preview(
     henka_authoring_mesh* previous_mesh;
     henka_mesh* previous_render_mesh;
     sandbox3d_authoring_face_selection_plan selection_plan = {0};
+    uint64_t next_geometry_revision = 0U;
     const bool allow_selection_fallback = object != NULL &&
         (object->selected_face != HENKA_AUTHORING_INVALID_ID ||
          object->selected_face_count > 0U ||
@@ -2578,6 +2617,12 @@ henka_result sandbox3d_authoring_object_commit_preview(
         object->preview_mesh == NULL || object->preview_render_mesh == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_authoring_next_geometry_revision(
+        object, &next_geometry_revision);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
     result = sandbox3d_authoring_prepare_selection_repair(
         object,
@@ -2599,7 +2644,7 @@ henka_result sandbox3d_authoring_object_commit_preview(
     previous_render_mesh = object->render_mesh;
     object->mesh = object->preview_mesh;
     object->render_mesh = object->preview_render_mesh;
-    sandbox3d_authoring_advance_geometry_revision(object);
+    object->geometry_revision = next_geometry_revision;
     object->preview_active = false;
     object->preview_mesh = NULL;
     object->preview_render_mesh = NULL;
