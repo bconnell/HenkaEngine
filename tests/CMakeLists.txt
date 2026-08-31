@@ -714,14 +714,6 @@ henka_enable_project_warnings(henka_tests)
 add_test(NAME henka_tests COMMAND henka_tests)
 endif()
 
-# Tests use bounded fixtures under build/test_tmp relative to the repository
-# root. Keep CTest's working directory stable across single-test and full-suite
-# runs so every test resolves the same documented fixture root.
-get_property(HENKA_TEST_NAMES DIRECTORY PROPERTY TESTS)
-if(HENKA_TEST_NAMES)
-    set(HENKA_TEST_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
-    set_tests_properties(${HENKA_TEST_NAMES} PROPERTIES WORKING_DIRECTORY "${HENKA_TEST_WORKING_DIRECTORY}")
-endif()
 add_executable(henka_authoring_quad_recovery_tests
     test_authoring_quad_recovery.c
 )
@@ -754,3 +746,21 @@ add_test(
     NAME henka_sandbox3d_realism_detail_tests
     COMMAND henka_sandbox3d_realism_detail_tests
 )
+
+if(WIN32)
+    add_test(
+        NAME henka_ctest_working_directory_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_ctest_working_directory_windows.ps1
+            -BuildDirectory ${CMAKE_BINARY_DIR})
+endif()
+
+# Tests use bounded fixtures under build/test_tmp relative to the repository
+# root. Keep CTest's working directory stable across single-test and full-suite
+# runs so every test resolves the same documented fixture root. Keep this block
+# after every add_test call so late registrations receive the same contract.
+get_property(HENKA_TEST_NAMES DIRECTORY PROPERTY TESTS)
+if(HENKA_TEST_NAMES)
+    set(HENKA_TEST_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+    set_tests_properties(${HENKA_TEST_NAMES} PROPERTIES WORKING_DIRECTORY "${HENKA_TEST_WORKING_DIRECTORY}")
+endif()
