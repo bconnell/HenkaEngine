@@ -971,6 +971,42 @@ cleanup:
     return result ? 1 : fail("vertex merge operations");
 }
 
+static int test_vertex_merge_input_limits(void)
+{
+    const henka_authoring_mesh_desc desc = {4U, 4U, 1U, 4U};
+    const henka_authoring_vertex_id oversized_selection[5] = {
+        1U, 2U, 3U, 4U, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id survivors[4] = {0U};
+    henka_authoring_modeling_report report;
+    henka_authoring_mesh_counts before;
+    size_t survivor_count = 99U;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_merge_vertices(
+            mesh, oversized_selection, 5U, HENKA_AUTHORING_VERTEX_MERGE_CENTER,
+            HENKA_AUTHORING_INVALID_ID, survivors, 4U, &survivor_count, &report) !=
+            HENKA_ERROR_LIMIT ||
+        survivor_count != 0U ||
+        henka_authoring_mesh_get_counts(mesh).vertices != before.vertices ||
+        henka_authoring_mesh_get_counts(mesh).edges != before.edges ||
+        henka_authoring_mesh_get_counts(mesh).faces != before.faces ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("vertex merge input limits");
+}
+
 static int test_vertex_topology_operations(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
@@ -3642,6 +3678,7 @@ int main(void)
         test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
         test_vertex_merge_operations() &&
+        test_vertex_merge_input_limits() &&
         test_vertex_topology_operations() && test_vertex_bevel_operations() &&
         test_boundary_edge_bevel_operation() && test_boundary_edge_batch_bevel_operation() &&
         test_same_face_boundary_edge_batch_bevel_operation() &&

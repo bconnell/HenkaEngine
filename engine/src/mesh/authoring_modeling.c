@@ -392,6 +392,9 @@ henka_result henka_authoring_mesh_merge_vertices(
     henka_authoring_vertex_id* selected = NULL;
     henka_authoring_vertex_id representatives[1];
     henka_vec3 representative_position[1];
+    const henka_authoring_mesh_desc desc = mesh != NULL
+        ? henka_authoring_mesh_get_desc(mesh) : (henka_authoring_mesh_desc){0};
+    size_t selected_bytes;
     size_t index;
     double sum_x = 0.0;
     double sum_y = 0.0;
@@ -404,9 +407,14 @@ henka_result henka_authoring_mesh_merge_vertices(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    selected = henka_malloc(vertex_count * sizeof(*selected));
+    if (vertex_count > desc.max_vertices ||
+        !henka_checked_size_multiply(vertex_count, sizeof(*selected), &selected_bytes))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    selected = henka_malloc(selected_bytes);
     if (selected == NULL) return HENKA_ERROR_OUT_OF_MEMORY;
-    memcpy(selected, vertex_ids, vertex_count * sizeof(*selected));
+    memcpy(selected, vertex_ids, selected_bytes);
     qsort(selected, vertex_count, sizeof(*selected), modeling_vertex_id_compare);
     for (index = 0U; index < vertex_count; ++index)
     {
@@ -447,7 +455,7 @@ henka_result henka_authoring_mesh_merge_vertices(
         }
     }
     {
-        henka_authoring_vertex_id* maps = henka_malloc(vertex_count * sizeof(*maps));
+        henka_authoring_vertex_id* maps = henka_malloc(selected_bytes);
         if (maps == NULL)
         {
             henka_free(selected);
