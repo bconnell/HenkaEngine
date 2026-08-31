@@ -4968,6 +4968,10 @@ henka_result henka_authoring_mesh_duplicate_face(
     henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_result result;
     const henka_authoring_face* source;
+    if (out_face_id != NULL)
+    {
+        *out_face_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (mesh == NULL || out_face_id == NULL || !modeling_finite_vec3(offset) ||
         !modeling_face_is_valid(mesh, face_id))
     {
@@ -5013,6 +5017,10 @@ henka_result henka_authoring_mesh_extrude_face(
     bool replace_source;
     size_t corner;
     henka_result result;
+    if (out_face_id != NULL)
+    {
+        *out_face_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (mesh == NULL || out_face_id == NULL || !modeling_finite_scalar(distance) ||
         !modeling_face_is_valid(mesh, face_id))
     {
@@ -6084,6 +6092,10 @@ henka_result henka_authoring_mesh_inset_face(
     henka_authoring_mesh* candidate = NULL;
     henka_result result;
     henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    if (out_face_id != NULL)
+    {
+        *out_face_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (mesh == NULL || out_face_id == NULL || !modeling_finite_scalar(factor) ||
         factor <= 0.0f || factor >= 1.0f || !modeling_face_is_valid(mesh, face_id))
     {
@@ -6117,6 +6129,10 @@ henka_result henka_authoring_mesh_bevel_face(
     henka_authoring_face_id inset_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_face_id beveled_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_result result;
+    if (out_face_id != NULL)
+    {
+        *out_face_id = HENKA_AUTHORING_INVALID_ID;
+    }
     if (mesh == NULL || out_face_id == NULL || !modeling_finite_scalar(width) ||
         width <= 0.0f || width >= 1.0f || !modeling_face_is_valid(mesh, face_id))
     {

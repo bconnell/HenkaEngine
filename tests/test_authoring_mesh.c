@@ -298,6 +298,58 @@ cleanup:
     return result ? 1 : fail("evaluation failure output state");
 }
 
+static int test_face_operation_outputs_fail_closed(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_face_id output_face_id = HENKA_AUTHORING_INVALID_ID;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    output_face_id = 123U;
+    if (henka_authoring_mesh_duplicate_face(
+            mesh, HENKA_AUTHORING_INVALID_ID, (henka_vec3){0.0f, 1.0f, 0.0f},
+            &output_face_id) != HENKA_ERROR_INVALID_ARGUMENT ||
+        output_face_id != HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    output_face_id = 123U;
+    if (henka_authoring_mesh_extrude_face(
+            mesh, HENKA_AUTHORING_INVALID_ID, 0.5f, &output_face_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        output_face_id != HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    output_face_id = 123U;
+    if (henka_authoring_mesh_inset_face(
+            mesh, HENKA_AUTHORING_INVALID_ID, 0.5f, &output_face_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        output_face_id != HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    output_face_id = 123U;
+    if (henka_authoring_mesh_bevel_face(
+            mesh, HENKA_AUTHORING_INVALID_ID, 0.25f, &output_face_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        output_face_id != HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_get_counts(mesh).faces != 1U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("face operation output state");
+}
+
 static int test_rejection_and_tombstones(void)
 {
     henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
@@ -3354,6 +3406,7 @@ cleanup:
 int main(void)
 {
     return test_topology_and_evaluation() && test_evaluation_failure_clears_output_counts() &&
+        test_face_operation_outputs_fail_closed() &&
         test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
         test_vertex_merge_operations() &&
