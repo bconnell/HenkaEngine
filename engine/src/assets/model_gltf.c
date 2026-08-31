@@ -1526,7 +1526,7 @@ static bool henka_gltf_parse_scene_lights(
         else if (strcmp(type, "directional") == 0) output->type = HENKA_MODEL_SCENE_LIGHT_DIRECTIONAL;
         else return false;
         if (!isfinite(color.x) || !isfinite(color.y) || !isfinite(color.z) || color.x < 0.0f || color.y < 0.0f || color.z < 0.0f ||
-            !isfinite(intensity) || intensity < 0.0f || !isfinite(range) || range < 0.0f ||
+            !isfinite(intensity) || intensity < 0.0f || !isfinite(range) || range <= 0.0f ||
             !isfinite(inner) || !isfinite(outer) || inner < 0.0f || outer <= inner || outer > HENKA_PI * 0.5f) return false;
         output->color = color;
         output->intensity = intensity;
