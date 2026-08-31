@@ -1,13 +1,8 @@
 # Henka V1 Behavior State Persistence Design
 
-## Status
+## Scope
 
-Approved for implementation as the next vertical slice of the active Game
-Authoring Hardening + Scripting Foundation V1 campaign.
-
-## Goal
-
-Give Lua and HenkaScript behaviors a shared, bounded, typed state boundary that
+Lua and HenkaScript behaviors use a shared, bounded, typed state boundary that
 survives an explicit save/load operation without mutating the authoring Scene
 Document or allowing Play simulation state to leak into Edit mode.
 

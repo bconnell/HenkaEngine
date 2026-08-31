@@ -14,7 +14,7 @@ Repository generators and imported compatibility assets may continue to exist
 as separately labeled tests. They are not a fallback or provenance source for
 either final showcase model.
 
-## Current evidence and gap
+## Current implementation and gap
 
 `henka_authoring_mesh` already provides bounded editable topology, validation,
 UVs, and mesh history. `sandbox3d_authoring_object` already publishes edits to
@@ -94,15 +94,14 @@ The persisted document carries explicit provenance:
 `HENKA_PRODUCT_NATIVE_AUTHORED`. That label is set only by normal document
 creation and editor commands; import and fixture paths cannot write it.
 
-### Visible proof
+### Workflow validation
 
-The existing graphical harness must activate normal visible editor controls and
-capture each relevant state. It may move the controlled test cursor and click
-the editor but may not create or modify source files directly. Required proof
-is: new native asset, primitive source creation, component selection and
-topology editing, transform/refinement, material and UV edit, save, process
-close/release, reload, second edit, second save/reload, scene placement, and
-packaged runtime render.
+The visible editor workflow activates normal editor controls and captures the
+relevant states without creating or modifying source files directly. The
+workflow covers new native asset creation, primitive source creation, component
+selection and topology editing, transform/refinement, material and UV editing,
+save, close/release, reload, a second edit and save/reload, scene placement, and
+packaged runtime rendering.
 
 The final Giraffe and Rocket are constructed through that workflow and inspected
 in multiple editor and packaged-runtime views. Automated evidence cannot
@@ -123,12 +122,12 @@ evidence is current.
 - Public documentation does not say the showcase assets were authored in Henka
   until the current editor workflow and package evidence prove it.
 
-## Acceptance evidence
+## Validation coverage
 
-1. Unit and integration tests prove bounded native-document creation, failure
+1. Unit and integration tests cover bounded native-document creation, failure
    atomicity, undo/redo, material/UV persistence, source reload, and package
    inclusion.
-2. A graphical harness drives only normal visible editor commands and produces
+2. The graphical workflow drives normal visible editor commands and records
    operation-by-operation screenshots/logs.
 3. The final Giraffe and Rocket sources carry
    `HENKA_PRODUCT_NATIVE_AUTHORED`; fixture/import sources cannot acquire that
@@ -137,5 +136,5 @@ evidence is current.
    survives a second reload.
 5. Packaged runtime renders both authored assets with their persisted materials
    and textures.
-6. Human inspection accepts the editor and packaged visual evidence as
-   deliberately modeled, production-like assets.
+6. Visual review covers the editor and packaged views for deliberate modeling
+   and production-like asset quality.

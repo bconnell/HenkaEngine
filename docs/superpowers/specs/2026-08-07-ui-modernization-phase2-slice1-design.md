@@ -1,8 +1,4 @@
-# Henka Engine UI Modernization Phase 2 - Slice 1 Revised Design
-
-Date: 2026-08-07
-Status: Revised design, awaiting written-spec approval
-Authoritative implementation parent: `39650cc3449387a9313ecf50c28f678a70c30623`
+# Henka Engine UI Modernization Phase 2 - Slice 1 Design
 
 ## 1. Objective
 
@@ -417,7 +413,7 @@ Presentation requirements:
 - preserve current cursor/drag behavior;
 - preserve the current panel bounds on both sides.
 
-The packaged desktop check must prove both appearance and interaction. A separator that looks correct but becomes hard to drag is not acceptable.
+The separator keeps its existing larger drag target while presenting as one thin visible line.
 
 ## 12. Error Handling and Invariants
 
@@ -438,7 +434,7 @@ Required invariants:
 - failed material edits preserve the previous effective material;
 - clearing or invalidating selection clears inspector material-edit capability immediately.
 
-## 13. Test-Driven Implementation Strategy
+## 13. Verification scenarios
 
 Production behavior changes start with focused failing tests.
 
@@ -483,7 +479,7 @@ Add the narrowest useful test around separator presentation data or geometry if 
 
 Do not duplicate the desktop harness with a second visual-testing framework.
 
-## 14. Packaged Desktop Validation
+## 14. Runtime validation scenarios
 
 Extend the existing packaged desktop harness.
 
@@ -514,51 +510,7 @@ Required interaction coverage:
 
 The existing viewport stability threshold cannot be relaxed for this UI work.
 
-## 15. Validation and Publication
-
-Before implementation commit:
-
-- verify exact repository identity and expected parent;
-- verify clean or exact known-safe state;
-- inspect current source before editing;
-- follow red-green-refactor for behavior changes;
-- run focused unit tests while developing;
-- run Release build;
-- run working-tree package/startup or contract checks that apply;
-- inspect staged scope;
-- run `git diff --check`.
-
-After implementation commit at exact HEAD:
-
-- clean-tree gate;
-- complete unit tests;
-- Release build;
-- exact-HEAD Release package;
-- package contract;
-- full packaged interactive desktop harness;
-- external C-template validation;
-- required public-hygiene and integrity checks.
-
-Push only when every required exact-HEAD gate passes and `origin/main` has not moved.
-
-## 16. Expected Implementation Surface
-
-Discovery indicates a bounded surface similar to:
-
-- public/core UI header for disclosure/property and frame-input declarations;
-- internal UI context state;
-- core UI implementation;
-- UI unit tests;
-- `examples/sandbox3d/main.c` for Controls/Main, Object Details, material capability adaptation, settings, and frame input;
-- the existing workspace/splitter presentation code required for the single-line separator;
-- packaged desktop harness;
-- user-facing help or UI documentation when the workflow changes.
-
-Exact files are confirmed from the current repository during implementation planning.
-
-No unrelated refactor is authorized.
-
-## 17. Success Criteria
+## 15. Design outcomes
 
 Slice 1 is complete when:
 
@@ -575,12 +527,9 @@ Slice 1 is complete when:
 11. Mouse and required keyboard disclosure semantics work.
 12. The Scene View separator presents as one thin line and remains easy to drag.
 13. Docking and Phase 1 workspace semantics are unchanged.
-14. QA remains segregated.
-15. Renderer/GI behavior and stationary stability remain valid.
-16. Unit, package, desktop-interaction, external-template, and repository safety gates pass.
-17. The exact validated implementation commit is published to `main`.
+14. QA surfaces remain separately reachable from the main editing flow.
 
-## 18. Deferred Phase 2 Work
+## 16. Future extensions
 
 After this slice is proven:
 
