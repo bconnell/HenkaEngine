@@ -3834,6 +3834,27 @@ cleanup:
     return result ? 1 : fail("extreme authoring bounds");
 }
 
+static int test_save_propagates_parent_directory_errors(void)
+{
+    const char* path = "build/test_tmp/authoring_parent_path_error.hams";
+    const henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
+    henka_authoring_mesh* mesh = NULL;
+    henka_result save_result;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        return fail("authoring parent-path failure setup");
+    }
+    henka_memory_test_fail_after(0U);
+    save_result = henka_authoring_mesh_save_file(mesh, path);
+    henka_memory_test_disable_failures();
+    henka_authoring_mesh_destroy(mesh);
+    remove(path);
+    return save_result == HENKA_ERROR_OUT_OF_MEMORY
+        ? 1
+        : fail("authoring parent-path error propagation");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_extreme_bounds_remain_finite() &&
@@ -3870,6 +3891,7 @@ int main(void)
         test_loose_edge_extrude_operation() &&
         test_boundary_edge_extrude_operation() &&
         test_logical_identity_reuse_and_history() &&
+        test_save_propagates_parent_directory_errors() &&
         test_persistence_versions_and_malformed() &&
         test_loose_component_representation_and_persistence() &&
         test_hams_loose_topology_versioning() ? 0 : 1;

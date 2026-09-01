@@ -3422,13 +3422,15 @@ henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, co
     char* temporary_path = NULL;
     size_t index;
     bool ok = false;
+    henka_result result;
     if (mesh == NULL || path == NULL || path[0] == '\0' || !henka_authoring_mesh_validate(mesh))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (henka_path_ensure_parent_directory(path) != HENKA_SUCCESS)
+    result = henka_path_ensure_parent_directory(path);
+    if (result != HENKA_SUCCESS)
     {
-        return HENKA_ERROR_ASSET_SOURCE;
+        return result;
     }
     if (!authoring_make_temporary_path(path, &temporary_path))
     {
