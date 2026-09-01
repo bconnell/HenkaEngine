@@ -1626,6 +1626,81 @@ henka_result henka_scene_get_entity_parent(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_get_entity_child_count(
+    const henka_scene* scene,
+    henka_entity parent,
+    size_t* out_count)
+{
+    size_t index;
+
+    if (out_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_count = 0U;
+    if (scene == NULL ||
+        (parent != HENKA_INVALID_ENTITY &&
+            henka_scene_get_entity_record_const(scene, parent) == NULL))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < scene->entity_capacity; ++index)
+    {
+        if (scene->entities[index].active && scene->entities[index].parent == parent)
+        {
+            if (*out_count == SIZE_MAX)
+            {
+                *out_count = 0U;
+                return HENKA_ERROR_LIMIT;
+            }
+            *out_count += 1U;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_entity_child_at_index(
+    const henka_scene* scene,
+    henka_entity parent,
+    size_t index,
+    henka_entity* out_child)
+{
+    size_t child_index;
+    size_t active_index;
+
+    if (out_child == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_child = HENKA_INVALID_ENTITY;
+    if (scene == NULL ||
+        (parent != HENKA_INVALID_ENTITY &&
+            henka_scene_get_entity_record_const(scene, parent) == NULL))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    active_index = 0U;
+    for (child_index = 0U; child_index < scene->entity_capacity; ++child_index)
+    {
+        const henka_scene_entity_record* record = &scene->entities[child_index];
+
+        if (!record->active || record->parent != parent)
+        {
+            continue;
+        }
+        if (active_index == index)
+        {
+            *out_child = henka_scene_make_entity(child_index, record->generation);
+            return HENKA_SUCCESS;
+        }
+        active_index += 1U;
+    }
+
+    return HENKA_ERROR_UNKNOWN;
+}
+
 henka_result henka_scene_get_entity_mesh(const henka_scene* scene, henka_entity entity, henka_mesh** out_mesh)
 {
     const henka_scene_entity_record* record;

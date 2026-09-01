@@ -224,11 +224,12 @@ See [scripting-foundation.md](scripting-foundation.md) for the scripting boundar
 
 The public runtime scene now provides a bounded generation-checked parent/child
 transform foundation with cycle rejection, keep-local/keep-world reparenting,
-subtree propagation, and parent-destruction promotion. HSCN v6 persists parent
-IDs and migrates v1-v5 objects to roots in memory without rewriting the source
-file. Hierarchy editing in the Sandbox, hierarchy history, broader imported
-object registration, complete source/material/project serialization, and
-production gameplay workflows remain open.
+deterministic direct-child enumeration, subtree propagation, and parent-
+destruction promotion. Passing `HENKA_INVALID_ENTITY` enumerates root entities.
+HSCN v6 persists parent IDs and migrates v1-v5 objects to roots in memory
+without rewriting the source file. Hierarchy editing in the Sandbox, hierarchy
+history, broader imported object registration, complete source/material/project
+serialization, and production gameplay workflows remain open.
 
 ## Prefabs / Reusable Scene Objects
 

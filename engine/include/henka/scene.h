@@ -337,6 +337,17 @@ henka_result henka_scene_get_entity_parent(
     const henka_scene* scene,
     henka_entity entity,
     henka_entity* out_parent);
+/* Enumerates direct children in deterministic storage order. Passing
+ * HENKA_INVALID_ENTITY selects root entities. */
+henka_result henka_scene_get_entity_child_count(
+    const henka_scene* scene,
+    henka_entity parent,
+    size_t* out_count);
+henka_result henka_scene_get_entity_child_at_index(
+    const henka_scene* scene,
+    henka_entity parent,
+    size_t index,
+    henka_entity* out_child);
 /* Reparents a subtree transactionally. KEEP_LOCAL preserves the child's local
  * transform; KEEP_WORLD preserves its current world transform. The bounded
  * v1 TRS model rejects parent scales that would require shear representation. */

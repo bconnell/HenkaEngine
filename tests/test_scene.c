@@ -355,6 +355,79 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     henka_scene_destroy(target);
 }
 
+static void henka_test_scene_child_enumeration(void)
+{
+    henka_scene* scene;
+    henka_entity root;
+    henka_entity first_child;
+    henka_entity stale_child;
+    henka_entity third_child;
+    henka_entity replacement_child;
+    henka_entity listed;
+    size_t count;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    root = henka_scene_create_entity_named(scene, "Enumeration Root");
+    first_child = henka_scene_create_entity_named(scene, "Enumeration First");
+    stale_child = henka_scene_create_entity_named(scene, "Enumeration Stale");
+    third_child = henka_scene_create_entity_named(scene, "Enumeration Third");
+    replacement_child = henka_scene_create_entity_named(scene, "Enumeration Replacement");
+    HENKA_TEST_ASSERT(root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(first_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(stale_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(third_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(replacement_child != HENKA_INVALID_ENTITY);
+
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, first_child, root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, stale_child, root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, third_child, root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, replacement_child, root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_count(scene, root, &count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(count == 4U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_at_index(
+        scene, root, 0U, &listed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(listed == first_child);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_at_index(
+        scene, root, 3U, &listed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(listed == replacement_child);
+    listed = HENKA_INVALID_ENTITY;
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_at_index(
+        scene, root, 4U, &listed) == HENKA_ERROR_UNKNOWN);
+    HENKA_TEST_ASSERT(listed == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_count(
+        scene, HENKA_INVALID_ENTITY, &count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(count == 1U);
+
+    henka_scene_destroy_entity(scene, stale_child);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_count(
+        scene, stale_child, &count) == HENKA_ERROR_INVALID_ARGUMENT);
+    replacement_child = henka_scene_create_entity_named(scene, "Enumeration Reused");
+    HENKA_TEST_ASSERT(replacement_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, replacement_child, root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_count(scene, root, &count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(count == 4U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_at_index(
+        scene, root, 1U, &listed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(listed == replacement_child);
+
+    count = 42U;
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_count(
+        scene, (henka_entity)0x1234U, &count) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(count == 0U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_count(scene, root, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_at_index(
+        scene, (henka_entity)0x1234U, 0U, &listed) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(listed == HENKA_INVALID_ENTITY);
+
+    henka_scene_destroy(scene);
+}
+
 void henka_test_scene(void)
 {
     henka_bounds bounds;
@@ -840,5 +913,6 @@ void henka_test_scene(void)
     henka_test_scene_capacity_growth();
     henka_test_scene_revision_exhaustion();
     henka_test_scene_hierarchy();
+    henka_test_scene_child_enumeration();
     henka_test_prefab_snapshot_and_transaction();
 }

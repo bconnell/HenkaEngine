@@ -124,8 +124,9 @@ A mature controller should remain stable across slopes, steps, moving platforms,
 > **Status:** Foundation; editor and cross-subsystem hierarchy maturity is planned after Character Controller.
 
 The runtime hierarchy foundation establishes an authoritative composition model
-for real Henka objects. Editor hierarchy authoring, history, and participation
-across all major subsystems remain planned work.
+for real Henka objects, including deterministic direct-child enumeration and
+root enumeration. Editor hierarchy authoring, history, and participation across
+all major subsystems remain planned work.
 
 ### Core hierarchy
 
