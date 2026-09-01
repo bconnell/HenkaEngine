@@ -20,7 +20,8 @@ The public physics API provides:
 - optional links from physics bodies to real scene entities
 - a bounded public character-controller foundation backed by a real dynamic
   sphere body, with planar velocity limits, grounded jump queuing, and
-  explicit prepare/synchronize integration around the shared fixed-step world
+  explicit teleport/repositioning, and prepare/synchronize integration around
+  the shared fixed-step world
 - debug-shape and contact data for truthful runtime visualization
 - transform validation that rejects non-finite and collapsed scale components
 - physics allocations included in Henka's debug memory accounting

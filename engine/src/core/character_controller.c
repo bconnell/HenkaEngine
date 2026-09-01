@@ -171,6 +171,28 @@ henka_result henka_character_controller_set_movement_tuning(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_character_controller_teleport(
+    henka_character_controller* controller,
+    henka_transform transform,
+    bool clear_velocity)
+{
+    henka_physics_body_state body_state;
+
+    if (controller == NULL || controller->world == NULL ||
+        henka_physics_body_get_state(
+            controller->world,
+            controller->body,
+            &body_state) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_physics_body_set_transform(
+        controller->world,
+        controller->body,
+        transform,
+        clear_velocity);
+}
+
 henka_result henka_character_controller_destroy(
     henka_character_controller* controller)
 {

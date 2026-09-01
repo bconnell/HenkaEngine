@@ -59,6 +59,12 @@ henka_result henka_character_controller_set_movement_tuning(
     henka_character_controller* controller,
     float acceleration,
     float deceleration);
+/* Repositions the owned body through the physics transform contract. A failed
+ * transform leaves the controller and its body unchanged. */
+henka_result henka_character_controller_teleport(
+    henka_character_controller* controller,
+    henka_transform transform,
+    bool clear_velocity);
 henka_result henka_character_controller_queue_jump(
     henka_character_controller* controller);
 

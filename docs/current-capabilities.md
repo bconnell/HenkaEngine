@@ -515,9 +515,10 @@ Sandbox Physics QA and selected-body activation are available. Numeric, allocati
 The public Character Controller foundation is available for a real dynamic
 sphere body. It validates bounded planar input, supports optional bounded
 acceleration and deceleration tuning, grounded jump queuing, rejects stale
-physics bodies, and participates in the caller-owned fixed-step lifecycle.
+physics bodies, supports explicit teleport/repositioning through the physics
+transform contract, and participates in the caller-owned fixed-step lifecycle.
 Zero acceleration or deceleration preserves the immediate response for that
-direction.
+direction. A teleport can preserve or clear the body's velocity as requested.
 
 Full Character Controller movement remains unfinished: capsule geometry,
 swept movement, sliding, slope handling, and step offsets are not currently

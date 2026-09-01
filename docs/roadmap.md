@@ -79,9 +79,10 @@ flowchart LR
 
 The public Character Controller foundation currently supports a real dynamic
 sphere body, bounded planar input, optional acceleration and deceleration
-tuning, grounded jump queuing, stale-body rejection, and caller-owned fixed-step
-participation. Full first-person, third-person, and general character movement
-remains current development.
+tuning, grounded jump queuing, stale-body rejection, explicit teleporting through
+the physics transform contract, and caller-owned fixed-step participation. Full
+first-person, third-person, and general character movement remains current
+development.
 
 ### Target capability
 
