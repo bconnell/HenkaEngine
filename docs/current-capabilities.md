@@ -523,17 +523,18 @@ Sandbox Physics QA and selected-body activation are available. Numeric, allocati
 - Advanced simulation
 
 The public Character Controller foundation is available for a real dynamic
-sphere body. It validates bounded planar input, supports optional bounded
-acceleration and deceleration tuning, grounded jump queuing, rejects stale
-physics bodies, supports explicit teleport/repositioning through the physics
-transform contract, and participates in the caller-owned fixed-step lifecycle.
-Zero acceleration or deceleration preserves the immediate response for that
-direction. A teleport can preserve or clear the body's velocity as requested.
+upright capsule body. It validates bounded planar input, supports optional
+bounded acceleration and deceleration tuning, grounded jump queuing, rejects
+stale physics bodies, supports explicit teleport/repositioning through the
+physics transform contract, and participates in the caller-owned fixed-step
+lifecycle. Zero acceleration or deceleration preserves the immediate response
+for that direction. A teleport can preserve or clear the body's velocity as
+requested. A zero capsule half-height is sphere-equivalent for compatibility.
 
-Full Character Controller movement remains unfinished: capsule geometry,
-swept movement, sliding, slope handling, and step offsets are not currently
-implemented. Mesh collision, constraints, and advanced simulation also remain
-open.
+Full Character Controller movement remains unfinished: swept movement,
+sliding, slope handling, moving-platform support, and step offsets are not
+currently implemented. Mesh collision, constraints, and advanced simulation
+also remain open.
 
 See [physics.md](physics.md) and [help/sandbox3d.md](help/sandbox3d.md).
 

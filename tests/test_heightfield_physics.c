@@ -17,6 +17,7 @@ int main(void)
     henka_physics_world* world = NULL;
     henka_physics_body_id terrain = HENKA_INVALID_PHYSICS_BODY_ID;
     henka_physics_body_id sphere = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id capsule = HENKA_INVALID_PHYSICS_BODY_ID;
     henka_physics_body_id box = HENKA_INVALID_PHYSICS_BODY_ID;
     henka_physics_body_desc terrain_desc = {0};
     henka_physics_body_desc sphere_desc = {0};
@@ -70,6 +71,22 @@ int main(void)
     {
         henka_physics_world_destroy(world);
         return 4;
+    }
+
+    sphere_desc.transform = test_transform(1.0f, 1.0f, 1.0f);
+    sphere_desc.collider = henka_physics_collider_capsule(0.5f, 0.75f);
+    if (henka_physics_body_create(world, &sphere_desc, &capsule) != HENKA_SUCCESS ||
+        henka_physics_world_step_fixed(world) != HENKA_SUCCESS ||
+        henka_physics_body_get_state(world, capsule, &state) != HENKA_SUCCESS ||
+        !state.grounded)
+    {
+        henka_physics_world_destroy(world);
+        return 6;
+    }
+    if (henka_physics_body_destroy(world, capsule) != HENKA_SUCCESS)
+    {
+        henka_physics_world_destroy(world);
+        return 9;
     }
 
     if (henka_physics_body_set_collider(

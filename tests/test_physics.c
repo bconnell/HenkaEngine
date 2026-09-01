@@ -310,6 +310,104 @@ static void henka_test_physics_contacts_and_events(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_physics_capsule_contacts_and_raycast(void)
+{
+    henka_physics_world* world;
+    henka_physics_body_desc desc;
+    henka_physics_body_id capsule;
+    henka_physics_body_id floor;
+    henka_physics_body_state state;
+    henka_physics_raycast_hit hit;
+    size_t count;
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world, (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_capsule(0.5f, 0.75f),
+        (henka_vec3){0.0f, 1.2f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &capsule) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, capsule, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.collider.data.capsule.radius, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.collider.data.capsule.half_height, 0.75f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_physics_world_raycast(
+        world,
+        (henka_ray){{0.0f, 3.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
+        10.0f,
+        HENKA_PHYSICS_ALL_LAYERS,
+        &hit) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(hit.hit && hit.body == capsule);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.distance, 0.55f, 0.0001f);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_plane((henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &floor) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_get_contacts(world, &count) != NULL && count == 1U);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, capsule, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.grounded && state.transform.position.y > 1.2f);
+    henka_physics_world_destroy(world);
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world, (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_capsule(0.5f, 0.5f),
+        (henka_vec3){0.75f, 0.6f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &capsule) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f}),
+        (henka_vec3){1.0f, 0.5f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &floor) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_get_contacts(world, &count) != NULL && count == 1U);
+    henka_physics_world_destroy(world);
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world, (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_capsule(0.5f, 0.5f),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &capsule) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_capsule(0.5f, 0.5f),
+        (henka_vec3){0.75f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &floor) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_get_contacts(world, &count) != NULL && count == 1U);
+    henka_physics_world_destroy(world);
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_capsule(0.5f, 0.75f),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    desc.collider.data.capsule.half_height = -1.0f;
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world, &desc, &capsule) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(capsule == HENKA_INVALID_PHYSICS_BODY_ID);
+    desc.collider.data.capsule.half_height = 0.75f;
+    desc.transform.rotation = henka_quat_from_axis_angle(
+        (henka_vec3){1.0f, 0.0f, 0.0f}, 45.0f * HENKA_DEG_TO_RAD);
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world, &desc, &capsule) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(capsule == HENKA_INVALID_PHYSICS_BODY_ID);
+    desc.transform.rotation = henka_quat_from_axis_angle(
+        (henka_vec3){0.0f, 1.0f, 0.0f}, 90.0f * HENKA_DEG_TO_RAD);
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world, &desc, &capsule) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_destroy(world, capsule) == HENKA_SUCCESS);
+    henka_physics_world_destroy(world);
+}
+
 static void henka_test_physics_shape_pairs_and_raycast(void)
 {
     henka_physics_world* world;
@@ -1365,8 +1463,10 @@ void henka_test_physics(void)
 {
     HENKA_TEST_ASSERT(strcmp(henka_physics_body_type_get_label(HENKA_PHYSICS_BODY_DYNAMIC), "Dynamic") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_physics_shape_type_get_label(HENKA_PHYSICS_SHAPE_BOX), "AABB") == 0);
+    HENKA_TEST_ASSERT(strcmp(henka_physics_shape_type_get_label(HENKA_PHYSICS_SHAPE_CAPSULE), "Capsule") == 0);
     henka_test_physics_motion_and_materials();
     henka_test_physics_contacts_and_events();
+    henka_test_physics_capsule_contacts_and_raycast();
     henka_test_physics_shape_pairs_and_raycast();
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();

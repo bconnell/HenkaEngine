@@ -28,7 +28,8 @@ typedef enum henka_physics_shape_type
     HENKA_PHYSICS_SHAPE_SPHERE = 0,
     HENKA_PHYSICS_SHAPE_BOX,
     HENKA_PHYSICS_SHAPE_PLANE,
-    HENKA_PHYSICS_SHAPE_HEIGHTFIELD
+    HENKA_PHYSICS_SHAPE_HEIGHTFIELD,
+    HENKA_PHYSICS_SHAPE_CAPSULE
 } henka_physics_shape_type;
 
 typedef enum henka_physics_event_type
@@ -60,6 +61,11 @@ typedef struct henka_physics_collider_desc
         {
             float radius;
         } sphere;
+        struct
+        {
+            float radius;
+            float half_height;
+        } capsule;
         struct
         {
             henka_vec3 half_extents;
@@ -149,6 +155,11 @@ typedef struct henka_physics_debug_shape
 
 henka_physics_material henka_physics_material_default(void);
 henka_physics_collider_desc henka_physics_collider_sphere(float radius);
+/* Creates an upright, world-Y capsule. half_height is the half-length of
+ * the cylindrical center segment; zero is a sphere-equivalent capsule. */
+henka_physics_collider_desc henka_physics_collider_capsule(
+    float radius,
+    float half_height);
 henka_physics_collider_desc henka_physics_collider_box(henka_vec3 half_extents);
 henka_physics_collider_desc henka_physics_collider_plane(henka_vec3 normal, float offset);
 /*

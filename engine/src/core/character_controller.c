@@ -92,6 +92,7 @@ static bool henka_character_controller_desc_valid(
     const henka_character_controller_desc* desc)
 {
     return desc != NULL && isfinite(desc->radius) && desc->radius > 0.0f &&
+        isfinite(desc->half_height) && desc->half_height >= 0.0f &&
         isfinite(desc->max_speed) && desc->max_speed > 0.0f &&
         isfinite(desc->jump_speed) && desc->jump_speed >= 0.0f &&
         desc->layer != 0U;
@@ -126,7 +127,8 @@ henka_result henka_character_controller_create(
     body_desc.transform = desc->transform;
     body_desc.mass = 1.0f;
     body_desc.material = henka_physics_material_default();
-    body_desc.collider = henka_physics_collider_sphere(desc->radius);
+    body_desc.collider = henka_physics_collider_capsule(
+        desc->radius, desc->half_height);
     body_desc.collider.layer = desc->layer;
     body_desc.collider.mask = desc->mask;
     body_desc.linked_scene = desc->linked_scene;

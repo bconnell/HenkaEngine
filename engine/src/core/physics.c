@@ -230,6 +230,30 @@ static float henka_physics_sphere_radius(const henka_physics_body_state* body)
     return body->collider.data.sphere.radius * maximum;
 }
 
+static bool henka_physics_capsule_transform_is_upright(henka_transform transform)
+{
+    henka_vec3 axis = henka_vec3_normalize(henka_quat_rotate_vec3(
+        transform.rotation, (henka_vec3){0.0f, 1.0f, 0.0f}));
+
+    return henka_vec3_length(axis) > 0.0001f &&
+        henka_physics_abs(axis.x) <= 0.0001f &&
+        henka_physics_abs(axis.z) <= 0.0001f &&
+        henka_physics_abs(henka_physics_abs(axis.y) - 1.0f) <= 0.0001f;
+}
+
+static float henka_physics_capsule_radius(const henka_physics_body_state* body)
+{
+    henka_vec3 scale = henka_physics_abs_vec3(body->transform.scale);
+    float maximum = scale.x > scale.z ? scale.x : scale.z;
+    return body->collider.data.capsule.radius * maximum;
+}
+
+static float henka_physics_capsule_half_height(const henka_physics_body_state* body)
+{
+    return body->collider.data.capsule.half_height *
+        henka_physics_abs(body->transform.scale.y);
+}
+
 static bool henka_physics_heightfield_dimensions_valid(
     const henka_physics_collider_desc* collider,
     size_t* out_sample_count)
@@ -299,6 +323,11 @@ static bool henka_physics_collider_valid(henka_physics_collider_desc collider)
     {
         case HENKA_PHYSICS_SHAPE_SPHERE:
             return isfinite(collider.data.sphere.radius) && collider.data.sphere.radius > 0.0f;
+        case HENKA_PHYSICS_SHAPE_CAPSULE:
+            return isfinite(collider.data.capsule.radius) &&
+                collider.data.capsule.radius > 0.0f &&
+                isfinite(collider.data.capsule.half_height) &&
+                collider.data.capsule.half_height >= 0.0f;
         case HENKA_PHYSICS_SHAPE_BOX:
             return henka_physics_is_finite_vec3(collider.data.box.half_extents) &&
                 collider.data.box.half_extents.x > 0.0f && collider.data.box.half_extents.y > 0.0f &&
@@ -369,6 +398,27 @@ static bool henka_physics_geometry_valid(
             extent_x = (double)collider.data.sphere.radius * maximum_scale;
             extent_y = extent_x;
             extent_z = extent_x;
+            break;
+        }
+
+        case HENKA_PHYSICS_SHAPE_CAPSULE:
+        {
+            henka_vec3 scale;
+            double maximum_horizontal_scale;
+            double radius;
+            double half_height;
+
+            if (!henka_physics_capsule_transform_is_upright(transform))
+            {
+                return false;
+            }
+            scale = henka_physics_abs_vec3(transform.scale);
+            maximum_horizontal_scale = scale.x > scale.z ? scale.x : scale.z;
+            radius = (double)collider.data.capsule.radius * maximum_horizontal_scale;
+            half_height = (double)collider.data.capsule.half_height * (double)scale.y;
+            extent_x = radius;
+            extent_z = radius;
+            extent_y = radius + half_height;
             break;
         }
 
@@ -775,6 +825,189 @@ static henka_physics_contact_status henka_physics_sphere_box(
     return HENKA_PHYSICS_CONTACT_FOUND;
 }
 
+static float henka_physics_capsule_like_radius(
+    const henka_physics_body_state* body)
+{
+    return body->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE ?
+        henka_physics_capsule_radius(body) : henka_physics_sphere_radius(body);
+}
+
+static float henka_physics_capsule_like_half_height(
+    const henka_physics_body_state* body)
+{
+    return body->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE ?
+        henka_physics_capsule_half_height(body) : 0.0f;
+}
+
+static henka_physics_contact_status henka_physics_capsule_capsule(
+    const henka_physics_body_state* a,
+    const henka_physics_body_state* b,
+    henka_physics_contact* contact)
+{
+    henka_vec3 a_center = henka_physics_collider_center(a);
+    henka_vec3 b_center = henka_physics_collider_center(b);
+    double a_radius = (double)henka_physics_capsule_like_radius(a);
+    double b_radius = (double)henka_physics_capsule_like_radius(b);
+    double a_half_height = (double)henka_physics_capsule_like_half_height(a);
+    double b_half_height = (double)henka_physics_capsule_like_half_height(b);
+    double a_bottom = (double)a_center.y - a_half_height;
+    double a_top = (double)a_center.y + a_half_height;
+    double b_bottom = (double)b_center.y - b_half_height;
+    double b_top = (double)b_center.y + b_half_height;
+    double a_y;
+    double b_y;
+    double dx;
+    double dy;
+    double dz;
+    double distance;
+    double radius_sum = a_radius + b_radius;
+
+    if (a_top < b_bottom)
+    {
+        a_y = a_top;
+        b_y = b_bottom;
+    }
+    else if (b_top < a_bottom)
+    {
+        a_y = a_bottom;
+        b_y = b_top;
+    }
+    else
+    {
+        double overlap_bottom = a_bottom > b_bottom ? a_bottom : b_bottom;
+        double overlap_top = a_top < b_top ? a_top : b_top;
+        a_y = (overlap_bottom + overlap_top) * 0.5;
+        b_y = a_y;
+    }
+    dx = (double)b_center.x - (double)a_center.x;
+    dy = b_y - a_y;
+    dz = (double)b_center.z - (double)a_center.z;
+    distance = hypot(hypot(dx, dy), dz);
+    if (distance >= radius_sum)
+    {
+        return HENKA_PHYSICS_CONTACT_NONE;
+    }
+    if (distance > 0.0001)
+    {
+        if (!henka_physics_try_vec3(
+                dx / distance, dy / distance, dz / distance,
+                &contact->normal))
+        {
+            return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+        }
+    }
+    else
+    {
+        contact->normal = (henka_vec3){1.0f, 0.0f, 0.0f};
+    }
+    if (!henka_physics_try_float(radius_sum - distance, &contact->penetration) ||
+        !henka_physics_try_vec3(
+            (double)a_center.x + (double)contact->normal.x * a_radius,
+            a_y + (double)contact->normal.y * a_radius,
+            (double)a_center.z + (double)contact->normal.z * a_radius,
+            &contact->point))
+    {
+        return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+    }
+    return HENKA_PHYSICS_CONTACT_FOUND;
+}
+
+static henka_physics_contact_status henka_physics_capsule_box(
+    const henka_physics_body_state* capsule,
+    const henka_physics_body_state* box,
+    henka_physics_contact* contact)
+{
+    henka_vec3 capsule_center = henka_physics_collider_center(capsule);
+    henka_vec3 box_center = henka_physics_collider_center(box);
+    henka_vec3 extents = henka_physics_box_extents(box);
+    double radius = (double)henka_physics_capsule_radius(capsule);
+    double half_height = (double)henka_physics_capsule_half_height(capsule);
+    double capsule_bottom = (double)capsule_center.y - half_height;
+    double capsule_top = (double)capsule_center.y + half_height;
+    double box_min_x = (double)box_center.x - (double)extents.x;
+    double box_max_x = (double)box_center.x + (double)extents.x;
+    double box_min_y = (double)box_center.y - (double)extents.y;
+    double box_max_y = (double)box_center.y + (double)extents.y;
+    double box_min_z = (double)box_center.z - (double)extents.z;
+    double box_max_z = (double)box_center.z + (double)extents.z;
+    double capsule_point_y;
+    double box_point_y;
+    double capsule_point_x = fmax(box_min_x, fmin((double)capsule_center.x, box_max_x));
+    double box_point_x = capsule_point_x;
+    double capsule_point_z = fmax(box_min_z, fmin((double)capsule_center.z, box_max_z));
+    double box_point_z = capsule_point_z;
+    double dx;
+    double dy;
+    double dz;
+    double distance;
+    double penetration;
+
+    if (capsule_top < box_min_y)
+    {
+        capsule_point_y = capsule_top;
+        box_point_y = box_min_y;
+    }
+    else if (capsule_bottom > box_max_y)
+    {
+        capsule_point_y = capsule_bottom;
+        box_point_y = box_max_y;
+    }
+    else
+    {
+        capsule_point_y = fmax(
+            capsule_bottom,
+            fmin((double)box_center.y, capsule_top));
+        box_point_y = capsule_point_y;
+    }
+    dx = capsule_point_x - box_point_x;
+    dy = capsule_point_y - box_point_y;
+    dz = capsule_point_z - box_point_z;
+    distance = hypot(hypot(dx, dy), dz);
+    if (distance >= radius)
+    {
+        return HENKA_PHYSICS_CONTACT_NONE;
+    }
+    if (distance > 0.0001)
+    {
+        if (!henka_physics_try_vec3(
+                -dx / distance, -dy / distance, -dz / distance,
+                &contact->normal))
+        {
+            return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+        }
+        penetration = radius - distance;
+    }
+    else
+    {
+        double distance_x = (double)extents.x - fabs((double)capsule_center.x - (double)box_center.x);
+        double distance_y = (double)extents.y - fabs(capsule_point_y - (double)box_center.y);
+        double distance_z = (double)extents.z - fabs((double)capsule_center.z - (double)box_center.z);
+
+        penetration = radius + distance_x;
+        contact->normal = (henka_vec3){
+            capsule_center.x < box_center.x ? 1.0f : -1.0f, 0.0f, 0.0f};
+        if (distance_y < distance_x && distance_y <= distance_z)
+        {
+            penetration = radius + distance_y;
+            contact->normal = (henka_vec3){
+                0.0f, capsule_point_y < box_center.y ? 1.0f : -1.0f, 0.0f};
+        }
+        else if (distance_z < distance_x)
+        {
+            penetration = radius + distance_z;
+            contact->normal = (henka_vec3){
+                0.0f, 0.0f, capsule_center.z < box_center.z ? 1.0f : -1.0f};
+        }
+    }
+    if (!henka_physics_try_float(penetration, &contact->penetration) ||
+        !henka_physics_try_vec3(
+            box_point_x, box_point_y, box_point_z, &contact->point))
+    {
+        return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+    }
+    return HENKA_PHYSICS_CONTACT_FOUND;
+}
+
 static henka_physics_contact_status henka_physics_shape_plane(
     const henka_physics_body_state* shape,
     const henka_physics_body_state* plane,
@@ -794,6 +1027,11 @@ static henka_physics_contact_status henka_physics_shape_plane(
     if (shape->collider.shape == HENKA_PHYSICS_SHAPE_SPHERE)
     {
         radius = (double)henka_physics_sphere_radius(shape);
+    }
+    else if (shape->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE)
+    {
+        radius = (double)henka_physics_capsule_radius(shape) +
+            (double)henka_physics_capsule_half_height(shape) * henka_physics_abs(normal.y);
     }
     else if (shape->collider.shape == HENKA_PHYSICS_SHAPE_BOX)
     {
@@ -915,6 +1153,16 @@ static henka_physics_contact_status henka_physics_shape_heightfield(
         }
         support = henka_physics_sphere_radius(shape);
     }
+    else if (shape->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE)
+    {
+        if (!henka_physics_heightfield_sample(
+                heightfield, center.x, center.z, &surface_height, &normal))
+        {
+            return HENKA_PHYSICS_CONTACT_NONE;
+        }
+        support = henka_physics_capsule_radius(shape) +
+            henka_physics_capsule_half_height(shape) * henka_physics_abs(normal.y);
+    }
     else if (shape->collider.shape == HENKA_PHYSICS_SHAPE_BOX)
     {
         const henka_vec3 extents = henka_physics_box_extents(shape);
@@ -989,6 +1237,32 @@ static henka_physics_contact_status henka_physics_detect_contact(
         swapped.body_a = b->id;
         swapped.body_b = a->id;
         status = henka_physics_sphere_box(b, a, &swapped);
+        if (status == HENKA_PHYSICS_CONTACT_FOUND)
+        {
+            contact->normal = henka_vec3_scale(swapped.normal, -1.0f);
+            contact->penetration = swapped.penetration;
+            contact->point = swapped.point;
+        }
+    }
+    else if ((a->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE ||
+              a->collider.shape == HENKA_PHYSICS_SHAPE_SPHERE) &&
+             (b->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE ||
+              b->collider.shape == HENKA_PHYSICS_SHAPE_SPHERE))
+    {
+        status = henka_physics_capsule_capsule(a, b, contact);
+    }
+    else if (a->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE &&
+             b->collider.shape == HENKA_PHYSICS_SHAPE_BOX)
+    {
+        status = henka_physics_capsule_box(a, b, contact);
+    }
+    else if (a->collider.shape == HENKA_PHYSICS_SHAPE_BOX &&
+             b->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE)
+    {
+        swapped = *contact;
+        swapped.body_a = b->id;
+        swapped.body_b = a->id;
+        status = henka_physics_capsule_box(b, a, &swapped);
         if (status == HENKA_PHYSICS_CONTACT_FOUND)
         {
             contact->normal = henka_vec3_scale(swapped.normal, -1.0f);
@@ -1672,6 +1946,19 @@ henka_physics_collider_desc henka_physics_collider_sphere(float radius)
     henka_physics_collider_desc collider = {0};
     collider.shape = HENKA_PHYSICS_SHAPE_SPHERE;
     collider.data.sphere.radius = radius;
+    collider.layer = 1U;
+    collider.mask = HENKA_PHYSICS_ALL_LAYERS;
+    return collider;
+}
+
+henka_physics_collider_desc henka_physics_collider_capsule(
+    float radius,
+    float half_height)
+{
+    henka_physics_collider_desc collider = {0};
+    collider.shape = HENKA_PHYSICS_SHAPE_CAPSULE;
+    collider.data.capsule.radius = radius;
+    collider.data.capsule.half_height = half_height;
     collider.layer = 1U;
     collider.mask = HENKA_PHYSICS_ALL_LAYERS;
     return collider;
@@ -2463,11 +2750,17 @@ float henka_physics_test_get_accumulator(const henka_physics_world* world)
     return world != NULL ? world->accumulator : 0.0f;
 }
 
-static bool henka_physics_raycast_sphere(const henka_physics_body_state* body, henka_ray ray, float maximum, float* distance, henka_vec3* normal)
+static bool henka_physics_raycast_sphere_at(
+    henka_vec3 center,
+    float radius,
+    henka_ray ray,
+    float maximum,
+    float* distance,
+    henka_vec3* normal)
 {
-    henka_vec3 offset = henka_vec3_subtract(ray.origin, henka_physics_collider_center(body));
+    henka_vec3 offset = henka_vec3_subtract(ray.origin, center);
     float b = henka_vec3_dot(offset, ray.direction);
-    float c = henka_vec3_dot(offset, offset) - henka_physics_sphere_radius(body) * henka_physics_sphere_radius(body);
+    float c = henka_vec3_dot(offset, offset) - radius * radius;
     float discriminant = b * b - c;
     float result;
     if (discriminant < 0.0f)
@@ -2484,8 +2777,118 @@ static bool henka_physics_raycast_sphere(const henka_physics_body_state* body, h
         return false;
     }
     *distance = result;
-    *normal = henka_vec3_normalize(henka_vec3_subtract(henka_vec3_add(ray.origin, henka_vec3_scale(ray.direction, result)), henka_physics_collider_center(body)));
+    *normal = henka_vec3_normalize(henka_vec3_subtract(
+        henka_vec3_add(ray.origin, henka_vec3_scale(ray.direction, result)), center));
     return true;
+}
+
+static bool henka_physics_raycast_sphere(
+    const henka_physics_body_state* body,
+    henka_ray ray,
+    float maximum,
+    float* distance,
+    henka_vec3* normal)
+{
+    return henka_physics_raycast_sphere_at(
+        henka_physics_collider_center(body),
+        henka_physics_sphere_radius(body),
+        ray,
+        maximum,
+        distance,
+        normal);
+}
+
+static bool henka_physics_raycast_capsule(
+    const henka_physics_body_state* body,
+    henka_ray ray,
+    float maximum,
+    float* distance,
+    henka_vec3* normal)
+{
+    henka_vec3 center = henka_physics_collider_center(body);
+    float radius = henka_physics_capsule_radius(body);
+    float half_height = henka_physics_capsule_half_height(body);
+    double origin_x = (double)ray.origin.x - (double)center.x;
+    double origin_z = (double)ray.origin.z - (double)center.z;
+    double direction_x = (double)ray.direction.x;
+    double direction_z = (double)ray.direction.z;
+    double quadratic_a = direction_x * direction_x + direction_z * direction_z;
+    double quadratic_b = 2.0 * (origin_x * direction_x + origin_z * direction_z);
+    double quadratic_c = origin_x * origin_x + origin_z * origin_z -
+        (double)radius * (double)radius;
+    double discriminant = quadratic_b * quadratic_b -
+        4.0 * quadratic_a * quadratic_c;
+    double roots[2];
+    float best = maximum;
+    bool found = false;
+    size_t index;
+
+    if (henka_physics_raycast_sphere_at(
+            (henka_vec3){center.x, center.y - half_height, center.z},
+            radius,
+            ray,
+            best,
+            distance,
+            normal))
+    {
+        best = *distance;
+        found = true;
+    }
+    if (henka_physics_raycast_sphere_at(
+            (henka_vec3){center.x, center.y + half_height, center.z},
+            radius,
+            ray,
+            best,
+            distance,
+            normal))
+    {
+        best = *distance;
+        found = true;
+    }
+
+    if (quadratic_a > 0.0000000001 && discriminant >= 0.0 && isfinite(discriminant))
+    {
+        double root_delta = sqrt(discriminant);
+        roots[0] = (-quadratic_b - root_delta) / (2.0 * quadratic_a);
+        roots[1] = (-quadratic_b + root_delta) / (2.0 * quadratic_a);
+        for (index = 0U; index < 2U; ++index)
+        {
+            double root = roots[index];
+            double y;
+            henka_vec3 point;
+            double radial_length;
+
+            if (!isfinite(root) || root < 0.0 || root > (double)best)
+            {
+                continue;
+            }
+            y = (double)ray.origin.y + (double)ray.direction.y * root;
+            if (y < (double)center.y - (double)half_height ||
+                y > (double)center.y + (double)half_height)
+            {
+                continue;
+            }
+            point = henka_vec3_add(
+                ray.origin,
+                henka_vec3_scale(ray.direction, (float)root));
+            radial_length = hypot(
+                (double)point.x - (double)center.x,
+                (double)point.z - (double)center.z);
+            if (!isfinite(radial_length) || radial_length <= 0.0001 ||
+                !henka_physics_double_fits_float(root))
+            {
+                continue;
+            }
+            best = (float)root;
+            *distance = best;
+            *normal = (henka_vec3){
+                (float)(((double)point.x - (double)center.x) / radial_length),
+                0.0f,
+                (float)(((double)point.z - (double)center.z) / radial_length)};
+            found = true;
+        }
+    }
+    return found;
 }
 
 static bool henka_physics_raycast_box(
@@ -2745,6 +3148,10 @@ henka_result henka_physics_world_raycast(const henka_physics_world* world, henka
         {
             hit = henka_physics_raycast_sphere(body, ray, max_distance, &distance, &normal);
         }
+        else if (body->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE)
+        {
+            hit = henka_physics_raycast_capsule(body, ray, max_distance, &distance, &normal);
+        }
         else if (body->collider.shape == HENKA_PHYSICS_SHAPE_BOX)
         {
             hit = henka_physics_raycast_box(body, ray, max_distance, &distance, &normal);
@@ -2826,6 +3233,7 @@ const char* henka_physics_shape_type_get_label(henka_physics_shape_type type)
     switch (type)
     {
         case HENKA_PHYSICS_SHAPE_SPHERE: return "Sphere";
+        case HENKA_PHYSICS_SHAPE_CAPSULE: return "Capsule";
         case HENKA_PHYSICS_SHAPE_BOX: return "AABB";
         case HENKA_PHYSICS_SHAPE_PLANE: return "Plane";
         case HENKA_PHYSICS_SHAPE_HEIGHTFIELD: return "Heightfield";

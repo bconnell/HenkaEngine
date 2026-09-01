@@ -12,14 +12,15 @@ The public physics API provides:
 - kinematic bodies driven by assigned velocity; gravity and forces do not drive them
 - angular velocity and torque integration
 - material restitution, static friction, dynamic friction, linear damping, and angular damping
-- sphere, axis-aligned box, plane, and bounded static heightfield colliders
+- sphere, upright capsule, axis-aligned box, plane, and bounded static
+  heightfield colliders
 - layer and mask filtering
 - trigger overlap reporting without physical response
 - collision and trigger enter, stay, and exit events
 - raycasts against every supported collider shape, including bounded heightfield traversal
 - optional links from physics bodies to real scene entities
 - a bounded public character-controller foundation backed by a real dynamic
-  sphere body, with planar velocity limits, grounded jump queuing, and
+  upright capsule body, with planar velocity limits, grounded jump queuing, and
   explicit teleport/repositioning, and prepare/synchronize integration around
   the shared fixed-step world
 - debug-shape and contact data for truthful runtime visualization
@@ -38,6 +39,16 @@ layer/mask filters. Raycasts use a bounded cell-sized march and fail closed when
 the requested range cannot be covered by the traversal budget. Replacement
 copies the candidate before releasing the prior field, so invalid input or
 allocation failure preserves the last valid collision representation.
+
+Capsules are created with `henka_physics_collider_capsule`. The supported v1
+capsule is upright on the world Y axis, uses a radius and cylindrical
+half-height, and supports sphere/capsule, capsule/box, capsule/plane, and
+capsule/heightfield contacts plus raycasts. An upright rotation around the Y
+axis is accepted; tilted capsule transforms are rejected rather than treated
+as a different shape. Nonuniform horizontal scale uses the larger X/Z scale
+for a conservative bounded radius. Scene Document physics authoring still
+supports its existing sphere and box shapes; runtime capsule authoring is not
+implicitly serialized by this slice.
 
 The broadphase currently iterates body pairs directly, which is appropriate for the small sandbox scene and deterministic tests.
 
@@ -78,9 +89,9 @@ Physics simulation writes linked-body transforms to the real scene entities. Edi
 - Integration validates acceleration, damping, velocity, position, angular delta, and quaternion state before commit. Collision geometry, contact normals, penetration, contact points, impulses, friction, and positional correction are likewise required to remain finite and representable.
 - There are no arbitrary mesh or concave colliders; heightfields are the only
   supported terrain-shaped collider.
-- The character-controller foundation does not yet provide capsule geometry,
-  swept movement, sliding, slope handling, step offsets, vehicles, cloth, soft
-  bodies, fluids, or ragdolls.
+- The character-controller foundation provides an upright capsule body, but it
+  does not yet provide swept movement, sliding, slope handling, moving-platform
+  support, step offsets, vehicles, cloth, soft bodies, fluids, or ragdolls.
 - Continuous collision detection is not implemented; the demo and tests use normal fixed-step conditions.
 - Physics state is runtime state, not scene-authoring or save-data support.
 

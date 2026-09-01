@@ -9,9 +9,10 @@ typedef struct henka_character_controller henka_character_controller;
 
 /*
  * The v1 controller is a production dynamic-body component. It owns the
- * body it creates, but not the physics world or linked scene. Planar input is
- * applied during prepare_step and the caller advances the shared physics
- * world exactly once before sync_after_step.
+ * body it creates, but not the physics world or linked scene. The body uses
+ * an upright capsule collider; a zero half_height is sphere-equivalent.
+ * Planar input is applied during prepare_step and the caller advances the
+ * shared physics world exactly once before sync_after_step.
  */
 typedef struct henka_character_controller_desc
 {
@@ -23,6 +24,7 @@ typedef struct henka_character_controller_desc
     uint32_t mask;
     henka_scene* linked_scene;
     henka_entity linked_entity;
+    float half_height;
 } henka_character_controller_desc;
 
 typedef struct henka_character_controller_state

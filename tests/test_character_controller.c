@@ -12,6 +12,7 @@ static henka_character_controller_desc henka_test_character_controller_desc(void
     desc.transform = henka_transform_identity();
     desc.transform.position = (henka_vec3){0.0f, 2.0f, 0.0f};
     desc.radius = 0.5f;
+    desc.half_height = 0.75f;
     desc.max_speed = 3.0f;
     desc.jump_speed = 5.0f;
     desc.layer = 1U;
@@ -25,6 +26,7 @@ static void henka_test_character_controller_create_and_validate(void)
     henka_character_controller* controller = NULL;
     henka_character_controller_desc desc = henka_test_character_controller_desc();
     henka_character_controller_state state;
+    henka_physics_body_state body_state;
 
     HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_character_controller_create(
@@ -35,6 +37,11 @@ static void henka_test_character_controller_create_and_validate(void)
     HENKA_TEST_ASSERT(state.body != HENKA_INVALID_PHYSICS_BODY_ID);
     HENKA_TEST_ASSERT(state.transform.position.y == 2.0f);
     HENKA_TEST_ASSERT(!state.grounded);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(
+        world, state.body, &body_state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(body_state.collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        body_state.collider.data.capsule.half_height, 0.75f, 0.0001f);
     HENKA_TEST_ASSERT(henka_character_controller_set_planar_velocity(
         controller, (henka_vec3){1.0f, 0.0f, 2.0f}) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_character_controller_set_planar_velocity(
@@ -80,7 +87,7 @@ static void henka_test_character_controller_moves_and_jumps(void)
     }
     HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(state.transform.position.x > 1.0f);
-    HENKA_TEST_ASSERT(state.transform.position.y > 0.45f && state.transform.position.y < 0.6f);
+    HENKA_TEST_ASSERT(state.transform.position.y > 1.2f && state.transform.position.y < 1.3f);
     HENKA_TEST_ASSERT(state.grounded);
     HENKA_TEST_ASSERT(state.velocity.x > 0.0f && state.velocity.x <= 3.0f);
     HENKA_TEST_ASSERT(henka_character_controller_queue_jump(controller) == HENKA_SUCCESS);
