@@ -1,5 +1,6 @@
 #include "test_suite.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include <henka/assets.h>
@@ -13,6 +14,81 @@
 #include <ktx.h>
 #include <stdlib.h>
 #endif
+
+static bool henka_test_write_file(
+    const char* path,
+    const void* data,
+    size_t size)
+{
+    FILE* file = NULL;
+    bool success;
+
+    if (path == NULL || (data == NULL && size > 0U)) return false;
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "wb") != 0) file = NULL;
+#else
+    file = fopen(path, "wb");
+#endif
+    if (file == NULL) return false;
+    success = fwrite(data, 1U, size, file) == size;
+    if (fclose(file) != 0) success = false;
+    return success;
+}
+
+static void henka_test_material_load_does_not_populate_mesh_cache(void)
+{
+    static const char* material_only_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
+    const char* path = "build/test_tmp/material-only.gltf";
+    henka_asset_manager manager;
+    henka_engine engine;
+    henka_material_asset* asset = NULL;
+    henka_material_asset* reloaded_asset = NULL;
+    henka_shader shader;
+    henka_result result;
+
+    memset(&manager, 0, sizeof(manager));
+    memset(&engine, 0, sizeof(engine));
+    memset(&shader, 0, sizeof(shader));
+    engine.asset_base_path = "";
+    manager.engine = &engine;
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        path,
+        material_only_gltf,
+        strlen(material_only_gltf)));
+
+    result = henka_assets_load_gltf_material_asset(
+        &manager,
+        path,
+        &shader,
+        &asset);
+    HENKA_TEST_ASSERT(result == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(asset != NULL);
+    HENKA_TEST_ASSERT(manager.mesh_count == 0U);
+    HENKA_TEST_ASSERT(manager.material_count == 1U);
+
+    result = henka_assets_reload_gltf_material_asset(
+        &manager,
+        path,
+        &reloaded_asset);
+    HENKA_TEST_ASSERT(result == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_asset == asset);
+    HENKA_TEST_ASSERT(manager.mesh_count == 0U);
+
+    if (asset != NULL)
+    {
+        henka_free(asset->display_name);
+        henka_free(asset->source_path);
+        henka_free(asset->key);
+        henka_free(asset);
+    }
+    henka_free(manager.material_entries);
+}
 
 static void henka_test_mesh_loader_preserves_nonempty_output(void)
 {
@@ -162,6 +238,7 @@ static void henka_test_shader_and_audio_loaders_preserve_nonempty_output(void)
 
 void henka_test_assets(void)
 {
+    henka_test_material_load_does_not_populate_mesh_cache();
     henka_test_mesh_loader_preserves_nonempty_output();
     henka_test_mesh_source_failure_requires_fallback();
     henka_test_texture_loader_preserves_nonempty_output();

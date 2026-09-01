@@ -3698,7 +3698,6 @@ static henka_result henka_assets_build_gltf_material_instance(
     henka_asset_manager* manager,
     const char* path,
     henka_shader* shader,
-    henka_mesh** out_mesh,
     henka_material* out_material)
 {
     char* source_path = NULL;
@@ -3707,9 +3706,8 @@ static henka_result henka_assets_build_gltf_material_instance(
     henka_material candidate;
     henka_result result;
 
-    if (out_mesh != NULL) *out_mesh = NULL;
     if (out_material != NULL) *out_material = henka_material_default();
-    if (manager == NULL || path == NULL || shader == NULL || out_mesh == NULL || out_material == NULL)
+    if (manager == NULL || path == NULL || shader == NULL || out_material == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -3727,14 +3725,6 @@ static henka_result henka_assets_build_gltf_material_instance(
         return result;
     }
 
-    result = henka_assets_load_gltf_mesh(manager, source_path, out_mesh);
-    if (result != HENKA_SUCCESS)
-    {
-        henka_model_data_destroy(&model);
-        henka_free(source_path);
-        return result;
-    }
-
     if (model.has_material) result = henka_assets_resolve_gltf_material_source(
         manager, source_path, shader, &model.material_source, &candidate);
     else
@@ -3744,7 +3734,6 @@ static henka_result henka_assets_build_gltf_material_instance(
         result = henka_material_validate(&candidate);
     }
     if (result == HENKA_SUCCESS) *out_material = candidate;
-    else *out_mesh = NULL;
     henka_model_data_destroy(&model);
     henka_free(source_path);
     return result;
@@ -3761,7 +3750,6 @@ henka_result henka_assets_load_gltf_material_asset(
     char* display_name = NULL;
     henka_material_asset* asset = NULL;
     henka_material candidate;
-    henka_mesh* mesh = NULL;
     henka_result result;
 
     if (manager == NULL || path == NULL || shader == NULL || out_asset == NULL || *out_asset != NULL)
@@ -3785,7 +3773,7 @@ henka_result henka_assets_load_gltf_material_asset(
         return HENKA_SUCCESS;
     }
 
-    result = henka_assets_build_gltf_material_instance(manager, source_path, shader, &mesh, &candidate);
+    result = henka_assets_build_gltf_material_instance(manager, source_path, shader, &candidate);
     if (result != HENKA_SUCCESS)
     {
         henka_free(key);
@@ -4661,7 +4649,6 @@ henka_result henka_assets_reload_gltf_material_asset(
     char* key = NULL;
     henka_material_asset* asset;
     henka_material candidate;
-    henka_mesh* mesh = NULL;
     uint64_t next_revision;
     henka_result result;
 
@@ -4676,7 +4663,7 @@ henka_result henka_assets_reload_gltf_material_asset(
     if (result != HENKA_SUCCESS) return result;
 
     result = henka_assets_build_gltf_material_instance(
-        manager, asset->source_path, asset->material.shader, &mesh, &candidate);
+        manager, asset->source_path, asset->material.shader, &candidate);
     if (result != HENKA_SUCCESS) return result;
     asset->material = candidate;
     asset->revision = next_revision;
