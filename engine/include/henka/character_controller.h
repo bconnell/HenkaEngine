@@ -12,7 +12,9 @@ typedef struct henka_character_controller henka_character_controller;
  * body it creates, but not the physics world or linked scene. The body uses
  * an upright capsule collider; a zero half_height is sphere-equivalent.
  * Planar input is applied during prepare_step and the caller advances the
- * shared physics world exactly once before sync_after_step.
+ * shared physics world exactly once before sync_after_step. A grounded
+ * controller inherits linear motion from a live kinematic support body;
+ * destroyed or stale support identities are ignored until the next sync.
  */
 typedef struct henka_character_controller_desc
 {

@@ -249,8 +249,9 @@ continues to affect status.
   advanced physics, broader renderer backends, mature Game/Play workflows, and
   advanced audio effects/occlusion remain unfinished. A bounded dynamic-body
   character-controller foundation is available, including contact-aware planar
-  sliding and supported walkable-plane traversal; capsule sweep, advanced
-  slope traversal and response, and step-offset behavior remain open.
+  sliding, supported walkable-plane traversal, and bounded kinematic-platform
+  motion inheritance; capsule sweep, advanced slope traversal and response,
+  and step-offset behavior remain open.
   Slope-aware grounding classification is available.
 - Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
 - The default Giraffe and Rocket are deterministic imported/generated sample

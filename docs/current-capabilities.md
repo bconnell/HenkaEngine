@@ -534,12 +534,13 @@ direction. A teleport can preserve or clear the body's velocity as requested.
 A zero capsule half-height is sphere-equivalent for compatibility.
 
 Full Character Controller movement remains unfinished: swept movement,
-advanced slope traversal and surface response, moving-platform support, and
-step offsets are not currently implemented. Contact-aware planar sliding
-against blocking contacts, basic traversal across supported walkable planes,
-configurable slope-aware grounding classification, and the accepted ground
-normal are available. Mesh collision, constraints, and advanced simulation
-also remain open.
+advanced slope traversal and surface response, advanced moving-platform
+behavior, and step offsets are not currently implemented. Contact-aware planar
+sliding against blocking contacts, basic traversal across supported walkable
+planes, bounded kinematic-platform motion inheritance, configurable
+slope-aware grounding classification, and the accepted ground normal are
+available. Mesh collision, constraints, and advanced simulation also remain
+open.
 
 See [physics.md](physics.md) and [help/sandbox3d.md](help/sandbox3d.md).
 

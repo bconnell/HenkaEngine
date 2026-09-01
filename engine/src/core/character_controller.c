@@ -17,6 +17,7 @@ struct henka_character_controller
     bool jump_queued;
     bool grounded;
     henka_vec3 ground_normal;
+    henka_physics_body_id ground_body;
 };
 
 static bool henka_character_controller_vec3_finite(henka_vec3 value)
@@ -53,7 +54,8 @@ static bool henka_character_controller_slope_limit_cosine(
 static bool henka_character_controller_find_ground_contact(
     const henka_character_controller* controller,
     bool* out_grounded,
-    henka_vec3* out_normal)
+    henka_vec3* out_normal,
+    henka_physics_body_id* out_body)
 {
     const henka_physics_contact* contacts;
     size_t contact_count;
@@ -61,12 +63,14 @@ static bool henka_character_controller_find_ground_contact(
     bool found = false;
     size_t index;
 
-    if (controller == NULL || out_grounded == NULL || out_normal == NULL)
+    if (controller == NULL || out_grounded == NULL || out_normal == NULL ||
+        out_body == NULL)
     {
         return false;
     }
     *out_grounded = false;
     *out_normal = (henka_vec3){0.0f, 0.0f, 0.0f};
+    *out_body = HENKA_INVALID_PHYSICS_BODY_ID;
     contacts = henka_physics_world_get_contacts(
         controller->world, &contact_count);
     if (contact_count > 0U && contacts == NULL)
@@ -77,6 +81,7 @@ static bool henka_character_controller_find_ground_contact(
     {
         henka_physics_contact contact = contacts[index];
         henka_vec3 support_normal;
+        henka_physics_body_id support_body;
         double normal_length;
 
         if (contact.is_trigger ||
@@ -87,6 +92,12 @@ static bool henka_character_controller_find_ground_contact(
         }
         support_normal = contact.body_a == controller->body ?
             henka_vec3_scale(contact.normal, -1.0f) : contact.normal;
+        support_body = contact.body_a == controller->body ?
+            contact.body_b : contact.body_a;
+        if (support_body == HENKA_INVALID_PHYSICS_BODY_ID)
+        {
+            return false;
+        }
         normal_length = hypot(
             hypot((double)support_normal.x, (double)support_normal.y),
             (double)support_normal.z);
@@ -102,6 +113,7 @@ static bool henka_character_controller_find_ground_contact(
             found = true;
             best_y = support_normal.y;
             *out_normal = support_normal;
+            *out_body = support_body;
         }
     }
     *out_grounded = found;
@@ -318,6 +330,7 @@ henka_result henka_character_controller_create(
     controller->jump_queued = false;
     controller->grounded = false;
     controller->ground_normal = (henka_vec3){0.0f, 0.0f, 0.0f};
+    controller->ground_body = HENKA_INVALID_PHYSICS_BODY_ID;
     *out_controller = controller;
     return HENKA_SUCCESS;
 }
@@ -353,6 +366,7 @@ henka_result henka_character_controller_set_slope_limit(
     henka_physics_body_state body_state;
     bool grounded;
     henka_vec3 ground_normal;
+    henka_physics_body_id ground_body;
 
     if (controller == NULL || controller->world == NULL ||
         !henka_character_controller_slope_limit_cosine(
@@ -367,13 +381,14 @@ henka_result henka_character_controller_set_slope_limit(
     previous_slope_limit_cosine = controller->slope_limit_cosine;
     controller->slope_limit_cosine = slope_limit_cosine;
     if (!henka_character_controller_find_ground_contact(
-            controller, &grounded, &ground_normal))
+            controller, &grounded, &ground_normal, &ground_body))
     {
         controller->slope_limit_cosine = previous_slope_limit_cosine;
         return HENKA_ERROR_NUMERIC_RANGE;
     }
     controller->grounded = grounded;
     controller->ground_normal = ground_normal;
+    controller->ground_body = ground_body;
     return HENKA_SUCCESS;
 }
 
@@ -401,6 +416,7 @@ henka_result henka_character_controller_teleport(
     {
         controller->grounded = false;
         controller->ground_normal = (henka_vec3){0.0f, 0.0f, 0.0f};
+        controller->ground_body = HENKA_INVALID_PHYSICS_BODY_ID;
     }
     return result;
 }
@@ -481,7 +497,9 @@ henka_result henka_character_controller_prepare_step(
     float fixed_timestep;
     henka_vec3 target_planar_velocity;
     henka_vec3 planar_velocity;
+    henka_vec3 support_velocity = {0.0f, 0.0f, 0.0f};
     bool apply_jump;
+    bool inherit_support_motion = false;
     henka_result result;
 
     if (controller == NULL || controller->world == NULL)
@@ -494,6 +512,28 @@ henka_result henka_character_controller_prepare_step(
             &body_state) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (controller->grounded &&
+        controller->ground_body != HENKA_INVALID_PHYSICS_BODY_ID)
+    {
+        henka_physics_body_state support_state;
+
+        if (henka_physics_body_get_state(
+                controller->world,
+                controller->ground_body,
+                &support_state) == HENKA_SUCCESS &&
+            support_state.id != controller->body &&
+            support_state.type == HENKA_PHYSICS_BODY_KINEMATIC)
+        {
+            if (!henka_character_controller_vec3_finite(
+                    support_state.linear_velocity))
+            {
+                return HENKA_ERROR_NUMERIC_RANGE;
+            }
+            support_velocity = support_state.linear_velocity;
+            inherit_support_motion = true;
+        }
     }
 
     planar_length = hypot(
@@ -515,6 +555,10 @@ henka_result henka_character_controller_prepare_step(
     {
         vertical_velocity = (double)controller->jump_speed;
     }
+    if (inherit_support_motion)
+    {
+        vertical_velocity += (double)support_velocity.y;
+    }
     if (!henka_character_controller_double_fits_float(vertical_velocity) ||
         !henka_character_controller_double_fits_float(
             (double)controller->desired_velocity.x * planar_scale) ||
@@ -527,6 +571,21 @@ henka_result henka_character_controller_prepare_step(
         (float)((double)controller->desired_velocity.x * planar_scale),
         0.0f,
         (float)((double)controller->desired_velocity.z * planar_scale)};
+    if (inherit_support_motion)
+    {
+        double support_x =
+            (double)target_planar_velocity.x + (double)support_velocity.x;
+        double support_z =
+            (double)target_planar_velocity.z + (double)support_velocity.z;
+
+        if (!henka_character_controller_double_fits_float(support_x) ||
+            !henka_character_controller_double_fits_float(support_z))
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        target_planar_velocity.x = (float)support_x;
+        target_planar_velocity.z = (float)support_z;
+    }
     result = henka_character_controller_project_planar_velocity(
         controller,
         target_planar_velocity,
@@ -579,6 +638,7 @@ henka_result henka_character_controller_sync_after_step(
     henka_physics_body_state body_state;
     bool grounded;
     henka_vec3 ground_normal;
+    henka_physics_body_id ground_body;
 
     if (controller == NULL || controller->world == NULL)
     {
@@ -592,12 +652,13 @@ henka_result henka_character_controller_sync_after_step(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (!henka_character_controller_find_ground_contact(
-            controller, &grounded, &ground_normal))
+            controller, &grounded, &ground_normal, &ground_body))
     {
         return HENKA_ERROR_NUMERIC_RANGE;
     }
     controller->grounded = grounded;
     controller->ground_normal = ground_normal;
+    controller->ground_body = ground_body;
     return HENKA_SUCCESS;
 }
 

@@ -84,9 +84,11 @@ teleporting through the physics transform contract, configurable slope-aware
 grounding classification, accepted ground-normal reporting, contact-aware
 planar sliding against blocking contacts, and caller-owned fixed-step
 participation. The current foundation also traverses supported walkable planes
-through the shared fixed-step collision path. Full first-person, third-person,
-and general character movement remains current development. Capsule half-height
-zero remains sphere-equivalent for compatibility.
+through the shared fixed-step collision path and inherits motion from a live
+kinematic support body. Stale support identities are ignored during movement
+and cleared by the next synchronized contact update. Full first-person,
+third-person, and general character movement remains current development.
+Capsule half-height zero remains sphere-equivalent for compatibility.
 
 The runtime camera foundation now follows a live generation-checked scene
 entity through target-local offsets, immediate positioning, and bounded
@@ -104,7 +106,7 @@ The production foundation should cover:
 - advanced slope traversal and surface response;
 - stairs and bounded step handling;
 - ledge and contact behavior;
-- moving-platform participation;
+- advanced moving-platform participation and platform-relative motion;
 - crouch and stand-clearance checks;
 - advanced collision recovery and wall/contact handling;
 - configurable step height, skin/contact margin, and surface response;
