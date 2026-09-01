@@ -13,7 +13,9 @@ typedef struct henka_prefab_entry
 {
     henka_entity source_entity;
     henka_entity source_parent;
+    henka_entity source_selection_owner;
     size_t parent_index;
+    size_t selection_owner_index;
     char* name;
     char* tag;
     char* material_name;
@@ -208,6 +210,7 @@ henka_result henka_prefab_create_from_scene(
         const henka_material_asset* material_asset;
         uint64_t asset_revision;
         bool asset_overridden;
+        henka_entity selection_owner;
 
         if (entity == HENKA_INVALID_ENTITY ||
             !henka_prefab_is_descendant_or_root(source_scene, root_entity, entity))
@@ -261,6 +264,19 @@ henka_result henka_prefab_create_from_scene(
         }
         result = henka_scene_get_entity_flags(source_scene, entity, &entry->flags);
         if (result != HENKA_SUCCESS)
+        {
+            henka_prefab_destroy(prefab);
+            return result;
+        }
+        entry->source_selection_owner = entity;
+        result = henka_scene_get_entity_selection_owner(
+            source_scene, entity, &selection_owner);
+        if (result == HENKA_SUCCESS)
+        {
+            entry->source_selection_owner = selection_owner;
+        }
+        else if (result != HENKA_ERROR_UNKNOWN ||
+                 !henka_scene_is_entity_helper(source_scene, entity))
         {
             henka_prefab_destroy(prefab);
             return result;
@@ -326,6 +342,12 @@ henka_result henka_prefab_create_from_scene(
 
     for (index = 0U; index < prefab->entity_count; ++index)
     {
+        prefab->entries[index].selection_owner_index =
+            henka_prefab_find_entry(
+                prefab, prefab->entries[index].source_selection_owner);
+        /* A logical owner outside the captured subtree must not alias the
+         * source scene or another prefab instance. New entities already own
+         * themselves, so retain that isolated default in this case. */
         if (prefab->entries[index].source_entity != root_entity)
         {
             prefab->entries[index].parent_index = henka_prefab_find_entry(
@@ -493,6 +515,24 @@ static henka_result henka_prefab_instantiate_internal(
             henka_prefab_rollback_entities(target_scene, entities, created);
             henka_free(entities);
             return result;
+        }
+    }
+
+    for (index = 0U; index < prefab->entity_count; ++index)
+    {
+        const size_t owner_index = prefab->entries[index].selection_owner_index;
+        if (owner_index != SIZE_MAX && owner_index != index)
+        {
+            result = henka_scene_set_entity_selection_owner(
+                target_scene,
+                entities[index],
+                entities[owner_index]);
+            if (result != HENKA_SUCCESS)
+            {
+                henka_prefab_rollback_entities(target_scene, entities, created);
+                henka_free(entities);
+                return result;
+            }
         }
     }
 

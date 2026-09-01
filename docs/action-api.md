@@ -50,7 +50,8 @@ The current action context supports:
 - parent and unparent operations through the runtime hierarchy API, with
   explicit keep-local or keep-world behavior.
 - bounded subtree duplication through the runtime prefab snapshot path, with
-  new scene identities and preserved hierarchy/state.
+  new scene identities, preserved hierarchy/state, and remapped in-subtree
+  logical selection ownership.
 
 ### Primitive creation
 
@@ -119,8 +120,10 @@ separate work.
 
 Subtree duplication accepts a live user-object handle, validates and captures
 the bounded source snapshot before mutation, and rolls back any partial
-instance if the target scene rejects a created entity or relationship. A dry
-run validates the capture path without adding scene entities.
+instance if the target scene rejects a created entity or relationship. Logical
+selection owners within the snapshot are remapped to the new instance; owners
+outside it are isolated to avoid cross-instance references. A dry run validates
+the capture path without adding scene entities.
 
 ## Creation transaction safety
 

@@ -256,6 +256,9 @@ mutate the scene. Full editor hierarchy presentation and history remain open.
   live scene entity using a caller-supplied local transform. Stale or invalid
   parent handles fail before allocation, and later hierarchy failures roll back
   the created instance.
+- Logical selection ownership inside the captured subtree is remapped to the
+  corresponding new identities. An owner outside the snapshot is not retained
+  as a cross-instance reference; the new entity keeps its self-owned default.
 - Snapshot text is owned by the prefab. Meshes, shaders, textures, and material
   definitions remain borrowed from their existing owners and must outlive the
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls

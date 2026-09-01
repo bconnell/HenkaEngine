@@ -287,13 +287,19 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     henka_prefab* prefab;
     henka_entity source_root;
     henka_entity source_child;
+    henka_entity source_visual;
+    henka_entity source_external_owner;
+    henka_entity source_external_visual;
     henka_entity instance_root;
     henka_entity instance_child;
+    henka_entity instance_visual;
+    henka_entity instance_external_visual;
     henka_entity holder;
     henka_entity stale_holder;
     henka_entity nested_root;
     henka_entity nested_child;
     henka_entity parent;
+    henka_entity selection_owner;
     size_t target_count;
     henka_transform transform;
     henka_bounds bounds;
@@ -302,8 +308,14 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
     source_child = henka_scene_create_entity_named(source, "Prefab Child");
     source_root = henka_scene_create_entity_named(source, "Prefab Root");
+    source_visual = henka_scene_create_entity_named(source, "Prefab Visual");
+    source_external_owner = henka_scene_create_entity_named(source, "External Owner");
+    source_external_visual = henka_scene_create_entity_named(source, "Prefab External Visual");
     HENKA_TEST_ASSERT(source_root != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(source_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_visual != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_external_owner != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_external_visual != HENKA_INVALID_ENTITY);
 
     transform = henka_transform_identity();
     transform.position = (henka_vec3){10.0f, 2.0f, -4.0f};
@@ -321,10 +333,24 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(source, source_child, bounds) == HENKA_SUCCESS);
     interaction = (henka_interaction_desc){true, 6.0f, "Inspect prefab part"};
     HENKA_TEST_ASSERT(henka_scene_set_entity_interaction(source, source_child, &interaction) == HENKA_SUCCESS);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){-3.0f, 1.0f, 2.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(source, source_visual, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        source, source_visual, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_selection_owner(
+        source, source_visual, source_root) == HENKA_SUCCESS);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){4.0f, -1.0f, -2.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(source, source_external_visual, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        source, source_external_visual, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_selection_owner(
+        source, source_external_visual, source_external_owner) == HENKA_SUCCESS);
 
     prefab = NULL;
     HENKA_TEST_ASSERT(henka_prefab_create_from_scene(source, source_root, &prefab) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(henka_prefab_get_entity_count(prefab) == 2U);
+    HENKA_TEST_ASSERT(henka_prefab_get_entity_count(prefab) == 4U);
     henka_scene_destroy(source);
 
     HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
@@ -338,7 +364,7 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     transform.position = (henka_vec3){30.0f, 5.0f, 7.0f};
     HENKA_TEST_ASSERT(henka_prefab_instantiate(prefab, target, transform, &instance_root) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(instance_root != HENKA_INVALID_ENTITY);
-    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == 2U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == 4U);
     HENKA_TEST_ASSERT(henka_scene_find_entity_by_name(
         target, "Prefab Child", &instance_child) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(target, instance_root), "Prefab Root") == 0);
@@ -355,6 +381,21 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.x, 1.0f, 0.0001f);
     HENKA_TEST_ASSERT(henka_scene_get_entity_interaction(target, instance_child, &interaction) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(interaction.enabled && strcmp(interaction.prompt, "Inspect prefab part") == 0);
+    HENKA_TEST_ASSERT(henka_scene_find_entity_by_name(
+        target, "Prefab Visual", &instance_visual) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(target, instance_visual, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == instance_root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_selection_owner(
+        target, instance_visual, &selection_owner) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(selection_owner == instance_root);
+    HENKA_TEST_ASSERT(henka_scene_find_entity_by_name(
+        target, "Prefab External Visual", &instance_external_visual) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(
+        target, instance_external_visual, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == instance_root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_selection_owner(
+        target, instance_external_visual, &selection_owner) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(selection_owner == instance_external_visual);
 
     holder = henka_scene_create_entity_named(target, "Prefab Holder");
     HENKA_TEST_ASSERT(holder != HENKA_INVALID_ENTITY);
@@ -391,7 +432,7 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, 12.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, -17.0f, 0.0001f);
     HENKA_TEST_ASSERT(henka_scene_get_entity_child_count(target, nested_root, &target_count) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(target_count == 1U);
+    HENKA_TEST_ASSERT(target_count == 3U);
     HENKA_TEST_ASSERT(henka_scene_get_entity_child_at_index(
         target, nested_root, 0U, &nested_child) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_parent(target, nested_child, &parent) == HENKA_SUCCESS);

@@ -17,7 +17,9 @@ typedef struct henka_prefab henka_prefab;
  * scene order. Names, tags, transforms, materials, visibility, bounds,
  * interaction data, and hierarchy are copied. Meshes, textures, shaders, and
  * material definitions remain borrowed from their existing owners and must
- * outlive the prefab and any instances created from it. */
+ * outlive the prefab and any instances created from it. Logical selection
+ * owners inside the captured subtree are remapped during instantiation;
+ * external owners are not retained as cross-instance references. */
 henka_result henka_prefab_create_from_scene(
     const henka_scene* source_scene,
     henka_entity root_entity,
