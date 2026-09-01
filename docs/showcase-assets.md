@@ -2,7 +2,7 @@
 
 Henka's normal Windows Sandbox startup presents two repository-owned sample models: the Anatomical Giraffe Study and the realistic rocket fixture.
 
-> **Purpose:** These assets are deterministic engine dogfood for imported content, material instances, native editing, persistence, packaging, and visual QA. Their provenance remains explicit throughout the workflow.
+> **Purpose:** These assets are deterministic repository-owned samples for imported content, material instances, native editing, persistence, packaging, and runtime inspection. Their provenance remains explicit throughout the workflow.
 
 ## Contents
 
@@ -12,7 +12,7 @@ Henka's normal Windows Sandbox startup presents two repository-owned sample mode
 - [Owned material workflow](#owned-material-workflow)
 - [Native authored assets](#native-authored-assets)
 - [Generation and package ownership](#generation-and-package-ownership)
-- [Visual acceptance](#visual-acceptance)
+- [Visual inspection and quality](#visual-inspection-and-quality)
 - [Runtime path](#runtime-path)
 - [Current limits](#current-limits)
 
@@ -72,19 +72,16 @@ The fixture contains no agency branding, mission markings, or copied mission har
 
 ## Provenance
 
-The generated glTF pair and deterministic detail textures use the following evidence classifications:
-
-- `GENERATED_TEST_FIXTURE`;
-- `IMPORT_COMPATIBILITY_ASSET`.
-
-They are produced by the repository generator and consumed through the public glTF/material asset path.
+The generated glTF pair and deterministic detail textures are repository-owned
+sample assets. They are produced by the repository generator and consumed
+through the public glTF/material asset path.
 
 The repository also carries:
 
 - `assets/authoring/showcase_giraffe.hams`;
 - `assets/authoring/showcase_rocket.hams`.
 
-Those HAMS files are captured through the visible editor workflow using:
+Those HAMS files record the visible editor workflow using:
 
 - Make Editable;
 - component Move;
@@ -95,9 +92,11 @@ Those HAMS files are captured through the visible editor workflow using:
 - Save Project;
 - Reload Project.
 
-The current HAMS files contain mesh/topology/UV/material-region data and do not contain their own provenance field. Runtime sidecar/evidence classification labels them `HENKA_NATIVE_EDITED_FIXTURE`, which identifies them as persisted editor-owned derivatives of imported fixture geometry.
+The current HAMS files contain mesh/topology/UV/material-region data and do not contain their own provenance field. The runtime sidecar labels them `HENKA_NATIVE_EDITED_FIXTURE`, identifying them as persisted editor-owned derivatives of imported fixture geometry.
 
-The HAMS sources prove editor-owned persistence and native editing participation. Independent user design of the recognizable Giraffe and Rocket forms remains outside that evidence claim.
+The HAMS sources record editor-owned persistence and native editing
+participation. Independent user design of the recognizable Giraffe and Rocket
+forms remains outside that provenance record.
 
 ## Native-authoring bridge
 
@@ -168,7 +167,7 @@ Imported showcase primitives retain borrowed glTF material identity until the us
 
 The imported glTF source remains unchanged.
 
-### Packaged material dogfood
+### Packaged material workflow
 
 The packaged Windows workflow exercises:
 
@@ -340,40 +339,28 @@ The Sandbox studio floor uses a bounded 64 m graphite plane beneath the independ
 
 The surface extends beyond ordinary showcase framing so its finite far edge remains outside normal Material Preview and Rendered composition.
 
-## Visual acceptance
+## Visual inspection and quality
 
-The normal Windows graphical path is the source of truth for showcase visual review.
+The normal packaged Windows Sandbox is the reference runtime for inspecting
+these assets. Use Solid, Material Preview, and Rendered views to inspect
+silhouette, surface continuity, materials, textures, lighting, and shadows.
 
-### Same-camera evidence
+### Inspection views
 
-The standard visual evidence set covers:
+The standard showcase views include:
 
-- Solid;
-- Material Preview;
-- Rendered.
+- Giraffe startup, close front, close three-quarter, close profile, wide
+  silhouette, and front Material Preview;
+- Rocket close front, close three-quarter, and profile views.
 
-### Dedicated inspection evidence
+Inspection views may hide editor chrome while the application inspects the
+asset. Scene, materials, lighting, asset management, and renderer execution
+remain unchanged.
 
-The mascot/showcase inspection path launches the real Sandbox repeatedly with the packaged glTF scene/material path active and captures:
+### Capture workflow
 
-**Giraffe**
-
-- normal startup frame;
-- close front Rendered;
-- close three-quarter Rendered;
-- close profile Rendered;
-- wide silhouette Rendered;
-- front Material Preview.
-
-**Rocket**
-
-- close front Rendered;
-- close three-quarter Rendered;
-- profile Rendered.
-
-Dedicated views hide editor chrome only for application inspection. Scene, materials, lighting, asset management, and renderer execution remain unchanged.
-
-### Capture commands
+For reproducible local captures, use the repository capture and validation
+helpers:
 
 ```powershell
 .\scripts\capture_visual_evidence_windows.ps1 `
@@ -386,74 +373,32 @@ Dedicated views hide editor chrome only for application inspection. Scene, mater
   -InputDirectory (Join-Path (Get-Location) "build\visual_evidence_giraffe")
 ```
 
-### Fresh runtime staging
+The capture helper stages the selected executable and adjacent assets into a
+fresh repository-local runtime for each run. It waits for a readiness record
+from the running application and checks asset visibility, authoritative bounds,
+render meshes, viewport framing, settled frames, executable identity, required
+views, image dimensions, and non-flat content. The staged runtime is disposable
+build output and is not a source or package input.
 
-The capture helper stages the selected executable and adjacent assets into a fresh repository-local runtime for each run.
+The [Sandbox 3D manual checklist](qa/sandbox3d-manual-checklist.md) covers
+packaged launch and interactive inspection.
 
-Older generated user saves therefore stay outside the evidence path.
+### Quality checklist
 
-The staged runtime is disposable build output and is not a source/package input.
+Visual inspection covers:
 
-### Readiness metadata
-
-The capture process waits up to 20 seconds for a `CAPTURE_READY` record from the real application.
-
-Pair captures use `capture_subject=pair` and verify:
-
-- both named subject groups are visible;
-- authoritative bounds are ready;
-- render meshes are ready;
-- final Scene View viewport is known;
-- front camera is level;
-- combined midpoint is centered;
-- both projected rectangles have safety margins;
-- three settled frames completed.
-
-Subject-specific captures use:
-
-- `capture_subject=giraffe`;
-- `capture_subject=rocket`.
-
-They apply the same readiness, level-camera, centering, and safety-margin checks to the requested subject.
-
-`FULL_SHOWCASE` identifies full showcase evidence. `GIRAFFE_INSPECTION` identifies inspection-only runs and is not accepted by the full validator.
-
-### Automated image guards
-
-The validator requires matching readiness metadata for Solid, Material Preview, and Rendered before image inspection.
-
-It also verifies:
-
-- Henka Sandbox executable identity;
-- all required views;
-- valid image dimensions;
-- non-flat content;
-- minimum chroma requirements where relevant.
-
-These automated checks establish structural capture integrity.
-
-### Human review
-
-Human review should inspect:
-
-- silhouette;
-- facial assembly;
-- neck/head attachment;
-- eyes;
-- ears;
-- ossicones;
-- nostrils;
-- mouth;
-- mane;
-- spots;
-- geometry intersections;
-- gaps;
-- material/shading defects;
+- silhouette and proportions;
+- facial assembly, neck/head attachment, eyes, ears, ossicones, nostrils,
+  mouth, mane, and spots;
+- geometry intersections and gaps;
+- material and shading behavior;
 - rocket proportion and mechanical assembly quality.
 
-Generated evidence remains repository-local and is not committed.
-
-Retained screenshots remain useful only when the capture index binds the exact executable/source revision, source hashes, and capture metadata.
+Automated capture checks establish structural integrity. Visual inspection
+establishes the appearance and usability of the asset. Generated captures stay
+in repository-local build output and are not source inputs or committed assets.
+Saved captures are useful when their index records the executable, source
+revision, source hashes, and capture metadata.
 
 ## Runtime path
 

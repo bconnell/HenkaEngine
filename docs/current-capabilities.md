@@ -630,7 +630,8 @@ Packaging is transactional and preserves user data unless reset is explicitly re
 
 Application-local automation input ownership separates deterministic test pointer/keyboard events from ordinary physical input.
 
-Screenshot captures are application-only evidence; they do not replace human visual QA.
+Screenshot captures record application state. Visual inspection remains required
+for editor feel, rendering, and modeling quality.
 
 See [building.md](building.md), [package-provenance.md](package-provenance.md), [repository-integrity.md](repository-integrity.md), and [showcase-assets.md](showcase-assets.md).
 
@@ -702,4 +703,4 @@ Major open areas include:
 - complete scene serialization;
 - remaining renderer and Terrain visual validation.
 
-The default Giraffe and Rocket are deterministic imported/generated fixtures and editor-owned derivatives for dogfooding. They are not proof of user-authored production-quality assets. See [showcase-assets.md](showcase-assets.md).
+The default Giraffe and Rocket are deterministic imported/generated sample assets and editor-owned derivatives used to exercise current import, material, editing, persistence, packaging, and rendering workflows. They do not establish complete arbitrary production-asset authoring coverage. See [showcase-assets.md](showcase-assets.md).

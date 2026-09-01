@@ -104,9 +104,8 @@ save, close/release, reload, a second edit and save/reload, scene placement, and
 packaged runtime rendering.
 
 The final Giraffe and Rocket are constructed through that workflow and inspected
-in multiple editor and packaged-runtime views. Automated evidence cannot
-override human visual review. The final claim becomes true only after all
-evidence is current.
+in multiple editor and packaged-runtime views. Automated capture data records
+workflow state; visual inspection remains required for final asset quality.
 
 ## Safety and quality invariants
 

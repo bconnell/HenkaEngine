@@ -23,7 +23,6 @@ support.
 | Future renderer direction | Vulkan / Direct3D 12 / Metal through backend isolation |
 | Editor | Native integrated workspace |
 | Game project boundary | Separate external projects supported through validated templates |
-| Major system sequence | Audio completion → Character Controller → Scene Hierarchy / Parenting → Prefabs |
 | License | MIT |
 
 Integrated authoring is underway alongside runtime and workspace hardening. The
@@ -252,8 +251,12 @@ continues to affect status.
   character-controller foundation is available; capsule, sweep, slope, and
   step-offset behavior remain open.
 - Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
-- The default Giraffe and Rocket are deterministic imported/generated fixtures and editor-owned dogfood derivatives, not proof of user-authored production assets.
-- Automated evidence does not replace human visual QA for editor feel, detached windows, terrain corners, rendering, or modeling quality.
+- The default Giraffe and Rocket are deterministic imported/generated sample
+  assets and editor-owned derivatives used to exercise current import, material,
+  editing, persistence, packaging, and rendering workflows. They do not establish
+  complete arbitrary production-asset authoring coverage.
+- Editor feel, detached windows, terrain corners, rendering, and modeling quality
+  remain active quality areas.
 
 The detailed boundary inventory is maintained in
 [docs/current-capabilities.md](docs/current-capabilities.md), with subsystem

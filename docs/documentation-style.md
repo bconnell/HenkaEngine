@@ -65,15 +65,9 @@ State facts, requirements, limitations, and plans directly.
 
 Use one clear assertion at a time. Name the current scope. State remaining gaps separately. State validation requirements separately. This keeps technical documentation factual and removes defensive or conversational wording.
 
-Documentation should avoid:
-
-- rhetorical contrast;
-- defensive capability disclaimers;
-- conversational justification of a design choice;
-- negative framing when a positive scope statement carries the same information;
-- repeated statements that explain what a feature is by comparing it with something else;
-- prose that argues with an imagined reader;
-- wording that sounds like a response to a previous conversation.
+Documentation should avoid rhetorical contrast, conversational justification,
+and defensive framing when a direct scope statement carries the technical
+meaning. Explain current behavior as a standalone contributor-facing statement.
 
 Preferred wording is declarative:
 
