@@ -42,7 +42,7 @@ Normal startup follows this content path:
 2. restore checked-in HAMS geometry when available;
 3. restore valid saved local Sandbox/editor state.
 
-The HAMS files are persisted editor-owned derivatives of fixture geometry. Their provenance does not establish independent user-authored geometry proof.
+The HAMS files are persisted native-editing derivatives of fixture geometry. Their provenance does not establish independent user-authored geometry.
 
 The default showcase materials use their own material factors. The primitive-gallery cube texture belongs to the engineering sample path.
 
@@ -320,7 +320,7 @@ Available primitive parts include:
 
 UV Sphere retains latitude/longitude topology with triangular pole caps. Quad Sphere uses closed shared-vertex cubed-sphere topology with four-sided faces.
 
-The resulting document is editor-owned, uses `HENKA_PRODUCT_NATIVE_AUTHORED` provenance, and supports bounded save/close/reopen.
+The resulting document uses native authoring storage, carries `HENKA_PRODUCT_NATIVE_AUTHORED` provenance, and supports bounded save/close/reopen.
 
 ### Repository-owned showcase source refresh
 

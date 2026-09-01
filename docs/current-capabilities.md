@@ -703,4 +703,4 @@ Major open areas include:
 - complete scene serialization;
 - remaining renderer and Terrain visual validation.
 
-The default Giraffe and Rocket are deterministic imported/generated sample assets and editor-owned derivatives used to exercise current import, material, editing, persistence, packaging, and rendering workflows. They do not establish complete arbitrary production-asset authoring coverage. See [showcase-assets.md](showcase-assets.md).
+The default Giraffe and Rocket are deterministic imported/generated sample assets maintained by the repository. They exercise current import, material, editing, persistence, packaging, and rendering workflows. They do not establish complete arbitrary production-asset authoring coverage. See [showcase-assets.md](showcase-assets.md).

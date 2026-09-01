@@ -92,11 +92,11 @@ Those HAMS files record the visible editor workflow using:
 - Save Project;
 - Reload Project.
 
-The current HAMS files contain mesh/topology/UV/material-region data and do not contain their own provenance field. The runtime sidecar labels them `HENKA_NATIVE_EDITED_FIXTURE`, identifying them as persisted editor-owned derivatives of imported fixture geometry.
+The current HAMS files contain mesh/topology/UV/material-region data and do not contain their own provenance field. The runtime sidecar labels them `HENKA_NATIVE_EDITED_FIXTURE`, identifying them as persisted native-editing derivatives of imported fixture geometry.
 
-The HAMS sources record editor-owned persistence and native editing
-participation. Independent user design of the recognizable Giraffe and Rocket
-forms remains outside that provenance record.
+The HAMS sources record the persisted result of the supported native editing
+workflow. They do not establish independent user design of the recognizable
+Giraffe and Rocket forms.
 
 ## Native-authoring bridge
 
@@ -110,7 +110,8 @@ The normal editor provides a bounded native editing path for the showcase fixtur
 4. Choose `Make Editable`.
 5. Use the normal component, topology, UV, undo/redo, and project controls.
 
-Henka converts the validated imported primitive into an editor-owned authoring mesh connected to the selected scene entity.
+Henka converts the validated imported primitive into a native authoring mesh
+connected to the selected scene entity.
 
 ### Component picking
 
@@ -233,13 +234,14 @@ Quad Sphere uses a closed shared-vertex cubed-sphere topology with four-sided fa
 
 The resulting document:
 
-- is editor-owned;
+- is stored in the native authoring format;
 - uses `HENKA_PRODUCT_NATIVE_AUTHORED` provenance;
 - supports bounded save/close/reopen.
 
 This workflow establishes native asset creation through Henka's visible authoring path.
 
-The default Giraffe and Rocket remain separately classified imported/generated fixtures and editor-owned derivatives.
+The default Giraffe and Rocket remain imported/generated sample assets. The New
+Asset workflow creates separate native-authored documents.
 
 ### Generic showcase editing
 
@@ -263,9 +265,10 @@ The generator creates deterministic bounded:
 
 It uses no third-party model and no external runtime authoring application.
 
-The generator is classified as a fixture generator. It is not the design source for the checked-in HAMS editor-owned derivatives.
+The generator is a fixture generator. The checked-in HAMS derivatives are
+maintained separately from generated glTF output.
 
-### Refreshing editor-owned HAMS sources
+### Refreshing persisted HAMS sources
 
 After a validated Windows modeling session, run:
 
@@ -452,4 +455,4 @@ The showcase system currently leaves the following work open:
 - ray-traced subsurface transport;
 - production showcase quality closure.
 
-Human visual QA across Solid, Material Preview, and Rendered remains a required acceptance gate.
+Manual visual inspection across Solid, Material Preview, and Rendered remains a required acceptance gate.

@@ -252,7 +252,7 @@ continues to affect status.
   step-offset behavior remain open.
 - Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
 - The default Giraffe and Rocket are deterministic imported/generated sample
-  assets and editor-owned derivatives used to exercise current import, material,
+  assets maintained by the repository. They exercise current import, material,
   editing, persistence, packaging, and rendering workflows. They do not establish
   complete arbitrary production-asset authoring coverage.
 - Editor feel, detached windows, terrain corners, rendering, and modeling quality
