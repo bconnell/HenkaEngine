@@ -601,6 +601,7 @@ static bool henka_gltf_parse_buffers(henka_gltf_context* context)
         char uri[HENKA_MAX_ASSET_PATH_BYTES];
         const char* uri_end;
         size_t uri_length;
+        context->buffer_count = index + 1U;
         if (!henka_gltf_member_size(item, item_end, "byteLength", &expected_size) || expected_size > HENKA_MAX_GLTF_SOURCE_BYTES) return false;
         context->buffers[index].data = NULL;
         context->buffers[index].size = 0U;
@@ -636,8 +637,9 @@ static bool henka_gltf_parse_buffers(henka_gltf_context* context)
         else return false;
         if (context->buffers[index].data == NULL || context->buffers[index].size < expected_size) return false;
     }
+    if (henka_gltf_array_item(array, array_end, HENKA_MAX_GLTF_ARRAY_ITEMS, &item, &item_end)) return false;
     context->buffer_count = index;
-    return index > 0U && index < HENKA_MAX_GLTF_ARRAY_ITEMS;
+    return index > 0U && index <= HENKA_MAX_GLTF_ARRAY_ITEMS;
 }
 
 static bool henka_gltf_parse_views(henka_gltf_context* context)
@@ -657,8 +659,9 @@ static bool henka_gltf_parse_views(henka_gltf_context* context)
         { const char* value; const char* value_end; if (henka_gltf_find_member(item, item_end, "byteStride", &value, &value_end) && !henka_gltf_size_number(value, value_end, &view->byte_stride)) return false; }
         if (view->byte_stride > 0U && (view->byte_stride < 1U || view->byte_stride > 256U)) return false;
     }
+    if (henka_gltf_array_item(array, array_end, HENKA_MAX_GLTF_ARRAY_ITEMS, &item, &item_end)) return false;
     context->view_count = index;
-    return index > 0U && index < HENKA_MAX_GLTF_ARRAY_ITEMS;
+    return index > 0U && index <= HENKA_MAX_GLTF_ARRAY_ITEMS;
 }
 
 static bool henka_gltf_accessor_span_is_valid(
@@ -729,8 +732,9 @@ static bool henka_gltf_parse_accessors(henka_gltf_context* context)
                     view, accessor->byte_offset, accessor->count, element_size)) return false;
         }
     }
+    if (henka_gltf_array_item(array, array_end, HENKA_MAX_GLTF_ARRAY_ITEMS, &item, &item_end)) return false;
     context->accessor_count = index;
-    return index > 0U && index < HENKA_MAX_GLTF_ARRAY_ITEMS;
+    return index > 0U && index <= HENKA_MAX_GLTF_ARRAY_ITEMS;
 }
 
 static bool henka_gltf_accessor_address(

@@ -65,6 +65,197 @@ static bool henka_test_write_file(const char* path, const void* data, size_t siz
     return success;
 }
 
+static bool henka_test_append_text(
+    char* destination,
+    size_t capacity,
+    size_t* offset,
+    const char* text)
+{
+    size_t length;
+
+    if (destination == NULL || offset == NULL || text == NULL || *offset > capacity) return false;
+    length = strlen(text);
+    if (length >= capacity - *offset) return false;
+    memcpy(destination + *offset, text, length);
+    *offset += length;
+    destination[*offset] = '\0';
+    return true;
+}
+
+static bool henka_test_build_gltf_with_buffer_count(
+    char* destination,
+    size_t capacity,
+    size_t buffer_count,
+    size_t* out_size)
+{
+    static const char* position_data_uri =
+        "data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA";
+    static const char* empty_data_uri = "data:application/octet-stream;base64,";
+    size_t offset = 0U;
+    size_t index;
+
+    if (destination == NULL || out_size == NULL || buffer_count == 0U) return false;
+    destination[0] = '\0';
+    if (!henka_test_append_text(destination, capacity, &offset,
+        "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[")) return false;
+    for (index = 0U; index < buffer_count; ++index)
+    {
+        char buffer_entry[192];
+        int written = snprintf(
+            buffer_entry,
+            sizeof(buffer_entry),
+            "%s{\"uri\":\"%s\",\"byteLength\":%u}",
+            index == 0U ? "" : ",",
+            index == 0U ? position_data_uri : empty_data_uri,
+            index == 0U ? 36U : 0U);
+        if (written < 0 || (size_t)written >= sizeof(buffer_entry) ||
+            !henka_test_append_text(destination, capacity, &offset, buffer_entry)) return false;
+    }
+    if (!henka_test_append_text(
+        destination,
+        capacity,
+        &offset,
+        "],\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}")) return false;
+    *out_size = offset;
+    return true;
+}
+
+static bool henka_test_build_gltf_with_view_accessor_counts(
+    char* destination,
+    size_t capacity,
+    size_t view_count,
+    size_t accessor_count,
+    size_t* out_size)
+{
+    static const char* position_data_uri =
+        "data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA";
+    size_t offset = 0U;
+    size_t index;
+
+    if (destination == NULL || out_size == NULL || view_count == 0U || accessor_count == 0U) return false;
+    destination[0] = '\0';
+    if (!henka_test_append_text(
+        destination,
+        capacity,
+        &offset,
+        "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"uri\":\"")) return false;
+    if (!henka_test_append_text(destination, capacity, &offset, position_data_uri) ||
+        !henka_test_append_text(destination, capacity, &offset,
+            "\",\"byteLength\":36}],\"bufferViews\":[")) return false;
+    for (index = 0U; index < view_count; ++index)
+    {
+        char view_entry[96];
+        int written = snprintf(
+            view_entry,
+            sizeof(view_entry),
+            "%s{\"buffer\":0,\"byteLength\":%u}",
+            index == 0U ? "" : ",",
+            index == 0U ? 36U : 0U);
+        if (written < 0 || (size_t)written >= sizeof(view_entry) ||
+            !henka_test_append_text(destination, capacity, &offset, view_entry)) return false;
+    }
+    if (!henka_test_append_text(destination, capacity, &offset, "],\"accessors\":[")) return false;
+    for (index = 0U; index < accessor_count; ++index)
+    {
+        char accessor_entry[128];
+        int written = snprintf(
+            accessor_entry,
+            sizeof(accessor_entry),
+            "%s{%s\"componentType\":5126,\"count\":%u,\"type\":\"%s\"}",
+            index == 0U ? "" : ",",
+            index == 0U ? "\"bufferView\":0," : "",
+            index == 0U ? 3U : 0U,
+            index == 0U ? "VEC3" : "SCALAR");
+        if (written < 0 || (size_t)written >= sizeof(accessor_entry) ||
+            !henka_test_append_text(destination, capacity, &offset, accessor_entry)) return false;
+    }
+    if (!henka_test_append_text(
+        destination,
+        capacity,
+        &offset,
+        "],\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}")) return false;
+    *out_size = offset;
+    return true;
+}
+
+static void henka_test_gltf_boundary_table_and_buffer_cleanup(void)
+{
+    char gltf[32768];
+    size_t gltf_size;
+    size_t allocations_before;
+    henka_model_data model;
+    henka_result result;
+    static const char* malformed_later_buffer =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":["
+        "{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36},"
+        "{\"uri\":\"data:application/octet-stream;base64,!\",\"byteLength\":0}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
+
+    HENKA_TEST_ASSERT(henka_test_build_gltf_with_buffer_count(
+        gltf, sizeof(gltf), 256U, &gltf_size));
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        gltf, gltf_size, "256-buffer-table.gltf", &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U);
+    henka_model_data_destroy(&model);
+
+    HENKA_TEST_ASSERT(henka_test_build_gltf_with_buffer_count(
+        gltf, sizeof(gltf), 257U, &gltf_size));
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        gltf, gltf_size, "257-buffer-table.gltf", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+    henka_model_data_destroy(&model);
+
+    allocations_before = henka_memory_get_allocation_count();
+    memset(&model, 0, sizeof(model));
+    result = henka_model_data_load_gltf_from_memory(
+        malformed_later_buffer,
+        strlen(malformed_later_buffer),
+        "malformed-later-buffer.gltf",
+        &model);
+    HENKA_TEST_ASSERT(result != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+    henka_model_data_destroy(&model);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before);
+
+    HENKA_TEST_ASSERT(henka_test_build_gltf_with_view_accessor_counts(
+        gltf, sizeof(gltf), 256U, 256U, &gltf_size));
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        gltf, gltf_size, "256-view-accessor-tables.gltf", &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U);
+    henka_model_data_destroy(&model);
+
+    HENKA_TEST_ASSERT(henka_test_build_gltf_with_view_accessor_counts(
+        gltf, sizeof(gltf), 257U, 256U, &gltf_size));
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        gltf, gltf_size, "257-buffer-view-table.gltf", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+    henka_model_data_destroy(&model);
+
+    HENKA_TEST_ASSERT(henka_test_build_gltf_with_view_accessor_counts(
+        gltf, sizeof(gltf), 256U, 257U, &gltf_size));
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        gltf, gltf_size, "257-accessor-table.gltf", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+    henka_model_data_destroy(&model);
+}
+
 static void henka_test_model_rejects_unsafe_bounds(void)
 {
     static const char* unsupported_gltf_extension =
@@ -1462,6 +1653,7 @@ void henka_test_model(void)
     henka_test_gltf_rejects_material_values_outside_engine_range();
     henka_test_gltf_rejects_invalid_accessor_boolean();
     henka_test_gltf_rejects_invalid_tangent_handedness();
+    henka_test_gltf_boundary_table_and_buffer_cleanup();
     henka_test_gltf_external_buffer_file_load();
     henka_test_gltf_external_interleaved_position_file_load();
     henka_test_gltf_external_image_file_load();
