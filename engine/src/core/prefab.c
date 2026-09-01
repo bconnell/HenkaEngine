@@ -2,6 +2,7 @@
 #include <henka/memory.h>
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 
 #include "checked.h"
@@ -37,6 +38,14 @@ typedef struct henka_prefab_entry
 struct henka_prefab
 {
     henka_prefab_entry* entries;
+    size_t entity_count;
+    size_t root_index;
+};
+
+struct henka_prefab_instance
+{
+    henka_scene* target_scene;
+    henka_entity* entities;
     size_t entity_count;
     size_t root_index;
 };
@@ -386,6 +395,85 @@ size_t henka_prefab_get_entity_count(const henka_prefab* prefab)
     return prefab == NULL ? 0U : prefab->entity_count;
 }
 
+henka_result henka_prefab_find_source_index(
+    const henka_prefab* prefab,
+    henka_entity source_entity,
+    size_t* out_index)
+{
+    size_t index;
+
+    if (out_index == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_index = SIZE_MAX;
+    if (prefab == NULL || source_entity == HENKA_INVALID_ENTITY)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < prefab->entity_count; ++index)
+    {
+        if (prefab->entries[index].source_entity == source_entity)
+        {
+            *out_index = index;
+            return HENKA_SUCCESS;
+        }
+    }
+    return HENKA_ERROR_UNKNOWN;
+}
+
+void henka_prefab_instance_destroy(henka_prefab_instance* instance)
+{
+    if (instance == NULL)
+    {
+        return;
+    }
+    henka_free(instance->entities);
+    henka_free(instance);
+}
+
+size_t henka_prefab_instance_get_entity_count(
+    const henka_prefab_instance* instance)
+{
+    return instance == NULL ? 0U : instance->entity_count;
+}
+
+henka_result henka_prefab_instance_get_entity_at(
+    const henka_prefab_instance* instance,
+    size_t index,
+    henka_entity* out_entity)
+{
+    if (out_entity != NULL)
+    {
+        *out_entity = HENKA_INVALID_ENTITY;
+    }
+    if (instance == NULL || instance->target_scene == NULL ||
+        instance->entities == NULL || out_entity == NULL ||
+        index >= instance->entity_count ||
+        !henka_scene_is_entity_valid(instance->target_scene, instance->entities[index]))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_entity = instance->entities[index];
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_prefab_instance_get_root_entity(
+    const henka_prefab_instance* instance,
+    henka_entity* out_entity)
+{
+    if (out_entity != NULL)
+    {
+        *out_entity = HENKA_INVALID_ENTITY;
+    }
+    if (instance == NULL || instance->root_index >= instance->entity_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_prefab_instance_get_entity_at(
+        instance, instance->root_index, out_entity);
+}
+
 static void henka_prefab_rollback_entities(
     henka_scene* scene,
     henka_entity* entities,
@@ -403,20 +491,31 @@ static henka_result henka_prefab_instantiate_internal(
     henka_scene* target_scene,
     henka_entity parent_entity,
     henka_transform root_transform,
-    henka_entity* out_root_entity)
+    henka_entity* out_root_entity,
+    henka_prefab_instance** out_instance,
+    bool require_parent)
 {
     henka_entity* entities;
+    henka_prefab_instance* instance;
     size_t allocation_size;
     size_t index;
     size_t created;
     henka_result result;
 
-    if (out_root_entity == NULL)
+    if (out_root_entity == NULL && out_instance == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    *out_root_entity = HENKA_INVALID_ENTITY;
-    if (prefab == NULL || target_scene == NULL)
+    if (out_root_entity != NULL)
+    {
+        *out_root_entity = HENKA_INVALID_ENTITY;
+    }
+    if (out_instance != NULL)
+    {
+        *out_instance = NULL;
+    }
+    if (prefab == NULL || target_scene == NULL ||
+        (require_parent && parent_entity == HENKA_INVALID_ENTITY))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -571,8 +670,30 @@ static henka_result henka_prefab_instantiate_internal(
         }
     }
 
-    *out_root_entity = entities[prefab->root_index];
-    henka_free(entities);
+    instance = NULL;
+    if (out_instance != NULL)
+    {
+        instance = (henka_prefab_instance*)henka_calloc(1U, sizeof(*instance));
+        if (instance == NULL)
+        {
+            henka_prefab_rollback_entities(target_scene, entities, created);
+            henka_free(entities);
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        instance->target_scene = target_scene;
+        instance->entities = entities;
+        instance->entity_count = prefab->entity_count;
+        instance->root_index = prefab->root_index;
+        *out_instance = instance;
+    }
+    if (out_root_entity != NULL)
+    {
+        *out_root_entity = entities[prefab->root_index];
+    }
+    if (out_instance == NULL)
+    {
+        henka_free(entities);
+    }
     return HENKA_SUCCESS;
 }
 
@@ -587,7 +708,9 @@ henka_result henka_prefab_instantiate(
         target_scene,
         HENKA_INVALID_ENTITY,
         root_transform,
-        out_root_entity);
+        out_root_entity,
+        NULL,
+        false);
 }
 
 henka_result henka_prefab_instantiate_under_parent(
@@ -602,5 +725,40 @@ henka_result henka_prefab_instantiate_under_parent(
         target_scene,
         parent_entity,
         root_transform,
-        out_root_entity);
+        out_root_entity,
+        NULL,
+        true);
+}
+
+henka_result henka_prefab_instantiate_with_instance(
+    const henka_prefab* prefab,
+    henka_scene* target_scene,
+    henka_transform root_transform,
+    henka_prefab_instance** out_instance)
+{
+    return henka_prefab_instantiate_internal(
+        prefab,
+        target_scene,
+        HENKA_INVALID_ENTITY,
+        root_transform,
+        NULL,
+        out_instance,
+        false);
+}
+
+henka_result henka_prefab_instantiate_under_parent_with_instance(
+    const henka_prefab* prefab,
+    henka_scene* target_scene,
+    henka_entity parent_entity,
+    henka_transform root_transform,
+    henka_prefab_instance** out_instance)
+{
+    return henka_prefab_instantiate_internal(
+        prefab,
+        target_scene,
+        parent_entity,
+        root_transform,
+        NULL,
+        out_instance,
+        true);
 }

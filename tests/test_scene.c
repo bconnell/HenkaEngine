@@ -402,6 +402,16 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     transform = henka_transform_identity();
     transform.position = (henka_vec3){100.0f, 10.0f, -20.0f};
     HENKA_TEST_ASSERT(henka_scene_set_entity_transform(target, holder, transform) == HENKA_SUCCESS);
+    nested_root = HENKA_INVALID_ENTITY;
+    target_count = henka_scene_get_entity_count(target);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_under_parent(
+        prefab,
+        target,
+        HENKA_INVALID_ENTITY,
+        henka_transform_identity(),
+        &nested_root) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(nested_root == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == target_count);
     stale_holder = holder;
     henka_scene_destroy_entity(target, stale_holder);
     target_count = henka_scene_get_entity_count(target);
@@ -444,6 +454,133 @@ static void henka_test_prefab_snapshot_and_transaction(void)
 
     henka_prefab_destroy(prefab);
     henka_scene_destroy(target);
+}
+
+static void henka_test_prefab_instance_mapping(void)
+{
+    henka_scene* source = NULL;
+    henka_scene* target = NULL;
+    henka_prefab* prefab = NULL;
+    henka_prefab_instance* instance = NULL;
+    henka_entity source_root;
+    henka_entity source_child;
+    henka_entity source_outside;
+    henka_entity instance_root = HENKA_INVALID_ENTITY;
+    henka_entity instance_child = HENKA_INVALID_ENTITY;
+    henka_entity parent;
+    henka_entity mapping_parent = HENKA_INVALID_ENTITY;
+    henka_entity stale_mapping_parent = HENKA_INVALID_ENTITY;
+    size_t root_index = SIZE_MAX;
+    size_t child_index = SIZE_MAX;
+    size_t outside_index = SIZE_MAX;
+    size_t count;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
+    source_root = henka_scene_create_entity_named(source, "Mapped Root");
+    source_child = henka_scene_create_entity_named(source, "Mapped Child");
+    source_outside = henka_scene_create_entity_named(source, "Unmapped Source");
+    HENKA_TEST_ASSERT(source_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_outside != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        source, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_create_from_scene(
+        source, source_root, &prefab) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_index(
+        prefab, source_root, &root_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_index(
+        prefab, source_child, &child_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(root_index != child_index);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_index(
+        prefab, source_outside, &outside_index) == HENKA_ERROR_UNKNOWN);
+    HENKA_TEST_ASSERT(outside_index == SIZE_MAX);
+    HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_with_instance(
+        prefab,
+        target,
+        henka_transform_identity(),
+        &instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance != NULL);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_root_entity(
+        instance, &instance_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_count(instance) == 2U);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_at(
+        instance, root_index, &instance_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_at(
+        instance, child_index, &instance_child) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(
+        target, instance_child, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == instance_root);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_at(
+        instance, 2U, &instance_child) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(instance_child == HENKA_INVALID_ENTITY);
+
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_at(
+        instance, child_index, &instance_child) == HENKA_SUCCESS);
+    henka_scene_destroy_entity(target, instance_child);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_at(
+        instance, child_index, &instance_child) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(instance_child == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == 1U);
+    count = henka_scene_get_entity_count(target);
+    henka_prefab_instance_destroy(instance);
+    instance = NULL;
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == count);
+
+    mapping_parent = henka_scene_create_entity_named(target, "Mapped Parent");
+    HENKA_TEST_ASSERT(mapping_parent != HENKA_INVALID_ENTITY);
+    count = henka_scene_get_entity_count(target);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_under_parent_with_instance(
+        prefab,
+        target,
+        HENKA_INVALID_ENTITY,
+        henka_transform_identity(),
+        &instance) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(instance == NULL);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == count);
+    stale_mapping_parent = mapping_parent;
+    henka_scene_destroy_entity(target, stale_mapping_parent);
+    count = henka_scene_get_entity_count(target);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_under_parent_with_instance(
+        prefab,
+        target,
+        stale_mapping_parent,
+        henka_transform_identity(),
+        &instance) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(instance == NULL);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == count);
+
+    mapping_parent = henka_scene_create_entity_named(target, "Mapped Parent Reused");
+    HENKA_TEST_ASSERT(mapping_parent != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_under_parent_with_instance(
+        prefab,
+        target,
+        mapping_parent,
+        henka_transform_identity(),
+        &instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance != NULL);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_count(instance) == 2U);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_root_entity(
+        instance, &instance_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_at(
+        instance, child_index, &instance_child) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(
+        target, instance_child, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == instance_root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(
+        target, instance_root, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == mapping_parent);
+    count = henka_scene_get_entity_count(target);
+    henka_prefab_instance_destroy(instance);
+    instance = NULL;
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == count);
+
+    henka_prefab_destroy(prefab);
+    henka_scene_destroy(target);
+    henka_scene_destroy(source);
 }
 
 static void henka_test_scene_child_enumeration(void)
@@ -1006,4 +1143,5 @@ void henka_test_scene(void)
     henka_test_scene_hierarchy();
     henka_test_scene_child_enumeration();
     henka_test_prefab_snapshot_and_transaction();
+    henka_test_prefab_instance_mapping();
 }

@@ -259,6 +259,10 @@ mutate the scene. Full editor hierarchy presentation and history remain open.
 - Logical selection ownership inside the captured subtree is remapped to the
   corresponding new identities. An owner outside the snapshot is not retained
   as a cross-instance reference; the new entity keeps its self-owned default.
+- `henka_prefab_find_source_index` plus the mapped root and under-parent
+  instantiation APIs expose a bounded deterministic source-to-instance mapping.
+  Queries clear their output and fail closed when a mapped entity is stale or
+  destroyed; destroying the mapping handle does not destroy scene entities.
 - Snapshot text is owned by the prefab. Meshes, shaders, textures, and material
   definitions remain borrowed from their existing owners and must outlive the
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls
