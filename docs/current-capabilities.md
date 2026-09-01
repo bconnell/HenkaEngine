@@ -513,9 +513,11 @@ Sandbox Physics QA and selected-body activation are available. Numeric, allocati
 - Advanced simulation
 
 The public Character Controller foundation is available for a real dynamic
-sphere body. It validates bounded planar input, supports grounded jump
-queuing, rejects stale physics bodies, and participates in the caller-owned
-fixed-step lifecycle.
+sphere body. It validates bounded planar input, supports optional bounded
+acceleration and deceleration tuning, grounded jump queuing, rejects stale
+physics bodies, and participates in the caller-owned fixed-step lifecycle.
+Zero acceleration or deceleration preserves the immediate response for that
+direction.
 
 Full Character Controller movement remains unfinished: capsule geometry,
 swept movement, sliding, slope handling, and step offsets are not currently

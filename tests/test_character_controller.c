@@ -95,6 +95,42 @@ static void henka_test_character_controller_moves_and_jumps(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_character_controller_movement_tuning(void)
+{
+    henka_physics_world* world = NULL;
+    henka_character_controller* controller = NULL;
+    henka_character_controller_desc desc = henka_test_character_controller_desc();
+    henka_character_controller_state state;
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_create(
+        world, &desc, &controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_set_movement_tuning(
+        controller, 6.0f, 12.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_set_planar_velocity(
+        controller, (henka_vec3){3.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.velocity.x, 0.1f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.velocity.z, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.velocity.x, 0.2f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_character_controller_set_planar_velocity(
+        controller, (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.velocity.x, 0.0f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_character_controller_set_movement_tuning(
+        controller, NAN, 12.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_character_controller_set_movement_tuning(
+        controller, 6.0f, -1.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_character_controller_destroy(controller) == HENKA_SUCCESS);
+    henka_physics_world_destroy(world);
+}
+
 static void henka_test_character_controller_failure_boundaries(void)
 {
     henka_physics_world* world = NULL;
@@ -118,6 +154,8 @@ static void henka_test_character_controller_failure_boundaries(void)
     memset(&state, 0xA5, sizeof(state));
     HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(state.body == HENKA_INVALID_PHYSICS_BODY_ID);
+    HENKA_TEST_ASSERT(henka_character_controller_set_movement_tuning(
+        controller, 6.0f, 12.0f) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_character_controller_set_planar_velocity(
         controller, (henka_vec3){1.0f, 0.0f, 0.0f}) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_character_controller_queue_jump(controller) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -129,5 +167,6 @@ void henka_test_character_controller(void)
 {
     henka_test_character_controller_create_and_validate();
     henka_test_character_controller_moves_and_jumps();
+    henka_test_character_controller_movement_tuning();
     henka_test_character_controller_failure_boundaries();
 }

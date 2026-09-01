@@ -78,9 +78,10 @@ flowchart LR
 > **Status:** Foundation; full movement maturity is planned after the current Audio boundary.
 
 The public Character Controller foundation currently supports a real dynamic
-sphere body, bounded planar input, grounded jump queuing, stale-body rejection,
-and caller-owned fixed-step participation. Full first-person, third-person, and
-general character movement remains current development.
+sphere body, bounded planar input, optional acceleration and deceleration
+tuning, grounded jump queuing, stale-body rejection, and caller-owned fixed-step
+participation. Full first-person, third-person, and general character movement
+remains current development.
 
 ### Target capability
 

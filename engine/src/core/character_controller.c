@@ -10,6 +10,8 @@ struct henka_character_controller
     henka_physics_body_id body;
     float max_speed;
     float jump_speed;
+    float acceleration;
+    float deceleration;
     henka_vec3 desired_velocity;
     bool jump_queued;
 };
@@ -22,6 +24,68 @@ static bool henka_character_controller_vec3_finite(henka_vec3 value)
 static bool henka_character_controller_double_fits_float(double value)
 {
     return isfinite(value) && value >= -(double)FLT_MAX && value <= (double)FLT_MAX;
+}
+
+static henka_result henka_character_controller_approach_planar_velocity(
+    henka_vec3 current,
+    henka_vec3 target,
+    float rate,
+    float timestep,
+    henka_vec3* out_velocity)
+{
+    double delta_x;
+    double delta_z;
+    double delta_length;
+    double maximum_delta;
+    double scale;
+    double next_x;
+    double next_z;
+
+    if (out_velocity == NULL || !henka_character_controller_vec3_finite(current) ||
+        !henka_character_controller_vec3_finite(target) || !isfinite(rate) ||
+        rate < 0.0f || !isfinite(timestep) || timestep <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    delta_x = (double)target.x - (double)current.x;
+    delta_z = (double)target.z - (double)current.z;
+    delta_length = hypot(delta_x, delta_z);
+    if (!isfinite(delta_length))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    if (delta_length <= 0.0)
+    {
+        *out_velocity = (henka_vec3){current.x, 0.0f, current.z};
+        return HENKA_SUCCESS;
+    }
+    if (rate <= 0.0f)
+    {
+        *out_velocity = (henka_vec3){target.x, 0.0f, target.z};
+        return HENKA_SUCCESS;
+    }
+
+    maximum_delta = (double)rate * (double)timestep;
+    if (!isfinite(maximum_delta))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    if (maximum_delta >= delta_length)
+    {
+        *out_velocity = (henka_vec3){target.x, 0.0f, target.z};
+        return HENKA_SUCCESS;
+    }
+
+    scale = maximum_delta / delta_length;
+    next_x = (double)current.x + delta_x * scale;
+    next_z = (double)current.z + delta_z * scale;
+    if (!henka_character_controller_double_fits_float(next_x) ||
+        !henka_character_controller_double_fits_float(next_z))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    *out_velocity = (henka_vec3){(float)next_x, 0.0f, (float)next_z};
+    return HENKA_SUCCESS;
 }
 
 static bool henka_character_controller_desc_valid(
@@ -77,9 +141,33 @@ henka_result henka_character_controller_create(
     controller->world = world;
     controller->max_speed = desc->max_speed;
     controller->jump_speed = desc->jump_speed;
+    controller->acceleration = 0.0f;
+    controller->deceleration = 0.0f;
     controller->desired_velocity = (henka_vec3){0.0f, 0.0f, 0.0f};
     controller->jump_queued = false;
     *out_controller = controller;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_character_controller_set_movement_tuning(
+    henka_character_controller* controller,
+    float acceleration,
+    float deceleration)
+{
+    henka_physics_body_state body_state;
+
+    if (controller == NULL || controller->world == NULL ||
+        !isfinite(acceleration) || acceleration < 0.0f ||
+        !isfinite(deceleration) || deceleration < 0.0f ||
+        henka_physics_body_get_state(
+            controller->world,
+            controller->body,
+            &body_state) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    controller->acceleration = acceleration;
+    controller->deceleration = deceleration;
     return HENKA_SUCCESS;
 }
 
@@ -156,6 +244,9 @@ henka_result henka_character_controller_prepare_step(
     double planar_length;
     double planar_scale;
     double vertical_velocity;
+    float fixed_timestep;
+    henka_vec3 target_planar_velocity;
+    henka_vec3 planar_velocity;
     bool apply_jump;
     henka_result result;
 
@@ -198,10 +289,33 @@ henka_result henka_character_controller_prepare_step(
     {
         return HENKA_ERROR_NUMERIC_RANGE;
     }
-    velocity = (henka_vec3){
+    target_planar_velocity = (henka_vec3){
         (float)((double)controller->desired_velocity.x * planar_scale),
-        (float)vertical_velocity,
+        0.0f,
         (float)((double)controller->desired_velocity.z * planar_scale)};
+    velocity = target_planar_velocity;
+    if (controller->acceleration > 0.0f || controller->deceleration > 0.0f)
+    {
+        fixed_timestep = henka_physics_world_get_fixed_timestep(controller->world);
+        if (!isfinite(fixed_timestep) || fixed_timestep <= 0.0f)
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        result = henka_character_controller_approach_planar_velocity(
+            (henka_vec3){body_state.linear_velocity.x, 0.0f, body_state.linear_velocity.z},
+            target_planar_velocity,
+            target_planar_velocity.x != 0.0f || target_planar_velocity.z != 0.0f ?
+                controller->acceleration : controller->deceleration,
+            fixed_timestep,
+            &planar_velocity);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        velocity.x = planar_velocity.x;
+        velocity.z = planar_velocity.z;
+    }
+    velocity.y = (float)vertical_velocity;
     result = henka_physics_body_set_linear_velocity(
             controller->world,
             controller->body,

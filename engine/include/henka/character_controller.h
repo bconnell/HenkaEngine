@@ -50,6 +50,15 @@ henka_result henka_character_controller_destroy(
 henka_result henka_character_controller_set_planar_velocity(
     henka_character_controller* controller,
     henka_vec3 desired_velocity);
+/*
+ * Sets planar movement response in world units per second squared. A zero
+ * acceleration or deceleration preserves the legacy immediate response for
+ * that direction. The update is atomic when validation fails.
+ */
+henka_result henka_character_controller_set_movement_tuning(
+    henka_character_controller* controller,
+    float acceleration,
+    float deceleration);
 henka_result henka_character_controller_queue_jump(
     henka_character_controller* controller);
 
