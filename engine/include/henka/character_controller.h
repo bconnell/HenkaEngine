@@ -14,7 +14,11 @@ typedef struct henka_character_controller henka_character_controller;
  * Planar input is applied during prepare_step and the caller advances the
  * shared physics world exactly once before sync_after_step. A grounded
  * controller inherits linear motion from a live kinematic support body;
- * destroyed or stale support identities are ignored until the next sync.
+ * destroyed or stale support identities are ignored until the next sync. When
+ * both linked_scene and linked_entity identify a live scene entity, the owned
+ * body uses the normal physics transform path to synchronize that entity after
+ * creation, teleport, and successful fixed steps. The link is borrowed; the
+ * controller does not own the scene or entity.
  */
 typedef struct henka_character_controller_desc
 {

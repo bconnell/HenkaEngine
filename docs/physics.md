@@ -83,7 +83,12 @@ Body-type behavior is intentionally explicit in the UI:
 
 The demo links existing generic sample objects to bodies: the ground is a plane, the cubes use AABB colliders, the marker uses a sphere collider, one sample is a static obstacle, and one sample is a trigger volume. Collider debug lines come from the same collider data the solver tests, are clipped to the Scene View, and are not selectable scene objects. The visible ground uses a finite floor surface and grid; selecting it shows one bounded floor indicator. Infinite plane bounds are not shown.
 
-Physics simulation writes linked-body transforms to the real scene entities. Editor-style transforms continue to use the Action API and synchronize their linked body so gizmos and Transform QA remain usable.
+Physics simulation writes linked-body transforms to the real scene entities.
+The character controller's optional live scene/entity link uses this same
+production path after creation, teleport, and successful fixed steps. A
+destroyed, stale, or replaced linked entity is ignored and cannot receive
+controller writes. Editor-style transforms continue to use the Action API and
+synchronize their linked body so gizmos and Transform QA remain usable.
 
 ## Current Limits
 

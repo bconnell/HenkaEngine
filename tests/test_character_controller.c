@@ -3,6 +3,7 @@
 
 #include <henka/character_controller.h>
 #include <henka/physics.h>
+#include <henka/scene.h>
 
 #include "test_suite.h"
 
@@ -436,6 +437,113 @@ static void henka_test_character_controller_follows_kinematic_platform(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_character_controller_syncs_linked_scene_entity(void)
+{
+    henka_scene* scene = NULL;
+    henka_physics_world* world = NULL;
+    henka_character_controller* controller = NULL;
+    henka_character_controller_desc controller_desc =
+        henka_test_character_controller_desc();
+    henka_physics_body_desc floor_desc = {0};
+    henka_character_controller_state state;
+    henka_physics_body_id floor;
+    henka_entity entity;
+    henka_entity replacement;
+    henka_transform scene_transform;
+    henka_transform replacement_transform;
+    henka_transform destination = henka_transform_identity();
+    size_t step;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Character Controller");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    controller_desc.linked_scene = scene;
+    controller_desc.linked_entity = entity;
+    floor_desc.type = HENKA_PHYSICS_BODY_STATIC;
+    floor_desc.transform = henka_transform_identity();
+    floor_desc.material = henka_physics_material_default();
+    floor_desc.collider = henka_physics_collider_plane(
+        (henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f);
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world, &floor_desc, &floor) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_create(
+        world, &controller_desc, &controller) == HENKA_SUCCESS);
+
+    for (step = 0U; step < 180U; ++step)
+    {
+        HENKA_TEST_ASSERT(henka_character_controller_prepare_step(
+            controller) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_character_controller_sync_after_step(
+            controller) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(
+        controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+        scene, entity, &scene_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.position.x, state.transform.position.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.position.y, state.transform.position.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.position.z, state.transform.position.z, 0.0001f);
+
+    destination.position = (henka_vec3){3.0f, 4.0f, -2.0f};
+    HENKA_TEST_ASSERT(henka_character_controller_teleport(
+        controller, destination, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+        scene, entity, &scene_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.position.x, destination.position.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.position.y, destination.position.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.position.z, destination.position.z, 0.0001f);
+
+    henka_scene_destroy_entity(scene, entity);
+    replacement = henka_scene_create_entity_named(scene, "Replacement Character");
+    HENKA_TEST_ASSERT(replacement != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(replacement != entity);
+    replacement_transform = henka_transform_identity();
+    replacement_transform.position = (henka_vec3){9.0f, 8.0f, 7.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+        scene, replacement, replacement_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(
+        controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_sync_after_step(
+        controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+        scene, replacement, &scene_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.position.x, replacement_transform.position.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.position.y, replacement_transform.position.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.position.z, replacement_transform.position.z, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.rotation.x, replacement_transform.rotation.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.rotation.y, replacement_transform.rotation.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.rotation.z, replacement_transform.rotation.z, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.rotation.w, replacement_transform.rotation.w, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.scale.x, replacement_transform.scale.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.scale.y, replacement_transform.scale.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_transform.scale.z, replacement_transform.scale.z, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_character_controller_destroy(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_destroy(world, floor) == HENKA_SUCCESS);
+    henka_physics_world_destroy(world);
+    henka_scene_destroy(scene);
+}
+
 static void henka_test_character_controller_failure_boundaries(void)
 {
     henka_physics_world* world = NULL;
@@ -482,5 +590,6 @@ void henka_test_character_controller(void)
     henka_test_character_controller_slides_along_wall();
     henka_test_character_controller_traverses_walkable_slope();
     henka_test_character_controller_follows_kinematic_platform();
+    henka_test_character_controller_syncs_linked_scene_entity();
     henka_test_character_controller_failure_boundaries();
 }

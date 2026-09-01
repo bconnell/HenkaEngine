@@ -88,7 +88,11 @@ through the shared fixed-step collision path and inherits motion from a live
 kinematic support body. Stale support identities are ignored during movement
 and cleared by the next synchronized contact update. Full first-person,
 third-person, and general character movement remains current development.
-Capsule half-height zero remains sphere-equivalent for compatibility.
+Capsule half-height zero remains sphere-equivalent for compatibility. An
+optional live scene/entity link keeps the controller's scene representation
+synchronized through the normal physics transform path after creation,
+teleport, and successful fixed steps; stale or replaced scene entities do not
+receive writes.
 
 The runtime camera foundation now follows a live generation-checked scene
 entity through target-local offsets, immediate positioning, and bounded

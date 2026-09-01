@@ -531,7 +531,11 @@ lifecycle. It projects planar movement away from blocking non-walkable contact
 normals, preserving tangential motion for bounded wall sliding. Zero
 acceleration or deceleration preserves the immediate response for that
 direction. A teleport can preserve or clear the body's velocity as requested.
-A zero capsule half-height is sphere-equivalent for compatibility.
+A zero capsule half-height is sphere-equivalent for compatibility. An optional
+live scene/entity link uses the normal physics transform path to keep the
+controller's scene representation synchronized after creation, teleport, and
+successful fixed steps. Destroyed, stale, or replaced scene entities do not
+receive controller writes.
 
 Full Character Controller movement remains unfinished: swept movement,
 advanced slope traversal and surface response, advanced moving-platform
