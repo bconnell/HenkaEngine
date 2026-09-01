@@ -12,6 +12,8 @@
 #include <henka/script_asset.h>
 #include <henka/script_source.h>
 
+#include "../engine/src/core/memory_internal.h"
+
 static henka_scene_document_behavior make_behavior(
     henka_script_language language,
     const char* path,
@@ -262,6 +264,30 @@ static void test_source_document_persistence(void)
     (void)remove(hks_path);
 }
 
+static void test_source_save_propagates_temporary_path_errors(void)
+{
+    henka_script_source_document* document = NULL;
+    static const char source[] = "return 1\n";
+    henka_result result;
+
+    assert(henka_script_source_create(
+               HENKA_SCRIPT_LANGUAGE_LUA, &document) == HENKA_SUCCESS);
+    assert(henka_script_source_set_text(
+               document, source, strlen(source)) == HENKA_SUCCESS);
+
+    /* Destination path, temporary-name, and temporary-resolution setup use
+     * four allocations. The fifth allocation is the resolved temporary path;
+     * its failure must remain an allocation error instead of being masked as
+     * a generic source-write failure. */
+    henka_memory_test_fail_after(4U);
+    result = henka_script_asset_save_source_document(
+        ".", "test_tmp/error_propagation.lua", document);
+    henka_memory_test_disable_failures();
+    assert(result == HENKA_ERROR_OUT_OF_MEMORY);
+    assert(henka_script_source_is_dirty(document));
+    henka_script_source_destroy(document);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
@@ -273,6 +299,7 @@ int main(void)
     test_asset_path_and_source_rejection();
     test_exclusive_script_templates();
     test_source_document_persistence();
+    test_source_save_propagates_temporary_path_errors();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_script_asset_tests: PASS");
     return 0;

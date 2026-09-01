@@ -372,10 +372,13 @@ henka_result henka_script_asset_save_source_document(
         project_root,
         temporary_relative_path,
         &temporary_path);
-    if (result != HENKA_SUCCESS ||
-        henka_path_ensure_parent_directory(path) != HENKA_SUCCESS)
+    if (result != HENKA_SUCCESS)
     {
-        result = HENKA_ERROR_ASSET_SOURCE;
+        goto cleanup;
+    }
+    result = henka_path_ensure_parent_directory(path);
+    if (result != HENKA_SUCCESS)
+    {
         goto cleanup;
     }
 #if defined(_MSC_VER)
