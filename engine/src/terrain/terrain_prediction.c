@@ -178,9 +178,17 @@ henka_result henka_terrain_prediction_submit(
             ++prediction->stats.submitted_count;
             if (henka_terrain_prediction_rebuild(prediction) != HENKA_SUCCESS)
             {
+                henka_result rollback_result;
                 prediction->pending[index].active = false;
                 --prediction->stats.pending_command_count;
-                (void)henka_terrain_prediction_rebuild(prediction);
+                rollback_result = henka_terrain_prediction_rebuild(prediction);
+                if (rollback_result != HENKA_SUCCESS)
+                {
+                    /* The predicted presentation world may be only partially
+                     * rebuilt. Do not expose it as valid until refresh can
+                     * reconstruct it successfully. */
+                    prediction->stats.prediction_enabled = false;
+                }
                 return HENKA_ERROR_ASSET_SOURCE;
             }
             return HENKA_SUCCESS;
