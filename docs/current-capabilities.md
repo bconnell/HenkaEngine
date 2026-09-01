@@ -87,12 +87,17 @@ See [model-loading.md](model-loading.md) for import limits and failure behavior.
 - Shared overlay gizmos
 - Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D presets
 - Orthographic zoom and deterministic vertical-view bases
+- Runtime camera follow from a live generation-checked scene entity, with
+  target-local offsets, immediate updates, bounded positional smoothing, and
+  atomic stale-target rejection
 
 The Scene View Compass is a dynamic, camera-driven viewport instrument with axis snapping, orbit dragging, projection switching, persisted placement and scale preferences, and an application-local automation input path for deterministic graphical validation.
 
 ### Remaining hardening
 
-The scene/camera feature boundary is functionally present, but broader visual and manual presentation validation remains open.
+The scene/camera feature boundary is functionally present, but collision-aware
+camera motion, first-person and third-person rigs, camera blending, shake, and
+broader visual/manual presentation validation remain open.
 
 ## Editor Workspace
 

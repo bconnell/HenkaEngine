@@ -84,6 +84,11 @@ the physics transform contract, and caller-owned fixed-step participation. Full
 first-person, third-person, and general character movement remains current
 development.
 
+The runtime camera foundation now follows a live generation-checked scene
+entity through target-local offsets, immediate positioning, and bounded
+positional smoothing. Collision-aware camera motion, first-person and
+third-person rigs, and camera blending remain current development.
+
 ### Target capability
 
 The production foundation should cover:
@@ -101,7 +106,6 @@ The production foundation should cover:
 - configurable step height, skin/contact margin, and surface response;
 - first-person and third-person use;
 - keyboard, mouse, and gamepad integration through the real input boundary;
-- runtime camera integration;
 - one authoritative physics/movement relationship;
 - animation hooks;
 - Audio and footstep hooks;

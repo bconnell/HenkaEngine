@@ -2,6 +2,7 @@
 #define HENKA_RUNTIME_H
 
 #include <henka/camera.h>
+#include <henka/camera_follow.h>
 #include <henka/audio.h>
 #include <henka/math.h>
 #include <henka/memory.h>

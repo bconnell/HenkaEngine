@@ -2611,6 +2611,23 @@ henka_result henka_scene_set_camera(henka_scene* scene, const henka_camera* came
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_get_camera(
+    const henka_scene* scene,
+    henka_camera* out_camera)
+{
+    if (out_camera != NULL)
+    {
+        memset(out_camera, 0, sizeof(*out_camera));
+    }
+    if (scene == NULL || out_camera == NULL || !scene->has_camera)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_camera = scene->camera;
+    return HENKA_SUCCESS;
+}
+
 void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direction)
 {
     henka_vec3 normalized_direction;

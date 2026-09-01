@@ -106,6 +106,8 @@ The reusable camera API provides:
 - orbit;
 - pan;
 - dolly;
+- entity-backed camera follow with target-local offsets and bounded positional
+  smoothing;
 - screen-point ray creation;
 - world-to-screen conversion.
 
@@ -136,6 +138,15 @@ Screen-ray and world-to-screen conversion:
 - initialize caller outputs deterministically on failure.
 
 Camera mutation helpers reject non-finite deltas without corrupting persistent camera state.
+
+`henka_camera_follow_scene_entity` reads the target's authoritative
+generation-checked world transform and updates the scene-owned camera only
+after the complete candidate pose validates. Position and look-at offsets are
+expressed in target-local space. A zero lag applies the desired position
+immediately; a positive lag uses bounded exponential positional smoothing.
+Stale targets, invalid offsets, invalid timing, and invalid candidate poses
+fail without changing the scene camera. Repeated updates with an unchanged
+pose do not consume the camera revision watermark.
 
 ## Action API
 

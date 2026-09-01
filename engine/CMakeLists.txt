@@ -21,6 +21,7 @@ add_library(henka_runtime STATIC
     src/scripting/lua_source.c
     $<$<BOOL:${HENKA_ENABLE_LUA}>:src/scripting/lua_backend.c>
     src/scene/camera.c
+    src/scene/camera_follow.c
     src/scene/scene.c
     src/mesh/authoring_mesh.c
     src/mesh/authoring_topology.c
@@ -91,6 +92,7 @@ if(HENKA_BUILD_CLIENT)
         src/renderer/texture.c
         $<$<BOOL:${HENKA_ENABLE_KTX2_TRANSCODER}>:src/renderer/ktx_boundary.c>
         src/scene/camera.c
+        src/scene/camera_follow.c
         src/scene/scene.c
         src/ui/ui.c
         src/ui/ui_icons.c
