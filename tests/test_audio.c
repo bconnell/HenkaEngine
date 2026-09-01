@@ -159,6 +159,31 @@ static bool test_write_bytes(const char* path, const unsigned char* bytes, size_
     return success;
 }
 
+static bool test_append_bytes(const char* path, const unsigned char* bytes, size_t size)
+{
+    FILE* file = NULL;
+    bool success;
+
+    if (path == NULL || bytes == NULL || size == 0U)
+    {
+        return false;
+    }
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "ab") != 0)
+    {
+        file = NULL;
+    }
+#else
+    file = fopen(path, "ab");
+#endif
+    success = file != NULL && fwrite(bytes, 1U, size, file) == size;
+    if (file != NULL && fclose(file) != 0)
+    {
+        success = false;
+    }
+    return success;
+}
+
 static int test_base64_value(char value)
 {
     if (value >= 'A' && value <= 'Z')
@@ -529,7 +554,9 @@ int main(void)
     const char* stream_path = "build/test_tmp/audio_stream.wav";
     const char* large_stream_path = "build/test_tmp/audio_large_stream.wav";
     const char* malformed_path = "build/test_tmp/audio_malformed.wav";
+    const char* trailing_wav_path = "build/test_tmp/audio_trailing_bytes.wav";
     const unsigned char malformed[] = {'R', 'I', 'F', 'F', 0U, 0U, 0U, 0U};
+    const unsigned char trailing_wav_bytes[] = {0xa5U};
     henka_audio_clip* clip = NULL;
     henka_audio_clip* malformed_clip = NULL;
     henka_audio_clip_info clip_info;
@@ -560,6 +587,14 @@ int main(void)
 
     HENKA_TEST_ASSERT(test_write_real_wav(wav_path, 128U));
     HENKA_TEST_ASSERT(test_write_real_wav(stream_path, 8192U));
+    HENKA_TEST_ASSERT(test_write_real_wav(trailing_wav_path, 8U));
+    HENKA_TEST_ASSERT(test_append_bytes(
+        trailing_wav_path,
+        trailing_wav_bytes,
+        sizeof(trailing_wav_bytes)));
+    HENKA_TEST_ASSERT(henka_audio_clip_load_file(
+        ".", trailing_wav_path, &malformed_clip) == HENKA_ERROR_ASSET_SOURCE);
+    HENKA_TEST_ASSERT(malformed_clip == NULL);
     HENKA_TEST_ASSERT(test_compressed_format_contract() == EXIT_SUCCESS);
     HENKA_TEST_ASSERT(test_compressed_stream_reload_contract() == EXIT_SUCCESS);
     HENKA_TEST_ASSERT(test_streaming_wav_contract(stream_path) == EXIT_SUCCESS);
@@ -790,6 +825,7 @@ int main(void)
     remove(wav_path);
     remove(stream_path);
     remove(malformed_path);
+    remove(trailing_wav_path);
     henka_audio_emitter_destroy(emitter);
     henka_audio_system_destroy(system);
     henka_scene_destroy(scene);

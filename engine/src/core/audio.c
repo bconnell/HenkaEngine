@@ -507,7 +507,8 @@ static bool henka_audio_parse_wav(
         }
         offset = next_offset;
     }
-    if (!found_format || !found_data || format_size < 16U || data_size == 0U)
+    if (offset != byte_count || !found_format || !found_data ||
+        format_size < 16U || data_size == 0U)
     {
         return false;
     }
