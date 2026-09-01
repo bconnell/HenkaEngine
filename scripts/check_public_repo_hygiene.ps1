@@ -36,6 +36,28 @@ function New-WholeWordPattern {
     return [pscustomobject]@{ Pattern = $pattern; Options = $options }
 }
 
+function Get-HenkaTextLineNumber {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Collections.Generic.List[int]]$LineStarts,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Offset
+    )
+
+    $low = 0
+    $high = $LineStarts.Count - 1
+    while ($low -le $high) {
+        $middle = $low + [int](($high - $low) / 2)
+        if ($LineStarts[$middle] -le $Offset) {
+            $low = $middle + 1
+        } else {
+            $high = $middle - 1
+        }
+    }
+    return $high + 1
+}
+
 $ruleSpecs = @(
     @{ Name = "unfinished public wording"; Token = Convert-CodePoints @(112, 108, 97, 99, 101, 104, 111, 108, 100, 101, 114); CaseSensitive = $false },
     @{ Name = "internal development wording 1"; Token = Convert-CodePoints @(97, 103, 101, 110, 116, 105, 99, 32, 119, 111, 114, 107, 101, 114, 115); CaseSensitive = $false },
@@ -113,15 +135,26 @@ foreach ($rawPath in $paths) {
         continue
     }
 
-    $lines = [System.IO.File]::ReadAllLines($absolutePath)
-    for ($lineIndex = 0; $lineIndex -lt $lines.Length; ++$lineIndex) {
-        foreach ($rule in $rules) {
-            if ([System.Text.RegularExpressions.Regex]::IsMatch(
-                    $lines[$lineIndex],
-                    $rule.Pattern,
-                    $rule.Options)) {
-                $findings.Add("${relativePath}:$($lineIndex + 1): $($rule.Name)")
+    $text = [System.IO.File]::ReadAllText($absolutePath)
+    $lineStarts = $null
+    foreach ($rule in $rules) {
+        $matches = [System.Text.RegularExpressions.Regex]::Matches(
+            $text,
+            $rule.Pattern,
+            $rule.Options)
+        if ($matches.Count -eq 0) {
+            continue
+        }
+        if ($null -eq $lineStarts) {
+            $lineStarts = New-Object System.Collections.Generic.List[int]
+            $lineStarts.Add(0)
+            foreach ($lineBreak in [System.Text.RegularExpressions.Regex]::Matches($text, "`n")) {
+                $lineStarts.Add($lineBreak.Index + 1)
             }
+        }
+        foreach ($match in $matches) {
+            $lineNumber = Get-HenkaTextLineNumber -LineStarts $lineStarts -Offset $match.Index
+            $findings.Add("${relativePath}:${lineNumber}: $($rule.Name)")
         }
     }
 }
