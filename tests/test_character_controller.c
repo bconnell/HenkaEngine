@@ -176,6 +176,87 @@ static void henka_test_character_controller_teleport(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_character_controller_slope_grounding(void)
+{
+    const float slope_angle = 20.0f * 3.14159265358979323846f / 180.0f;
+    henka_physics_world* world = NULL;
+    henka_character_controller* controller = NULL;
+    henka_character_controller_desc desc = henka_test_character_controller_desc();
+    henka_physics_body_desc floor_desc = {0};
+    henka_character_controller_state state;
+    henka_physics_body_id floor;
+    size_t step;
+
+    floor_desc.type = HENKA_PHYSICS_BODY_STATIC;
+    floor_desc.transform = henka_transform_identity();
+    floor_desc.material = henka_physics_material_default();
+    floor_desc.collider = henka_physics_collider_plane(
+        (henka_vec3){sinf(slope_angle), cosf(slope_angle), 0.0f}, 0.0f);
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &floor_desc, &floor) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_create(
+        world, &desc, &controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_set_slope_limit(
+        controller, 30.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_set_slope_limit(
+        controller, NAN) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_character_controller_set_slope_limit(
+        controller, -1.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_character_controller_set_slope_limit(
+        controller, 91.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    for (step = 0U; step < 180U; ++step)
+    {
+        HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_character_controller_sync_after_step(controller) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.grounded);
+    HENKA_TEST_ASSERT(state.ground_normal.y > 0.9f);
+    HENKA_TEST_ASSERT(state.ground_normal.x > 0.2f);
+    HENKA_TEST_ASSERT(henka_character_controller_set_slope_limit(
+        controller, 10.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!state.grounded);
+    HENKA_TEST_ASSERT(state.ground_normal.y == 0.0f);
+    HENKA_TEST_ASSERT(henka_character_controller_set_slope_limit(
+        controller, 30.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.grounded);
+
+    HENKA_TEST_ASSERT(henka_character_controller_destroy(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_destroy(world, floor) == HENKA_SUCCESS);
+    henka_physics_world_destroy(world);
+
+    desc = henka_test_character_controller_desc();
+    floor_desc.collider = henka_physics_collider_plane(
+        (henka_vec3){sinf(50.0f * 3.14159265358979323846f / 180.0f),
+            cosf(50.0f * 3.14159265358979323846f / 180.0f), 0.0f},
+        0.0f);
+    world = NULL;
+    controller = NULL;
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &floor_desc, &floor) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_create(
+        world, &desc, &controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_set_slope_limit(
+        controller, 30.0f) == HENKA_SUCCESS);
+    for (step = 0U; step < 180U; ++step)
+    {
+        HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_character_controller_sync_after_step(controller) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!state.grounded);
+    HENKA_TEST_ASSERT(state.ground_normal.y == 0.0f);
+    HENKA_TEST_ASSERT(henka_character_controller_destroy(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_destroy(world, floor) == HENKA_SUCCESS);
+    henka_physics_world_destroy(world);
+}
+
 static void henka_test_character_controller_failure_boundaries(void)
 {
     henka_physics_world* world = NULL;
@@ -196,6 +277,8 @@ static void henka_test_character_controller_failure_boundaries(void)
     HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &before) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_physics_body_destroy(world, before.body) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_character_controller_set_slope_limit(
+        controller, 30.0f) == HENKA_ERROR_INVALID_ARGUMENT);
     memset(&state, 0xA5, sizeof(state));
     HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(state.body == HENKA_INVALID_PHYSICS_BODY_ID);
@@ -216,5 +299,6 @@ void henka_test_character_controller(void)
     henka_test_character_controller_moves_and_jumps();
     henka_test_character_controller_movement_tuning();
     henka_test_character_controller_teleport();
+    henka_test_character_controller_slope_grounding();
     henka_test_character_controller_failure_boundaries();
 }

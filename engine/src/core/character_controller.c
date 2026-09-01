@@ -12,8 +12,11 @@ struct henka_character_controller
     float jump_speed;
     float acceleration;
     float deceleration;
+    float slope_limit_cosine;
     henka_vec3 desired_velocity;
     bool jump_queued;
+    bool grounded;
+    henka_vec3 ground_normal;
 };
 
 static bool henka_character_controller_vec3_finite(henka_vec3 value)
@@ -24,6 +27,85 @@ static bool henka_character_controller_vec3_finite(henka_vec3 value)
 static bool henka_character_controller_double_fits_float(double value)
 {
     return isfinite(value) && value >= -(double)FLT_MAX && value <= (double)FLT_MAX;
+}
+
+static bool henka_character_controller_slope_limit_cosine(
+    float slope_limit_degrees,
+    float* out_cosine)
+{
+    double radians;
+
+    if (out_cosine == NULL || !isfinite(slope_limit_degrees) ||
+        slope_limit_degrees < 0.0f || slope_limit_degrees > 90.0f)
+    {
+        return false;
+    }
+    radians = (double)slope_limit_degrees *
+        3.14159265358979323846 / 180.0;
+    if (!isfinite(radians) || !isfinite(cos(radians)))
+    {
+        return false;
+    }
+    *out_cosine = (float)cos(radians);
+    return isfinite(*out_cosine);
+}
+
+static bool henka_character_controller_find_ground_contact(
+    const henka_character_controller* controller,
+    bool* out_grounded,
+    henka_vec3* out_normal)
+{
+    const henka_physics_contact* contacts;
+    size_t contact_count;
+    float best_y = 0.0f;
+    bool found = false;
+    size_t index;
+
+    if (controller == NULL || out_grounded == NULL || out_normal == NULL)
+    {
+        return false;
+    }
+    *out_grounded = false;
+    *out_normal = (henka_vec3){0.0f, 0.0f, 0.0f};
+    contacts = henka_physics_world_get_contacts(
+        controller->world, &contact_count);
+    if (contact_count > 0U && contacts == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < contact_count; ++index)
+    {
+        henka_physics_contact contact = contacts[index];
+        henka_vec3 support_normal;
+        double normal_length;
+
+        if (contact.is_trigger ||
+            (contact.body_a != controller->body &&
+                contact.body_b != controller->body))
+        {
+            continue;
+        }
+        support_normal = contact.body_a == controller->body ?
+            henka_vec3_scale(contact.normal, -1.0f) : contact.normal;
+        normal_length = hypot(
+            hypot((double)support_normal.x, (double)support_normal.y),
+            (double)support_normal.z);
+        if (!henka_character_controller_vec3_finite(support_normal) ||
+            !isfinite(normal_length) || fabs(normal_length - 1.0) > 0.001 ||
+            support_normal.y <= 0.0001f ||
+            support_normal.y + 0.0001f < controller->slope_limit_cosine)
+        {
+            continue;
+        }
+        if (!found || support_normal.y > best_y)
+        {
+            found = true;
+            best_y = support_normal.y;
+            *out_normal = support_normal;
+        }
+    }
+    *out_grounded = found;
+    return true;
 }
 
 static henka_result henka_character_controller_approach_planar_velocity(
@@ -145,8 +227,12 @@ henka_result henka_character_controller_create(
     controller->jump_speed = desc->jump_speed;
     controller->acceleration = 0.0f;
     controller->deceleration = 0.0f;
+    controller->slope_limit_cosine = cosf(
+        45.0f * 3.14159265358979323846f / 180.0f);
     controller->desired_velocity = (henka_vec3){0.0f, 0.0f, 0.0f};
     controller->jump_queued = false;
+    controller->grounded = false;
+    controller->ground_normal = (henka_vec3){0.0f, 0.0f, 0.0f};
     *out_controller = controller;
     return HENKA_SUCCESS;
 }
@@ -173,14 +259,19 @@ henka_result henka_character_controller_set_movement_tuning(
     return HENKA_SUCCESS;
 }
 
-henka_result henka_character_controller_teleport(
+henka_result henka_character_controller_set_slope_limit(
     henka_character_controller* controller,
-    henka_transform transform,
-    bool clear_velocity)
+    float slope_limit_degrees)
 {
+    float slope_limit_cosine;
+    float previous_slope_limit_cosine;
     henka_physics_body_state body_state;
+    bool grounded;
+    henka_vec3 ground_normal;
 
     if (controller == NULL || controller->world == NULL ||
+        !henka_character_controller_slope_limit_cosine(
+            slope_limit_degrees, &slope_limit_cosine) ||
         henka_physics_body_get_state(
             controller->world,
             controller->body,
@@ -188,11 +279,45 @@ henka_result henka_character_controller_teleport(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    return henka_physics_body_set_transform(
+    previous_slope_limit_cosine = controller->slope_limit_cosine;
+    controller->slope_limit_cosine = slope_limit_cosine;
+    if (!henka_character_controller_find_ground_contact(
+            controller, &grounded, &ground_normal))
+    {
+        controller->slope_limit_cosine = previous_slope_limit_cosine;
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    controller->grounded = grounded;
+    controller->ground_normal = ground_normal;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_character_controller_teleport(
+    henka_character_controller* controller,
+    henka_transform transform,
+    bool clear_velocity)
+{
+    henka_result result;
+
+    if (controller == NULL || controller->world == NULL ||
+        henka_physics_body_get_state(
+            controller->world,
+            controller->body,
+            &(henka_physics_body_state){0}) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_physics_body_set_transform(
         controller->world,
         controller->body,
         transform,
         clear_velocity);
+    if (result == HENKA_SUCCESS)
+    {
+        controller->grounded = false;
+        controller->ground_normal = (henka_vec3){0.0f, 0.0f, 0.0f};
+    }
+    return result;
 }
 
 henka_result henka_character_controller_destroy(
@@ -296,11 +421,11 @@ henka_result henka_character_controller_prepare_step(
     planar_scale = planar_length > (double)controller->max_speed ?
         (double)controller->max_speed / planar_length : 1.0;
     vertical_velocity = body_state.linear_velocity.y;
-    if (body_state.grounded && vertical_velocity < 0.0)
+    if (controller->grounded && vertical_velocity < 0.0)
     {
         vertical_velocity = 0.0;
     }
-    apply_jump = controller->jump_queued && body_state.grounded;
+    apply_jump = controller->jump_queued && controller->grounded;
     if (apply_jump)
     {
         vertical_velocity = (double)controller->jump_speed;
@@ -359,6 +484,8 @@ henka_result henka_character_controller_sync_after_step(
     henka_character_controller* controller)
 {
     henka_physics_body_state body_state;
+    bool grounded;
+    henka_vec3 ground_normal;
 
     if (controller == NULL || controller->world == NULL)
     {
@@ -371,6 +498,13 @@ henka_result henka_character_controller_sync_after_step(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_character_controller_find_ground_contact(
+            controller, &grounded, &ground_normal))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    controller->grounded = grounded;
+    controller->ground_normal = ground_normal;
     return HENKA_SUCCESS;
 }
 
@@ -401,7 +535,8 @@ henka_result henka_character_controller_get_state(
         body_state.id,
         body_state.transform,
         body_state.linear_velocity,
-        body_state.grounded,
-        controller->jump_queued};
+        controller->grounded,
+        controller->jump_queued,
+        controller->ground_normal};
     return HENKA_SUCCESS;
 }

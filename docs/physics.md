@@ -21,8 +21,9 @@ The public physics API provides:
 - optional links from physics bodies to real scene entities
 - a bounded public character-controller foundation backed by a real dynamic
   upright capsule body, with planar velocity limits, grounded jump queuing, and
-  explicit teleport/repositioning, and prepare/synchronize integration around
-  the shared fixed-step world
+  configurable slope-aware grounding, ground-normal reporting, explicit
+  teleport/repositioning, and prepare/synchronize integration around the shared
+  fixed-step world
 - debug-shape and contact data for truthful runtime visualization
 - transform validation that rejects non-finite and collapsed scale components
 - physics allocations included in Henka's debug memory accounting
@@ -90,8 +91,10 @@ Physics simulation writes linked-body transforms to the real scene entities. Edi
 - There are no arbitrary mesh or concave colliders; heightfields are the only
   supported terrain-shaped collider.
 - The character-controller foundation provides an upright capsule body, but it
-  does not yet provide swept movement, sliding, slope handling, moving-platform
-  support, step offsets, vehicles, cloth, soft bodies, fluids, or ragdolls.
+  does not yet provide swept movement, collision sliding, slope traversal or
+  response, moving-platform support, step offsets, vehicles, cloth, soft
+  bodies, fluids, or ragdolls. It does provide configurable slope-aware
+  grounding classification and the accepted ground normal.
 - Continuous collision detection is not implemented; the demo and tests use normal fixed-step conditions.
 - Physics state is runtime state, not scene-authoring or save-data support.
 

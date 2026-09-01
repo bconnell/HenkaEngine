@@ -34,6 +34,7 @@ typedef struct henka_character_controller_state
     henka_vec3 velocity;
     bool grounded;
     bool jump_queued;
+    henka_vec3 ground_normal;
 } henka_character_controller_state;
 
 henka_result henka_character_controller_create(
@@ -61,6 +62,11 @@ henka_result henka_character_controller_set_movement_tuning(
     henka_character_controller* controller,
     float acceleration,
     float deceleration);
+/* Sets the maximum walkable surface angle in degrees. The default is 45
+ * degrees. Grounding is updated by sync_after_step from physics contacts. */
+henka_result henka_character_controller_set_slope_limit(
+    henka_character_controller* controller,
+    float slope_limit_degrees);
 /* Repositions the owned body through the physics transform contract. A failed
  * transform leaves the controller and its body unchanged. */
 henka_result henka_character_controller_teleport(

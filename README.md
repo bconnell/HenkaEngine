@@ -248,8 +248,9 @@ continues to affect status.
 - 2D, broader scripting/behavior authoring, full character-controller movement,
   advanced physics, broader renderer backends, mature Game/Play workflows, and
   advanced audio effects/occlusion remain unfinished. A bounded dynamic-body
-  character-controller foundation is available; capsule, sweep, slope, and
-  step-offset behavior remain open.
+  character-controller foundation is available; capsule sweep, slope
+  traversal and response, and step-offset behavior remain open. Slope-aware
+  grounding classification is available.
 - Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
 - The default Giraffe and Rocket are deterministic imported/generated sample
   assets maintained by the repository. They exercise current import, material,
