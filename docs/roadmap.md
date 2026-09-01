@@ -168,8 +168,10 @@ Hierarchy maturity includes:
 
 - tree/outliner presentation;
 - selection synchronization with the viewport;
-- parent, unparent, reparent, duplicate, rename, and delete operations;
-- subtree duplication with new stable identities and correct internal reference remapping;
+- parent, unparent, reparent, and subtree duplication are available through
+  runtime APIs; complete editor-facing hierarchy operations remain planned;
+- editor subtree duplication with new stable identities and correct internal
+  reference remapping;
 - undo/redo for hierarchy edits;
 - exact save/reload round trips;
 - safe lifecycle behavior when roots, parents, children, or subtrees are destroyed;

@@ -32,7 +32,8 @@ typedef enum henka_action_command
     HENKA_ACTION_COMMAND_HIDE_OBJECT,
     HENKA_ACTION_COMMAND_SHOW_OBJECT,
     HENKA_ACTION_COMMAND_FOCUS_CAMERA_ON_OBJECT,
-    HENKA_ACTION_COMMAND_SET_PARENT
+    HENKA_ACTION_COMMAND_SET_PARENT,
+    HENKA_ACTION_COMMAND_DUPLICATE_SUBTREE
 } henka_action_command;
 
 typedef enum henka_action_status
@@ -105,6 +106,10 @@ typedef struct henka_action_request
             henka_entity parent;
             henka_scene_parenting_mode mode;
         } set_parent;
+        struct
+        {
+            henka_entity entity;
+        } duplicate_subtree;
         struct
         {
             henka_entity entity;

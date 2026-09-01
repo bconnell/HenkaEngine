@@ -239,6 +239,10 @@ Action API can author a parent or unparent operation through this runtime
 foundation with explicit keep-local or keep-world behavior; rejected helper,
 stale, locked, invalid, or cycle-producing relationships leave the hierarchy
 unchanged.
+The public Action API can also duplicate a live user-object subtree through
+the bounded prefab snapshot path, producing new scene identities while
+preserving captured hierarchy and object state; dry-run validation does not
+mutate the scene. Full editor hierarchy presentation and history remain open.
 
 ## Prefabs / Reusable Scene Objects
 

@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include <henka/memory.h>
+#include <henka/prefab.h>
 
 #include "checked.h"
 
@@ -946,6 +947,101 @@ henka_result henka_action_execute(
             break;
         }
 
+        case HENKA_ACTION_COMMAND_DUPLICATE_SUBTREE:
+        {
+            const henka_entity source_entity = request->params.duplicate_subtree.entity;
+            henka_entity source_parent;
+            henka_transform root_transform;
+            henka_prefab* prefab = NULL;
+            henka_entity duplicate_root = HENKA_INVALID_ENTITY;
+            henka_result operation_result;
+
+            status = henka_action_validate_entity_target(context, source_entity, false);
+            if (status != HENKA_ACTION_STATUS_OK)
+            {
+                result.status = status;
+                result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
+                henka_action_set_message(&result, "Duplicate target is not a valid user object.");
+                break;
+            }
+            if (henka_scene_get_entity_parent(context->scene, source_entity, &source_parent) != HENKA_SUCCESS)
+            {
+                result.status = HENKA_ACTION_STATUS_INVALID_ENTITY;
+                result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
+                result.affected_entity = source_entity;
+                henka_action_set_message(&result, "Duplicate target hierarchy could not be read.");
+                break;
+            }
+            operation_result = source_parent == HENKA_INVALID_ENTITY
+                ? henka_scene_get_entity_world_transform(context->scene, source_entity, &root_transform)
+                : henka_scene_get_entity_local_transform(context->scene, source_entity, &root_transform);
+            if (operation_result != HENKA_SUCCESS)
+            {
+                result.status = HENKA_ACTION_STATUS_INVALID_ENTITY;
+                result.engine_result = operation_result;
+                result.affected_entity = source_entity;
+                henka_action_set_message(&result, "Duplicate target transform could not be read.");
+                break;
+            }
+
+            operation_result = henka_prefab_create_from_scene(
+                context->scene,
+                source_entity,
+                &prefab);
+            if (operation_result != HENKA_SUCCESS)
+            {
+                result.status = operation_result == HENKA_ERROR_OUT_OF_MEMORY
+                    ? HENKA_ACTION_STATUS_OUT_OF_MEMORY
+                    : HENKA_ACTION_STATUS_INVALID_ENTITY;
+                result.engine_result = operation_result;
+                result.affected_entity = source_entity;
+                henka_action_set_message(&result, "Subtree could not be captured for duplication.");
+                break;
+            }
+
+            result.status = HENKA_ACTION_STATUS_OK;
+            result.engine_result = HENKA_SUCCESS;
+            result.success = true;
+            if (!request->dry_run)
+            {
+                operation_result = source_parent == HENKA_INVALID_ENTITY
+                    ? henka_prefab_instantiate(
+                        prefab,
+                        context->scene,
+                        root_transform,
+                        &duplicate_root)
+                    : henka_prefab_instantiate_under_parent(
+                        prefab,
+                        context->scene,
+                        source_parent,
+                        root_transform,
+                        &duplicate_root);
+                if (operation_result != HENKA_SUCCESS)
+                {
+                    result.status = operation_result == HENKA_ERROR_OUT_OF_MEMORY
+                        ? HENKA_ACTION_STATUS_OUT_OF_MEMORY
+                        : operation_result == HENKA_ERROR_INVALID_ARGUMENT
+                            ? HENKA_ACTION_STATUS_INVALID_ENTITY
+                            : HENKA_ACTION_STATUS_UNSUPPORTED;
+                    result.engine_result = operation_result;
+                    result.success = false;
+                    henka_action_set_message(&result, "Subtree duplication was rejected without changing the scene.");
+                }
+                else
+                {
+                    result.affected_entity = duplicate_root;
+                }
+            }
+            henka_prefab_destroy(prefab);
+            if (result.success)
+            {
+                henka_action_set_message(
+                    &result,
+                    request->dry_run ? "Validated subtree duplication." : "Subtree duplicated.");
+            }
+            break;
+        }
+
         case HENKA_ACTION_COMMAND_SET_POSITION:
         case HENKA_ACTION_COMMAND_SET_ROTATION:
         case HENKA_ACTION_COMMAND_SET_SCALE:
@@ -1279,6 +1375,8 @@ const char* henka_action_command_to_string(henka_action_command command)
             return "focus_camera_on_object";
         case HENKA_ACTION_COMMAND_SET_PARENT:
             return "set_parent";
+        case HENKA_ACTION_COMMAND_DUPLICATE_SUBTREE:
+            return "duplicate_subtree";
         case HENKA_ACTION_COMMAND_NONE:
         default:
             return "none";

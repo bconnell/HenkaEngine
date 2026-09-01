@@ -148,10 +148,105 @@ static void henka_test_action_parenting(void)
     henka_scene_destroy(scene);
 }
 
+static void henka_test_action_duplicate_subtree(void)
+{
+    henka_action_context* actions;
+    henka_action_request request;
+    henka_action_result result;
+    henka_scene* scene;
+    henka_entity source_root;
+    henka_entity source_child;
+    henka_entity duplicate_root;
+    henka_entity duplicate_child;
+    henka_entity parent;
+    henka_transform transform;
+    henka_bounds bounds;
+    henka_interaction_desc interaction;
+    size_t entity_count;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_action_context_create(&actions) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_action_context_set_scene(actions, scene) == HENKA_SUCCESS);
+    source_root = henka_scene_create_entity_named(scene, "Duplicate Root");
+    source_child = henka_scene_create_entity_named(scene, "Duplicate Child");
+    HENKA_TEST_ASSERT(source_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_child != HENKA_INVALID_ENTITY);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){12.0f, 4.0f, -6.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, source_root, transform) == HENKA_SUCCESS);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){1.0f, 2.0f, 3.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(scene, source_child, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_tag(scene, source_child, "duplicate-child") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_visible(scene, source_child, false) == HENKA_SUCCESS);
+    bounds = (henka_bounds){{-1.0f, -2.0f, -3.0f}, {1.0f, 2.0f, 3.0f}};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, source_child, bounds) == HENKA_SUCCESS);
+    interaction = (henka_interaction_desc){true, 4.0f, "Inspect duplicate"};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_interaction(scene, source_child, &interaction) == HENKA_SUCCESS);
+
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_DUPLICATE_SUBTREE;
+    request.params.duplicate_subtree.entity = source_root;
+    request.dry_run = true;
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 2U);
+    HENKA_TEST_ASSERT(henka_action_validate(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    HENKA_TEST_ASSERT(result.dry_run);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 2U);
+
+    request.dry_run = false;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    duplicate_root = result.affected_entity;
+    HENKA_TEST_ASSERT(duplicate_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(duplicate_root != source_root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 4U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, duplicate_root, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 12.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, 4.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, -6.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_count(scene, duplicate_root, &entity_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(entity_count == 1U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_at_index(
+        scene, duplicate_root, 0U, &duplicate_child) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(duplicate_child != source_child);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, duplicate_child, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == duplicate_root);
+    HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(scene, duplicate_child), "Duplicate Child") == 0);
+    HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_tag(scene, duplicate_child), "duplicate-child") == 0);
+    HENKA_TEST_ASSERT(!henka_scene_is_entity_visible(scene, duplicate_child));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, duplicate_child, &bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.y, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_interaction(scene, duplicate_child, &interaction) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(interaction.enabled && strcmp(interaction.prompt, "Inspect duplicate") == 0);
+
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
+        scene, source_root, HENKA_SCENE_ENTITY_FLAG_HELPER) == HENKA_SUCCESS);
+    request.params.duplicate_subtree.entity = source_root;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_HELPER_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 4U);
+
+    henka_scene_destroy_entity(scene, source_root);
+    request.params.duplicate_subtree.entity = source_root;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 3U);
+
+    henka_action_context_destroy(actions);
+    henka_scene_destroy(scene);
+}
+
 void henka_test_action(void)
 {
     henka_test_action_default_transform_growth();
     henka_test_action_parenting();
+    henka_test_action_duplicate_subtree();
     henka_action_context* actions;
     henka_action_object_details details[4];
     henka_action_request request;

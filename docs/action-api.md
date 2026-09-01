@@ -49,6 +49,8 @@ The current action context supports:
 - camera focus when a camera context is attached.
 - parent and unparent operations through the runtime hierarchy API, with
   explicit keep-local or keep-world behavior.
+- bounded subtree duplication through the runtime prefab snapshot path, with
+  new scene identities and preserved hierarchy/state.
 
 ### Primitive creation
 
@@ -114,6 +116,11 @@ children, invalid parenting modes, and cycle-producing relationships. A
 rejected relationship leaves the scene hierarchy unchanged. The Sandbox
 outliner, hierarchy history, and broader editor authoring surface remain
 separate work.
+
+Subtree duplication accepts a live user-object handle, validates and captures
+the bounded source snapshot before mutation, and rolls back any partial
+instance if the target scene rejects a created entity or relationship. A dry
+run validates the capture path without adding scene entities.
 
 ## Creation transaction safety
 
