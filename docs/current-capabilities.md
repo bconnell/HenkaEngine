@@ -239,6 +239,10 @@ serialization, and production gameplay workflows remain open.
   independent production scene entities, preserves local transforms and
   hierarchy, and applies names, tags, visibility, flags, bounds, interaction,
   and material state through the normal scene APIs.
+- `henka_prefab_instantiate_under_parent` composes the captured root beneath a
+  live scene entity using a caller-supplied local transform. Stale or invalid
+  parent handles fail before allocation, and later hierarchy failures roll back
+  the created instance.
 - Snapshot text is owned by the prefab. Meshes, shaders, textures, and material
   definitions remain borrowed from their existing owners and must outlive the
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls

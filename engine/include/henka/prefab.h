@@ -36,4 +36,14 @@ henka_result henka_prefab_instantiate(
     henka_transform root_transform,
     henka_entity* out_root_entity);
 
+/* Instantiates one prefab beneath an existing scene entity. root_transform is
+ * local to parent_entity; the operation remains transactional and rejects a
+ * stale or invalid parent before creating target entities. */
+henka_result henka_prefab_instantiate_under_parent(
+    const henka_prefab* prefab,
+    henka_scene* target_scene,
+    henka_entity parent_entity,
+    henka_transform root_transform,
+    henka_entity* out_root_entity);
+
 #endif

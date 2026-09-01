@@ -166,7 +166,9 @@ Weapons attached to hands, Audio emitters attached to world objects, cameras att
 > **Status:** Foundation; full reusable authored-object workflows are planned on the hierarchy foundation.
 
 The runtime prefab foundation captures bounded scene snapshots and instantiates
-independent normal Henka scene objects with traceable source relationships.
+independent normal Henka scene objects with traceable source relationships. It
+also composes a captured root beneath a live scene entity using a local root
+transform, which supports runtime attachment to existing gameplay hierarchies.
 Persistent prefab assets, editor authoring, and source-change workflows remain
 planned work.
 

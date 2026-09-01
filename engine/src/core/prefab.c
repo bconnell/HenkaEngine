@@ -376,9 +376,10 @@ static void henka_prefab_rollback_entities(
     }
 }
 
-henka_result henka_prefab_instantiate(
+static henka_result henka_prefab_instantiate_internal(
     const henka_prefab* prefab,
     henka_scene* target_scene,
+    henka_entity parent_entity,
     henka_transform root_transform,
     henka_entity* out_root_entity)
 {
@@ -394,6 +395,11 @@ henka_result henka_prefab_instantiate(
     }
     *out_root_entity = HENKA_INVALID_ENTITY;
     if (prefab == NULL || target_scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (parent_entity != HENKA_INVALID_ENTITY &&
+        !henka_scene_is_entity_valid(target_scene, parent_entity))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -432,7 +438,9 @@ henka_result henka_prefab_instantiate(
     {
         const henka_prefab_entry* entry = &prefab->entries[index];
         result = index == prefab->root_index
-            ? henka_scene_set_entity_transform(target_scene, entities[index], root_transform)
+            ? (parent_entity == HENKA_INVALID_ENTITY
+                ? henka_scene_set_entity_transform(target_scene, entities[index], root_transform)
+                : henka_scene_set_entity_local_transform(target_scene, entities[index], root_transform))
             : henka_scene_set_entity_local_transform(target_scene, entities[index], entry->local_transform);
         if (result == HENKA_SUCCESS)
         {
@@ -508,7 +516,51 @@ henka_result henka_prefab_instantiate(
         }
     }
 
+    if (parent_entity != HENKA_INVALID_ENTITY)
+    {
+        result = henka_scene_set_entity_parent(
+            target_scene,
+            entities[prefab->root_index],
+            parent_entity,
+            HENKA_SCENE_PARENT_KEEP_LOCAL);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_prefab_rollback_entities(target_scene, entities, created);
+            henka_free(entities);
+            return result;
+        }
+    }
+
     *out_root_entity = entities[prefab->root_index];
     henka_free(entities);
     return HENKA_SUCCESS;
+}
+
+henka_result henka_prefab_instantiate(
+    const henka_prefab* prefab,
+    henka_scene* target_scene,
+    henka_transform root_transform,
+    henka_entity* out_root_entity)
+{
+    return henka_prefab_instantiate_internal(
+        prefab,
+        target_scene,
+        HENKA_INVALID_ENTITY,
+        root_transform,
+        out_root_entity);
+}
+
+henka_result henka_prefab_instantiate_under_parent(
+    const henka_prefab* prefab,
+    henka_scene* target_scene,
+    henka_entity parent_entity,
+    henka_transform root_transform,
+    henka_entity* out_root_entity)
+{
+    return henka_prefab_instantiate_internal(
+        prefab,
+        target_scene,
+        parent_entity,
+        root_transform,
+        out_root_entity);
 }

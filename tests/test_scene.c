@@ -289,7 +289,12 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     henka_entity source_child;
     henka_entity instance_root;
     henka_entity instance_child;
+    henka_entity holder;
+    henka_entity stale_holder;
+    henka_entity nested_root;
+    henka_entity nested_child;
     henka_entity parent;
+    size_t target_count;
     henka_transform transform;
     henka_bounds bounds;
     henka_interaction_desc interaction;
@@ -350,6 +355,51 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.x, 1.0f, 0.0001f);
     HENKA_TEST_ASSERT(henka_scene_get_entity_interaction(target, instance_child, &interaction) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(interaction.enabled && strcmp(interaction.prompt, "Inspect prefab part") == 0);
+
+    holder = henka_scene_create_entity_named(target, "Prefab Holder");
+    HENKA_TEST_ASSERT(holder != HENKA_INVALID_ENTITY);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){100.0f, 10.0f, -20.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(target, holder, transform) == HENKA_SUCCESS);
+    stale_holder = holder;
+    henka_scene_destroy_entity(target, stale_holder);
+    target_count = henka_scene_get_entity_count(target);
+    nested_root = HENKA_INVALID_ENTITY;
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_under_parent(
+        prefab,
+        target,
+        stale_holder,
+        henka_transform_identity(),
+        &nested_root) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(nested_root == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == target_count);
+
+    holder = henka_scene_create_entity_named(target, "Prefab Holder Reused");
+    HENKA_TEST_ASSERT(holder != HENKA_INVALID_ENTITY);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){100.0f, 10.0f, -20.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(target, holder, transform) == HENKA_SUCCESS);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){1.0f, 2.0f, 3.0f};
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_under_parent(
+        prefab, target, holder, transform, &nested_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(nested_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(target, nested_root, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == holder);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(target, nested_root, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 101.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, 12.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, -17.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_count(target, nested_root, &target_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(target_count == 1U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_child_at_index(
+        target, nested_root, 0U, &nested_child) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(target, nested_child, &parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(parent == nested_root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(target, nested_child, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 103.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, 15.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, -13.0f, 0.0001f);
 
     henka_prefab_destroy(prefab);
     henka_scene_destroy(target);
