@@ -5153,6 +5153,7 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
     size_t primitive_index;
     size_t child_index;
     char name[HENKA_MAX_SCENE_TEXT_BYTES];
+    henka_result result;
 
     (void)manager;
     if (asset == NULL || target_scene == NULL || inout_count == NULL || inout_selection_owner == NULL || node_index < 0 ||
@@ -5175,12 +5176,14 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
         {
             *inout_selection_owner = entity;
         }
-        else if (henka_scene_set_entity_selection_owner(
-                     target_scene, entity, *inout_selection_owner) != HENKA_SUCCESS)
+        else
         {
-            return HENKA_ERROR_UNKNOWN;
+            result = henka_scene_set_entity_selection_owner(
+                target_scene, entity, *inout_selection_owner);
+            if (result != HENKA_SUCCESS) return result;
         }
-        if (henka_scene_set_entity_mesh(target_scene, entity, asset->primitive_meshes[primitive_index]) != HENKA_SUCCESS) return HENKA_ERROR_UNKNOWN;
+        result = henka_scene_set_entity_mesh(target_scene, entity, asset->primitive_meshes[primitive_index]);
+        if (result != HENKA_SUCCESS) return result;
         material = henka_material_default();
         material.shader = asset->shader;
         if (asset->data.primitives[primitive_index].material_index >= 0 &&
@@ -5192,26 +5195,27 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
         }
         if (material_asset != NULL)
         {
-            if (henka_scene_apply_material_asset(
-                    target_scene, entity, material_asset, material,
-                    material_asset->revision) != HENKA_SUCCESS)
-            {
-                return HENKA_ERROR_UNKNOWN;
-            }
+            result = henka_scene_apply_material_asset(
+                target_scene, entity, material_asset, material,
+                material_asset->revision);
+            if (result != HENKA_SUCCESS) return result;
         }
-        else if (henka_scene_set_entity_material(target_scene, entity, material) != HENKA_SUCCESS ||
-                 henka_scene_set_entity_material_asset(target_scene, entity, NULL) != HENKA_SUCCESS)
+        else
         {
-            return HENKA_ERROR_UNKNOWN;
+            result = henka_scene_set_entity_material(target_scene, entity, material);
+            if (result != HENKA_SUCCESS) return result;
+            result = henka_scene_set_entity_material_asset(target_scene, entity, NULL);
+            if (result != HENKA_SUCCESS) return result;
         }
-        if (henka_scene_set_entity_transform(target_scene, entity, node->world_transform) != HENKA_SUCCESS) return HENKA_ERROR_UNKNOWN;
+        result = henka_scene_set_entity_transform(target_scene, entity, node->world_transform);
+        if (result != HENKA_SUCCESS) return result;
     }
     for (child_index = 0U; child_index < asset->data.node_count; ++child_index)
         if (asset->data.nodes[child_index].parent_index == node_index)
         {
-            henka_result result = henka_assets_instantiate_gltf_scene_node(manager, asset, target_scene,
+            henka_result child_result = henka_assets_instantiate_gltf_scene_node(manager, asset, target_scene,
                 (int)child_index, name_prefix, created, inout_count, inout_selection_owner);
-            if (result != HENKA_SUCCESS) return result;
+            if (child_result != HENKA_SUCCESS) return child_result;
         }
     return HENKA_SUCCESS;
 }

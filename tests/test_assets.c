@@ -459,6 +459,52 @@ static void henka_test_gltf_scene_light_limit_is_transactional(void)
     henka_scene_destroy(target);
 }
 
+static void henka_test_gltf_scene_instantiation_preserves_mutator_errors(void)
+{
+    henka_asset_manager manager;
+    static henka_gltf_scene_asset asset;
+    henka_mesh mesh;
+    henka_shader shader;
+    henka_material invalid_material;
+    henka_scene* target = NULL;
+    size_t entity_count = SIZE_MAX;
+
+    memset(&manager, 0, sizeof(manager));
+    memset(&asset, 0, sizeof(asset));
+    memset(&mesh, 0, sizeof(mesh));
+    memset(&shader, 0, sizeof(shader));
+    asset.shader = &shader;
+    asset.data.scene_count = 1U;
+    asset.data.active_scene_index = 0U;
+    asset.data.scene_root_counts[0] = 1U;
+    asset.data.scene_root_nodes[0] = 0;
+    asset.data.node_count = 1U;
+    asset.data.nodes[0].parent_index = -1;
+    asset.data.nodes[0].mesh_index = 0;
+    asset.data.nodes[0].camera_index = -1;
+    asset.data.nodes[0].light_index = -1;
+    asset.data.nodes[0].world_transform = henka_transform_identity();
+    asset.data.primitive_count = 1U;
+    asset.data.primitives[0].mesh_index = 0U;
+    asset.data.primitives[0].material_index = 0;
+    asset.primitive_meshes[0] = &mesh;
+    asset.data.material_count = 1U;
+    asset.material_ready[0] = true;
+    invalid_material = henka_material_default();
+    invalid_material.shader = &shader;
+    invalid_material.roughness = 0.0f;
+    asset.materials[0] = invalid_material;
+    asset.material_assets[0].material = invalid_material;
+    asset.material_assets[0].revision = 1U;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_instantiate_gltf_scene(
+        &manager, &asset, target, "Invalid Material ", &entity_count) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(entity_count == 0U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == 0U);
+    henka_scene_destroy(target);
+}
+
 static void henka_test_mesh_loader_preserves_nonempty_output(void)
 {
     henka_asset_manager manager;
@@ -611,6 +657,7 @@ void henka_test_assets(void)
     henka_test_material_dependency_failure_is_transactional();
     henka_test_gltf_scene_dependency_failure_is_transactional();
     henka_test_gltf_scene_light_limit_is_transactional();
+    henka_test_gltf_scene_instantiation_preserves_mutator_errors();
     henka_test_mesh_loader_preserves_nonempty_output();
     henka_test_mesh_source_failure_requires_fallback();
     henka_test_texture_loader_preserves_nonempty_output();
