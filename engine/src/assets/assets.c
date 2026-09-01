@@ -3631,7 +3631,7 @@ static henka_result henka_assets_resolve_gltf_material_texture_source(
         manager, source_path, uri, descriptor, out_texture);
 }
 
-static void henka_assets_rollback_material_texture_transaction(
+static void henka_assets_rollback_texture_transaction(
     henka_asset_manager* manager,
     size_t initial_texture_count,
     uint64_t initial_resident_bytes,
@@ -3727,7 +3727,7 @@ static henka_result henka_assets_resolve_gltf_material_source(
         source->thickness_embedded_size, descriptor, &candidate.thickness_texture);
     if (result == HENKA_SUCCESS) result = henka_material_validate(&candidate);
     if (result == HENKA_SUCCESS) *out_material = candidate;
-    else henka_assets_rollback_material_texture_transaction(
+    else henka_assets_rollback_texture_transaction(
         manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
     return result;
 }
@@ -4807,14 +4807,25 @@ static henka_result henka_assets_build_gltf_scene_payload(
     char* resolved_path = NULL;
     henka_model_data primitive_model;
     henka_result result;
+    size_t initial_texture_count;
+    uint64_t initial_resident_bytes;
+    uint64_t initial_uploaded_bytes;
     size_t index;
 
     if (manager == NULL || source_path == NULL || shader == NULL || out_asset == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    initial_texture_count = manager->texture_count;
+    initial_resident_bytes = manager->texture_resident_bytes;
+    initial_uploaded_bytes = manager->texture_uploaded_bytes;
     result = henka_assets_resolve_path(
         henka_engine_get_asset_base_path(manager->engine), source_path, &resolved_path);
     if (result == HENKA_SUCCESS) result = henka_model_scene_data_load_gltf(resolved_path, &out_asset->data);
     henka_free(resolved_path);
-    if (result != HENKA_SUCCESS) return result;
+    if (result != HENKA_SUCCESS)
+    {
+        henka_assets_rollback_texture_transaction(
+            manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
+        return result;
+    }
     out_asset->shader = shader;
 
     for (index = 0U; index < out_asset->data.material_count; ++index)
@@ -4825,6 +4836,8 @@ static henka_result henka_assets_build_gltf_scene_payload(
         if (result != HENKA_SUCCESS)
         {
             henka_assets_destroy_gltf_scene_payload(out_asset);
+            henka_assets_rollback_texture_transaction(
+                manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
             return result;
         }
         out_asset->material_assets[index].material = out_asset->materials[index];
@@ -4842,6 +4855,8 @@ static henka_result henka_assets_build_gltf_scene_payload(
         if (result != HENKA_SUCCESS)
         {
             henka_assets_destroy_gltf_scene_payload(out_asset);
+            henka_assets_rollback_texture_transaction(
+                manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
             return result;
         }
         out_asset->primitive_meshes[index]->asset_manager_owned = true;
@@ -4860,9 +4875,15 @@ henka_result henka_assets_load_gltf_scene_asset(
     char* display_name = NULL;
     henka_gltf_scene_asset* asset = NULL;
     henka_result result;
+    size_t initial_texture_count;
+    uint64_t initial_resident_bytes;
+    uint64_t initial_uploaded_bytes;
 
     if (manager == NULL || path == NULL || shader == NULL || out_asset == NULL || *out_asset != NULL)
         return HENKA_ERROR_INVALID_ARGUMENT;
+    initial_texture_count = manager->texture_count;
+    initial_resident_bytes = manager->texture_resident_bytes;
+    initial_uploaded_bytes = manager->texture_uploaded_bytes;
     result = henka_assets_make_canonical_key(path, &key);
     if (result != HENKA_SUCCESS) return result;
     result = henka_assets_normalize_source_path(path, &source_path);
@@ -4891,6 +4912,8 @@ henka_result henka_assets_load_gltf_scene_asset(
     result = henka_assets_build_gltf_scene_payload(manager, source_path, shader, asset);
     if (result != HENKA_SUCCESS)
     {
+        henka_assets_rollback_texture_transaction(
+            manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
         henka_free(asset);
         henka_free(key);
         henka_free(source_path);
@@ -4900,6 +4923,8 @@ henka_result henka_assets_load_gltf_scene_asset(
     if (display_name == NULL)
     {
         henka_assets_destroy_gltf_scene_payload(asset);
+        henka_assets_rollback_texture_transaction(
+            manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
         henka_free(asset);
         henka_free(key);
         henka_free(source_path);
@@ -4911,6 +4936,8 @@ henka_result henka_assets_load_gltf_scene_asset(
         if (result != HENKA_SUCCESS)
         {
             henka_assets_destroy_gltf_scene_payload(asset);
+            henka_assets_rollback_texture_transaction(
+                manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
             henka_free(display_name);
             henka_free(asset);
             henka_free(key);
@@ -4949,6 +4976,9 @@ henka_result henka_assets_reload_gltf_scene_asset(
     henka_material_asset* old_material_assets = NULL;
     bool* old_material_ready = NULL;
     uint64_t next_revision;
+    size_t initial_texture_count;
+    uint64_t initial_resident_bytes;
+    uint64_t initial_uploaded_bytes;
     size_t material_index;
     henka_result result;
 
@@ -4959,6 +4989,9 @@ henka_result henka_assets_reload_gltf_scene_asset(
     asset = henka_asset_manager_find_gltf_scene_entry(manager, key);
     henka_free(key);
     if (asset == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    initial_texture_count = manager->texture_count;
+    initial_resident_bytes = manager->texture_resident_bytes;
+    initial_uploaded_bytes = manager->texture_uploaded_bytes;
     result = henka_assets_advance_revision(asset->revision, &next_revision);
     if (result != HENKA_SUCCESS) return result;
     for (material_index = 0U;
@@ -4999,6 +5032,8 @@ henka_result henka_assets_reload_gltf_scene_asset(
     result = henka_assets_build_gltf_scene_payload(manager, asset->source_path, asset->shader, candidate);
     if (result != HENKA_SUCCESS)
     {
+        henka_assets_rollback_texture_transaction(
+            manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
         henka_free(candidate);
         henka_free(old_data);
         henka_free(old_meshes);
@@ -5029,6 +5064,8 @@ henka_result henka_assets_reload_gltf_scene_asset(
         if (result != HENKA_SUCCESS)
         {
             henka_assets_destroy_gltf_scene_payload(candidate);
+            henka_assets_rollback_texture_transaction(
+                manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
             henka_free(candidate);
             henka_free(old_data);
             henka_free(old_meshes);
@@ -5043,6 +5080,8 @@ henka_result henka_assets_reload_gltf_scene_asset(
             asset->data.primitive_count)
     {
         henka_assets_destroy_gltf_scene_payload(candidate);
+        henka_assets_rollback_texture_transaction(
+            manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
         henka_free(candidate);
         henka_free(old_data);
         henka_free(old_meshes);
