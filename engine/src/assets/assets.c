@@ -5243,14 +5243,56 @@ static bool henka_assets_gltf_node_is_active(
     return false;
 }
 
-static void henka_assets_apply_gltf_scene_bindings(
+static henka_result henka_assets_validate_gltf_scene_light_capacity(
+    const henka_gltf_scene_asset* asset,
+    const henka_scene* target_scene)
+{
+    size_t existing_local_light_count = 0U;
+    size_t imported_local_light_count = 0U;
+    size_t index;
+
+    if (asset == NULL || target_scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
+    {
+        henka_scene_light_desc light;
+        if (henka_scene_get_light(target_scene, (uint32_t)index, &light) == HENKA_SUCCESS)
+        {
+            ++existing_local_light_count;
+        }
+    }
+    for (index = 0U; index < asset->data.node_count; ++index)
+    {
+        const henka_model_scene_node* node = &asset->data.nodes[index];
+        if (!henka_assets_gltf_node_is_active(asset, (int)index) ||
+            node->light_index < 0 || (size_t)node->light_index >= asset->data.light_count)
+        {
+            continue;
+        }
+        if (asset->data.lights[node->light_index].type != HENKA_MODEL_SCENE_LIGHT_DIRECTIONAL)
+        {
+            ++imported_local_light_count;
+        }
+    }
+    if (existing_local_light_count > HENKA_SCENE_MAX_LOCAL_LIGHTS ||
+        imported_local_light_count > HENKA_SCENE_MAX_LOCAL_LIGHTS - existing_local_light_count ||
+        (henka_scene_get_render_revision(target_scene) == UINT64_MAX && imported_local_light_count > 0U))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_assets_apply_gltf_scene_bindings(
     const henka_gltf_scene_asset* asset,
     henka_scene* target_scene)
 {
     bool camera_applied = false;
     size_t node_index;
 
-    if (asset == NULL || target_scene == NULL) return;
+    if (asset == NULL || target_scene == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
     for (node_index = 0U; node_index < asset->data.node_count; ++node_index)
     {
         const henka_model_scene_node* node = &asset->data.nodes[node_index];
@@ -5299,11 +5341,13 @@ static void henka_assets_apply_gltf_scene_bindings(
             }
             else
             {
-                /* The scene contract is intentionally bounded; excess local lights are ignored safely. */
-                (void)henka_scene_add_light(target_scene, light, &(uint32_t){UINT32_MAX});
+                uint32_t light_index = UINT32_MAX;
+                henka_result result = henka_scene_add_light(target_scene, light, &light_index);
+                if (result != HENKA_SUCCESS) return result;
             }
         }
     }
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_assets_instantiate_gltf_scene(
@@ -5321,6 +5365,8 @@ henka_result henka_assets_instantiate_gltf_scene(
     if (out_entity_count != NULL) *out_entity_count = 0U;
     if (manager == NULL || asset == NULL || target_scene == NULL || out_entity_count == NULL ||
         asset->data.active_scene_index >= asset->data.scene_count) return HENKA_ERROR_INVALID_ARGUMENT;
+    result = henka_assets_validate_gltf_scene_light_capacity(asset, target_scene);
+    if (result != HENKA_SUCCESS) return result;
     for (root_index = 0U; root_index < asset->data.scene_root_counts[asset->data.active_scene_index]; ++root_index)
     {
         int node_index = asset->data.scene_root_nodes[
@@ -5335,7 +5381,12 @@ henka_result henka_assets_instantiate_gltf_scene(
         while (created_count > 0U) henka_scene_destroy_entity(target_scene, created[--created_count]);
         return result;
     }
-    henka_assets_apply_gltf_scene_bindings(asset, target_scene);
+    result = henka_assets_apply_gltf_scene_bindings(asset, target_scene);
+    if (result != HENKA_SUCCESS)
+    {
+        while (created_count > 0U) henka_scene_destroy_entity(target_scene, created[--created_count]);
+        return result;
+    }
     *out_entity_count = created_count;
     return HENKA_SUCCESS;
 }

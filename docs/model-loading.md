@@ -246,7 +246,7 @@ Scene data preserves:
 
 Scene data stays CPU-owned until manager/renderer instantiation publishes dependent meshes and material instances.
 
-Instantiation applies the first active glTF camera and publishes active punctual lights into the runtime scene. The runtime currently supports a bounded four-local-light list.
+Instantiation applies the first active glTF camera and publishes active punctual lights into the runtime scene. The runtime currently supports a bounded four-local-light list. If a valid active scene would exceed that local-light capacity, instantiation returns `HENKA_ERROR_LIMIT` before changing the target scene.
 
 A valid scene may contain cameras, lights, and nodes without mesh buffers. Mesh-bearing scenes require valid bounded buffers, accessors, and triangle primitives.
 
