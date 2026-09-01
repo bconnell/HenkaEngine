@@ -616,7 +616,9 @@ function Invoke-HenkaExpectedFailure {
         [Parameter(Mandatory = $true)]
         [string]$Label,
 
-        [int]$TimeoutMilliseconds = 120000
+        [int]$TimeoutMilliseconds = 120000,
+
+        [switch]$ReturnOutput
     )
 
     if ($TimeoutMilliseconds -le 0) {
@@ -656,7 +658,15 @@ function Invoke-HenkaExpectedFailure {
             Write-Host $stderr.TrimEnd()
         }
 
-        return [int]$capturedProcess.Process.ExitCode
+        $result = [pscustomobject]@{
+            ExitCode = [int]$capturedProcess.Process.ExitCode
+            Stdout = $stdout
+            Stderr = $stderr
+        }
+        if ($ReturnOutput) {
+            return $result
+        }
+        return $result.ExitCode
     }
     finally {
         Close-HenkaCapturedProcess -CapturedProcess $capturedProcess
