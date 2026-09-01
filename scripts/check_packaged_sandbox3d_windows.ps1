@@ -1777,7 +1777,7 @@ try {
         # rather than requiring one implementation detail.
         $nativeSourceRestored = Wait-FileContains `
             -Path $stdoutPath `
-            -Pattern 'Native authoring (source loaded:|topology bridge: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE\.|dogfood: Make Editable converted .+source_state=HENKA_NATIVE_EDITABLE_SOURCE\.|startup restore: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE\.|startup restore fallback: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE fallback=IMPORTED_FIXTURE\.)' `
+            -Pattern 'Native authoring (source loaded:|topology bridge: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE\.|startup restore: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE\.|startup restore fallback: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE fallback=IMPORTED_FIXTURE\.)' `
             -TimeoutMilliseconds 3000
         $nativeAuthoringFallbackObserved = Get-LastLogRegexMatch `
             -Path $stdoutPath `

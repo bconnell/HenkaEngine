@@ -51,7 +51,7 @@ The current major-system order is:
 3. **Scene Hierarchy / Parenting Maturity**.
 4. **Prefabs / Reusable Scene Objects**.
 
-Renderer, realism, modeling, terrain, 2D/2.5D, scripting, and other roadmap work remain active supporting tracks. The sequence identifies the lead major-system campaign after each clean completion boundary.
+Renderer, realism, modeling, terrain, 2D/2.5D, scripting, and other roadmap work remain active supporting tracks. The sequence identifies the lead major-system work after each clean completion boundary.
 
 ```mermaid
 flowchart LR
@@ -618,7 +618,7 @@ Longer-term release work includes:
 4. Versioned builds.
 5. Checksums and release verification.
 6. Provenance for release artifacts.
-7. Continued Audio maturity through remaining device lifecycle, streaming, format, editor, scripting, and packaged end-user workflow gaps until the Audio campaign reaches its defined completion boundary.
+7. Continued Audio maturity through remaining device lifecycle, streaming, format, editor, scripting, and packaged end-user workflow gaps until the Audio scope reaches its defined completion boundary.
 
 These systems affect project structure, compatibility, safety, and long-term maintenance and require explicit design and validation contracts.
 
