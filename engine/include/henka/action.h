@@ -31,7 +31,8 @@ typedef enum henka_action_command
     HENKA_ACTION_COMMAND_RESET_TRANSFORM,
     HENKA_ACTION_COMMAND_HIDE_OBJECT,
     HENKA_ACTION_COMMAND_SHOW_OBJECT,
-    HENKA_ACTION_COMMAND_FOCUS_CAMERA_ON_OBJECT
+    HENKA_ACTION_COMMAND_FOCUS_CAMERA_ON_OBJECT,
+    HENKA_ACTION_COMMAND_SET_PARENT
 } henka_action_command;
 
 typedef enum henka_action_status
@@ -49,7 +50,8 @@ typedef enum henka_action_status
     HENKA_ACTION_STATUS_NO_DEFAULT_TRANSFORM,
     HENKA_ACTION_STATUS_NO_CAMERA,
     HENKA_ACTION_STATUS_UNSUPPORTED,
-    HENKA_ACTION_STATUS_OUT_OF_MEMORY
+    HENKA_ACTION_STATUS_OUT_OF_MEMORY,
+    HENKA_ACTION_STATUS_INVALID_PARENTING
 } henka_action_status;
 
 typedef enum henka_action_primitive
@@ -97,6 +99,12 @@ typedef struct henka_action_request
         {
             henka_entity entity;
         } entity;
+        struct
+        {
+            henka_entity entity;
+            henka_entity parent;
+            henka_scene_parenting_mode mode;
+        } set_parent;
         struct
         {
             henka_entity entity;
@@ -153,6 +161,10 @@ typedef struct henka_action_result
     bool has_scene_summary;
     henka_action_scene_summary scene_summary;
     char message[160];
+    bool has_before_parent;
+    bool has_after_parent;
+    henka_entity before_parent;
+    henka_entity after_parent;
 } henka_action_result;
 
 henka_result henka_action_context_create(henka_action_context** out_context);

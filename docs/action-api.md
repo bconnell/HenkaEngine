@@ -47,6 +47,8 @@ The current action context supports:
 - transform reset when a default transform is registered;
 - visibility changes;
 - camera focus when a camera context is attached.
+- parent and unparent operations through the runtime hierarchy API, with
+  explicit keep-local or keep-world behavior.
 
 ### Primitive creation
 
@@ -106,6 +108,12 @@ Protected operations include:
 - camera focus.
 
 This keeps viewport helpers outside ordinary user-object authority.
+
+Hierarchy actions reject helper or stale parent handles, transform-locked
+children, invalid parenting modes, and cycle-producing relationships. A
+rejected relationship leaves the scene hierarchy unchanged. The Sandbox
+outliner, hierarchy history, and broader editor authoring surface remain
+separate work.
 
 ## Creation transaction safety
 

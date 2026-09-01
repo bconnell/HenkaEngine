@@ -842,6 +842,110 @@ henka_result henka_action_execute(
             henka_action_set_message(&result, result.success ? "Object details ready." : "Object details could not be read.");
             break;
 
+        case HENKA_ACTION_COMMAND_SET_PARENT:
+        {
+            henka_entity entity = request->params.set_parent.entity;
+            henka_entity parent = request->params.set_parent.parent;
+            henka_entity before_parent;
+            henka_transform before_world;
+            henka_transform after_world;
+            henka_result operation_result;
+
+            status = henka_action_validate_entity_target(context, entity, false);
+            if (status != HENKA_ACTION_STATUS_OK)
+            {
+                result.status = status;
+                result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
+                henka_action_set_message(&result, "Parenting target is not a valid user object.");
+                break;
+            }
+            if (parent != HENKA_INVALID_ENTITY)
+            {
+                status = henka_action_validate_entity_target(context, parent, false);
+                if (status != HENKA_ACTION_STATUS_OK)
+                {
+                    result.status = status;
+                    result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
+                    result.affected_entity = entity;
+                    henka_action_set_message(&result, "Parent is not a valid user object or root target.");
+                    break;
+                }
+            }
+            if (request->params.set_parent.mode != HENKA_SCENE_PARENT_KEEP_LOCAL &&
+                request->params.set_parent.mode != HENKA_SCENE_PARENT_KEEP_WORLD)
+            {
+                result.status = HENKA_ACTION_STATUS_INVALID_PARENTING;
+                result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
+                result.affected_entity = entity;
+                henka_action_set_message(&result, "Parenting mode is invalid.");
+                break;
+            }
+            if (henka_scene_is_entity_transform_locked(context->scene, entity))
+            {
+                result.status = HENKA_ACTION_STATUS_TRANSFORM_LOCKED;
+                result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
+                result.affected_entity = entity;
+                henka_action_set_message(&result, "Object transform is locked.");
+                break;
+            }
+            if (henka_scene_get_entity_parent(context->scene, entity, &before_parent) != HENKA_SUCCESS ||
+                henka_scene_get_entity_world_transform(context->scene, entity, &before_world) != HENKA_SUCCESS)
+            {
+                result.status = HENKA_ACTION_STATUS_INVALID_ENTITY;
+                result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
+                result.affected_entity = entity;
+                henka_action_set_message(&result, "Parenting target state could not be read.");
+                break;
+            }
+
+            result.affected_entity = entity;
+            result.selected_entity = henka_action_context_get_selected_entity(context);
+            result.has_before_parent = true;
+            result.before_parent = before_parent;
+            result.has_before_transform = true;
+            result.before_transform = before_world;
+            result.has_after_parent = true;
+            result.after_parent = parent;
+            result.status = HENKA_ACTION_STATUS_OK;
+            result.engine_result = HENKA_SUCCESS;
+            result.success = true;
+            if (!request->dry_run)
+            {
+                operation_result = henka_scene_set_entity_parent(
+                    context->scene,
+                    entity,
+                    parent,
+                    request->params.set_parent.mode);
+                if (operation_result != HENKA_SUCCESS)
+                {
+                    result.status = operation_result == HENKA_ERROR_INVALID_ARGUMENT
+                        ? HENKA_ACTION_STATUS_INVALID_PARENTING
+                        : henka_action_status_from_result(operation_result);
+                    result.engine_result = operation_result;
+                    result.success = false;
+                    result.has_after_parent = false;
+                    henka_action_set_message(&result, "Parenting operation was rejected without changing the scene.");
+                    break;
+                }
+                if (henka_scene_get_entity_parent(context->scene, entity, &result.after_parent) != HENKA_SUCCESS ||
+                    henka_scene_get_entity_world_transform(context->scene, entity, &after_world) != HENKA_SUCCESS)
+                {
+                    result.status = HENKA_ACTION_STATUS_INVALID_ENTITY;
+                    result.engine_result = HENKA_ERROR_UNKNOWN;
+                    result.success = false;
+                    result.has_after_parent = false;
+                    henka_action_set_message(&result, "Parenting operation committed but its result could not be read.");
+                    break;
+                }
+                result.has_after_transform = true;
+                result.after_transform = after_world;
+            }
+            henka_action_set_message(
+                &result,
+                request->dry_run ? "Validated parent change." : "Parent changed.");
+            break;
+        }
+
         case HENKA_ACTION_COMMAND_SET_POSITION:
         case HENKA_ACTION_COMMAND_SET_ROTATION:
         case HENKA_ACTION_COMMAND_SET_SCALE:
@@ -1173,6 +1277,8 @@ const char* henka_action_command_to_string(henka_action_command command)
             return "show_object";
         case HENKA_ACTION_COMMAND_FOCUS_CAMERA_ON_OBJECT:
             return "focus_camera_on_object";
+        case HENKA_ACTION_COMMAND_SET_PARENT:
+            return "set_parent";
         case HENKA_ACTION_COMMAND_NONE:
         default:
             return "none";
@@ -1211,6 +1317,8 @@ const char* henka_action_status_to_string(henka_action_status status)
             return "unsupported";
         case HENKA_ACTION_STATUS_OUT_OF_MEMORY:
             return "out of memory";
+        case HENKA_ACTION_STATUS_INVALID_PARENTING:
+            return "invalid parenting";
         default:
             return "unknown";
     }

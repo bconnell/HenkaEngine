@@ -140,7 +140,9 @@ A mature controller should remain stable across slopes, steps, moving platforms,
 The runtime hierarchy foundation establishes an authoritative composition model
 for real Henka objects, including deterministic direct-child enumeration and
 root enumeration. Editor hierarchy authoring, history, and participation across
-all major subsystems remain planned work.
+all major subsystems remain planned work. The public Action API now exposes
+transactional parent and unparent operations with explicit keep-local and
+keep-world behavior; the Sandbox outliner and hierarchy history remain planned.
 
 ### Core hierarchy
 

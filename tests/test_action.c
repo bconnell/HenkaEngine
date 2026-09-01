@@ -32,9 +32,126 @@ static void henka_test_action_default_transform_growth(void)
     henka_scene_destroy(scene);
 }
 
+static void henka_test_action_parenting(void)
+{
+    henka_action_context* actions;
+    henka_action_request request;
+    henka_action_result result;
+    henka_scene* scene;
+    henka_entity root;
+    henka_entity child;
+    henka_entity helper;
+    henka_entity stale_parent;
+    henka_transform transform;
+    henka_transform child_world;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_action_context_create(&actions) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_action_context_set_scene(actions, scene) == HENKA_SUCCESS);
+    root = henka_scene_create_entity_named(scene, "Action Parent");
+    child = henka_scene_create_entity_named(scene, "Action Child");
+    helper = henka_scene_create_entity_named(scene, "Action Helper");
+    HENKA_TEST_ASSERT(root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(helper != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
+        scene, helper, HENKA_SCENE_ENTITY_FLAG_HELPER) == HENKA_SUCCESS);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){10.0f, 2.0f, -3.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, root, transform) == HENKA_SUCCESS);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){1.0f, 2.0f, 3.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(scene, child, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &child_world) == HENKA_SUCCESS);
+
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_SET_PARENT;
+    request.params.set_parent.entity = child;
+    request.params.set_parent.parent = root;
+    request.params.set_parent.mode = HENKA_SCENE_PARENT_KEEP_LOCAL;
+    HENKA_TEST_ASSERT(henka_action_validate(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    HENKA_TEST_ASSERT(result.has_before_parent);
+    HENKA_TEST_ASSERT(result.before_parent == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, child, &stale_parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stale_parent == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    HENKA_TEST_ASSERT(result.has_after_parent);
+    HENKA_TEST_ASSERT(result.after_parent == root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, child, &stale_parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stale_parent == root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_transform(scene, child, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, 3.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &child_world) == HENKA_SUCCESS);
+
+    request.dry_run = true;
+    request.params.set_parent.parent = HENKA_INVALID_ENTITY;
+    request.params.set_parent.mode = HENKA_SCENE_PARENT_KEEP_WORLD;
+    HENKA_TEST_ASSERT(henka_action_validate(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    HENKA_TEST_ASSERT(result.dry_run);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, child, &stale_parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stale_parent == root);
+    request.dry_run = false;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(scene, child, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, child_world.position.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, child_world.position.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, child_world.position.z, 0.0001f);
+
+    request.params.set_parent.parent = root;
+    request.params.set_parent.mode = (henka_scene_parenting_mode)99;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_INVALID_PARENTING);
+    HENKA_TEST_ASSERT(strcmp(henka_action_status_to_string(result.status), "invalid parenting") == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, child, &stale_parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stale_parent == HENKA_INVALID_ENTITY);
+
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
+        scene, child, HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED) == HENKA_SUCCESS);
+    request.params.set_parent.mode = HENKA_SCENE_PARENT_KEEP_LOCAL;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_TRANSFORM_LOCKED);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, child, &stale_parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stale_parent == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(scene, child, HENKA_SCENE_ENTITY_FLAG_NONE) == HENKA_SUCCESS);
+
+    request.params.set_parent.parent = helper;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_HELPER_ENTITY);
+
+    request.params.set_parent.parent = child;
+    request.params.set_parent.mode = HENKA_SCENE_PARENT_KEEP_LOCAL;
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, child, HENKA_INVALID_ENTITY, HENKA_SCENE_PARENT_KEEP_WORLD) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_INVALID_PARENTING);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(scene, child, &stale_parent) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(stale_parent == HENKA_INVALID_ENTITY);
+
+    henka_scene_destroy_entity(scene, root);
+    request.params.set_parent.parent = root;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_INVALID_ENTITY);
+
+    henka_action_context_destroy(actions);
+    henka_scene_destroy(scene);
+}
+
 void henka_test_action(void)
 {
     henka_test_action_default_transform_growth();
+    henka_test_action_parenting();
     henka_action_context* actions;
     henka_action_object_details details[4];
     henka_action_request request;

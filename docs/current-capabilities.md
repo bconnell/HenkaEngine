@@ -234,7 +234,11 @@ destruction promotion. Passing `HENKA_INVALID_ENTITY` enumerates root entities.
 HSCN v6 persists parent IDs and migrates v1-v5 objects to roots in memory
 without rewriting the source file. Hierarchy editing in the Sandbox, hierarchy
 history, broader imported object registration, complete source/material/project
-serialization, and production gameplay workflows remain open.
+serialization, and production gameplay workflows remain open. The public
+Action API can author a parent or unparent operation through this runtime
+foundation with explicit keep-local or keep-world behavior; rejected helper,
+stale, locked, invalid, or cycle-producing relationships leave the hierarchy
+unchanged.
 
 ## Prefabs / Reusable Scene Objects
 
