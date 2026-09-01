@@ -3631,6 +3631,36 @@ static henka_result henka_assets_resolve_gltf_material_texture_source(
         manager, source_path, uri, descriptor, out_texture);
 }
 
+static void henka_assets_rollback_material_texture_transaction(
+    henka_asset_manager* manager,
+    size_t initial_texture_count,
+    uint64_t initial_resident_bytes,
+    uint64_t initial_uploaded_bytes)
+{
+    size_t index;
+
+    if (manager == NULL || manager->texture_entries == NULL ||
+        initial_texture_count > manager->texture_count)
+    {
+        return;
+    }
+    for (index = initial_texture_count; index < manager->texture_count; ++index)
+    {
+        henka_asset_texture_entry* entry = &manager->texture_entries[index];
+        if (entry->owns_texture)
+        {
+            henka_texture_destroy_owned(entry->texture);
+        }
+        henka_free(entry->key);
+        henka_free(entry->source_path);
+        henka_free(entry->display_name);
+        memset(entry, 0, sizeof(*entry));
+    }
+    manager->texture_count = initial_texture_count;
+    manager->texture_resident_bytes = initial_resident_bytes;
+    manager->texture_uploaded_bytes = initial_uploaded_bytes;
+}
+
 static henka_result henka_assets_resolve_gltf_material_source(
     henka_asset_manager* manager,
     const char* source_path,
@@ -3641,10 +3671,16 @@ static henka_result henka_assets_resolve_gltf_material_source(
     henka_material candidate;
     henka_texture_descriptor descriptor;
     henka_result result;
+    size_t initial_texture_count;
+    uint64_t initial_resident_bytes;
+    uint64_t initial_uploaded_bytes;
 
     if (out_material != NULL) *out_material = henka_material_default();
     if (manager == NULL || source_path == NULL || shader == NULL || source == NULL || out_material == NULL)
         return HENKA_ERROR_INVALID_ARGUMENT;
+    initial_texture_count = manager->texture_count;
+    initial_resident_bytes = manager->texture_resident_bytes;
+    initial_uploaded_bytes = manager->texture_uploaded_bytes;
     candidate = source->material;
     candidate.shader = shader;
     candidate.name = "glTF Material";
@@ -3691,6 +3727,8 @@ static henka_result henka_assets_resolve_gltf_material_source(
         source->thickness_embedded_size, descriptor, &candidate.thickness_texture);
     if (result == HENKA_SUCCESS) result = henka_material_validate(&candidate);
     if (result == HENKA_SUCCESS) *out_material = candidate;
+    else henka_assets_rollback_material_texture_transaction(
+        manager, initial_texture_count, initial_resident_bytes, initial_uploaded_bytes);
     return result;
 }
 

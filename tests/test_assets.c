@@ -90,6 +90,153 @@ static void henka_test_material_load_does_not_populate_mesh_cache(void)
     henka_free(manager.material_entries);
 }
 
+static void henka_test_material_dependency_failure_is_transactional(void)
+{
+    static const char* material_only_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
+    static const char* failed_material_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"images\":[{\"uri\":\"data:application/octet-stream;base64,AQID\"},"
+        "{\"uri\":\"../outside.png\"}],"
+        "\"textures\":[{\"source\":0},{\"source\":1}],"
+        "\"materials\":[{\"pbrMetallicRoughness\":{\"baseColorTexture\":{\"index\":0}},"
+        "\"normalTexture\":{\"index\":1}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    const char* path = "build/test_tmp/transactional-material.gltf";
+    henka_asset_manager load_manager;
+    henka_asset_manager reload_manager;
+    henka_asset_texture_entry load_texture_entries[2];
+    henka_asset_texture_entry reload_texture_entries[2];
+    henka_engine load_engine;
+    henka_engine reload_engine;
+    henka_renderer load_renderer;
+    henka_renderer reload_renderer;
+    henka_texture load_fallback;
+    henka_texture reload_fallback;
+    henka_shader load_shader;
+    henka_shader reload_shader;
+    henka_material_asset* loaded_asset = NULL;
+    henka_material_asset* reloaded_asset = NULL;
+    henka_material_asset* reload_target = NULL;
+    henka_result result;
+    bool load_transactional;
+    bool reload_transactional;
+    size_t index;
+
+    memset(&load_manager, 0, sizeof(load_manager));
+    memset(&reload_manager, 0, sizeof(reload_manager));
+    memset(load_texture_entries, 0, sizeof(load_texture_entries));
+    memset(reload_texture_entries, 0, sizeof(reload_texture_entries));
+    memset(&load_engine, 0, sizeof(load_engine));
+    memset(&reload_engine, 0, sizeof(reload_engine));
+    memset(&load_renderer, 0, sizeof(load_renderer));
+    memset(&reload_renderer, 0, sizeof(reload_renderer));
+    memset(&load_fallback, 0, sizeof(load_fallback));
+    memset(&reload_fallback, 0, sizeof(reload_fallback));
+    memset(&load_shader, 0, sizeof(load_shader));
+    memset(&reload_shader, 0, sizeof(reload_shader));
+    load_engine.asset_base_path = "";
+    reload_engine.asset_base_path = "";
+    load_manager.engine = &load_engine;
+    reload_manager.engine = &reload_engine;
+    load_manager.error_texture = &load_fallback;
+    reload_manager.error_texture = &reload_fallback;
+    load_manager.texture_entries = load_texture_entries;
+    reload_manager.texture_entries = reload_texture_entries;
+    load_manager.texture_capacity = sizeof(load_texture_entries) / sizeof(load_texture_entries[0]);
+    reload_manager.texture_capacity = sizeof(reload_texture_entries) / sizeof(reload_texture_entries[0]);
+    load_fallback.renderer = &load_renderer;
+    load_fallback.backend_data = (void*)1;
+    load_fallback.width = 2;
+    load_fallback.height = 2;
+    reload_fallback.renderer = &reload_renderer;
+    reload_fallback.backend_data = (void*)1;
+    reload_fallback.width = 2;
+    reload_fallback.height = 2;
+
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        path,
+        failed_material_gltf,
+        strlen(failed_material_gltf)));
+    result = henka_assets_load_gltf_material_asset(
+        &load_manager,
+        path,
+        &load_shader,
+        &loaded_asset);
+    load_transactional = result != HENKA_SUCCESS && loaded_asset == NULL &&
+        load_manager.texture_count == 0U && load_manager.texture_resident_bytes == 0U &&
+        load_manager.texture_uploaded_bytes == 0U;
+    for (index = 0U; index < load_manager.texture_count; ++index)
+    {
+        load_manager.texture_entries[index].texture->backend_data = NULL;
+        load_manager.texture_entries[index].texture->owns_backend = false;
+        henka_texture_destroy_owned(load_manager.texture_entries[index].texture);
+        henka_free(load_manager.texture_entries[index].key);
+        henka_free(load_manager.texture_entries[index].source_path);
+        henka_free(load_manager.texture_entries[index].display_name);
+    }
+    load_manager.texture_count = 0U;
+
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        path,
+        material_only_gltf,
+        strlen(material_only_gltf)));
+    result = henka_assets_load_gltf_material_asset(
+        &reload_manager,
+        path,
+        &reload_shader,
+        &reload_target);
+    if (result == HENKA_SUCCESS && reload_target != NULL)
+    {
+        HENKA_TEST_ASSERT(henka_test_write_file(
+            path,
+            failed_material_gltf,
+            strlen(failed_material_gltf)));
+        result = henka_assets_reload_gltf_material_asset(
+            &reload_manager,
+            path,
+            &reloaded_asset);
+        reload_transactional = result != HENKA_SUCCESS && reloaded_asset == NULL &&
+            reload_target->revision == 1U && reload_target->material.shader == &reload_shader &&
+            reload_target->material.base_color_texture == NULL && reload_manager.texture_count == 0U &&
+            reload_manager.texture_resident_bytes == 0U && reload_manager.texture_uploaded_bytes == 0U;
+    }
+    else
+    {
+        reload_transactional = false;
+    }
+
+    for (index = 0U; index < reload_manager.texture_count; ++index)
+    {
+        reload_manager.texture_entries[index].texture->backend_data = NULL;
+        reload_manager.texture_entries[index].texture->owns_backend = false;
+        henka_texture_destroy_owned(reload_manager.texture_entries[index].texture);
+        henka_free(reload_manager.texture_entries[index].key);
+        henka_free(reload_manager.texture_entries[index].source_path);
+        henka_free(reload_manager.texture_entries[index].display_name);
+    }
+    if (reload_manager.material_count > 0U && reload_manager.material_entries[0] != NULL)
+    {
+        henka_free(reload_manager.material_entries[0]->key);
+        henka_free(reload_manager.material_entries[0]->source_path);
+        henka_free(reload_manager.material_entries[0]->display_name);
+        henka_free(reload_manager.material_entries[0]);
+    }
+    henka_free(reload_manager.material_entries);
+    (void)remove(path);
+    HENKA_TEST_ASSERT(load_transactional);
+    HENKA_TEST_ASSERT(reload_transactional);
+}
+
 static void henka_test_mesh_loader_preserves_nonempty_output(void)
 {
     henka_asset_manager manager;
@@ -239,6 +386,7 @@ static void henka_test_shader_and_audio_loaders_preserve_nonempty_output(void)
 void henka_test_assets(void)
 {
     henka_test_material_load_does_not_populate_mesh_cache();
+    henka_test_material_dependency_failure_is_transactional();
     henka_test_mesh_loader_preserves_nonempty_output();
     henka_test_mesh_source_failure_requires_fallback();
     henka_test_texture_loader_preserves_nonempty_output();
