@@ -528,9 +528,17 @@ henka_result henka_script_state_store_save_file(
     size_t size;
     size_t index;
     henka_result result;
-    if (store == NULL || henka_script_state_resolve_path(
-            project_root, relative_path, &path) != HENKA_SUCCESS ||
-        store->count > HENKA_SCRIPT_STATE_MAX_VALUES ||
+    if (store == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_script_state_resolve_path(project_root, relative_path, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        return result;
+    }
+    if (store->count > HENKA_SCRIPT_STATE_MAX_VALUES ||
         !henka_script_state_size_for_count((uint32_t)store->count, &size))
     {
         henka_free(path);
@@ -614,11 +622,15 @@ henka_result henka_script_state_store_load_file(
     uint32_t count;
     size_t index;
     henka_result result;
-    if (store == NULL || henka_script_state_resolve_path(
-            project_root, relative_path, &path) != HENKA_SUCCESS)
+    if (store == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_script_state_resolve_path(project_root, relative_path, &path);
+    if (result != HENKA_SUCCESS)
     {
         henka_free(path);
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        return result;
     }
 #ifdef _WIN32
     if (fopen_s(&file, path, "rb") != 0)

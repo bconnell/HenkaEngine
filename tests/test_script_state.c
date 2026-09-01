@@ -14,6 +14,8 @@
 #include <henka/memory.h>
 #include <henka/script_state.h>
 
+#include "../engine/src/core/memory_internal.h"
+
 static const henka_script_state_identity identity_a = {11U, 101U};
 static const henka_script_state_identity identity_b = {12U, 102U};
 
@@ -246,6 +248,28 @@ static void test_invalid_values_and_load_retention(void)
     henka_script_state_store_destroy(store);
 }
 
+static void test_script_state_propagates_path_errors(void)
+{
+    henka_script_state_store* store = NULL;
+    henka_result result;
+
+    assert(henka_script_state_store_create(&store) == HENKA_SUCCESS);
+
+    henka_memory_test_fail_after(0U);
+    result = henka_script_state_store_save_file(
+        store, ".", "test_tmp/script_state_save_path_error.hstate");
+    henka_memory_test_disable_failures();
+    assert(result == HENKA_ERROR_OUT_OF_MEMORY);
+
+    henka_memory_test_fail_after(0U);
+    result = henka_script_state_store_load_file(
+        store, ".", "test_tmp/script_state_load_path_error.hstate");
+    henka_memory_test_disable_failures();
+    assert(result == HENKA_ERROR_OUT_OF_MEMORY);
+
+    henka_script_state_store_destroy(store);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
@@ -253,6 +277,7 @@ int main(void)
     test_transactional_file_round_trip();
     test_clone_is_independent();
     test_invalid_values_and_load_retention();
+    test_script_state_propagates_path_errors();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_script_state_tests: PASS");
     return 0;
