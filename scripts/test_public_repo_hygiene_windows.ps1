@@ -73,4 +73,38 @@ foreach ($probe in $probeCases) {
     }
 }
 
+$pathProbeDirectory = Join-Path $RepositoryRoot "docs\superpowers"
+$pathProbePath = Join-Path $pathProbeDirectory ".public-hygiene-path-probe-$PID.md"
+if (Test-Path -LiteralPath $pathProbeDirectory) {
+    throw "The framework-branded public documentation path already exists; refusing to run the scoped path probe."
+}
+
+try {
+    New-Item -ItemType Directory -Path $pathProbeDirectory | Out-Null
+    [System.IO.File]::WriteAllText($pathProbePath, "scoped path regression probe")
+    $exitCode = Invoke-HenkaExpectedFailure `
+        -FilePath "powershell.exe" `
+        -Arguments @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", $hygieneScript) `
+        -WorkingDirectory $RepositoryRoot `
+        -Label "Run public repository hygiene regression (framework-public-path)" `
+        -TimeoutMilliseconds 120000
+    if ($exitCode -eq 0) {
+        throw "The public-content gate accepted a framework-branded public documentation path."
+    }
+    Write-Host "[pass] Public-content regression rejected framework-branded public documentation paths."
+} finally {
+    if (Test-Path -LiteralPath $pathProbePath -PathType Leaf) {
+        Remove-Item -LiteralPath $pathProbePath -Force
+    }
+    if (Test-Path -LiteralPath $pathProbeDirectory -PathType Container) {
+        $remaining = @(Get-ChildItem -LiteralPath $pathProbeDirectory -Force)
+        if ($remaining.Count -eq 0) {
+            Remove-Item -LiteralPath $pathProbeDirectory -Force
+        }
+    }
+}
+
 exit 0

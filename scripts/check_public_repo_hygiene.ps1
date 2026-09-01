@@ -89,6 +89,12 @@ foreach ($rawPath in $paths) {
         continue
     }
 
+    if ($relativePath.Equals("docs/superpowers", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $relativePath.StartsWith("docs/superpowers/", [System.StringComparison]::OrdinalIgnoreCase)) {
+        $findings.Add("${relativePath}: framework-branded public documentation path residue")
+        continue
+    }
+
     $fileName = [System.IO.Path]::GetFileName($relativePath)
     $extension = [System.IO.Path]::GetExtension($relativePath).ToLowerInvariant()
     $isKnownText = $extension -in $textExtensions -or
