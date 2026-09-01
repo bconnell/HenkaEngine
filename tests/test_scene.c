@@ -583,6 +583,78 @@ static void henka_test_prefab_instance_mapping(void)
     henka_scene_destroy(source);
 }
 
+static void henka_test_prefab_revision_refresh(void)
+{
+    henka_scene* source = NULL;
+    henka_scene* target_before = NULL;
+    henka_scene* target_after = NULL;
+    henka_prefab* prefab = NULL;
+    henka_prefab_instance* old_instance = NULL;
+    henka_prefab_instance* new_instance = NULL;
+    henka_entity source_root;
+    henka_entity source_child;
+    henka_entity stale_root;
+    henka_entity old_root = HENKA_INVALID_ENTITY;
+    henka_entity new_root = HENKA_INVALID_ENTITY;
+    henka_entity found = HENKA_INVALID_ENTITY;
+    size_t snapshot_count;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
+    source_root = henka_scene_create_entity_named(source, "Refresh Root");
+    source_child = henka_scene_create_entity_named(source, "Refresh Child");
+    HENKA_TEST_ASSERT(source_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        source, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_create_from_scene(
+        source, source_root, &prefab) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_revision(prefab) == 1U);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_with_instance(
+        prefab, NULL, henka_transform_identity(), &old_instance) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(old_instance == NULL);
+    HENKA_TEST_ASSERT(henka_scene_create(&target_before) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_with_instance(
+        prefab, target_before, henka_transform_identity(), &old_instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_prefab_revision(old_instance) == 1U);
+
+    HENKA_TEST_ASSERT(henka_scene_set_entity_name(
+        source, source_child, "Refresh Child Updated") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_refresh_from_scene(
+        prefab, source, source_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_revision(prefab) == 2U);
+    HENKA_TEST_ASSERT(henka_prefab_get_entity_count(prefab) == 2U);
+
+    HENKA_TEST_ASSERT(henka_scene_create(&target_after) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_with_instance(
+        prefab, target_after, henka_transform_identity(), &new_instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_prefab_revision(new_instance) == 2U);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_root_entity(new_instance, &new_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_find_entity_by_name(
+        target_after, "Refresh Child Updated", &found) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(found != HENKA_INVALID_ENTITY);
+
+    stale_root = source_root;
+    henka_scene_destroy_entity(source, stale_root);
+    snapshot_count = henka_prefab_get_entity_count(prefab);
+    HENKA_TEST_ASSERT(henka_prefab_refresh_from_scene(
+        prefab, source, stale_root) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_prefab_get_revision(prefab) == 2U);
+    HENKA_TEST_ASSERT(henka_prefab_get_entity_count(prefab) == snapshot_count);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate(
+        prefab, target_after, henka_transform_identity(), &old_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(old_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_find_entity_by_name(
+        target_after, "Refresh Child Updated", &found) == HENKA_SUCCESS);
+
+    henka_prefab_instance_destroy(old_instance);
+    henka_prefab_instance_destroy(new_instance);
+    henka_prefab_destroy(prefab);
+    henka_scene_destroy(target_before);
+    henka_scene_destroy(target_after);
+    henka_scene_destroy(source);
+}
+
 static void henka_test_scene_child_enumeration(void)
 {
     henka_scene* scene;
@@ -1144,4 +1216,5 @@ void henka_test_scene(void)
     henka_test_scene_child_enumeration();
     henka_test_prefab_snapshot_and_transaction();
     henka_test_prefab_instance_mapping();
+    henka_test_prefab_revision_refresh();
 }

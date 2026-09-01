@@ -181,7 +181,7 @@ Weapons attached to hands, Audio emitters attached to world objects, cameras att
 
 ## Prefabs / Reusable Scene Objects
 
-> **Status:** Foundation; full reusable authored-object workflows are planned on the hierarchy foundation.
+> **Status:** Foundation; in-memory snapshot refresh and revision tracking are available; full reusable authored-object workflows are planned on the hierarchy foundation.
 
 The runtime prefab foundation captures bounded scene snapshots and instantiates
 independent normal Henka scene objects with traceable source relationships. Its
@@ -190,8 +190,13 @@ entities for both root-level and under-parent instantiation, while retaining
 the target scene as a borrowed owner. It also composes a captured root beneath
 a live scene entity using a local root transform, which supports runtime
 attachment to existing gameplay hierarchies.
-Persistent prefab assets, editor authoring, and source-change workflows remain
-planned work.
+The runtime API also supports transactional refresh from a live source root.
+Successful refreshes replace the bounded snapshot and increment its in-memory
+revision; newly created instances record the revision they captured. A failed
+refresh preserves the prior snapshot. Refresh does not persist prefab identity
+or propagate changes into existing instances.
+Persistent prefab assets, stable serialized identity and revisions, editor
+authoring, and source-change propagation remain planned work.
 
 ### Core prefab capability
 

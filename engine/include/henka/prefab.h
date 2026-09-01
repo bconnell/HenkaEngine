@@ -2,6 +2,7 @@
 #define HENKA_PREFAB_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <henka/math.h>
 #include <henka/result.h>
@@ -35,6 +36,16 @@ henka_result henka_prefab_find_source_index(
     const henka_prefab* prefab,
     henka_entity source_entity,
     size_t* out_index);
+uint64_t henka_prefab_get_revision(const henka_prefab* prefab);
+
+/* Rebuilds the bounded snapshot from a live source root. The existing
+ * snapshot remains unchanged if capture or validation fails. A successful
+ * refresh increments the in-memory revision; serialized prefab identity and
+ * persistence are separate contracts. */
+henka_result henka_prefab_refresh_from_scene(
+    henka_prefab* prefab,
+    const henka_scene* source_scene,
+    henka_entity root_entity);
 
 /* Instantiates one independent set of real scene entities and retains a
  * bounded source-to-instance mapping. The mapping borrows target_scene and
@@ -48,6 +59,8 @@ henka_result henka_prefab_instantiate_with_instance(
     henka_prefab_instance** out_instance);
 void henka_prefab_instance_destroy(henka_prefab_instance* instance);
 size_t henka_prefab_instance_get_entity_count(
+    const henka_prefab_instance* instance);
+uint64_t henka_prefab_instance_get_prefab_revision(
     const henka_prefab_instance* instance);
 henka_result henka_prefab_instance_get_entity_at(
     const henka_prefab_instance* instance,

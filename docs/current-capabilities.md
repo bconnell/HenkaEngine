@@ -263,15 +263,21 @@ mutate the scene. Full editor hierarchy presentation and history remain open.
   instantiation APIs expose a bounded deterministic source-to-instance mapping.
   Queries clear their output and fail closed when a mapped entity is stale or
   destroyed; destroying the mapping handle does not destroy scene entities.
+- `henka_prefab_get_revision` and `henka_prefab_refresh_from_scene` provide
+  bounded in-memory snapshot refresh. A successful refresh rebuilds the
+  snapshot transactionally from a live source root and increments its revision;
+  each newly created instance records the revision it captured. A rejected
+  refresh leaves the previous snapshot and revision unchanged.
 - Snapshot text is owned by the prefab. Meshes, shaders, textures, and material
   definitions remain borrowed from their existing owners and must outlive the
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls
   back all newly created entities if validation or allocation fails.
-- Persistent prefab identities and revisions, inherited-versus-overridden
-  values, source-change propagation, duplication, unpacking, serialized
-  prefab assets, editor authoring, and packaged/external-project workflows
-  remain in progress. The current runtime snapshot is a foundation rather than
-  a complete prefab authoring system.
+- Persistent prefab identities and serialized revisions,
+  inherited-versus-overridden values, source-change propagation to existing
+  instances, duplication, unpacking, serialized prefab assets, editor
+  authoring, and packaged/external-project workflows remain in progress. The
+  current runtime snapshot and refresh API are a foundation rather than a
+  complete prefab authoring system.
 
 ## Modeling / Content Authoring
 
