@@ -1,9 +1,12 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <henka/scene_document.h>
+
+#include "../engine/src/core/memory_internal.h"
 
 static bool test_scene_document_files_equal(const char* left_path, const char* right_path)
 {
@@ -524,6 +527,32 @@ static bool test_scene_document_write_v3_or_v4_or_v5_fixture(
         fwrite(payload, 1U, position, file) == position && fclose(file) == 0;
 }
 
+static void test_scene_document_save_propagates_path_errors(void)
+{
+    henka_scene_document* document = NULL;
+    henka_result result;
+
+    assert(henka_scene_document_create(&document) == HENKA_SUCCESS);
+
+    /* The first destination-path allocation must remain an allocation error;
+     * it must not be collapsed into invalid-argument. */
+    henka_memory_test_fail_after(0U);
+    result = henka_scene_document_save_file(
+        document, ".", "test_tmp/scene_document_path_error.hscene");
+    henka_memory_test_disable_failures();
+    assert(result == HENKA_ERROR_OUT_OF_MEMORY);
+
+    /* Six allocations reach parent-directory preparation. Its allocation
+     * failure must also remain visible to the caller. */
+    henka_memory_test_fail_after(6U);
+    result = henka_scene_document_save_file(
+        document, ".", "test_tmp/scene_document_parent_error.hscene");
+    henka_memory_test_disable_failures();
+    assert(result == HENKA_ERROR_OUT_OF_MEMORY);
+
+    henka_scene_document_destroy(document);
+}
+
 int main(void)
 {
     const char* first_path = "build/test_tmp/scene_document_slice_b.hscene";
@@ -561,6 +590,7 @@ int main(void)
     {
         goto cleanup;
     }
+    test_scene_document_save_propagates_path_errors();
     authored_listener.position = (henka_vec3){4.0f, 2.0f, -6.0f};
     authored_listener.forward = (henka_vec3){0.0f, -0.25f, -1.0f};
     authored_listener.up = (henka_vec3){0.0f, 1.0f, -0.1f};

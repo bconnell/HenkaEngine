@@ -1671,11 +1671,16 @@ henka_result henka_scene_document_save_file(
     size_t relative_length;
 
     if (document == NULL || project_root == NULL || relative_path == NULL || relative_path[0] == '\0' ||
-        henka_scene_document_validate(document) != HENKA_SUCCESS ||
-        henka_path_resolve_confined(project_root, relative_path, &path) != HENKA_SUCCESS)
+        henka_scene_document_validate(document) != HENKA_SUCCESS)
     {
         henka_free(path);
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_path_resolve_confined(project_root, relative_path, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        return result;
     }
     if (!henka_scene_document_make_payload(document->storage, &payload, &payload_size))
     {
@@ -1697,9 +1702,13 @@ henka_result henka_scene_document_save_file(
     memcpy(temporary_relative_path, relative_path, relative_length);
     memcpy(temporary_relative_path + relative_length, ".tmp", 5U);
     result = henka_path_resolve_confined(project_root, temporary_relative_path, &temporary_path);
-    if (result != HENKA_SUCCESS || henka_path_ensure_parent_directory(path) != HENKA_SUCCESS)
+    if (result != HENKA_SUCCESS)
     {
-        result = HENKA_ERROR_PLATFORM;
+        goto save_cleanup;
+    }
+    result = henka_path_ensure_parent_directory(path);
+    if (result != HENKA_SUCCESS)
+    {
         goto save_cleanup;
     }
     memset(header, 0, sizeof(header));
