@@ -932,10 +932,10 @@ static henka_physics_contact_status henka_physics_capsule_box(
     double box_max_z = (double)box_center.z + (double)extents.z;
     double capsule_point_y;
     double box_point_y;
-    double capsule_point_x = fmax(box_min_x, fmin((double)capsule_center.x, box_max_x));
-    double box_point_x = capsule_point_x;
-    double capsule_point_z = fmax(box_min_z, fmin((double)capsule_center.z, box_max_z));
-    double box_point_z = capsule_point_z;
+    double capsule_point_x = (double)capsule_center.x;
+    double box_point_x = fmax(box_min_x, fmin((double)capsule_center.x, box_max_x));
+    double capsule_point_z = (double)capsule_center.z;
+    double box_point_z = fmax(box_min_z, fmin((double)capsule_center.z, box_max_z));
     double dx;
     double dy;
     double dz;

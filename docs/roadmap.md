@@ -75,16 +75,17 @@ flowchart LR
 
 ## Character Controller
 
-> **Status:** Foundation; full movement maturity is planned after the current Audio boundary.
+> **Status:** Foundation; collision-aware planar movement is available and full movement maturity remains current development.
 
 The public Character Controller foundation currently supports a real dynamic
 upright capsule body, bounded planar input, optional acceleration and
 deceleration tuning, grounded jump queuing, stale-body rejection, explicit
 teleporting through the physics transform contract, configurable slope-aware
-grounding classification, accepted ground-normal reporting, and caller-owned
-fixed-step participation. Full first-person, third-person, and general
-character movement remains current development. Capsule half-height zero
-remains sphere-equivalent for compatibility.
+grounding classification, accepted ground-normal reporting, contact-aware
+planar sliding against blocking contacts, and caller-owned fixed-step
+participation. Full first-person, third-person, and general character movement
+remains current development. Capsule half-height zero remains sphere-equivalent
+for compatibility.
 
 The runtime camera foundation now follows a live generation-checked scene
 entity through target-local offsets, immediate positioning, and bounded
@@ -99,12 +100,12 @@ The production foundation should cover:
 - walking and running with configurable acceleration and deceleration;
 - jumping, falling, and gravity integration;
 - configurable movement speed and movement policy;
-- slope traversal, explicit slope limits, and surface response;
+- slope traversal and advanced surface response;
 - stairs and bounded step handling;
 - ledge and contact behavior;
 - moving-platform participation;
 - crouch and stand-clearance checks;
-- collision recovery and wall/contact handling;
+- advanced collision recovery and wall/contact handling;
 - configurable step height, skin/contact margin, and surface response;
 - first-person and third-person use;
 - keyboard, mouse, and gamepad integration through the real input boundary;

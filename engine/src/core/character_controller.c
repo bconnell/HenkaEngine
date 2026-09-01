@@ -108,6 +108,91 @@ static bool henka_character_controller_find_ground_contact(
     return true;
 }
 
+static henka_result henka_character_controller_project_planar_velocity(
+    const henka_character_controller* controller,
+    henka_vec3 target_velocity,
+    henka_vec3* out_velocity)
+{
+    const henka_physics_contact* contacts;
+    size_t contact_count;
+    size_t index;
+
+    if (controller == NULL || controller->world == NULL ||
+        out_velocity == NULL ||
+        !henka_character_controller_vec3_finite(target_velocity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_velocity = target_velocity;
+    contacts = henka_physics_world_get_contacts(
+        controller->world, &contact_count);
+    if (contact_count > 0U && contacts == NULL)
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    for (index = 0U; index < contact_count; ++index)
+    {
+        henka_physics_contact contact = contacts[index];
+        henka_vec3 support_normal;
+        double normal_length;
+        double horizontal_length;
+        double normal_x;
+        double normal_z;
+        double inward_velocity;
+        double next_x;
+        double next_z;
+
+        if (contact.is_trigger ||
+            (contact.body_a != controller->body &&
+                contact.body_b != controller->body))
+        {
+            continue;
+        }
+        support_normal = contact.body_a == controller->body ?
+            henka_vec3_scale(contact.normal, -1.0f) : contact.normal;
+        normal_length = hypot(
+            hypot((double)support_normal.x, (double)support_normal.y),
+            (double)support_normal.z);
+        if (!henka_character_controller_vec3_finite(support_normal) ||
+            !isfinite(normal_length) || fabs(normal_length - 1.0) > 0.001)
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        if (support_normal.y + 0.0001f >= controller->slope_limit_cosine)
+        {
+            continue;
+        }
+        horizontal_length = hypot(
+            (double)support_normal.x, (double)support_normal.z);
+        if (!isfinite(horizontal_length))
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        if (horizontal_length <= 0.0001)
+        {
+            continue;
+        }
+        normal_x = (double)support_normal.x / horizontal_length;
+        normal_z = (double)support_normal.z / horizontal_length;
+        inward_velocity = (double)out_velocity->x * normal_x +
+            (double)out_velocity->z * normal_z;
+        if (!isfinite(inward_velocity) || inward_velocity >= 0.0)
+        {
+            continue;
+        }
+        next_x = (double)out_velocity->x - normal_x * inward_velocity;
+        next_z = (double)out_velocity->z - normal_z * inward_velocity;
+        if (!henka_character_controller_double_fits_float(next_x) ||
+            !henka_character_controller_double_fits_float(next_z))
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        out_velocity->x = (float)next_x;
+        out_velocity->z = (float)next_z;
+    }
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_character_controller_approach_planar_velocity(
     henka_vec3 current,
     henka_vec3 target,
@@ -442,6 +527,14 @@ henka_result henka_character_controller_prepare_step(
         (float)((double)controller->desired_velocity.x * planar_scale),
         0.0f,
         (float)((double)controller->desired_velocity.z * planar_scale)};
+    result = henka_character_controller_project_planar_velocity(
+        controller,
+        target_planar_velocity,
+        &target_planar_velocity);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
     velocity = target_planar_velocity;
     if (controller->acceleration > 0.0f || controller->deceleration > 0.0f)
     {

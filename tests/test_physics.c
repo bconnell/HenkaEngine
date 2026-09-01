@@ -408,6 +408,49 @@ static void henka_test_physics_capsule_contacts_and_raycast(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_physics_capsule_box_separation(void)
+{
+    henka_physics_world* world = NULL;
+    henka_physics_body_desc desc;
+    henka_physics_body_id capsule;
+    henka_physics_body_id wall;
+    henka_physics_body_state state;
+    const henka_physics_contact* contacts;
+    size_t contact_count;
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world, (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_capsule(0.5f, 0.75f),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &capsule) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_box((henka_vec3){0.25f, 2.0f, 10.0f}),
+        (henka_vec3){2.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &wall) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    contacts = henka_physics_world_get_contacts(world, &contact_count);
+    HENKA_TEST_ASSERT(contacts == NULL && contact_count == 0U);
+
+    state = (henka_physics_body_state){0};
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, capsule, &state) == HENKA_SUCCESS);
+    state.transform.position.x = 1.5f;
+    HENKA_TEST_ASSERT(henka_physics_body_set_transform(
+        world, capsule, state.transform, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    contacts = henka_physics_world_get_contacts(world, &contact_count);
+    HENKA_TEST_ASSERT(contacts != NULL && contact_count == 1U);
+    HENKA_TEST_ASSERT(contacts[0].body_a == capsule);
+    HENKA_TEST_ASSERT(contacts[0].body_b == wall);
+    HENKA_TEST_ASSERT(contacts[0].normal.x > 0.9f);
+
+    henka_physics_world_destroy(world);
+}
+
 static void henka_test_physics_shape_pairs_and_raycast(void)
 {
     henka_physics_world* world;
@@ -1467,6 +1510,7 @@ void henka_test_physics(void)
     henka_test_physics_motion_and_materials();
     henka_test_physics_contacts_and_events();
     henka_test_physics_capsule_contacts_and_raycast();
+    henka_test_physics_capsule_box_separation();
     henka_test_physics_shape_pairs_and_raycast();
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();

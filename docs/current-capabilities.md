@@ -527,15 +527,18 @@ upright capsule body. It validates bounded planar input, supports optional
 bounded acceleration and deceleration tuning, grounded jump queuing, rejects
 stale physics bodies, supports explicit teleport/repositioning through the
 physics transform contract, and participates in the caller-owned fixed-step
-lifecycle. Zero acceleration or deceleration preserves the immediate response
-for that direction. A teleport can preserve or clear the body's velocity as
-requested. A zero capsule half-height is sphere-equivalent for compatibility.
+lifecycle. It projects planar movement away from blocking non-walkable contact
+normals, preserving tangential motion for bounded wall sliding. Zero
+acceleration or deceleration preserves the immediate response for that
+direction. A teleport can preserve or clear the body's velocity as requested.
+A zero capsule half-height is sphere-equivalent for compatibility.
 
 Full Character Controller movement remains unfinished: swept movement,
-sliding, slope traversal and response, moving-platform support, and step
-offsets are not currently implemented. The foundation does provide
-configurable slope-aware grounding classification and the accepted ground
-normal. Mesh collision, constraints, and advanced simulation also remain open.
+slope traversal and response, moving-platform support, and step offsets are
+not currently implemented. Contact-aware planar sliding against blocking
+contacts, configurable slope-aware grounding classification, and the accepted
+ground normal are available. Mesh collision, constraints, and advanced
+simulation also remain open.
 
 See [physics.md](physics.md) and [help/sandbox3d.md](help/sandbox3d.md).
 
