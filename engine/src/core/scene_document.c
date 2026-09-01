@@ -1823,10 +1823,15 @@ henka_result henka_scene_document_load_file(
     henka_result result;
 
     if (document == NULL || document->storage == NULL || project_root == NULL || relative_path == NULL ||
-        relative_path[0] == '\0' || henka_path_resolve_confined(project_root, relative_path, &path) != HENKA_SUCCESS)
+        relative_path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_path_resolve_confined(project_root, relative_path, &path);
+    if (result != HENKA_SUCCESS)
     {
         henka_free(path);
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        return result;
     }
     result = henka_scene_document_read_file(path, &data, &size);
     henka_free(path);
