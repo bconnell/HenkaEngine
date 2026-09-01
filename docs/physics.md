@@ -92,11 +92,11 @@ Physics simulation writes linked-body transforms to the real scene entities. Edi
 - There are no arbitrary mesh or concave colliders; heightfields are the only
   supported terrain-shaped collider.
 - The character-controller foundation provides an upright capsule body, but it
-  does not yet provide swept movement, slope traversal or response,
+  does not yet provide swept movement, advanced slope traversal or response,
   moving-platform support, step offsets, vehicles, cloth, soft bodies, fluids,
   or ragdolls. It provides contact-aware planar sliding against blocking
-  contacts, configurable slope-aware grounding classification, and the
-  accepted ground normal.
+  contacts, basic traversal across supported walkable planes, configurable
+  slope-aware grounding classification, and the accepted ground normal.
 - Continuous collision detection is not implemented; the demo and tests use normal fixed-step conditions.
 - Physics state is runtime state, not scene-authoring or save-data support.
 
