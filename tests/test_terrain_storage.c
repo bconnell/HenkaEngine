@@ -5,6 +5,8 @@
 #include <henka/memory.h>
 #include <henka/terrain_storage.h>
 
+#include "../engine/src/core/memory_internal.h"
+
 static long test_terrain_storage_file_size(const char* path)
 {
     FILE* file = fopen(path, "rb");
@@ -317,10 +319,32 @@ cleanup:
     return result;
 }
 
+static int test_storage_path_errors_are_preserved(void)
+{
+    const char* root_path = "build/test_tmp/terrain_storage_path_errors";
+    henka_terrain_world_desc desc = henka_terrain_world_desc_default();
+    henka_terrain_storage* storage = NULL;
+    henka_terrain_world_desc loaded_desc;
+    henka_result result;
+
+    if (henka_terrain_storage_create(&desc, root_path, &storage) != HENKA_SUCCESS ||
+        henka_terrain_storage_ensure_manifest(storage) != HENKA_SUCCESS)
+    {
+        henka_terrain_storage_destroy(storage);
+        return 0;
+    }
+    henka_memory_test_fail_after(0U);
+    result = henka_terrain_storage_load_manifest(storage, &loaded_desc);
+    henka_memory_test_disable_failures();
+    henka_terrain_storage_destroy(storage);
+    return result == HENKA_ERROR_OUT_OF_MEMORY ? 1 : 0;
+}
+
 int main(void)
 {
     return test_codec_and_transaction_recovery() &&
         test_save_resident_regions_transactionally() &&
         test_save_dirty_regions_skips_clean_residents() &&
-        test_committed_journal_stays_bounded_across_repeated_runs() ? 0 : 1;
+        test_committed_journal_stays_bounded_across_repeated_runs() &&
+        test_storage_path_errors_are_preserved() ? 0 : 1;
 }

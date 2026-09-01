@@ -509,10 +509,15 @@ static henka_result henka_terrain_append_journal_record(
     uint8_t header[HENKA_TERRAIN_JOURNAL_HEADER_BYTES];
     henka_result result;
     if (payload_size > HENKA_TERRAIN_MAX_REGION_RECORD_BYTES ||
-        (payload_size > 0U && payload == NULL) ||
-        henka_terrain_storage_journal_path(storage, &path) != HENKA_SUCCESS)
+        (payload_size > 0U && payload == NULL))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_storage_journal_path(storage, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        return result;
     }
     file = henka_terrain_open_file(path, "ab");
     if (file == NULL)
@@ -542,12 +547,19 @@ static henka_result henka_terrain_storage_replace_snapshot(
     char* temporary_path = NULL;
     FILE* file = NULL;
     henka_result result;
-    if (henka_terrain_storage_region_path(storage, region_id, false, &path) != HENKA_SUCCESS ||
-        henka_terrain_storage_region_path(storage, region_id, true, &temporary_path) != HENKA_SUCCESS)
+    result = henka_terrain_storage_region_path(storage, region_id, false, &path);
+    if (result != HENKA_SUCCESS)
     {
         henka_free(path);
         henka_free(temporary_path);
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        return result;
+    }
+    result = henka_terrain_storage_region_path(storage, region_id, true, &temporary_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        henka_free(temporary_path);
+        return result;
     }
     file = henka_terrain_open_file(temporary_path, "wb");
     if (file == NULL)
@@ -667,9 +679,15 @@ henka_result henka_terrain_storage_recover(henka_terrain_storage* storage)
     bool active = false;
     henka_result result = HENKA_SUCCESS;
 
-    if (storage == NULL || henka_terrain_storage_journal_path(storage, &path) != HENKA_SUCCESS)
+    if (storage == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_storage_journal_path(storage, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        return result;
     }
     file = henka_terrain_open_file(path, "rb");
     henka_free(path);
@@ -751,13 +769,25 @@ static henka_result henka_terrain_storage_write_manifest(
     uint8_t buffer[HENKA_TERRAIN_MANIFEST_BYTES];
     henka_result result;
 
-    if (storage == NULL ||
-        henka_terrain_storage_manifest_path(storage, false, &path) != HENKA_SUCCESS ||
-        henka_terrain_storage_manifest_path(storage, true, &temporary_path) != HENKA_SUCCESS)
+    if (storage == NULL)
     {
         henka_free(path);
         henka_free(temporary_path);
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_storage_manifest_path(storage, false, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        henka_free(temporary_path);
+        return result;
+    }
+    result = henka_terrain_storage_manifest_path(storage, true, &temporary_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        henka_free(temporary_path);
+        return result;
     }
     henka_terrain_manifest_encode(&storage->desc, buffer);
     file = henka_terrain_open_file(temporary_path, "wb");
@@ -793,11 +823,17 @@ henka_result henka_terrain_storage_load_manifest(
     FILE* file = NULL;
     uint8_t buffer[HENKA_TERRAIN_MAX_MANIFEST_BYTES];
     size_t bytes_read;
-    if (storage == NULL || out_desc == NULL ||
-        henka_terrain_storage_manifest_path(storage, false, &path) != HENKA_SUCCESS)
+    henka_result result;
+    if (storage == NULL || out_desc == NULL)
     {
         henka_free(path);
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_storage_manifest_path(storage, false, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        return result;
     }
     file = henka_terrain_open_file(path, "rb");
     henka_free(path);
@@ -844,13 +880,25 @@ henka_result henka_terrain_storage_compact(henka_terrain_storage* storage)
     char* temporary_path = NULL;
     FILE* file = NULL;
     henka_result result;
-    if (storage == NULL || storage->active_transaction_id != 0U ||
-        henka_terrain_storage_journal_path(storage, &path) != HENKA_SUCCESS ||
-        henka_terrain_storage_resolve(storage, "terrain.journal.compact", &temporary_path) != HENKA_SUCCESS)
+    if (storage == NULL || storage->active_transaction_id != 0U)
     {
         henka_free(path);
         henka_free(temporary_path);
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_storage_journal_path(storage, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        henka_free(temporary_path);
+        return result;
+    }
+    result = henka_terrain_storage_resolve(storage, "terrain.journal.compact", &temporary_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        henka_free(temporary_path);
+        return result;
     }
     result = henka_terrain_storage_recover(storage);
     if (result != HENKA_SUCCESS)
@@ -956,9 +1004,11 @@ henka_result henka_terrain_storage_commit(
         FILE* journal = NULL;
         long journal_size = 0L;
 
-        if (henka_terrain_storage_journal_path(storage, &journal_path) != HENKA_SUCCESS)
+        result = henka_terrain_storage_journal_path(storage, &journal_path);
+        if (result != HENKA_SUCCESS)
         {
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            henka_free(journal_path);
+            return result;
         }
         journal = henka_terrain_open_file(journal_path, "rb");
         if (journal == NULL)
@@ -1114,10 +1164,15 @@ henka_result henka_terrain_storage_load_region(
     size_t size;
     henka_result result;
     if (storage == NULL || out_info == NULL || samples == NULL ||
-        !henka_terrain_region_id_is_valid(&storage->desc, region_id) ||
-        henka_terrain_storage_region_path(storage, region_id, false, &path) != HENKA_SUCCESS)
+        !henka_terrain_region_id_is_valid(&storage->desc, region_id))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_storage_region_path(storage, region_id, false, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        return result;
     }
     file = henka_terrain_open_file(path, "rb");
     henka_free(path);
