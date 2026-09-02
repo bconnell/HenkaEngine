@@ -50,6 +50,16 @@ bool henka_scene_is_destroyed(const henka_scene* scene)
     return scene == NULL || scene->destroyed;
 }
 
+static void henka_scene_release_if_destroyed(henka_scene* scene)
+{
+    if (scene != NULL && scene->destroyed &&
+        scene->linked_physics_ref_count == 0U &&
+        scene->linked_audio_ref_count == 0U)
+    {
+        henka_free(scene);
+    }
+}
+
 henka_result henka_scene_acquire_physics_link(henka_scene* scene)
 {
     if (scene == NULL || scene->destroyed)
@@ -71,10 +81,31 @@ void henka_scene_release_physics_link(henka_scene* scene)
         return;
     }
     --scene->linked_physics_ref_count;
-    if (scene->destroyed && scene->linked_physics_ref_count == 0U)
+    henka_scene_release_if_destroyed(scene);
+}
+
+henka_result henka_scene_acquire_audio_link(henka_scene* scene)
+{
+    if (scene == NULL || scene->destroyed)
     {
-        henka_free(scene);
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (scene->linked_audio_ref_count == SIZE_MAX)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    ++scene->linked_audio_ref_count;
+    return HENKA_SUCCESS;
+}
+
+void henka_scene_release_audio_link(henka_scene* scene)
+{
+    if (scene == NULL || scene->linked_audio_ref_count == 0U)
+    {
+        return;
+    }
+    --scene->linked_audio_ref_count;
+    henka_scene_release_if_destroyed(scene);
 }
 
 static bool henka_scene_bump_render_revision(henka_scene* scene)
@@ -1257,7 +1288,8 @@ void henka_scene_destroy(henka_scene* scene)
     scene->entities = NULL;
     scene->entity_capacity = 0U;
     scene->entity_count = 0U;
-    if (scene->linked_physics_ref_count == 0U)
+    if (scene->linked_physics_ref_count == 0U &&
+        scene->linked_audio_ref_count == 0U)
     {
         henka_free(scene);
     }

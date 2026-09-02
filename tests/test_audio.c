@@ -857,6 +857,51 @@ int main(void)
     HENKA_TEST_ASSERT(emitter_info.gain == desc.gain && emitter_info.pitch == desc.pitch &&
         emitter_info.source_frame == 0U);
     HENKA_TEST_ASSERT(henka_audio_voice_stop(system, replacement_voice) == HENKA_SUCCESS);
+
+    /* Scene-first destruction must retire the real emitter without leaving
+     * the Audio system with a dangling scene pointer. */
+    {
+        henka_scene* scene_first_destroyed = NULL;
+        henka_audio_emitter* scene_first_emitter = NULL;
+        henka_audio_emitter* scene_first_stream_emitter = NULL;
+        henka_audio_stream* scene_first_stream = NULL;
+        henka_entity scene_first_entity;
+
+        HENKA_TEST_ASSERT(henka_scene_create(&scene_first_destroyed) == HENKA_SUCCESS);
+        scene_first_entity = henka_scene_create_entity_named(
+            scene_first_destroyed,
+            "Audio scene-first lifetime object");
+        HENKA_TEST_ASSERT(scene_first_entity != HENKA_INVALID_ENTITY);
+        HENKA_TEST_ASSERT(henka_audio_emitter_create_with_clip(
+            system,
+            scene_first_destroyed,
+            scene_first_entity,
+            clip,
+            &emitter_config,
+            &scene_first_emitter) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_stream_load_file(
+            ".",
+            stream_path,
+            &scene_first_stream) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_emitter_create_with_stream(
+            system,
+            scene_first_destroyed,
+            scene_first_entity,
+            scene_first_stream,
+            &emitter_config,
+            &scene_first_stream_emitter) == HENKA_SUCCESS);
+        henka_scene_destroy(scene_first_destroyed);
+        HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene_first_destroyed) == 0U);
+        HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!henka_audio_emitter_is_valid(scene_first_emitter));
+        HENKA_TEST_ASSERT(!henka_audio_emitter_is_valid(scene_first_stream_emitter));
+        HENKA_TEST_ASSERT(henka_audio_system_get_active_voice_count(system) == 0U);
+        HENKA_TEST_ASSERT(henka_audio_emitter_stop(scene_first_emitter) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+        henka_audio_emitter_destroy(scene_first_emitter);
+        henka_audio_emitter_destroy(scene_first_stream_emitter);
+        henka_audio_stream_destroy(scene_first_stream);
+    }
     result = EXIT_SUCCESS;
 
     remove(wav_path);

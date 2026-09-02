@@ -14,6 +14,7 @@
 #include <henka/persistence.h>
 
 #include "audio_decoder.h"
+#include "../scene/scene_internal.h"
 
 #define HENKA_AUDIO_MIN_SAMPLE_RATE 8000U
 #define HENKA_AUDIO_MAX_SAMPLE_RATE 192000U
@@ -39,6 +40,7 @@ typedef struct henka_audio_voice_slot
     size_t stream_window_start;
     size_t stream_window_frame_count;
     uint64_t stream_revision;
+    bool scene_link_registered;
     float stream_window[HENKA_AUDIO_STREAM_WINDOW_FRAMES * HENKA_AUDIO_OUTPUT_CHANNELS];
 } henka_audio_voice_slot;
 
@@ -90,6 +92,7 @@ struct henka_audio_emitter
     henka_audio_stream* stream;
     bool owns_stream;
     bool owns_clip;
+    bool scene_link_registered;
     henka_audio_emitter_config config;
     henka_audio_voice_id voice;
 };
@@ -710,6 +713,12 @@ static void henka_audio_release_voice(
     {
         return;
     }
+    if (slot->scene_link_registered)
+    {
+        henka_scene* scene = slot->scene;
+        slot->scene_link_registered = false;
+        henka_scene_release_audio_link(scene);
+    }
     slot->active = false;
     slot->scene = NULL;
     slot->entity = HENKA_INVALID_ENTITY;
@@ -851,8 +860,19 @@ henka_result henka_audio_system_create(
 
 void henka_audio_system_destroy(henka_audio_system* system)
 {
+    size_t index;
+
     if (system != NULL)
     {
+        for (index = 0U; index < HENKA_AUDIO_MAX_VOICES; ++index)
+        {
+            if (system->voices[index].scene_link_registered)
+            {
+                henka_scene* scene = system->voices[index].scene;
+                system->voices[index].scene_link_registered = false;
+                henka_scene_release_audio_link(scene);
+            }
+        }
         henka_free(system);
     }
 }
@@ -1392,6 +1412,7 @@ henka_result henka_audio_voice_play(
     henka_audio_voice_id* out_voice)
 {
     henka_audio_voice_desc effective_desc;
+    henka_result scene_link_result;
     size_t index;
     if (out_voice == NULL)
     {
@@ -1412,6 +1433,11 @@ henka_result henka_audio_voice_play(
         {
             continue;
         }
+        scene_link_result = henka_scene_acquire_audio_link(scene);
+        if (scene_link_result != HENKA_SUCCESS)
+        {
+            return scene_link_result;
+        }
         slot->generation = slot->generation == UINT32_MAX ? 1U : slot->generation + 1U;
         slot->active = true;
         slot->scene = scene;
@@ -1424,6 +1450,7 @@ henka_result henka_audio_voice_play(
         slot->stream_window_start = 0U;
         slot->stream_window_frame_count = 0U;
         slot->stream_revision = 0U;
+        slot->scene_link_registered = true;
         ++system->active_voice_count;
         *out_voice = henka_audio_make_voice_id(index, slot->generation);
         return HENKA_SUCCESS;
@@ -1440,6 +1467,7 @@ henka_result henka_audio_voice_play_stream(
     henka_audio_voice_id* out_voice)
 {
     henka_audio_voice_desc effective_desc;
+    henka_result scene_link_result;
     size_t index;
     if (out_voice == NULL)
     {
@@ -1461,6 +1489,11 @@ henka_result henka_audio_voice_play_stream(
         {
             continue;
         }
+        scene_link_result = henka_scene_acquire_audio_link(scene);
+        if (scene_link_result != HENKA_SUCCESS)
+        {
+            return scene_link_result;
+        }
         slot->generation = slot->generation == UINT32_MAX ? 1U : slot->generation + 1U;
         slot->active = true;
         slot->scene = scene;
@@ -1473,6 +1506,7 @@ henka_result henka_audio_voice_play_stream(
         slot->stream_window_start = 0U;
         slot->stream_window_frame_count = 0U;
         slot->stream_revision = stream->content_revision;
+        slot->scene_link_registered = true;
         ++system->active_voice_count;
         *out_voice = henka_audio_make_voice_id(index, slot->generation);
         return HENKA_SUCCESS;
@@ -1666,6 +1700,11 @@ henka_result henka_audio_voice_get_info(
         slot->paused,
         slot->desc.looping,
         slot->desc.spatial};
+    if (slot->scene_link_registered && henka_scene_is_destroyed(slot->scene))
+    {
+        out_info->scene = NULL;
+        out_info->entity = HENKA_INVALID_ENTITY;
+    }
     return HENKA_SUCCESS;
 }
 
@@ -1712,6 +1751,13 @@ henka_result henka_audio_emitter_create_with_clip(
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
+    result = henka_scene_acquire_audio_link(scene);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(emitter);
+        return result;
+    }
+    emitter->scene_link_registered = true;
     emitter->system = system;
     emitter->scene = scene;
     emitter->entity = entity;
@@ -1737,6 +1783,8 @@ henka_result henka_audio_emitter_create_with_clip(
         &emitter->voice);
     if (result != HENKA_SUCCESS)
     {
+        emitter->scene_link_registered = false;
+        henka_scene_release_audio_link(scene);
         henka_free(emitter);
         return result;
     }
@@ -1774,6 +1822,13 @@ henka_result henka_audio_emitter_create_with_stream(
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
+    result = henka_scene_acquire_audio_link(scene);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(emitter);
+        return result;
+    }
+    emitter->scene_link_registered = true;
     emitter->system = system;
     emitter->scene = scene;
     emitter->entity = entity;
@@ -1794,6 +1849,8 @@ henka_result henka_audio_emitter_create_with_stream(
         system, scene, entity, stream, &voice_desc, &emitter->voice);
     if (result != HENKA_SUCCESS)
     {
+        emitter->scene_link_registered = false;
+        henka_scene_release_audio_link(scene);
         henka_free(emitter);
         return result;
     }
@@ -1945,6 +2002,11 @@ void henka_audio_emitter_destroy(henka_audio_emitter* emitter)
     if (emitter->owns_stream)
     {
         henka_audio_stream_destroy(emitter->stream);
+    }
+    if (emitter->scene_link_registered)
+    {
+        emitter->scene_link_registered = false;
+        henka_scene_release_audio_link(emitter->scene);
     }
     henka_free(emitter);
 }
@@ -2364,6 +2426,7 @@ henka_result henka_audio_system_mix(
             continue;
         }
         if (slot->scene == NULL ||
+            henka_scene_is_destroyed(slot->scene) ||
             !henka_scene_is_entity_valid(slot->scene, slot->entity) ||
             henka_scene_get_entity_transform(slot->scene, slot->entity, &transform) != HENKA_SUCCESS)
         {

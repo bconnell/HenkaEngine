@@ -12,7 +12,6 @@
 struct henka_audio_output
 {
     henka_audio_system* system;
-    henka_scene* scene;
     SDL_AudioStream* stream;
     float* mix_buffer;
     uint32_t max_pump_frames;
@@ -241,7 +240,6 @@ henka_result henka_audio_output_create(
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
     output->system = system;
-    output->scene = scene;
     output->max_pump_frames = effective_config.max_pump_frames;
     output->max_queued_frames = effective_config.max_queued_frames;
     output->sample_rate = sample_rate;

@@ -210,12 +210,11 @@ henka_result henka_audio_stream_read_frames(
     size_t out_frame_capacity,
     size_t* out_frames);
 
-/* The scene, entity, and clip are borrowed production objects. They must
- * outlive every voice that references them; callers must stop voices before
- * destroying their scene or clip. Voice commands and mixing are currently
- * single-owner operations; the future device adapter will own synchronization
- * at that boundary rather than making this deterministic core lock-free by
- * accident. */
+/* The entity and clip are borrowed production objects. An active voice retains
+ * the scene allocation until it is stopped or its system is destroyed;
+ * destroying the scene first retires its entity data and the voice then fails
+ * closed without contributing audio. The caller still owns synchronization
+ * for scene, clip, voice commands, and mixing. */
 henka_result henka_audio_voice_play(
     henka_audio_system* system,
     henka_scene* scene,
@@ -286,10 +285,10 @@ uint32_t henka_audio_system_get_sample_rate(
     const henka_audio_system* system);
 
 /* Creates a real object-attached emitter through the production scene/entity
- * path. The emitter owns its resident clip and stops that voice on destroy;
- * system and scene are borrowed and must outlive the emitter. The entity may
- * be destroyed first; the mixer then rejects the stale binding and the
- * emitter becomes invalid without producing orphaned audio. */
+ * path. The emitter owns its resident clip and retains the scene allocation
+ * until destroy; destroying the scene first retires its entity data. The
+ * emitter's voice then fails closed without producing orphaned audio. The
+ * system must outlive the emitter. */
 henka_result henka_audio_emitter_create(
     henka_audio_system* system,
     const char* project_root,
@@ -298,8 +297,8 @@ henka_result henka_audio_emitter_create(
     const henka_audio_emitter_config* config,
     henka_audio_emitter** out_emitter);
 /* Creates an emitter from a borrowed clip, for use with manager-owned audio
- * assets. The clip and system must outlive the emitter; the emitter does not
- * destroy the borrowed clip. */
+ * assets. The clip and system must outlive the emitter; the emitter retains
+ * the scene allocation until destroy and does not destroy the borrowed clip. */
 henka_result henka_audio_emitter_create_with_clip(
     henka_audio_system* system,
     henka_scene* scene,
