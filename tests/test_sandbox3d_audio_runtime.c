@@ -10,7 +10,9 @@
 #endif
 
 #include <henka/henka.h>
+#include <henka/assets.h>
 #include <henka/audio.h>
+#include <henka/engine.h>
 #include <henka/memory.h>
 #include <henka/scene.h>
 
@@ -186,6 +188,196 @@ static bool test_prepare_package_audio(void)
     return true;
 }
 
+static bool test_audio_imported_object_integration(
+    sandbox3d_audio_runtime* runtime,
+    henka_audio_system* audio_system,
+    henka_scene* scene)
+{
+    const char* audio_asset_path = "assets/audio/henka_audio_fixture.wav";
+    const char* imported_asset_path = "assets/models/henka_marker.gltf";
+    henka_engine_config engine_config = {0};
+    henka_engine* import_engine = NULL;
+    henka_asset_manager* import_assets = NULL;
+    henka_shader* import_shader = NULL;
+    henka_gltf_scene_asset* imported_asset = NULL;
+    henka_audio_clip* imported_clip = NULL;
+    henka_audio_emitter* imported_emitter = NULL;
+    henka_audio_emitter_config emitter_config =
+        henka_audio_emitter_config_default();
+    henka_camera camera;
+    henka_transform imported_transform;
+    henka_mesh* imported_mesh = NULL;
+    const henka_material_asset* imported_material_asset = NULL;
+    const char* imported_name = NULL;
+    henka_result mesh_result;
+    henka_result material_result;
+    henka_entity imported_entity = HENKA_INVALID_ENTITY;
+    size_t scene_entity_count;
+    size_t imported_entity_count = 0U;
+    float samples[256U * HENKA_AUDIO_OUTPUT_CHANNELS];
+    float left_energy;
+    float right_energy;
+    bool passed = false;
+    henka_result result;
+
+    if (runtime == NULL || audio_system == NULL || scene == NULL)
+    {
+        return false;
+    }
+    engine_config.application_name = "Henka Imported Audio Object Test";
+    engine_config.window_width = 320;
+    engine_config.window_height = 240;
+    engine_config.enable_vsync = false;
+    engine_config.asset_base_path = ".";
+    result = henka_engine_create(&engine_config, &import_engine);
+    if (result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    import_assets = henka_engine_get_asset_manager(import_engine);
+    if (import_assets == NULL)
+    {
+        goto cleanup;
+    }
+    result = henka_assets_load_shader(
+        import_assets,
+        "assets/shaders/basic_lit.vert",
+        "assets/shaders/basic_lit.frag",
+        &import_shader);
+    if (result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    result = henka_assets_load_gltf_scene_asset(
+        import_assets,
+        imported_asset_path,
+        import_shader,
+        &imported_asset);
+    if (result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    result = henka_assets_load_audio_clip(
+        import_assets,
+        audio_asset_path,
+        &imported_clip);
+    if (result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    scene_entity_count = henka_scene_get_entity_count(scene);
+    result = henka_assets_instantiate_gltf_scene(
+            import_assets,
+            imported_asset,
+            scene,
+            "Imported Audio ",
+            &imported_entity_count);
+    if (result != HENKA_SUCCESS ||
+        imported_entity_count != 1U ||
+        scene_entity_count >= henka_scene_get_entity_count(scene))
+    {
+        goto cleanup;
+    }
+    imported_entity = henka_scene_get_entity_at_index(scene, scene_entity_count);
+    imported_name = henka_scene_get_entity_name(scene, imported_entity);
+    mesh_result = henka_scene_get_entity_mesh(
+        scene,
+        imported_entity,
+        &imported_mesh);
+    material_result = henka_scene_get_entity_material_asset(
+        scene,
+        imported_entity,
+        &imported_material_asset);
+    if (imported_entity == HENKA_INVALID_ENTITY ||
+        imported_name == NULL ||
+        strcmp(imported_name, "Imported Audio Marker") != 0 ||
+        mesh_result != HENKA_SUCCESS ||
+        imported_mesh == NULL ||
+        material_result != HENKA_SUCCESS ||
+        imported_material_asset == NULL)
+    {
+        goto cleanup;
+    }
+
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        16.0f / 9.0f,
+        0.1f,
+        100.0f);
+    camera.position = (henka_vec3){0.0f, 0.0f, 0.0f};
+    camera.yaw_radians = 0.0f;
+    camera.pitch_radians = 0.0f;
+    if (sandbox3d_audio_runtime_update_listener(runtime, &camera) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    emitter_config.enabled = true;
+    emitter_config.looping = true;
+    emitter_config.spatial = true;
+    emitter_config.streaming = false;
+    (void)snprintf(
+        emitter_config.clip_path,
+        sizeof(emitter_config.clip_path),
+        "%s",
+        audio_asset_path);
+    imported_transform = (henka_transform){
+        {0.0f, 0.0f, -4.0f},
+        {0.0f, 0.0f, 0.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f}};
+    if (henka_scene_set_entity_transform(
+            scene,
+            imported_entity,
+            imported_transform) != HENKA_SUCCESS ||
+        henka_audio_emitter_create_with_clip(
+            audio_system,
+            scene,
+            imported_entity,
+            imported_clip,
+            &emitter_config,
+            &imported_emitter) != HENKA_SUCCESS ||
+            imported_emitter == NULL ||
+            henka_audio_system_mix(audio_system, samples, 256U) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    left_energy = test_audio_channel_energy(samples, 256U, 0U);
+    right_energy = test_audio_channel_energy(samples, 256U, 1U);
+    if (left_energy <= right_energy * 1.25f)
+    {
+        goto cleanup;
+    }
+    imported_transform.position.z = 4.0f;
+    if (henka_scene_set_entity_transform(
+            scene,
+            imported_entity,
+            imported_transform) != HENKA_SUCCESS ||
+            henka_audio_emitter_restart(imported_emitter) != HENKA_SUCCESS ||
+            henka_audio_system_mix(audio_system, samples, 256U) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    left_energy = test_audio_channel_energy(samples, 256U, 0U);
+    right_energy = test_audio_channel_energy(samples, 256U, 1U);
+    if (right_energy <= left_energy * 1.25f)
+    {
+        goto cleanup;
+    }
+    henka_scene_destroy_entity(scene, imported_entity);
+    imported_entity = HENKA_INVALID_ENTITY;
+    passed = henka_audio_system_mix(audio_system, samples, 1U) == HENKA_SUCCESS &&
+        henka_audio_system_get_active_voice_count(audio_system) == 0U &&
+        !henka_audio_emitter_is_playing(imported_emitter);
+
+cleanup:
+    henka_audio_emitter_destroy(imported_emitter);
+    if (imported_entity != HENKA_INVALID_ENTITY)
+    {
+        henka_scene_destroy_entity(scene, imported_entity);
+    }
+    henka_engine_destroy(import_engine);
+    return passed;
+}
+
 int main(void)
 {
     const char* audio_asset_path = "assets/audio/henka_audio_fixture.wav";
@@ -347,6 +539,11 @@ int main(void)
 
     henka_audio_emitter_destroy(emitter);
     emitter = NULL;
+    if (!test_audio_imported_object_integration(runtime, audio_system, scene))
+    {
+        fprintf(stderr, "sandbox audio runtime imported-object integration failed\n");
+        goto cleanup;
+    }
     memset(&engine, 0, sizeof(engine));
     engine.asset_base_path = ".";
     assets = (henka_asset_manager*)henka_malloc(sizeof(*assets));
