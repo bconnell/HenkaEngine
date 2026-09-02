@@ -18,7 +18,9 @@ typedef struct henka_character_controller henka_character_controller;
  * both linked_scene and linked_entity identify a live scene entity, the owned
  * body uses the normal physics transform path to synchronize that entity after
  * creation, teleport, and successful fixed steps. The link is borrowed; the
- * controller does not own the scene or entity.
+ * controller does not own the scene or entity. The linked scene may be
+ * destroyed before the controller; its contents are retired immediately and
+ * its storage remains valid until the controller releases the body link.
  */
 typedef struct henka_character_controller_desc
 {

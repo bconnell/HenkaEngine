@@ -663,6 +663,72 @@ static void henka_test_physics_scene_link(void)
     henka_scene_destroy(scene);
 }
 
+static void henka_test_physics_scene_link_survives_scene_destroy(void)
+{
+    henka_scene* scene = NULL;
+    henka_entity entity;
+    henka_physics_world* world = NULL;
+    henka_physics_body_desc desc;
+    henka_physics_body_id body = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id candidate_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_state state;
+    henka_transform transform;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Destroyed Scene Link");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_sphere(0.5f),
+        (henka_vec3){0.0f, 1.0f, 0.0f});
+    desc.linked_scene = scene;
+    desc.linked_entity = entity;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &body) == HENKA_SUCCESS);
+
+    henka_scene_destroy(scene);
+    HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(scene, entity));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 0U);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == 0U);
+
+    /* A retired scene cannot be attached to a newly created body. */
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &candidate_body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(candidate_body == HENKA_INVALID_PHYSICS_BODY_ID);
+
+    scene = NULL;
+
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){2.0f, 3.0f, 4.0f};
+    HENKA_TEST_ASSERT(henka_physics_body_set_transform(
+        world,
+        body,
+        transform,
+        true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(
+        world,
+        body,
+        &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.linked_scene == NULL);
+    HENKA_TEST_ASSERT(state.linked_entity == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_physics_body_destroy(world, body) == HENKA_SUCCESS);
+
+    /* World destruction must release links for bodies not explicitly destroyed. */
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "World Destroy Scene Link");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    desc.linked_scene = scene;
+    desc.linked_entity = entity;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &body) == HENKA_SUCCESS);
+    henka_scene_destroy(scene);
+    henka_physics_world_destroy(world);
+    scene = NULL;
+    world = NULL;
+}
+
 static void henka_test_physics_validation_and_tracking(void)
 {
     size_t allocations_before;
@@ -1514,6 +1580,7 @@ void henka_test_physics(void)
     henka_test_physics_shape_pairs_and_raycast();
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();
+    henka_test_physics_scene_link_survives_scene_destroy();
     henka_test_physics_validation_and_tracking();
     henka_test_physics_destroy_preserves_contact_continuity();
     henka_test_physics_transactional_allocation_failure();

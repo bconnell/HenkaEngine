@@ -35,13 +35,46 @@ static henka_material_layer henka_material_layer_default(
 static bool henka_scene_render_revision_available(const henka_scene* scene)
 {
     return scene != NULL &&
+        !scene->destroyed &&
         scene->render_revision != UINT64_MAX &&
         scene->content_revision != UINT64_MAX;
 }
 
 static bool henka_scene_camera_revision_available(const henka_scene* scene)
 {
-    return scene != NULL && scene->render_revision != UINT64_MAX;
+    return scene != NULL && !scene->destroyed && scene->render_revision != UINT64_MAX;
+}
+
+bool henka_scene_is_destroyed(const henka_scene* scene)
+{
+    return scene == NULL || scene->destroyed;
+}
+
+henka_result henka_scene_acquire_physics_link(henka_scene* scene)
+{
+    if (scene == NULL || scene->destroyed)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (scene->linked_physics_ref_count == SIZE_MAX)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    ++scene->linked_physics_ref_count;
+    return HENKA_SUCCESS;
+}
+
+void henka_scene_release_physics_link(henka_scene* scene)
+{
+    if (scene == NULL || scene->linked_physics_ref_count == 0U)
+    {
+        return;
+    }
+    --scene->linked_physics_ref_count;
+    if (scene->destroyed && scene->linked_physics_ref_count == 0U)
+    {
+        henka_free(scene);
+    }
 }
 
 static bool henka_scene_bump_render_revision(henka_scene* scene)
@@ -514,6 +547,7 @@ static henka_scene_entity_record* henka_scene_get_entity_record(
     size_t index;
 
     if (scene == NULL ||
+        scene->destroyed ||
         !henka_scene_decode_entity(
             entity,
             &index,
@@ -1111,7 +1145,7 @@ henka_result henka_scene_clone(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_clone = NULL;
-    if (source == NULL || source->entity_count > HENKA_MAX_SCENE_ENTITIES ||
+    if (source == NULL || source->destroyed || source->entity_count > HENKA_MAX_SCENE_ENTITIES ||
         source->entity_count > source->entity_capacity ||
         source->entity_capacity > HENKA_MAX_SCENE_ENTITIES ||
         !henka_checked_size_multiply(
@@ -1204,10 +1238,12 @@ void henka_scene_destroy(henka_scene* scene)
 {
     size_t index;
 
-    if (scene == NULL)
+    if (scene == NULL || scene->destroyed)
     {
         return;
     }
+
+    scene->destroyed = true;
 
     for (index = 0U; index < scene->entity_capacity; ++index)
     {
@@ -1218,12 +1254,18 @@ void henka_scene_destroy(henka_scene* scene)
     }
 
     henka_free(scene->entities);
-    henka_free(scene);
+    scene->entities = NULL;
+    scene->entity_capacity = 0U;
+    scene->entity_count = 0U;
+    if (scene->linked_physics_ref_count == 0U)
+    {
+        henka_free(scene);
+    }
 }
 
 uint64_t henka_scene_get_render_revision(const henka_scene* scene)
 {
-    return scene == NULL ? 0U : scene->render_revision;
+    return scene == NULL || scene->destroyed ? 0U : scene->render_revision;
 }
 
 henka_entity henka_scene_create_entity(henka_scene* scene)
@@ -1401,7 +1443,7 @@ bool henka_scene_is_entity_visible(const henka_scene* scene, henka_entity entity
 
 size_t henka_scene_get_entity_count(const henka_scene* scene)
 {
-    if (scene == NULL)
+    if (scene == NULL || scene->destroyed)
     {
         return 0U;
     }

@@ -18,7 +18,11 @@ The public physics API provides:
 - trigger overlap reporting without physical response
 - collision and trigger enter, stay, and exit events
 - raycasts against every supported collider shape, including bounded heightfield traversal
-- optional links from physics bodies to real scene entities
+- optional links from physics bodies to real scene entities. The link is
+  borrowed, but the body keeps the scene storage valid until the body or its
+  world is destroyed. Destroying the scene first retires its entity data
+  immediately, prevents further scene writes, and reports the body link as
+  absent until the physics owner releases it.
 - a bounded public character-controller foundation backed by a real dynamic
   upright capsule body, with planar velocity limits, grounded jump queuing, and
   configurable slope-aware grounding, ground-normal reporting, explicit

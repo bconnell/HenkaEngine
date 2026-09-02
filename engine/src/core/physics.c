@@ -9,6 +9,7 @@
 
 #include "checked.h"
 #include "physics_internal.h"
+#include "../scene/scene_internal.h"
 
 typedef struct henka_physics_body_record
 {
@@ -18,6 +19,7 @@ typedef struct henka_physics_body_record
     henka_vec3 torque;
     int32_t* owned_heightfield_heights_millimeters;
     size_t owned_heightfield_sample_count;
+    bool scene_link_registered;
 } henka_physics_body_record;
 
 typedef struct henka_physics_pair
@@ -645,13 +647,19 @@ static bool henka_physics_contact_involves_pair(
         (contact.body_a == second && contact.body_b == first);
 }
 
-static void henka_physics_write_scene_transform(const henka_physics_body_state* state)
+static void henka_physics_write_scene_transform(const henka_physics_body_record* body)
 {
-    if (state->linked_scene != NULL && state->linked_entity != HENKA_INVALID_ENTITY &&
-        henka_scene_is_entity_valid(state->linked_scene, state->linked_entity) &&
-        !henka_scene_is_entity_helper(state->linked_scene, state->linked_entity))
+    if (body != NULL && body->scene_link_registered &&
+        body->state.linked_scene != NULL &&
+        body->state.linked_entity != HENKA_INVALID_ENTITY &&
+        !henka_scene_is_destroyed(body->state.linked_scene) &&
+        henka_scene_is_entity_valid(body->state.linked_scene, body->state.linked_entity) &&
+        !henka_scene_is_entity_helper(body->state.linked_scene, body->state.linked_entity))
     {
-        (void)henka_scene_set_entity_transform(state->linked_scene, state->linked_entity, state->transform);
+        (void)henka_scene_set_entity_transform(
+            body->state.linked_scene,
+            body->state.linked_entity,
+            body->state.transform);
     }
 }
 
@@ -1900,7 +1908,7 @@ static void henka_physics_commit_candidate(
     {
         if (world->bodies[index].active)
         {
-            henka_physics_write_scene_transform(&world->bodies[index].state);
+            henka_physics_write_scene_transform(&world->bodies[index]);
         }
     }
 }
@@ -2036,6 +2044,12 @@ void henka_physics_world_destroy(henka_physics_world* world)
     }
     for (index = 0U; index < world->body_capacity; ++index)
     {
+        if (world->bodies[index].scene_link_registered)
+        {
+            henka_scene* linked_scene = world->bodies[index].state.linked_scene;
+            world->bodies[index].scene_link_registered = false;
+            henka_scene_release_physics_link(linked_scene);
+        }
         henka_free(world->bodies[index].owned_heightfield_heights_millimeters);
     }
     henka_free(world->bodies);
@@ -2095,6 +2109,7 @@ henka_result henka_physics_body_create(
     size_t index;
     size_t old_capacity;
     size_t required;
+    henka_result scene_link_result;
 
     if (out_body == NULL)
     {
@@ -2184,6 +2199,17 @@ henka_result henka_physics_body_create(
             desc->collider.data.heightfield.heights_millimeters,
             heightfield_bytes);
     }
+    scene_link_result = HENKA_SUCCESS;
+    if (desc->linked_scene != NULL)
+    {
+        scene_link_result = henka_scene_acquire_physics_link(desc->linked_scene);
+        if (scene_link_result != HENKA_SUCCESS)
+        {
+            henka_free(heightfield_copy);
+            return scene_link_result;
+        }
+    }
+
     memset(body, 0, sizeof(*body));
     body->active = true;
     body->state.id = world->next_body_id;
@@ -2202,11 +2228,12 @@ henka_result henka_physics_body_create(
     {
         body->state.collider.data.heightfield.heights_millimeters = heightfield_copy;
     }
+    body->scene_link_registered = desc->linked_scene != NULL;
     body->state.linked_scene = desc->linked_scene;
     body->state.linked_entity = desc->linked_entity;
     ++world->body_count;
     *out_body = body->state.id;
-    henka_physics_write_scene_transform(&body->state);
+    henka_physics_write_scene_transform(body);
     return HENKA_SUCCESS;
 }
 
@@ -2369,6 +2396,12 @@ henka_result henka_physics_body_destroy(henka_physics_world* world, henka_physic
     }
     world->previous_pair_count = write_index;
 
+    if (record->scene_link_registered)
+    {
+        henka_scene* linked_scene = record->state.linked_scene;
+        record->scene_link_registered = false;
+        henka_scene_release_physics_link(linked_scene);
+    }
     henka_free(record->owned_heightfield_heights_millimeters);
     memset(record, 0, sizeof(*record));
     --world->body_count;
@@ -2396,6 +2429,11 @@ henka_result henka_physics_body_get_state(
     }
 
     *out_state = record->state;
+    if (record->scene_link_registered && henka_scene_is_destroyed(record->state.linked_scene))
+    {
+        out_state->linked_scene = NULL;
+        out_state->linked_entity = HENKA_INVALID_ENTITY;
+    }
     return HENKA_SUCCESS;
 }
 
@@ -2417,7 +2455,7 @@ henka_result henka_physics_body_set_transform(henka_physics_world* world, henka_
         record->state.linear_velocity = (henka_vec3){0.0f, 0.0f, 0.0f};
         record->state.angular_velocity = (henka_vec3){0.0f, 0.0f, 0.0f};
     }
-    henka_physics_write_scene_transform(&record->state);
+    henka_physics_write_scene_transform(record);
     return HENKA_SUCCESS;
 }
 
@@ -2704,7 +2742,7 @@ henka_result henka_physics_world_reset(henka_physics_world* world)
             world->bodies[index].state.grounded = false;
             world->bodies[index].force = (henka_vec3){0.0f, 0.0f, 0.0f};
             world->bodies[index].torque = (henka_vec3){0.0f, 0.0f, 0.0f};
-            henka_physics_write_scene_transform(&world->bodies[index].state);
+            henka_physics_write_scene_transform(&world->bodies[index]);
         }
     }
     world->accumulator = 0.0f;

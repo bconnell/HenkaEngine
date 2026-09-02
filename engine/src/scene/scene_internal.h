@@ -43,6 +43,8 @@ struct henka_scene
     henka_scene_entity_record* entities;
     size_t entity_capacity;
     size_t entity_count;
+    bool destroyed;
+    size_t linked_physics_ref_count;
     henka_camera camera;
     bool has_camera;
     henka_vec3 light_direction;
@@ -58,5 +60,10 @@ struct henka_scene
     bool local_light_active[HENKA_SCENE_MAX_LOCAL_LIGHTS];
     henka_scene_fog_desc fog;
 };
+
+/* Internal lifetime bridge for physics bodies that borrow a scene link. */
+henka_result henka_scene_acquire_physics_link(henka_scene* scene);
+void henka_scene_release_physics_link(henka_scene* scene);
+bool henka_scene_is_destroyed(const henka_scene* scene);
 
 #endif

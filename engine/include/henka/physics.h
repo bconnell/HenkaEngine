@@ -98,6 +98,9 @@ typedef struct henka_physics_body_desc
     henka_vec3 angular_velocity;
     henka_physics_material material;
     henka_physics_collider_desc collider;
+    /* The scene is borrowed. A linked physics body keeps its scene link valid
+     * until the body is destroyed; destroying the scene first retires its
+     * contents and defers final scene storage release until then. */
     henka_scene* linked_scene;
     henka_entity linked_entity;
 } henka_physics_body_desc;
@@ -113,6 +116,7 @@ typedef struct henka_physics_body_state
     henka_vec3 angular_velocity;
     henka_physics_material material;
     henka_physics_collider_desc collider;
+    /* A destroyed linked scene is reported as an absent link. */
     henka_scene* linked_scene;
     henka_entity linked_entity;
     bool colliding;
