@@ -2019,28 +2019,31 @@ henka_result henka_model_scene_data_load_gltf_from_memory(
     const char* label,
     henka_model_scene_data* out_scene)
 {
-    henka_model_scene_data candidate;
+    henka_model_scene_data* candidate;
     henka_gltf_context context;
     henka_result result;
     (void)label;
 
     if (data == NULL || out_scene == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
-    memset(&candidate, 0, sizeof(candidate));
+    candidate = henka_calloc(1U, sizeof(*candidate));
+    if (candidate == NULL) return HENKA_ERROR_OUT_OF_MEMORY;
     memset(&context, 0, sizeof(context));
     if (!henka_gltf_prepare_json((const unsigned char*)data, data_size, &context))
     {
         henka_gltf_context_destroy(&context);
+        henka_free(candidate);
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = henka_gltf_parse_scene_context(&context, &candidate);
+    result = henka_gltf_parse_scene_context(&context, candidate);
     henka_gltf_context_destroy(&context);
     if (result == HENKA_SUCCESS)
     {
         henka_model_scene_data_destroy(out_scene);
-        *out_scene = candidate;
-        memset(&candidate, 0, sizeof(candidate));
+        *out_scene = *candidate;
+        memset(candidate, 0, sizeof(*candidate));
     }
-    henka_model_scene_data_destroy(&candidate);
+    henka_model_scene_data_destroy(candidate);
+    henka_free(candidate);
     return result;
 }
 
@@ -2061,14 +2064,19 @@ henka_result henka_model_scene_data_load_gltf(
     size_t data_size;
     henka_gltf_context context;
     henka_result result;
-    henka_model_scene_data candidate;
+    henka_model_scene_data* candidate;
     const char* separator;
     size_t directory_length;
 
     if (path == NULL || out_scene == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
-    memset(&candidate, 0, sizeof(candidate));
+    candidate = henka_calloc(1U, sizeof(*candidate));
+    if (candidate == NULL) return HENKA_ERROR_OUT_OF_MEMORY;
     data = henka_gltf_read_file(path, &data_size);
-    if (data == NULL) return HENKA_ERROR_PLATFORM;
+    if (data == NULL)
+    {
+        henka_free(candidate);
+        return HENKA_ERROR_PLATFORM;
+    }
     memset(&context, 0, sizeof(context));
     separator = strrchr(path, '/');
     {
@@ -2080,21 +2088,23 @@ henka_result henka_model_scene_data_load_gltf(
     if (context.base_directory == NULL)
     {
         henka_free(data);
+        henka_free(candidate);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
     memcpy(context.base_directory, path, directory_length);
     context.base_directory[directory_length] = '\0';
     if (!henka_gltf_prepare_json((const unsigned char*)data, data_size, &context)) result = HENKA_ERROR_INVALID_ARGUMENT;
-    else result = henka_gltf_parse_scene_context(&context, &candidate);
+    else result = henka_gltf_parse_scene_context(&context, candidate);
     henka_gltf_context_destroy(&context);
     henka_free(data);
     if (result == HENKA_SUCCESS)
     {
         henka_model_scene_data_destroy(out_scene);
-        *out_scene = candidate;
-        memset(&candidate, 0, sizeof(candidate));
+        *out_scene = *candidate;
+        memset(candidate, 0, sizeof(*candidate));
     }
-    henka_model_scene_data_destroy(&candidate);
+    henka_model_scene_data_destroy(candidate);
+    henka_free(candidate);
     return result;
 }
 
