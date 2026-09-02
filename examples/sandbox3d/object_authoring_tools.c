@@ -1655,6 +1655,13 @@ static henka_result sandbox3d_authoring_publish_candidate(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    /* Mesh and bounds are published through separate scene mutators.  Preflight
+     * enough bounded watermark headroom for the forward pair and the matching
+     * rollback pair before the first visible mutation. */
+    if (!henka_scene_has_render_revision_capacity(object->scene, 4U))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
     result = sandbox3d_authoring_next_geometry_revision(
         object, &next_geometry_revision);
     if (result != HENKA_SUCCESS)
@@ -1758,6 +1765,10 @@ static henka_result sandbox3d_authoring_cancel_preview_internal(
     if (object->scene != NULL &&
         henka_scene_is_entity_valid(object->scene, object->entity))
     {
+        if (!henka_scene_has_render_revision_capacity(object->scene, 2U))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
         result = henka_scene_set_entity_mesh(
             object->scene, object->entity, object->render_mesh);
         if (result == HENKA_SUCCESS)
@@ -1812,6 +1823,10 @@ static henka_result sandbox3d_authoring_replace_loaded_source(
     if (object == NULL || candidate == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_has_render_revision_capacity(object->scene, 4U))
+    {
+        return HENKA_ERROR_LIMIT;
     }
     result = sandbox3d_authoring_next_geometry_revision(
         object, &next_geometry_revision);
@@ -2066,6 +2081,11 @@ static henka_result sandbox3d_authoring_object_create_from_owned_mesh(
     {
         henka_authoring_mesh_destroy(mesh);
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_has_render_revision_capacity(scene, 4U))
+    {
+        henka_authoring_mesh_destroy(mesh);
+        return HENKA_ERROR_LIMIT;
     }
     *out_object = NULL;
     object = henka_calloc(1U, sizeof(*object));
@@ -2530,6 +2550,11 @@ henka_result sandbox3d_authoring_object_preview_candidate(
         !henka_authoring_mesh_validate(candidate))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_has_render_revision_capacity(
+            object->scene, object->preview_active ? 6U : 4U))
+    {
+        return HENKA_ERROR_LIMIT;
     }
     if (object->preview_active)
     {

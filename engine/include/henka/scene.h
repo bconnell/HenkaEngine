@@ -312,6 +312,13 @@ void henka_scene_destroy(henka_scene* scene);
  * revision watermark is rejected or ignored according to the mutator's
  * return contract, and the existing scene state remains live. */
 uint64_t henka_scene_get_render_revision(const henka_scene* scene);
+/* Reports whether a bounded caller-side transaction can perform the requested
+ * number of visible scene mutations without exhausting either monotonic
+ * revision watermark.  This is a preflight check; it does not reserve the
+ * capacity or mutate the scene. */
+bool henka_scene_has_render_revision_capacity(
+    const henka_scene* scene,
+    uint64_t mutation_count);
 henka_entity henka_scene_create_entity(henka_scene* scene);
 henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* name);
 void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity);

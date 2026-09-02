@@ -1300,6 +1300,18 @@ uint64_t henka_scene_get_render_revision(const henka_scene* scene)
     return scene == NULL || scene->destroyed ? 0U : scene->render_revision;
 }
 
+bool henka_scene_has_render_revision_capacity(
+    const henka_scene* scene,
+    uint64_t mutation_count)
+{
+    if (scene == NULL || scene->destroyed || mutation_count == 0U)
+    {
+        return false;
+    }
+    return mutation_count <= UINT64_MAX - scene->render_revision &&
+        mutation_count <= UINT64_MAX - scene->content_revision;
+}
+
 henka_entity henka_scene_create_entity(henka_scene* scene)
 {
     return henka_scene_create_entity_named(scene, NULL);
