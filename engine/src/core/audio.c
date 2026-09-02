@@ -2392,20 +2392,26 @@ henka_result henka_audio_system_mix(
     size_t frame_count)
 {
     size_t output_sample_count;
+    size_t output_byte_count;
     size_t voice_index;
     henka_result mix_result = HENKA_SUCCESS;
     if (system == NULL ||
-        (frame_count != 0U && output_interleaved == NULL) ||
-        !henka_audio_size_multiply(frame_count, HENKA_AUDIO_OUTPUT_CHANNELS,
-            &output_sample_count))
+        (frame_count != 0U && output_interleaved == NULL))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_audio_size_multiply(frame_count, HENKA_AUDIO_OUTPUT_CHANNELS,
+            &output_sample_count) ||
+        !henka_audio_size_multiply(output_sample_count, sizeof(float),
+            &output_byte_count))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
     }
     if (frame_count == 0U)
     {
         return HENKA_SUCCESS;
     }
-    memset(output_interleaved, 0, output_sample_count * sizeof(float));
+    memset(output_interleaved, 0, output_byte_count);
     for (voice_index = 0U; voice_index < HENKA_AUDIO_MAX_VOICES; ++voice_index)
     {
         henka_audio_voice_slot* slot = &system->voices[voice_index];

@@ -358,9 +358,10 @@ henka_result henka_audio_emitter_set_bus(
 bool henka_audio_emitter_is_playing(const henka_audio_emitter* emitter);
 
 /* Mixes bounded stereo float PCM. output_interleaved must contain at least
- * frame_count * HENKA_AUDIO_OUTPUT_CHANNELS floats. The buffer is cleared
- * before deterministic slot-order mixing. A destroyed/stale entity stops its
- * voice before it can contribute another sample. */
+ * frame_count * HENKA_AUDIO_OUTPUT_CHANNELS floats, and the required byte
+ * count must be representable by size_t. The buffer is cleared before
+ * deterministic slot-order mixing. A destroyed/stale entity stops its voice
+ * before it can contribute another sample. */
 henka_result henka_audio_system_mix(
     henka_audio_system* system,
     float* output_interleaved,

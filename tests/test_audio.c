@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #if defined(_WIN32)
 #include <io.h>
@@ -299,6 +300,16 @@ static int test_compressed_format_contract(void)
     entity = henka_scene_create_entity_named(scene, "Compressed Audio Object");
     HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(henka_audio_system_create(NULL, &system) == HENKA_SUCCESS);
+    {
+        float overflow_guard[HENKA_AUDIO_OUTPUT_CHANNELS] = {1.0f, 1.0f};
+        const size_t overflow_frame_count = SIZE_MAX /
+            (HENKA_AUDIO_OUTPUT_CHANNELS * sizeof(float)) + 1U;
+        HENKA_TEST_ASSERT(henka_audio_system_mix(
+            system,
+            overflow_guard,
+            overflow_frame_count) == HENKA_ERROR_NUMERIC_RANGE);
+        HENKA_TEST_ASSERT(overflow_guard[0] == 1.0f && overflow_guard[1] == 1.0f);
+    }
     desc.spatial = false;
     for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index)
     {
