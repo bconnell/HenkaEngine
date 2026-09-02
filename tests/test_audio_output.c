@@ -134,19 +134,37 @@ int main(void)
     HENKA_TEST_ASSERT(info.queued_frames == 0U);
     HENKA_TEST_ASSERT(info.pumped_frames == 64U);
     {
-        SDL_Event device_event = {0};
-        device_event.type = SDL_EVENT_AUDIO_DEVICE_FORMAT_CHANGED;
-        device_event.adevice.recording = false;
-        HENKA_TEST_ASSERT(SDL_PushEvent(&device_event) == 1);
-        HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
-        HENKA_TEST_ASSERT(info.recovery_pending);
-        HENKA_TEST_ASSERT(henka_audio_output_pump(output, 32U) == HENKA_SUCCESS);
-        HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
-        HENKA_TEST_ASSERT(info.device_open && !info.recovery_pending &&
-            info.recovery_attempts == 0U && !info.recovery_exhausted);
+        const uint32_t device_event_types[] = {
+            SDL_EVENT_AUDIO_DEVICE_ADDED,
+            SDL_EVENT_AUDIO_DEVICE_REMOVED,
+            SDL_EVENT_AUDIO_DEVICE_FORMAT_CHANGED};
+        size_t event_index;
+        for (event_index = 0U;
+            event_index < sizeof(device_event_types) / sizeof(device_event_types[0]);
+            ++event_index)
+        {
+            SDL_Event device_event = {0};
+            device_event.type = device_event_types[event_index];
+            device_event.adevice.recording = false;
+            HENKA_TEST_ASSERT(SDL_PushEvent(&device_event) == 1);
+            HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(info.recovery_pending);
+            HENKA_TEST_ASSERT(henka_audio_output_pump(output, 32U) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(info.device_open && !info.recovery_pending &&
+                info.recovery_attempts == 0U && !info.recovery_exhausted);
+        }
+        {
+            SDL_Event recording_event = {0};
+            recording_event.type = SDL_EVENT_AUDIO_DEVICE_REMOVED;
+            recording_event.adevice.recording = true;
+            HENKA_TEST_ASSERT(SDL_PushEvent(&recording_event) == 1);
+            HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(!info.recovery_pending);
+        }
     }
     HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(info.pumped_frames == 96U);
+    HENKA_TEST_ASSERT(info.pumped_frames == 160U);
     HENKA_TEST_ASSERT(info.queued_frames > 0U);
     HENKA_TEST_ASSERT(henka_audio_output_pump(output, 129U) == HENKA_ERROR_LIMIT);
     HENKA_TEST_ASSERT(henka_audio_output_get_info(output, &info) == HENKA_SUCCESS);
