@@ -147,6 +147,14 @@ henka_result henka_audio_system_get_bus_gain(
     const henka_audio_system* system,
     henka_audio_bus bus,
     float* out_gain);
+henka_result henka_audio_system_set_bus_muted(
+    henka_audio_system* system,
+    henka_audio_bus bus,
+    bool muted);
+henka_result henka_audio_system_get_bus_muted(
+    const henka_audio_system* system,
+    henka_audio_bus bus,
+    bool* out_muted);
 henka_result henka_audio_system_get_diagnostics(
     const henka_audio_system* system,
     henka_audio_diagnostics* out_diagnostics);

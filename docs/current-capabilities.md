@@ -685,9 +685,9 @@ See [building.md](building.md), [package-provenance.md](package-provenance.md), 
 - The renderer-independent runtime provides the supported Audio scope:
   confined resident PCM WAV, Ogg Vorbis, MP3, and FLAC loading, fixed-capacity
   generation-checked voices, Master/Music/SFX/Dialogue/Ambience/UI bus gains,
-  listener orientation, distance attenuation and stereo panning, deterministic
-  interleaved stereo float-PCM mixing, and resident voice pause/resume/restart/
-  seek/gain/pitch controls.
+  listener orientation, distance attenuation and stereo panning, explicit
+  per-bus mute state, deterministic interleaved stereo float-PCM mixing, and
+  resident voice pause/resume/restart/seek/gain/pitch controls.
 - Voices bind to borrowed production `henka_scene` and `henka_entity` objects.
   The mixer reads the live entity transform each mix operation, rejects stale or
   destroyed entities before they contribute, and exposes bounded diagnostics.

@@ -73,6 +73,7 @@ struct henka_audio_system
     uint32_t output_sample_rate;
     henka_audio_listener listener;
     float bus_gains[HENKA_AUDIO_BUS_COUNT];
+    bool bus_muted[HENKA_AUDIO_BUS_COUNT];
     henka_audio_voice_slot voices[HENKA_AUDIO_MAX_VOICES];
     uint32_t active_voice_count;
     uint32_t stale_voice_count;
@@ -842,6 +843,7 @@ henka_result henka_audio_system_create(
     for (index = 0U; index < HENKA_AUDIO_BUS_COUNT; ++index)
     {
         system->bus_gains[index] = 1.0f;
+        system->bus_muted[index] = false;
     }
     *out_system = system;
     return HENKA_SUCCESS;
@@ -905,6 +907,32 @@ henka_result henka_audio_system_get_bus_gain(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_gain = system->bus_gains[bus];
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_system_set_bus_muted(
+    henka_audio_system* system,
+    henka_audio_bus bus,
+    bool muted)
+{
+    if (system == NULL || !henka_audio_bus_is_valid(bus))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    system->bus_muted[bus] = muted;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_audio_system_get_bus_muted(
+    const henka_audio_system* system,
+    henka_audio_bus bus,
+    bool* out_muted)
+{
+    if (system == NULL || out_muted == NULL || !henka_audio_bus_is_valid(bus))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_muted = system->bus_muted[bus];
     return HENKA_SUCCESS;
 }
 
@@ -2347,6 +2375,11 @@ henka_result henka_audio_system_mix(
             system, slot, transform.position, &left_gain, &right_gain);
         bus_gain = system->bus_gains[HENKA_AUDIO_BUS_MASTER] *
             system->bus_gains[slot->desc.bus] * slot->desc.gain;
+        if (system->bus_muted[HENKA_AUDIO_BUS_MASTER] ||
+            system->bus_muted[slot->desc.bus])
+        {
+            bus_gain = 0.0f;
+        }
         source_frame_count = slot->clip != NULL
             ? slot->clip->frame_count
             : slot->stream->frame_count;

@@ -31,11 +31,13 @@ service in `engine/include/henka/audio.h`.
   borrowed `henka_scene` and `henka_entity` objects and read the live entity
   transform while mixing.
 - The bounded bus layout is Master, Music, SFX, Dialogue, Ambience, and UI.
-  The current mixer supports per-bus gains, listener orientation, distance
-  attenuation, stereo panning, looping, pitch, and deterministic interleaved
-  stereo float-PCM output. Resident voices also support bounded pause, resume,
-  restart, seek, gain, pitch, looping, spatial, and bus controls with
-  generation-checked IDs.
+  The current mixer supports per-bus gains and explicit per-bus mute state,
+  listener orientation, distance attenuation, stereo panning, looping, pitch,
+  and deterministic interleaved stereo float-PCM output. Muting Master
+  suppresses all routed voices; muting another bus suppresses only voices
+  assigned to that bus without changing their playback position or settings.
+  Resident voices also support bounded pause, resume, restart, seek, gain,
+  pitch, looping, spatial, and bus controls with generation-checked IDs.
 - Destroyed or stale scene entities are rejected before they contribute audio.
   Scene and clip owners must stop dependent voices before destroying those
   borrowed objects.

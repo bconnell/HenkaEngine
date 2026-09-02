@@ -581,6 +581,8 @@ int main(void)
     float near_sum;
     float far_sum;
     size_t paused_source_frame;
+    size_t muted_source_frame;
+    bool muted;
     henka_audio_voice_info emitter_info;
     henka_audio_diagnostics diagnostics;
     int result = EXIT_FAILURE;
@@ -759,6 +761,41 @@ int main(void)
     HENKA_TEST_ASSERT(!test_nonzero_mix(samples, 1U));
     HENKA_TEST_ASSERT(henka_audio_system_set_bus_gain(
         system, HENKA_AUDIO_BUS_SFX, 1.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, voice, &emitter_info) == HENKA_SUCCESS);
+    muted_source_frame = emitter_info.source_frame;
+    muted = true;
+    HENKA_TEST_ASSERT(henka_audio_system_get_bus_muted(
+        system, HENKA_AUDIO_BUS_SFX, &muted) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!muted);
+    HENKA_TEST_ASSERT(henka_audio_system_set_bus_muted(
+        system, HENKA_AUDIO_BUS_SFX, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_system_get_bus_muted(
+        system, HENKA_AUDIO_BUS_SFX, &muted) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(muted);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!test_nonzero_mix(samples, 1U));
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, voice, &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(emitter_info.source_frame > muted_source_frame);
+    HENKA_TEST_ASSERT(henka_audio_system_set_bus_muted(
+        system, HENKA_AUDIO_BUS_MASTER, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_system_set_bus_muted(
+        system, HENKA_AUDIO_BUS_SFX, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!test_nonzero_mix(samples, 1U));
+    HENKA_TEST_ASSERT(henka_audio_system_set_bus_muted(
+        system, HENKA_AUDIO_BUS_MASTER, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(test_nonzero_mix(samples, 1U));
+    HENKA_TEST_ASSERT(henka_audio_system_set_bus_muted(
+        system, (henka_audio_bus)HENKA_AUDIO_BUS_COUNT, true) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    muted = true;
+    HENKA_TEST_ASSERT(henka_audio_system_get_bus_muted(
+        system, (henka_audio_bus)HENKA_AUDIO_BUS_COUNT, &muted) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(muted);
     henka_scene_destroy_entity(scene, entity);
     HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(!henka_audio_voice_is_valid(system, voice));
