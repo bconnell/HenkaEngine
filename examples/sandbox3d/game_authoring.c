@@ -67,11 +67,15 @@ static henka_result sandbox3d_game_authoring_build_object(
 {
     henka_scene_object_info info;
     henka_interaction_desc interaction;
+    henka_material material;
+    const henka_material_asset* material_asset = NULL;
     int written;
     if (scene == NULL || out_object == NULL ||
         !henka_scene_is_entity_valid(scene, entity) ||
         henka_scene_get_entity_info(scene, entity, &info) != HENKA_SUCCESS ||
-        henka_scene_get_entity_interaction(scene, entity, &interaction) != HENKA_SUCCESS)
+        henka_scene_get_entity_interaction(scene, entity, &interaction) != HENKA_SUCCESS ||
+        henka_scene_get_entity_material(scene, entity, &material) != HENKA_SUCCESS ||
+        henka_scene_get_entity_material_asset(scene, entity, &material_asset) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -87,6 +91,17 @@ static henka_result sandbox3d_game_authoring_build_object(
     }
     out_object->visible = info.visible;
     out_object->transform = info.transform;
+    out_object->renderer.base_color = material.base_color;
+    out_object->renderer.metallic = material.metallic;
+    out_object->renderer.roughness = material.roughness;
+    out_object->renderer.emissive = material.emissive_color;
+    out_object->renderer.emissive_strength = material.emissive_strength;
+    /* The Scene Document stores scalar inline overrides only when the live
+     * scene has a valid renderer material authority. A manager-owned material
+     * definition remains the runtime resource authority until the asset-
+     * material bridge is explicitly used. */
+    out_object->renderer.material_override =
+        material_asset == NULL && material.shader != NULL;
     out_object->interaction.enabled = interaction.enabled;
     out_object->interaction.max_distance = interaction.max_distance;
     written = snprintf(

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include <henka/core.h>
 #include <henka/scene.h>
@@ -19,6 +20,9 @@ int main(void)
     henka_scene_document* loaded = NULL;
     henka_scene_document_object watermark_object;
     henka_scene_document_object loaded_object;
+    henka_material authored_material;
+    henka_material changed_material;
+    henka_material restored_material;
     henka_scene_document_id replacement_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id new_object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id loaded_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
@@ -61,10 +65,7 @@ int main(void)
         loaded_id != watermark_id + 1U ||
         (load_result = sandbox3d_game_authoring_load(authoring, ".")) != HENKA_SUCCESS ||
         (new_entity = henka_scene_create_entity_named(
-             scene, "Identity Watermark New Object")) == HENKA_INVALID_ENTITY ||
-        (register_result = sandbox3d_game_authoring_register_entity(
-            authoring, new_entity, &new_object_id)) != HENKA_SUCCESS ||
-        new_object_id < watermark_id + 1U)
+             scene, "Identity Watermark New Object")) == HENKA_INVALID_ENTITY)
     {
         fprintf(
             stderr,
@@ -74,6 +75,35 @@ int main(void)
             (int)load_result,
             (int)register_result,
             (unsigned long long)new_object_id);
+        goto cleanup;
+    }
+
+    authored_material = henka_material_default();
+    authored_material.shader = (henka_shader*)1;
+    authored_material.name = "Identity Authored Material";
+    authored_material.base_color = (henka_vec4){0.18f, 0.42f, 0.86f, 1.0f};
+    authored_material.metallic = 0.72f;
+    authored_material.roughness = 0.19f;
+    authored_material.emissive_color = (henka_vec3){0.03f, 0.07f, 0.11f};
+    authored_material.emissive_strength = 2.4f;
+    if (henka_scene_set_entity_material(scene, new_entity, authored_material) != HENKA_SUCCESS ||
+        (register_result = sandbox3d_game_authoring_register_entity(
+            authoring, new_entity, &new_object_id)) != HENKA_SUCCESS ||
+        new_object_id < watermark_id + 1U ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, new_entity, &unchanged_id, &loaded_object) != HENKA_SUCCESS ||
+        unchanged_id != new_object_id ||
+        fabsf(loaded_object.renderer.base_color.x - authored_material.base_color.x) > 0.0001f ||
+        fabsf(loaded_object.renderer.base_color.y - authored_material.base_color.y) > 0.0001f ||
+        fabsf(loaded_object.renderer.base_color.z - authored_material.base_color.z) > 0.0001f ||
+        fabsf(loaded_object.renderer.metallic - authored_material.metallic) > 0.0001f ||
+        fabsf(loaded_object.renderer.roughness - authored_material.roughness) > 0.0001f ||
+        fabsf(loaded_object.renderer.emissive.x - authored_material.emissive_color.x) > 0.0001f ||
+        fabsf(loaded_object.renderer.emissive.y - authored_material.emissive_color.y) > 0.0001f ||
+        fabsf(loaded_object.renderer.emissive.z - authored_material.emissive_color.z) > 0.0001f ||
+        fabsf(loaded_object.renderer.emissive_strength - authored_material.emissive_strength) > 0.0001f)
+    {
+        fprintf(stderr, "game authoring identity test failed to capture renderer authority\n");
         goto cleanup;
     }
 
@@ -87,6 +117,30 @@ int main(void)
         strcmp(loaded_object.name, "Identity Watermark New Object") != 0)
     {
         fprintf(stderr, "game authoring identity test failed during baseline save\n");
+        goto cleanup;
+    }
+
+    changed_material = authored_material;
+    changed_material.name = "Changed Runtime Material";
+    changed_material.base_color = (henka_vec4){0.91f, 0.12f, 0.07f, 1.0f};
+    changed_material.metallic = 0.04f;
+    changed_material.roughness = 0.88f;
+    changed_material.emissive_color = (henka_vec3){0.0f, 0.0f, 0.0f};
+    changed_material.emissive_strength = 0.0f;
+    if (henka_scene_set_entity_material(scene, new_entity, changed_material) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, ".") != HENKA_SUCCESS ||
+        henka_scene_get_entity_material(scene, new_entity, &restored_material) != HENKA_SUCCESS ||
+        fabsf(restored_material.base_color.x - authored_material.base_color.x) > 0.0001f ||
+        fabsf(restored_material.base_color.y - authored_material.base_color.y) > 0.0001f ||
+        fabsf(restored_material.base_color.z - authored_material.base_color.z) > 0.0001f ||
+        fabsf(restored_material.metallic - authored_material.metallic) > 0.0001f ||
+        fabsf(restored_material.roughness - authored_material.roughness) > 0.0001f ||
+        fabsf(restored_material.emissive_color.x - authored_material.emissive_color.x) > 0.0001f ||
+        fabsf(restored_material.emissive_color.y - authored_material.emissive_color.y) > 0.0001f ||
+        fabsf(restored_material.emissive_color.z - authored_material.emissive_color.z) > 0.0001f ||
+        fabsf(restored_material.emissive_strength - authored_material.emissive_strength) > 0.0001f)
+    {
+        fprintf(stderr, "game authoring identity test failed to materialize renderer authority\n");
         goto cleanup;
     }
 
