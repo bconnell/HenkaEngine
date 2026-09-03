@@ -3921,7 +3921,11 @@ try {
     $genericNewAssetY = $genericNameFieldY + 30.0
     $genericSaveAssetY = $genericPrimitiveY + 88.0
     $genericPrimitiveActionWidth = [Math]::Max(72.0, ($genericPanelWidth - 34.0) / 2.0)
-    $genericAssetName = "PackagedAsset_" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
+    # The production editor starts with the bounded NativeAsset default. Append
+    # a unique suffix instead of queueing dozens of erase events through the
+    # one-event-per-frame automation stream on a slow Debug renderer. The
+    # click and text event still exercise the real editable asset-name field.
+    $genericAssetName = "NativeAsset_" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
     $genericAssetNamePattern = [Regex]::Escape($genericAssetName)
     $genericAssetNameX = $genericPanelX + 14.0 + ($genericActionWidth * 2.0 + 6.0) / 2.0
     $genericNewAssetX = $genericPanelX + 14.0 + $genericActionWidth / 2.0
@@ -3935,10 +3939,6 @@ try {
     Assert-FramebufferRect -Name "Generic asset name field" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X $genericAssetNameX -Y $genericNameFieldY -Width ($genericActionWidth * 2.0 + 6.0) -Height 24.0
     Assert-FramebufferRect -Name "Generic New Asset control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0) -Y $genericNewAssetY -Width $genericActionWidth -Height 24.0
     Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAssetNameX -Y ($genericNameFieldY + 12.0)
-    for ($index = 0; $index -lt 63; ++$index) {
-        Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "key Backspace down" -SettleMilliseconds 0
-        Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "key Backspace up" -SettleMilliseconds 0
-    }
     Start-Sleep -Milliseconds 600
     Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetName
     Start-Sleep -Milliseconds 600
@@ -3957,10 +3957,6 @@ try {
             throw "The generic New Asset action created a document with an unexpected name."
         }
         Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAssetNameX -Y ($genericNameFieldY + 12.0)
-        for ($index = 0; $index -lt 63; ++$index) {
-            Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "key Backspace down" -SettleMilliseconds 0
-            Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "key Backspace up" -SettleMilliseconds 0
-        }
         Start-Sleep -Milliseconds 600
         Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetName
         Start-Sleep -Milliseconds 600
