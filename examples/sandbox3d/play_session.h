@@ -27,6 +27,27 @@ typedef enum sandbox3d_play_session_state
     SANDBOX3D_PLAY_SESSION_FAILED
 } sandbox3d_play_session_state;
 
+/* Runtime Play configuration for one real, bridge-bound scene object. The
+ * configuration is copied into the stopped session and does not retain caller
+ * memory. It is mutually exclusive with the object's authored generic
+ * physics component; the controller creates and owns its dynamic capsule
+ * body for the Play session. Persisted controller authoring remains a
+ * separate Scene Document capability. */
+typedef struct sandbox3d_play_character_controller_config
+{
+    henka_scene_document_id document_id;
+    float radius;
+    float half_height;
+    float max_speed;
+    float jump_speed;
+    float acceleration;
+    float deceleration;
+    float air_control;
+    float slope_limit_degrees;
+    uint32_t layer;
+    uint32_t mask;
+} sandbox3d_play_character_controller_config;
+
 henka_result sandbox3d_play_session_create(
     sandbox3d_scene_document_bridge* bridge,
     henka_physics_world* physics_world,
@@ -60,6 +81,16 @@ henka_result sandbox3d_play_session_set_input_context(
     sandbox3d_play_input_query input_query,
     void* input_user_data,
     henka_vec3 observer_position);
+/* Installs or replaces one bounded runtime controller configuration while
+ * stopped. The document ID must resolve to a live bridge binding. Input is
+ * sampled from MOVE_FORWARD/BACK/LEFT/RIGHT and MOVE_UP is treated as jump
+ * through the existing Play input callback. */
+henka_result sandbox3d_play_session_set_character_controller(
+    sandbox3d_play_session* session,
+    const sandbox3d_play_character_controller_config* config);
+henka_result sandbox3d_play_session_clear_character_controller(
+    sandbox3d_play_session* session,
+    henka_scene_document_id document_id);
 void sandbox3d_play_session_destroy(sandbox3d_play_session* session);
 sandbox3d_play_session_state sandbox3d_play_session_get_state(
     const sandbox3d_play_session* session);

@@ -6,6 +6,8 @@
 
 #include <henka/audio.h>
 #include <henka/assets.h>
+#include <henka/character_controller.h>
+#include <henka/input.h>
 #include <henka/memory.h>
 #include <henka/physics.h>
 #include <henka/scene.h>
@@ -13,6 +15,159 @@
 
 #include "../examples/sandbox3d/play_session.h"
 #include "../engine/src/henka_internal.h"
+
+typedef struct test_character_controller_input
+{
+    bool forward;
+    bool jump;
+    size_t query_count;
+} test_character_controller_input;
+
+static bool test_character_controller_input_query(
+    void* user_data,
+    uint32_t action_id)
+{
+    test_character_controller_input* input =
+        (test_character_controller_input*)user_data;
+    if (input == NULL)
+    {
+        return false;
+    }
+    ++input->query_count;
+    if (action_id == HENKA_INPUT_ACTION_MOVE_FORWARD)
+    {
+        return input->forward;
+    }
+    if (action_id == HENKA_INPUT_ACTION_MOVE_UP)
+    {
+        return input->jump;
+    }
+    return false;
+}
+
+static bool test_character_controller_play_integration(void)
+{
+    henka_scene_document* document = NULL;
+    sandbox3d_scene_document_bridge* bridge = NULL;
+    sandbox3d_play_session* session = NULL;
+    henka_scene* scene = NULL;
+    henka_physics_world* physics_world = NULL;
+    henka_scene_document_object ground = henka_scene_document_object_default();
+    henka_scene_document_object player = henka_scene_document_object_default();
+    henka_scene_document_id ground_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id player_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_entity ground_entity = HENKA_INVALID_ENTITY;
+    henka_entity player_entity = HENKA_INVALID_ENTITY;
+    henka_transform initial_transform;
+    henka_transform moved_transform;
+    henka_transform jump_transform = {0};
+    sandbox3d_play_character_controller_config controller_config;
+    test_character_controller_input input = {false, false, 0U};
+    size_t tick_index;
+    bool success = false;
+
+    ground.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE;
+    ground.source.primitive = HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX;
+    ground.source.primitive_dimensions = (henka_vec3){40.0f, 1.0f, 40.0f};
+    ground.physics.enabled = true;
+    ground.physics.body_type = HENKA_PHYSICS_BODY_STATIC;
+    ground.physics.shape = HENKA_PHYSICS_SHAPE_BOX;
+    ground.physics.box_half_extents = (henka_vec3){20.0f, 0.5f, 20.0f};
+    ground.physics.mass = 0.0f;
+    ground.transform.position = (henka_vec3){0.0f, -0.5f, 0.0f};
+    player.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE;
+    player.source.primitive = HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX;
+    player.source.primitive_dimensions = (henka_vec3){1.0f, 2.0f, 1.0f};
+    player.transform.position = (henka_vec3){0.0f, 2.0f, 0.0f};
+    (void)snprintf(ground.name, sizeof(ground.name), "%s", "Controller Ground");
+    (void)snprintf(player.name, sizeof(player.name), "%s", "Controller Player");
+
+    if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_physics_world_create(&physics_world) != HENKA_SUCCESS ||
+        henka_scene_document_add_object(document, &ground, &ground_id) != HENKA_SUCCESS ||
+        henka_scene_document_add_object(document, &player, &player_id) != HENKA_SUCCESS ||
+        (ground_entity = henka_scene_create_entity_named(scene, ground.name)) == HENKA_INVALID_ENTITY ||
+        (player_entity = henka_scene_create_entity_named(scene, player.name)) == HENKA_INVALID_ENTITY ||
+        sandbox3d_scene_document_bridge_create(document, scene, &bridge) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_bind(bridge, ground_id, ground_entity) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_bind(bridge, player_id, player_entity) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_object(bridge, ground_id) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_object(bridge, player_id) != HENKA_SUCCESS ||
+        sandbox3d_play_session_create(bridge, physics_world, &session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_set_input_context(
+            session,
+            test_character_controller_input_query,
+            &input,
+            (henka_vec3){0.0f, 1.0f, 4.0f}) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    controller_config = (sandbox3d_play_character_controller_config){
+        player_id,
+        0.45f,
+        0.5f,
+        2.0f,
+        4.0f,
+        0.0f,
+        0.0f,
+        1.0f,
+        45.0f,
+        1U,
+        HENKA_PHYSICS_ALL_LAYERS};
+    if (sandbox3d_play_session_set_character_controller(
+            session, &controller_config) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(scene, player_entity, &initial_transform) != HENKA_SUCCESS ||
+        sandbox3d_play_session_start(session) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    input.forward = true;
+    for (tick_index = 0U; tick_index < 180U; ++tick_index)
+    {
+        if (sandbox3d_play_session_tick(session) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    input.forward = false;
+    if (henka_scene_get_entity_transform(scene, player_entity, &moved_transform) != HENKA_SUCCESS ||
+        moved_transform.position.z >= initial_transform.position.z - 0.5f ||
+        moved_transform.position.y < 0.8f ||
+        input.query_count == 0U)
+    {
+        goto cleanup;
+    }
+
+    input.jump = true;
+    if (sandbox3d_play_session_tick(session) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(scene, player_entity, &jump_transform) != HENKA_SUCCESS ||
+        jump_transform.position.y <= moved_transform.position.y + 0.01f)
+    {
+        goto cleanup;
+    }
+    input.jump = false;
+    if (sandbox3d_play_session_stop(session) != HENKA_SUCCESS ||
+        henka_physics_world_get_body_count(physics_world) != 0U ||
+        henka_scene_get_entity_transform(scene, player_entity, &jump_transform) != HENKA_SUCCESS ||
+        jump_transform.position.x != initial_transform.position.x ||
+        jump_transform.position.y != initial_transform.position.y ||
+        jump_transform.position.z != initial_transform.position.z)
+    {
+        goto cleanup;
+    }
+    success = true;
+
+cleanup:
+    sandbox3d_play_session_destroy(session);
+    sandbox3d_scene_document_bridge_destroy(bridge);
+    henka_physics_world_destroy(physics_world);
+    henka_scene_destroy(scene);
+    henka_scene_document_destroy(document);
+    return success;
+}
 
 static void test_write_u16(unsigned char* bytes, size_t offset, uint16_t value)
 {
@@ -103,6 +258,12 @@ int main(void)
     henka_result tick_result = HENKA_SUCCESS;
     size_t tick_count;
     int exit_code = 1;
+
+    if (!test_character_controller_play_integration())
+    {
+        fprintf(stderr, "character controller Play integration test failed\n");
+        return 1;
+    }
 
     object.behavior_count = 2U;
     object.behaviors[0] = henka_scene_document_behavior_default();

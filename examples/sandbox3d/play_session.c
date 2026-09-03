@@ -4,6 +4,8 @@
 #include <math.h>
 #include <string.h>
 
+#include <henka/character_controller.h>
+#include <henka/input.h>
 #include <henka/memory.h>
 #include <henka/scene_behavior_runtime.h>
 
@@ -18,6 +20,8 @@ typedef struct sandbox3d_play_snapshot
     henka_transform transform;
     bool visible;
     henka_physics_body_id body;
+    henka_character_controller* character_controller;
+    float character_controller_max_speed;
 } sandbox3d_play_snapshot;
 
 struct sandbox3d_play_session
@@ -37,6 +41,9 @@ struct sandbox3d_play_session
     char project_root[SANDBOX3D_PLAY_SESSION_MAX_PROJECT_ROOT_BYTES];
     size_t snapshot_count;
     sandbox3d_play_snapshot snapshots[SANDBOX3D_PLAY_SESSION_MAX_OBJECTS];
+    size_t character_controller_count;
+    sandbox3d_play_character_controller_config character_controllers[
+        SANDBOX3D_PLAY_SESSION_MAX_OBJECTS];
     henka_audio_system* audio_system;
     henka_asset_manager* audio_asset_manager;
     henka_audio_emitter* audio_emitters[SANDBOX3D_PLAY_SESSION_MAX_OBJECTS];
@@ -78,6 +85,122 @@ static size_t sandbox3d_play_session_find_snapshot_by_body(
         }
     }
     return SIZE_MAX;
+}
+
+static size_t sandbox3d_play_session_find_character_controller(
+    const sandbox3d_play_session* session,
+    henka_scene_document_id document_id)
+{
+    size_t index;
+    if (session == NULL || document_id == HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        return SIZE_MAX;
+    }
+    for (index = 0U; index < session->character_controller_count; ++index)
+    {
+        if (session->character_controllers[index].document_id == document_id)
+        {
+            return index;
+        }
+    }
+    return SIZE_MAX;
+}
+
+static bool sandbox3d_play_session_character_controller_config_valid(
+    const sandbox3d_play_session* session,
+    const sandbox3d_play_character_controller_config* config)
+{
+    henka_entity entity;
+    henka_scene_document_object object;
+    return session != NULL && config != NULL &&
+        config->document_id != HENKA_INVALID_SCENE_DOCUMENT_ID &&
+        isfinite(config->radius) && config->radius > 0.0f &&
+        isfinite(config->half_height) && config->half_height >= 0.0f &&
+        isfinite(config->max_speed) && config->max_speed > 0.0f &&
+        isfinite(config->jump_speed) && config->jump_speed >= 0.0f &&
+        isfinite(config->acceleration) && config->acceleration >= 0.0f &&
+        isfinite(config->deceleration) && config->deceleration >= 0.0f &&
+        isfinite(config->air_control) && config->air_control >= 0.0f &&
+        config->air_control <= 1.0f &&
+        isfinite(config->slope_limit_degrees) &&
+        config->slope_limit_degrees >= 0.0f &&
+        config->slope_limit_degrees <= 90.0f &&
+        config->layer != 0U && config->mask != 0U &&
+        sandbox3d_scene_document_bridge_get_entity(
+            session->bridge, config->document_id, &entity) == HENKA_SUCCESS &&
+        sandbox3d_scene_document_bridge_get_object(
+            session->bridge, config->document_id, &object) == HENKA_SUCCESS &&
+        !object.physics.enabled;
+}
+
+static henka_result sandbox3d_play_session_make_character_controller(
+    sandbox3d_play_session* session,
+    const sandbox3d_play_character_controller_config* config,
+    henka_scene* scene,
+    henka_entity entity,
+    henka_transform transform,
+    henka_character_controller** out_controller,
+    henka_physics_body_id* out_body)
+{
+    henka_character_controller_desc desc;
+    henka_character_controller_state state = {0};
+    henka_character_controller* controller = NULL;
+    henka_result result;
+
+    if (out_controller == NULL || out_body == NULL || session == NULL ||
+        config == NULL || scene == NULL || entity == HENKA_INVALID_ENTITY ||
+        !sandbox3d_play_session_character_controller_config_valid(
+            session, config))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_controller = NULL;
+    *out_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    desc = (henka_character_controller_desc){
+        transform,
+        config->radius,
+        config->max_speed,
+        config->jump_speed,
+        config->layer,
+        config->mask,
+        scene,
+        entity,
+        config->half_height};
+    result = henka_character_controller_create(
+        session->physics_world, &desc, &controller);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    *out_controller = controller;
+    result = henka_character_controller_set_movement_tuning(
+        controller, config->acceleration, config->deceleration);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_character_controller_set_air_control(
+            controller, config->air_control);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_character_controller_set_slope_limit(
+            controller, config->slope_limit_degrees);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_character_controller_get_state(controller, &state);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        const henka_result destroy_result =
+            henka_character_controller_destroy(controller);
+        if (destroy_result == HENKA_SUCCESS)
+        {
+            *out_controller = NULL;
+        }
+        return destroy_result != HENKA_SUCCESS ? destroy_result : result;
+    }
+    *out_body = state.body;
+    return HENKA_SUCCESS;
 }
 
 static henka_script_lifecycle_event sandbox3d_play_session_event_to_lifecycle(
@@ -551,7 +674,9 @@ static void sandbox3d_play_session_clear_snapshot(
             HENKA_INVALID_ENTITY,
             henka_transform_identity(),
             false,
-            HENKA_INVALID_PHYSICS_BODY_ID};
+            HENKA_INVALID_PHYSICS_BODY_ID,
+            NULL,
+            0.0f};
     }
 }
 
@@ -562,18 +687,38 @@ static henka_result sandbox3d_play_session_destroy_bodies(
     henka_result result = HENKA_SUCCESS;
     for (index = 0U; index < session->snapshot_count; ++index)
     {
-        if (session->snapshots[index].body != HENKA_INVALID_PHYSICS_BODY_ID)
+        sandbox3d_play_snapshot* snapshot = &session->snapshots[index];
+        if (snapshot->character_controller != NULL)
         {
-            const henka_result destroy_result = henka_physics_body_destroy(
-                session->physics_world,
-                session->snapshots[index].body);
+            const henka_result destroy_result =
+                henka_character_controller_destroy(
+                    snapshot->character_controller);
             if (destroy_result != HENKA_SUCCESS && result == HENKA_SUCCESS)
             {
                 result = destroy_result;
             }
             if (destroy_result == HENKA_SUCCESS)
             {
-                session->snapshots[index].body = HENKA_INVALID_PHYSICS_BODY_ID;
+                snapshot->character_controller = NULL;
+                snapshot->body = HENKA_INVALID_PHYSICS_BODY_ID;
+            }
+            else
+            {
+                continue;
+            }
+        }
+        if (snapshot->body != HENKA_INVALID_PHYSICS_BODY_ID)
+        {
+            const henka_result destroy_result = henka_physics_body_destroy(
+                session->physics_world,
+                snapshot->body);
+            if (destroy_result != HENKA_SUCCESS && result == HENKA_SUCCESS)
+            {
+                result = destroy_result;
+            }
+            if (destroy_result == HENKA_SUCCESS)
+            {
+                snapshot->body = HENKA_INVALID_PHYSICS_BODY_ID;
             }
         }
     }
@@ -840,6 +985,63 @@ henka_result sandbox3d_play_session_set_input_context(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_play_session_set_character_controller(
+    sandbox3d_play_session* session,
+    const sandbox3d_play_character_controller_config* config)
+{
+    size_t index;
+    if (session == NULL || session->state != SANDBOX3D_PLAY_SESSION_STOPPED ||
+        !sandbox3d_play_session_character_controller_config_valid(
+            session, config))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    index = sandbox3d_play_session_find_character_controller(
+        session, config->document_id);
+    if (index == SIZE_MAX)
+    {
+        if (session->character_controller_count >=
+            SANDBOX3D_PLAY_SESSION_MAX_OBJECTS)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        index = session->character_controller_count;
+        ++session->character_controller_count;
+    }
+    session->character_controllers[index] = *config;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_play_session_clear_character_controller(
+    sandbox3d_play_session* session,
+    henka_scene_document_id document_id)
+{
+    size_t index;
+    if (session == NULL || session->state != SANDBOX3D_PLAY_SESSION_STOPPED ||
+        document_id == HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    index = sandbox3d_play_session_find_character_controller(
+        session, document_id);
+    if (index == SIZE_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (index + 1U < session->character_controller_count)
+    {
+        memmove(
+            &session->character_controllers[index],
+            &session->character_controllers[index + 1U],
+            (session->character_controller_count - index - 1U) *
+                sizeof(session->character_controllers[0]));
+    }
+    --session->character_controller_count;
+    session->character_controllers[session->character_controller_count] =
+        (sandbox3d_play_character_controller_config){0};
+    return HENKA_SUCCESS;
+}
+
 henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
 {
     size_t index;
@@ -886,6 +1088,7 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
         henka_physics_body_id body = HENKA_INVALID_PHYSICS_BODY_ID;
         henka_result audio_result;
         henka_scene* scene;
+        size_t controller_config_index;
         if (sandbox3d_scene_document_bridge_get_binding_at(
                 session->bridge, index, &document_id, &entity) != HENKA_SUCCESS ||
             sandbox3d_scene_document_bridge_get_scene(session->bridge) == NULL ||
@@ -906,9 +1109,41 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
             entity,
             transform,
             henka_scene_is_entity_visible(scene, entity),
-            HENKA_INVALID_PHYSICS_BODY_ID};
+            HENKA_INVALID_PHYSICS_BODY_ID,
+            NULL,
+            0.0f};
         ++session->snapshot_count;
-        if (object.physics.enabled)
+        controller_config_index = sandbox3d_play_session_find_character_controller(
+            session, document_id);
+        if (controller_config_index != SIZE_MAX)
+        {
+            henka_character_controller* controller = NULL;
+            const sandbox3d_play_character_controller_config* config =
+                &session->character_controllers[controller_config_index];
+            if (object.physics.enabled)
+            {
+                return sandbox3d_play_session_abort_start_with_error(
+                    session, HENKA_ERROR_INVALID_ARGUMENT);
+            }
+            result = sandbox3d_play_session_make_character_controller(
+                session,
+                config,
+                scene,
+                entity,
+                transform,
+                &controller,
+                &body);
+            session->snapshots[session->snapshot_count - 1U].character_controller =
+                controller;
+            if (result != HENKA_SUCCESS)
+            {
+                return sandbox3d_play_session_abort_start_with_error(session, result);
+            }
+            session->snapshots[session->snapshot_count - 1U].body = body;
+            session->snapshots[session->snapshot_count - 1U].character_controller_max_speed =
+                config->max_speed;
+        }
+        else if (object.physics.enabled)
         {
             const henka_result descriptor_result =
                 sandbox3d_scene_document_bridge_make_physics_body_desc(
@@ -1078,6 +1313,101 @@ henka_result sandbox3d_play_session_resume(sandbox3d_play_session* session)
     return HENKA_SUCCESS;
 }
 
+static bool sandbox3d_play_session_input_is_down(
+    const sandbox3d_play_session* session,
+    henka_input_action action)
+{
+    return session != NULL && session->input_query != NULL &&
+        session->input_query(session->input_user_data, (uint32_t)action);
+}
+
+static henka_result sandbox3d_play_session_prepare_character_controllers(
+    sandbox3d_play_session* session)
+{
+    size_t index;
+    if (session == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < session->snapshot_count; ++index)
+    {
+        sandbox3d_play_snapshot* snapshot = &session->snapshots[index];
+        double direction_x;
+        double direction_z;
+        double direction_length;
+        henka_vec3 desired_velocity;
+        henka_result result;
+        if (snapshot->character_controller == NULL)
+        {
+            continue;
+        }
+        direction_x = (sandbox3d_play_session_input_is_down(
+                session, HENKA_INPUT_ACTION_MOVE_RIGHT) ? 1.0 : 0.0) -
+            (sandbox3d_play_session_input_is_down(
+                session, HENKA_INPUT_ACTION_MOVE_LEFT) ? 1.0 : 0.0);
+        direction_z = (sandbox3d_play_session_input_is_down(
+                session, HENKA_INPUT_ACTION_MOVE_BACK) ? 1.0 : 0.0) -
+            (sandbox3d_play_session_input_is_down(
+                session, HENKA_INPUT_ACTION_MOVE_FORWARD) ? 1.0 : 0.0);
+        direction_length = hypot(direction_x, direction_z);
+        if (!isfinite(direction_length))
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        if (direction_length > 1.0)
+        {
+            direction_x /= direction_length;
+            direction_z /= direction_length;
+        }
+        desired_velocity = (henka_vec3){
+            (float)(direction_x * (double)snapshot->character_controller_max_speed),
+            0.0f,
+            (float)(direction_z * (double)snapshot->character_controller_max_speed)};
+        result = henka_character_controller_set_planar_velocity(
+            snapshot->character_controller, desired_velocity);
+        if (result == HENKA_SUCCESS && sandbox3d_play_session_input_is_down(
+                session, HENKA_INPUT_ACTION_MOVE_UP))
+        {
+            result = henka_character_controller_queue_jump(
+                snapshot->character_controller);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        result = henka_character_controller_prepare_step(
+            snapshot->character_controller);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+static henka_result sandbox3d_play_session_sync_character_controllers(
+    sandbox3d_play_session* session)
+{
+    size_t index;
+    if (session == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < session->snapshot_count; ++index)
+    {
+        if (session->snapshots[index].character_controller != NULL)
+        {
+            const henka_result result = henka_character_controller_sync_after_step(
+                session->snapshots[index].character_controller);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_play_session_run_fixed_tick(
     sandbox3d_play_session* session)
 {
@@ -1111,7 +1441,15 @@ static henka_result sandbox3d_play_session_run_fixed_tick(
     }
     if (result == HENKA_SUCCESS)
     {
+        result = sandbox3d_play_session_prepare_character_controllers(session);
+    }
+    if (result == HENKA_SUCCESS)
+    {
         result = henka_physics_world_step_fixed(session->physics_world);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_play_session_sync_character_controllers(session);
     }
     if (result == HENKA_SUCCESS)
     {
