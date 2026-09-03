@@ -21,11 +21,25 @@ void henka_test_camera(void)
     henka_vec3 right;
     henka_vec3 up;
     henka_camera before;
+    henka_scene* camera_scene;
+    uint64_t camera_revision;
+    henka_camera updated_camera;
     float depth;
     float previous_yaw;
 
     camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     HENKA_TEST_ASSERT(henka_camera_is_valid(&camera));
+    camera_scene = NULL;
+    HENKA_TEST_ASSERT(henka_scene_create(&camera_scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_camera(camera_scene, &camera) == HENKA_SUCCESS);
+    camera_revision = henka_scene_get_render_revision(camera_scene);
+    HENKA_TEST_ASSERT(henka_scene_set_camera(camera_scene, &camera) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(camera_scene) == camera_revision);
+    updated_camera = camera;
+    updated_camera.yaw_radians += 0.1f;
+    HENKA_TEST_ASSERT(henka_scene_set_camera(camera_scene, &updated_camera) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(camera_scene) == camera_revision + 1U);
+    henka_scene_destroy(camera_scene);
     invalid_camera = henka_camera_create_perspective(NAN, 0.0f, -1.0f, NAN);
     HENKA_TEST_ASSERT(henka_camera_is_valid(&invalid_camera));
     HENKA_TEST_ASSERT_FLOAT_CLOSE(invalid_camera.field_of_view_radians, 60.0f * HENKA_DEG_TO_RAD, 0.0001f);

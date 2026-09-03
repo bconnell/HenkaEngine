@@ -129,6 +129,27 @@ static bool henka_scene_bump_camera_revision(henka_scene* scene)
     return true;
 }
 
+static bool henka_scene_cameras_equal(
+    const henka_camera* left,
+    const henka_camera* right)
+{
+    return left != NULL && right != NULL &&
+        left->position.x == right->position.x &&
+        left->position.y == right->position.y &&
+        left->position.z == right->position.z &&
+        left->yaw_radians == right->yaw_radians &&
+        left->pitch_radians == right->pitch_radians &&
+        left->roll_radians == right->roll_radians &&
+        left->projection_mode == right->projection_mode &&
+        left->field_of_view_radians == right->field_of_view_radians &&
+        left->orthographic_height == right->orthographic_height &&
+        left->near_plane == right->near_plane &&
+        left->far_plane == right->far_plane &&
+        left->aspect_ratio == right->aspect_ratio &&
+        left->movement_speed == right->movement_speed &&
+        left->fast_movement_multiplier == right->fast_movement_multiplier;
+}
+
 henka_material henka_material_default(void)
 {
     henka_material material;
@@ -2685,6 +2706,10 @@ henka_result henka_scene_set_camera(henka_scene* scene, const henka_camera* came
     if (scene == NULL || !henka_camera_is_valid(camera))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (scene->has_camera && henka_scene_cameras_equal(&scene->camera, camera))
+    {
+        return HENKA_SUCCESS;
     }
     if (!henka_scene_camera_revision_available(scene))
     {

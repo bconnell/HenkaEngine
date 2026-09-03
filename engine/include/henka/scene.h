@@ -415,6 +415,7 @@ bool henka_scene_is_entity_helper(const henka_scene* scene, henka_entity entity)
 bool henka_scene_is_entity_transform_locked(const henka_scene* scene, henka_entity entity);
 henka_interaction_result henka_scene_can_interact(const henka_scene* scene, henka_entity entity, henka_vec3 observer_position);
 henka_result henka_scene_pick_entity(const henka_scene* scene, henka_ray ray, henka_entity* out_entity, float* out_distance);
+/* Identical camera values are a successful no-op and do not advance the scene revision. */
 henka_result henka_scene_set_camera(henka_scene* scene, const henka_camera* camera);
 henka_result henka_scene_get_camera(const henka_scene* scene, henka_camera* out_camera);
 void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direction);
