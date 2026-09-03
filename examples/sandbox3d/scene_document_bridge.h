@@ -23,6 +23,8 @@ henka_result sandbox3d_scene_document_bridge_get_binding_at(
     size_t index,
     henka_scene_document_id* out_document_id,
     henka_entity* out_entity);
+/* Validation requires a one-to-one set of persistent document IDs and live
+ * runtime bindings; names and array positions are not identity. */
 henka_result sandbox3d_scene_document_bridge_validate(
     const sandbox3d_scene_document_bridge* bridge);
 henka_result sandbox3d_scene_document_bridge_begin_play(

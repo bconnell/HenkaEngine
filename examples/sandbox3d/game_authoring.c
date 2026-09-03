@@ -60,41 +60,6 @@ static size_t sandbox3d_game_authoring_find_binding(
     return SIZE_MAX;
 }
 
-static henka_result sandbox3d_game_authoring_find_document_id_by_name(
-    const henka_scene_document* document,
-    const char* name,
-    henka_scene_document_id* out_id)
-{
-    size_t index;
-    size_t count;
-    bool found = false;
-    if (document == NULL || name == NULL || out_id == NULL)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    *out_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
-    count = henka_scene_document_get_object_count(document);
-    for (index = 0U; index < count; ++index)
-    {
-        henka_scene_document_object object;
-        if (henka_scene_document_get_object_at(document, index, &object) != HENKA_SUCCESS)
-        {
-            return HENKA_ERROR_INVALID_ARGUMENT;
-        }
-        if (strcmp(object.name, name) == 0)
-        {
-            if (found)
-            {
-                *out_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
-                return HENKA_ERROR_LIMIT;
-            }
-            *out_id = object.id;
-            found = true;
-        }
-    }
-    return found ? HENKA_SUCCESS : HENKA_ERROR_INVALID_ARGUMENT;
-}
-
 static henka_result sandbox3d_game_authoring_build_object(
     const henka_scene* scene,
     henka_entity entity,
@@ -842,10 +807,7 @@ henka_result sandbox3d_game_authoring_load(
 {
     henka_scene_document* candidate = NULL;
     henka_scene_document* previous = NULL;
-    henka_scene_document_id ids[SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
-    henka_scene_document_id previous_ids[SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
     size_t index;
-    size_t rebound_count = 0U;
     henka_camera previous_camera;
     henka_result result;
     if (authoring == NULL || project_root == NULL ||
@@ -869,47 +831,22 @@ henka_result sandbox3d_game_authoring_load(
         henka_scene_document_destroy(candidate);
         return result;
     }
+    if (henka_scene_document_get_object_count(candidate) != authoring->binding_count)
+    {
+        henka_scene_document_destroy(candidate);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     for (index = 0U; index < authoring->binding_count; ++index)
     {
-        previous_ids[index] = authoring->bindings[index].document_id;
         if (henka_scene_document_get_object(
                 candidate,
-                previous_ids[index],
+                authoring->bindings[index].document_id,
                 &(henka_scene_document_object){0}) == HENKA_SUCCESS)
         {
-            ids[index] = previous_ids[index];
             continue;
         }
-        const char* name = henka_scene_get_entity_name(
-            authoring->scene,
-            authoring->bindings[index].entity);
-        if (name == NULL)
-        {
-            henka_scene_document_destroy(candidate);
-            return HENKA_ERROR_INVALID_ARGUMENT;
-        }
-        result = sandbox3d_game_authoring_find_document_id_by_name(
-            candidate,
-            name,
-            &ids[index]);
-        if (result == HENKA_ERROR_LIMIT)
-        {
-            henka_scene_document_destroy(candidate);
-            return result;
-        }
-        if (result != HENKA_SUCCESS)
-        {
-            henka_scene_document_object current;
-            if (henka_scene_document_get_object(
-                    authoring->document,
-                    previous_ids[index],
-                    &current) != HENKA_SUCCESS ||
-                henka_scene_document_add_object(candidate, &current, &ids[index]) != HENKA_SUCCESS)
-            {
-                henka_scene_document_destroy(candidate);
-                return HENKA_ERROR_INVALID_ARGUMENT;
-            }
-        }
+        henka_scene_document_destroy(candidate);
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
     result = sandbox3d_game_authoring_copy_document(authoring->document, &previous);
     if (result != HENKA_SUCCESS)
@@ -917,39 +854,15 @@ henka_result sandbox3d_game_authoring_load(
         henka_scene_document_destroy(candidate);
         return result;
     }
-    /* Publish the already validated candidate, including any explicitly
-     * preserved current bindings that were absent from the persisted file.
-     * Re-reading the file here would discard those candidate additions and
-     * could make an otherwise recoverable identity remap fail during bind. */
+    /* Publish only a candidate whose persistent object IDs exactly match the
+     * live binding set. Runtime entities remain generation-checked derived
+     * state; names are not identity and cannot silently remap a loaded file. */
     result = sandbox3d_game_authoring_restore_document(
         authoring->document,
         candidate);
     if (result != HENKA_SUCCESS)
     {
         goto load_cleanup;
-    }
-    for (index = 0U; index < authoring->binding_count; ++index)
-    {
-        result = sandbox3d_scene_document_bridge_unbind(
-            authoring->bridge,
-            previous_ids[index]);
-        if (result != HENKA_SUCCESS)
-        {
-            goto load_rollback;
-        }
-    }
-    for (index = 0U; index < authoring->binding_count; ++index)
-    {
-        result = sandbox3d_scene_document_bridge_bind(
-            authoring->bridge,
-            ids[index],
-            authoring->bindings[index].entity);
-        if (result != HENKA_SUCCESS)
-        {
-            goto load_rollback;
-        }
-        authoring->bindings[index].document_id = ids[index];
-        ++rebound_count;
     }
     for (index = 0U; index < authoring->binding_count; ++index)
     {
@@ -977,21 +890,12 @@ henka_result sandbox3d_game_authoring_load(
     return result;
 
 load_rollback:
-    for (index = 0U; index < rebound_count; ++index)
-    {
-        (void)sandbox3d_scene_document_bridge_unbind(authoring->bridge, ids[index]);
-    }
     (void)sandbox3d_game_authoring_restore_document(authoring->document, previous);
     for (index = 0U; index < authoring->binding_count; ++index)
     {
-        authoring->bindings[index].document_id = previous_ids[index];
-        (void)sandbox3d_scene_document_bridge_bind(
-            authoring->bridge,
-            previous_ids[index],
-            authoring->bindings[index].entity);
         (void)sandbox3d_scene_document_bridge_apply_object(
             authoring->bridge,
-            previous_ids[index]);
+            authoring->bindings[index].document_id);
     }
     (void)sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge);
     (void)henka_scene_set_camera(authoring->scene, &previous_camera);

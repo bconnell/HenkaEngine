@@ -106,6 +106,8 @@ henka_result sandbox3d_game_authoring_attach_script_template(
 henka_result sandbox3d_game_authoring_save(
     sandbox3d_game_authoring* authoring,
     const char* project_root);
+/* Loads only a candidate whose persistent object IDs exactly match the live
+ * bindings. Missing or extra objects are rejected before publication. */
 henka_result sandbox3d_game_authoring_load(
     sandbox3d_game_authoring* authoring,
     const char* project_root);

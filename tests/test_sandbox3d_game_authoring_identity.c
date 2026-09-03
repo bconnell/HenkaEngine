@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include <henka/core.h>
 #include <henka/scene.h>
@@ -21,6 +22,7 @@ int main(void)
     henka_scene_document_id replacement_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id new_object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id loaded_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id unchanged_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_entity new_entity = HENKA_INVALID_ENTITY;
     henka_result load_result = HENKA_ERROR_INVALID_ARGUMENT;
     henka_result register_result = HENKA_ERROR_INVALID_ARGUMENT;
@@ -72,6 +74,61 @@ int main(void)
             (int)load_result,
             (int)register_result,
             (unsigned long long)new_object_id);
+        goto cleanup;
+    }
+
+    if (sandbox3d_game_authoring_save(authoring, ".") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring,
+            new_entity,
+            &unchanged_id,
+            &loaded_object) != HENKA_SUCCESS ||
+        unchanged_id != new_object_id ||
+        strcmp(loaded_object.name, "Identity Watermark New Object") != 0)
+    {
+        fprintf(stderr, "game authoring identity test failed during baseline save\n");
+        goto cleanup;
+    }
+
+    henka_scene_document_destroy(replacement);
+    replacement = NULL;
+    if (henka_scene_document_create(&replacement) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "game authoring identity test failed creating invalid candidate\n");
+        goto cleanup;
+    }
+    watermark_object.id = watermark_id + 2U;
+    if (henka_scene_document_add_object(
+            replacement, &watermark_object, &replacement_id) != HENKA_SUCCESS ||
+        replacement_id != watermark_id + 2U ||
+        henka_scene_document_save_file(replacement, ".", relative_path) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring,
+            new_entity,
+            &unchanged_id,
+            &loaded_object) != HENKA_SUCCESS ||
+        unchanged_id != new_object_id ||
+        strcmp(loaded_object.name, "Identity Watermark New Object") != 0)
+    {
+        fprintf(stderr, "game authoring identity test failed rejecting unexpected ID\n");
+        goto cleanup;
+    }
+
+    henka_scene_document_destroy(replacement);
+    replacement = NULL;
+    if (henka_scene_document_create(&replacement) != HENKA_SUCCESS ||
+        henka_scene_document_save_file(replacement, ".", relative_path) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring,
+            new_entity,
+            &unchanged_id,
+            &loaded_object) != HENKA_SUCCESS ||
+        unchanged_id != new_object_id ||
+        strcmp(loaded_object.name, "Identity Watermark New Object") != 0)
+    {
+        fprintf(stderr, "game authoring identity test failed rejecting missing ID\n");
         goto cleanup;
     }
 

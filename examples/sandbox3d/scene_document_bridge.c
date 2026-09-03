@@ -152,9 +152,15 @@ henka_result sandbox3d_scene_document_bridge_get_binding_at(
 henka_result sandbox3d_scene_document_bridge_validate(
     const sandbox3d_scene_document_bridge* bridge)
 {
+    size_t document_count;
     size_t index;
     if (bridge == NULL || bridge->document == NULL || bridge->scene == NULL ||
         henka_scene_document_validate(bridge->document) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    document_count = henka_scene_document_get_object_count(bridge->document);
+    if (document_count != bridge->binding_count)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -165,6 +171,20 @@ henka_result sandbox3d_scene_document_bridge_validate(
                 bridge->bindings[index].document_id,
                 &(henka_scene_document_object){0}) != HENKA_SUCCESS ||
             !henka_scene_is_entity_valid(bridge->scene, bridge->bindings[index].entity))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    for (index = 0U; index < document_count; ++index)
+    {
+        henka_scene_document_object object;
+        if (henka_scene_document_get_object_at(
+                bridge->document,
+                index,
+                &object) != HENKA_SUCCESS ||
+            sandbox3d_scene_document_bridge_find_document_index(
+                bridge,
+                object.id) == SIZE_MAX)
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }

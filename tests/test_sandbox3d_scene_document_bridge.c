@@ -14,6 +14,7 @@ int main(void)
     henka_scene* scene = NULL;
     henka_scene_document_object object = henka_scene_document_object_default();
     henka_scene_document_object child_object = henka_scene_document_object_default();
+    henka_scene_document_object unbound_object = henka_scene_document_object_default();
     henka_physics_body_desc body_desc;
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_entity child_entity = HENKA_INVALID_ENTITY;
@@ -21,6 +22,7 @@ int main(void)
     henka_entity parent_entity = HENKA_INVALID_ENTITY;
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id unbound_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_camera authored_camera;
     henka_camera loaded_camera;
     henka_camera unchanged_camera;
@@ -73,6 +75,11 @@ int main(void)
         sandbox3d_scene_document_bridge_bind(bridge, object_id, entity) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_bind(bridge, child_id, child_entity) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_get_binding_count(bridge) != 2U ||
+        henka_scene_document_add_object(
+            document, &unbound_object, &unbound_id) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_validate(bridge) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_scene_document_remove_object(document, unbound_id) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_validate(bridge) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_bind(bridge, object_id, entity) == HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_apply_object(bridge, child_id) != HENKA_SUCCESS ||
