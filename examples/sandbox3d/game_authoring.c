@@ -141,6 +141,9 @@ static henka_result sandbox3d_game_authoring_copy_document(
     henka_scene_document** out_copy)
 {
     henka_scene_document* copy = NULL;
+    henka_audio_listener audio_listener;
+    henka_camera camera;
+    bool has_camera;
     size_t index;
     size_t count;
     henka_result result;
@@ -155,6 +158,31 @@ static henka_result sandbox3d_game_authoring_copy_document(
     if (result != HENKA_SUCCESS)
     {
         return result;
+    }
+    if (henka_scene_document_get_audio_listener(source, &audio_listener) != HENKA_SUCCESS)
+    {
+        henka_scene_document_destroy(copy);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_scene_document_set_audio_listener(copy, audio_listener);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_scene_document_destroy(copy);
+        return result;
+    }
+    has_camera = henka_scene_document_has_camera(source);
+    if (has_camera)
+    {
+        result = henka_scene_document_get_camera(source, &camera);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_scene_document_set_camera(copy, &camera);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            henka_scene_document_destroy(copy);
+            return result;
+        }
     }
     count = henka_scene_document_get_object_count(source);
     for (index = 0U; index < count; ++index)
@@ -226,6 +254,9 @@ static henka_result sandbox3d_game_authoring_restore_document(
     henka_scene_document* destination,
     const henka_scene_document* source)
 {
+    henka_audio_listener audio_listener;
+    henka_camera camera;
+    bool has_camera;
     size_t index;
     size_t count;
     henka_result result;
@@ -235,10 +266,33 @@ static henka_result sandbox3d_game_authoring_restore_document(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (henka_scene_document_get_audio_listener(source, &audio_listener) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    has_camera = henka_scene_document_has_camera(source);
+    if (has_camera &&
+        henka_scene_document_get_camera(source, &camera) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     result = henka_scene_document_clear(destination);
     if (result != HENKA_SUCCESS)
     {
         return result;
+    }
+    result = henka_scene_document_set_audio_listener(destination, audio_listener);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (has_camera)
+    {
+        result = henka_scene_document_set_camera(destination, &camera);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
     }
     count = henka_scene_document_get_object_count(source);
     for (index = 0U; index < count; ++index)
@@ -718,6 +772,10 @@ henka_result sandbox3d_game_authoring_save(
     sandbox3d_game_authoring* authoring,
     const char* project_root)
 {
+    henka_camera previous_camera;
+    const bool had_authored_camera =
+        authoring != NULL && authoring->document != NULL &&
+        henka_scene_document_has_camera(authoring->document);
     henka_result result;
     if (authoring == NULL || project_root == NULL ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
@@ -725,10 +783,32 @@ henka_result sandbox3d_game_authoring_save(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (had_authored_camera &&
+        henka_scene_document_get_camera(authoring->document, &previous_camera) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_scene_document_bridge_sync_camera(authoring->bridge);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
     result = henka_scene_document_save_file(
         authoring->document,
         project_root,
         authoring->relative_path);
+    if (result != HENKA_SUCCESS)
+    {
+        if (had_authored_camera)
+        {
+            (void)henka_scene_document_set_camera(authoring->document, &previous_camera);
+        }
+        else
+        {
+            (void)henka_scene_document_clear_camera(authoring->document);
+        }
+        return result;
+    }
     if (result == HENKA_SUCCESS)
     {
         result = sandbox3d_game_authoring_set_project_root(authoring, project_root);
@@ -746,10 +826,15 @@ henka_result sandbox3d_game_authoring_load(
     henka_scene_document_id previous_ids[SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
     size_t index;
     size_t rebound_count = 0U;
+    henka_camera previous_camera;
     henka_result result;
     if (authoring == NULL || project_root == NULL ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
         strlen(project_root) >= HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_scene_get_camera(authoring->scene, &previous_camera) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -861,6 +946,11 @@ henka_result sandbox3d_game_authoring_load(
     {
         goto load_rollback;
     }
+    result = sandbox3d_scene_document_bridge_apply_camera(authoring->bridge);
+    if (result != HENKA_SUCCESS)
+    {
+        goto load_rollback;
+    }
     henka_scene_document_destroy(candidate);
     henka_scene_document_destroy(previous);
     (void)sandbox3d_game_authoring_set_project_root(authoring, project_root);
@@ -884,6 +974,7 @@ load_rollback:
             previous_ids[index]);
     }
     (void)sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge);
+    (void)henka_scene_set_camera(authoring->scene, &previous_camera);
 load_cleanup:
     henka_scene_document_destroy(candidate);
     henka_scene_document_destroy(previous);

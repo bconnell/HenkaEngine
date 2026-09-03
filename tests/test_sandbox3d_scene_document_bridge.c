@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <henka/core.h>
 #include <henka/scene.h>
 #include <henka/scene_document.h>
 
@@ -20,6 +21,9 @@ int main(void)
     henka_entity parent_entity = HENKA_INVALID_ENTITY;
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_camera authored_camera;
+    henka_camera loaded_camera;
+    henka_camera unchanged_camera;
     int exit_code = 1;
 
     if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
@@ -45,7 +49,16 @@ int main(void)
         goto cleanup;
     }
     child_object.parent_id = object_id;
+    authored_camera = henka_camera_create_perspective(
+        55.0f * HENKA_DEG_TO_RAD,
+        4.0f / 3.0f,
+        0.2f,
+        500.0f);
+    authored_camera.position = (henka_vec3){4.0f, 5.0f, 6.0f};
+    authored_camera.yaw_radians = -0.4f;
+    authored_camera.pitch_radians = 0.15f;
     if (henka_scene_document_add_object(document, &child_object, &child_id) != HENKA_SUCCESS ||
+        henka_scene_document_set_camera(document, &authored_camera) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_create(document, scene, &bridge) != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -77,6 +90,43 @@ int main(void)
         body_desc.collider.shape != HENKA_PHYSICS_SHAPE_BOX ||
         body_desc.collider.is_trigger != true ||
         body_desc.collider.data.box.half_extents.y != 2.0f)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_scene_document_bridge_apply_camera(bridge) != HENKA_SUCCESS ||
+        henka_scene_get_camera(scene, &loaded_camera) != HENKA_SUCCESS ||
+        loaded_camera.position.x != authored_camera.position.x ||
+        loaded_camera.position.y != authored_camera.position.y ||
+        loaded_camera.yaw_radians != authored_camera.yaw_radians ||
+        loaded_camera.pitch_radians != authored_camera.pitch_radians ||
+        loaded_camera.projection_mode != authored_camera.projection_mode)
+    {
+        goto cleanup;
+    }
+    authored_camera.position = (henka_vec3){-7.0f, 8.0f, 9.0f};
+    authored_camera.roll_radians = 0.2f;
+    if (henka_scene_set_camera(scene, &authored_camera) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_sync_camera(bridge) != HENKA_SUCCESS ||
+        henka_scene_document_get_camera(document, &loaded_camera) != HENKA_SUCCESS ||
+        loaded_camera.position.z != authored_camera.position.z ||
+        loaded_camera.roll_radians != authored_camera.roll_radians)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_document_clear_camera(document) != HENKA_SUCCESS ||
+        henka_scene_get_camera(scene, &unchanged_camera) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_camera(bridge) != HENKA_SUCCESS ||
+        henka_scene_get_camera(scene, &loaded_camera) != HENKA_SUCCESS ||
+        loaded_camera.position.x != unchanged_camera.position.x ||
+        loaded_camera.position.y != unchanged_camera.position.y ||
+        loaded_camera.position.z != unchanged_camera.position.z)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_scene_document_bridge_begin_play(bridge) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_camera(bridge) != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_scene_document_bridge_sync_camera(bridge) != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_scene_document_bridge_end_play(bridge) != HENKA_SUCCESS)
     {
         goto cleanup;
     }

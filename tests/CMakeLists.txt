@@ -242,6 +242,25 @@ add_test(
     COMMAND henka_sandbox3d_game_authoring_tests
 )
 
+add_executable(henka_sandbox3d_game_authoring_camera_tests
+    ../examples/sandbox3d/scene_document_bridge.c
+    ../examples/sandbox3d/play_session.c
+    ../examples/sandbox3d/game_authoring.c
+    test_sandbox3d_game_authoring_camera.c
+)
+
+target_link_libraries(henka_sandbox3d_game_authoring_camera_tests
+    PRIVATE
+        henka
+)
+
+henka_enable_project_warnings(henka_sandbox3d_game_authoring_camera_tests)
+
+add_test(
+    NAME henka_sandbox3d_game_authoring_camera_tests
+    COMMAND henka_sandbox3d_game_authoring_camera_tests
+)
+
 if(HENKA_BUILD_CLIENT)
     add_executable(henka_sandbox3d_audio_runtime_tests
         ../examples/sandbox3d/audio_runtime.c

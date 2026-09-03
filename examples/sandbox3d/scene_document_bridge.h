@@ -65,6 +65,15 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
 henka_result sandbox3d_scene_document_bridge_apply_hierarchy(
     const sandbox3d_scene_document_bridge* bridge);
 
+/* Applies an optional authored scene camera. Legacy documents without a
+ * camera leave the current runtime camera unchanged. */
+henka_result sandbox3d_scene_document_bridge_apply_camera(
+    const sandbox3d_scene_document_bridge* bridge);
+
+/* Copies the current runtime camera into the authored document for saving. */
+henka_result sandbox3d_scene_document_bridge_sync_camera(
+    sandbox3d_scene_document_bridge* bridge);
+
 /* Copies only runtime-owned presentation values back into a candidate object
  * and commits them through the Scene Document validation boundary. */
 henka_result sandbox3d_scene_document_bridge_sync_object(

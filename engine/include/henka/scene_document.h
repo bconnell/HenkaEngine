@@ -173,6 +173,8 @@ henka_result henka_scene_document_get_audio_listener(
 henka_result henka_scene_document_set_camera(
     henka_scene_document* document,
     const henka_camera* camera);
+henka_result henka_scene_document_clear_camera(
+    henka_scene_document* document);
 bool henka_scene_document_has_camera(
     const henka_scene_document* document);
 henka_result henka_scene_document_get_camera(

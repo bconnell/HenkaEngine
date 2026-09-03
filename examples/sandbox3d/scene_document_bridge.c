@@ -213,6 +213,39 @@ const henka_scene_document* sandbox3d_scene_document_bridge_get_document(
     return bridge == NULL ? NULL : bridge->document;
 }
 
+henka_result sandbox3d_scene_document_bridge_apply_camera(
+    const sandbox3d_scene_document_bridge* bridge)
+{
+    henka_camera camera;
+    if (bridge == NULL || bridge->play_locked ||
+        sandbox3d_scene_document_bridge_validate(bridge) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_document_has_camera(bridge->document))
+    {
+        return HENKA_SUCCESS;
+    }
+    if (henka_scene_document_get_camera(bridge->document, &camera) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_scene_set_camera(bridge->scene, &camera);
+}
+
+henka_result sandbox3d_scene_document_bridge_sync_camera(
+    sandbox3d_scene_document_bridge* bridge)
+{
+    henka_camera camera;
+    if (bridge == NULL || bridge->play_locked ||
+        sandbox3d_scene_document_bridge_validate(bridge) != HENKA_SUCCESS ||
+        henka_scene_get_camera(bridge->scene, &camera) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_scene_document_set_camera(bridge->document, &camera);
+}
+
 henka_result sandbox3d_scene_document_bridge_get_object(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id,

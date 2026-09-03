@@ -1127,6 +1127,18 @@ henka_result henka_scene_document_set_camera(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_document_clear_camera(
+    henka_scene_document* document)
+{
+    if (document == NULL || document->storage == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    document->storage->has_camera = false;
+    memset(&document->storage->camera, 0, sizeof(document->storage->camera));
+    return HENKA_SUCCESS;
+}
+
 bool henka_scene_document_has_camera(
     const henka_scene_document* document)
 {
