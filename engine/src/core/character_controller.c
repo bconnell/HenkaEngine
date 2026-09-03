@@ -12,6 +12,7 @@ struct henka_character_controller
     float jump_speed;
     float acceleration;
     float deceleration;
+    float air_control;
     float slope_limit_cosine;
     henka_vec3 desired_velocity;
     bool jump_queued;
@@ -324,6 +325,7 @@ henka_result henka_character_controller_create(
     controller->jump_speed = desc->jump_speed;
     controller->acceleration = 0.0f;
     controller->deceleration = 0.0f;
+    controller->air_control = 1.0f;
     controller->slope_limit_cosine = cosf(
         45.0f * 3.14159265358979323846f / 180.0f);
     controller->desired_velocity = (henka_vec3){0.0f, 0.0f, 0.0f};
@@ -354,6 +356,25 @@ henka_result henka_character_controller_set_movement_tuning(
     }
     controller->acceleration = acceleration;
     controller->deceleration = deceleration;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_character_controller_set_air_control(
+    henka_character_controller* controller,
+    float air_control)
+{
+    henka_physics_body_state body_state;
+
+    if (controller == NULL || controller->world == NULL ||
+        !isfinite(air_control) || air_control < 0.0f || air_control > 1.0f ||
+        henka_physics_body_get_state(
+            controller->world,
+            controller->body,
+            &body_state) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    controller->air_control = air_control;
     return HENKA_SUCCESS;
 }
 
@@ -585,6 +606,24 @@ henka_result henka_character_controller_prepare_step(
         }
         target_planar_velocity.x = (float)support_x;
         target_planar_velocity.z = (float)support_z;
+    }
+    if (!controller->grounded && controller->air_control < 1.0f)
+    {
+        const double current_x = (double)body_state.linear_velocity.x;
+        const double current_z = (double)body_state.linear_velocity.z;
+        const double control = (double)controller->air_control;
+        const double next_x = current_x +
+            ((double)target_planar_velocity.x - current_x) * control;
+        const double next_z = current_z +
+            ((double)target_planar_velocity.z - current_z) * control;
+
+        if (!henka_character_controller_double_fits_float(next_x) ||
+            !henka_character_controller_double_fits_float(next_z))
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        target_planar_velocity.x = (float)next_x;
+        target_planar_velocity.z = (float)next_z;
     }
     result = henka_character_controller_project_planar_velocity(
         controller,

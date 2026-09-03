@@ -139,6 +139,63 @@ static void henka_test_character_controller_movement_tuning(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_character_controller_air_control(void)
+{
+    henka_physics_world* world = NULL;
+    henka_character_controller* controller = NULL;
+    henka_character_controller_desc desc = henka_test_character_controller_desc();
+    henka_character_controller_state state;
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world, (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_create(
+        world, &desc, &controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_set_planar_velocity(
+        controller, (henka_vec3){3.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.velocity.x, 3.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_character_controller_teleport(
+        controller, desc.transform, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_set_air_control(
+        controller, 0.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.velocity.x, 0.0f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_character_controller_set_air_control(
+        controller, 0.5f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.velocity.x, 1.5f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_character_controller_set_air_control(
+        controller, 1.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.velocity.x, 3.0f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_character_controller_set_air_control(
+        controller, NAN) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_character_controller_teleport(
+        controller, desc.transform, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_set_planar_velocity(
+        controller, (henka_vec3){3.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.velocity.x, 3.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_character_controller_set_air_control(
+        controller, 1.1f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_character_controller_teleport(
+        controller, desc.transform, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.velocity.x, 3.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_character_controller_destroy(controller) == HENKA_SUCCESS);
+    henka_physics_world_destroy(world);
+}
+
 static void henka_test_character_controller_teleport(void)
 {
     henka_physics_world* world = NULL;
@@ -585,6 +642,7 @@ void henka_test_character_controller(void)
     henka_test_character_controller_create_and_validate();
     henka_test_character_controller_moves_and_jumps();
     henka_test_character_controller_movement_tuning();
+    henka_test_character_controller_air_control();
     henka_test_character_controller_teleport();
     henka_test_character_controller_slope_grounding();
     henka_test_character_controller_slides_along_wall();

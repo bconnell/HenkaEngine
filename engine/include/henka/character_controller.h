@@ -70,6 +70,11 @@ henka_result henka_character_controller_set_movement_tuning(
     henka_character_controller* controller,
     float acceleration,
     float deceleration);
+/* Sets the fraction of requested planar velocity applied while airborne.
+ * Zero preserves current horizontal velocity; one preserves full air control. */
+henka_result henka_character_controller_set_air_control(
+    henka_character_controller* controller,
+    float air_control);
 /* Sets the maximum walkable surface angle in degrees. The default is 45
  * degrees. Grounding is updated by sync_after_step from physics contacts. */
 henka_result henka_character_controller_set_slope_limit(

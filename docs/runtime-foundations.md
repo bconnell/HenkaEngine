@@ -1410,7 +1410,8 @@ Current gaps include:
 - mature scene hierarchy;
 - complete scene/project serialization;
 - broader physics picking and advanced physics;
-- Character Controller;
+- mature Character Controller movement beyond the available dynamic-body
+  controller foundation;
 - shader graph;
 - live shader authoring;
 - production dialogue/game-specific interaction systems;

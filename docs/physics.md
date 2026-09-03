@@ -24,8 +24,9 @@ The public physics API provides:
   immediately, prevents further scene writes, and reports the body link as
   absent until the physics owner releases it.
 - a bounded public character-controller foundation backed by a real dynamic
-  upright capsule body, with planar velocity limits, grounded jump queuing, and
-  configurable slope-aware grounding, ground-normal reporting, explicit
+  upright capsule body, with planar velocity limits, configurable airborne
+  control, grounded jump queuing, and configurable slope-aware grounding,
+  ground-normal reporting, explicit
   teleport/repositioning, contact-aware planar sliding against blocking
   contacts, and prepare/synchronize integration around the shared fixed-step
   world
