@@ -81,9 +81,11 @@ henka_result henka_prefab_instantiate_under_parent_with_instance(
 
 /* Instantiates one independent set of real scene entities. root_transform is
  * the new root world transform; descendant local transforms are preserved.
- * The operation rolls back every entity it created if any validation or
- * allocation step fails. The target scene and borrowed asset owners must be
- * used according to their normal thread/lifetime contracts. */
+ * The operation preflights the complete revision budget, including worst-case
+ * rollback, before its first target-scene mutation and rolls back every entity
+ * it created if any later validation or allocation step fails. The target
+ * scene and borrowed asset owners must be used according to their normal
+ * thread/lifetime contracts. */
 henka_result henka_prefab_instantiate(
     const henka_prefab* prefab,
     henka_scene* target_scene,

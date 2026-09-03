@@ -542,6 +542,77 @@ static void henka_prefab_rollback_entities(
     }
 }
 
+static bool henka_prefab_add_mutation_count(
+    uint64_t* total,
+    uint64_t additional)
+{
+    if (total == NULL || additional > UINT64_MAX - *total)
+    {
+        return false;
+    }
+    *total += additional;
+    return true;
+}
+
+static bool henka_prefab_get_transaction_mutation_count(
+    const henka_prefab* prefab,
+    bool has_external_parent,
+    uint64_t* out_count)
+{
+    uint64_t mutation_count;
+    size_t index;
+
+    if (prefab == NULL || out_count == NULL)
+    {
+        return false;
+    }
+
+    mutation_count = 0U;
+    if (!henka_prefab_add_mutation_count(
+            &mutation_count, (uint64_t)prefab->entity_count))
+    {
+        return false;
+    }
+    for (index = 0U; index < prefab->entity_count; ++index)
+    {
+        const henka_prefab_entry* entry = &prefab->entries[index];
+
+        /* Each created entity receives a transform, flags, material-asset
+         * state, bounds, and interaction state before hierarchy is linked. */
+        if (!henka_prefab_add_mutation_count(&mutation_count, 5U) ||
+            (!entry->visible &&
+                !henka_prefab_add_mutation_count(&mutation_count, 1U)) ||
+            (entry->has_explicit_material &&
+                !henka_prefab_add_mutation_count(&mutation_count, 1U)) ||
+            (entry->mesh != NULL &&
+                !henka_prefab_add_mutation_count(&mutation_count, 1U)) ||
+            (entry->selection_owner_index != SIZE_MAX &&
+                entry->selection_owner_index != index &&
+                !henka_prefab_add_mutation_count(&mutation_count, 1U)) ||
+            (entry->parent_index != SIZE_MAX &&
+                !henka_prefab_add_mutation_count(&mutation_count, 1U)))
+        {
+            return false;
+        }
+    }
+    if (has_external_parent &&
+        !henka_prefab_add_mutation_count(&mutation_count, 1U))
+    {
+        return false;
+    }
+
+    /* A failed multi-entity operation destroys every entity it created. The
+     * rollback itself bumps both scene revision watermarks, so reserve that
+     * additional capacity before making the first visible mutation. */
+    if (!henka_prefab_add_mutation_count(
+            &mutation_count, (uint64_t)prefab->entity_count))
+    {
+        return false;
+    }
+    *out_count = mutation_count;
+    return true;
+}
+
 static henka_result henka_prefab_instantiate_internal(
     const henka_prefab* prefab,
     henka_scene* target_scene,
@@ -556,6 +627,7 @@ static henka_result henka_prefab_instantiate_internal(
     size_t allocation_size;
     size_t index;
     size_t created;
+    uint64_t required_mutations;
     henka_result result;
 
     if (out_root_entity == NULL && out_instance == NULL)
@@ -584,6 +656,16 @@ static henka_result henka_prefab_instantiate_internal(
         prefab->entity_count > HENKA_MAX_PREFAB_ENTITIES ||
         prefab->root_index >= prefab->entity_count ||
         henka_scene_get_entity_count(target_scene) > HENKA_MAX_SCENE_ENTITIES - prefab->entity_count)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    if (!henka_prefab_get_transaction_mutation_count(
+            prefab, parent_entity != HENKA_INVALID_ENTITY, &required_mutations))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    if (!henka_scene_has_render_revision_capacity(
+            target_scene, required_mutations))
     {
         return HENKA_ERROR_LIMIT;
     }
