@@ -29,6 +29,7 @@
 #define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING UINT32_C(128)
 #define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL UINT32_C(256)
 #define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING UINT32_C(512)
+#define HENKA_SCENE_DOCUMENT_CAMERA_VALUE_COUNT 14U
 #define HENKA_SCENE_DOCUMENT_KNOWN_FLAGS ( \
     HENKA_SCENE_DOCUMENT_FLAG_VISIBLE | \
     HENKA_SCENE_DOCUMENT_FLAG_RENDERER_ENABLED | \
@@ -49,6 +50,8 @@ typedef struct henka_scene_document_storage
     size_t object_count;
     uint64_t next_id;
     henka_audio_listener audio_listener;
+    bool has_camera;
+    henka_camera camera;
     henka_scene_document_object objects[HENKA_SCENE_DOCUMENT_MAX_OBJECTS];
 } henka_scene_document_storage;
 
@@ -437,7 +440,8 @@ static henka_result henka_scene_document_validate_storage(
 
     if (storage == NULL || storage->object_count > HENKA_SCENE_DOCUMENT_MAX_OBJECTS ||
         (storage->next_id == 0U && storage->object_count == 0U) ||
-        !henka_scene_document_valid_audio_listener(storage->audio_listener))
+        !henka_scene_document_valid_audio_listener(storage->audio_listener) ||
+        (storage->has_camera && !henka_camera_is_valid(&storage->camera)))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1109,6 +1113,43 @@ henka_result henka_scene_document_get_audio_listener(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_document_set_camera(
+    henka_scene_document* document,
+    const henka_camera* camera)
+{
+    if (document == NULL || document->storage == NULL || camera == NULL ||
+        !henka_camera_is_valid(camera))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    document->storage->camera = *camera;
+    document->storage->has_camera = true;
+    return HENKA_SUCCESS;
+}
+
+bool henka_scene_document_has_camera(
+    const henka_scene_document* document)
+{
+    return document != NULL && document->storage != NULL && document->storage->has_camera;
+}
+
+henka_result henka_scene_document_get_camera(
+    const henka_scene_document* document,
+    henka_camera* out_camera)
+{
+    if (out_camera != NULL)
+    {
+        memset(out_camera, 0, sizeof(*out_camera));
+    }
+    if (document == NULL || document->storage == NULL || out_camera == NULL ||
+        !document->storage->has_camera)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_camera = document->storage->camera;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_document_validate(const henka_scene_document* document)
 {
     if (document == NULL || document->storage == NULL)
@@ -1225,6 +1266,14 @@ static bool henka_scene_document_payload_size(
         }
     }
     if (!henka_scene_document_size_add(&size, 9U * sizeof(uint32_t)))
+    {
+        return false;
+    }
+    if (!henka_scene_document_size_add(&size, sizeof(uint32_t)) ||
+        (storage->has_camera &&
+            !henka_scene_document_size_add(
+                &size,
+                HENKA_SCENE_DOCUMENT_CAMERA_VALUE_COUNT * sizeof(uint32_t))))
     {
         return false;
     }
@@ -1458,7 +1507,7 @@ static bool henka_scene_document_decode_object(
     }
     *object = henka_scene_document_object_default();
     if (!henka_scene_document_reader_u64(reader, &object->id) ||
-        (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V6 &&
             !henka_scene_document_reader_u64(reader, &object->parent_id)) ||
         !henka_scene_document_reader_u32(reader, &flags) ||
         (flags & ~HENKA_SCENE_DOCUMENT_KNOWN_FLAGS) != 0U ||
@@ -1625,6 +1674,24 @@ static bool henka_scene_document_make_payload(
     henka_scene_document_writer_float(&writer, storage->audio_listener.up.x);
     henka_scene_document_writer_float(&writer, storage->audio_listener.up.y);
     henka_scene_document_writer_float(&writer, storage->audio_listener.up.z);
+    henka_scene_document_writer_u32(&writer, storage->has_camera ? 1U : 0U);
+    if (storage->has_camera)
+    {
+        henka_scene_document_writer_float(&writer, storage->camera.position.x);
+        henka_scene_document_writer_float(&writer, storage->camera.position.y);
+        henka_scene_document_writer_float(&writer, storage->camera.position.z);
+        henka_scene_document_writer_float(&writer, storage->camera.yaw_radians);
+        henka_scene_document_writer_float(&writer, storage->camera.pitch_radians);
+        henka_scene_document_writer_float(&writer, storage->camera.roll_radians);
+        henka_scene_document_writer_u32(&writer, (uint32_t)storage->camera.projection_mode);
+        henka_scene_document_writer_float(&writer, storage->camera.field_of_view_radians);
+        henka_scene_document_writer_float(&writer, storage->camera.orthographic_height);
+        henka_scene_document_writer_float(&writer, storage->camera.near_plane);
+        henka_scene_document_writer_float(&writer, storage->camera.far_plane);
+        henka_scene_document_writer_float(&writer, storage->camera.aspect_ratio);
+        henka_scene_document_writer_float(&writer, storage->camera.movement_speed);
+        henka_scene_document_writer_float(&writer, storage->camera.fast_movement_multiplier);
+    }
     if (writer.failed || writer.position != payload_size)
     {
         henka_free(payload);
@@ -1847,6 +1914,7 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V4 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V6 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
@@ -1913,6 +1981,39 @@ henka_result henka_scene_document_load_file(
     {
         result = HENKA_ERROR_INVALID_ARGUMENT;
         goto load_cleanup;
+    }
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    {
+        uint32_t has_camera;
+        if (!henka_scene_document_reader_u32(&reader, &has_camera) || has_camera > 1U)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto load_cleanup;
+        }
+        if (has_camera != 0U)
+        {
+            uint32_t projection_mode;
+            candidate->has_camera = true;
+            if (!henka_scene_document_reader_float(&reader, &candidate->camera.position.x) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.position.y) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.position.z) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.yaw_radians) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.pitch_radians) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.roll_radians) ||
+                !henka_scene_document_reader_u32(&reader, &projection_mode) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.field_of_view_radians) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.orthographic_height) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.near_plane) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.far_plane) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.aspect_ratio) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.movement_speed) ||
+                !henka_scene_document_reader_float(&reader, &candidate->camera.fast_movement_multiplier))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto load_cleanup;
+            }
+            candidate->camera.projection_mode = (henka_camera_projection_mode)projection_mode;
+        }
     }
     if (reader.failed || reader.position != reader.size ||
         henka_scene_document_validate_storage(candidate) != HENKA_SUCCESS)

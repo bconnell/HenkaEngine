@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <henka/core.h>
 #include <henka/scene_document.h>
 
 #include "../engine/src/core/memory_internal.h"
@@ -224,6 +225,53 @@ static bool test_scene_document_patch_u64_and_checksum(
     return result;
 }
 
+static bool test_scene_document_patch_u32_and_checksum(
+    const char* path,
+    long payload_offset,
+    uint32_t value)
+{
+    FILE* file = fopen(path, "r+b");
+    unsigned char* data = NULL;
+    long length;
+    size_t size;
+    bool result = false;
+    if (file == NULL || fseek(file, 0L, SEEK_END) != 0 ||
+        (length = ftell(file)) < 40L || fseek(file, 0L, SEEK_SET) != 0)
+    {
+        if (file != NULL) fclose(file);
+        return false;
+    }
+    size = (size_t)length;
+    if ((uint64_t)payload_offset > (uint64_t)size ||
+        size - (size_t)payload_offset < sizeof(value))
+    {
+        fclose(file);
+        return false;
+    }
+    data = (unsigned char*)malloc(size);
+    if (data != NULL && fread(data, 1U, size, file) == size)
+    {
+        (void)test_scene_document_legacy_write_u32(
+            data,
+            size,
+            &(size_t){(size_t)payload_offset},
+            value);
+        (void)test_scene_document_legacy_write_u32(
+            data,
+            size,
+            &(size_t){32U},
+            test_scene_document_legacy_checksum(data + 40U, size - 40U));
+        result = fseek(file, 0L, SEEK_SET) == 0 &&
+            fwrite(data, 1U, size, file) == size;
+    }
+    free(data);
+    if (fclose(file) != 0)
+    {
+        result = false;
+    }
+    return result;
+}
+
 static bool test_scene_document_write_legacy_fixture(const char* path)
 {
     const henka_scene_document_object object = henka_scene_document_object_default();
@@ -409,7 +457,7 @@ static bool test_scene_document_write_v2_fixture(const char* path)
     return result;
 }
 
-static bool test_scene_document_write_v3_or_v4_or_v5_fixture(
+static bool test_scene_document_write_v3_to_v6_fixture(
     const char* path,
     uint32_t version)
 {
@@ -421,15 +469,27 @@ static bool test_scene_document_write_v3_or_v4_or_v5_fixture(
     FILE* file;
     bool result = true;
 
-    if (path == NULL || (version != 3U && version != 4U && version != 5U))
+    if (path == NULL || (version != 3U && version != 4U && version != 5U && version != 6U))
     {
         return false;
     }
     memset(payload, 0, sizeof(payload));
     memset(header, 0, sizeof(header));
     result = result && test_scene_document_legacy_write_u64(payload, sizeof(payload), &position, 1U);
+    if (version >= 6U)
+    {
+        result = result && test_scene_document_legacy_write_u64(
+            payload,
+            sizeof(payload),
+            &position,
+            HENKA_INVALID_SCENE_DOCUMENT_ID);
+    }
     result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, 3U);
-    result = result && test_scene_document_legacy_write_string(payload, sizeof(payload), &position, version == 3U ? "v3" : (version == 4U ? "v4" : "v5"));
+    result = result && test_scene_document_legacy_write_string(
+        payload,
+        sizeof(payload),
+        &position,
+        version == 3U ? "v3" : (version == 4U ? "v4" : (version == 5U ? "v5" : "v6")));
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.x);
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.y);
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.z);
@@ -581,10 +641,13 @@ int main(void)
     const char* v3_path = "build/test_tmp/scene_document_legacy_v3.hscene";
     const char* v4_path = "build/test_tmp/scene_document_legacy_v4.hscene";
     const char* v5_path = "build/test_tmp/scene_document_legacy_v5.hscene";
+    const char* v6_path = "build/test_tmp/scene_document_legacy_v6.hscene";
+    const char* camera_path = "build/test_tmp/scene_document_camera.hscene";
     const unsigned char malformed_data[] = {'H', 'S', 'C', 'N', 1U};
     henka_scene_document* document = NULL;
     henka_scene_document* loaded = NULL;
     henka_scene_document* exhausted = NULL;
+    henka_scene_document* camera_document = NULL;
     henka_scene_document_object object;
     henka_scene_document_object loaded_object;
     henka_scene_document_object maximum_id_object;
@@ -593,6 +656,8 @@ int main(void)
     henka_scene_document_behavior loaded_behavior;
     henka_audio_listener authored_listener = henka_audio_listener_default();
     henka_audio_listener loaded_listener;
+    henka_camera authored_camera;
+    henka_camera loaded_camera;
     henka_scene_document_id first_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id added_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id duplicate_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
@@ -604,7 +669,8 @@ int main(void)
 
     if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
         henka_scene_document_create(&loaded) != HENKA_SUCCESS ||
-        henka_scene_document_create(&exhausted) != HENKA_SUCCESS)
+        henka_scene_document_create(&exhausted) != HENKA_SUCCESS ||
+        henka_scene_document_create(&camera_document) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -708,17 +774,17 @@ int main(void)
         henka_scene_document_validate(document) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", second_path) != HENKA_SUCCESS ||
-        !test_scene_document_write_v3_or_v4_or_v5_fixture(v3_path, 3U) ||
+        !test_scene_document_write_v3_to_v6_fixture(v3_path, 3U) ||
         !test_scene_document_files_equal(first_path, second_path) ||
         !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)) ||
         henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=6 objects=257") == NULL)
+        inspection_size == 0U || strstr(inspection, "HSCN version=7 objects=257") == NULL)
     {
         fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v3_or_v4_or_v5_fixture(v5_path, 5U) ||
+    if (!test_scene_document_write_v3_to_v6_fixture(v5_path, 5U) ||
         henka_scene_document_load_file(loaded, ".", v5_path) != HENKA_SUCCESS ||
         henka_scene_document_get_object_at(loaded, 0U, &loaded_object) != HENKA_SUCCESS ||
         loaded_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
@@ -830,12 +896,45 @@ int main(void)
         fprintf(stderr, "scene document test failed during v1 migration\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v3_or_v4_or_v5_fixture(v4_path, 4U) ||
+    if (!test_scene_document_write_v3_to_v6_fixture(v4_path, 4U) ||
         henka_scene_document_load_file(loaded, ".", v4_path) != HENKA_SUCCESS ||
         henka_scene_document_get_object(loaded, first_id, &loaded_object) != HENKA_SUCCESS ||
         loaded_object.audio.streaming)
     {
         fprintf(stderr, "scene document test failed during v4 migration\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_write_v3_to_v6_fixture(v6_path, 6U) ||
+        henka_scene_document_load_file(loaded, ".", v6_path) != HENKA_SUCCESS ||
+        henka_scene_document_has_camera(loaded) ||
+        henka_scene_document_get_camera(loaded, &(henka_camera){0}) == HENKA_SUCCESS)
+    {
+        fprintf(stderr, "scene document test failed during v6 compatibility load\n");
+        goto cleanup;
+    }
+    authored_camera = henka_camera_create_perspective(
+        55.0f * HENKA_DEG_TO_RAD,
+        16.0f / 9.0f,
+        0.2f,
+        800.0f);
+    authored_camera.position = (henka_vec3){2.0f, 3.0f, 9.0f};
+    authored_camera.yaw_radians = -0.4f;
+    authored_camera.pitch_radians = 0.2f;
+    authored_camera.roll_radians = 0.05f;
+    if (henka_scene_document_set_camera(camera_document, &authored_camera) != HENKA_SUCCESS ||
+        henka_scene_document_save_file(camera_document, ".", camera_path) != HENKA_SUCCESS ||
+        henka_scene_document_load_file(loaded, ".", camera_path) != HENKA_SUCCESS ||
+        !henka_scene_document_has_camera(loaded) ||
+        henka_scene_document_get_camera(loaded, &loaded_camera) != HENKA_SUCCESS ||
+        loaded_camera.position.x != authored_camera.position.x ||
+        loaded_camera.yaw_radians != authored_camera.yaw_radians ||
+        loaded_camera.projection_mode != authored_camera.projection_mode ||
+        !test_scene_document_patch_u32_and_checksum(camera_path, 76L, 2U) ||
+        henka_scene_document_load_file(loaded, ".", camera_path) == HENKA_SUCCESS ||
+        henka_scene_document_get_camera(loaded, &loaded_camera) != HENKA_SUCCESS ||
+        loaded_camera.position.x != authored_camera.position.x)
+    {
+        fprintf(stderr, "scene document test failed during camera validation/retention\n");
         goto cleanup;
     }
     if (henka_scene_document_load_file(loaded, ".", v3_path) != HENKA_SUCCESS ||
@@ -907,9 +1006,9 @@ int main(void)
         !loaded_object.audio.streaming ||
         henka_scene_document_format_inspection(
             loaded, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        strstr(inspection, "HSCN version=6") == NULL)
+        strstr(inspection, "HSCN version=7") == NULL)
     {
-        fprintf(stderr, "scene document test failed during streamed audio v6 round-trip\n");
+        fprintf(stderr, "scene document test failed during streamed audio v7 round-trip\n");
         goto cleanup;
     }
     if (!test_scene_document_patch_u32(first_path, 4L, UINT32_C(4)) ||
@@ -923,7 +1022,9 @@ int main(void)
     result = 0;
 
 cleanup:
+    remove(camera_path);
     henka_scene_document_destroy(exhausted);
+    henka_scene_document_destroy(camera_document);
     henka_scene_document_destroy(loaded);
     henka_scene_document_destroy(document);
     return result;

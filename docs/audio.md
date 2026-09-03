@@ -41,7 +41,7 @@ service in `engine/include/henka/audio.h`.
 - Destroyed or stale scene entities are rejected before they contribute audio.
   Scene and clip owners must stop dependent voices before destroying those
   borrowed objects.
-- Scene Document v6 stores a bounded, value-only emitter configuration on the
+- Scene Document v7 stores a bounded, value-only emitter configuration on the
   real authored object record and a value-only listener, including the
   resident/streamed storage choice. v1 through v3 documents load with the
   listener at its default, while v4 loads its authored listener and defaults

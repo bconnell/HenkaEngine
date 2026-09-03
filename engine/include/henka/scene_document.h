@@ -7,11 +7,13 @@
 
 #include <henka/math.h>
 #include <henka/audio.h>
+#include <henka/camera.h>
 #include <henka/physics.h>
 #include <henka/result.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(6)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(7)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V6 UINT32_C(6)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 UINT32_C(5)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V4 UINT32_C(4)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3 UINT32_C(3)
@@ -165,6 +167,17 @@ henka_result henka_scene_document_set_audio_listener(
 henka_result henka_scene_document_get_audio_listener(
     const henka_scene_document* document,
     henka_audio_listener* out_listener);
+/* An authored scene camera is optional. Legacy documents have no authored
+ * camera; callers can choose whether to retain or replace their runtime
+ * camera when applying a document. */
+henka_result henka_scene_document_set_camera(
+    henka_scene_document* document,
+    const henka_camera* camera);
+bool henka_scene_document_has_camera(
+    const henka_scene_document* document);
+henka_result henka_scene_document_get_camera(
+    const henka_scene_document* document,
+    henka_camera* out_camera);
 size_t henka_scene_document_get_behavior_count(
     const henka_scene_document* document,
     henka_scene_document_id object_id);
