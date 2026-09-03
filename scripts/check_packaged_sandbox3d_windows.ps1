@@ -18,6 +18,7 @@ if ($ContractOnly -and -not $NonInteractive) {
 
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 . (Join-Path $PSScriptRoot "henka_ui_automation_helpers.ps1")
+. (Join-Path $PSScriptRoot "henka_packaged_startup_readiness.ps1")
 
 $script:allowForegroundIntegration = $AllowForegroundIntegration.IsPresent
 if (-not $script:allowForegroundIntegration) {
@@ -1185,9 +1186,20 @@ try {
         throw "The packaged sandbox window did not become available."
     }
 
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -TimeoutMilliseconds 30000)) {
-        throw "Startup help heading was not found in the packaged sandbox output within the bounded 30-second startup window."
-    }
+    $startupReadiness = Wait-HenkaPackagedStartupReady `
+        -StdoutPath $stdoutPath `
+        -StderrPath $stderrPath `
+        -ProcessId $process.Id `
+        -HardTimeoutMilliseconds 120000 `
+        -NoProgressTimeoutMilliseconds 45000 `
+        -PollMilliseconds 150
+    $startupReadinessMessage =
+        "[pass] Packaged startup readiness reached {0} after {1} ms " +
+        "({2} application stages observed)."
+    Write-Output ($startupReadinessMessage -f
+        $startupReadiness.LastProgressStage,
+        $startupReadiness.ElapsedMilliseconds,
+        $startupReadiness.ProgressStagesObserved)
     Assert-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -Description "Startup help heading"
     Assert-FileContains -Path $stdoutPath -Pattern "F4               Show or hide the sandbox panels" -Description "F4 help text"
     Assert-FileContains -Path $stdoutPath -Pattern "F5               Switch Standard and Focus Viewport layouts" -Description "F5 help text"
