@@ -3723,6 +3723,278 @@ static void henka_test_sandbox3d_publication_revision_boundary(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_revision_capacity_contract(void)
+{
+    henka_scene* scene = NULL;
+
+    HENKA_TEST_ASSERT(!henka_scene_has_render_revision_capacity(NULL, 1U));
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!henka_scene_has_render_revision_capacity(scene, 0U));
+    HENKA_TEST_ASSERT(henka_scene_has_render_revision_capacity(scene, 1U));
+
+    scene->render_revision = UINT64_MAX - 2U;
+    scene->content_revision = UINT64_MAX - 2U;
+    HENKA_TEST_ASSERT(henka_scene_has_render_revision_capacity(scene, 2U));
+    HENKA_TEST_ASSERT(!henka_scene_has_render_revision_capacity(scene, 3U));
+
+    scene->render_revision = UINT64_MAX - 1U;
+    HENKA_TEST_ASSERT(henka_scene_has_render_revision_capacity(scene, 1U));
+    HENKA_TEST_ASSERT(!henka_scene_has_render_revision_capacity(scene, 2U));
+
+    scene->content_revision = UINT64_MAX;
+    HENKA_TEST_ASSERT(!henka_scene_has_render_revision_capacity(scene, 1U));
+    scene->render_revision = UINT64_MAX;
+    HENKA_TEST_ASSERT(!henka_scene_has_render_revision_capacity(scene, 1U));
+
+    henka_scene_destroy(scene);
+}
+
+static void henka_test_sandbox3d_preview_revision_boundary(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    henka_mesh* original_render_mesh = NULL;
+    henka_mesh* current_render_mesh = NULL;
+    henka_bounds original_bounds;
+    henka_bounds current_bounds;
+    henka_entity entity;
+
+    config.application_name = "Henka Authoring Preview Boundary Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Preview Boundary");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
+        engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, entity, &original_render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
+        scene, entity, &original_bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_clone(
+        sandbox3d_authoring_object_get_mesh(object), &candidate) == HENKA_SUCCESS);
+
+    scene->render_revision = UINT64_MAX - 1U;
+    scene->content_revision = UINT64_MAX - 1U;
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_preview_candidate(
+        object, candidate) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(!sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, entity, &current_render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(current_render_mesh == original_render_mesh);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
+        scene, entity, &current_bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.x, original_bounds.center.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.y, original_bounds.center.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.z, original_bounds.center.z, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.x, original_bounds.extents.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.y, original_bounds.extents.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.z, original_bounds.extents.z, 0.0001f);
+    HENKA_TEST_ASSERT(scene->render_revision == UINT64_MAX - 1U);
+    HENKA_TEST_ASSERT(scene->content_revision == UINT64_MAX - 1U);
+
+    henka_authoring_mesh_destroy(candidate);
+    sandbox3d_authoring_object_destroy(object);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
+static void henka_test_sandbox3d_cancel_preview_revision_boundary(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    henka_mesh* preview_render_mesh = NULL;
+    henka_mesh* current_render_mesh = NULL;
+    henka_bounds preview_bounds;
+    henka_bounds current_bounds;
+    henka_entity entity;
+
+    config.application_name = "Henka Authoring Cancel Boundary Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Cancel Boundary");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
+        engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_clone(
+        sandbox3d_authoring_object_get_mesh(object), &candidate) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_preview_candidate(
+        object, candidate) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, entity, &preview_render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
+        scene, entity, &preview_bounds) == HENKA_SUCCESS);
+
+    scene->render_revision = UINT64_MAX - 1U;
+    scene->content_revision = UINT64_MAX - 1U;
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_cancel_preview(object) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, entity, &current_render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(current_render_mesh == preview_render_mesh);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
+        scene, entity, &current_bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.x, preview_bounds.center.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.y, preview_bounds.center.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.z, preview_bounds.center.z, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.x, preview_bounds.extents.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.y, preview_bounds.extents.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.z, preview_bounds.extents.z, 0.0001f);
+    HENKA_TEST_ASSERT(scene->render_revision == UINT64_MAX - 1U);
+    HENKA_TEST_ASSERT(scene->content_revision == UINT64_MAX - 1U);
+
+    scene->render_revision = 0U;
+    scene->content_revision = 0U;
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_cancel_preview(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!sandbox3d_authoring_object_has_preview(object));
+    sandbox3d_authoring_object_destroy(object);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
+static void henka_test_sandbox3d_reload_revision_boundary(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    const henka_authoring_mesh* original_source;
+    henka_mesh* original_render_mesh = NULL;
+    henka_mesh* current_render_mesh = NULL;
+    henka_bounds original_bounds;
+    henka_bounds current_bounds;
+    henka_entity entity;
+    const char* path = "build/test_tmp/revision_boundary_reload.hams";
+
+    config.application_name = "Henka Authoring Reload Boundary Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Reload Boundary");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
+        engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_save_source(object, path) == HENKA_SUCCESS);
+    original_source = sandbox3d_authoring_object_get_mesh(object);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, entity, &original_render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
+        scene, entity, &original_bounds) == HENKA_SUCCESS);
+
+    scene->render_revision = UINT64_MAX - 1U;
+    scene->content_revision = UINT64_MAX - 1U;
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_reload_source(
+        object, path) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_mesh(object) == original_source);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, entity, &current_render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(current_render_mesh == original_render_mesh);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
+        scene, entity, &current_bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.x, original_bounds.center.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.y, original_bounds.center.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.z, original_bounds.center.z, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.x, original_bounds.extents.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.y, original_bounds.extents.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.z, original_bounds.extents.z, 0.0001f);
+    HENKA_TEST_ASSERT(scene->render_revision == UINT64_MAX - 1U);
+    HENKA_TEST_ASSERT(scene->content_revision == UINT64_MAX - 1U);
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
+static void henka_test_sandbox3d_create_revision_boundary(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_mesh* original_mesh = NULL;
+    henka_mesh* current_mesh = NULL;
+    henka_bounds original_bounds = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
+    henka_bounds current_bounds;
+    sandbox3d_authoring_object* object = NULL;
+    henka_entity entity;
+
+    config.application_name = "Henka Authoring Create Boundary Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Create Boundary");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_mesh_create_cube(engine, &original_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(
+        scene, entity, original_mesh) == HENKA_SUCCESS);
+    original_bounds.center = (henka_vec3){1.0f, 2.0f, 3.0f};
+    original_bounds.extents = (henka_vec3){0.5f, 0.75f, 1.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(
+        scene, entity, original_bounds) == HENKA_SUCCESS);
+
+    scene->render_revision = UINT64_MAX - 1U;
+    scene->content_revision = UINT64_MAX - 1U;
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
+        engine, scene, entity, 2.0f, 2.0f, 2.0f, NULL, 8U, &object) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(object == NULL);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, entity, &current_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(current_mesh == original_mesh);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
+        scene, entity, &current_bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.x, original_bounds.center.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.y, original_bounds.center.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.center.z, original_bounds.center.z, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.x, original_bounds.extents.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.y, original_bounds.extents.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        current_bounds.extents.z, original_bounds.extents.z, 0.0001f);
+    HENKA_TEST_ASSERT(scene->render_revision == UINT64_MAX - 1U);
+    HENKA_TEST_ASSERT(scene->content_revision == UINT64_MAX - 1U);
+
+    henka_scene_destroy(scene);
+    henka_mesh_destroy(original_mesh);
+    henka_engine_destroy(engine);
+}
+
 void henka_test_sandbox3d_object_authoring(void)
 {
     henka_test_sandbox3d_object_authoring_scene_policy();
@@ -3755,6 +4027,11 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_vertex_extrude();
     henka_test_sandbox3d_geometry_revision_exhaustion();
     henka_test_sandbox3d_publication_revision_boundary();
+    henka_test_sandbox3d_revision_capacity_contract();
+    henka_test_sandbox3d_preview_revision_boundary();
+    henka_test_sandbox3d_cancel_preview_revision_boundary();
+    henka_test_sandbox3d_reload_revision_boundary();
+    henka_test_sandbox3d_create_revision_boundary();
     henka_test_sandbox3d_selection_repair_failure();
     henka_test_sandbox3d_object_authoring_scalable_selection();
     henka_test_sandbox3d_object_authoring_connected_scalable_selection();
