@@ -15,6 +15,7 @@
 
 #include "../examples/sandbox3d/play_session.h"
 #include "../engine/src/henka_internal.h"
+#include "../engine/src/core/memory_internal.h"
 
 typedef struct test_character_controller_input
 {
@@ -169,6 +170,123 @@ cleanup:
     return success;
 }
 
+static bool test_play_session_stop_retry_after_body_failure(void)
+{
+    enum { TEST_OBJECT_COUNT = 9 };
+    static const henka_vec3 static_positions[TEST_OBJECT_COUNT - 1U] = {
+        {2.4f, 0.0f, 0.0f},
+        {-2.4f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 2.4f},
+        {0.0f, 0.0f, -2.4f},
+        {1.7f, 0.0f, 1.7f},
+        {-1.7f, 0.0f, 1.7f},
+        {1.7f, 0.0f, -1.7f},
+        {-1.7f, 0.0f, -1.7f}};
+    henka_scene_document* document = NULL;
+    sandbox3d_scene_document_bridge* bridge = NULL;
+    sandbox3d_play_session* session = NULL;
+    henka_scene* scene = NULL;
+    henka_physics_world* physics_world = NULL;
+    henka_scene_document_id object_ids[TEST_OBJECT_COUNT] = {0};
+    henka_entity entities[TEST_OBJECT_COUNT] = {0};
+    henka_transform initial_transform;
+    henka_transform restored_transform;
+    henka_result first_stop_result;
+    size_t event_count = 0U;
+    size_t index;
+    bool success = false;
+
+    if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_physics_world_create(&physics_world) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < TEST_OBJECT_COUNT; ++index)
+    {
+        henka_scene_document_object object = henka_scene_document_object_default();
+        object.physics.enabled = true;
+        object.physics.body_type = index == 0U
+            ? HENKA_PHYSICS_BODY_DYNAMIC
+            : HENKA_PHYSICS_BODY_STATIC;
+        object.physics.shape = HENKA_PHYSICS_SHAPE_SPHERE;
+        object.physics.sphere_radius = index == 0U ? 2.0f : 0.5f;
+        object.physics.mass = index == 0U ? 1.0f : 0.0f;
+        object.transform.position = index == 0U
+            ? (henka_vec3){0.0f, 0.0f, 0.0f}
+            : static_positions[index - 1U];
+        if (snprintf(
+                object.name,
+                sizeof(object.name),
+                "Stop Failure Object %zu",
+                index) < 0 ||
+            henka_scene_document_add_object(
+                document, &object, &object_ids[index]) != HENKA_SUCCESS ||
+            (entities[index] = henka_scene_create_entity_named(scene, object.name)) ==
+                HENKA_INVALID_ENTITY)
+        {
+            goto cleanup;
+        }
+    }
+    if (sandbox3d_scene_document_bridge_create(document, scene, &bridge) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < TEST_OBJECT_COUNT; ++index)
+    {
+        if (sandbox3d_scene_document_bridge_bind(
+                bridge, object_ids[index], entities[index]) != HENKA_SUCCESS ||
+            sandbox3d_scene_document_bridge_apply_object(
+                bridge, object_ids[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_scene_get_entity_transform(
+            scene, entities[0], &initial_transform) != HENKA_SUCCESS ||
+        sandbox3d_play_session_create(bridge, physics_world, &session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_start(session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_tick(session) != HENKA_SUCCESS ||
+        henka_physics_world_get_events(physics_world, &event_count) == NULL ||
+        event_count != TEST_OBJECT_COUNT - 1U ||
+        henka_physics_world_get_body_count(physics_world) != TEST_OBJECT_COUNT)
+    {
+        goto cleanup;
+    }
+
+    henka_memory_test_fail_after(0U);
+    first_stop_result = sandbox3d_play_session_stop(session);
+    if (first_stop_result != HENKA_ERROR_OUT_OF_MEMORY)
+    {
+        henka_memory_test_disable_failures();
+        goto cleanup;
+    }
+    henka_memory_test_disable_failures();
+    if (sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_FAILED ||
+        henka_physics_world_get_body_count(physics_world) != TEST_OBJECT_COUNT ||
+        !sandbox3d_scene_document_bridge_is_play_locked(bridge) ||
+        henka_scene_get_entity_transform(
+            scene, entities[0], &restored_transform) != HENKA_SUCCESS ||
+        memcmp(&restored_transform, &initial_transform, sizeof(initial_transform)) != 0 ||
+        sandbox3d_play_session_stop(session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_STOPPED ||
+        henka_physics_world_get_body_count(physics_world) != 0U ||
+        sandbox3d_scene_document_bridge_is_play_locked(bridge))
+    {
+        goto cleanup;
+    }
+    success = true;
+
+cleanup:
+    henka_memory_test_disable_failures();
+    sandbox3d_play_session_destroy(session);
+    sandbox3d_scene_document_bridge_destroy(bridge);
+    henka_physics_world_destroy(physics_world);
+    henka_scene_destroy(scene);
+    henka_scene_document_destroy(document);
+    return success;
+}
+
 static void test_write_u16(unsigned char* bytes, size_t offset, uint16_t value)
 {
     bytes[offset] = (unsigned char)(value & 0xffU);
@@ -262,6 +380,11 @@ int main(void)
     if (!test_character_controller_play_integration())
     {
         fprintf(stderr, "character controller Play integration test failed\n");
+        return 1;
+    }
+    if (!test_play_session_stop_retry_after_body_failure())
+    {
+        fprintf(stderr, "Play stop retry after body failure test failed\n");
         return 1;
     }
 

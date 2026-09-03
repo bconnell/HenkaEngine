@@ -1572,35 +1572,51 @@ henka_result sandbox3d_play_session_stop(sandbox3d_play_session* session)
      * restoration fails. Play scenes may be discarded by the coordinator, so
      * physics bodies and the bridge lock must not retain references into a
      * scene that is about to be released. */
-    destroy_script_result = henka_scene_behavior_runtime_dispatch(
-        session->behavior_runtime,
-        HENKA_SCRIPT_LIFECYCLE_DESTROY,
-        0.0f,
-        session->frame_index,
-        &(henka_script_behavior_batch_report){0});
-    script_result = henka_scene_behavior_runtime_dispatch(
-        session->behavior_runtime,
-        HENKA_SCRIPT_LIFECYCLE_STOP,
-        0.0f,
-        session->frame_index,
-        &(henka_script_behavior_batch_report){0});
-    henka_scene_behavior_runtime_destroy(session->behavior_runtime);
-    session->behavior_runtime = NULL;
-    henka_script_host_destroy(session->script_host);
-    session->script_host = NULL;
+    destroy_script_result = session->behavior_runtime == NULL
+        ? HENKA_SUCCESS
+        : henka_scene_behavior_runtime_dispatch(
+            session->behavior_runtime,
+            HENKA_SCRIPT_LIFECYCLE_DESTROY,
+            0.0f,
+            session->frame_index,
+            &(henka_script_behavior_batch_report){0});
+    script_result = session->behavior_runtime == NULL
+        ? HENKA_SUCCESS
+        : henka_scene_behavior_runtime_dispatch(
+            session->behavior_runtime,
+            HENKA_SCRIPT_LIFECYCLE_STOP,
+            0.0f,
+            session->frame_index,
+            &(henka_script_behavior_batch_report){0});
+    if (session->behavior_runtime != NULL)
+    {
+        henka_scene_behavior_runtime_destroy(session->behavior_runtime);
+        session->behavior_runtime = NULL;
+    }
+    if (session->script_host != NULL)
+    {
+        henka_script_host_destroy(session->script_host);
+        session->script_host = NULL;
+    }
     sandbox3d_play_session_destroy_audio_emitters(session);
     restore_result = sandbox3d_play_session_restore_scene(session);
     body_result = sandbox3d_play_session_destroy_bodies(session);
-    end_result = sandbox3d_scene_document_bridge_end_play(session->bridge);
+    end_result = body_result == HENKA_SUCCESS &&
+        sandbox3d_scene_document_bridge_is_play_locked(session->bridge)
+        ? sandbox3d_scene_document_bridge_end_play(session->bridge)
+        : HENKA_SUCCESS;
     result = destroy_script_result != HENKA_SUCCESS ? destroy_script_result
         : script_result != HENKA_SUCCESS ? script_result
         : restore_result != HENKA_SUCCESS ? restore_result
         : (body_result != HENKA_SUCCESS ? body_result : end_result);
-    for (size_t index = 0U; index < session->snapshot_count; ++index)
+    if (result == HENKA_SUCCESS)
     {
-        sandbox3d_play_session_clear_snapshot(&session->snapshots[index]);
+        for (size_t index = 0U; index < session->snapshot_count; ++index)
+        {
+            sandbox3d_play_session_clear_snapshot(&session->snapshots[index]);
+        }
+        session->snapshot_count = 0U;
     }
-    session->snapshot_count = 0U;
     if (result != HENKA_SUCCESS)
     {
         session->last_error = result;

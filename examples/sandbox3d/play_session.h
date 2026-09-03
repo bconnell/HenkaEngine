@@ -114,6 +114,9 @@ henka_result sandbox3d_play_session_reload_behavior(
     henka_scene_document_id document_id,
     henka_scene_document_behavior_id behavior_id,
     henka_script_source_diagnostic* out_diagnostic);
+/* A failed stop leaves the session in FAILED while retaining any cleanup
+ * state that could not be released. Callers may retry after the transient
+ * failure is resolved. */
 henka_result sandbox3d_play_session_stop(sandbox3d_play_session* session);
 
 #endif
