@@ -616,6 +616,10 @@ static void henka_test_character_controller_failure_boundaries(void)
     HENKA_TEST_ASSERT(henka_character_controller_create(
         world, &desc, &controller) == HENKA_ERROR_INVALID_ARGUMENT);
     desc = henka_test_character_controller_desc();
+    desc.mask = 0U;
+    HENKA_TEST_ASSERT(henka_character_controller_create(
+        world, &desc, &controller) == HENKA_ERROR_INVALID_ARGUMENT);
+    desc = henka_test_character_controller_desc();
     HENKA_TEST_ASSERT(henka_character_controller_create(
         world, &desc, &controller) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_character_controller_get_state(controller, &before) == HENKA_SUCCESS);

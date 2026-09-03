@@ -17,7 +17,9 @@ typedef struct henka_character_controller henka_character_controller;
  * destroyed or stale support identities are ignored until the next sync. When
  * both linked_scene and linked_entity identify a live scene entity, the owned
  * body uses the normal physics transform path to synchronize that entity after
- * creation, teleport, and successful fixed steps. The link is borrowed; the
+ * creation, teleport, and successful fixed steps. Both layer and mask must
+ * contain at least one collision bit so the controller cannot be created as
+ * an inert collision participant. The link is borrowed; the
  * controller does not own the scene or entity. The linked scene may be
  * destroyed before the controller; its contents are retired immediately and
  * its storage remains valid until the controller releases the body link.

@@ -275,7 +275,7 @@ static bool henka_character_controller_desc_valid(
         isfinite(desc->half_height) && desc->half_height >= 0.0f &&
         isfinite(desc->max_speed) && desc->max_speed > 0.0f &&
         isfinite(desc->jump_speed) && desc->jump_speed >= 0.0f &&
-        desc->layer != 0U;
+        desc->layer != 0U && desc->mask != 0U;
 }
 
 henka_result henka_character_controller_create(
