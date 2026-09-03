@@ -398,7 +398,7 @@ void sandbox3d_game_authoring_destroy(
     henka_free(authoring);
 }
 
-henka_result sandbox3d_game_authoring_register_entity(
+static henka_result sandbox3d_game_authoring_register_entity_once(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
     henka_scene_document_id* out_document_id)
@@ -408,17 +408,24 @@ henka_result sandbox3d_game_authoring_register_entity(
     henka_entity parent_entity = HENKA_INVALID_ENTITY;
     size_t parent_index;
     henka_result result;
-    if (out_document_id != NULL)
-    {
-        *out_document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
-    }
-    if (authoring == NULL || out_document_id == NULL ||
-        sandbox3d_game_authoring_is_play_locked(authoring) ||
-        authoring->binding_count >= SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS ||
-        sandbox3d_game_authoring_find_binding(authoring, entity) != SIZE_MAX ||
-        sandbox3d_game_authoring_build_object(authoring->scene, entity, &object) != HENKA_SUCCESS)
+
+    if (authoring == NULL || out_document_id == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (authoring->binding_count >= SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    if (sandbox3d_game_authoring_find_binding(authoring, entity) != SIZE_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_game_authoring_build_object(
+        authoring->scene, entity, &object);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
     if (henka_scene_get_entity_parent(
             authoring->scene, entity, &parent_entity) != HENKA_SUCCESS)
@@ -449,6 +456,115 @@ henka_result sandbox3d_game_authoring_register_entity(
     authoring->bindings[authoring->binding_count++] =
         (sandbox3d_game_authoring_binding){document_id, entity};
     *out_document_id = document_id;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_game_authoring_register_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity entity,
+    henka_scene_document_id* out_document_id)
+{
+    henka_entity chain[SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
+    henka_entity current_entity;
+    henka_scene_document_object target_object;
+    henka_scene_document_id document_id;
+    henka_result result;
+    size_t chain_count = 0U;
+    size_t initial_binding_count;
+    size_t index;
+
+    if (out_document_id != NULL)
+    {
+        *out_document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    }
+    if (authoring == NULL || out_document_id == NULL ||
+        sandbox3d_game_authoring_is_play_locked(authoring))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    /* Validate the target before honoring an existing binding so stale scene
+     * entities cannot be mistaken for an idempotent registration. */
+    result = sandbox3d_game_authoring_build_object(
+        authoring->scene, entity, &target_object);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    index = sandbox3d_game_authoring_find_binding(authoring, entity);
+    if (index != SIZE_MAX)
+    {
+        *out_document_id = authoring->bindings[index].document_id;
+        return HENKA_SUCCESS;
+    }
+
+    /* Preflight the complete live parent chain before mutating the document
+     * or bridge.  This makes registration independent of scene iteration
+     * order and keeps failures before the first visible authoring mutation. */
+    current_entity = entity;
+    while (current_entity != HENKA_INVALID_ENTITY &&
+           sandbox3d_game_authoring_find_binding(authoring, current_entity) == SIZE_MAX)
+    {
+        henka_scene_document_object preflight_object;
+        henka_entity parent_entity = HENKA_INVALID_ENTITY;
+
+        if (chain_count >= SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        for (index = 0U; index < chain_count; ++index)
+        {
+            if (chain[index] == current_entity)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+        result = sandbox3d_game_authoring_build_object(
+            authoring->scene, current_entity, &preflight_object);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        if (henka_scene_get_entity_parent(
+                authoring->scene, current_entity, &parent_entity) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        chain[chain_count++] = current_entity;
+        current_entity = parent_entity;
+    }
+    if (chain_count > SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS - authoring->binding_count)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    initial_binding_count = authoring->binding_count;
+    for (index = chain_count; index > 0U; --index)
+    {
+        result = sandbox3d_game_authoring_register_entity_once(
+            authoring, chain[index - 1U], &document_id);
+        if (result != HENKA_SUCCESS)
+        {
+            while (authoring->binding_count > initial_binding_count)
+            {
+                henka_entity rollback_entity =
+                    authoring->bindings[authoring->binding_count - 1U].entity;
+                if (sandbox3d_game_authoring_unregister_entity(
+                        authoring, rollback_entity) != HENKA_SUCCESS)
+                {
+                    return HENKA_ERROR_UNKNOWN;
+                }
+            }
+            return result;
+        }
+    }
+
+    index = sandbox3d_game_authoring_find_binding(authoring, entity);
+    if (index == SIZE_MAX)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+    *out_document_id = authoring->bindings[index].document_id;
     return HENKA_SUCCESS;
 }
 

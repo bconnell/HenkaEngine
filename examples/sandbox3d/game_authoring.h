@@ -26,6 +26,8 @@ henka_result sandbox3d_game_authoring_create(
 void sandbox3d_game_authoring_destroy(
     sandbox3d_game_authoring* authoring);
 
+/* Registration is idempotent.  A missing live parent chain is registered
+ * root-to-leaf transactionally before the requested entity. */
 henka_result sandbox3d_game_authoring_register_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
