@@ -134,6 +134,12 @@ henka_scene_document_behavior henka_scene_document_behavior_default(void);
 henka_result henka_scene_document_create(henka_scene_document** out_document);
 void henka_scene_document_destroy(henka_scene_document* document);
 henka_result henka_scene_document_clear(henka_scene_document* document);
+/* Replaces destination with a validated authored snapshot transactionally.
+ * Persistent object/behavior IDs and the allocation watermark are copied
+ * exactly; runtime pointers and handles are not part of the document. */
+henka_result henka_scene_document_copy(
+    henka_scene_document* destination,
+    const henka_scene_document* source);
 size_t henka_scene_document_get_object_count(const henka_scene_document* document);
 henka_result henka_scene_document_get_object_at(
     const henka_scene_document* document,

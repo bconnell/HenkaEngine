@@ -682,6 +682,36 @@ henka_result henka_scene_document_clear(henka_scene_document* document)
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_document_copy(
+    henka_scene_document* destination,
+    const henka_scene_document* source)
+{
+    henka_scene_document_storage* replacement;
+    henka_scene_document_storage* previous;
+
+    if (destination == NULL || destination->storage == NULL ||
+        source == NULL || source->storage == NULL ||
+        henka_scene_document_validate(source) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (destination == source)
+    {
+        return HENKA_SUCCESS;
+    }
+    replacement = (henka_scene_document_storage*)henka_calloc(
+        1U, sizeof(*replacement));
+    if (replacement == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    *replacement = *source->storage;
+    previous = destination->storage;
+    destination->storage = replacement;
+    henka_free(previous);
+    return HENKA_SUCCESS;
+}
+
 size_t henka_scene_document_get_object_count(const henka_scene_document* document)
 {
     return document == NULL || document->storage == NULL ? 0U : document->storage->object_count;

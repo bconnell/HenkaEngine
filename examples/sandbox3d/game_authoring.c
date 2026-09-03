@@ -141,15 +141,9 @@ static henka_result sandbox3d_game_authoring_copy_document(
     henka_scene_document** out_copy)
 {
     henka_scene_document* copy = NULL;
-    henka_audio_listener audio_listener;
-    henka_camera camera;
-    bool has_camera;
-    size_t index;
-    size_t count;
     henka_result result;
 
-    if (source == NULL || out_copy == NULL ||
-        henka_scene_document_validate(source) != HENKA_SUCCESS)
+    if (source == NULL || out_copy == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -159,46 +153,11 @@ static henka_result sandbox3d_game_authoring_copy_document(
     {
         return result;
     }
-    if (henka_scene_document_get_audio_listener(source, &audio_listener) != HENKA_SUCCESS)
-    {
-        henka_scene_document_destroy(copy);
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    result = henka_scene_document_set_audio_listener(copy, audio_listener);
+    result = henka_scene_document_copy(copy, source);
     if (result != HENKA_SUCCESS)
     {
         henka_scene_document_destroy(copy);
         return result;
-    }
-    has_camera = henka_scene_document_has_camera(source);
-    if (has_camera)
-    {
-        result = henka_scene_document_get_camera(source, &camera);
-        if (result == HENKA_SUCCESS)
-        {
-            result = henka_scene_document_set_camera(copy, &camera);
-        }
-        if (result != HENKA_SUCCESS)
-        {
-            henka_scene_document_destroy(copy);
-            return result;
-        }
-    }
-    count = henka_scene_document_get_object_count(source);
-    for (index = 0U; index < count; ++index)
-    {
-        henka_scene_document_object object;
-        henka_scene_document_id ignored_id;
-        result = henka_scene_document_get_object_at(source, index, &object);
-        if (result == HENKA_SUCCESS)
-        {
-            result = henka_scene_document_add_object(copy, &object, &ignored_id);
-        }
-        if (result != HENKA_SUCCESS)
-        {
-            henka_scene_document_destroy(copy);
-            return result;
-        }
     }
     *out_copy = copy;
     return HENKA_SUCCESS;
@@ -254,62 +213,7 @@ static henka_result sandbox3d_game_authoring_restore_document(
     henka_scene_document* destination,
     const henka_scene_document* source)
 {
-    henka_audio_listener audio_listener;
-    henka_camera camera;
-    bool has_camera;
-    size_t index;
-    size_t count;
-    henka_result result;
-
-    if (destination == NULL || source == NULL ||
-        henka_scene_document_validate(source) != HENKA_SUCCESS)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    if (henka_scene_document_get_audio_listener(source, &audio_listener) != HENKA_SUCCESS)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    has_camera = henka_scene_document_has_camera(source);
-    if (has_camera &&
-        henka_scene_document_get_camera(source, &camera) != HENKA_SUCCESS)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    result = henka_scene_document_clear(destination);
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
-    }
-    result = henka_scene_document_set_audio_listener(destination, audio_listener);
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
-    }
-    if (has_camera)
-    {
-        result = henka_scene_document_set_camera(destination, &camera);
-        if (result != HENKA_SUCCESS)
-        {
-            return result;
-        }
-    }
-    count = henka_scene_document_get_object_count(source);
-    for (index = 0U; index < count; ++index)
-    {
-        henka_scene_document_object object;
-        henka_scene_document_id ignored_id;
-        result = henka_scene_document_get_object_at(source, index, &object);
-        if (result == HENKA_SUCCESS)
-        {
-            result = henka_scene_document_add_object(destination, &object, &ignored_id);
-        }
-        if (result != HENKA_SUCCESS)
-        {
-            return result;
-        }
-    }
-    return HENKA_SUCCESS;
+    return henka_scene_document_copy(destination, source);
 }
 
 henka_result sandbox3d_game_authoring_create(
