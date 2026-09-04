@@ -10,6 +10,7 @@
 
 #include "../engine/src/core/memory_internal.h"
 #include "../engine/src/core/physics_internal.h"
+#include "../engine/src/scene/scene_internal.h"
 
 typedef struct henka_test_physics_snapshot
 {
@@ -663,6 +664,178 @@ static void henka_test_physics_scene_link(void)
     henka_scene_destroy(scene);
 }
 
+static void henka_test_physics_scene_link_transaction(void)
+{
+    henka_scene* scene = NULL;
+    henka_physics_world* world = NULL;
+    henka_entity entities[2];
+    henka_physics_body_id bodies[2];
+    henka_physics_body_id rejected_body;
+    henka_physics_body_desc desc;
+    henka_physics_body_state before_states[2];
+    henka_physics_body_state after_states[2];
+    henka_transform before_scene_transforms[2];
+    henka_transform after_scene_transforms[2];
+    henka_transform attempted_transform;
+    size_t body_count_before;
+    size_t index;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    for (index = 0U; index < 2U; ++index)
+    {
+        entities[index] = henka_scene_create_entity_named(
+            scene,
+            index == 0U ? "Physics Transaction A" : "Physics Transaction B");
+        HENKA_TEST_ASSERT(entities[index] != HENKA_INVALID_ENTITY);
+    }
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_sphere(0.5f),
+        (henka_vec3){0.0f, 1.0f, 0.0f});
+    desc.linked_scene = scene;
+    desc.linked_entity = entities[0];
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &bodies[0]) == HENKA_SUCCESS);
+    desc.transform.position = (henka_vec3){2.0f, 1.0f, 0.0f};
+    desc.linked_entity = entities[1];
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &bodies[1]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_set_linear_velocity(
+        world,
+        bodies[0],
+        (henka_vec3){1.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_set_linear_velocity(
+        world,
+        bodies[1],
+        (henka_vec3){-1.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+
+    for (index = 0U; index < 2U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_physics_body_get_state(
+            world,
+            bodies[index],
+            &before_states[index]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+            scene,
+            entities[index],
+            &before_scene_transforms[index]) == HENKA_SUCCESS);
+    }
+
+    scene->render_revision = UINT64_MAX - UINT64_C(1);
+    scene->content_revision = UINT64_MAX - UINT64_C(1);
+    HENKA_TEST_ASSERT(henka_scene_has_render_revision_capacity(scene, 1U));
+    HENKA_TEST_ASSERT(!henka_scene_has_render_revision_capacity(scene, 2U));
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == UINT64_MAX - UINT64_C(1));
+    HENKA_TEST_ASSERT(scene->content_revision == UINT64_MAX - UINT64_C(1));
+
+    for (index = 0U; index < 2U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_physics_body_get_state(
+            world,
+            bodies[index],
+            &after_states[index]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+            scene,
+            entities[index],
+            &after_scene_transforms[index]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            after_states[index].transform.position.x,
+            before_states[index].transform.position.x,
+            0.000001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            after_scene_transforms[index].position.x,
+            before_scene_transforms[index].position.x,
+            0.000001f);
+    }
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == 2U);
+
+    scene->render_revision = UINT64_MAX;
+    scene->content_revision = UINT64_MAX;
+    attempted_transform = before_states[0].transform;
+    attempted_transform.position.x += 4.0f;
+    HENKA_TEST_ASSERT(henka_physics_body_set_transform(
+        world,
+        bodies[0],
+        attempted_transform,
+        true) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(
+        world,
+        bodies[0],
+        &after_states[0]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        after_states[0].transform.position.x,
+        before_states[0].transform.position.x,
+        0.000001f);
+    rejected_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    body_count_before = henka_physics_world_get_body_count(world);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_sphere(0.5f),
+        (henka_vec3){50.0f, 1.0f, 0.0f});
+    desc.linked_scene = scene;
+    desc.linked_entity = entities[0];
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world,
+        &desc,
+        &rejected_body) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(rejected_body == HENKA_INVALID_PHYSICS_BODY_ID);
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == body_count_before);
+
+    scene->render_revision = 100U;
+    scene->content_revision = 100U;
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    for (index = 0U; index < 2U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_physics_body_get_state(
+            world,
+            bodies[index],
+            &after_states[index]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+            scene,
+            entities[index],
+            &after_scene_transforms[index]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(after_states[index].transform.position.x !=
+            before_states[index].transform.position.x);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            after_scene_transforms[index].position.x,
+            after_states[index].transform.position.x,
+            0.000001f);
+    }
+
+    scene->render_revision = UINT64_MAX;
+    scene->content_revision = UINT64_MAX;
+    HENKA_TEST_ASSERT(henka_physics_world_reset(world) == HENKA_ERROR_LIMIT);
+    for (index = 0U; index < 2U; ++index)
+    {
+        henka_physics_body_state reset_state;
+        henka_transform reset_scene_transform;
+
+        HENKA_TEST_ASSERT(henka_physics_body_get_state(
+            world,
+            bodies[index],
+            &reset_state) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+            scene,
+            entities[index],
+            &reset_scene_transform) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            reset_state.transform.position.x,
+            after_states[index].transform.position.x,
+            0.000001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            reset_scene_transform.position.x,
+            after_scene_transforms[index].position.x,
+            0.000001f);
+    }
+
+    henka_physics_world_destroy(world);
+    henka_scene_destroy(scene);
+}
+
 static void henka_test_physics_scene_link_survives_scene_destroy(void)
 {
     henka_scene* scene = NULL;
@@ -1029,7 +1202,7 @@ static void henka_test_physics_transactional_allocation_failure(void)
         0.000001f);
 
     state_before = state_after;
-    henka_memory_test_fail_after(5U);
+    henka_memory_test_fail_after(8U);
     result = henka_physics_world_step(
         world,
         henka_physics_world_get_fixed_timestep(world) * 2.0f);
@@ -1580,6 +1753,7 @@ void henka_test_physics(void)
     henka_test_physics_shape_pairs_and_raycast();
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();
+    henka_test_physics_scene_link_transaction();
     henka_test_physics_scene_link_survives_scene_destroy();
     henka_test_physics_validation_and_tracking();
     henka_test_physics_destroy_preserves_contact_continuity();

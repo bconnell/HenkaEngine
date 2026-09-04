@@ -1290,6 +1290,186 @@ henka_result henka_scene_apply_entity_presentation(
     return HENKA_SUCCESS;
 }
 
+static bool henka_scene_prepare_entity_transform_update(
+    const henka_scene_entity_transform_update* update,
+    henka_transform* out_sanitized_transform,
+    henka_transform* out_local_transform)
+{
+    henka_scene_entity_record* record;
+    const henka_scene_entity_record* parent_record;
+    henka_bounds world_bounds;
+
+    if (update == NULL ||
+        out_sanitized_transform == NULL ||
+        out_local_transform == NULL ||
+        (record = henka_scene_get_entity_record(update->scene, update->entity)) == NULL ||
+        (record->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U ||
+        !henka_transform_is_valid(update->transform))
+    {
+        return false;
+    }
+
+    *out_sanitized_transform = henka_transform_sanitize(update->transform);
+    if (record->has_local_bounds &&
+        !henka_scene_try_transform_bounds(
+            record->local_bounds,
+            *out_sanitized_transform,
+            &world_bounds))
+    {
+        return false;
+    }
+
+    parent_record = henka_scene_get_entity_record_const(update->scene, record->parent);
+    if (record->parent == HENKA_INVALID_ENTITY)
+    {
+        *out_local_transform = *out_sanitized_transform;
+    }
+    else if (parent_record == NULL ||
+        !henka_scene_try_world_to_local_transform(
+            parent_record->transform,
+            *out_sanitized_transform,
+            out_local_transform))
+    {
+        return false;
+    }
+
+    return henka_scene_validate_hierarchy_subtree(
+        update->scene,
+        update->entity,
+        *out_sanitized_transform,
+        0U);
+}
+
+henka_result henka_scene_apply_entity_transform_updates(
+    const henka_scene_entity_transform_update* updates,
+    size_t update_count)
+{
+    size_t index;
+
+    if (update_count == 0U)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (updates == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    /* Validate all inputs and reject ambiguous duplicate links before any
+     * scene is changed. This keeps a multi-body physics commit deterministic
+     * and makes its commit phase allocation-free. */
+    for (index = 0U; index < update_count; ++index)
+    {
+        henka_transform sanitized_transform;
+        henka_transform local_transform;
+        size_t previous_index;
+
+        if (!henka_scene_prepare_entity_transform_update(
+                &updates[index],
+                &sanitized_transform,
+                &local_transform))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        for (previous_index = 0U; previous_index < index; ++previous_index)
+        {
+            if (updates[previous_index].scene == updates[index].scene &&
+                updates[previous_index].entity == updates[index].entity)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+    }
+
+    /* Capacity is counted per scene because one physics world may link
+     * bodies to more than one scene. */
+    for (index = 0U; index < update_count; ++index)
+    {
+        size_t previous_index;
+        bool first_scene = true;
+        uint64_t mutation_count = 0U;
+
+        for (previous_index = 0U; previous_index < index; ++previous_index)
+        {
+            if (updates[previous_index].scene == updates[index].scene)
+            {
+                first_scene = false;
+                break;
+            }
+        }
+        if (!first_scene)
+        {
+            continue;
+        }
+
+        for (previous_index = index; previous_index < update_count; ++previous_index)
+        {
+            henka_transform sanitized_transform;
+            henka_transform local_transform;
+            henka_scene_entity_record* record;
+
+            if (updates[previous_index].scene != updates[index].scene ||
+                !henka_scene_prepare_entity_transform_update(
+                    &updates[previous_index],
+                    &sanitized_transform,
+                    &local_transform))
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            record = henka_scene_get_entity_record(
+                updates[previous_index].scene,
+                updates[previous_index].entity);
+            if (!henka_scene_presentation_transform_equal(
+                    record->transform,
+                    sanitized_transform))
+            {
+                if (mutation_count == UINT64_MAX)
+                {
+                    return HENKA_ERROR_LIMIT;
+                }
+                ++mutation_count;
+            }
+        }
+        if (mutation_count != 0U &&
+            !henka_scene_has_render_revision_capacity(
+                updates[index].scene,
+                mutation_count))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+    }
+
+    /* No operation below this point allocates or can fail. */
+    for (index = 0U; index < update_count; ++index)
+    {
+        henka_transform sanitized_transform;
+        henka_transform local_transform;
+        henka_scene_entity_record* record;
+
+        (void)henka_scene_prepare_entity_transform_update(
+            &updates[index],
+            &sanitized_transform,
+            &local_transform);
+        record = henka_scene_get_entity_record(
+            updates[index].scene,
+            updates[index].entity);
+        if (!henka_scene_presentation_transform_equal(
+                record->transform,
+                sanitized_transform))
+        {
+            record->local_transform = local_transform;
+            henka_scene_apply_hierarchy_subtree(
+                updates[index].scene,
+                updates[index].entity,
+                sanitized_transform,
+                0U);
+            (void)henka_scene_bump_render_revision(updates[index].scene);
+        }
+    }
+
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_scene_grow(henka_scene* scene)
 {
     size_t allocation_size;

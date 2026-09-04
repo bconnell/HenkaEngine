@@ -62,6 +62,21 @@ struct henka_scene
     henka_scene_fog_desc fog;
 };
 
+/* A borrowed cross-scene transform update used by runtime transactions. The
+ * scene module validates every update and every per-scene revision budget
+ * before committing any update. Duplicate scene/entity pairs are rejected so
+ * the result cannot depend on caller iteration order. */
+typedef struct henka_scene_entity_transform_update
+{
+    henka_scene* scene;
+    henka_entity entity;
+    henka_transform transform;
+} henka_scene_entity_transform_update;
+
+henka_result henka_scene_apply_entity_transform_updates(
+    const henka_scene_entity_transform_update* updates,
+    size_t update_count);
+
 /* Internal lifetime bridge for runtime owners that borrow a scene link. */
 henka_result henka_scene_acquire_physics_link(henka_scene* scene);
 void henka_scene_release_physics_link(henka_scene* scene);

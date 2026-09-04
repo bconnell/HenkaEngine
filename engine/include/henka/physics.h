@@ -206,11 +206,13 @@ henka_result henka_physics_body_clear_velocity(henka_physics_world* world, henka
 
 /*
  * Each fixed substep is atomic. Allocation failure returns
- * HENKA_ERROR_OUT_OF_MEMORY, while finite input that cannot produce valid
- * representable simulation state returns HENKA_ERROR_NUMERIC_RANGE. Either
- * failure leaves that substep's bodies, contacts, pair history, events,
- * accumulator, and linked scene transforms unchanged. In a multi-substep
- * update, earlier committed substeps remain committed.
+ * HENKA_ERROR_OUT_OF_MEMORY, finite input that cannot produce valid
+ * representable simulation state returns HENKA_ERROR_NUMERIC_RANGE, and a
+ * linked-scene transform publication that cannot advance the scene revision
+ * returns HENKA_ERROR_LIMIT. Either failure leaves that substep's bodies,
+ * contacts, pair history, events, accumulator, and linked scene transforms
+ * unchanged. In a multi-substep update, earlier committed substeps remain
+ * committed.
  */
 henka_result henka_physics_world_step(henka_physics_world* world, float delta_seconds);
 henka_result henka_physics_world_step_fixed(henka_physics_world* world);

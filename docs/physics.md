@@ -61,7 +61,15 @@ The broadphase currently iterates body pairs directly, which is appropriate for 
 
 Body IDs are monotonic within a world. Destroying a body cannot make its stale ID refer to a later body that reuses the same storage slot. Destruction reserves space for all required EXIT events before changing live state, then removes only contacts and current/previous pairs involving that body. Existing queued events remain available until the next simulation step, including events for unrelated pairs; the appended EXIT events appear once and are not repeated by the next step. Survivor `colliding` and `grounded` flags are recomputed only when the survivor had a contact with the destroyed body.
 
-Each fixed substep builds a complete candidate using scratch body, contact, pair, and event arrays. The live world is replaced only after integration, collision response, and event classification all succeed. An allocation failure returns `HENKA_ERROR_OUT_OF_MEMORY`; a finite calculation that cannot produce representable, contract-valid body, collider, contact, or response state returns `HENKA_ERROR_NUMERIC_RANGE`. Either failure releases candidate storage, preserves the prior live arrays and accumulator, and performs no linked-scene writes. Callers may correct the input state and retry. The numeric boundary follows representable engine state and collider validity. It does not use an arbitrary gameplay-scale limit. In a catch-up update, each successful substep commits independently; if a later substep fails, the earlier results remain committed and the remaining accumulated time can be retried. Linked entity transforms are synchronized best-effort after a successful physics commit, so an invalid or removed link cannot corrupt the physics world.
+Each fixed substep builds a complete candidate using scratch body, contact, pair, and event arrays. Linked scene transforms are preflighted and published as one allocation-free scene transaction before the candidate replaces the live world. The live world is replaced only after integration, collision response, event classification, and linked-scene publication all succeed.
+
+Failure results are:
+
+- `HENKA_ERROR_OUT_OF_MEMORY` when candidate or synchronization storage cannot be allocated;
+- `HENKA_ERROR_NUMERIC_RANGE` when a finite calculation cannot produce representable, contract-valid body, collider, contact, or response state;
+- `HENKA_ERROR_LIMIT` when linked-scene revision capacity is exhausted.
+
+For the failed substep, any failure releases candidate storage, preserves that substep's prior live arrays and accumulator, and leaves its linked-scene publication unchanged. Callers may correct the input state or restore scene revision capacity and retry. The numeric boundary follows representable engine state and collider validity. It does not use an arbitrary gameplay-scale limit. In a catch-up update, each successful substep commits independently; if a later substep fails, the earlier results remain committed, including their linked-scene publications, and the remaining accumulated time can be retried. Invalid or removed links are ignored safely because they no longer identify a live scene entity.
 
 ## Sandbox Physics QA
 
