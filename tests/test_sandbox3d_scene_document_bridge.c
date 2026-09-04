@@ -2,10 +2,12 @@
 #include <string.h>
 
 #include <henka/core.h>
+#include <henka/memory.h>
 #include <henka/scene.h>
 #include <henka/scene_document.h>
 
 #include "../examples/sandbox3d/scene_document_bridge.h"
+#include "../engine/src/core/memory_internal.h"
 #include "../engine/src/scene/scene_internal.h"
 
 static bool test_transform_equal(
@@ -248,28 +250,36 @@ int main(void)
         const uint64_t render_revision_before = scene->render_revision;
         const uint64_t content_revision_before = scene->content_revision;
         henka_result apply_result;
-        const henka_result info_result =
-            henka_scene_get_entity_info(scene, entity, &object_info);
-        const henka_result interaction_result =
-            henka_scene_get_entity_interaction(scene, entity, &interaction);
-        const henka_result material_result =
-            henka_scene_get_entity_material(scene, entity, &material);
-        const bool name_same = info_result == HENKA_SUCCESS &&
-            strcmp(object_info.name == NULL ? "" : object_info.name, previous_name) == 0;
-        const bool visible_same = info_result == HENKA_SUCCESS &&
-            object_info.visible == previous_info.visible;
-        const bool transform_same = info_result == HENKA_SUCCESS &&
-            test_transform_equal(&object_info.transform, &previous_info.transform);
-        const bool interaction_same = interaction_result == HENKA_SUCCESS &&
-            interaction.enabled == previous_interaction.enabled &&
-            interaction.max_distance == previous_interaction.max_distance &&
-            strcmp(interaction.prompt == NULL ? "" : interaction.prompt, previous_prompt) == 0;
-        const bool material_same = material_result == HENKA_SUCCESS &&
-            test_material_scalars_equal(&material, &previous_material);
+        henka_result info_result;
+        henka_result interaction_result;
+        henka_result material_result;
+        bool name_same;
+        bool visible_same;
+        bool transform_same;
+        bool interaction_same;
+        bool material_same;
 
         scene->render_revision = UINT64_MAX - 2U;
         scene->content_revision = UINT64_MAX - 2U;
         apply_result = sandbox3d_scene_document_bridge_apply_object(bridge, object_id);
+        /* Read the destination after the rejected call.  Name updates do not
+         * consume render revision capacity, so pre-call snapshots alone do
+         * not prove that a failed transaction left the complete state intact. */
+        info_result = henka_scene_get_entity_info(scene, entity, &object_info);
+        interaction_result = henka_scene_get_entity_interaction(scene, entity, &interaction);
+        material_result = henka_scene_get_entity_material(scene, entity, &material);
+        name_same = info_result == HENKA_SUCCESS &&
+            strcmp(object_info.name == NULL ? "" : object_info.name, previous_name) == 0;
+        visible_same = info_result == HENKA_SUCCESS &&
+            object_info.visible == previous_info.visible;
+        transform_same = info_result == HENKA_SUCCESS &&
+            test_transform_equal(&object_info.transform, &previous_info.transform);
+        interaction_same = interaction_result == HENKA_SUCCESS &&
+            interaction.enabled == previous_interaction.enabled &&
+            interaction.max_distance == previous_interaction.max_distance &&
+            strcmp(interaction.prompt == NULL ? "" : interaction.prompt, previous_prompt) == 0;
+        material_same = material_result == HENKA_SUCCESS &&
+            test_material_scalars_equal(&material, &previous_material);
         if (apply_result != HENKA_ERROR_LIMIT ||
             scene->render_revision != UINT64_MAX - 2U ||
             scene->content_revision != UINT64_MAX - 2U ||
@@ -281,6 +291,88 @@ int main(void)
         }
         scene->render_revision = render_revision_before;
         scene->content_revision = content_revision_before;
+    }
+    object = applied_object;
+    (void)snprintf(object.name, sizeof(object.name), "%s", "Allocation Failure");
+    object.transform.position.x += 1.0f;
+    object.interaction.enabled = !object.interaction.enabled;
+    object.interaction.max_distance = 7.0f;
+    (void)snprintf(
+        object.interaction.prompt,
+        sizeof(object.interaction.prompt),
+        "%s",
+        "Allocation Failure Prompt");
+    object.renderer.material_override = true;
+    object.renderer.base_color = (henka_vec4){0.31f, 0.42f, 0.53f, 1.0f};
+    object.renderer.metallic = 0.35f;
+    object.renderer.roughness = 0.45f;
+    object.renderer.emissive = (henka_vec3){0.02f, 0.03f, 0.04f};
+    object.renderer.emissive_strength = 0.25f;
+    if (henka_scene_document_set_object(document, &object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        const uint64_t render_revision_before = scene->render_revision;
+        const uint64_t content_revision_before = scene->content_revision;
+        const size_t allocations_before = henka_memory_get_allocation_count();
+        henka_result apply_result;
+
+        /* The first text allocation may succeed, but the later prompt
+         * allocation must fail without exposing the earlier name change. */
+        henka_memory_test_fail_after(1U);
+        apply_result = sandbox3d_scene_document_bridge_apply_object(bridge, object_id);
+        henka_memory_test_disable_failures();
+        if (apply_result != HENKA_ERROR_OUT_OF_MEMORY ||
+            scene->render_revision != render_revision_before ||
+            scene->content_revision != content_revision_before ||
+            henka_memory_get_allocation_count() != allocations_before ||
+            henka_scene_get_entity_info(scene, entity, &object_info) != HENKA_SUCCESS ||
+            strcmp(object_info.name == NULL ? "" : object_info.name, previous_name) != 0 ||
+            test_transform_equal(&object_info.transform, &previous_info.transform) == false ||
+            henka_scene_get_entity_interaction(scene, entity, &interaction) != HENKA_SUCCESS ||
+            interaction.enabled != previous_interaction.enabled ||
+            interaction.max_distance != previous_interaction.max_distance ||
+            strcmp(interaction.prompt == NULL ? "" : interaction.prompt, previous_prompt) != 0 ||
+            henka_scene_get_entity_material(scene, entity, &material) != HENKA_SUCCESS ||
+            !test_material_scalars_equal(&material, &previous_material) ||
+            henka_scene_document_set_object(document, &applied_object) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    object = applied_object;
+    object.transform.rotation = (henka_quat){0.0f, 1.0f, 0.0f, 1.0f};
+    if (henka_scene_document_set_object(document, &object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        const uint64_t first_revision = scene->render_revision;
+        henka_scene_object_info normalized_info;
+        if (sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_SUCCESS ||
+            henka_scene_get_render_revision(scene) == first_revision ||
+            henka_scene_get_entity_info(scene, entity, &normalized_info) != HENKA_SUCCESS ||
+            normalized_info.transform.rotation.y < 0.7070f ||
+            normalized_info.transform.rotation.y > 0.7072f ||
+            normalized_info.transform.rotation.w < 0.7070f ||
+            normalized_info.transform.rotation.w > 0.7072f)
+        {
+            goto cleanup;
+        }
+        {
+            const uint64_t second_revision = henka_scene_get_render_revision(scene);
+            if (sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_SUCCESS ||
+                henka_scene_get_render_revision(scene) != second_revision)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    if (henka_scene_document_set_object(document, &applied_object) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
     }
     henka_scene_destroy_entity(scene, child_entity);
     child_entity = HENKA_INVALID_ENTITY;

@@ -1086,6 +1086,210 @@ static void henka_scene_apply_hierarchy_subtree(
     }
 }
 
+static bool henka_scene_presentation_text_equal(
+    const char* left,
+    const char* right)
+{
+    return strcmp(left == NULL ? "" : left, right == NULL ? "" : right) == 0;
+}
+
+static bool henka_scene_presentation_transform_equal(
+    henka_transform left,
+    henka_transform right)
+{
+    return left.position.x == right.position.x &&
+        left.position.y == right.position.y &&
+        left.position.z == right.position.z &&
+        left.rotation.x == right.rotation.x &&
+        left.rotation.y == right.rotation.y &&
+        left.rotation.z == right.rotation.z &&
+        left.rotation.w == right.rotation.w &&
+        left.scale.x == right.scale.x &&
+        left.scale.y == right.scale.y &&
+        left.scale.z == right.scale.z;
+}
+
+henka_result henka_scene_apply_entity_presentation(
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_scene_entity_presentation_update* update)
+{
+    henka_scene_entity_record* record;
+    const henka_scene_entity_record* parent_record;
+    henka_transform sanitized_transform;
+    henka_transform local_transform;
+    henka_bounds world_bounds;
+    char* new_name = NULL;
+    char* new_prompt = NULL;
+    char* new_material_name = NULL;
+    bool name_changed;
+    bool transform_changed;
+    bool visible_changed;
+    bool interaction_changed;
+    bool material_changed;
+    uint64_t mutation_count;
+    henka_result result;
+
+    if (scene == NULL || update == NULL ||
+        (record = henka_scene_get_entity_record(scene, entity)) == NULL ||
+        !henka_transform_is_valid(update->transform) ||
+        !henka_is_finite_float(update->interaction.max_distance) ||
+        update->interaction.max_distance < 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (update->apply_material && !henka_scene_material_is_valid(update->material))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    sanitized_transform = henka_transform_sanitize(update->transform);
+    name_changed = !henka_scene_presentation_text_equal(
+        record->name,
+        update->name);
+    transform_changed = !henka_scene_presentation_transform_equal(
+        record->transform,
+        sanitized_transform);
+    visible_changed = record->visible != update->visible;
+    interaction_changed = record->interaction.enabled != update->interaction.enabled ||
+        record->interaction.max_distance != update->interaction.max_distance ||
+        !henka_scene_presentation_text_equal(
+            record->interaction.prompt,
+            update->interaction.prompt);
+    material_changed = update->apply_material;
+    local_transform = sanitized_transform;
+
+    if (transform_changed)
+    {
+        if (record->has_local_bounds &&
+            !henka_scene_try_transform_bounds(
+                record->local_bounds,
+                sanitized_transform,
+                &world_bounds))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+
+        parent_record = henka_scene_get_entity_record_const(scene, record->parent);
+        if (record->parent == HENKA_INVALID_ENTITY)
+        {
+            local_transform = sanitized_transform;
+        }
+        else if (parent_record == NULL ||
+            !henka_scene_try_world_to_local_transform(
+                parent_record->transform,
+                sanitized_transform,
+                &local_transform))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (!henka_scene_validate_hierarchy_subtree(
+                scene,
+                entity,
+                sanitized_transform,
+                0U))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
+    mutation_count = (transform_changed ? UINT64_C(1) : UINT64_C(0)) +
+        (visible_changed ? UINT64_C(1) : UINT64_C(0)) +
+        (interaction_changed ? UINT64_C(1) : UINT64_C(0)) +
+        (material_changed ? UINT64_C(1) : UINT64_C(0));
+    if (mutation_count != 0U &&
+        !henka_scene_has_render_revision_capacity(scene, mutation_count))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    if (name_changed)
+    {
+        result = henka_scene_duplicate_text(update->name, &new_name);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    if (interaction_changed)
+    {
+        result = henka_scene_duplicate_text(
+            update->interaction.prompt,
+            &new_prompt);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(new_name);
+            return result;
+        }
+    }
+    if (material_changed && update->material.name != NULL &&
+        update->material.name[0] != '\0')
+    {
+        result = henka_scene_duplicate_text(
+            update->material.name,
+            &new_material_name);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(new_prompt);
+            henka_free(new_name);
+            return result;
+        }
+    }
+
+    /* No operation below this point can fail.  All state that owns heap
+     * storage is now ready, and the bounded revision preflight succeeded. */
+    if (name_changed)
+    {
+        henka_free(record->name);
+        record->name = new_name;
+        new_name = NULL;
+    }
+    if (transform_changed)
+    {
+        record->local_transform = local_transform;
+        henka_scene_apply_hierarchy_subtree(
+            scene,
+            entity,
+            sanitized_transform,
+            0U);
+        (void)henka_scene_bump_render_revision(scene);
+    }
+    if (visible_changed)
+    {
+        record->visible = update->visible;
+        (void)henka_scene_bump_render_revision(scene);
+    }
+    if (interaction_changed)
+    {
+        henka_free(record->interaction_prompt);
+        record->interaction_prompt = new_prompt;
+        new_prompt = NULL;
+        record->interaction = update->interaction;
+        record->interaction.prompt = record->interaction_prompt;
+        (void)henka_scene_bump_render_revision(scene);
+    }
+    if (material_changed)
+    {
+        henka_free(record->material_name);
+        record->material_name = new_material_name;
+        new_material_name = NULL;
+        record->material = update->material;
+        record->material.name = record->material_name != NULL
+            ? record->material_name
+            : "Material";
+        if (record->material_asset != NULL)
+        {
+            record->material_asset_overridden = true;
+        }
+        (void)henka_scene_bump_render_revision(scene);
+    }
+
+    henka_free(new_material_name);
+    henka_free(new_prompt);
+    henka_free(new_name);
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_scene_grow(henka_scene* scene)
 {
     size_t allocation_size;
@@ -2396,6 +2600,19 @@ henka_result henka_scene_get_material_asset_state(
     *out_revision = record->material_asset_revision;
     *out_overridden = record->material_asset_overridden;
     return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_entity_material_asset_state(
+    const henka_scene* scene,
+    henka_entity entity,
+    uint64_t* out_revision,
+    bool* out_overridden)
+{
+    return henka_scene_get_material_asset_state(
+        scene,
+        entity,
+        out_revision,
+        out_overridden);
 }
 
 henka_result henka_scene_restore_material_asset_state(

@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -27,7 +28,9 @@ int main(void)
     henka_scene_document_id new_object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id loaded_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id unchanged_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id asset_override_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_entity new_entity = HENKA_INVALID_ENTITY;
+    henka_entity asset_override_entity = HENKA_INVALID_ENTITY;
     henka_result load_result = HENKA_ERROR_INVALID_ARGUMENT;
     henka_result register_result = HENKA_ERROR_INVALID_ARGUMENT;
     int result = 1;
@@ -104,6 +107,28 @@ int main(void)
         fabsf(loaded_object.renderer.emissive_strength - authored_material.emissive_strength) > 0.0001f)
     {
         fprintf(stderr, "game authoring identity test failed to capture renderer authority\n");
+        goto cleanup;
+    }
+
+    asset_override_entity = henka_scene_create_entity_named(
+        scene,
+        "Asset Override Boundary");
+    if (asset_override_entity == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_material_asset(
+            scene,
+            asset_override_entity,
+            (const henka_material_asset*)(uintptr_t)1U) != HENKA_SUCCESS ||
+        henka_scene_set_entity_material(
+            scene,
+            asset_override_entity,
+            authored_material) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring,
+            asset_override_entity,
+            &asset_override_id) != HENKA_ERROR_INVALID_ARGUMENT ||
+        asset_override_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        fprintf(stderr, "game authoring identity test failed to reject asset override capture\n");
         goto cleanup;
     }
 
@@ -193,6 +218,7 @@ cleanup:
     henka_scene_document_destroy(loaded);
     henka_scene_document_destroy(replacement);
     sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy_entity(scene, asset_override_entity);
     henka_scene_destroy(scene);
     return result;
 }

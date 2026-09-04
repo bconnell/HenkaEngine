@@ -68,5 +68,4 @@ void henka_scene_release_physics_link(henka_scene* scene);
 henka_result henka_scene_acquire_audio_link(henka_scene* scene);
 void henka_scene_release_audio_link(henka_scene* scene);
 bool henka_scene_is_destroyed(const henka_scene* scene);
-
 #endif

@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <henka/memory.h>
+#include <henka/scene.h>
 
 #define SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS HENKA_SCENE_DOCUMENT_MAX_OBJECTS
 
@@ -360,18 +361,6 @@ static bool sandbox3d_scene_document_bridge_vec4_equal(
         left.z == right.z && left.w == right.w;
 }
 
-static bool sandbox3d_scene_document_bridge_transform_equal(
-    henka_transform left,
-    henka_transform right)
-{
-    return sandbox3d_scene_document_bridge_vec3_equal(left.position, right.position) &&
-        left.rotation.x == right.rotation.x &&
-        left.rotation.y == right.rotation.y &&
-        left.rotation.z == right.rotation.z &&
-        left.rotation.w == right.rotation.w &&
-        sandbox3d_scene_document_bridge_vec3_equal(left.scale, right.scale);
-}
-
 static bool sandbox3d_scene_document_bridge_material_scalars_equal(
     const henka_material* left,
     const henka_material* right)
@@ -388,35 +377,20 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id)
 {
-    henka_scene_object_info previous_info;
-    henka_interaction_desc previous_interaction;
     henka_material previous_material;
     henka_material material = henka_material_default();
     const henka_material_asset* material_asset = NULL;
-    char previous_name[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
-    char previous_prompt[HENKA_SCENE_DOCUMENT_MAX_PROMPT_BYTES];
+    henka_scene_entity_presentation_update update;
     henka_scene_document_object object;
-    henka_interaction_desc interaction;
     henka_entity entity;
-    henka_result result;
-    bool name_changed;
-    bool transform_changed;
-    bool visible_changed;
-    bool interaction_changed;
     bool material_changed = false;
-    bool material_applied = false;
-    uint64_t forward_mutations;
-    uint64_t rollback_mutations;
-    int written;
     if (bridge == NULL || bridge->play_locked ||
         sandbox3d_scene_document_bridge_get_bound_object(
             bridge, document_id, &object, &entity) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (henka_scene_get_entity_info(bridge->scene, entity, &previous_info) != HENKA_SUCCESS ||
-        henka_scene_get_entity_interaction(bridge->scene, entity, &previous_interaction) != HENKA_SUCCESS ||
-        henka_scene_get_entity_material(bridge->scene, entity, &previous_material) != HENKA_SUCCESS ||
+    if (henka_scene_get_entity_material(bridge->scene, entity, &previous_material) != HENKA_SUCCESS ||
         henka_scene_get_entity_material_asset(bridge->scene, entity, &material_asset) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -428,18 +402,16 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
          * silently turning a persisted reference into an inline instance. */
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    name_changed = strcmp(
-        previous_info.name == NULL ? "" : previous_info.name,
-        object.name) != 0;
-    transform_changed = !sandbox3d_scene_document_bridge_transform_equal(
-        previous_info.transform,
-        object.transform);
-    visible_changed = previous_info.visible != object.visible;
-    interaction_changed = previous_interaction.enabled != object.interaction.enabled ||
-        previous_interaction.max_distance != object.interaction.max_distance ||
-        strcmp(
-            previous_interaction.prompt == NULL ? "" : previous_interaction.prompt,
-            object.interaction.prompt) != 0;
+    update = (henka_scene_entity_presentation_update){
+        object.name,
+        object.transform,
+        object.visible,
+        {
+            object.interaction.enabled,
+            object.interaction.max_distance,
+            object.interaction.prompt},
+        false,
+        material};
     if (object.renderer.material_override)
     {
         material = previous_material;
@@ -448,131 +420,16 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
         material.roughness = object.renderer.roughness;
         material.emissive_color = object.renderer.emissive;
         material.emissive_strength = object.renderer.emissive_strength;
+        update.material = material;
         material_changed = !sandbox3d_scene_document_bridge_material_scalars_equal(
             &previous_material,
             &material);
+        update.apply_material = material_changed;
     }
-    forward_mutations = (transform_changed ? UINT64_C(1) : UINT64_C(0)) +
-        (visible_changed ? UINT64_C(1) : UINT64_C(0)) +
-        (interaction_changed ? UINT64_C(1) : UINT64_C(0)) +
-        (material_changed ? UINT64_C(1) : UINT64_C(0));
-    rollback_mutations = (transform_changed ? UINT64_C(1) : UINT64_C(0)) +
-        (visible_changed ? UINT64_C(1) : UINT64_C(0)) +
-        (interaction_changed ? UINT64_C(1) : UINT64_C(0)) +
-        (material_changed ? UINT64_C(1) : UINT64_C(0));
-    if (forward_mutations != 0U &&
-        !henka_scene_has_render_revision_capacity(
-            bridge->scene,
-            forward_mutations + rollback_mutations))
-    {
-        return HENKA_ERROR_LIMIT;
-    }
-    written = snprintf(
-        previous_name,
-        sizeof(previous_name),
-        "%s",
-        previous_info.name == NULL ? "" : previous_info.name);
-    if (written < 0 || (size_t)written >= sizeof(previous_name))
-    {
-        return HENKA_ERROR_LIMIT;
-    }
-    written = snprintf(
-        previous_prompt,
-        sizeof(previous_prompt),
-        "%s",
-        previous_interaction.prompt == NULL ? "" : previous_interaction.prompt);
-    if (written < 0 || (size_t)written >= sizeof(previous_prompt))
-    {
-        return HENKA_ERROR_LIMIT;
-    }
-    result = name_changed
-        ? henka_scene_set_entity_name(bridge->scene, entity, object.name)
-        : HENKA_SUCCESS;
-    if (result != HENKA_SUCCESS)
-    {
-        goto rollback;
-    }
-    result = transform_changed
-        ? henka_scene_set_entity_transform(bridge->scene, entity, object.transform)
-        : HENKA_SUCCESS;
-    if (result != HENKA_SUCCESS)
-    {
-        goto rollback;
-    }
-    result = visible_changed
-        ? henka_scene_set_entity_visible(bridge->scene, entity, object.visible)
-        : HENKA_SUCCESS;
-    if (result != HENKA_SUCCESS)
-    {
-        goto rollback;
-    }
-    if (interaction_changed)
-    {
-        interaction = (henka_interaction_desc){
-            object.interaction.enabled,
-            object.interaction.max_distance,
-            object.interaction.prompt};
-        result = henka_scene_set_entity_interaction(
-            bridge->scene,
-            entity,
-            &interaction);
-    }
-    else
-    {
-        result = HENKA_SUCCESS;
-    }
-    if (result == HENKA_SUCCESS && material_changed)
-    {
-        result = henka_scene_set_entity_material(bridge->scene, entity, material);
-        material_applied = result == HENKA_SUCCESS;
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        return HENKA_SUCCESS;
-    }
-
-rollback:
-    /* Every value above was validated before publication. Restore the
-     * complete runtime presentation if a later setter rejects the update. */
-    if (material_applied)
-    {
-        (void)henka_scene_set_entity_material(
-            bridge->scene,
-            entity,
-            previous_material);
-    }
-    if (interaction_changed)
-    {
-        (void)henka_scene_set_entity_interaction(
-            bridge->scene,
-            entity,
-            &(henka_interaction_desc){
-                previous_interaction.enabled,
-                previous_interaction.max_distance,
-                previous_prompt});
-    }
-    if (visible_changed)
-    {
-        (void)henka_scene_set_entity_visible(
-            bridge->scene,
-            entity,
-            previous_info.visible);
-    }
-    if (transform_changed)
-    {
-        (void)henka_scene_set_entity_transform(
-            bridge->scene,
-            entity,
-            previous_info.transform);
-    }
-    if (name_changed)
-    {
-        (void)henka_scene_set_entity_name(
-            bridge->scene,
-            entity,
-            previous_name);
-    }
-    return result;
+    return henka_scene_apply_entity_presentation(
+        bridge->scene,
+        entity,
+        &update);
 }
 
 henka_result sandbox3d_scene_document_bridge_apply_hierarchy(

@@ -136,6 +136,21 @@ typedef struct henka_interaction_desc
     const char* prompt;
 } henka_interaction_desc;
 
+/* A complete presentation update for one live scene entity. All pointer
+ * values are borrowed for the duration of the call. The scene validates and
+ * prepares every fallible allocation before publishing any field or revision,
+ * so callers do not need an allocating rollback path. Name changes are
+ * included in the same atomic update but do not consume render revisions. */
+typedef struct henka_scene_entity_presentation_update
+{
+    const char* name;
+    henka_transform transform;
+    bool visible;
+    henka_interaction_desc interaction;
+    bool apply_material;
+    henka_material material;
+} henka_scene_entity_presentation_update;
+
 typedef enum henka_scene_environment_mode
 {
     HENKA_SCENE_ENVIRONMENT_GRADIENT = 0,
@@ -375,6 +390,13 @@ henka_result henka_scene_get_entity_material_asset(
     const henka_scene* scene,
     henka_entity entity,
     const henka_material_asset** out_asset);
+/* Returns the borrowed material definition revision and whether the entity's
+ * effective material contains explicit overrides over that definition. */
+henka_result henka_scene_get_entity_material_asset_state(
+    const henka_scene* scene,
+    henka_entity entity,
+    uint64_t* out_revision,
+    bool* out_overridden);
 henka_result henka_scene_get_entity_local_bounds(const henka_scene* scene, henka_entity entity, henka_bounds* out_bounds);
 henka_result henka_scene_get_entity_world_bounds(const henka_scene* scene, henka_entity entity, henka_bounds* out_bounds);
 henka_result henka_scene_get_entity_interaction(const henka_scene* scene, henka_entity entity, henka_interaction_desc* out_interaction);
@@ -392,6 +414,12 @@ henka_result henka_scene_set_entity_selection_owner(
     henka_entity entity,
     henka_entity owner);
 henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity entity, henka_transform transform);
+/* Applies name, transform, visibility, interaction, and optionally inline
+ * material state as one preflighted scene transaction. */
+henka_result henka_scene_apply_entity_presentation(
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_scene_entity_presentation_update* update);
 henka_result henka_scene_translate_entity(henka_scene* scene, henka_entity entity, henka_vec3 delta);
 henka_result henka_scene_rotate_entity(henka_scene* scene, henka_entity entity, henka_quat delta_rotation);
 henka_result henka_scene_scale_entity(henka_scene* scene, henka_entity entity, henka_vec3 scale_multiplier);

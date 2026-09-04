@@ -69,13 +69,20 @@ static henka_result sandbox3d_game_authoring_build_object(
     henka_interaction_desc interaction;
     henka_material material;
     const henka_material_asset* material_asset = NULL;
+    uint64_t material_asset_revision = 0U;
+    bool material_asset_overridden = false;
     int written;
     if (scene == NULL || out_object == NULL ||
         !henka_scene_is_entity_valid(scene, entity) ||
         henka_scene_get_entity_info(scene, entity, &info) != HENKA_SUCCESS ||
         henka_scene_get_entity_interaction(scene, entity, &interaction) != HENKA_SUCCESS ||
         henka_scene_get_entity_material(scene, entity, &material) != HENKA_SUCCESS ||
-        henka_scene_get_entity_material_asset(scene, entity, &material_asset) != HENKA_SUCCESS)
+        henka_scene_get_entity_material_asset(scene, entity, &material_asset) != HENKA_SUCCESS ||
+        henka_scene_get_entity_material_asset_state(
+            scene,
+            entity,
+            &material_asset_revision,
+            &material_asset_overridden) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -96,10 +103,15 @@ static henka_result sandbox3d_game_authoring_build_object(
     out_object->renderer.roughness = material.roughness;
     out_object->renderer.emissive = material.emissive_color;
     out_object->renderer.emissive_strength = material.emissive_strength;
-    /* The Scene Document stores scalar inline overrides only when the live
-     * scene has a valid renderer material authority. A manager-owned material
-     * definition remains the runtime resource authority until the asset-
-     * material bridge is explicitly used. */
+    if (material_asset != NULL && material_asset_overridden)
+    {
+        /* This bridge has no material-asset path/authority with which to
+         * reconstruct an explicit override. Do not collapse that state into
+         * an apparently asset-owned document. */
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    /* Inline scalar state is document-owned only when no manager-owned
+     * material definition is attached. */
     out_object->renderer.material_override =
         material_asset == NULL && material.shader != NULL;
     out_object->interaction.enabled = interaction.enabled;
@@ -520,6 +532,7 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
 {
     henka_scene_document_object previous;
     henka_scene_document_id document_id;
+    henka_result rollback_result;
     henka_result result;
     if (authoring == NULL || object == NULL ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
@@ -541,9 +554,24 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
     }
     if (result != HENKA_SUCCESS)
     {
-        (void)henka_scene_document_set_object(authoring->document, &previous);
-        (void)sandbox3d_scene_document_bridge_apply_object(authoring->bridge, document_id);
-        (void)sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge);
+        rollback_result = henka_scene_document_set_object(
+            authoring->document,
+            &previous);
+        if (rollback_result == HENKA_SUCCESS)
+        {
+            rollback_result = sandbox3d_scene_document_bridge_apply_object(
+                authoring->bridge,
+                document_id);
+        }
+        if (rollback_result == HENKA_SUCCESS)
+        {
+            rollback_result = sandbox3d_scene_document_bridge_apply_hierarchy(
+                authoring->bridge);
+        }
+        if (rollback_result != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
     }
     return result;
 }
@@ -824,6 +852,7 @@ henka_result sandbox3d_game_authoring_load(
     henka_scene_document* previous = NULL;
     size_t index;
     henka_camera previous_camera;
+    henka_result rollback_result;
     henka_result result;
     if (authoring == NULL || project_root == NULL ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
@@ -905,15 +934,32 @@ henka_result sandbox3d_game_authoring_load(
     return result;
 
 load_rollback:
-    (void)sandbox3d_game_authoring_restore_document(authoring->document, previous);
+    rollback_result = sandbox3d_game_authoring_restore_document(
+        authoring->document,
+        previous);
     for (index = 0U; index < authoring->binding_count; ++index)
     {
-        (void)sandbox3d_scene_document_bridge_apply_object(
-            authoring->bridge,
-            authoring->bindings[index].document_id);
+        if (sandbox3d_scene_document_bridge_apply_object(
+                authoring->bridge,
+                authoring->bindings[index].document_id) != HENKA_SUCCESS)
+        {
+            rollback_result = HENKA_ERROR_UNKNOWN;
+        }
     }
-    (void)sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge);
-    (void)henka_scene_set_camera(authoring->scene, &previous_camera);
+    if (sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge) !=
+        HENKA_SUCCESS)
+    {
+        rollback_result = HENKA_ERROR_UNKNOWN;
+    }
+    if (henka_scene_set_camera(authoring->scene, &previous_camera) !=
+        HENKA_SUCCESS)
+    {
+        rollback_result = HENKA_ERROR_UNKNOWN;
+    }
+    if (rollback_result != HENKA_SUCCESS)
+    {
+        result = HENKA_ERROR_UNKNOWN;
+    }
 load_cleanup:
     henka_scene_document_destroy(candidate);
     henka_scene_document_destroy(previous);
