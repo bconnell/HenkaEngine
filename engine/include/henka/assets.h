@@ -471,6 +471,9 @@ henka_result henka_assets_reload_gltf_scene_asset(
 henka_result henka_assets_set_gltf_scene_active_scene(
     henka_gltf_scene_asset* asset,
     size_t scene_index);
+/* Scene instantiation is transactional across imported entities, the active
+ * camera, and local/global light state. A failed instantiation leaves the
+ * target scene and its revision watermarks unchanged. */
 henka_result henka_assets_instantiate_gltf_scene(
     henka_asset_manager* manager,
     const henka_gltf_scene_asset* asset,

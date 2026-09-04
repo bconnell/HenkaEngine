@@ -5317,7 +5317,11 @@ static henka_result henka_assets_apply_gltf_scene_bindings(
                     node->world_matrix.m[12], node->world_matrix.m[13], node->world_matrix.m[14]};
                 camera.yaw_radians = atan2f(forward.z, forward.x);
                 camera.pitch_radians = asinf(fmaxf(-1.0f, fminf(1.0f, forward.y)));
-                if (henka_scene_set_camera(target_scene, &camera) == HENKA_SUCCESS) camera_applied = true;
+                if (henka_scene_set_camera(target_scene, &camera) != HENKA_SUCCESS)
+                {
+                    return HENKA_ERROR_LIMIT;
+                }
+                camera_applied = true;
             }
         }
         if (node->light_index >= 0 && (size_t)node->light_index < asset->data.light_count)
@@ -5339,9 +5343,17 @@ static henka_result henka_assets_apply_gltf_scene_bindings(
                 true};
             if (source->type == HENKA_MODEL_SCENE_LIGHT_DIRECTIONAL)
             {
+                uint64_t render_revision_before = target_scene->render_revision;
+                uint64_t content_revision_before = target_scene->content_revision;
+
                 henka_scene_set_light_color(target_scene, source->color);
                 henka_scene_set_light_intensity(target_scene, source->intensity);
                 henka_scene_set_light_direction(target_scene, direction);
+                if (target_scene->render_revision != render_revision_before + 3U ||
+                    target_scene->content_revision != content_revision_before + 3U)
+                {
+                    return HENKA_ERROR_LIMIT;
+                }
             }
             else
             {
@@ -5354,6 +5366,61 @@ static henka_result henka_assets_apply_gltf_scene_bindings(
     return HENKA_SUCCESS;
 }
 
+static void henka_assets_release_scene_entity_storage(
+    henka_scene_entity_record* entities,
+    size_t entity_capacity)
+{
+    size_t index;
+
+    for (index = 0U; index < entity_capacity; ++index)
+    {
+        henka_free(entities[index].name);
+        henka_free(entities[index].tag);
+        henka_free(entities[index].material_name);
+        henka_free(entities[index].interaction_prompt);
+    }
+    henka_free(entities);
+}
+
+static void henka_assets_commit_gltf_scene_candidate(
+    henka_scene* target_scene,
+    henka_scene* candidate_scene)
+{
+    henka_scene_entity_record* old_entities = target_scene->entities;
+    size_t old_entity_capacity = target_scene->entity_capacity;
+
+    target_scene->entities = candidate_scene->entities;
+    target_scene->entity_capacity = candidate_scene->entity_capacity;
+    target_scene->entity_count = candidate_scene->entity_count;
+    target_scene->camera = candidate_scene->camera;
+    target_scene->has_camera = candidate_scene->has_camera;
+    target_scene->light_direction = candidate_scene->light_direction;
+    target_scene->light_color = candidate_scene->light_color;
+    target_scene->light_intensity = candidate_scene->light_intensity;
+    target_scene->ambient_color = candidate_scene->ambient_color;
+    target_scene->environment = candidate_scene->environment;
+    memcpy(target_scene->reflection_probes,
+        candidate_scene->reflection_probes,
+        sizeof(target_scene->reflection_probes));
+    memcpy(target_scene->reflection_probe_active,
+        candidate_scene->reflection_probe_active,
+        sizeof(target_scene->reflection_probe_active));
+    target_scene->render_revision = candidate_scene->render_revision;
+    target_scene->content_revision = candidate_scene->content_revision;
+    memcpy(target_scene->local_lights,
+        candidate_scene->local_lights,
+        sizeof(target_scene->local_lights));
+    memcpy(target_scene->local_light_active,
+        candidate_scene->local_light_active,
+        sizeof(target_scene->local_light_active));
+    target_scene->fog = candidate_scene->fog;
+
+    candidate_scene->entities = NULL;
+    candidate_scene->entity_capacity = 0U;
+    candidate_scene->entity_count = 0U;
+    henka_assets_release_scene_entity_storage(old_entities, old_entity_capacity);
+}
+
 henka_result henka_assets_instantiate_gltf_scene(
     henka_asset_manager* manager,
     const henka_gltf_scene_asset* asset,
@@ -5364,6 +5431,7 @@ henka_result henka_assets_instantiate_gltf_scene(
     henka_entity created[HENKA_MODEL_MAX_SCENE_ITEMS];
     size_t created_count = 0U;
     size_t root_index;
+    henka_scene* candidate_scene = NULL;
     henka_result result = HENKA_SUCCESS;
 
     if (out_entity_count != NULL) *out_entity_count = 0U;
@@ -5371,26 +5439,33 @@ henka_result henka_assets_instantiate_gltf_scene(
         asset->data.active_scene_index >= asset->data.scene_count) return HENKA_ERROR_INVALID_ARGUMENT;
     result = henka_assets_validate_gltf_scene_light_capacity(asset, target_scene);
     if (result != HENKA_SUCCESS) return result;
+    result = henka_scene_clone(target_scene, &candidate_scene);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
     for (root_index = 0U; root_index < asset->data.scene_root_counts[asset->data.active_scene_index]; ++root_index)
     {
         int node_index = asset->data.scene_root_nodes[
             asset->data.scene_root_offsets[asset->data.active_scene_index] + root_index];
         henka_entity selection_owner = HENKA_INVALID_ENTITY;
-        result = henka_assets_instantiate_gltf_scene_node(manager, asset, target_scene, node_index,
+        result = henka_assets_instantiate_gltf_scene_node(manager, asset, candidate_scene, node_index,
             name_prefix, created, &created_count, &selection_owner);
         if (result != HENKA_SUCCESS) break;
     }
     if (result != HENKA_SUCCESS)
     {
-        while (created_count > 0U) henka_scene_destroy_entity(target_scene, created[--created_count]);
+        henka_scene_destroy(candidate_scene);
         return result;
     }
-    result = henka_assets_apply_gltf_scene_bindings(asset, target_scene);
+    result = henka_assets_apply_gltf_scene_bindings(asset, candidate_scene);
     if (result != HENKA_SUCCESS)
     {
-        while (created_count > 0U) henka_scene_destroy_entity(target_scene, created[--created_count]);
+        henka_scene_destroy(candidate_scene);
         return result;
     }
+    henka_assets_commit_gltf_scene_candidate(target_scene, candidate_scene);
+    henka_scene_destroy(candidate_scene);
     *out_entity_count = created_count;
     return HENKA_SUCCESS;
 }

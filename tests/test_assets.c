@@ -505,6 +505,163 @@ static void henka_test_gltf_scene_instantiation_preserves_mutator_errors(void)
     henka_scene_destroy(target);
 }
 
+static void henka_test_gltf_scene_instantiation_preserves_global_bindings(void)
+{
+    henka_asset_manager manager;
+    static henka_gltf_scene_asset asset;
+    henka_mesh mesh;
+    henka_shader shader;
+    henka_scene* target = NULL;
+    henka_camera initial_camera;
+    henka_camera after_camera;
+    henka_scene_light_desc initial_light;
+    henka_scene_light_desc after_light;
+    henka_entity existing;
+    size_t entity_count = SIZE_MAX;
+    uint64_t render_revision_before;
+    uint64_t content_revision_before;
+
+    memset(&manager, 0, sizeof(manager));
+    memset(&asset, 0, sizeof(asset));
+    memset(&mesh, 0, sizeof(mesh));
+    memset(&shader, 0, sizeof(shader));
+    asset.shader = &shader;
+    asset.data.scene_count = 1U;
+    asset.data.active_scene_index = 0U;
+    asset.data.scene_root_counts[0] = 2U;
+    asset.data.scene_root_nodes[0] = 0;
+    asset.data.scene_root_nodes[1] = 1;
+    asset.data.node_count = 2U;
+    asset.data.nodes[0].parent_index = -1;
+    asset.data.nodes[0].mesh_index = 0;
+    asset.data.nodes[0].camera_index = 0;
+    asset.data.nodes[0].light_index = 0;
+    asset.data.nodes[0].world_matrix = henka_mat4_identity();
+    asset.data.nodes[0].world_transform = henka_transform_identity();
+    asset.data.nodes[1].parent_index = -1;
+    asset.data.nodes[1].mesh_index = -1;
+    asset.data.nodes[1].camera_index = -1;
+    asset.data.nodes[1].light_index = 1;
+    asset.data.nodes[1].world_matrix = henka_mat4_identity();
+    asset.data.nodes[1].world_transform = henka_transform_identity();
+    asset.data.primitive_count = 1U;
+    asset.data.primitives[0].mesh_index = 0U;
+    asset.data.primitives[0].material_index = -1;
+    asset.primitive_meshes[0] = &mesh;
+    asset.data.camera_count = 1U;
+    asset.data.cameras[0].camera = henka_camera_create_perspective(
+        1.0f,
+        1.0f,
+        0.1f,
+        100.0f);
+    asset.data.light_count = 2U;
+    asset.data.lights[0].type = HENKA_MODEL_SCENE_LIGHT_POINT;
+    asset.data.lights[0].color = (henka_vec3){0.4f, 0.5f, 0.6f};
+    asset.data.lights[0].intensity = 3.0f;
+    asset.data.lights[0].range = 12.0f;
+    asset.data.lights[1] = asset.data.lights[0];
+    asset.data.lights[1].intensity = -1.0f;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
+    existing = henka_scene_create_entity_named(target, "Existing");
+    HENKA_TEST_ASSERT(existing != HENKA_INVALID_ENTITY);
+    initial_camera = henka_camera_create_perspective(0.8f, 1.5f, 0.2f, 250.0f);
+    initial_camera.position = (henka_vec3){10.0f, 2.0f, 4.0f};
+    initial_camera.yaw_radians = 0.4f;
+    initial_camera.pitch_radians = -0.2f;
+    HENKA_TEST_ASSERT(henka_scene_set_camera(target, &initial_camera) == HENKA_SUCCESS);
+    initial_light = (henka_scene_light_desc){
+        HENKA_SCENE_LIGHT_SPOT,
+        (henka_vec3){4.0f, 5.0f, 6.0f},
+        (henka_vec3){0.0f, -1.0f, 0.0f},
+        (henka_vec3){0.7f, 0.6f, 0.5f},
+        2.0f,
+        20.0f,
+        0.9f,
+        0.7f,
+        true};
+    HENKA_TEST_ASSERT(henka_scene_add_light(target, initial_light, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+    {
+        uint32_t light_index = UINT32_MAX;
+        HENKA_TEST_ASSERT(henka_scene_add_light(target, initial_light, &light_index) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(light_index == 0U);
+    }
+    render_revision_before = henka_scene_get_render_revision(target);
+    content_revision_before = target->content_revision;
+
+    HENKA_TEST_ASSERT(henka_assets_instantiate_gltf_scene(
+        &manager,
+        &asset,
+        target,
+        "Imported ",
+        &entity_count) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(entity_count == 0U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == 1U);
+    HENKA_TEST_ASSERT(henka_scene_is_entity_valid(target, existing));
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(target) == render_revision_before);
+    HENKA_TEST_ASSERT(target->content_revision == content_revision_before);
+    HENKA_TEST_ASSERT(henka_scene_get_camera(target, &after_camera) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(memcmp(&after_camera, &initial_camera, sizeof(after_camera)) == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_light(target, 0U, &after_light) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(memcmp(&after_light, &initial_light, sizeof(after_light)) == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_light(target, 1U, &after_light) != HENKA_SUCCESS);
+    henka_scene_destroy(target);
+}
+
+static void henka_test_gltf_scene_instantiation_revision_limit_is_transactional(void)
+{
+    henka_asset_manager manager;
+    static henka_gltf_scene_asset asset;
+    henka_mesh mesh;
+    henka_shader shader;
+    henka_scene* target = NULL;
+    henka_entity existing;
+    size_t entity_count = SIZE_MAX;
+    uint64_t render_revision_before;
+    uint64_t content_revision_before;
+
+    memset(&manager, 0, sizeof(manager));
+    memset(&asset, 0, sizeof(asset));
+    memset(&mesh, 0, sizeof(mesh));
+    memset(&shader, 0, sizeof(shader));
+    asset.shader = &shader;
+    asset.data.scene_count = 1U;
+    asset.data.active_scene_index = 0U;
+    asset.data.scene_root_counts[0] = 1U;
+    asset.data.scene_root_nodes[0] = 0;
+    asset.data.node_count = 1U;
+    asset.data.nodes[0].parent_index = -1;
+    asset.data.nodes[0].mesh_index = 0;
+    asset.data.nodes[0].camera_index = -1;
+    asset.data.nodes[0].light_index = -1;
+    asset.data.nodes[0].world_matrix = henka_mat4_identity();
+    asset.data.nodes[0].world_transform = henka_transform_identity();
+    asset.data.primitive_count = 1U;
+    asset.data.primitives[0].mesh_index = 0U;
+    asset.data.primitives[0].material_index = -1;
+    asset.primitive_meshes[0] = &mesh;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
+    existing = henka_scene_create_entity_named(target, "Existing");
+    HENKA_TEST_ASSERT(existing != HENKA_INVALID_ENTITY);
+    target->render_revision = UINT64_MAX - UINT64_C(1);
+    target->content_revision = UINT64_MAX - UINT64_C(1);
+    render_revision_before = henka_scene_get_render_revision(target);
+    content_revision_before = target->content_revision;
+    HENKA_TEST_ASSERT(henka_assets_instantiate_gltf_scene(
+        &manager,
+        &asset,
+        target,
+        "Imported ",
+        &entity_count) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(entity_count == 0U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == 1U);
+    HENKA_TEST_ASSERT(henka_scene_is_entity_valid(target, existing));
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(target) == render_revision_before);
+    HENKA_TEST_ASSERT(target->content_revision == content_revision_before);
+    henka_scene_destroy(target);
+}
+
 static void henka_test_mesh_loader_preserves_nonempty_output(void)
 {
     henka_asset_manager manager;
@@ -658,6 +815,8 @@ void henka_test_assets(void)
     henka_test_gltf_scene_dependency_failure_is_transactional();
     henka_test_gltf_scene_light_limit_is_transactional();
     henka_test_gltf_scene_instantiation_preserves_mutator_errors();
+    henka_test_gltf_scene_instantiation_preserves_global_bindings();
+    henka_test_gltf_scene_instantiation_revision_limit_is_transactional();
     henka_test_mesh_loader_preserves_nonempty_output();
     henka_test_mesh_source_failure_requires_fallback();
     henka_test_texture_loader_preserves_nonempty_output();
