@@ -81,10 +81,12 @@ henka_result sandbox3d_play_session_set_input_context(
     sandbox3d_play_input_query input_query,
     void* input_user_data,
     henka_vec3 observer_position);
-/* Installs or replaces one bounded runtime controller configuration while
- * stopped. The document ID must resolve to a live bridge binding. Input is
- * sampled from MOVE_FORWARD/BACK/LEFT/RIGHT and MOVE_UP is treated as jump
- * through the existing Play input callback. */
+/* Installs or replaces one bounded runtime controller override while stopped.
+ * The document ID must resolve to a live bridge binding. When no override is
+ * installed, Play consumes the value-owned controller configuration authored
+ * on the Scene Document object. Input is sampled from
+ * MOVE_FORWARD/BACK/LEFT/RIGHT and MOVE_UP is treated as jump through the
+ * existing Play input callback. */
 henka_result sandbox3d_play_session_set_character_controller(
     sandbox3d_play_session* session,
     const sandbox3d_play_character_controller_config* config);

@@ -239,10 +239,12 @@ scale is not approximated. Destroying a parent promotes its direct children to
 roots while preserving their world transforms, and stale parent handles cannot
 be reused.
 
-HSCN v7 persists parent IDs and an optional authored scene camera, and
-validates references, cycles, and camera values during load; v1-v6 documents
-migrate in memory without being rewritten. Legacy documents without an
-authored camera remain valid and expose no authored camera value.
+HSCN v8 persists parent IDs, an optional authored scene camera, and the
+value-owned Character Controller component, and validates references, cycles,
+camera values, and controller values during load; v1-v6 documents migrate in
+memory without being rewritten, while v7 data defaults the new controller
+component to disabled. Legacy documents without an authored camera remain
+valid and expose no authored camera value.
 Sandbox hierarchy editing, hierarchy history, and participation by every
 runtime subsystem remain subsequent work. The runtime foundation is independent
 of the selection-owner relationship used for editor presentation.

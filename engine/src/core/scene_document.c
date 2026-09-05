@@ -29,6 +29,7 @@
 #define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING UINT32_C(128)
 #define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL UINT32_C(256)
 #define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING UINT32_C(512)
+#define HENKA_SCENE_DOCUMENT_FLAG_CHARACTER_CONTROLLER_ENABLED UINT32_C(1024)
 #define HENKA_SCENE_DOCUMENT_CAMERA_VALUE_COUNT 14U
 #define HENKA_SCENE_DOCUMENT_KNOWN_FLAGS ( \
     HENKA_SCENE_DOCUMENT_FLAG_VISIBLE | \
@@ -40,7 +41,8 @@
     HENKA_SCENE_DOCUMENT_FLAG_AUDIO_ENABLED | \
     HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING | \
     HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL | \
-    HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING)
+    HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING | \
+    HENKA_SCENE_DOCUMENT_FLAG_CHARACTER_CONTROLLER_ENABLED)
 #define HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED UINT32_C(1)
 #define HENKA_SCENE_DOCUMENT_BEHAVIOR_KNOWN_FLAGS \
     HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED
@@ -287,6 +289,7 @@ static henka_result henka_scene_document_validate_object(
     const henka_scene_document_renderer* renderer;
     const henka_scene_document_interaction* interaction;
     const henka_scene_document_physics* physics;
+    const henka_scene_document_character_controller* character_controller;
 
     if (object == NULL || object->id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
         !henka_scene_document_string_is_valid(
@@ -410,6 +413,32 @@ static henka_result henka_scene_document_validate_object(
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
+    }
+    character_controller = &object->character_controller;
+    if (!isfinite(character_controller->radius) ||
+        !isfinite(character_controller->half_height) ||
+        !isfinite(character_controller->max_speed) ||
+        !isfinite(character_controller->jump_speed) ||
+        !isfinite(character_controller->acceleration) ||
+        !isfinite(character_controller->deceleration) ||
+        !isfinite(character_controller->air_control) ||
+        !isfinite(character_controller->slope_limit_degrees) ||
+        (character_controller->enabled &&
+            (character_controller->radius <= 0.0f ||
+                character_controller->half_height < 0.0f ||
+                character_controller->max_speed <= 0.0f ||
+                character_controller->jump_speed < 0.0f ||
+                character_controller->acceleration < 0.0f ||
+                character_controller->deceleration < 0.0f ||
+                character_controller->air_control < 0.0f ||
+                character_controller->air_control > 1.0f ||
+                character_controller->slope_limit_degrees < 0.0f ||
+                character_controller->slope_limit_degrees > 90.0f ||
+                character_controller->layer == 0U ||
+                character_controller->mask == 0U ||
+                physics->enabled)))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (object->behavior_count > HENKA_SCENE_DOCUMENT_MAX_BEHAVIORS_PER_OBJECT)
     {
@@ -544,8 +573,27 @@ henka_scene_document_object henka_scene_document_object_default(void)
     object.physics.material = (henka_physics_material){0.0f, 0.5f, 0.5f, 0.0f, 0.0f};
     object.physics.layer = 1U;
     object.physics.mask = HENKA_PHYSICS_ALL_LAYERS;
+    object.character_controller =
+        henka_scene_document_character_controller_default();
     object.audio = henka_audio_emitter_config_default();
     return object;
+}
+
+henka_scene_document_character_controller
+henka_scene_document_character_controller_default(void)
+{
+    return (henka_scene_document_character_controller){
+        false,
+        0.5f,
+        0.75f,
+        3.0f,
+        4.0f,
+        0.0f,
+        0.0f,
+        1.0f,
+        45.0f,
+        1U,
+        HENKA_PHYSICS_ALL_LAYERS};
 }
 
 henka_scene_document_behavior henka_scene_document_behavior_default(void)
@@ -1291,7 +1339,7 @@ static bool henka_scene_document_payload_size(
                 4U + 4U + 12U + 2U + source_path_length + 4U +
                 2U + material_path_length + 40U + 4U + 2U + prompt_length +
                 4U + 4U + 12U + 4U + 12U + 4U + 20U + 4U + 4U +
-                2U + audio_path_length + 4U + 16U + 4U))
+                2U + audio_path_length + 4U + 16U + 4U + 40U))
         {
             return false;
         }
@@ -1394,6 +1442,8 @@ static void henka_scene_document_encode_object(
     if (object->audio.looping) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_LOOPING;
     if (object->audio.spatial) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_SPATIAL;
     if (object->audio.streaming) flags |= HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING;
+    if (object->character_controller.enabled)
+        flags |= HENKA_SCENE_DOCUMENT_FLAG_CHARACTER_CONTROLLER_ENABLED;
 
     henka_scene_document_writer_u64(writer, object->id);
     henka_scene_document_writer_u64(writer, object->parent_id);
@@ -1465,6 +1515,16 @@ static void henka_scene_document_encode_object(
         henka_scene_document_writer_u32(writer, (uint32_t)behavior->language);
         henka_scene_document_writer_string(writer, behavior->asset_path);
     }
+    henka_scene_document_writer_float(writer, object->character_controller.radius);
+    henka_scene_document_writer_float(writer, object->character_controller.half_height);
+    henka_scene_document_writer_float(writer, object->character_controller.max_speed);
+    henka_scene_document_writer_float(writer, object->character_controller.jump_speed);
+    henka_scene_document_writer_float(writer, object->character_controller.acceleration);
+    henka_scene_document_writer_float(writer, object->character_controller.deceleration);
+    henka_scene_document_writer_float(writer, object->character_controller.air_control);
+    henka_scene_document_writer_float(writer, object->character_controller.slope_limit_degrees);
+    henka_scene_document_writer_u32(writer, object->character_controller.layer);
+    henka_scene_document_writer_u32(writer, object->character_controller.mask);
 }
 
 static bool henka_scene_document_reader_bytes(
@@ -1675,12 +1735,38 @@ static bool henka_scene_document_decode_object(
             behavior->language = (henka_script_language)language;
         }
     }
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        (!henka_scene_document_reader_float(
+            reader, &object->character_controller.radius) ||
+            !henka_scene_document_reader_float(
+                reader, &object->character_controller.half_height) ||
+            !henka_scene_document_reader_float(
+                reader, &object->character_controller.max_speed) ||
+            !henka_scene_document_reader_float(
+                reader, &object->character_controller.jump_speed) ||
+            !henka_scene_document_reader_float(
+                reader, &object->character_controller.acceleration) ||
+            !henka_scene_document_reader_float(
+                reader, &object->character_controller.deceleration) ||
+            !henka_scene_document_reader_float(
+                reader, &object->character_controller.air_control) ||
+            !henka_scene_document_reader_float(
+                reader, &object->character_controller.slope_limit_degrees) ||
+            !henka_scene_document_reader_u32(
+                reader, &object->character_controller.layer) ||
+            !henka_scene_document_reader_u32(
+                reader, &object->character_controller.mask)))
+    {
+        return false;
+    }
     object->visible = (flags & HENKA_SCENE_DOCUMENT_FLAG_VISIBLE) != 0U;
     object->renderer.enabled = (flags & HENKA_SCENE_DOCUMENT_FLAG_RENDERER_ENABLED) != 0U;
     object->renderer.material_override = (flags & HENKA_SCENE_DOCUMENT_FLAG_MATERIAL_OVERRIDE) != 0U;
     object->interaction.enabled = (flags & HENKA_SCENE_DOCUMENT_FLAG_INTERACTION_ENABLED) != 0U;
     object->physics.enabled = (flags & HENKA_SCENE_DOCUMENT_FLAG_PHYSICS_ENABLED) != 0U;
     object->physics.is_trigger = (flags & HENKA_SCENE_DOCUMENT_FLAG_TRIGGER) != 0U;
+    object->character_controller.enabled =
+        (flags & HENKA_SCENE_DOCUMENT_FLAG_CHARACTER_CONTROLLER_ENABLED) != 0U;
     return henka_scene_document_validate_object(object) == HENKA_SUCCESS;
 }
 
@@ -1957,6 +2043,7 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V4 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V6 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V7 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
@@ -2024,7 +2111,7 @@ henka_result henka_scene_document_load_file(
         result = HENKA_ERROR_INVALID_ARGUMENT;
         goto load_cleanup;
     }
-    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V7)
     {
         uint32_t has_camera;
         if (!henka_scene_document_reader_u32(&reader, &has_camera) || has_camera > 1U)

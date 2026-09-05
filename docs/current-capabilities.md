@@ -231,8 +231,10 @@ The public runtime scene now provides a bounded generation-checked parent/child
 transform foundation with cycle rejection, keep-local/keep-world reparenting,
 deterministic direct-child enumeration, subtree propagation, and parent-
 destruction promotion. Passing `HENKA_INVALID_ENTITY` enumerates root entities.
-HSCN v7 persists parent IDs and an optional authored scene camera; v1-v6
-documents migrate objects to roots in memory without rewriting the source file.
+HSCN v8 persists parent IDs, an optional authored scene camera, and the
+value-owned Character Controller component; v1-v6 documents migrate objects to
+roots in memory without rewriting the source file, while v7 data defaults the
+new controller component to disabled.
 Hierarchy editing in the Sandbox, hierarchy
 history, broader imported object registration, complete source/material/project
 serialization, and production gameplay workflows remain open. The public
@@ -558,6 +560,11 @@ live scene/entity link uses the normal physics transform path to keep the
 controller's scene representation synchronized after creation, teleport, and
 successful fixed steps. Destroyed, stale, or replaced scene entities do not
 receive controller writes.
+
+Controller settings can also be authored as value-owned Scene Document data,
+persisted through the current format, migrated from the previous format, and
+consumed by the normal Play session. A transient Play-session configuration can
+override the authored values without changing the document.
 
 Full Character Controller movement remains unfinished: swept movement,
 advanced slope traversal and surface response, advanced moving-platform

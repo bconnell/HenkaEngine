@@ -79,7 +79,7 @@ flowchart LR
 
 The public Character Controller foundation currently supports a real dynamic
 upright capsule body, bounded planar input, optional acceleration and
-deceleration tuning, grounded jump queuing, stale-body rejection, explicit
+deceleration and airborne-control tuning, grounded jump queuing, stale-body rejection, explicit
 teleporting through the physics transform contract, configurable slope-aware
 grounding classification, accepted ground-normal reporting, contact-aware
 planar sliding against blocking contacts, and caller-owned fixed-step
@@ -93,6 +93,11 @@ optional live scene/entity link keeps the controller's scene representation
 synchronized through the normal physics transform path after creation,
 teleport, and successful fixed steps; stale or replaced scene entities do not
 receive writes.
+
+Value-owned controller settings are available in the Scene Document and are
+consumed by Play. The current format persists the settings and loads the prior
+format with the controller component disabled. A stopped Play session may
+apply a transient controller override without mutating authored document data.
 
 The runtime camera foundation now follows a live generation-checked scene
 entity through target-local offsets, immediate positioning, and bounded

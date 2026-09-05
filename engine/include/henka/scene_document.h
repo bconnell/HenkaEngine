@@ -12,7 +12,8 @@
 #include <henka/result.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(7)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(8)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V7 UINT32_C(7)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V6 UINT32_C(6)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 UINT32_C(5)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V4 UINT32_C(4)
@@ -98,6 +99,24 @@ typedef struct henka_scene_document_physics
     uint32_t mask;
 } henka_scene_document_physics;
 
+/* Value-owned controller authoring. The runtime controller creates and owns
+ * its physics body during Play; the document stores only validated settings.
+ * The component is mutually exclusive with an authored physics body. */
+typedef struct henka_scene_document_character_controller
+{
+    bool enabled;
+    float radius;
+    float half_height;
+    float max_speed;
+    float jump_speed;
+    float acceleration;
+    float deceleration;
+    float air_control;
+    float slope_limit_degrees;
+    uint32_t layer;
+    uint32_t mask;
+} henka_scene_document_character_controller;
+
 typedef uint64_t henka_scene_document_behavior_id;
 
 #define HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ((henka_scene_document_behavior_id)0)
@@ -122,6 +141,7 @@ typedef struct henka_scene_document_object
     henka_scene_document_renderer renderer;
     henka_scene_document_interaction interaction;
     henka_scene_document_physics physics;
+    henka_scene_document_character_controller character_controller;
     henka_audio_emitter_config audio;
     size_t behavior_count;
     henka_scene_document_behavior behaviors[HENKA_SCENE_DOCUMENT_MAX_BEHAVIORS_PER_OBJECT];
@@ -130,6 +150,8 @@ typedef struct henka_scene_document_object
 
 henka_scene_document_object henka_scene_document_object_default(void);
 henka_scene_document_behavior henka_scene_document_behavior_default(void);
+henka_scene_document_character_controller
+henka_scene_document_character_controller_default(void);
 
 henka_result henka_scene_document_create(henka_scene_document** out_document);
 void henka_scene_document_destroy(henka_scene_document* document);

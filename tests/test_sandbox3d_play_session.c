@@ -62,7 +62,6 @@ static bool test_character_controller_play_integration(void)
     henka_transform initial_transform;
     henka_transform moved_transform;
     henka_transform jump_transform = {0};
-    sandbox3d_play_character_controller_config controller_config;
     test_character_controller_input input = {false, false, 0U};
     size_t tick_index;
     bool success = false;
@@ -80,6 +79,12 @@ static bool test_character_controller_play_integration(void)
     player.source.primitive = HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX;
     player.source.primitive_dimensions = (henka_vec3){1.0f, 2.0f, 1.0f};
     player.transform.position = (henka_vec3){0.0f, 2.0f, 0.0f};
+    player.character_controller.enabled = true;
+    player.character_controller.radius = 0.45f;
+    player.character_controller.half_height = 0.5f;
+    player.character_controller.max_speed = 2.0f;
+    player.character_controller.jump_speed = 4.0f;
+    player.character_controller.slope_limit_degrees = 45.0f;
     (void)snprintf(ground.name, sizeof(ground.name), "%s", "Controller Ground");
     (void)snprintf(player.name, sizeof(player.name), "%s", "Controller Player");
 
@@ -105,21 +110,7 @@ static bool test_character_controller_play_integration(void)
         goto cleanup;
     }
 
-    controller_config = (sandbox3d_play_character_controller_config){
-        player_id,
-        0.45f,
-        0.5f,
-        2.0f,
-        4.0f,
-        0.0f,
-        0.0f,
-        1.0f,
-        45.0f,
-        1U,
-        HENKA_PHYSICS_ALL_LAYERS};
-    if (sandbox3d_play_session_set_character_controller(
-            session, &controller_config) != HENKA_SUCCESS ||
-        henka_scene_get_entity_transform(scene, player_entity, &initial_transform) != HENKA_SUCCESS ||
+    if (henka_scene_get_entity_transform(scene, player_entity, &initial_transform) != HENKA_SUCCESS ||
         sandbox3d_play_session_start(session) != HENKA_SUCCESS)
     {
         goto cleanup;

@@ -457,7 +457,7 @@ static bool test_scene_document_write_v2_fixture(const char* path)
     return result;
 }
 
-static bool test_scene_document_write_v3_to_v6_fixture(
+static bool test_scene_document_write_v3_to_v7_fixture(
     const char* path,
     uint32_t version)
 {
@@ -469,7 +469,9 @@ static bool test_scene_document_write_v3_to_v6_fixture(
     FILE* file;
     bool result = true;
 
-    if (path == NULL || (version != 3U && version != 4U && version != 5U && version != 6U))
+    if (path == NULL ||
+        (version != 3U && version != 4U && version != 5U &&
+            version != 6U && version != 7U))
     {
         return false;
     }
@@ -489,7 +491,8 @@ static bool test_scene_document_write_v3_to_v6_fixture(
         payload,
         sizeof(payload),
         &position,
-        version == 3U ? "v3" : (version == 4U ? "v4" : (version == 5U ? "v5" : "v6")));
+        version == 3U ? "v3" : (version == 4U ? "v4" :
+            (version == 5U ? "v5" : (version == 6U ? "v6" : "v7"))));
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.x);
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.y);
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.z);
@@ -555,6 +558,11 @@ static bool test_scene_document_write_v3_to_v6_fixture(
         result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.up.x);
         result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.up.y);
         result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.up.z);
+    }
+    if (version >= 7U)
+    {
+        result = result && test_scene_document_legacy_write_u32(
+            payload, sizeof(payload), &position, 0U);
     }
     if (!result)
     {
@@ -642,6 +650,7 @@ int main(void)
     const char* v4_path = "build/test_tmp/scene_document_legacy_v4.hscene";
     const char* v5_path = "build/test_tmp/scene_document_legacy_v5.hscene";
     const char* v6_path = "build/test_tmp/scene_document_legacy_v6.hscene";
+    const char* v7_path = "build/test_tmp/scene_document_legacy_v7.hscene";
     const char* camera_path = "build/test_tmp/scene_document_camera.hscene";
     const unsigned char malformed_data[] = {'H', 'S', 'C', 'N', 1U};
     henka_scene_document* document = NULL;
@@ -650,6 +659,7 @@ int main(void)
     henka_scene_document* camera_document = NULL;
     henka_scene_document_object object;
     henka_scene_document_object loaded_object;
+    henka_scene_document_object invalid_object;
     henka_scene_document_object maximum_id_object;
     henka_scene_document_object recycled_id_object;
     henka_scene_document_behavior behavior;
@@ -728,6 +738,15 @@ int main(void)
                 object.audio.clip_path,
                 sizeof(object.audio.clip_path),
                 "audio/scene_wind.wav");
+            object.character_controller.enabled = true;
+            object.character_controller.radius = 0.45f;
+            object.character_controller.half_height = 0.5f;
+            object.character_controller.max_speed = 2.0f;
+            object.character_controller.jump_speed = 4.0f;
+            object.character_controller.acceleration = 3.0f;
+            object.character_controller.deceleration = 5.0f;
+            object.character_controller.air_control = 0.75f;
+            object.character_controller.slope_limit_degrees = 42.0f;
         }
         if (henka_scene_document_add_object(document, &object, &added_id) != HENKA_SUCCESS)
         {
@@ -774,17 +793,17 @@ int main(void)
         henka_scene_document_validate(document) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", second_path) != HENKA_SUCCESS ||
-        !test_scene_document_write_v3_to_v6_fixture(v3_path, 3U) ||
+        !test_scene_document_write_v3_to_v7_fixture(v3_path, 3U) ||
         !test_scene_document_files_equal(first_path, second_path) ||
         !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)) ||
         henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=7 objects=257") == NULL)
+        inspection_size == 0U || strstr(inspection, "HSCN version=8 objects=257") == NULL)
     {
         fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v3_to_v6_fixture(v5_path, 5U) ||
+    if (!test_scene_document_write_v3_to_v7_fixture(v5_path, 5U) ||
         henka_scene_document_load_file(loaded, ".", v5_path) != HENKA_SUCCESS ||
         henka_scene_document_get_object_at(loaded, 0U, &loaded_object) != HENKA_SUCCESS ||
         loaded_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
@@ -807,13 +826,21 @@ int main(void)
         loaded_object.audio.min_distance != 2.0f ||
         loaded_object.audio.max_distance != 40.0f ||
         strcmp(loaded_object.audio.clip_path, "audio/scene_wind.wav") != 0 ||
+        !loaded_object.character_controller.enabled ||
+        loaded_object.character_controller.radius != 0.45f ||
+        loaded_object.character_controller.half_height != 0.5f ||
+        loaded_object.character_controller.max_speed != 2.0f ||
+        loaded_object.character_controller.jump_speed != 4.0f ||
+        loaded_object.character_controller.acceleration != 3.0f ||
+        loaded_object.character_controller.deceleration != 5.0f ||
+        loaded_object.character_controller.air_control != 0.75f ||
+        loaded_object.character_controller.slope_limit_degrees != 42.0f ||
         henka_scene_document_get_audio_listener(loaded, &loaded_listener) != HENKA_SUCCESS ||
         loaded_listener.position.x != authored_listener.position.x ||
         loaded_listener.position.y != authored_listener.position.y ||
         loaded_listener.position.z != authored_listener.position.z ||
         loaded_listener.forward.y != authored_listener.forward.y ||
         loaded_listener.up.z != authored_listener.up.z ||
-        henka_scene_document_get_object(loaded, duplicate_id, &loaded_object) != HENKA_SUCCESS ||
         henka_scene_document_get_behavior_count(loaded, first_id) != 1U ||
         henka_scene_document_get_behavior(
             loaded,
@@ -824,6 +851,18 @@ int main(void)
         strcmp(loaded_behavior.asset_path, "scripts/rotate.lua") != 0)
     {
         fprintf(stderr, "scene document test failed during round-trip load\n");
+        goto cleanup;
+    }
+    invalid_object = loaded_object;
+    invalid_object.character_controller.radius = 0.0f;
+    invalid_object.physics.enabled = true;
+    if (henka_scene_document_set_object(loaded, &invalid_object) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_scene_document_get_object(loaded, first_id, &invalid_object) != HENKA_SUCCESS ||
+        !invalid_object.character_controller.enabled ||
+        invalid_object.character_controller.radius != 0.45f ||
+        invalid_object.physics.enabled)
+    {
+        fprintf(stderr, "scene document test failed during invalid controller transaction\n");
         goto cleanup;
     }
     if (henka_scene_document_get_object(loaded, duplicate_id, &loaded_object) != HENKA_SUCCESS ||
@@ -896,7 +935,7 @@ int main(void)
         fprintf(stderr, "scene document test failed during v1 migration\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v3_to_v6_fixture(v4_path, 4U) ||
+    if (!test_scene_document_write_v3_to_v7_fixture(v4_path, 4U) ||
         henka_scene_document_load_file(loaded, ".", v4_path) != HENKA_SUCCESS ||
         henka_scene_document_get_object(loaded, first_id, &loaded_object) != HENKA_SUCCESS ||
         loaded_object.audio.streaming)
@@ -904,12 +943,21 @@ int main(void)
         fprintf(stderr, "scene document test failed during v4 migration\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v3_to_v6_fixture(v6_path, 6U) ||
+    if (!test_scene_document_write_v3_to_v7_fixture(v6_path, 6U) ||
         henka_scene_document_load_file(loaded, ".", v6_path) != HENKA_SUCCESS ||
         henka_scene_document_has_camera(loaded) ||
         henka_scene_document_get_camera(loaded, &(henka_camera){0}) == HENKA_SUCCESS)
     {
         fprintf(stderr, "scene document test failed during v6 compatibility load\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_write_v3_to_v7_fixture(v7_path, 7U) ||
+        henka_scene_document_load_file(loaded, ".", v7_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_object_at(loaded, 0U, &loaded_object) != HENKA_SUCCESS ||
+        loaded_object.character_controller.enabled ||
+        henka_scene_document_has_camera(loaded))
+    {
+        fprintf(stderr, "scene document test failed during v7 compatibility load\n");
         goto cleanup;
     }
     authored_camera = henka_camera_create_perspective(
@@ -1006,7 +1054,7 @@ int main(void)
         !loaded_object.audio.streaming ||
         henka_scene_document_format_inspection(
             loaded, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        strstr(inspection, "HSCN version=7") == NULL)
+        strstr(inspection, "HSCN version=8") == NULL)
     {
         fprintf(stderr, "scene document test failed during streamed audio v7 round-trip\n");
         goto cleanup;
