@@ -760,6 +760,32 @@ henka_result henka_scene_document_copy(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_document_swap_contents(
+    henka_scene_document* destination,
+    henka_scene_document* prepared_source)
+{
+    henka_scene_document_storage* storage;
+
+    if (destination == NULL || destination->storage == NULL ||
+        prepared_source == NULL || prepared_source->storage == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (destination == prepared_source)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (henka_scene_document_validate(destination) != HENKA_SUCCESS ||
+        henka_scene_document_validate(prepared_source) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    storage = destination->storage;
+    destination->storage = prepared_source->storage;
+    prepared_source->storage = storage;
+    return HENKA_SUCCESS;
+}
+
 size_t henka_scene_document_get_object_count(const henka_scene_document* document)
 {
     return document == NULL || document->storage == NULL ? 0U : document->storage->object_count;

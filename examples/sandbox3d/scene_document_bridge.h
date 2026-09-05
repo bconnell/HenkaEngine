@@ -59,6 +59,10 @@ henka_result sandbox3d_scene_document_bridge_get_entity(
 henka_result sandbox3d_scene_document_bridge_apply_object(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id);
+/* Applies all bound object presentations after staging every fallible scene
+ * allocation. A failure leaves the live scene unchanged. */
+henka_result sandbox3d_scene_document_bridge_apply_objects(
+    const sandbox3d_scene_document_bridge* bridge);
 /* Applies one supplied object value to a candidate scene. The candidate must
  * be discarded unless all related authoring operations also succeed; this
  * helper does not mutate the borrowed Scene Document. */

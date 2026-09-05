@@ -439,27 +439,41 @@ static bool sandbox3d_scene_document_bridge_material_scalars_equal(
         left->emissive_strength == right->emissive_strength;
 }
 
-henka_result sandbox3d_scene_document_bridge_apply_object_candidate(
+static henka_result sandbox3d_scene_document_bridge_build_object_update(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id,
-    const henka_scene_document_object* object)
+    const henka_scene_document_object* object,
+    henka_entity* out_entity,
+    henka_scene_entity_presentation_update* out_update)
 {
     henka_material previous_material;
     henka_material material = henka_material_default();
     const henka_material_asset* material_asset = NULL;
-    henka_scene_entity_presentation_update update;
-    henka_entity entity;
     bool material_changed = false;
 
-    if (bridge == NULL || object == NULL ||
-        object->id != document_id || bridge->play_locked ||
+    if (out_entity != NULL)
+    {
+        *out_entity = HENKA_INVALID_ENTITY;
+    }
+    if (out_update != NULL)
+    {
+        *out_update = (henka_scene_entity_presentation_update){0};
+    }
+    if (bridge == NULL || object == NULL || out_entity == NULL ||
+        out_update == NULL || object->id != document_id || bridge->play_locked ||
         sandbox3d_scene_document_bridge_get_entity(
-            bridge, document_id, &entity) != HENKA_SUCCESS)
+            bridge, document_id, out_entity) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (henka_scene_get_entity_material(bridge->scene, entity, &previous_material) != HENKA_SUCCESS ||
-        henka_scene_get_entity_material_asset(bridge->scene, entity, &material_asset) != HENKA_SUCCESS)
+    if (henka_scene_get_entity_material(
+            bridge->scene,
+            *out_entity,
+            &previous_material) != HENKA_SUCCESS ||
+        henka_scene_get_entity_material_asset(
+            bridge->scene,
+            *out_entity,
+            &material_asset) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -467,7 +481,7 @@ henka_result sandbox3d_scene_document_bridge_apply_object_candidate(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    update = (henka_scene_entity_presentation_update){
+    *out_update = (henka_scene_entity_presentation_update){
         object->name,
         object->transform,
         object->visible,
@@ -485,11 +499,32 @@ henka_result sandbox3d_scene_document_bridge_apply_object_candidate(
         material.roughness = object->renderer.roughness;
         material.emissive_color = object->renderer.emissive;
         material.emissive_strength = object->renderer.emissive_strength;
-        update.material = material;
+        out_update->material = material;
         material_changed = !sandbox3d_scene_document_bridge_material_scalars_equal(
             &previous_material,
             &material);
-        update.apply_material = material_changed;
+        out_update->apply_material = material_changed;
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_scene_document_bridge_apply_object_candidate(
+    const sandbox3d_scene_document_bridge* bridge,
+    henka_scene_document_id document_id,
+    const henka_scene_document_object* object)
+{
+    henka_scene_entity_presentation_update update;
+    henka_entity entity;
+    henka_result result =
+        sandbox3d_scene_document_bridge_build_object_update(
+            bridge,
+            document_id,
+            object,
+            &entity,
+            &update);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
     return henka_scene_apply_entity_presentation(
         bridge->scene,
@@ -513,6 +548,66 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
         bridge,
         document_id,
         &object);
+}
+
+henka_result sandbox3d_scene_document_bridge_apply_objects(
+    const sandbox3d_scene_document_bridge* bridge)
+{
+    henka_entity* entities = NULL;
+    henka_scene_document_object* objects = NULL;
+    henka_scene_entity_presentation_update* updates = NULL;
+    size_t index;
+    henka_result result = HENKA_SUCCESS;
+
+    if (bridge == NULL || bridge->play_locked ||
+        sandbox3d_scene_document_bridge_validate(bridge) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (bridge->binding_count == 0U)
+    {
+        return HENKA_SUCCESS;
+    }
+    entities = henka_calloc(bridge->binding_count, sizeof(*entities));
+    objects = henka_calloc(bridge->binding_count, sizeof(*objects));
+    updates = henka_calloc(bridge->binding_count, sizeof(*updates));
+    if (entities == NULL || objects == NULL || updates == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    for (index = 0U; index < bridge->binding_count; ++index)
+    {
+        result = henka_scene_document_get_object(
+            bridge->document,
+            bridge->bindings[index].document_id,
+            &objects[index]);
+        if (result != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        result = sandbox3d_scene_document_bridge_build_object_update(
+            bridge,
+            bridge->bindings[index].document_id,
+            &objects[index],
+            &entities[index],
+            &updates[index]);
+        if (result != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    result = henka_scene_apply_entity_presentation_batch(
+        bridge->scene,
+        entities,
+        updates,
+        bridge->binding_count);
+
+cleanup:
+    henka_free(updates);
+    henka_free(objects);
+    henka_free(entities);
+    return result;
 }
 
 static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(

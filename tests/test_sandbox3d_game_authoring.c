@@ -10,6 +10,7 @@
 #include <henka/scene.h>
 
 #include "../examples/sandbox3d/game_authoring.h"
+#include "../engine/src/core/memory_internal.h"
 #include "../engine/src/scene/scene_internal.h"
 
 static void test_write_u16(unsigned char* bytes, size_t offset, uint16_t value)
@@ -242,6 +243,282 @@ cleanup:
     return success;
 }
 
+static bool test_load_allocation_failure_is_transactional(void)
+{
+    const char* relative_path =
+        "build/test_tmp/game_authoring_load_allocation_transaction.hscene";
+    bool observed_out_of_memory = false;
+    bool observed_success = false;
+    bool success = true;
+    size_t failure_budget;
+
+    for (failure_budget = 0U; failure_budget < 512U; ++failure_budget)
+    {
+        henka_scene* scene = NULL;
+        sandbox3d_game_authoring* authoring = NULL;
+        henka_scene_document* candidate_document = NULL;
+        henka_scene_document_object parent_object;
+        henka_scene_document_object child_object;
+        henka_scene_document_object loaded_parent;
+        henka_scene_document_object loaded_child;
+        henka_camera camera;
+        henka_entity parent = HENKA_INVALID_ENTITY;
+        henka_entity child = HENKA_INVALID_ENTITY;
+        henka_scene_document_id parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+        henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+        henka_scene_document_id candidate_parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+        henka_scene_document_id candidate_child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+        henka_entity parent_after = HENKA_INVALID_ENTITY;
+        henka_transform parent_transform_after;
+        henka_interaction_desc parent_interaction_before;
+        henka_interaction_desc parent_interaction_after;
+        henka_interaction_desc child_interaction_before;
+        henka_interaction_desc child_interaction_after;
+        uint64_t render_revision_before;
+        uint64_t content_revision_before;
+        henka_result result;
+
+        camera = henka_camera_create_perspective(
+            60.0f * HENKA_DEG_TO_RAD,
+            16.0f / 9.0f,
+            0.1f,
+            100.0f);
+        if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+            henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS ||
+            sandbox3d_game_authoring_create(
+                scene,
+                relative_path,
+                &authoring) != HENKA_SUCCESS)
+        {
+            success = false;
+            goto iteration_cleanup;
+        }
+        parent = henka_scene_create_entity_named(scene, "Allocation Parent");
+        child = henka_scene_create_entity_named(scene, "Allocation Child");
+        if (parent == HENKA_INVALID_ENTITY ||
+            child == HENKA_INVALID_ENTITY ||
+            sandbox3d_game_authoring_register_entity(
+                authoring,
+                parent,
+                &parent_id) != HENKA_SUCCESS ||
+            sandbox3d_game_authoring_register_entity(
+                authoring,
+                child,
+                &child_id) != HENKA_SUCCESS ||
+            henka_scene_document_create(&candidate_document) != HENKA_SUCCESS)
+        {
+            success = false;
+            goto iteration_cleanup;
+        }
+
+        parent_object = henka_scene_document_object_default();
+        child_object = henka_scene_document_object_default();
+        if (henka_scene_document_add_object(
+                candidate_document,
+                &parent_object,
+                &candidate_parent_id) != HENKA_SUCCESS ||
+            henka_scene_document_add_object(
+                candidate_document,
+                &child_object,
+                &candidate_child_id) != HENKA_SUCCESS ||
+            candidate_parent_id != parent_id ||
+            candidate_child_id != child_id ||
+            henka_scene_document_get_object(
+                candidate_document,
+                candidate_parent_id,
+                &parent_object) != HENKA_SUCCESS ||
+            henka_scene_document_get_object(
+                candidate_document,
+                candidate_child_id,
+                &child_object) != HENKA_SUCCESS)
+        {
+            success = false;
+            goto iteration_cleanup;
+        }
+
+        (void)snprintf(
+            parent_object.name,
+            sizeof(parent_object.name),
+            "%s",
+            "Loaded Allocation Parent");
+        (void)snprintf(
+            child_object.name,
+            sizeof(child_object.name),
+            "%s",
+            "Loaded Allocation Child");
+        parent_object.transform.position.x = 4.0f;
+        child_object.transform.position.y = 2.0f;
+        parent_object.interaction.enabled = true;
+        parent_object.interaction.max_distance = 8.0f;
+        (void)snprintf(
+            parent_object.interaction.prompt,
+            sizeof(parent_object.interaction.prompt),
+            "%s",
+            "Inspect loaded parent");
+        child_object.interaction.enabled = true;
+        child_object.interaction.max_distance = 6.0f;
+        (void)snprintf(
+            child_object.interaction.prompt,
+            sizeof(child_object.interaction.prompt),
+            "%s",
+            "Inspect loaded child");
+        child_object.parent_id = candidate_parent_id;
+        if (henka_scene_document_set_object(
+                candidate_document,
+                &parent_object) != HENKA_SUCCESS ||
+            henka_scene_document_set_object(
+                candidate_document,
+                &child_object) != HENKA_SUCCESS ||
+            henka_scene_document_save_file(
+                candidate_document,
+                ".",
+                relative_path) != HENKA_SUCCESS ||
+            henka_scene_get_entity_transform(
+                scene,
+                parent,
+                &parent_transform_after) != HENKA_SUCCESS ||
+            henka_scene_get_entity_interaction(
+                scene,
+                parent,
+                &parent_interaction_before) != HENKA_SUCCESS ||
+            henka_scene_get_entity_interaction(
+                scene,
+                child,
+                &child_interaction_before) != HENKA_SUCCESS ||
+            henka_scene_get_entity_interaction(
+                scene,
+                parent,
+                &parent_interaction_after) != HENKA_SUCCESS ||
+            henka_scene_get_entity_interaction(
+                scene,
+                child,
+                &child_interaction_after) != HENKA_SUCCESS)
+        {
+            success = false;
+            goto iteration_cleanup;
+        }
+        render_revision_before = scene->render_revision;
+        content_revision_before = scene->content_revision;
+
+        henka_memory_test_fail_after(failure_budget);
+        result = sandbox3d_game_authoring_load(authoring, ".");
+        henka_memory_test_disable_failures();
+
+        if (sandbox3d_game_authoring_get_object_for_entity(
+                authoring,
+                parent,
+                &parent_id,
+                &loaded_parent) != HENKA_SUCCESS ||
+            sandbox3d_game_authoring_get_object_for_entity(
+                authoring,
+                child,
+                &child_id,
+                &loaded_child) != HENKA_SUCCESS ||
+            henka_scene_get_entity_parent(
+                scene,
+                child,
+                &parent_after) != HENKA_SUCCESS ||
+            henka_scene_get_entity_transform(
+                scene,
+                parent,
+                &parent_transform_after) != HENKA_SUCCESS ||
+            henka_scene_get_entity_interaction(
+                scene,
+                parent,
+                &parent_interaction_after) != HENKA_SUCCESS ||
+            henka_scene_get_entity_interaction(
+                scene,
+                child,
+                &child_interaction_after) != HENKA_SUCCESS)
+        {
+            success = false;
+            goto iteration_cleanup;
+        }
+
+        if (result == HENKA_ERROR_OUT_OF_MEMORY)
+        {
+            observed_out_of_memory = true;
+            if (strcmp(loaded_parent.name, "Allocation Parent") != 0 ||
+                strcmp(loaded_child.name, "Allocation Child") != 0 ||
+                strcmp(henka_scene_get_entity_name(scene, parent),
+                    "Allocation Parent") != 0 ||
+                strcmp(henka_scene_get_entity_name(scene, child),
+                    "Allocation Child") != 0 ||
+                loaded_parent.transform.position.x != 0.0f ||
+                loaded_child.transform.position.y != 0.0f ||
+                parent_after != HENKA_INVALID_ENTITY ||
+                parent_transform_after.position.x != 0.0f ||
+                parent_interaction_after.enabled != parent_interaction_before.enabled ||
+                parent_interaction_after.max_distance != parent_interaction_before.max_distance ||
+                ((parent_interaction_after.prompt == NULL) !=
+                    (parent_interaction_before.prompt == NULL)) ||
+                (parent_interaction_after.prompt != NULL &&
+                    strcmp(parent_interaction_after.prompt,
+                        parent_interaction_before.prompt) != 0) ||
+                child_interaction_after.enabled != child_interaction_before.enabled ||
+                child_interaction_after.max_distance != child_interaction_before.max_distance ||
+                ((child_interaction_after.prompt == NULL) !=
+                    (child_interaction_before.prompt == NULL)) ||
+                (child_interaction_after.prompt != NULL &&
+                    strcmp(child_interaction_after.prompt,
+                        child_interaction_before.prompt) != 0) ||
+                scene->render_revision != render_revision_before ||
+                scene->content_revision != content_revision_before)
+            {
+                fprintf(
+                    stderr,
+                    "allocation-failure load mutated state at budget %zu\n",
+                    failure_budget);
+                success = false;
+                goto iteration_cleanup;
+            }
+        }
+        else if (result == HENKA_SUCCESS)
+        {
+            observed_success = true;
+            if (strcmp(loaded_parent.name, "Loaded Allocation Parent") != 0 ||
+                strcmp(loaded_child.name, "Loaded Allocation Child") != 0 ||
+                strcmp(henka_scene_get_entity_name(scene, parent),
+                    "Loaded Allocation Parent") != 0 ||
+                strcmp(henka_scene_get_entity_name(scene, child),
+                    "Loaded Allocation Child") != 0 ||
+                parent_after != parent ||
+                parent_transform_after.position.x != 4.0f ||
+                !parent_interaction_after.enabled ||
+                parent_interaction_after.max_distance != 8.0f ||
+                strcmp(parent_interaction_after.prompt, "Inspect loaded parent") != 0 ||
+                !child_interaction_after.enabled ||
+                child_interaction_after.max_distance != 6.0f ||
+                strcmp(child_interaction_after.prompt, "Inspect loaded child") != 0)
+            {
+                success = false;
+            }
+        }
+        else
+        {
+            fprintf(
+                stderr,
+                "allocation-failure load returned unexpected result %d at budget %zu\n",
+                (int)result,
+                failure_budget);
+            success = false;
+        }
+
+iteration_cleanup:
+        henka_memory_test_disable_failures();
+        henka_scene_document_destroy(candidate_document);
+        sandbox3d_game_authoring_destroy(authoring);
+        henka_scene_destroy(scene);
+        if (!success || observed_success)
+        {
+            break;
+        }
+    }
+
+    (void)remove(relative_path);
+    return success && observed_out_of_memory && observed_success;
+}
+
 int main(void)
 {
     const char* relative_path = "build/test_tmp/game_authoring_slice.hscene";
@@ -286,6 +563,11 @@ int main(void)
     if (!test_load_failure_is_transactional())
     {
         fprintf(stderr, "game authoring load transaction test failed\n");
+        return 1;
+    }
+    if (!test_load_allocation_failure_is_transactional())
+    {
+        fprintf(stderr, "game authoring allocation-failure load transaction test failed\n");
         return 1;
     }
 

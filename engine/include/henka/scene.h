@@ -319,6 +319,13 @@ henka_result henka_scene_create(henka_scene** out_scene);
 henka_result henka_scene_clone(
     const henka_scene* source,
     henka_scene** out_clone);
+/* Replaces destination with a validated clone whose entity slot identities
+ * match destination. The operation performs no allocation and preserves
+ * destination's external physics/audio links, so it is suitable for an
+ * already-prepared transaction commit. */
+henka_result henka_scene_replace_contents(
+    henka_scene* destination,
+    henka_scene* prepared_source);
 void henka_scene_destroy(henka_scene* scene);
 /* Returns the monotonically changing scene render revision.  Any public scene
  * mutation that can change visible geometry, transforms, materials, bounds,
@@ -420,6 +427,14 @@ henka_result henka_scene_apply_entity_presentation(
     henka_scene* scene,
     henka_entity entity,
     const henka_scene_entity_presentation_update* update);
+/* Applies a bounded set of presentation updates as one scene transaction.
+ * Every fallible allocation is completed before the first entity or revision
+ * is changed; a failure therefore leaves the scene untouched. */
+henka_result henka_scene_apply_entity_presentation_batch(
+    henka_scene* scene,
+    const henka_entity* entities,
+    const henka_scene_entity_presentation_update* updates,
+    size_t update_count);
 henka_result henka_scene_translate_entity(henka_scene* scene, henka_entity entity, henka_vec3 delta);
 henka_result henka_scene_rotate_entity(henka_scene* scene, henka_entity entity, henka_quat delta_rotation);
 henka_result henka_scene_scale_entity(henka_scene* scene, henka_entity entity, henka_vec3 scale_multiplier);

@@ -128,33 +128,6 @@ static henka_result sandbox3d_game_authoring_build_object(
     return HENKA_SUCCESS;
 }
 
-static henka_result sandbox3d_game_authoring_copy_document(
-    const henka_scene_document* source,
-    henka_scene_document** out_copy)
-{
-    henka_scene_document* copy = NULL;
-    henka_result result;
-
-    if (source == NULL || out_copy == NULL)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    *out_copy = NULL;
-    result = henka_scene_document_create(&copy);
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
-    }
-    result = henka_scene_document_copy(copy, source);
-    if (result != HENKA_SUCCESS)
-    {
-        henka_scene_document_destroy(copy);
-        return result;
-    }
-    *out_copy = copy;
-    return HENKA_SUCCESS;
-}
-
 static henka_result sandbox3d_game_authoring_set_project_root(
     sandbox3d_game_authoring* authoring,
     const char* project_root)
@@ -199,13 +172,6 @@ static henka_result sandbox3d_game_authoring_get_state_relative_path(
     return (size_t)written >= out_path_capacity
         ? HENKA_ERROR_LIMIT
         : HENKA_SUCCESS;
-}
-
-static henka_result sandbox3d_game_authoring_restore_document(
-    henka_scene_document* destination,
-    const henka_scene_document* source)
-{
-    return henka_scene_document_copy(destination, source);
 }
 
 henka_result sandbox3d_game_authoring_create(
@@ -906,20 +872,13 @@ henka_result sandbox3d_game_authoring_load(
     const char* project_root)
 {
     henka_scene_document* candidate = NULL;
-    henka_scene_document* previous = NULL;
     henka_scene* candidate_scene = NULL;
     sandbox3d_scene_document_bridge* candidate_bridge = NULL;
     size_t index;
-    henka_camera previous_camera;
-    henka_result rollback_result;
     henka_result result;
     if (authoring == NULL || project_root == NULL ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
         strlen(project_root) >= HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    if (henka_scene_get_camera(authoring->scene, &previous_camera) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -969,13 +928,9 @@ henka_result sandbox3d_game_authoring_load(
             authoring->bindings[index].document_id,
             authoring->bindings[index].entity);
     }
-    for (index = 0U;
-        index < authoring->binding_count && result == HENKA_SUCCESS;
-        ++index)
+    if (result == HENKA_SUCCESS)
     {
-        result = sandbox3d_scene_document_bridge_apply_object(
-            candidate_bridge,
-            authoring->bindings[index].document_id);
+        result = sandbox3d_scene_document_bridge_apply_objects(candidate_bridge);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -989,85 +944,44 @@ henka_result sandbox3d_game_authoring_load(
     }
     sandbox3d_scene_document_bridge_destroy(candidate_bridge);
     candidate_bridge = NULL;
-    henka_scene_destroy(candidate_scene);
-    candidate_scene = NULL;
     if (result != HENKA_SUCCESS)
     {
         goto load_cleanup;
-    }
-    result = sandbox3d_game_authoring_copy_document(authoring->document, &previous);
-    if (result != HENKA_SUCCESS)
-    {
-        henka_scene_document_destroy(candidate);
-        return result;
     }
     /* Publish only a candidate whose persistent object IDs exactly match the
      * live binding set. Runtime entities remain generation-checked derived
      * state; names are not identity and cannot silently remap a loaded file. */
-    result = sandbox3d_game_authoring_restore_document(
-        authoring->document,
-        candidate);
+    result = henka_scene_replace_contents(authoring->scene, candidate_scene);
     if (result != HENKA_SUCCESS)
     {
         goto load_cleanup;
     }
-    for (index = 0U; index < authoring->binding_count; ++index)
+    result = henka_scene_document_swap_contents(
+        authoring->document,
+        candidate);
+    if (result != HENKA_SUCCESS)
     {
-        result = sandbox3d_scene_document_bridge_apply_object(
-            authoring->bridge,
-            authoring->bindings[index].document_id);
-        if (result != HENKA_SUCCESS)
+        /* Both swaps are allocation-free. Restore the first swap if the
+         * validated document invariant is violated rather than reconstructing
+         * state through fallible setters. */
+        if (henka_scene_replace_contents(authoring->scene, candidate_scene) !=
+            HENKA_SUCCESS)
         {
-            goto load_rollback;
+            result = HENKA_ERROR_UNKNOWN;
         }
-    }
-    result = sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge);
-    if (result != HENKA_SUCCESS)
-    {
-        goto load_rollback;
-    }
-    result = sandbox3d_scene_document_bridge_apply_camera(authoring->bridge);
-    if (result != HENKA_SUCCESS)
-    {
-        goto load_rollback;
+        goto load_cleanup;
     }
     henka_scene_document_destroy(candidate);
-    henka_scene_document_destroy(previous);
+    candidate = NULL;
+    henka_scene_destroy(candidate_scene);
+    candidate_scene = NULL;
     (void)sandbox3d_game_authoring_set_project_root(authoring, project_root);
     return result;
 
-load_rollback:
-    rollback_result = sandbox3d_game_authoring_restore_document(
-        authoring->document,
-        previous);
-    for (index = 0U; index < authoring->binding_count; ++index)
-    {
-        if (sandbox3d_scene_document_bridge_apply_object(
-                authoring->bridge,
-                authoring->bindings[index].document_id) != HENKA_SUCCESS)
-        {
-            rollback_result = HENKA_ERROR_UNKNOWN;
-        }
-    }
-    if (sandbox3d_scene_document_bridge_apply_hierarchy(authoring->bridge) !=
-        HENKA_SUCCESS)
-    {
-        rollback_result = HENKA_ERROR_UNKNOWN;
-    }
-    if (henka_scene_set_camera(authoring->scene, &previous_camera) !=
-        HENKA_SUCCESS)
-    {
-        rollback_result = HENKA_ERROR_UNKNOWN;
-    }
-    if (rollback_result != HENKA_SUCCESS)
-    {
-        result = HENKA_ERROR_UNKNOWN;
-    }
 load_cleanup:
     sandbox3d_scene_document_bridge_destroy(candidate_bridge);
     henka_scene_destroy(candidate_scene);
     henka_scene_document_destroy(candidate);
-    henka_scene_document_destroy(previous);
     return result;
 }
 

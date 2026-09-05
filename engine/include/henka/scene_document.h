@@ -162,6 +162,13 @@ henka_result henka_scene_document_clear(henka_scene_document* document);
 henka_result henka_scene_document_copy(
     henka_scene_document* destination,
     const henka_scene_document* source);
+/* Swaps validated fixed-storage contents without allocating. The document
+ * objects remain at their original addresses so borrowed bridge pointers stay
+ * valid; the prepared source owns the previous destination contents after
+ * the swap. */
+henka_result henka_scene_document_swap_contents(
+    henka_scene_document* destination,
+    henka_scene_document* prepared_source);
 size_t henka_scene_document_get_object_count(const henka_scene_document* document);
 henka_result henka_scene_document_get_object_at(
     const henka_scene_document* document,

@@ -1290,6 +1290,275 @@ henka_result henka_scene_apply_entity_presentation(
     return HENKA_SUCCESS;
 }
 
+typedef struct henka_prepared_entity_presentation
+{
+    henka_scene_entity_record* record;
+    henka_entity entity;
+    henka_scene_entity_presentation_update update;
+    henka_transform sanitized_transform;
+    henka_transform local_transform;
+    char* new_name;
+    char* new_prompt;
+    char* new_material_name;
+    bool name_changed;
+    bool transform_changed;
+    bool visible_changed;
+    bool interaction_changed;
+    bool material_changed;
+} henka_prepared_entity_presentation;
+
+static void henka_scene_discard_prepared_entity_presentations(
+    henka_prepared_entity_presentation* prepared,
+    size_t count)
+{
+    size_t index;
+    if (prepared == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < count; ++index)
+    {
+        henka_free(prepared[index].new_name);
+        henka_free(prepared[index].new_prompt);
+        henka_free(prepared[index].new_material_name);
+    }
+    henka_free(prepared);
+}
+
+henka_result henka_scene_apply_entity_presentation_batch(
+    henka_scene* scene,
+    const henka_entity* entities,
+    const henka_scene_entity_presentation_update* updates,
+    size_t update_count)
+{
+    henka_prepared_entity_presentation* prepared = NULL;
+    size_t allocation_size;
+    size_t index;
+    uint64_t mutation_count = 0U;
+    henka_result result = HENKA_SUCCESS;
+
+    if (scene == NULL || entities == NULL || updates == NULL ||
+        update_count == 0U ||
+        !henka_checked_size_multiply(
+            update_count,
+            sizeof(*prepared),
+            &allocation_size))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    prepared = (henka_prepared_entity_presentation*)henka_calloc(
+        update_count,
+        sizeof(*prepared));
+    if (prepared == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    for (index = 0U; index < update_count; ++index)
+    {
+        henka_scene_entity_record* record;
+        const henka_scene_entity_record* parent_record;
+        henka_bounds world_bounds;
+        uint64_t update_mutation_count;
+        size_t previous_index;
+
+        record = henka_scene_get_entity_record(scene, entities[index]);
+        if (record == NULL ||
+            !henka_transform_is_valid(updates[index].transform) ||
+            !henka_is_finite_float(updates[index].interaction.max_distance) ||
+            updates[index].interaction.max_distance < 0.0f ||
+            (updates[index].apply_material &&
+                !henka_scene_material_is_valid(updates[index].material)))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto prepare_failed;
+        }
+        for (previous_index = 0U; previous_index < index; ++previous_index)
+        {
+            if (entities[previous_index] == entities[index])
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto prepare_failed;
+            }
+        }
+
+        prepared[index].record = record;
+        prepared[index].entity = entities[index];
+        prepared[index].update = updates[index];
+        prepared[index].sanitized_transform = henka_transform_sanitize(
+            updates[index].transform);
+        prepared[index].name_changed = !henka_scene_presentation_text_equal(
+            record->name,
+            updates[index].name);
+        prepared[index].transform_changed =
+            !henka_scene_presentation_transform_equal(
+                record->transform,
+                prepared[index].sanitized_transform);
+        prepared[index].visible_changed = record->visible != updates[index].visible;
+        prepared[index].interaction_changed =
+            record->interaction.enabled != updates[index].interaction.enabled ||
+            record->interaction.max_distance !=
+                updates[index].interaction.max_distance ||
+            !henka_scene_presentation_text_equal(
+                record->interaction_prompt,
+                updates[index].interaction.prompt);
+        prepared[index].material_changed = updates[index].apply_material;
+        prepared[index].local_transform = prepared[index].sanitized_transform;
+
+        if (prepared[index].transform_changed)
+        {
+            if (record->has_local_bounds &&
+                !henka_scene_try_transform_bounds(
+                    record->local_bounds,
+                    prepared[index].sanitized_transform,
+                    &world_bounds))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto prepare_failed;
+            }
+            parent_record = henka_scene_get_entity_record_const(
+                scene,
+                record->parent);
+            if (record->parent == HENKA_INVALID_ENTITY)
+            {
+                prepared[index].local_transform =
+                    prepared[index].sanitized_transform;
+            }
+            else if (parent_record == NULL ||
+                !henka_scene_try_world_to_local_transform(
+                    parent_record->transform,
+                    prepared[index].sanitized_transform,
+                    &prepared[index].local_transform))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto prepare_failed;
+            }
+            if (!henka_scene_validate_hierarchy_subtree(
+                    scene,
+                    entities[index],
+                    prepared[index].sanitized_transform,
+                    0U))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto prepare_failed;
+            }
+        }
+
+        update_mutation_count =
+            (prepared[index].transform_changed ? UINT64_C(1) : UINT64_C(0)) +
+            (prepared[index].visible_changed ? UINT64_C(1) : UINT64_C(0)) +
+            (prepared[index].interaction_changed ? UINT64_C(1) : UINT64_C(0)) +
+            (prepared[index].material_changed ? UINT64_C(1) : UINT64_C(0));
+        if (update_mutation_count > UINT64_MAX - mutation_count)
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto prepare_failed;
+        }
+        mutation_count += update_mutation_count;
+
+        if (prepared[index].name_changed)
+        {
+            result = henka_scene_duplicate_text(
+                updates[index].name,
+                &prepared[index].new_name);
+            if (result != HENKA_SUCCESS)
+            {
+                goto prepare_failed;
+            }
+        }
+        if (prepared[index].interaction_changed)
+        {
+            result = henka_scene_duplicate_text(
+                updates[index].interaction.prompt,
+                &prepared[index].new_prompt);
+            if (result != HENKA_SUCCESS)
+            {
+                goto prepare_failed;
+            }
+        }
+        if (prepared[index].material_changed &&
+            updates[index].material.name != NULL &&
+            updates[index].material.name[0] != '\0')
+        {
+            result = henka_scene_duplicate_text(
+                updates[index].material.name,
+                &prepared[index].new_material_name);
+            if (result != HENKA_SUCCESS)
+            {
+                goto prepare_failed;
+            }
+        }
+    }
+
+    if (mutation_count != 0U &&
+        !henka_scene_has_render_revision_capacity(scene, mutation_count))
+    {
+        result = HENKA_ERROR_LIMIT;
+        goto prepare_failed;
+    }
+
+    /* The commit only swaps prepared ownership and updates bounded fields.
+     * It performs no allocation and cannot require an allocating rollback. */
+    for (index = 0U; index < update_count; ++index)
+    {
+        henka_prepared_entity_presentation* item = &prepared[index];
+        henka_scene_entity_record* record = item->record;
+
+        if (item->name_changed)
+        {
+            henka_free(record->name);
+            record->name = item->new_name;
+            item->new_name = NULL;
+        }
+        if (item->transform_changed)
+        {
+            record->local_transform = item->local_transform;
+            henka_scene_apply_hierarchy_subtree(
+                scene,
+                item->entity,
+                item->sanitized_transform,
+                0U);
+            (void)henka_scene_bump_render_revision(scene);
+        }
+        if (item->visible_changed)
+        {
+            record->visible = item->update.visible;
+            (void)henka_scene_bump_render_revision(scene);
+        }
+        if (item->interaction_changed)
+        {
+            henka_free(record->interaction_prompt);
+            record->interaction_prompt = item->new_prompt;
+            item->new_prompt = NULL;
+            record->interaction = item->update.interaction;
+            record->interaction.prompt = record->interaction_prompt;
+            (void)henka_scene_bump_render_revision(scene);
+        }
+        if (item->material_changed)
+        {
+            henka_free(record->material_name);
+            record->material_name = item->new_material_name;
+            item->new_material_name = NULL;
+            record->material = item->update.material;
+            record->material.name = record->material_name != NULL
+                ? record->material_name
+                : "Material";
+            if (record->material_asset != NULL)
+            {
+                record->material_asset_overridden = true;
+            }
+            (void)henka_scene_bump_render_revision(scene);
+        }
+    }
+
+    henka_scene_discard_prepared_entity_presentations(prepared, update_count);
+    return HENKA_SUCCESS;
+
+prepare_failed:
+    henka_scene_discard_prepared_entity_presentations(prepared, update_count);
+    return result;
+}
+
 static bool henka_scene_prepare_entity_transform_update(
     const henka_scene_entity_transform_update* update,
     henka_transform* out_sanitized_transform,
@@ -1667,6 +1936,48 @@ henka_result henka_scene_clone(
     }
 
     *out_clone = clone;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_replace_contents(
+    henka_scene* destination,
+    henka_scene* prepared_source)
+{
+    henka_scene temporary;
+    size_t index;
+    size_t destination_physics_links;
+    size_t destination_audio_links;
+
+    if (destination == NULL || prepared_source == NULL ||
+        destination == prepared_source || destination->destroyed ||
+        prepared_source->destroyed ||
+        prepared_source->linked_physics_ref_count != 0U ||
+        prepared_source->linked_audio_ref_count != 0U ||
+        destination->entity_capacity != prepared_source->entity_capacity ||
+        destination->entity_count != prepared_source->entity_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < destination->entity_capacity; ++index)
+    {
+        if (destination->entities[index].active !=
+                prepared_source->entities[index].active ||
+            destination->entities[index].generation !=
+                prepared_source->entities[index].generation)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
+    destination_physics_links = destination->linked_physics_ref_count;
+    destination_audio_links = destination->linked_audio_ref_count;
+    temporary = *destination;
+    *destination = *prepared_source;
+    *prepared_source = temporary;
+    destination->linked_physics_ref_count = destination_physics_links;
+    destination->linked_audio_ref_count = destination_audio_links;
+    prepared_source->linked_physics_ref_count = 0U;
+    prepared_source->linked_audio_ref_count = 0U;
     return HENKA_SUCCESS;
 }
 
