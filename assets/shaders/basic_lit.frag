@@ -990,6 +990,17 @@ void main()
             float environmentPrefilterLod =
                 clamp(surfaceRoughness, 0.0, 1.0) *
                 clamp(iblPrefilterMaxLod, 0.0, 1024.0);
+            /* The bounded fractional-LOD capture keeps the ordinary
+             * production branch intact while replacing only its calculated
+             * LOD. This isolates hardware trilinear/face sampling from the
+             * separate diagnostic shader branch. */
+            if (iblDiagnosticPrefilterLod >= 0.0)
+            {
+                environmentPrefilterLod = clamp(
+                    iblDiagnosticPrefilterLod,
+                    0.0,
+                    1024.0);
+            }
             if (useIBL)
             {
                 if (useReflectionProbeMap)

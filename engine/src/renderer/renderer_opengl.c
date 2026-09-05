@@ -6059,10 +6059,6 @@ henka_result henka_opengl_renderer_draw_scene(
         ibl_prefilter_max_lod = use_reflection_probe_map ?
             (float)(HENKA_REFLECTION_PROBE_PREFILTER_LEVELS - 1) :
             (float)(HENKA_IBL_PREFILTER_LEVELS - 1);
-        if (renderer->ibl_diagnostic_prefilter_lod >= 0.0f)
-        {
-            ibl_prefilter_max_lod = renderer->ibl_diagnostic_prefilter_lod;
-        }
         use_reflection_probe_map_secondary = use_reflection_probe &&
             reflection_probe_secondary_index < HENKA_SCENE_MAX_REFLECTION_PROBES &&
             state->reflection_probe_capture_ready[reflection_probe_secondary_index] &&

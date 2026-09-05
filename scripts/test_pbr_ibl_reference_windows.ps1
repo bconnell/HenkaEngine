@@ -64,8 +64,8 @@ if ($studioSource -notmatch 'lower_gradient = sandbox3d_smoothstep\(\(latitude -
 }
 if ($studioSource -notmatch 'key_delta = fabsf\(longitude - 4\.35f\)' -or
     $studioSource -notmatch 'fill_delta = fabsf\(longitude - 1\.05f\)' -or
-    $studioSource -notmatch 'key_field = 0\.78f \+ 0\.22f \* cosf\(key_delta\)' -or
-    $studioSource -notmatch 'fill_field = 0\.88f \+ 0\.12f \* cosf\(fill_delta\)' -or
+    $studioSource -notmatch 'key_field = 0\.92f \+ 0\.08f \* cosf\(key_delta\)' -or
+    $studioSource -notmatch 'fill_field = 0\.95f \+ 0\.05f \* cosf\(fill_delta\)' -or
     $studioSource -notmatch 'key_field \* 1\.75f') {
     $missing += 'broad cosine studio key/fill reflection field'
 }

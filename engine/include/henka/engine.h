@@ -331,7 +331,9 @@ henka_result henka_engine_set_ibl_diagnostic_mode(
     henka_ibl_diagnostic_mode mode);
 henka_ibl_diagnostic_mode henka_engine_get_ibl_diagnostic_mode(
     const henka_engine* engine);
-/* A non-negative value forces the IBL prefilter level for diagnostic captures.
+/* A non-negative value forces the IBL prefilter level for diagnostic/reference
+ * captures. In the ordinary production branch it replaces only the calculated
+ * environment prefilter LOD; the resource-derived maximum remains authoritative.
  * Pass -1.0f to restore roughness-derived selection. This is opt-in diagnostic
  * state and does not persist into scene or material data. */
 henka_result henka_engine_set_ibl_diagnostic_prefilter_lod(
