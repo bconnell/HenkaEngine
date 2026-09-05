@@ -662,6 +662,76 @@ static void henka_test_gltf_scene_instantiation_revision_limit_is_transactional(
     henka_scene_destroy(target);
 }
 
+static void henka_test_real_gltf_scene_asset_production_path(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_asset_manager* manager;
+    henka_shader* shader = NULL;
+    henka_gltf_scene_asset* asset = NULL;
+    henka_scene* scene = NULL;
+    henka_entity entity;
+    henka_mesh* mesh = NULL;
+    const henka_material_asset* material_asset = NULL;
+    henka_camera camera;
+    henka_scene_light_desc light;
+    uint64_t material_revision = 0U;
+    bool material_overridden = true;
+    size_t entity_count = 0U;
+
+    config.application_name = "Henka Real glTF Scene Production Path Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    manager = henka_engine_get_asset_manager(engine);
+    HENKA_TEST_ASSERT(manager != NULL);
+    HENKA_TEST_ASSERT(henka_assets_load_shader(
+        manager,
+        "assets/shaders/basic_lit.vert",
+        "assets/shaders/basic_lit.frag",
+        &shader) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_scene_asset(
+        manager,
+        "assets/models/henka_marker.gltf",
+        shader,
+        &asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(asset != NULL);
+    HENKA_TEST_ASSERT(asset->data.primitive_count == 1U);
+    HENKA_TEST_ASSERT(asset->primitive_meshes[0] != NULL);
+    HENKA_TEST_ASSERT(asset->material_ready[0]);
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_instantiate_gltf_scene(
+        manager,
+        asset,
+        scene,
+        "Imported Marker ",
+        &entity_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(entity_count == 1U);
+    entity = henka_scene_get_entity_at_index(scene, 0U);
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(strcmp(
+        henka_scene_get_entity_name(scene, entity),
+        "Imported Marker Marker") == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(mesh == asset->primitive_meshes[0]);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset(
+        scene, entity, &material_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_asset == &asset->material_assets[0]);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset_state(
+        scene, entity, &material_revision, &material_overridden) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_revision == asset->material_assets[0].revision);
+    HENKA_TEST_ASSERT(!material_overridden);
+    HENKA_TEST_ASSERT(henka_scene_get_camera(scene, &camera) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_light(scene, 0U, &light) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(light.type == HENKA_SCENE_LIGHT_POINT);
+
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_mesh_loader_preserves_nonempty_output(void)
 {
     henka_asset_manager manager;
@@ -817,6 +887,7 @@ void henka_test_assets(void)
     henka_test_gltf_scene_instantiation_preserves_mutator_errors();
     henka_test_gltf_scene_instantiation_preserves_global_bindings();
     henka_test_gltf_scene_instantiation_revision_limit_is_transactional();
+    henka_test_real_gltf_scene_asset_production_path();
     henka_test_mesh_loader_preserves_nonempty_output();
     henka_test_mesh_source_failure_requires_fallback();
     henka_test_texture_loader_preserves_nonempty_output();
