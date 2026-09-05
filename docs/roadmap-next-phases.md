@@ -2,7 +2,7 @@
 
 This document complements [roadmap.md](roadmap.md) by recording the intended sequence after the current 3D engine and integrated authoring foundation reaches its defined production boundary. It describes direction, dependency order, and acceptance expectations. It does not define dates or change current capability status.
 
-Henka remains a general-purpose MIT-licensed game engine. Later phases should build on the same canonical scene, identity, persistence, asset, input, scripting, Audio, packaging, and external-project boundaries instead of creating parallel engines for different game dimensions or device classes.
+Henka remains a general-purpose MIT-licensed game engine. Later phases should build on the same canonical scene, identity, persistence, asset, input, scripting, Audio, packaging, and external-project boundaries while keeping one shared engine architecture across dimensions and device classes.
 
 ## Planned sequence
 
@@ -28,7 +28,7 @@ After the current engine/content-authoring completion campaign, Henka should rec
 
 ### Product identity
 
-The normal developer-facing application should present a consistent Henka Engine / Henka Editor identity rather than feeling like an internal sample, test harness, or CMake application. The product experience should include:
+The normal developer-facing application should present a consistent Henka Engine / Henka Editor identity and a deliberate end-user product experience, distinct from internal samples, test harnesses, and CMake tooling. The product experience should include:
 
 - consistent application naming, iconography, version/build identity, About information, and license presentation;
 - intentional startup, project-open, loading, failure, and shutdown presentation;
@@ -86,7 +86,7 @@ Executable layout/visual validation should exercise at least representative 1280
 
 ## Binary distribution and release engineering
 
-Binary distribution should become a first-class product boundary before 2D begins so later dimensional expansion lands on a mature user-facing engine rather than a source-only development workflow.
+Binary distribution should become a first-class product boundary before 2D begins so later dimensional expansion lands on a mature user-facing engine instead of a source-only development workflow.
 
 ### Initial Windows distribution
 
@@ -109,7 +109,7 @@ Release engineering should provide:
 - validated external-project templates against the released binary/SDK boundary;
 - release notes that distinguish new features, compatibility changes, migration requirements, fixes, and known limitations.
 
-Normal game-development workflows should not require shell commands once the product path is ready. CMake, PowerShell, and source builds remain supported engineering/automation interfaces rather than the primary user experience.
+Normal game-development workflows should not require shell commands once the product path is ready. CMake, PowerShell, and source builds remain supported engineering and automation interfaces; the normal product workflow is graphical.
 
 ### GameDev-oriented documentation transition
 
@@ -122,11 +122,11 @@ When the binary path is genuinely ready, the README and primary docs should be r
 - How do I author, Play, and package a game?
 - Where are the editor, scripting, asset, and packaging guides?
 
-Implementation language, source-building, architecture, and contribution details remain important but should move below the normal product workflow rather than leading it.
+Implementation language, source-building, architecture, and contribution details remain important but should move below the normal product workflow instead of leading it.
 
 ## First-class 2D
 
-2D should be a first-class dimensional mode over Henka's existing canonical foundations, not a separate scene graph or a second engine hidden inside the repository.
+2D is a first-class dimensional mode over Henka's existing canonical foundations, sharing the same scene graph and engine architecture while receiving dedicated 2D runtime, editor, asset, physics, rendering, validation, and release support.
 
 ### Dimensional authority
 
@@ -153,13 +153,13 @@ The 2D asset foundation should include:
 - deliberate filtering/mipmap/pixel-art policies;
 - resilience to texture move/rename/reimport through stable asset identity.
 
-Sprite components should reference stable region/asset identities rather than fragile raw pixel coordinates wherever the asset architecture permits.
+Sprite components should reference stable region/asset identities wherever the asset architecture permits; raw pixel coordinates should not become authoritative cross-asset references.
 
 ### Dedicated 2D renderer
 
 The renderer should provide a real optimized 2D path with deterministic draw ordering, sprite/atlas batching, camera culling, transparent handling, clipping/scissor support, pixel-art filtering options, color-space correctness, and scalable workload validation.
 
-Completion evidence should use meaningful stress fixtures with large sprite/tile populations and multiple atlases/material states rather than a handful of decorative quads.
+Completion evidence should use meaningful stress fixtures with large sprite/tile populations and multiple atlases/material states, with workload scale sufficient to prove the real renderer path.
 
 ### 2D camera
 
@@ -169,7 +169,7 @@ Pixel-perfect behavior requires executable tests for subpixel jitter, odd/even r
 
 ### 2D physics
 
-Henka should provide a genuine 2D physics domain rather than implementing every 2D body as an ultra-thin 3D object. The production boundary should include appropriate static/dynamic/kinematic bodies, box/circle/capsule/polygon/edge or chain shapes, triggers, layers/masks, contacts/events, ray/shape/overlap queries, fixed-step ownership, and a useful initial joint/constraint subset.
+Henka should provide a genuine 2D physics domain designed for 2D gameplay and integrated with the canonical scene transform. The production boundary should include appropriate static/dynamic/kinematic bodies, box/circle/capsule/polygon/edge or chain shapes, triggers, layers/masks, contacts/events, ray/shape/overlap queries, fixed-step ownership, and a useful initial joint/constraint subset.
 
 The canonical scene transform remains the external spatial truth. One entity must never have competing authoritative 2D and 3D physics writers for the same transform.
 
@@ -181,7 +181,7 @@ Reusable side/platformer and top-down controller modes should cover the common p
 
 Tilesets should use stable tile identity and carry visual region, animation, collision, custom metadata, terrain/autotile, material/light, and navigation information where applicable.
 
-Tilemaps should be designed around chunked sparse storage rather than a permanently dense giant array. They should support multiple layers, visibility/order, large maps, paint/erase/fill/selection/move, undo/redo, collision generation, localized rebuilding, streaming where necessary, and deterministic save/reload.
+Tilemaps should use chunked sparse storage as the intended scalable architecture. They should support multiple layers, visibility/order, large maps, paint/erase/fill/selection/move, undo/redo, collision generation, localized rebuilding, streaming where necessary, and deterministic save/reload.
 
 Autotile/terrain-rule support should be deterministic and cover adjacency, corners, transitions, and chunk boundaries without duplicated collision seams or rule changes after reload.
 
@@ -192,12 +192,12 @@ The 2D production path should also include:
 - layered parallax with independent factors and repeating backgrounds;
 - frame/sprite animation clips with timing, loop/ping-pong policy, events, playback control, and editor timeline support while reusing common animation concepts where practical;
 - 2D lighting appropriate to the renderer, including ambient/point-style lighting, normal-mapped sprites, masks/layers, emissive presentation, and supported shadowing;
-- 2D sprite-particle/VFX presentation through common VFX foundations rather than a decorative parallel particle engine;
+- 2D sprite-particle/VFX presentation through common VFX foundations with the same production validation expectations as other VFX paths;
 - navigation suitable for top-down/tile-based worlds, with debug visualization and tilemap integration where appropriate.
 
 ### 2D editor mode
 
-The existing editor should gain a deliberate 2D authoring mode rather than a second application. It should provide a 2D grid, pan/zoom, dimensional transform gizmos, pixel/grid snapping, sprite placement, pivot and atlas/region editing, tilemap painting, collision-shape editing, parallax controls, camera bounds, lighting/navigation overlays, and animation-timeline integration.
+The existing Henka application should gain a dedicated first-class 2D authoring mode. It should provide a 2D grid, pan/zoom, dimensional transform gizmos, pixel/grid snapping, sprite placement, pivot and atlas/region editing, tilemap painting, collision-shape editing, parallax controls, camera bounds, lighting/navigation overlays, and animation-timeline integration.
 
 Selection and canonical object identity should survive switching between 2D, 3D, and later hybrid views.
 
@@ -209,7 +209,7 @@ A permanent 2D end-to-end fixture should combine representative tilemap, control
 
 ## First-class 2.5D
 
-2.5D should be deliberate composition of mature Henka 2D and 3D systems rather than a third independent dimensional engine.
+2.5D is a first-class Henka dimensional capability with dedicated workflows, editor tools, runtime contracts, packaging, validation, and release support. Its implementation should deliberately compose the mature shared 2D and 3D foundations so 2.5D receives full product-level support while preserving one canonical engine architecture.
 
 ### Supported composition profiles
 
@@ -241,7 +241,7 @@ Regression fixtures should target transparent ordering, z-fighting, camera-depen
 
 Explicit sprite orientation modes should include fixed world-facing, camera-facing billboard, vertical-axis billboard, plane-aligned, and custom orientation where supported.
 
-Hybrid lighting should share the real renderer/environment rather than fake a separate world. Where supported, sprites may participate through normal maps, emissive response, fog/environment, and compatible shadow models. Unsupported combinations should be explicit in the editor and documentation.
+Hybrid lighting should share the real renderer/environment and remain part of the same world presentation. Where supported, sprites may participate through normal maps, emissive response, fog/environment, and compatible shadow models. Unsupported combinations should be explicit in the editor and documentation.
 
 ### Physics-domain authority
 
@@ -273,13 +273,13 @@ This phase includes the advanced systems already represented in the broader road
 - broader networking/runtime scale, sessions, replication, authority, large-world streaming, and server maturity;
 - cinematic/sequencer, richer animation/character workflows, interactive media, advanced Audio, platform expansion, and renderer backends.
 
-The mature engine should absorb these as coherent subsystem improvements rather than accumulating isolated showcase features.
+The mature engine should absorb these as coherent subsystem improvements with strong integration and production proof, avoiding isolated showcase-only additions.
 
 ## XR and immersive-device direction
 
 XR should be treated as a presentation/input capability over native 2D, 2.5D, and 3D worlds, not as another dimensional engine.
 
-Standards, headset runtimes, and hardware capabilities evolve quickly. Henka should preserve backend isolation and reassess the best standards-oriented implementation path when this phase becomes active rather than permanently binding the design to a specific 2026 device or vendor.
+Standards, headset runtimes, and hardware capabilities evolve quickly. Henka should preserve backend isolation and reassess the best standards-oriented implementation path when this phase becomes active, keeping the design open to the best available standards and devices at that time.
 
 ### Cross-dimensional XR presentation
 
@@ -301,14 +301,14 @@ Headset pose remains presentation/tracking input and should not silently replace
 
 ### Immersive I/O capability layer
 
-Later immersive support should expose generic capability-driven interfaces rather than hard-coding individual brands. Candidate capability families include:
+Later immersive support should expose generic capability-driven interfaces that remain independent of individual hardware brands. Candidate capability families include:
 
 - head, hand, and full-body tracking;
 - locomotion devices including omni-directional treadmills;
 - controller, vest, suit, and future body haptics;
 - optional environmental/sensory feedback where hardware can expose a safe interoperable contract.
 
-Applications should query available capabilities and degrade gracefully rather than assuming every device exists.
+Applications should query available capabilities and degrade gracefully across the capability set exposed by the connected hardware.
 
 ### Semantic haptics
 
@@ -324,7 +324,7 @@ The intended chain is:
 
 `physical locomotion device -> locomotion intent -> Henka action/controller -> authoritative movement`
 
-not direct hardware-driven teleportation of the scene entity.
+Direct hardware input does not teleport or otherwise bypass the authoritative scene/controller movement path.
 
 The same model can project locomotion into a 2D or 2.5D gameplay plane or use full 3D movement according to the active dimensional profile.
 
