@@ -3,6 +3,8 @@
 #include <string.h>
 
 #include <henka/audio.h>
+#include <henka/camera.h>
+#include <henka/core.h>
 #include <henka/physics.h>
 #include <henka/scene.h>
 
@@ -86,6 +88,7 @@ int main(void)
         HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID;
     henka_scene_document_behavior behavior;
     henka_scene_document_behavior loaded_behavior;
+    henka_camera camera;
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_entity child_entity = HENKA_INVALID_ENTITY;
     henka_entity restored_parent = HENKA_INVALID_ENTITY;
@@ -103,8 +106,14 @@ int main(void)
 
     play_scene = NULL;
 
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        16.0f / 9.0f,
+        0.1f,
+        100.0f);
     if (henka_scene_create(&scene) != HENKA_SUCCESS ||
         (entity = henka_scene_create_entity_named(scene, "Game Authoring Object")) == HENKA_INVALID_ENTITY ||
+        henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS ||
         henka_scene_set_entity_interaction(
             scene,
             entity,
@@ -247,10 +256,11 @@ int main(void)
             replacement_document,
             ".",
             relative_path) != HENKA_SUCCESS ||
-        sandbox3d_game_authoring_load(authoring, ".") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_get_object_for_entity(
             authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
-            restored_id != UINT64_C(5000))
+            restored_id != object_id ||
+            strcmp(restored.name, "Game Authoring Object") != 0)
     {
         fprintf(stderr, "game authoring test failed during persistent-ID remap\n");
         goto cleanup;
@@ -280,10 +290,10 @@ int main(void)
                 replacement_document,
                 ".",
                 relative_path) != HENKA_SUCCESS ||
-            sandbox3d_game_authoring_load(authoring, ".") != HENKA_SUCCESS ||
+            sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
             sandbox3d_game_authoring_get_object_for_entity(
                 authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
-            restored_id != UINT64_C(5000) ||
+            restored_id != object_id ||
             strcmp(restored.name, "Game Authoring Object") != 0)
         {
             fprintf(
@@ -319,7 +329,7 @@ int main(void)
             sandbox3d_game_authoring_load(authoring, ".") == HENKA_SUCCESS ||
             sandbox3d_game_authoring_get_object_for_entity(
                 authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
-            restored_id != UINT64_C(5000))
+            restored_id != object_id)
         {
             fprintf(stderr, "game authoring test failed during ambiguous-name rejection\n");
             goto cleanup;
@@ -357,7 +367,7 @@ int main(void)
             !interaction.enabled || interaction.max_distance != 4.0f ||
             sandbox3d_game_authoring_get_object_for_entity(
                 authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
-            restored_id != UINT64_C(5000) || !restored.interaction.enabled)
+            restored_id != object_id || !restored.interaction.enabled)
         {
             if (invalid_file != NULL)
             {
