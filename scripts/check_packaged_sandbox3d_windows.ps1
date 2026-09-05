@@ -994,6 +994,7 @@ Assert-PathExists -Path $packageInfoPath -Description "Packaged build marker"
 $packageSchema = Get-PackageInfoValue -Path $packageInfoPath -Name "Package schema"
 $sourceCommit = Get-PackageInfoValue -Path $packageInfoPath -Name "Source commit"
 $sourceState = Get-PackageInfoValue -Path $packageInfoPath -Name "Source state"
+$sourceIdentity = Get-PackageInfoValue -Path $packageInfoPath -Name "Source identity"
 $buildConfiguration = Get-PackageInfoValue -Path $packageInfoPath -Name "Build configuration"
 $buildRef = Get-PackageInfoValue -Path $packageInfoPath -Name "Build ref"
 $detachedHead = Get-PackageInfoValue -Path $packageInfoPath -Name "Detached HEAD"
@@ -1003,12 +1004,12 @@ $actualPackagedHash = (Get-FileHash -LiteralPath $packagedExe -Algorithm SHA256)
 $currentCommitLines = @(& $gitCommand -C $repoRoot rev-parse HEAD 2>$null)
 if ($LASTEXITCODE -ne 0 -or $currentCommitLines.Count -ne 1) { throw "Current commit could not be read for package verification." }
 $currentCommit = ([string]$currentCommitLines[0]).Trim()
-$currentStatusLines = @(& $gitCommand -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
-if ($LASTEXITCODE -ne 0) { throw "Current source state could not be read for package verification." }
-$currentSourceState = if ($currentStatusLines.Count -eq 0) { "clean" } else { "working-tree" }
-if ($packageSchema -ne "3") { throw "Packaged build marker has an unsupported schema." }
+$currentSourceIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
+$currentSourceState = $currentSourceIdentity.source_state
+if ($packageSchema -ne "4") { throw "Packaged build marker has an unsupported schema." }
 if ($sourceCommit -ne $currentCommit) { throw "Packaged source commit does not match current HEAD." }
 if ($sourceState -ne $currentSourceState) { throw "Packaged source state does not match the current working tree." }
+if ($sourceIdentity -ne $currentSourceIdentity.source_identity) { throw "Packaged source identity does not match the current candidate." }
 if ($buildConfiguration -ne "Debug" -and $buildConfiguration -ne "Release") { throw "Packaged build configuration is invalid." }
 if ([string]::IsNullOrWhiteSpace($buildRef)) { throw "Packaged build ref is missing." }
 if ($detachedHead -ne "True" -and $detachedHead -ne "False") { throw "Packaged detached-HEAD value is invalid." }

@@ -51,14 +51,6 @@ function Invoke-GitSingleLine {
     return ([string]$lines[0]).Trim()
 }
 
-function Get-GitSourceState {
-    $lines = @(Invoke-GitLines @("status", "--porcelain=v1", "--untracked-files=all"))
-    if ($lines.Count -eq 0) {
-        return "clean"
-    }
-    return "working-tree"
-}
-
 function Remove-HenkaDirectoryTree {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -196,7 +188,7 @@ if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
 }
 
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-if ($manifest.schema_version -ne 2 -or $manifest.configuration -ne $Configuration) {
+if ($manifest.schema_version -ne 3 -or $manifest.configuration -ne $Configuration) {
     throw "Build provenance does not match the current package contract or configuration $Configuration."
 }
 
@@ -210,13 +202,17 @@ if (-not (Test-Path -LiteralPath $expectedExeFull -PathType Leaf)) {
 }
 
 $currentCommit = Invoke-GitSingleLine @("rev-parse", "HEAD")
-$currentState = Get-GitSourceState
+$currentSourceIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
+$currentState = $currentSourceIdentity.source_state
 $currentHash = (Get-FileHash -LiteralPath $expectedExeFull -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($manifest.commit_sha -ne $currentCommit) {
     throw "Build provenance commit does not match current HEAD. Rebuild before packaging."
 }
 if ($manifest.source_state -ne $currentState) {
     throw "Build provenance source state does not match the current working tree. Rebuild before packaging."
+}
+if ($manifest.source_identity -ne $currentSourceIdentity.source_identity) {
+    throw "Build provenance source identity does not match the current candidate. Rebuild before packaging."
 }
 if ($manifest.executable_sha256 -ne $currentHash) {
     throw "Built executable hash does not match build provenance. Rebuild before packaging."
@@ -366,11 +362,12 @@ Local settings:
 
     $packageInfo = @"
 Henka Engine Sandbox 3D package
-Package schema: 3
+Package schema: 4
 Package refreshed UTC: $([DateTime]::UtcNow.ToString("o"))
 Build generated UTC: $($manifest.generated_utc)
 Source commit: $currentCommit
 Source state: $currentState
+Source identity: $($currentSourceIdentity.source_identity)
 Build configuration: $Configuration
 Build branch: $($manifest.branch)
 Build ref: $($manifest.git_ref)

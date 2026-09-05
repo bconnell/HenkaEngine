@@ -61,10 +61,10 @@ if (-not (Test-Path -LiteralPath $cmakePath -PathType Leaf)) {
 
 $commitLines = @(Invoke-GitCapture @("rev-parse", "HEAD"))
 $branchLines = @(Invoke-GitCapture @("branch", "--show-current"))
-$statusLines = @(Invoke-GitCapture @("status", "--porcelain=v1", "--untracked-files=all"))
 if ($commitLines.Count -ne 1 -or $branchLines.Count -gt 1) {
     throw "Git provenance output had an unexpected shape."
 }
+$sourceIdentity = Get-HenkaSourceIdentity -RepoRoot $repoPath
 
 $detachedHead = $branchLines.Count -eq 0 -or [string]::IsNullOrWhiteSpace([string]$branchLines[0])
 $branch = if ($detachedHead) { "detached" } else { ([string]$branchLines[0]).Trim() }
@@ -86,13 +86,14 @@ if ($LASTEXITCODE -ne 0 -or $cmakeVersionLines.Count -lt 1) {
 
 $relativeExe = $exePath.Substring($repoPrefix.Length).Replace("\", "/")
 $manifest = [ordered]@{
-    schema_version = 2
-    commit_sha = ([string]$commitLines[0]).Trim()
+    schema_version = 3
+    commit_sha = $sourceIdentity.commit_sha
     branch = $branch
     git_ref = $gitRef
     head_ref = $headRef
     detached_head = $detachedHead
-    source_state = if ($statusLines.Count -eq 0) { "clean" } else { "working-tree" }
+    source_state = $sourceIdentity.source_state
+    source_identity = $sourceIdentity.source_identity
     configuration = $Configuration
     architecture = if ([string]::IsNullOrWhiteSpace($env:PROCESSOR_ARCHITECTURE)) { "unknown" } else { $env:PROCESSOR_ARCHITECTURE }
     cmake_path = $cmakePath

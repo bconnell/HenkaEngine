@@ -67,6 +67,10 @@ jobs:
         shell: powershell
         run: .\scripts\check_repository_integrity.ps1
 
+      - name: Check exact source provenance identity
+        shell: powershell
+        run: .\scripts\test_source_provenance_windows.ps1
+
       - name: Build Debug
         shell: powershell
         run: .\scripts\build_windows.ps1 -Configuration Debug

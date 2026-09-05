@@ -8,6 +8,7 @@ Henka's Windows package flow records and verifies the build that produced the ru
 
 - the full source commit
 - whether tracked or untracked working-tree changes were present
+- a deterministic source identity derived from the committed and candidate file contents
 - the local branch when one is checked out
 - the GitHub ref and pull-request head ref when available
 - whether the checkout is detached
@@ -27,12 +28,13 @@ The package command requires an explicit validated build configuration. It rejec
 
 - a missing or obsolete build record
 - a build record from another commit or source state
+- a build record from another dirty candidate with the same `working-tree` label
 - an executable from another configuration
 - an executable whose SHA-256 no longer matches the build record
 - a copied executable whose SHA-256 differs from the source build
 - package inputs that contain reparse points
 
-`PACKAGE_INFO.txt` carries the verified commit, ref, source state, configuration, architecture, and executable hashes into the runnable folder.
+`PACKAGE_INFO.txt` carries the verified commit, ref, source state, source identity, configuration, architecture, and executable hashes into the runnable folder. The source identity is computed from the `HEAD` commit and the SHA-256 of each tracked and non-ignored untracked file, in deterministic path order. It distinguishes two dirty candidates that would otherwise both be labeled `working-tree`.
 
 ## Transactional refresh
 

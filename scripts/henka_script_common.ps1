@@ -101,6 +101,72 @@ function Get-HenkaGitPath {
     return $gitCommand.Source
 }
 
+function Get-HenkaSourceIdentity {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    $repoPath = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd([char[]]@("\", "/"))
+    $git = Get-HenkaGitPath
+    $commitLines = @(& $git -C $repoPath rev-parse HEAD 2>$null)
+    $commitExitCode = $LASTEXITCODE
+    $statusLines = @(& $git -C $repoPath status --porcelain=v1 --untracked-files=all 2>$null)
+    $statusExitCode = $LASTEXITCODE
+    $trackedRaw = [string](& $git -C $repoPath ls-files -z 2>$null)
+    $trackedExitCode = $LASTEXITCODE
+    $untrackedRaw = [string](& $git -C $repoPath ls-files --others --exclude-standard -z 2>$null)
+    $untrackedExitCode = $LASTEXITCODE
+
+    if ($commitExitCode -ne 0 -or
+        $statusExitCode -ne 0 -or
+        $trackedExitCode -ne 0 -or
+        $untrackedExitCode -ne 0 -or
+        $commitLines.Count -ne 1 -or
+        [string]::IsNullOrWhiteSpace([string]$commitLines[0])) {
+        throw "Git source identity query failed for $repoPath."
+    }
+
+    $relativePaths = @(
+        @($trackedRaw -split [char]0) +
+        @($untrackedRaw -split [char]0) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+            ForEach-Object { ([string]$_).Replace("\", "/") } |
+            Sort-Object -Unique
+    )
+    $manifestBuilder = New-Object System.Text.StringBuilder
+    [void]$manifestBuilder.Append("commit`0")
+    [void]$manifestBuilder.Append(([string]$commitLines[0]).Trim())
+    [void]$manifestBuilder.Append("`0")
+
+    foreach ($relativePath in $relativePaths) {
+        $filePath = Join-Path $repoPath ($relativePath.Replace("/", [System.IO.Path]::DirectorySeparatorChar))
+        if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
+            throw "Source identity input disappeared during hashing: $filePath"
+        }
+        $fileHash = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        [void]$manifestBuilder.Append($relativePath)
+        [void]$manifestBuilder.Append("`0")
+        [void]$manifestBuilder.Append($fileHash)
+        [void]$manifestBuilder.Append("`0")
+    }
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $digest = $sha256.ComputeHash(
+            [System.Text.Encoding]::UTF8.GetBytes($manifestBuilder.ToString()))
+    }
+    finally {
+        $sha256.Dispose()
+    }
+
+    return [pscustomobject]@{
+        commit_sha = ([string]$commitLines[0]).Trim()
+        source_state = if ($statusLines.Count -eq 0) { "clean" } else { "working-tree" }
+        source_identity = (-join ($digest | ForEach-Object { $_.ToString("x2") }))
+    }
+}
+
 function Write-HenkaUtf8NoBom {
     param(
         [Parameter(Mandatory = $true)]

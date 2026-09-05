@@ -32,13 +32,6 @@ function Invoke-HenkaGitSingleLine {
     return ([string]$lines[0]).Trim()
 }
 
-function Get-HenkaSourceState {
-    $lines = @(& $git -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
-    if ($LASTEXITCODE -ne 0) { throw "Git source-state query failed." }
-    if ($lines.Count -eq 0) { return "clean" }
-    return "working-tree"
-}
-
 function Remove-HenkaDirectoryTree {
     param([Parameter(Mandatory = $true)][string]$Path)
     if (Test-Path -LiteralPath $Path) {
@@ -79,7 +72,8 @@ if (Get-Process -Name "henka_dedicated_server" -ErrorAction SilentlyContinue) {
 }
 
 $currentCommit = Invoke-HenkaGitSingleLine @("rev-parse", "HEAD")
-$sourceState = Get-HenkaSourceState
+$sourceIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
+$sourceState = $sourceIdentity.source_state
 $sourceHash = (Get-FileHash -LiteralPath $expectedExe -Algorithm SHA256).Hash.ToLowerInvariant()
 [System.IO.Directory]::CreateDirectory($outRoot) | Out-Null
 $staleStaging = @(Get-ChildItem -LiteralPath $outRoot -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name.StartsWith(".HenkaDedicatedServer-staging-", [System.StringComparison]::OrdinalIgnoreCase) })
@@ -122,10 +116,11 @@ See docs\dedicated-server.md for build, deployment, and validation details.
     Write-HenkaUtf8NoBom -Path (Join-Path $stagingRoot "README.txt") -Text ($readme.TrimStart() + [Environment]::NewLine)
     $info = @"
 Henka Engine dedicated server package
-Package schema: 1
+Package schema: 2
 Package refreshed UTC: $([DateTime]::UtcNow.ToString("o"))
 Source commit: $currentCommit
 Source state: $sourceState
+Source identity: $($sourceIdentity.source_identity)
 Build configuration: $Configuration
 Source executable: build/examples/dedicated_server/$Configuration/henka_dedicated_server.exe
 Source executable SHA-256: $sourceHash

@@ -39,11 +39,15 @@ foreach ($textPath in @((Join-Path $packageRoot "server.conf.example"), (Join-Pa
         throw "Package text contains a machine-specific or source-tree path: $textPath"
     }
 }
+$packageSchema = Get-PackageValue "Package schema"
+if ($packageSchema -ne "2") { throw "The dedicated-server package schema is unsupported." }
 $git = Get-HenkaGitPath
 $currentCommit = ([string](& $git -C $repoRoot rev-parse HEAD)).Trim()
 if ($LASTEXITCODE -ne 0 -or $currentCommit -ne (Get-PackageValue "Source commit")) { throw "Package source commit does not match the current checkout." }
-$sourceState = if (@(& $git -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null).Count -eq 0) { "clean" } else { "working-tree" }
-if ($LASTEXITCODE -ne 0 -or $sourceState -ne (Get-PackageValue "Source state")) { throw "Package source state does not match the current checkout." }
+$sourceIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
+$sourceState = $sourceIdentity.source_state
+if ($sourceState -ne (Get-PackageValue "Source state")) { throw "Package source state does not match the current checkout." }
+if ($sourceIdentity.source_identity -ne (Get-PackageValue "Source identity")) { throw "Package source identity does not match the current checkout." }
 $packagedHash = (Get-FileHash -LiteralPath $packageExe -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($packagedHash -ne (Get-PackageValue "Packaged executable SHA-256") -or $packagedHash -ne (Get-PackageValue "Source executable SHA-256")) { throw "Package executable provenance hash failed." }
 
