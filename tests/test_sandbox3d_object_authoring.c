@@ -295,6 +295,52 @@ static bool henka_test_edges_share_vertex(
          (first->vertices[1] == second->vertices[1]));
 }
 
+static henka_result henka_test_create_authoring_object_from_source(
+    henka_engine* engine,
+    henka_scene* scene,
+    const henka_authoring_mesh* source,
+    const char* name,
+    henka_entity* out_entity,
+    sandbox3d_authoring_object** out_object)
+{
+    henka_entity entity;
+    henka_result result;
+
+    if (out_entity == NULL || out_object == NULL || engine == NULL || scene == NULL ||
+        source == NULL || name == NULL || name[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_entity = HENKA_INVALID_ENTITY;
+    *out_object = NULL;
+    entity = henka_scene_create_entity_named(scene, name);
+    if (entity == HENKA_INVALID_ENTITY)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    result = sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, out_object);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_scene_destroy_entity(scene, entity);
+        return result;
+    }
+    *out_entity = entity;
+    return HENKA_SUCCESS;
+}
+
+static void henka_test_destroy_authoring_object(
+    henka_scene* scene,
+    henka_entity entity,
+    sandbox3d_authoring_object* object)
+{
+    sandbox3d_authoring_object_destroy(object);
+    if (scene != NULL && entity != HENKA_INVALID_ENTITY)
+    {
+        henka_scene_destroy_entity(scene, entity);
+    }
+}
+
 static void henka_test_sandbox3d_object_authoring_scene_policy(void)
 {
     henka_scene* scene;
@@ -3253,6 +3299,185 @@ static void henka_test_sandbox3d_object_authoring_vertex_extrude(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_vertex_operations(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    henka_authoring_mesh* quad_source = NULL;
+    henka_authoring_mesh_desc desc;
+    henka_authoring_vertex_id loose_vertex = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id quad_vertices[4];
+    const size_t allocations_before = henka_memory_get_allocation_count();
+
+    config.application_name = "Henka Authoring Vertex Operations Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+
+    desc = henka_authoring_mesh_desc_default();
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create_box(
+        &desc, 1.0f, 1.0f, 1.0f, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source,
+        (henka_vec3){2.0f, 0.0f, 0.0f},
+        (henka_vec2){0.0f, 0.0f},
+        0U,
+        &loose_vertex) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(source));
+
+    {
+        henka_entity entity = HENKA_INVALID_ENTITY;
+        sandbox3d_authoring_object* object = NULL;
+        henka_authoring_mesh_counts before;
+        henka_authoring_mesh_counts after;
+        HENKA_TEST_ASSERT(henka_test_create_authoring_object_from_source(
+            engine, scene, source, "Merge Center", &entity, &object) == HENKA_SUCCESS);
+        sandbox3d_authoring_object_set_selection_mode(
+            object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 2U, true) == HENKA_SUCCESS);
+        before = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_merge_selected_vertices_center(object) == HENKA_SUCCESS);
+        after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(after.vertices == before.vertices - 1U);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+        henka_test_destroy_authoring_object(scene, entity, object);
+    }
+
+    {
+        henka_entity entity = HENKA_INVALID_ENTITY;
+        sandbox3d_authoring_object* object = NULL;
+        henka_authoring_mesh_counts before;
+        henka_authoring_mesh_counts after;
+        HENKA_TEST_ASSERT(henka_test_create_authoring_object_from_source(
+            engine, scene, source, "Merge Active", &entity, &object) == HENKA_SUCCESS);
+        sandbox3d_authoring_object_set_selection_mode(
+            object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 2U, true) == HENKA_SUCCESS);
+        before = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_merge_selected_vertices_active(object) == HENKA_SUCCESS);
+        after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(after.vertices == before.vertices - 1U);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+        henka_test_destroy_authoring_object(scene, entity, object);
+    }
+
+    {
+        henka_entity entity = HENKA_INVALID_ENTITY;
+        sandbox3d_authoring_object* object = NULL;
+        henka_authoring_mesh_counts before;
+        henka_authoring_mesh_counts after;
+        HENKA_TEST_ASSERT(henka_test_create_authoring_object_from_source(
+            engine, scene, source, "Merge By Distance", &entity, &object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_set_merge_distance(object, 2.0f) == HENKA_SUCCESS);
+        sandbox3d_authoring_object_set_selection_mode(
+            object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 2U, true) == HENKA_SUCCESS);
+        before = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_merge_selected_vertices_by_distance(object) == HENKA_SUCCESS);
+        after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(after.vertices == before.vertices - 1U);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+        henka_test_destroy_authoring_object(scene, entity, object);
+    }
+
+    {
+        henka_entity entity = HENKA_INVALID_ENTITY;
+        sandbox3d_authoring_object* object = NULL;
+        henka_authoring_mesh_counts before;
+        henka_authoring_mesh_counts after;
+        HENKA_TEST_ASSERT(henka_test_create_authoring_object_from_source(
+            engine, scene, source, "Dissolve Vertex", &entity, &object) == HENKA_SUCCESS);
+        sandbox3d_authoring_object_set_selection_mode(
+            object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, loose_vertex, false) == HENKA_SUCCESS);
+        before = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_dissolve_selected_vertices(object) == HENKA_SUCCESS);
+        after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(after.vertices == before.vertices - 1U);
+        HENKA_TEST_ASSERT(after.faces == before.faces);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+        henka_test_destroy_authoring_object(scene, entity, object);
+    }
+
+    {
+        henka_entity entity = HENKA_INVALID_ENTITY;
+        sandbox3d_authoring_object* object = NULL;
+        henka_authoring_mesh_counts before;
+        henka_authoring_mesh_counts after;
+        HENKA_TEST_ASSERT(henka_test_create_authoring_object_from_source(
+            engine, scene, source, "Delete Vertex", &entity, &object) == HENKA_SUCCESS);
+        sandbox3d_authoring_object_set_selection_mode(
+            object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, loose_vertex, false) == HENKA_SUCCESS);
+        before = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_delete_selected_vertices(object) == HENKA_SUCCESS);
+        after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(after.vertices == before.vertices - 1U);
+        HENKA_TEST_ASSERT(after.faces == before.faces);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+        henka_test_destroy_authoring_object(scene, entity, object);
+    }
+
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &quad_source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_make_quad_grid(
+        quad_source, 1U, 1U, quad_vertices, sizeof(quad_vertices) / sizeof(quad_vertices[0])) == HENKA_SUCCESS);
+    {
+        henka_entity entity = HENKA_INVALID_ENTITY;
+        sandbox3d_authoring_object* object = NULL;
+        henka_authoring_mesh_counts before;
+        henka_authoring_mesh_counts after;
+        HENKA_TEST_ASSERT(henka_test_create_authoring_object_from_source(
+            engine, scene, quad_source, "Connect Vertices", &entity, &object) == HENKA_SUCCESS);
+        sandbox3d_authoring_object_set_selection_mode(
+            object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, quad_vertices[0], false) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, quad_vertices[3], true) == HENKA_SUCCESS);
+        before = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_connect_selected_vertices(object) == HENKA_SUCCESS);
+        after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(after.faces == before.faces + 1U);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+        henka_test_destroy_authoring_object(scene, entity, object);
+    }
+
+    {
+        henka_entity entity = HENKA_INVALID_ENTITY;
+        sandbox3d_authoring_object* object = NULL;
+        henka_authoring_mesh_counts before;
+        henka_authoring_mesh_counts after;
+        HENKA_TEST_ASSERT(henka_test_create_authoring_object_from_source(
+            engine, scene, source, "Bevel Vertex", &entity, &object) == HENKA_SUCCESS);
+        sandbox3d_authoring_object_set_selection_mode(
+            object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_set_bevel_width(object, 0.05f) == HENKA_SUCCESS);
+        before = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_bevel_selected_vertices(object) == HENKA_SUCCESS);
+        after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(after.vertices > before.vertices);
+        HENKA_TEST_ASSERT(after.faces > before.faces);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+        henka_test_destroy_authoring_object(scene, entity, object);
+    }
+
+    henka_authoring_mesh_destroy(quad_source);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before);
+}
+
 static void henka_test_sandbox3d_object_authoring_scalable_selection(void)
 {
     henka_engine_config config = {0};
@@ -4123,6 +4348,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_edge_loop_slide();
     henka_test_sandbox3d_object_authoring_interior_edge_bevel();
     henka_test_sandbox3d_object_authoring_vertex_extrude();
+    henka_test_sandbox3d_object_authoring_vertex_operations();
     henka_test_sandbox3d_geometry_revision_exhaustion();
     henka_test_sandbox3d_publication_revision_boundary();
     henka_test_sandbox3d_revision_capacity_contract();
