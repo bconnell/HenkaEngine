@@ -135,6 +135,13 @@ static int test_snapshot_clears_pending_io_budget(void)
         goto cleanup;
     }
     samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples != NULL)
+    {
+        for (size_t index = 0U; index < layout.samples_per_region; ++index)
+        {
+            samples[index].material_weights[0] = 255U;
+        }
+    }
     if (samples == NULL ||
         henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
         henka_terrain_world_set_region_residency(
@@ -157,8 +164,101 @@ cleanup:
     return result;
 }
 
+static int test_snapshot_rejects_invalid_materials_without_mutation(void)
+{
+    henka_terrain_world_desc desc = henka_terrain_world_desc_default();
+    henka_terrain_world* world = NULL;
+    henka_terrain_layout layout;
+    henka_terrain_sample* valid_samples = NULL;
+    henka_terrain_sample* invalid_samples = NULL;
+    henka_terrain_region_state before_state;
+    henka_terrain_region_state after_state;
+    henka_terrain_world_stats before_stats;
+    henka_terrain_world_stats after_stats;
+    int result = 0;
+
+    desc.max_resident_regions = 2U;
+    if (henka_terrain_world_desc_get_layout(&desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&desc, &world) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    valid_samples = henka_calloc(layout.samples_per_region, sizeof(*valid_samples));
+    invalid_samples = henka_calloc(layout.samples_per_region, sizeof(*invalid_samples));
+    if (valid_samples == NULL || invalid_samples == NULL)
+    {
+        goto cleanup;
+    }
+    for (size_t index = 0U; index < layout.samples_per_region; ++index)
+    {
+        valid_samples[index].height_millimeters = (int32_t)(index % 17U);
+        valid_samples[index].material_weights[0] = 255U;
+    }
+    if (henka_terrain_world_apply_region_snapshot(
+            world,
+            (henka_terrain_region_storage_info){{0, 0}, 4U, 5U},
+            valid_samples,
+            layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_world_get_region_state(
+            world, (henka_terrain_region_id){0, 0}, &before_state) != HENKA_SUCCESS ||
+        henka_terrain_world_get_stats(world, &before_stats) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    memcpy(invalid_samples, valid_samples, layout.samples_per_region * sizeof(*invalid_samples));
+    invalid_samples[0].material_weights[0] = 254U;
+
+    if (henka_terrain_world_apply_region_snapshot(
+            world,
+            (henka_terrain_region_storage_info){{0, 0}, 8U, 9U},
+            invalid_samples,
+            layout.samples_per_region) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_terrain_world_get_region_state(
+            world, (henka_terrain_region_id){0, 0}, &after_state) != HENKA_SUCCESS ||
+        !henka_terrain_region_id_equal(after_state.id, before_state.id) ||
+        after_state.revision != before_state.revision ||
+        after_state.generation != before_state.generation ||
+        after_state.resident_chunk_count != before_state.resident_chunk_count ||
+        after_state.cpu_resident != before_state.cpu_resident ||
+        after_state.physics_resident != before_state.physics_resident ||
+        after_state.render_resident != before_state.render_resident ||
+        after_state.dirty != before_state.dirty ||
+        after_state.pending_io != before_state.pending_io ||
+        henka_terrain_world_get_stats(world, &after_stats) != HENKA_SUCCESS ||
+        after_stats.resident_region_count != before_stats.resident_region_count ||
+        after_stats.resident_chunk_count != before_stats.resident_chunk_count ||
+        after_stats.pending_io_count != before_stats.pending_io_count ||
+        after_stats.dirty_region_count != before_stats.dirty_region_count ||
+        after_stats.cpu_bytes != before_stats.cpu_bytes)
+    {
+        goto cleanup;
+    }
+
+    if (henka_terrain_world_get_stats(world, &before_stats) != HENKA_SUCCESS ||
+        henka_terrain_world_apply_region_snapshot(
+            world,
+            (henka_terrain_region_storage_info){{1, 0}, 1U, 1U},
+            invalid_samples,
+            layout.samples_per_region) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_terrain_world_get_stats(world, &after_stats) != HENKA_SUCCESS ||
+        after_stats.resident_region_count != before_stats.resident_region_count ||
+        henka_terrain_world_get_region_state(
+            world, (henka_terrain_region_id){1, 0}, &after_state) == HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_free(invalid_samples);
+    henka_free(valid_samples);
+    henka_terrain_world_destroy(world);
+    return result;
+}
+
 int main(void)
 {
     return test_default_layout() && test_deterministic_weights() &&
-        test_bounded_residency() && test_snapshot_clears_pending_io_budget() ? 0 : 1;
+        test_bounded_residency() && test_snapshot_clears_pending_io_budget() &&
+        test_snapshot_rejects_invalid_materials_without_mutation() ? 0 : 1;
 }

@@ -33,6 +33,8 @@ The authoritative height field uses signed 32-bit integer millimeters. Rendering
 
 Each sample reserves exactly four active material weights. The public normalization helper produces a deterministic total weight of 255 using integer arithmetic and a stable largest-remainder tie break.
 
+Snapshot publication validates every sample against the same 255-weight invariant before reserving or replacing a region. A rejected snapshot leaves existing residency, samples, and revision state unchanged.
+
 The world descriptor stores:
 
 - format version;

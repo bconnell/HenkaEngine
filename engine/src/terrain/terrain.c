@@ -242,6 +242,22 @@ henka_result henka_terrain_normalize_weights(
     return HENKA_SUCCESS;
 }
 
+bool henka_terrain_sample_is_valid(const henka_terrain_sample* sample)
+{
+    uint32_t total = 0U;
+    uint32_t index;
+
+    if (sample == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT; ++index)
+    {
+        total += sample->material_weights[index];
+    }
+    return total == 255U;
+}
+
 henka_terrain_region_record* henka_terrain_find_region_record(
     henka_terrain_world* world,
     henka_terrain_region_id id)
@@ -646,10 +662,18 @@ henka_result henka_terrain_world_apply_region_snapshot(
     size_t sample_count)
 {
     henka_terrain_region_record* record;
+    size_t index;
     if (world == NULL || samples == NULL || sample_count != world->layout.samples_per_region ||
         !henka_terrain_region_id_is_valid(&world->desc, info.id))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < sample_count; ++index)
+    {
+        if (!henka_terrain_sample_is_valid(&samples[index]))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
     }
     record = henka_terrain_find_region_record(world, info.id);
     if (record == NULL)

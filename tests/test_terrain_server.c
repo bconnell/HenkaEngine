@@ -466,7 +466,10 @@ static int test_session_info_order_is_coordinate_stable(void)
     {
         goto cleanup;
     }
-    samples[0].material_weights[0] = 255U;
+    for (index = 0U; index < layout.samples_per_region; ++index)
+    {
+        samples[index].material_weights[0] = 255U;
+    }
     for (index = 0U; index < 3U; ++index)
     {
         if (henka_terrain_world_apply_region_snapshot(

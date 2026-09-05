@@ -78,15 +78,7 @@ static bool henka_terrain_stream_generated_samples_valid(
     }
     for (index = 0U; index < sample_count; ++index)
     {
-        uint32_t total = 0U;
-        uint32_t material_index;
-        for (material_index = 0U;
-             material_index < HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT;
-             ++material_index)
-        {
-            total += samples[index].material_weights[material_index];
-        }
-        if (total != 255U)
+        if (!henka_terrain_sample_is_valid(&samples[index]))
         {
             return false;
         }

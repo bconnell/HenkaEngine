@@ -113,17 +113,6 @@ static uint32_t henka_terrain_checksum(const uint8_t* data, size_t size)
     return ~checksum;
 }
 
-static bool henka_terrain_weight_sum_is_valid(const henka_terrain_sample* sample)
-{
-    uint32_t total = 0U;
-    uint32_t index;
-    for (index = 0U; index < HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT; ++index)
-    {
-        total += sample->material_weights[index];
-    }
-    return total == 255U;
-}
-
 static henka_result henka_terrain_region_size(
     const henka_terrain_world_desc* desc,
     size_t sample_count,
@@ -187,7 +176,7 @@ henka_result henka_terrain_region_encode(
     weights = heights + sample_count * sizeof(int32_t);
     for (index = 0U; index < sample_count; ++index)
     {
-        if (!henka_terrain_weight_sum_is_valid(&samples[index]))
+        if (!henka_terrain_sample_is_valid(&samples[index]))
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
@@ -253,7 +242,7 @@ henka_result henka_terrain_region_decode(
         memcpy(samples[index].material_weights,
             weights + index * HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT,
             HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT);
-        if (!henka_terrain_weight_sum_is_valid(&samples[index]))
+        if (!henka_terrain_sample_is_valid(&samples[index]))
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }

@@ -132,6 +132,7 @@ henka_result henka_terrain_region_id_from_chunk(
 
 henka_result henka_terrain_normalize_weights(
     uint8_t weights[HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT]);
+bool henka_terrain_sample_is_valid(const henka_terrain_sample* sample);
 
 henka_result henka_terrain_world_create(
     const henka_terrain_world_desc* desc,
