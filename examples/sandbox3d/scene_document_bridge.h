@@ -59,6 +59,13 @@ henka_result sandbox3d_scene_document_bridge_get_entity(
 henka_result sandbox3d_scene_document_bridge_apply_object(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id);
+/* Applies one supplied object value to a candidate scene. The candidate must
+ * be discarded unless all related authoring operations also succeed; this
+ * helper does not mutate the borrowed Scene Document. */
+henka_result sandbox3d_scene_document_bridge_apply_object_candidate(
+    const sandbox3d_scene_document_bridge* bridge,
+    henka_scene_document_id document_id,
+    const henka_scene_document_object* object);
 
 /* Applies all persisted parent links to bound runtime entities in parent-first
  * order while preserving each entity's authored world transform. The bridge
@@ -66,6 +73,12 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
  * prior runtime parent links if a runtime parenting operation fails. */
 henka_result sandbox3d_scene_document_bridge_apply_hierarchy(
     const sandbox3d_scene_document_bridge* bridge);
+/* Applies hierarchy using one supplied candidate object in place of the
+ * persisted document value. The borrowed Scene Document is not changed. */
+henka_result sandbox3d_scene_document_bridge_apply_hierarchy_candidate(
+    const sandbox3d_scene_document_bridge* bridge,
+    henka_scene_document_id document_id,
+    const henka_scene_document_object* object);
 
 /* Applies an optional authored scene camera. Legacy documents without a
  * camera leave the current runtime camera unchanged. */

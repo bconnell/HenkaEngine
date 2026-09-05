@@ -439,20 +439,22 @@ static bool sandbox3d_scene_document_bridge_material_scalars_equal(
         left->emissive_strength == right->emissive_strength;
 }
 
-henka_result sandbox3d_scene_document_bridge_apply_object(
+henka_result sandbox3d_scene_document_bridge_apply_object_candidate(
     const sandbox3d_scene_document_bridge* bridge,
-    henka_scene_document_id document_id)
+    henka_scene_document_id document_id,
+    const henka_scene_document_object* object)
 {
     henka_material previous_material;
     henka_material material = henka_material_default();
     const henka_material_asset* material_asset = NULL;
     henka_scene_entity_presentation_update update;
-    henka_scene_document_object object;
     henka_entity entity;
     bool material_changed = false;
-    if (bridge == NULL || bridge->play_locked ||
-        sandbox3d_scene_document_bridge_get_bound_object(
-            bridge, document_id, &object, &entity) != HENKA_SUCCESS)
+
+    if (bridge == NULL || object == NULL ||
+        object->id != document_id || bridge->play_locked ||
+        sandbox3d_scene_document_bridge_get_entity(
+            bridge, document_id, &entity) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -461,31 +463,28 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (object.renderer.material_override && material_asset != NULL)
+    if (object->renderer.material_override && material_asset != NULL)
     {
-        /* Replacing a manager-owned definition requires the asset/material
-         * authority, which this bridge does not own. Fail closed instead of
-         * silently turning a persisted reference into an inline instance. */
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     update = (henka_scene_entity_presentation_update){
-        object.name,
-        object.transform,
-        object.visible,
+        object->name,
+        object->transform,
+        object->visible,
         {
-            object.interaction.enabled,
-            object.interaction.max_distance,
-            object.interaction.prompt},
+            object->interaction.enabled,
+            object->interaction.max_distance,
+            object->interaction.prompt},
         false,
         material};
-    if (object.renderer.material_override)
+    if (object->renderer.material_override)
     {
         material = previous_material;
-        material.base_color = object.renderer.base_color;
-        material.metallic = object.renderer.metallic;
-        material.roughness = object.renderer.roughness;
-        material.emissive_color = object.renderer.emissive;
-        material.emissive_strength = object.renderer.emissive_strength;
+        material.base_color = object->renderer.base_color;
+        material.metallic = object->renderer.metallic;
+        material.roughness = object->renderer.roughness;
+        material.emissive_color = object->renderer.emissive;
+        material.emissive_strength = object->renderer.emissive_strength;
         update.material = material;
         material_changed = !sandbox3d_scene_document_bridge_material_scalars_equal(
             &previous_material,
@@ -498,8 +497,28 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
         &update);
 }
 
-henka_result sandbox3d_scene_document_bridge_apply_hierarchy(
-    const sandbox3d_scene_document_bridge* bridge)
+henka_result sandbox3d_scene_document_bridge_apply_object(
+    const sandbox3d_scene_document_bridge* bridge,
+    henka_scene_document_id document_id)
+{
+    henka_scene_document_object object;
+
+    if (bridge == NULL || bridge->play_locked ||
+        sandbox3d_scene_document_bridge_get_object(
+            bridge, document_id, &object) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_scene_document_bridge_apply_object_candidate(
+        bridge,
+        document_id,
+        &object);
+}
+
+static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(
+    const sandbox3d_scene_document_bridge* bridge,
+    henka_scene_document_id override_document_id,
+    const henka_scene_document_object* override_object)
 {
     henka_scene_document_id parent_ids[
         SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
@@ -533,11 +552,19 @@ henka_result sandbox3d_scene_document_bridge_apply_hierarchy(
         henka_scene_document_object object;
         size_t parent_index;
         entities[index] = bridge->bindings[index].entity;
-        if (henka_scene_document_get_object(
+        if (override_object != NULL &&
+            bridge->bindings[index].document_id == override_document_id)
+        {
+            object = *override_object;
+        }
+        else if (henka_scene_document_get_object(
                 bridge->document,
                 bridge->bindings[index].document_id,
-                &object) != HENKA_SUCCESS ||
-            henka_scene_get_entity_parent(
+                &object) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (henka_scene_get_entity_parent(
                 bridge->scene,
                 entities[index],
                 &previous_parents[index]) != HENKA_SUCCESS)
@@ -616,6 +643,31 @@ rollback:
             HENKA_SCENE_PARENT_KEEP_WORLD);
     }
     return result;
+}
+
+henka_result sandbox3d_scene_document_bridge_apply_hierarchy(
+    const sandbox3d_scene_document_bridge* bridge)
+{
+    return sandbox3d_scene_document_bridge_apply_hierarchy_internal(
+        bridge,
+        HENKA_INVALID_SCENE_DOCUMENT_ID,
+        NULL);
+}
+
+henka_result sandbox3d_scene_document_bridge_apply_hierarchy_candidate(
+    const sandbox3d_scene_document_bridge* bridge,
+    henka_scene_document_id override_document_id,
+    const henka_scene_document_object* override_object)
+{
+    if (override_object == NULL ||
+        override_document_id == HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_scene_document_bridge_apply_hierarchy_internal(
+        bridge,
+        override_document_id,
+        override_object);
 }
 
 henka_result sandbox3d_scene_document_bridge_sync_object(

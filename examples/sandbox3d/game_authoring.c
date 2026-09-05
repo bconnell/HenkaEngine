@@ -531,7 +531,13 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
     const henka_scene_document_object* object)
 {
     henka_scene_document_object previous;
+    henka_scene* candidate_scene = NULL;
+    sandbox3d_scene_document_bridge* candidate_bridge = NULL;
     henka_scene_document_id document_id;
+    size_t binding_index;
+    size_t binding_count;
+    henka_scene_document_id binding_document_id;
+    henka_entity binding_entity;
     henka_result rollback_result;
     henka_result result;
     if (authoring == NULL || object == NULL ||
@@ -541,6 +547,57 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
         object->id != document_id)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_scene_clone(authoring->scene, &candidate_scene);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = sandbox3d_scene_document_bridge_create(
+        authoring->document,
+        candidate_scene,
+        &candidate_bridge);
+    if (result == HENKA_SUCCESS)
+    {
+        binding_count = sandbox3d_scene_document_bridge_get_binding_count(
+            authoring->bridge);
+        for (binding_index = 0U;
+            binding_index < binding_count && result == HENKA_SUCCESS;
+            ++binding_index)
+        {
+            result = sandbox3d_scene_document_bridge_get_binding_at(
+                authoring->bridge,
+                binding_index,
+                &binding_document_id,
+                &binding_entity);
+            if (result == HENKA_SUCCESS)
+            {
+                result = sandbox3d_scene_document_bridge_bind(
+                    candidate_bridge,
+                    binding_document_id,
+                    binding_entity);
+            }
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_apply_object_candidate(
+            candidate_bridge,
+            document_id,
+            object);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_apply_hierarchy_candidate(
+            candidate_bridge,
+            document_id,
+            object);
+    }
+    sandbox3d_scene_document_bridge_destroy(candidate_bridge);
+    henka_scene_destroy(candidate_scene);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
     result = henka_scene_document_set_object(authoring->document, object);
     if (result != HENKA_SUCCESS)

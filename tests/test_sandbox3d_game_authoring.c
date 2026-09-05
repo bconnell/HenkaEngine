@@ -10,6 +10,7 @@
 #include <henka/scene.h>
 
 #include "../examples/sandbox3d/game_authoring.h"
+#include "../engine/src/scene/scene_internal.h"
 
 static void test_write_u16(unsigned char* bytes, size_t offset, uint16_t value)
 {
@@ -69,6 +70,74 @@ static bool test_write_audio_fixture(const char* path)
     return success;
 }
 
+static bool test_update_object_failure_is_transactional(void)
+{
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_entity parent = HENKA_INVALID_ENTITY;
+    henka_entity child = HENKA_INVALID_ENTITY;
+    henka_scene_document_id parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object before;
+    henka_scene_document_object candidate;
+    henka_scene_document_object after;
+    henka_transform before_transform;
+    henka_transform after_transform;
+    henka_entity before_parent = HENKA_INVALID_ENTITY;
+    henka_entity after_parent = HENKA_INVALID_ENTITY;
+    henka_result result;
+    bool success = false;
+
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create(
+            scene,
+            "build/test_tmp/game_authoring_transaction.hscene",
+            &authoring) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    parent = henka_scene_create_entity_named(scene, "Transactional Parent");
+    child = henka_scene_create_entity_named(scene, "Transactional Child");
+    if (parent == HENKA_INVALID_ENTITY || child == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, parent, &parent_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, child, &child_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &child_id, &before) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(scene, child, &before_transform) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(scene, child, &before_parent) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    candidate = before;
+    candidate.transform.position.x += 3.0f;
+    candidate.parent_id = parent_id;
+    scene->render_revision = UINT64_MAX - UINT64_C(1);
+    scene->content_revision = UINT64_MAX - UINT64_C(1);
+    result = sandbox3d_game_authoring_update_object_for_entity(
+        authoring, child, &candidate);
+    if (sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &child_id, &after) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(scene, child, &after_transform) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(scene, child, &after_parent) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    success = result == HENKA_ERROR_LIMIT &&
+        after.parent_id == before.parent_id &&
+        after.transform.position.x == before.transform.position.x &&
+        after_transform.position.x == before_transform.position.x &&
+        after_parent == before_parent &&
+        scene->render_revision == UINT64_MAX - UINT64_C(1) &&
+        scene->content_revision == UINT64_MAX - UINT64_C(1);
+
+cleanup:
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    return success;
+}
+
 int main(void)
 {
     const char* relative_path = "build/test_tmp/game_authoring_slice.hscene";
@@ -104,6 +173,12 @@ int main(void)
     henka_result load_result;
     henka_result parent_result;
     int exit_code = 1;
+
+    if (!test_update_object_failure_is_transactional())
+    {
+        fprintf(stderr, "game authoring transaction test failed\n");
+        return 1;
+    }
 
     play_scene = NULL;
 
