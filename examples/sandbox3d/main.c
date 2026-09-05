@@ -10507,9 +10507,29 @@ static henka_result sandbox3d_initialize_game_authoring(
     {
         const henka_entity entity = henka_scene_get_entity_at_index(state->scene, index);
         henka_scene_document_id document_id;
+        const henka_material_asset* material_asset = NULL;
+        uint64_t material_asset_revision = 0U;
+        bool material_asset_overridden = false;
         if (entity == HENKA_INVALID_ENTITY ||
             !sandbox3d_is_logical_scene_object(state, entity))
         {
+            continue;
+        }
+        /* Scene Document does not yet carry a material-asset path/authority
+         * for an explicit inline override. Keep that source-owned state in the
+         * live scene instead of collapsing it into misleading inline truth. */
+        if (henka_scene_get_entity_material_asset(state->scene, entity, &material_asset) == HENKA_SUCCESS &&
+            henka_scene_get_entity_material_asset_state(
+                state->scene,
+                entity,
+                &material_asset_revision,
+                &material_asset_overridden) == HENKA_SUCCESS &&
+            material_asset != NULL && material_asset_overridden)
+        {
+            HENKA_LOG_ERROR(
+                "Skipping unsupported asset-backed material override for Game Authoring entity %llu (material revision %llu).",
+                (unsigned long long)entity,
+                (unsigned long long)material_asset_revision);
             continue;
         }
         result = sandbox3d_game_authoring_register_entity(
@@ -31815,6 +31835,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     int panel_index;
     sandbox3d_state* state;
     state = (sandbox3d_state*)user_data;
+    marker_material_asset = NULL;
+    marker_scene_asset = NULL;
     detail_normal_pixels = NULL;
     macro_variation_pixels = NULL;
     wood_grain_pixels = NULL;
