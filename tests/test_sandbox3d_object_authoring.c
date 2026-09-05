@@ -1581,6 +1581,73 @@ static void henka_test_sandbox3d_object_authoring_model_primitive_bridge(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_real_gltf_import_bridge(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_model_scene_data imported_scene = {0};
+    sandbox3d_authoring_object* object = NULL;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_mesh* previous_mesh = NULL;
+    henka_mesh* authored_mesh = NULL;
+    henka_bounds authored_bounds;
+    henka_authoring_mesh_counts counts;
+
+    HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf(
+        "assets/models/henka_marker.gltf",
+        &imported_scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(imported_scene.primitive_count >= 1U);
+    HENKA_TEST_ASSERT(imported_scene.primitives[0].vertices != NULL);
+    HENKA_TEST_ASSERT(imported_scene.primitives[0].indices != NULL);
+    HENKA_TEST_ASSERT(imported_scene.primitives[0].vertex_count >= 3U);
+    HENKA_TEST_ASSERT(imported_scene.primitives[0].index_count >= 3U);
+
+    config.application_name = "Henka glTF Authoring Bridge Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Imported glTF Authoring Source");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_mesh_create_cube(engine, &previous_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(scene, entity, previous_mesh) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_model_primitive(
+        engine,
+        scene,
+        entity,
+        &imported_scene.primitives[0],
+        8U,
+        &object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(object != NULL);
+    counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices >= 3U && counts.faces >= 1U);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &authored_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(authored_mesh != NULL && authored_mesh != previous_mesh);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
+        scene, entity, &authored_bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(authored_bounds.extents.x > 0.0f);
+    HENKA_TEST_ASSERT(authored_bounds.extents.y > 0.0f);
+    HENKA_TEST_ASSERT(authored_bounds.extents.z >= 0.0f);
+
+    sandbox3d_authoring_object_destroy(object);
+    object = NULL;
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &authored_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(authored_mesh == previous_mesh);
+    henka_scene_destroy(scene);
+    scene = NULL;
+    henka_mesh_destroy(previous_mesh);
+    previous_mesh = NULL;
+    henka_engine_destroy(engine);
+    engine = NULL;
+    henka_model_scene_data_destroy(&imported_scene);
+}
+
 static void henka_test_sandbox3d_object_authoring_real_obj_import_bridge(void)
 {
     static const char* obj_source =
@@ -4009,6 +4076,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_source_persistence();
     henka_test_sandbox3d_object_authoring_clone_bridge();
     henka_test_sandbox3d_object_authoring_model_primitive_bridge();
+    henka_test_sandbox3d_object_authoring_real_gltf_import_bridge();
     henka_test_sandbox3d_object_authoring_real_obj_import_bridge();
     henka_test_sandbox3d_object_authoring_rejects_unquantizable_position();
     henka_test_sandbox3d_object_authoring_component_selection();
