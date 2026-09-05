@@ -564,7 +564,7 @@ static void henka_test_gltf_rejects_invalid_tangent_handedness(void)
     const char* gltf_path = "build/test_tmp/invalid-tangent-handedness.gltf";
     henka_model_data model;
 
-    HENKA_TEST_ASSERT(sizeof(float) == 4U);
+    _Static_assert(sizeof(float) == 4U, "glTF fixture requires 32-bit float");
     HENKA_TEST_ASSERT(position_byte_length == 36U);
     HENKA_TEST_ASSERT(tangent_byte_offset == 36U);
     HENKA_TEST_ASSERT(tangent_byte_length == 48U);
@@ -622,7 +622,7 @@ static void henka_test_gltf_external_buffer_file_load(void)
     henka_model_data model;
     henka_result result;
 
-    HENKA_TEST_ASSERT(sizeof(float) == 4U);
+    _Static_assert(sizeof(float) == 4U, "glTF fixture requires 32-bit float");
     HENKA_TEST_ASSERT(position_byte_length == 36U);
     HENKA_TEST_ASSERT(position_byte_offset == 0U);
     HENKA_TEST_ASSERT(position_byte_stride == 0U);
@@ -691,7 +691,7 @@ static void henka_test_gltf_external_interleaved_position_file_load(void)
     const char* gltf_path = "build/test_tmp/external-interleaved-buffer.gltf";
     henka_model_data model;
 
-    HENKA_TEST_ASSERT(sizeof(float) == 4U);
+    _Static_assert(sizeof(float) == 4U, "glTF fixture requires 32-bit float");
     HENKA_TEST_ASSERT(position_byte_length == 48U);
     HENKA_TEST_ASSERT(position_byte_stride == 16U);
     for (index = 0U; index < sizeof(interleaved_positions) / sizeof(interleaved_positions[0]); ++index)
@@ -754,7 +754,7 @@ static void henka_test_gltf_external_image_file_load(void)
     const char* gltf_path = "build/test_tmp/external-image.gltf";
     henka_model_data model;
 
-    HENKA_TEST_ASSERT(sizeof(float) == 4U);
+    _Static_assert(sizeof(float) == 4U, "glTF fixture requires 32-bit float");
     HENKA_TEST_ASSERT(position_byte_length == 36U);
     for (index = 0U; index < sizeof(positions) / sizeof(positions[0]); ++index)
         HENKA_TEST_ASSERT(henka_test_write_f32_le(

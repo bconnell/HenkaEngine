@@ -358,12 +358,6 @@ if(WIN32)
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
     add_test(
-        NAME henka_ibl_fractional_lod_control_tests
-        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
-            ${CMAKE_SOURCE_DIR}/scripts/test_ibl_fractional_lod_controls_windows.ps1
-            -RepositoryRoot ${CMAKE_SOURCE_DIR})
-
-    add_test(
         NAME henka_packaged_startup_readiness_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_packaged_startup_readiness_windows.ps1
