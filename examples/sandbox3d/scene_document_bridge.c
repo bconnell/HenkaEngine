@@ -43,6 +43,72 @@ static size_t sandbox3d_scene_document_bridge_find_document_index(
     return SIZE_MAX;
 }
 
+static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_links(
+    const sandbox3d_scene_document_bridge* bridge,
+    henka_scene* scene,
+    const henka_scene_document_id* parent_ids,
+    const henka_entity* entities,
+    const henka_entity* parent_entities,
+    size_t binding_count,
+    bool* applied,
+    size_t* applied_order,
+    size_t* out_applied_count)
+{
+    size_t applied_count = 0U;
+
+    if (bridge == NULL || scene == NULL || parent_ids == NULL ||
+        entities == NULL || parent_entities == NULL || applied == NULL ||
+        applied_order == NULL || out_applied_count == NULL ||
+        binding_count != bridge->binding_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    while (applied_count < binding_count)
+    {
+        bool made_progress = false;
+        size_t index;
+
+        for (index = 0U; index < binding_count; ++index)
+        {
+            size_t parent_index;
+            henka_result result;
+
+            if (applied[index])
+            {
+                continue;
+            }
+            parent_index = parent_ids[index] == HENKA_INVALID_SCENE_DOCUMENT_ID
+                ? SIZE_MAX
+                : sandbox3d_scene_document_bridge_find_document_index(
+                    bridge, parent_ids[index]);
+            if (parent_index != SIZE_MAX && !applied[parent_index])
+            {
+                continue;
+            }
+            result = henka_scene_set_entity_parent(
+                scene,
+                entities[index],
+                parent_entities[index],
+                HENKA_SCENE_PARENT_KEEP_WORLD);
+            if (result != HENKA_SUCCESS)
+            {
+                *out_applied_count = applied_count;
+                return result;
+            }
+            applied[index] = true;
+            applied_order[applied_count++] = index;
+            made_progress = true;
+        }
+        if (!made_progress)
+        {
+            *out_applied_count = applied_count;
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    *out_applied_count = applied_count;
+    return HENKA_SUCCESS;
+}
+
 static size_t sandbox3d_scene_document_bridge_find_entity_index(
     const sandbox3d_scene_document_bridge* bridge,
     henka_entity entity)
@@ -443,6 +509,12 @@ henka_result sandbox3d_scene_document_bridge_apply_hierarchy(
         SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
     henka_entity previous_parents[
         SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
+    henka_scene* candidate_scene = NULL;
+    size_t candidate_applied_order[
+        SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
+    bool candidate_applied[
+        SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS] = {false};
+    size_t candidate_applied_count = 0U;
     size_t applied_order[
         SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
     bool applied[
@@ -489,42 +561,47 @@ henka_result sandbox3d_scene_document_bridge_apply_hierarchy(
         parent_entities[index] = bridge->bindings[parent_index].entity;
     }
 
-    while (applied_count < bridge->binding_count)
+    /* Prove the complete parent application on an independent scene first.
+     * This makes revision exhaustion, invalid hierarchy state, and any other
+     * deterministic parenting failure observable before the live scene is
+     * mutated. The clone preserves generation-checked entity handles and
+     * borrows the same render resources, so the candidate exercises the same
+     * production scene contract. */
+    result = henka_scene_clone(bridge->scene, &candidate_scene);
+    if (result != HENKA_SUCCESS)
     {
-        bool made_progress = false;
-        for (index = 0U; index < bridge->binding_count; ++index)
-        {
-            size_t parent_index;
-            if (applied[index])
-            {
-                continue;
-            }
-            parent_index = parent_ids[index] == HENKA_INVALID_SCENE_DOCUMENT_ID
-                ? SIZE_MAX
-                : sandbox3d_scene_document_bridge_find_document_index(
-                    bridge, parent_ids[index]);
-            if (parent_index != SIZE_MAX && !applied[parent_index])
-            {
-                continue;
-            }
-            result = henka_scene_set_entity_parent(
-                bridge->scene,
-                entities[index],
-                parent_entities[index],
-                HENKA_SCENE_PARENT_KEEP_WORLD);
-            if (result != HENKA_SUCCESS)
-            {
-                goto rollback;
-            }
-            applied[index] = true;
-            applied_order[applied_count++] = index;
-            made_progress = true;
-        }
-        if (!made_progress)
-        {
-            result = HENKA_ERROR_INVALID_ARGUMENT;
-            goto rollback;
-        }
+        return result;
+    }
+    result = sandbox3d_scene_document_bridge_apply_hierarchy_links(
+        bridge,
+        candidate_scene,
+        parent_ids,
+        entities,
+        parent_entities,
+        bridge->binding_count,
+        candidate_applied,
+        candidate_applied_order,
+        &candidate_applied_count);
+    henka_scene_destroy(candidate_scene);
+    candidate_scene = NULL;
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = sandbox3d_scene_document_bridge_apply_hierarchy_links(
+        bridge,
+        bridge->scene,
+        parent_ids,
+        entities,
+        parent_entities,
+        bridge->binding_count,
+        applied,
+        applied_order,
+        &applied_count);
+    if (result != HENKA_SUCCESS)
+    {
+        goto rollback;
     }
     return HENKA_SUCCESS;
 

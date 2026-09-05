@@ -44,6 +44,98 @@ static bool test_material_scalars_equal(
         left->emissive_strength == right->emissive_strength;
 }
 
+static bool test_hierarchy_capacity_failure_is_transactional(void)
+{
+    henka_scene_document* document = NULL;
+    sandbox3d_scene_document_bridge* bridge = NULL;
+    henka_scene* scene = NULL;
+    henka_scene_document_object root_object =
+        henka_scene_document_object_default();
+    henka_scene_document_object child_object =
+        henka_scene_document_object_default();
+    henka_scene_document_id root_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_entity alternate_parent = HENKA_INVALID_ENTITY;
+    henka_entity root_entity = HENKA_INVALID_ENTITY;
+    henka_entity child_entity = HENKA_INVALID_ENTITY;
+    henka_entity root_parent_before = HENKA_INVALID_ENTITY;
+    henka_entity child_parent_before = HENKA_INVALID_ENTITY;
+    henka_entity root_parent_after = HENKA_INVALID_ENTITY;
+    henka_entity child_parent_after = HENKA_INVALID_ENTITY;
+    const uint64_t exhausted_revision = UINT64_MAX - UINT64_C(1);
+    henka_result result;
+    bool success = false;
+
+    if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_document_add_object(
+            document, &root_object, &root_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    child_object.parent_id = root_id;
+    if (henka_scene_document_add_object(
+            document, &child_object, &child_id) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_create(document, scene, &bridge) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    alternate_parent = henka_scene_create_entity_named(scene, "Existing Parent");
+    root_entity = henka_scene_create_entity_named(scene, "Hierarchy Root");
+    child_entity = henka_scene_create_entity_named(scene, "Hierarchy Child");
+    if (alternate_parent == HENKA_INVALID_ENTITY ||
+        root_entity == HENKA_INVALID_ENTITY ||
+        child_entity == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_parent(
+            scene,
+            root_entity,
+            alternate_parent,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        henka_scene_set_entity_parent(
+            scene,
+            child_entity,
+            alternate_parent,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_bind(
+            bridge, root_id, root_entity) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_bind(
+            bridge, child_id, child_entity) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(
+            scene, root_entity, &root_parent_before) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(
+            scene, child_entity, &child_parent_before) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    scene->render_revision = exhausted_revision;
+    scene->content_revision = exhausted_revision;
+    if (!henka_scene_has_render_revision_capacity(scene, 1U) ||
+        henka_scene_has_render_revision_capacity(scene, 2U))
+    {
+        goto cleanup;
+    }
+
+    result = sandbox3d_scene_document_bridge_apply_hierarchy(bridge);
+    if (henka_scene_get_entity_parent(
+            scene, root_entity, &root_parent_after) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(
+            scene, child_entity, &child_parent_after) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    success = result == HENKA_ERROR_LIMIT &&
+        root_parent_after == root_parent_before &&
+        child_parent_after == child_parent_before &&
+        scene->render_revision == exhausted_revision &&
+        scene->content_revision == exhausted_revision;
+
+cleanup:
+    sandbox3d_scene_document_bridge_destroy(bridge);
+    henka_scene_destroy(scene);
+    henka_scene_document_destroy(document);
+    return success;
+}
+
 int main(void)
 {
     henka_scene_document* document = NULL;
@@ -74,6 +166,12 @@ int main(void)
     henka_camera unchanged_camera;
     uint64_t revision_before;
     int exit_code = 1;
+
+    if (!test_hierarchy_capacity_failure_is_transactional())
+    {
+        fprintf(stderr, "hierarchy capacity transaction test failed\n");
+        return 1;
+    }
 
     if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
         henka_scene_create(&scene) != HENKA_SUCCESS)
