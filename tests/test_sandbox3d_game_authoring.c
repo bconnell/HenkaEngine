@@ -138,6 +138,110 @@ cleanup:
     return success;
 }
 
+static bool test_load_failure_is_transactional(void)
+{
+    const char* relative_path =
+        "build/test_tmp/game_authoring_load_transaction.hscene";
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_scene_document* candidate_document = NULL;
+    henka_camera camera;
+    henka_scene_document_object parent_object;
+    henka_scene_document_object child_object;
+    henka_scene_document_object loaded_parent;
+    henka_scene_document_object loaded_child;
+    henka_entity parent = HENKA_INVALID_ENTITY;
+    henka_entity child = HENKA_INVALID_ENTITY;
+    henka_entity parent_before = HENKA_INVALID_ENTITY;
+    henka_entity parent_after = HENKA_INVALID_ENTITY;
+    henka_scene_document_id parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id candidate_parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id candidate_child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_transform parent_transform_before;
+    henka_transform parent_transform_after;
+    henka_result result;
+    bool success = false;
+
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        16.0f / 9.0f,
+        0.1f,
+        100.0f);
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create(scene, relative_path, &authoring) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    parent = henka_scene_create_entity_named(scene, "Load Transaction Parent");
+    child = henka_scene_create_entity_named(scene, "Load Transaction Child");
+    if (parent == HENKA_INVALID_ENTITY || child == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, parent, &parent_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, child, &child_id) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(scene, child, &parent_before) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(scene, parent, &parent_transform_before) != HENKA_SUCCESS ||
+        henka_scene_document_create(&candidate_document) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    parent_object = henka_scene_document_object_default();
+    child_object = henka_scene_document_object_default();
+    if (henka_scene_document_add_object(
+            candidate_document, &parent_object, &candidate_parent_id) != HENKA_SUCCESS ||
+        henka_scene_document_add_object(
+            candidate_document, &child_object, &candidate_child_id) != HENKA_SUCCESS ||
+        candidate_parent_id != parent_id || candidate_child_id != child_id)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_document_get_object(
+            candidate_document, candidate_parent_id, &parent_object) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(
+            candidate_document, candidate_child_id, &child_object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    parent_object.transform.position.x = 4.0f;
+    child_object.parent_id = candidate_parent_id;
+    if (henka_scene_document_set_object(
+            candidate_document, &parent_object) != HENKA_SUCCESS ||
+        henka_scene_document_set_object(
+            candidate_document, &child_object) != HENKA_SUCCESS ||
+        henka_scene_document_save_file(
+            candidate_document, ".", relative_path) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    scene->render_revision = UINT64_MAX - UINT64_C(1);
+    scene->content_revision = UINT64_MAX - UINT64_C(1);
+    result = sandbox3d_game_authoring_load(authoring, ".");
+    if (sandbox3d_game_authoring_get_object_for_entity(
+            authoring, parent, &parent_id, &loaded_parent) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &child_id, &loaded_child) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(scene, child, &parent_after) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(scene, parent, &parent_transform_after) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    success = result == HENKA_ERROR_LIMIT &&
+        loaded_parent.transform.position.x == 0.0f &&
+        loaded_child.parent_id == HENKA_INVALID_SCENE_DOCUMENT_ID &&
+        parent_after == parent_before &&
+        parent_transform_after.position.x == parent_transform_before.position.x &&
+        scene->render_revision == UINT64_MAX - UINT64_C(1) &&
+        scene->content_revision == UINT64_MAX - UINT64_C(1);
+cleanup:
+    henka_scene_document_destroy(candidate_document);
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove(relative_path);
+    return success;
+}
+
 int main(void)
 {
     const char* relative_path = "build/test_tmp/game_authoring_slice.hscene";
@@ -177,6 +281,11 @@ int main(void)
     if (!test_update_object_failure_is_transactional())
     {
         fprintf(stderr, "game authoring transaction test failed\n");
+        return 1;
+    }
+    if (!test_load_failure_is_transactional())
+    {
+        fprintf(stderr, "game authoring load transaction test failed\n");
         return 1;
     }
 

@@ -907,6 +907,8 @@ henka_result sandbox3d_game_authoring_load(
 {
     henka_scene_document* candidate = NULL;
     henka_scene_document* previous = NULL;
+    henka_scene* candidate_scene = NULL;
+    sandbox3d_scene_document_bridge* candidate_bridge = NULL;
     size_t index;
     henka_camera previous_camera;
     henka_result rollback_result;
@@ -948,6 +950,50 @@ henka_result sandbox3d_game_authoring_load(
         }
         henka_scene_document_destroy(candidate);
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_scene_clone(authoring->scene, &candidate_scene);
+    if (result != HENKA_SUCCESS)
+    {
+        goto load_cleanup;
+    }
+    result = sandbox3d_scene_document_bridge_create(
+        candidate,
+        candidate_scene,
+        &candidate_bridge);
+    for (index = 0U;
+        index < authoring->binding_count && result == HENKA_SUCCESS;
+        ++index)
+    {
+        result = sandbox3d_scene_document_bridge_bind(
+            candidate_bridge,
+            authoring->bindings[index].document_id,
+            authoring->bindings[index].entity);
+    }
+    for (index = 0U;
+        index < authoring->binding_count && result == HENKA_SUCCESS;
+        ++index)
+    {
+        result = sandbox3d_scene_document_bridge_apply_object(
+            candidate_bridge,
+            authoring->bindings[index].document_id);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_apply_hierarchy(
+            candidate_bridge);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_apply_camera(
+            candidate_bridge);
+    }
+    sandbox3d_scene_document_bridge_destroy(candidate_bridge);
+    candidate_bridge = NULL;
+    henka_scene_destroy(candidate_scene);
+    candidate_scene = NULL;
+    if (result != HENKA_SUCCESS)
+    {
+        goto load_cleanup;
     }
     result = sandbox3d_game_authoring_copy_document(authoring->document, &previous);
     if (result != HENKA_SUCCESS)
@@ -1018,6 +1064,8 @@ load_rollback:
         result = HENKA_ERROR_UNKNOWN;
     }
 load_cleanup:
+    sandbox3d_scene_document_bridge_destroy(candidate_bridge);
+    henka_scene_destroy(candidate_scene);
     henka_scene_document_destroy(candidate);
     henka_scene_document_destroy(previous);
     return result;
