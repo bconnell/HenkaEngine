@@ -1591,8 +1591,12 @@ static void henka_test_sandbox3d_object_authoring_real_gltf_import_bridge(void)
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_mesh* previous_mesh = NULL;
     henka_mesh* authored_mesh = NULL;
+    henka_mesh* render_after_reload = NULL;
     henka_bounds authored_bounds;
     henka_authoring_mesh_counts counts;
+    henka_authoring_mesh_counts saved_counts;
+    henka_authoring_mesh_counts changed_counts;
+    henka_authoring_mesh_counts restored_counts;
 
     HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf(
         "assets/models/henka_marker.gltf",
@@ -1634,6 +1638,32 @@ static void henka_test_sandbox3d_object_authoring_real_gltf_import_bridge(void)
     HENKA_TEST_ASSERT(authored_bounds.extents.x > 0.0f);
     HENKA_TEST_ASSERT(authored_bounds.extents.y > 0.0f);
     HENKA_TEST_ASSERT(authored_bounds.extents.z >= 0.0f);
+
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, 1U, false) == HENKA_SUCCESS);
+    saved_counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_save_source(
+        object, "build/test_tmp/authoring_gltf_bridge.hams") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_extrude_selected_face(
+        object, 0.125f) == HENKA_SUCCESS);
+    changed_counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(changed_counts.faces > saved_counts.faces);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_reload_source(
+        object, "build/test_tmp/authoring_gltf_bridge.hams") == HENKA_SUCCESS);
+    restored_counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(restored_counts.vertices == saved_counts.vertices);
+    HENKA_TEST_ASSERT(restored_counts.edges == saved_counts.edges);
+    HENKA_TEST_ASSERT(restored_counts.faces == saved_counts.faces);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, entity, &render_after_reload) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(render_after_reload != NULL);
 
     sandbox3d_authoring_object_destroy(object);
     object = NULL;
