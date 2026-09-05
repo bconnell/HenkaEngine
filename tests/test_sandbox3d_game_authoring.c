@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include <henka/audio.h>
 #include <henka/camera.h>
@@ -88,10 +89,10 @@ int main(void)
         HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID;
     henka_scene_document_behavior behavior;
     henka_scene_document_behavior loaded_behavior;
-    henka_camera camera;
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_entity child_entity = HENKA_INVALID_ENTITY;
     henka_entity restored_parent = HENKA_INVALID_ENTITY;
+    henka_camera camera;
     henka_interaction_desc interaction;
     henka_transform transform;
     henka_scene* play_scene;
@@ -187,6 +188,12 @@ int main(void)
     object.audio.enabled = true;
     object.audio.looping = true;
     object.audio.spatial = true;
+    object.audio.streaming = true;
+    object.audio.bus = HENKA_AUDIO_BUS_AMBIENCE;
+    object.audio.gain = 0.65f;
+    object.audio.pitch = 1.25f;
+    object.audio.min_distance = 2.0f;
+    object.audio.max_distance = 48.0f;
     (void)snprintf(object.audio.clip_path, sizeof(object.audio.clip_path), "%s", audio_path);
     if (sandbox3d_game_authoring_update_object_for_entity(authoring, entity, &object) != HENKA_SUCCESS ||
         !test_write_audio_fixture(audio_path) ||
@@ -219,7 +226,17 @@ int main(void)
             &(henka_interaction_desc){false, 0.0f, "Changed"}) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_load(authoring, ".") != HENKA_SUCCESS ||
         henka_scene_get_entity_interaction(scene, entity, &interaction) != HENKA_SUCCESS ||
-        !interaction.enabled || interaction.max_distance != 4.0f)
+        !interaction.enabled || interaction.max_distance != 4.0f ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
+        !restored.audio.enabled || !restored.audio.looping ||
+        !restored.audio.spatial || !restored.audio.streaming ||
+        restored.audio.bus != HENKA_AUDIO_BUS_AMBIENCE ||
+        fabsf(restored.audio.gain - 0.65f) > 0.0001f ||
+        fabsf(restored.audio.pitch - 1.25f) > 0.0001f ||
+        fabsf(restored.audio.min_distance - 2.0f) > 0.0001f ||
+        fabsf(restored.audio.max_distance - 48.0f) > 0.0001f ||
+        strcmp(restored.audio.clip_path, audio_path) != 0)
     {
         fprintf(stderr, "game authoring test failed during save/load\n");
         goto cleanup;
@@ -240,6 +257,22 @@ int main(void)
     {
         fprintf(stderr, "game authoring test failed during authored-object verification\n");
         goto cleanup;
+    }
+    {
+        henka_scene_document_object invalid_audio = restored;
+        invalid_audio.audio.gain = NAN;
+        if (sandbox3d_game_authoring_update_object_for_entity(
+                authoring,
+                entity,
+                &invalid_audio) != HENKA_ERROR_INVALID_ARGUMENT ||
+            sandbox3d_game_authoring_get_object_for_entity(
+                authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
+            fabsf(restored.audio.gain - 0.65f) > 0.0001f ||
+            restored.audio.bus != HENKA_AUDIO_BUS_AMBIENCE)
+        {
+            fprintf(stderr, "game authoring test failed during invalid Audio edit retention\n");
+            goto cleanup;
+        }
     }
 
     if (henka_scene_document_create(&replacement_document) != HENKA_SUCCESS)
@@ -331,7 +364,7 @@ int main(void)
                 authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
             restored_id != object_id)
         {
-            fprintf(stderr, "game authoring test failed during ambiguous-name rejection\n");
+            fprintf(stderr, "game authoring test failed during multi-object rejection\n");
             goto cleanup;
         }
     }

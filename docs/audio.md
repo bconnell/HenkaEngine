@@ -79,13 +79,15 @@ Audio integrations preserve the renderer-free dedicated-server path. Integration
 coverage includes real imported or authored objects.
 
 The Sandbox Object Details panel provides an Audio group for authored scene
-objects. It edits the persisted clip path, enabled, looping, spatial, and
-resident/streamed storage settings through the existing Game Authoring
-transaction. Preview and Stop
-Preview use the reusable Audio runtime helper: the asset manager owns the
-resident clip, the scene owns the entity, and the Audio runtime owns the
-temporary emitter. Preview replacement is transactional and failed asset
-loads leave the active preview unchanged.
+objects. It edits the persisted clip path, enabled, looping, spatial,
+resident/streamed storage, gain, pitch, bus, and minimum/maximum attenuation
+distance settings through the existing Game Authoring transaction. Numeric
+values are entered as finite text and applied only after the complete emitter
+configuration validates; invalid edits leave the authored object unchanged.
+Preview and Stop Preview use the reusable Audio runtime helper: the asset
+manager owns the resident clip, the scene owns the entity, and the Audio
+runtime owns the temporary emitter. Preview replacement is transactional and
+failed asset loads leave the active preview unchanged.
 
 The shared Script Host exposes typed `Audio.Play(entity)`,
 `Audio.Stop(entity)`, `Audio.Restart(entity)`, `Audio.Pause(entity)`,

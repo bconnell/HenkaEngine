@@ -443,6 +443,12 @@ typedef struct sandbox3d_state
     char native_authoring_loose_vertex_x[16];
     char native_authoring_loose_vertex_y[16];
     char native_authoring_loose_vertex_z[16];
+    char audio_authoring_gain[16];
+    char audio_authoring_pitch[16];
+    char audio_authoring_min_distance[16];
+    char audio_authoring_max_distance[16];
+    henka_entity audio_authoring_form_entity;
+    bool audio_authoring_form_initialized;
     sandbox3d_authoring_object* authoring_object;
     bool authoring_topology_overlay_enabled;
     henka_entity authoring_topology_overlay_entity;
@@ -3536,12 +3542,12 @@ static void sandbox3d_draw_native_authoring_project_controls(
     sandbox3d_state* state,
     henka_entity entity,
     const char* display_name,
-    henka_ui_rect viewport)
+    henka_ui_rect panel_bounds)
 {
     henka_ui_rect row = {
-        viewport.x,
-        viewport.y + viewport.height - 24.0f,
-        viewport.width,
+        panel_bounds.x + 14.0f,
+        panel_bounds.y + panel_bounds.height - 38.0f,
+        panel_bounds.width - 40.0f,
         24.0f};
     henka_ui_rect export_row;
     float project_button_width;
@@ -3598,7 +3604,7 @@ static void sandbox3d_draw_native_authoring_project_controls(
 
     if (!sandbox3d_details_flow_next_row(
             state,
-            viewport,
+            panel_bounds,
             24.0f,
             1U,
             &export_row))
@@ -3710,6 +3716,8 @@ static void sandbox3d_draw_panel_scrollbar(
     sandbox3d_state* state,
     const sandbox3d_workspace_layout* layout,
     sandbox3d_panel_scroll_target target);
+static bool sandbox3d_should_draw_native_authoring_project_controls(
+    const sandbox3d_state* state);
 static bool sandbox3d_handle_panel_scrollbar_input(
     sandbox3d_state* state,
     const sandbox3d_workspace_layout* layout,
@@ -4561,6 +4569,149 @@ static bool sandbox3d_parse_finite_float(
 
     *out_value = value;
     return true;
+}
+
+static void sandbox3d_sync_audio_authoring_fields(
+    sandbox3d_state* state,
+    henka_entity entity,
+    const henka_audio_emitter_config* config)
+{
+    if (state == NULL || config == NULL)
+    {
+        return;
+    }
+    (void)snprintf(
+        state->audio_authoring_gain,
+        sizeof(state->audio_authoring_gain),
+        "%.3f",
+        config->gain);
+    (void)snprintf(
+        state->audio_authoring_pitch,
+        sizeof(state->audio_authoring_pitch),
+        "%.3f",
+        config->pitch);
+    (void)snprintf(
+        state->audio_authoring_min_distance,
+        sizeof(state->audio_authoring_min_distance),
+        "%.3f",
+        config->min_distance);
+    (void)snprintf(
+        state->audio_authoring_max_distance,
+        sizeof(state->audio_authoring_max_distance),
+        "%.3f",
+        config->max_distance);
+    state->audio_authoring_form_entity = entity;
+    state->audio_authoring_form_initialized = true;
+}
+
+static bool sandbox3d_commit_audio_config_edit(
+    sandbox3d_state* state,
+    henka_entity entity,
+    const henka_scene_document_object* current_object,
+    const henka_audio_emitter_config* config,
+    const char* field_label,
+    henka_scene_document_object* out_object)
+{
+    henka_scene_document_object candidate;
+
+    if (state == NULL || current_object == NULL || config == NULL ||
+        field_label == NULL || out_object == NULL ||
+        henka_audio_emitter_config_validate(config) != HENKA_SUCCESS)
+    {
+        if (state != NULL && field_label != NULL)
+        {
+            sandbox3d_set_statusf(
+                state,
+                true,
+                false,
+                "Audio %s was rejected; authored Audio remains unchanged.",
+                field_label);
+        }
+        return false;
+    }
+
+    candidate = *current_object;
+    candidate.audio = *config;
+    if (!sandbox3d_commit_game_authoring_object(state, entity, &candidate))
+    {
+        return false;
+    }
+    *out_object = candidate;
+    sandbox3d_set_statusf(
+        state,
+        false,
+        false,
+        "Audio %s updated; Save Scene to persist it.",
+        field_label);
+    return true;
+}
+
+typedef enum sandbox3d_audio_float_field
+{
+    SANDBOX3D_AUDIO_FLOAT_GAIN = 0,
+    SANDBOX3D_AUDIO_FLOAT_PITCH,
+    SANDBOX3D_AUDIO_FLOAT_MIN_DISTANCE,
+    SANDBOX3D_AUDIO_FLOAT_MAX_DISTANCE
+} sandbox3d_audio_float_field;
+
+static bool sandbox3d_apply_audio_float_field(
+    sandbox3d_state* state,
+    henka_entity entity,
+    const henka_scene_document_object* current_object,
+    const char* text,
+    sandbox3d_audio_float_field field,
+    const char* field_label,
+    henka_scene_document_object* out_object)
+{
+    henka_audio_emitter_config config;
+    float value;
+
+    if (current_object == NULL ||
+        !sandbox3d_parse_finite_float(text, &value))
+    {
+        if (state != NULL && field_label != NULL)
+        {
+            sandbox3d_set_statusf(
+                state,
+                true,
+                false,
+                "Audio %s requires a finite value; authored Audio remains unchanged.",
+                field_label);
+        }
+        return false;
+    }
+
+    config = current_object->audio;
+    switch (field)
+    {
+        case SANDBOX3D_AUDIO_FLOAT_GAIN:
+            config.gain = value;
+            break;
+        case SANDBOX3D_AUDIO_FLOAT_PITCH:
+            config.pitch = value;
+            break;
+        case SANDBOX3D_AUDIO_FLOAT_MIN_DISTANCE:
+            config.min_distance = value;
+            break;
+        case SANDBOX3D_AUDIO_FLOAT_MAX_DISTANCE:
+            config.max_distance = value;
+            break;
+        default:
+            sandbox3d_set_statusf(
+                state,
+                true,
+                false,
+                "Audio %s was rejected; authored Audio remains unchanged.",
+                field_label != NULL ? field_label : "value");
+            return false;
+    }
+    return sandbox3d_commit_audio_config_edit(
+        state,
+        entity,
+        current_object,
+        &config,
+        field_label,
+        out_object);
 }
 
 static henka_viewport_shading_mode
@@ -21886,12 +22037,43 @@ static henka_ui_rect sandbox3d_panel_content_bounds(
         bounds.y += 38.0f;
         bounds.width -= 40.0f;
         bounds.height -= 52.0f;
+        if (sandbox3d_should_draw_native_authoring_project_controls(state))
+        {
+            bounds.height -= sandbox3d_editor_ui_details_footer_reserve(true);
+        }
     }
     if (bounds.width <= 0.0f || bounds.height <= 0.0f)
     {
         return (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
     }
     return bounds;
+}
+
+static bool sandbox3d_should_draw_native_authoring_project_controls(
+    const sandbox3d_state* state)
+{
+    henka_entity entity;
+
+    if (state == NULL ||
+        state->authoring_object == NULL ||
+        sandbox3d_authoring_object_get_entity(state->authoring_object) ==
+            HENKA_INVALID_ENTITY)
+    {
+        return false;
+    }
+
+    entity = sandbox3d_get_real_selected_entity(state);
+    if (entity == HENKA_INVALID_ENTITY)
+    {
+        return false;
+    }
+
+    return sandbox3d_get_imported_source_primitive(state, entity) != NULL ||
+        entity == sandbox3d_authoring_object_get_entity(state->authoring_object) ||
+        sandbox3d_entities_share_selection_owner(
+            state,
+            entity,
+            sandbox3d_authoring_object_get_entity(state->authoring_object));
 }
 
 static henka_ui_rect sandbox3d_panel_scrollbar_bounds(
@@ -24135,6 +24317,22 @@ static void sandbox3d_draw_object_details_panel(
             entity,
             &authored_document_id,
             &authored_object) == HENKA_SUCCESS;
+    if (authored_object_available)
+    {
+        if (!state->audio_authoring_form_initialized ||
+            state->audio_authoring_form_entity != entity)
+        {
+            sandbox3d_sync_audio_authoring_fields(
+                state,
+                entity,
+                &authored_object.audio);
+        }
+    }
+    else
+    {
+        state->audio_authoring_form_initialized = false;
+        state->audio_authoring_form_entity = HENKA_INVALID_ENTITY;
+    }
     behavior_count = authored_object_available
         ? authored_object.behavior_count
         : 0U;
@@ -29702,6 +29900,281 @@ details_group_audio:
             if (sandbox3d_details_flow_next_row(
                     state,
                     flow_desc.bounds,
+                    28.0f,
+                    1U,
+                    &row) &&
+                row.width >= 220.0f)
+            {
+                bool value_changed = false;
+                (void)henka_ui_label(
+                    state->ui,
+                    row.x,
+                    row.y + 7.0f,
+                    0.8f,
+                    "Gain");
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "game_authoring_audio_gain",
+                    (henka_ui_rect){row.x + 42.0f, row.y, 82.0f, row.height},
+                    state->audio_authoring_gain,
+                    sizeof(state->audio_authoring_gain),
+                    &value_changed);
+                (void)value_changed;
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_audio_gain_apply",
+                        (henka_ui_rect){row.x + 130.0f, row.y, 76.0f, row.height},
+                        "Apply") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    henka_scene_document_object updated_object;
+                    if (sandbox3d_apply_audio_float_field(
+                            state,
+                            entity,
+                            &authored_object,
+                            state->audio_authoring_gain,
+                            SANDBOX3D_AUDIO_FLOAT_GAIN,
+                            "gain",
+                            &updated_object))
+                    {
+                        authored_object = updated_object;
+                    }
+                }
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    28.0f,
+                    1U,
+                    &row) &&
+                row.width >= 220.0f)
+            {
+                bool value_changed = false;
+                (void)henka_ui_label(
+                    state->ui,
+                    row.x,
+                    row.y + 7.0f,
+                    0.8f,
+                    "Pitch");
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "game_authoring_audio_pitch",
+                    (henka_ui_rect){row.x + 42.0f, row.y, 82.0f, row.height},
+                    state->audio_authoring_pitch,
+                    sizeof(state->audio_authoring_pitch),
+                    &value_changed);
+                (void)value_changed;
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_audio_pitch_apply",
+                        (henka_ui_rect){row.x + 130.0f, row.y, 76.0f, row.height},
+                        "Apply") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    henka_scene_document_object updated_object;
+                    if (sandbox3d_apply_audio_float_field(
+                            state,
+                            entity,
+                            &authored_object,
+                            state->audio_authoring_pitch,
+                            SANDBOX3D_AUDIO_FLOAT_PITCH,
+                            "pitch",
+                            &updated_object))
+                    {
+                        authored_object = updated_object;
+                    }
+                }
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    28.0f,
+                    1U,
+                    &row) &&
+                row.width >= 220.0f)
+            {
+                bool value_changed = false;
+                (void)henka_ui_label(
+                    state->ui,
+                    row.x,
+                    row.y + 7.0f,
+                    0.8f,
+                    "Min Range");
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "game_authoring_audio_min_distance",
+                    (henka_ui_rect){row.x + 72.0f, row.y, 82.0f, row.height},
+                    state->audio_authoring_min_distance,
+                    sizeof(state->audio_authoring_min_distance),
+                    &value_changed);
+                (void)value_changed;
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_audio_min_distance_apply",
+                        (henka_ui_rect){row.x + 160.0f, row.y, 76.0f, row.height},
+                        "Apply") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    henka_scene_document_object updated_object;
+                    if (sandbox3d_apply_audio_float_field(
+                            state,
+                            entity,
+                            &authored_object,
+                            state->audio_authoring_min_distance,
+                            SANDBOX3D_AUDIO_FLOAT_MIN_DISTANCE,
+                            "minimum range",
+                            &updated_object))
+                    {
+                        authored_object = updated_object;
+                    }
+                }
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    28.0f,
+                    1U,
+                    &row) &&
+                row.width >= 220.0f)
+            {
+                bool value_changed = false;
+                (void)henka_ui_label(
+                    state->ui,
+                    row.x,
+                    row.y + 7.0f,
+                    0.8f,
+                    "Max Range");
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "game_authoring_audio_max_distance",
+                    (henka_ui_rect){row.x + 72.0f, row.y, 82.0f, row.height},
+                    state->audio_authoring_max_distance,
+                    sizeof(state->audio_authoring_max_distance),
+                    &value_changed);
+                (void)value_changed;
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_audio_max_distance_apply",
+                        (henka_ui_rect){row.x + 160.0f, row.y, 76.0f, row.height},
+                        "Apply") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    henka_scene_document_object updated_object;
+                    if (sandbox3d_apply_audio_float_field(
+                            state,
+                            entity,
+                            &authored_object,
+                            state->audio_authoring_max_distance,
+                            SANDBOX3D_AUDIO_FLOAT_MAX_DISTANCE,
+                            "maximum range",
+                            &updated_object))
+                    {
+                        authored_object = updated_object;
+                    }
+                }
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    28.0f,
+                    1U,
+                    &row) &&
+                row.width >= 260.0f)
+            {
+                static const char* const primary_bus_labels[] =
+                {
+                    "Music", "SFX", "Dialogue"
+                };
+                static const char* const secondary_bus_labels[] =
+                {
+                    "Ambience", "UI"
+                };
+                const size_t primary_bus_count =
+                    sizeof(primary_bus_labels) / sizeof(primary_bus_labels[0]);
+                const size_t secondary_bus_count =
+                    sizeof(secondary_bus_labels) / sizeof(secondary_bus_labels[0]);
+                const size_t bus_index = authored_object.audio.bus > HENKA_AUDIO_BUS_MASTER &&
+                    authored_object.audio.bus < HENKA_AUDIO_BUS_COUNT
+                    ? (size_t)authored_object.audio.bus - 1U
+                    : primary_bus_count + secondary_bus_count;
+                size_t primary_bus_index = bus_index < primary_bus_count
+                    ? bus_index
+                    : primary_bus_count;
+                bool primary_bus_changed = false;
+                (void)henka_ui_label(
+                    state->ui,
+                    row.x,
+                    row.y + 7.0f,
+                    0.8f,
+                    "Bus");
+                if (henka_ui_segmented_select(
+                        state->ui,
+                        "game_authoring_audio_bus_primary",
+                        (henka_ui_rect){row.x + 42.0f, row.y, row.width - 42.0f, row.height},
+                        primary_bus_labels,
+                        sizeof(primary_bus_labels) / sizeof(primary_bus_labels[0]),
+                        &primary_bus_index,
+                        &primary_bus_changed) == HENKA_SUCCESS &&
+                    primary_bus_changed &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    henka_scene_document_object updated_object;
+                    henka_audio_emitter_config config = authored_object.audio;
+                    config.bus = (henka_audio_bus)(primary_bus_index + 1U);
+                    if (sandbox3d_commit_audio_config_edit(
+                        state,
+                        entity,
+                        &authored_object,
+                            &config,
+                            "bus",
+                            &updated_object))
+                    {
+                        authored_object = updated_object;
+                    }
+                }
+                if (sandbox3d_details_flow_next_row(
+                        state,
+                        flow_desc.bounds,
+                        28.0f,
+                        1U,
+                        &row) &&
+                    row.width >= 260.0f)
+                {
+                    size_t secondary_bus_index = bus_index >= primary_bus_count &&
+                        bus_index < primary_bus_count + secondary_bus_count
+                        ? bus_index - primary_bus_count
+                        : secondary_bus_count;
+                    bool secondary_bus_changed = false;
+                    if (henka_ui_segmented_select(
+                            state->ui,
+                            "game_authoring_audio_bus_secondary",
+                            (henka_ui_rect){row.x + 42.0f, row.y, row.width - 42.0f, row.height},
+                            secondary_bus_labels,
+                            secondary_bus_count,
+                            &secondary_bus_index,
+                            &secondary_bus_changed) == HENKA_SUCCESS &&
+                        secondary_bus_changed &&
+                        !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                    {
+                        henka_scene_document_object updated_object;
+                        henka_audio_emitter_config config = authored_object.audio;
+                        config.bus = (henka_audio_bus)(secondary_bus_index + primary_bus_count + 1U);
+                        if (sandbox3d_commit_audio_config_edit(
+                                state,
+                                entity,
+                                &authored_object,
+                                &config,
+                                "bus",
+                                &updated_object))
+                        {
+                            authored_object = updated_object;
+                        }
+                    }
+                }
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
                     26.0f,
                     1U,
                     &row))
@@ -30013,6 +30486,7 @@ details_group_actions:
                 sandbox3d_set_statusf(
                     state,
                     save_result != HENKA_SUCCESS,
+                    false,
                     save_result == HENKA_SUCCESS ? "Game scene saved." : "Game scene save failed: %s.",
                     henka_result_to_string(save_result));
             }
@@ -30026,9 +30500,15 @@ details_group_actions:
                 const henka_result load_result = sandbox3d_game_authoring_load(
                     state->game_authoring,
                     henka_engine_get_user_data_base_path(engine));
+                if (load_result == HENKA_SUCCESS)
+                {
+                    state->audio_authoring_form_initialized = false;
+                    state->audio_authoring_form_entity = HENKA_INVALID_ENTITY;
+                }
                 sandbox3d_set_statusf(
                     state,
                     load_result != HENKA_SUCCESS,
+                    false,
                     load_result == HENKA_SUCCESS ? "Game scene reloaded transactionally." : "Game scene reload failed; current state retained: %s.",
                     henka_result_to_string(load_result));
             }
@@ -30054,20 +30534,14 @@ details_groups_complete:
     /* Project persistence is a sticky editor action, not part of the
      * scrollable authoring flow. Draw it after the flow has ended so its hit
      * testing remains independent of clipped/virtualized rows. */
-    if (state->authoring_object != NULL &&
-        (sandbox3d_get_imported_source_primitive(state, entity) != NULL ||
-         entity == sandbox3d_authoring_object_get_entity(state->authoring_object) ||
-         sandbox3d_entities_share_selection_owner(
-             state,
-             entity,
-             sandbox3d_authoring_object_get_entity(state->authoring_object))))
+    if (sandbox3d_should_draw_native_authoring_project_controls(state))
     {
         sandbox3d_draw_native_authoring_project_controls(
             engine,
             state,
             entity,
             display_name,
-            flow_desc.bounds);
+            panel_bounds);
     }
 
     if (disclosure_changed &&

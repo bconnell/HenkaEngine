@@ -327,6 +327,15 @@ float sandbox3d_editor_ui_clamp_scroll(
     return state.offset;
 }
 
+float sandbox3d_editor_ui_details_footer_reserve(
+    bool sticky_footer_visible)
+{
+    /* Keep the final scrollable row clear of the 24-pixel sticky footer and
+     * leave a bounded 10-pixel separation so the two surfaces do not merge
+     * visually or in hit testing. */
+    return sticky_footer_visible ? 34.0f : 0.0f;
+}
+
 void sandbox3d_editor_ui_scroll_state_set_content(
     sandbox3d_editor_scroll_state* state,
     float content_height,

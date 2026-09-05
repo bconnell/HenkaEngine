@@ -70,6 +70,9 @@ float sandbox3d_editor_ui_clamp_scroll(
     float content_height,
     float viewport_height);
 
+float sandbox3d_editor_ui_details_footer_reserve(
+    bool sticky_footer_visible);
+
 void sandbox3d_editor_ui_scroll_state_set_content(
     sandbox3d_editor_scroll_state* state,
     float content_height,

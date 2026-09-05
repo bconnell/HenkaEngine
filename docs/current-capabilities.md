@@ -717,6 +717,10 @@ See [building.md](building.md), [package-provenance.md](package-provenance.md), 
   authored-listener application, production-camera listener mapping,
   transactional stream recovery after device loss, and manager-owned resident
   supported-format reload that preserves borrowed clip identity.
+- Object Details exposes the persisted Audio clip path, enablement, looping,
+  spatial mode, resident/streamed storage, gain, pitch, bus, and attenuation
+  range controls. Numeric edits validate transactionally before they update the
+  authored object.
 - The shared Script Host exposes typed `Audio.Play`, `Audio.Stop`,
   `Audio.Restart`, `Audio.Pause`, `Audio.Resume`, `Audio.IsPlaying`,
   `Audio.SetGain`, `Audio.SetPitch`, `Audio.SetLooping`, `Audio.SetSpatial`,

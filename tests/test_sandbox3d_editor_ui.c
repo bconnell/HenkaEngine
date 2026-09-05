@@ -66,6 +66,13 @@ void henka_test_sandbox3d_editor_ui(void)
 
     sandbox3d_editor_ui_state_reset(&state);
 
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        sandbox3d_editor_ui_details_footer_reserve(false),
+        0.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_details_footer_reserve(true) > 24.0f);
+
     HENKA_TEST_ASSERT(!state.controls_workspace_expanded);
     HENKA_TEST_ASSERT(state.controls_viewer_expanded);
     HENKA_TEST_ASSERT(state.controls_viewport_expanded);
