@@ -81,14 +81,14 @@ foreach ($relativePath in $editorPaths) {
     }
 }
 
-foreach ($requiredPhrase in @(
-    'compiler remains the authority for HenkaScript syntax',
-    'compiler''s keyword table or grammar',
-    'not a second grammar or template',
-    'henka_hks_get_default_behavior_source'
+foreach ($documentationContract in @(
+    @{ Pattern = 'compiler\s+owns\s+HenkaScript\s+syntax\s+authority'; Label = 'compiler-owned HenkaScript syntax authority' },
+    @{ Pattern = 'compiler\s+remains\s+the\s+single\s+HenkaScript\s+grammar\s+authority'; Label = 'single compiler-owned HenkaScript grammar authority' },
+    @{ Pattern = 'HenkaScript\s+editor\s+presentation\s+consumes\s+compiler-owned\s+token'; Label = 'compiler-owned editor token presentation' },
+    @{ Pattern = 'henka_hks_get_default_behavior_source'; Label = 'compiler-owned behavior source API' }
 )) {
-    if ($documentation -notmatch [Regex]::Escape($requiredPhrase)) {
-        Add-Finding "docs/scripting-foundation.md: missing compiler-authority contract '$requiredPhrase'"
+    if ($documentation -notmatch $documentationContract.Pattern) {
+        Add-Finding "docs/scripting-foundation.md: missing compiler-authority contract '$($documentationContract.Label)'"
     }
 }
 
