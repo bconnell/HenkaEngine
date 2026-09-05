@@ -183,6 +183,39 @@ int main(void)
     {
         goto cleanup;
     }
+    if (henka_scene_set_entity_parent(
+            scene,
+            child_entity,
+            HENKA_INVALID_ENTITY,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_sync_object(bridge, child_id) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(document, child_id, &applied_object) != HENKA_SUCCESS ||
+        applied_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        henka_scene_set_entity_parent(
+            scene,
+            child_entity,
+            entity,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_sync_object(bridge, child_id) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(document, child_id, &applied_object) != HENKA_SUCCESS ||
+        applied_object.parent_id != object_id ||
+        henka_scene_set_entity_parent(
+            scene,
+            child_entity,
+            helper,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_sync_object(bridge, child_id) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_scene_document_get_object(document, child_id, &applied_object) != HENKA_SUCCESS ||
+        applied_object.parent_id != object_id ||
+        henka_scene_set_entity_parent(
+            scene,
+            child_entity,
+            entity,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_sync_object(bridge, child_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
     if (sandbox3d_scene_document_bridge_begin_play(bridge) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_apply_camera(bridge) != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_scene_document_bridge_sync_camera(bridge) != HENKA_ERROR_INVALID_ARGUMENT ||

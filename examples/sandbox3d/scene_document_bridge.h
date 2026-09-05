@@ -76,8 +76,10 @@ henka_result sandbox3d_scene_document_bridge_apply_camera(
 henka_result sandbox3d_scene_document_bridge_sync_camera(
     sandbox3d_scene_document_bridge* bridge);
 
-/* Copies only runtime-owned presentation values back into a candidate object
- * and commits them through the Scene Document validation boundary. */
+/* Copies runtime-owned presentation and hierarchy values back into a
+ * candidate object and commits them through the Scene Document validation
+ * boundary. A non-root runtime parent must be another bound document entity;
+ * otherwise the sync fails closed. */
 henka_result sandbox3d_scene_document_bridge_sync_object(
     sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id);

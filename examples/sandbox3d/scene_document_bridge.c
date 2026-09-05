@@ -549,13 +549,16 @@ henka_result sandbox3d_scene_document_bridge_sync_object(
     henka_scene_object_info info;
     henka_interaction_desc interaction;
     henka_entity entity;
+    henka_entity parent;
+    size_t parent_index;
     int written;
 
     if (bridge == NULL || bridge->play_locked ||
         sandbox3d_scene_document_bridge_get_bound_object(
             bridge, document_id, &candidate, &entity) != HENKA_SUCCESS ||
         henka_scene_get_entity_info(bridge->scene, entity, &info) != HENKA_SUCCESS ||
-        henka_scene_get_entity_interaction(bridge->scene, entity, &interaction) != HENKA_SUCCESS)
+        henka_scene_get_entity_interaction(bridge->scene, entity, &interaction) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(bridge->scene, entity, &parent) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -581,6 +584,20 @@ henka_result sandbox3d_scene_document_bridge_sync_object(
     candidate.visible = info.visible;
     candidate.interaction.enabled = interaction.enabled;
     candidate.interaction.max_distance = interaction.max_distance;
+    if (parent == HENKA_INVALID_ENTITY)
+    {
+        candidate.parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    }
+    else
+    {
+        parent_index = sandbox3d_scene_document_bridge_find_entity_index(
+            bridge, parent);
+        if (parent_index == SIZE_MAX)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        candidate.parent_id = bridge->bindings[parent_index].document_id;
+    }
     return henka_scene_document_set_object(bridge->document, &candidate);
 }
 

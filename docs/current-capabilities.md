@@ -235,6 +235,9 @@ HSCN v8 persists parent IDs, an optional authored scene camera, and the
 value-owned Character Controller component; v1-v6 documents migrate objects to
 roots in memory without rewriting the source file, while v7 data defaults the
 new controller component to disabled.
+The Sandbox Scene Document bridge applies persisted hierarchy and synchronizes
+runtime reparenting back to bound document IDs; unbound runtime parents are
+rejected without changing authored hierarchy state.
 Hierarchy editing in the Sandbox, hierarchy
 history, broader imported object registration, complete source/material/project
 serialization, and production gameplay workflows remain open. The public
