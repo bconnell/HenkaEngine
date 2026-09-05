@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include <henka/core.h>
+#include <henka/scene_document.h>
 #include <henka/memory.h>
 #include <henka/persistence.h>
 
@@ -53,6 +54,10 @@ void henka_test_persistence(void)
     henka_vec3 loaded_position;
     float loaded_yaw;
     henka_save_data* loaded_save;
+    henka_camera authored_camera;
+    henka_camera loaded_camera;
+    henka_scene_document* scene_document;
+    henka_scene_document* loaded_scene_document;
     henka_settings* reloaded;
     henka_result result;
     henka_save_data* save_data;
@@ -284,6 +289,49 @@ void henka_test_persistence(void)
     HENKA_TEST_ASSERT(henka_save_data_load_file(loaded_save, "build/test_tmp/save_bad_flag.save") == HENKA_ERROR_UNKNOWN);
     HENKA_TEST_ASSERT(strcmp(henka_save_data_get_scene_id(loaded_save), "preserved_scene") == 0);
 
+    authored_camera = henka_camera_create_perspective(
+        58.0f * HENKA_DEG_TO_RAD,
+        16.0f / 10.0f,
+        0.25f,
+        500.0f);
+    authored_camera.position = (henka_vec3){4.0f, 3.0f, 8.0f};
+    authored_camera.yaw_radians = -0.8f;
+    authored_camera.pitch_radians = 0.35f;
+    authored_camera.roll_radians = 0.1f;
+    HENKA_TEST_ASSERT(henka_camera_is_valid(&authored_camera));
+    scene_document = NULL;
+    loaded_scene_document = NULL;
+    HENKA_TEST_ASSERT(henka_scene_document_create(&scene_document) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_document_set_camera(
+        scene_document, &authored_camera) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_document_create(&loaded_scene_document) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_document_save_file(
+        scene_document,
+        ".",
+        "build/test_tmp/scene_camera_roundtrip.hscene") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_document_load_file(
+        loaded_scene_document,
+        ".",
+        "build/test_tmp/scene_camera_roundtrip.hscene") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_document_get_camera(
+        loaded_scene_document, &loaded_camera) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(loaded_camera.position.x == authored_camera.position.x);
+    HENKA_TEST_ASSERT(loaded_camera.position.y == authored_camera.position.y);
+    HENKA_TEST_ASSERT(loaded_camera.position.z == authored_camera.position.z);
+    HENKA_TEST_ASSERT(loaded_camera.yaw_radians == authored_camera.yaw_radians);
+    HENKA_TEST_ASSERT(loaded_camera.pitch_radians == authored_camera.pitch_radians);
+    HENKA_TEST_ASSERT(loaded_camera.roll_radians == authored_camera.roll_radians);
+    HENKA_TEST_ASSERT(loaded_camera.projection_mode == authored_camera.projection_mode);
+    HENKA_TEST_ASSERT(loaded_camera.field_of_view_radians == authored_camera.field_of_view_radians);
+    HENKA_TEST_ASSERT(loaded_camera.orthographic_height == authored_camera.orthographic_height);
+    HENKA_TEST_ASSERT(loaded_camera.near_plane == authored_camera.near_plane);
+    HENKA_TEST_ASSERT(loaded_camera.far_plane == authored_camera.far_plane);
+    HENKA_TEST_ASSERT(loaded_camera.aspect_ratio == authored_camera.aspect_ratio);
+    HENKA_TEST_ASSERT(loaded_camera.movement_speed == authored_camera.movement_speed);
+    HENKA_TEST_ASSERT(loaded_camera.fast_movement_multiplier == authored_camera.fast_movement_multiplier);
+    henka_scene_document_destroy(loaded_scene_document);
+    henka_scene_document_destroy(scene_document);
+
     henka_save_data_destroy(loaded_save);
     henka_save_data_destroy(save_data);
     henka_settings_destroy(settings);
@@ -295,4 +343,5 @@ void henka_test_persistence(void)
     remove("build/test_tmp/save_bad_float.save");
     remove("build/test_tmp/save_missing_field.save");
     remove("build/test_tmp/save_bad_flag.save");
+    remove("build/test_tmp/scene_camera_roundtrip.hscene");
 }
