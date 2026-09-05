@@ -447,6 +447,15 @@ henka_result henka_scene_set_entity_material_asset(
     henka_scene* scene,
     henka_entity entity,
     const henka_material_asset* asset);
+/* Applies a borrowed manager-owned definition plus an explicit instance
+ * override as one preflighted visible mutation. The definition and its
+ * dependencies remain borrowed; allocation or revision-capacity failure
+ * leaves the entity and both scene revision watermarks unchanged. */
+henka_result henka_scene_apply_material_asset_override(
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_material_asset* asset,
+    henka_material material);
 henka_result henka_scene_set_entity_name(henka_scene* scene, henka_entity entity, const char* name);
 henka_result henka_scene_set_entity_tag(henka_scene* scene, henka_entity entity, const char* tag);
 henka_result henka_scene_set_entity_visible(henka_scene* scene, henka_entity entity, bool visible);

@@ -3034,6 +3034,49 @@ henka_result henka_scene_set_entity_material_asset(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_apply_material_asset_override(
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_material_asset* asset,
+    henka_material material)
+{
+    char* material_name;
+    henka_scene_entity_record* record;
+    henka_result result;
+
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL || asset == NULL || !henka_scene_material_is_valid(material))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    /* Complete the only fallible operation before publishing any field or
+     * revision change. The asset and its dependencies remain borrowed. */
+    material_name = NULL;
+    if (material.name != NULL && material.name[0] != '\0')
+    {
+        result = henka_scene_duplicate_text(material.name, &material_name);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+
+    henka_free(record->material_name);
+    record->material_name = material_name;
+    record->material = material;
+    record->material.name = material_name != NULL ? material_name : "Material";
+    record->material_asset = asset;
+    record->material_asset_revision = 0U;
+    record->material_asset_overridden = true;
+    henka_scene_bump_render_revision(scene);
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_apply_material_asset(
     henka_scene* scene,
     henka_entity entity,

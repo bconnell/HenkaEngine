@@ -4270,39 +4270,14 @@ henka_result henka_assets_apply_material_instance_to_entity(
     henka_entity entity)
 {
     henka_material material;
-    const henka_material_asset* previous_asset = NULL;
-    uint64_t previous_revision = 0U;
-    bool previous_overridden = false;
-    henka_result result;
 
     if (instance == NULL || scene == NULL || entity == HENKA_INVALID_ENTITY ||
         henka_assets_get_material_instance_material(instance, &material) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (henka_scene_get_entity_material_asset(
-            scene, entity, &previous_asset) != HENKA_SUCCESS ||
-        henka_scene_get_material_asset_state(
-            scene, entity, &previous_revision, &previous_overridden) != HENKA_SUCCESS)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    if (previous_asset != instance->definition)
-    {
-        result = henka_scene_set_entity_material_asset(
-            scene, entity, instance->definition);
-        if (result != HENKA_SUCCESS)
-        {
-            return result;
-        }
-    }
-    result = henka_scene_set_entity_material(scene, entity, material);
-    if (result != HENKA_SUCCESS && previous_asset != instance->definition)
-    {
-        (void)henka_scene_restore_material_asset_state(
-            scene, entity, previous_asset, previous_revision, previous_overridden);
-    }
-    return result;
+    return henka_scene_apply_material_asset_override(
+        scene, entity, instance->definition, material);
 }
 
 static bool henka_assets_find_material_asset_state(

@@ -1133,6 +1133,9 @@ void henka_test_assets(void)
     henka_material peer_material;
     float peer_roughness_before;
     uint64_t material_revision;
+    uint64_t material_scene_revision_before;
+    uint64_t applied_material_asset_revision;
+    bool applied_material_overridden;
     size_t processed_residency_requests;
     size_t cancelled_residency_requests;
     size_t refreshed_material_count;
@@ -2001,8 +2004,18 @@ void henka_test_assets(void)
     material_entity_peer = henka_scene_create_entity_named(material_scene, "Material Instance Peer");
     HENKA_TEST_ASSERT(material_entity != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(material_entity_peer != HENKA_INVALID_ENTITY);
+    material_scene_revision_before = henka_scene_get_render_revision(material_scene);
     HENKA_TEST_ASSERT(henka_assets_apply_material_instance_to_entity(
         &material_instance, material_scene, material_entity) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(material_scene) ==
+        material_scene_revision_before + 1U);
+    HENKA_TEST_ASSERT(henka_scene_get_material_asset_state(
+        material_scene,
+        material_entity,
+        &applied_material_asset_revision,
+        &applied_material_overridden) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(applied_material_asset_revision == 0U);
+    HENKA_TEST_ASSERT(applied_material_overridden);
     HENKA_TEST_ASSERT(henka_assets_apply_material_instance_to_entity(
         &material_instance, material_scene, material_entity_peer) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_material(
@@ -2042,10 +2055,13 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(henka_assets_get_material_instance_material(
         &material_instance, &applied_material) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(applied_material.ior, material_entry.material.ior, 0.0001f);
+    material_scene_revision_before = henka_scene_get_render_revision(material_scene);
     henka_memory_test_fail_after(0U);
     HENKA_TEST_ASSERT(henka_assets_apply_material_instance_to_entity(
         &material_instance, material_scene, material_entity) == HENKA_ERROR_OUT_OF_MEMORY);
     henka_memory_test_disable_failures();
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(material_scene) ==
+        material_scene_revision_before);
     HENKA_TEST_ASSERT(henka_scene_get_entity_material(
         material_scene, material_entity, &applied_material) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(applied_material.roughness == material_entry.material.roughness);
