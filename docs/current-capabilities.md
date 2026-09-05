@@ -269,6 +269,9 @@ mutate the scene. Full editor hierarchy presentation and history remain open.
   instantiation APIs expose a bounded deterministic source-to-instance mapping.
   Queries clear their output and fail closed when a mapped entity is stale or
   destroyed; destroying the mapping handle does not destroy scene entities.
+  `henka_prefab_instance_destroy_entities` provides an explicit transactional
+  teardown path for all currently live mapped entities, while retaining the
+  handle with stale entries for idempotent cleanup.
 - `henka_prefab_get_revision` and `henka_prefab_refresh_from_scene` provide
   bounded in-memory snapshot refresh. A successful refresh rebuilds the
   snapshot transactionally from a live source root and increments its revision;

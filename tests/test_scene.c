@@ -586,6 +586,102 @@ static void henka_test_prefab_instance_mapping(void)
     henka_scene_destroy(source);
 }
 
+static void henka_test_prefab_instance_destroy_entities(void)
+{
+    henka_scene* source = NULL;
+    henka_scene* target = NULL;
+    henka_scene* capacity_target = NULL;
+    henka_prefab* prefab = NULL;
+    henka_prefab_instance* instance = NULL;
+    henka_prefab_instance* capacity_instance = NULL;
+    henka_entity source_root;
+    henka_entity source_child;
+    size_t index;
+    size_t target_count;
+    uint64_t render_revision;
+    uint64_t content_revision;
+    henka_entity mapped_entity;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
+    source_root = henka_scene_create_entity_named(source, "Destroy Root");
+    source_child = henka_scene_create_entity_named(source, "Destroy Child");
+    HENKA_TEST_ASSERT(source_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        source, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_create_from_scene(
+        source, source_root, &prefab) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_with_instance(
+        prefab, target, henka_transform_identity(), &instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance != NULL);
+    target_count = henka_scene_get_entity_count(target);
+    render_revision = henka_scene_get_render_revision(target);
+    content_revision = target->content_revision;
+    HENKA_TEST_ASSERT(target_count == 2U);
+
+    HENKA_TEST_ASSERT(
+        henka_prefab_instance_destroy_entities(instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == 0U);
+    HENKA_TEST_ASSERT(
+        henka_scene_get_render_revision(target) == render_revision + 2U);
+    HENKA_TEST_ASSERT(target->content_revision == content_revision + 2U);
+    for (index = 0U;
+        index < henka_prefab_instance_get_entity_count(instance);
+        ++index)
+    {
+        mapped_entity = HENKA_INVALID_ENTITY;
+        HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_at(
+            instance, index, &mapped_entity) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(mapped_entity == HENKA_INVALID_ENTITY);
+    }
+    mapped_entity = HENKA_INVALID_ENTITY;
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_root_entity(
+        instance, &mapped_entity) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(mapped_entity == HENKA_INVALID_ENTITY);
+
+    render_revision = henka_scene_get_render_revision(target);
+    content_revision = target->content_revision;
+    HENKA_TEST_ASSERT(
+        henka_prefab_instance_destroy_entities(instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(target) == 0U);
+    HENKA_TEST_ASSERT(
+        henka_scene_get_render_revision(target) == render_revision);
+    HENKA_TEST_ASSERT(target->content_revision == content_revision);
+    henka_prefab_instance_destroy(instance);
+    instance = NULL;
+    henka_scene_destroy(target);
+    target = NULL;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&capacity_target) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_with_instance(
+        prefab,
+        capacity_target,
+        henka_transform_identity(),
+        &capacity_instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(capacity_instance != NULL);
+    target_count = henka_scene_get_entity_count(capacity_target);
+    render_revision = UINT64_MAX - UINT64_C(1);
+    content_revision = UINT64_MAX - UINT64_C(1);
+    capacity_target->render_revision = render_revision;
+    capacity_target->content_revision = content_revision;
+    HENKA_TEST_ASSERT(
+        henka_prefab_instance_destroy_entities(capacity_instance) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(capacity_target) == target_count);
+    HENKA_TEST_ASSERT(
+        henka_scene_get_render_revision(capacity_target) == render_revision);
+    HENKA_TEST_ASSERT(capacity_target->content_revision == content_revision);
+    mapped_entity = HENKA_INVALID_ENTITY;
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_root_entity(
+        capacity_instance, &mapped_entity) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(mapped_entity != HENKA_INVALID_ENTITY);
+    henka_prefab_instance_destroy(capacity_instance);
+    henka_scene_destroy(capacity_target);
+    henka_prefab_destroy(prefab);
+    henka_scene_destroy(source);
+}
+
 static void henka_test_prefab_revision_refresh(void)
 {
     henka_scene* source = NULL;
@@ -1374,6 +1470,7 @@ void henka_test_scene(void)
     henka_test_scene_child_enumeration();
     henka_test_prefab_snapshot_and_transaction();
     henka_test_prefab_instance_mapping();
+    henka_test_prefab_instance_destroy_entities();
     henka_test_prefab_revision_refresh();
     henka_test_prefab_revision_capacity_transaction();
     henka_test_prefab_allocation_failure_transaction();

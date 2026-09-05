@@ -58,6 +58,13 @@ henka_result henka_prefab_instantiate_with_instance(
     henka_transform root_transform,
     henka_prefab_instance** out_instance);
 void henka_prefab_instance_destroy(henka_prefab_instance* instance);
+/* Destroys every currently live entity in the mapping through the normal
+ * scene lifetime path. The operation preflights the complete scene revision
+ * budget and leaves both the scene and mapping unchanged when capacity is
+ * exhausted. A successful call retains the mapping handle with all entries
+ * stale so repeated cleanup is an idempotent no-op. */
+henka_result henka_prefab_instance_destroy_entities(
+    henka_prefab_instance* instance);
 size_t henka_prefab_instance_get_entity_count(
     const henka_prefab_instance* instance);
 uint64_t henka_prefab_instance_get_prefab_revision(

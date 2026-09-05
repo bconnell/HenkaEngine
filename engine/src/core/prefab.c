@@ -482,6 +482,72 @@ void henka_prefab_instance_destroy(henka_prefab_instance* instance)
     henka_free(instance);
 }
 
+static size_t henka_prefab_instance_count_live_entities(
+    const henka_prefab_instance* instance)
+{
+    size_t live_count = 0U;
+    size_t index;
+
+    if (instance == NULL || instance->target_scene == NULL ||
+        instance->entities == NULL)
+    {
+        return 0U;
+    }
+    for (index = 0U; index < instance->entity_count; ++index)
+    {
+        if (henka_scene_is_entity_valid(
+                instance->target_scene,
+                instance->entities[index]))
+        {
+            ++live_count;
+        }
+    }
+    return live_count;
+}
+
+henka_result henka_prefab_instance_destroy_entities(
+    henka_prefab_instance* instance)
+{
+    size_t index;
+    const size_t live_count =
+        henka_prefab_instance_count_live_entities(instance);
+
+    if (instance == NULL || instance->target_scene == NULL ||
+        instance->entities == NULL ||
+        henka_scene_is_destroyed(instance->target_scene))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (live_count == 0U)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (!henka_scene_has_render_revision_capacity(
+            instance->target_scene,
+            (uint64_t)live_count))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    /* Destroy in reverse mapping order so the usual parent-before-child
+     * capture order does not leave a live child behind. The scene contract
+     * promotes children when their parent is retired, so this remains safe
+     * even when source storage order differs from hierarchy order. */
+    for (index = instance->entity_count; index > 0U; --index)
+    {
+        const size_t mapping_index = index - 1U;
+        const henka_entity entity = instance->entities[mapping_index];
+
+        if (!henka_scene_is_entity_valid(instance->target_scene, entity))
+        {
+            continue;
+        }
+        henka_scene_destroy_entity(instance->target_scene, entity);
+        instance->entities[mapping_index] = HENKA_INVALID_ENTITY;
+    }
+    return HENKA_SUCCESS;
+}
+
 size_t henka_prefab_instance_get_entity_count(
     const henka_prefab_instance* instance)
 {
