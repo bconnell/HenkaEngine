@@ -205,6 +205,7 @@ add_test(
     COMMAND henka_sandbox3d_scene_document_bridge_tests
 )
 
+if(HENKA_BUILD_CLIENT)
 add_executable(henka_sandbox3d_play_session_tests
     ../examples/sandbox3d/scene_document_bridge.c
     ../examples/sandbox3d/play_session.c
@@ -299,6 +300,8 @@ add_test(
     COMMAND henka_sandbox3d_game_authoring_identity_tests
 )
 
+endif()
+
 if(HENKA_BUILD_CLIENT)
     add_executable(henka_sandbox3d_audio_runtime_tests
         ../examples/sandbox3d/audio_runtime.c
@@ -352,6 +355,12 @@ if(WIN32)
         NAME henka_ibl_diagnostic_control_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_ibl_diagnostic_controls_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
+        NAME henka_ibl_fractional_lod_control_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_ibl_fractional_lod_controls_windows.ps1
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
     add_test(

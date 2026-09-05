@@ -9,8 +9,8 @@ $missing = @()
 if ($renderer -notmatch 'HENKA_REFLECTION_PROBE_PREFILTER_LEVELS\s+7') {
     $missing += 'full seven-level reflection-probe prefilter contract'
 }
-if ($shader -notmatch 'const float HENKA_PREFILTER_MAX_LOD = 6\.0;' -or
-    $shader -notmatch 'float environmentPrefilterLod =\s*clamp\(surfaceRoughness, 0\.0, 1\.0\) \* HENKA_PREFILTER_MAX_LOD;' -or
+if ($shader -notmatch 'uniform float iblPrefilterMaxLod;' -or
+    $shader -notmatch 'float environmentPrefilterLod =\s*clamp\(surfaceRoughness, 0\.0, 1\.0\) \*\s*clamp\(iblPrefilterMaxLod, 0\.0, 1024\.0\);' -or
     $shader -notmatch 'textureLod\(\s*reflectionProbeMap,\s*blurredReflectionDirection,\s*environmentPrefilterLod\)' -or
     $shader -notmatch 'textureLod\(\s*reflectionProbeMapSecondary,\s*secondaryReflectionDirection,\s*environmentPrefilterLod\)') {
     $missing += 'full-range local-probe roughness LOD selection'

@@ -14,6 +14,8 @@ if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
     $BuildDirectory = Join-Path $repoRoot "build\test_tmp\sanitized-runtime"
 }
 $BuildDirectory = [System.IO.Path]::GetFullPath($BuildDirectory)
+$testFixtureDirectory = Join-Path $repoRoot "build\test_tmp"
+New-Item -ItemType Directory -Path $testFixtureDirectory -Force | Out-Null
 
 function Get-HenkaAddressSanitizerRuntime {
     $cachePath = Join-Path $BuildDirectory "CMakeCache.txt"
@@ -63,6 +65,8 @@ $configureArguments = @(
 
 $localEnetSource = Join-Path $repoRoot "build\_deps\enet-src"
 $localLuaSource = Join-Path $repoRoot "build\_deps\lua-src"
+$localMiniaudioSource = Join-Path $repoRoot "build\_deps\miniaudio-src"
+$localStbSource = Join-Path $repoRoot "build\_deps\stb-src"
 $offlineProviderCount = 0
 if (Test-Path -LiteralPath (Join-Path $localEnetSource "CMakeLists.txt")) {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET=$localEnetSource"
@@ -72,7 +76,15 @@ if (Test-Path -LiteralPath (Join-Path $localLuaSource "lua.h")) {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA=$localLuaSource"
     $offlineProviderCount++
 }
-if ($offlineProviderCount -eq 2) {
+if (Test-Path -LiteralPath (Join-Path $localMiniaudioSource "miniaudio.h")) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_MINIAUDIO=$localMiniaudioSource"
+    $offlineProviderCount++
+}
+if (Test-Path -LiteralPath (Join-Path $localStbSource "stb_vorbis.c")) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_STB=$localStbSource"
+    $offlineProviderCount++
+}
+if ($offlineProviderCount -eq 4) {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
 } else {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
