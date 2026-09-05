@@ -118,6 +118,53 @@ void henka_test_sandbox3d_authoring_asset_ui(void)
     }
 
     {
+        const sandbox3d_authoring_asset_ui_action additional_primitives[] = {
+            SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_PLANE,
+            SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_CONE,
+            SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_UV_SPHERE};
+        const sandbox3d_authoring_primitive_kind expected_kinds[] = {
+            SANDBOX3D_AUTHORING_PRIMITIVE_PLANE,
+            SANDBOX3D_AUTHORING_PRIMITIVE_CONE,
+            SANDBOX3D_AUTHORING_PRIMITIVE_UV_SPHERE};
+        size_t index;
+
+        for (index = 0U;
+             index < sizeof(additional_primitives) / sizeof(additional_primitives[0]);
+             ++index)
+        {
+            sandbox3d_authoring_object* part;
+            sandbox3d_authoring_primitive_kind kind =
+                SANDBOX3D_AUTHORING_PRIMITIVE_BOX;
+            henka_authoring_mesh_counts counts;
+
+            HENKA_TEST_ASSERT(sandbox3d_authoring_asset_commands_add_primitive(
+                &ui,
+                engine,
+                scene,
+                "commands_asset",
+                additional_primitives[index],
+                index == 0U ? "plane" : (index == 1U ? "cone" : "uv_sphere"),
+                &part_index) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(part_index == index + 2U);
+            part = sandbox3d_authoring_asset_document_get_part(
+                (sandbox3d_authoring_asset_document*)
+                    sandbox3d_authoring_asset_ui_get_document(&ui),
+                part_index);
+            HENKA_TEST_ASSERT(part != NULL);
+            counts = henka_authoring_mesh_get_counts(
+                sandbox3d_authoring_object_get_mesh(part));
+            HENKA_TEST_ASSERT(counts.vertices > 0U && counts.faces > 0U);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_get_part_kind(
+                sandbox3d_authoring_asset_ui_get_document(&ui),
+                part,
+                &kind) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(kind == expected_kinds[index]);
+        }
+        HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_get_part_count(
+            sandbox3d_authoring_asset_ui_get_document(&ui)) == 5U);
+    }
+
+    {
         sandbox3d_authoring_asset_controller* controller = NULL;
         const sandbox3d_authoring_asset_document* before_failed_load;
         size_t controller_part_index = SIZE_MAX;
