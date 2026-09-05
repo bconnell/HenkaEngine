@@ -21,6 +21,7 @@ add_executable(henka_sandbox3d
     physics_tools.c
     studio_environment.c
     workspace_tools.c
+    workspace_persistence.c
     editor_layout.c
     scene_document_bridge.c
     play_session.c

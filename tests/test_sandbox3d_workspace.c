@@ -4,8 +4,11 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <henka/persistence.h>
+
 #include "../examples/sandbox3d/interaction_tools.h"
 #include "../examples/sandbox3d/studio_environment.h"
+#include "../examples/sandbox3d/workspace_persistence.h"
 #include "../examples/sandbox3d/workspace_tools.h"
 
 /* HENKA_WORKSPACE_TEST_DOCK_MEMBERSHIP_V1 */
@@ -31,6 +34,64 @@ static bool henka_test_workspace_dock_contains_section(
 
     return false;
 }
+
+static void henka_test_sandbox3d_workspace_persistence(void)
+{
+    henka_settings* settings = NULL;
+    sandbox3d_workspace_model saved;
+    sandbox3d_workspace_model loaded;
+    sandbox3d_workspace_model before_rejected_load;
+
+    HENKA_TEST_ASSERT(henka_settings_create(&settings) == HENKA_SUCCESS);
+    sandbox3d_workspace_model_reset(&saved);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_named_layout(
+        &saved,
+        SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY));
+    saved.left_dock_width = 416.0f;
+    saved.right_dock_width = 544.0f;
+    HENKA_TEST_ASSERT(sandbox3d_workspace_save_custom_layout(&saved, "Studio"));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_save_custom_layout_slot(
+        &saved, 1U, "Assembly"));
+    sandbox3d_workspace_persistence_save_panels(&saved, settings);
+    sandbox3d_workspace_persistence_save_topology(&saved, settings);
+    sandbox3d_workspace_persistence_save_custom_layout(&saved, settings);
+    sandbox3d_workspace_persistence_save_custom_layout_slots(&saved, settings);
+
+    sandbox3d_workspace_model_reset(&loaded);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_persistence_load_panels(&loaded, settings));
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_persistence_load_topology(&loaded, settings));
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_persistence_load_custom_layout(&loaded, settings));
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_persistence_load_custom_layout_slots(&loaded, settings));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded.left_dock_width, 416.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded.right_dock_width, 544.0f, 0.0001f);
+    HENKA_TEST_ASSERT(loaded.named_layout == saved.named_layout);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_has_custom_layout(&loaded));
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_custom_layout_name(&loaded), "Studio") == 0);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_has_custom_layout_slot(&loaded, 1U));
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_custom_layout_slot_name(&loaded, 1U),
+        "Assembly") == 0);
+
+    before_rejected_load = loaded;
+    HENKA_TEST_ASSERT(henka_settings_set_float(
+        settings,
+        "ui.workspace.left_dock_width",
+        1000.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_persistence_load_panels(
+        &loaded, settings));
+    HENKA_TEST_ASSERT(memcmp(
+        &loaded,
+        &before_rejected_load,
+        sizeof(loaded)) == 0);
+
+    henka_settings_destroy(settings);
+}
+
 void henka_test_sandbox3d_workspace(void)
 {
     volatile size_t context_count = SANDBOX3D_WORK_CONTEXT_COUNT;
@@ -62,6 +123,7 @@ void henka_test_sandbox3d_workspace(void)
     henka_ui_rect right_splitter;
     henka_ui_rect visual_splitter;
 
+    henka_test_sandbox3d_workspace_persistence();
     ground_color = sandbox3d_ground_surface_color();
     HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.x, 0.035f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.y, 0.050f, 0.0001f);

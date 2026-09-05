@@ -721,6 +721,7 @@ add_executable(henka_tests
     ../examples/sandbox3d/physics_tools.c
     ../examples/sandbox3d/studio_environment.c
     ../examples/sandbox3d/workspace_tools.c
+    ../examples/sandbox3d/workspace_persistence.c
     ../examples/sandbox3d/editor_layout.c
     test_action.c
     test_assets.c
