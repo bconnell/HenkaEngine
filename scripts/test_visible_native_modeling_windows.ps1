@@ -340,6 +340,32 @@ try {
     $viewportY = [double]::Parse($viewport.Groups["y"].Value, [Globalization.CultureInfo]::InvariantCulture)
     $viewportWidth = [double]::Parse($viewport.Groups["width"].Value, [Globalization.CultureInfo]::InvariantCulture)
     $viewportHeight = [double]::Parse($viewport.Groups["height"].Value, [Globalization.CultureInfo]::InvariantCulture)
+
+    # Modeling evidence must use the product's neutral geometry-reading mode.
+    # A fresh sandbox may otherwise restore Rendered mode when no user setting
+    # exists, making a valid mesh appear like an overexposed white silhouette.
+    # Use the reported Scene View control geometry and verify the app-owned
+    # shading transition rather than assuming a coordinate or mode.
+    $shadingControls = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern 'Viewport shading controls: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) button=(?<button>[-0-9.]+) gap=(?<gap>[-0-9.]+)'
+    $shadingX = [double]::Parse($shadingControls.Groups["x"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $shadingY = [double]::Parse($shadingControls.Groups["y"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $shadingButtonWidth = [double]::Parse($shadingControls.Groups["button"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $shadingGap = [double]::Parse($shadingControls.Groups["gap"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $solidModeCount = Get-LogMatchCount -Path $stdoutPath -Pattern 'Viewport shading: Solid\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ($shadingX + ($shadingButtonWidth + $shadingGap) + ($shadingButtonWidth * 0.5)) `
+        -Y ($shadingY + 11.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $solidModeCount `
+            -Pattern 'Viewport shading: Solid\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The modeling evidence could not establish the product Solid shading mode."
+    }
+
     Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
     Start-Sleep -Milliseconds 450
     Save-ProbeWindowScreenshot `
