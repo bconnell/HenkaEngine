@@ -332,6 +332,12 @@ try {
         -EventPath $automationInputPath `
         -Pattern ("Native authoring face controls: name=" + [Regex]::Escape($authoringName) + ' face_x=(?<x>[-0-9.]+) face_y=(?<y>[-0-9.]+) width=88.0 height=24.0\.') `
         -XGroup "x" -YGroup "y"
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring base edit cage: entity=\d+ mode=2 overlay=0 edges=[1-9]\d*\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible Face edit mode did not expose the authored base cage with diagnostics disabled."
+    }
 
     $viewport = Get-LastMatch `
         -Path $stdoutPath `
@@ -368,6 +374,39 @@ try {
 
     Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
     Start-Sleep -Milliseconds 450
+
+    $modeEvidence = @(
+        @{ Name = "vertex"; Label = "Vertex"; Code = 0; Pattern = ("Native authoring Vertex selection control: name=" + [Regex]::Escape($authoringName) + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=88.0 height=24.0\.') },
+        @{ Name = "edge"; Label = "Edge"; Code = 1; Pattern = ("Native authoring Edge selection control: name=" + [Regex]::Escape($authoringName) + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=88.0 height=24.0\.') },
+        @{ Name = "face"; Label = "Face"; Code = 2; Pattern = ("Native authoring face controls: name=" + [Regex]::Escape($authoringName) + ' face_x=(?<x>[-0-9.]+) face_y=(?<y>[-0-9.]+) width=88.0 height=24.0\.') }
+    )
+    foreach ($mode in $modeEvidence) {
+        Click-LoggedControl `
+            -LogPath $stdoutPath `
+            -EventPath $automationInputPath `
+            -Pattern $mode.Pattern `
+            -XGroup "x" `
+            -YGroup "y" `
+            -XOffset 44.0 `
+            -YOffset 12.0
+        if (-not (Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring topology mode: name=" + [Regex]::Escape($authoringName) + ' mode=' + $mode.Label + ' ') `
+                -TimeoutMilliseconds 5000)) {
+            throw ("The visible editor did not enter " + $mode.Label + " edit mode.")
+        }
+        if (-not (Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring base edit cage: entity=\d+ mode=" + $mode.Code + ' overlay=0 edges=[1-9]\d*\.') `
+                -TimeoutMilliseconds 5000)) {
+            throw ("The visible " + $mode.Label + " edit mode did not report its authored base cage.")
+        }
+        Start-Sleep -Milliseconds 300
+        Save-ProbeWindowScreenshot `
+            -Handle $capturedProcess.Process.MainWindowHandle `
+            -Path (Join-Path $runtimeDirectory ($mode.Name + "-mode-normal-distance.png"))
+    }
+
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "after-frame-before-pick.png")

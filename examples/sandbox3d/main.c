@@ -507,6 +507,8 @@ typedef struct sandbox3d_state
     bool native_authoring_face_edit_tools_reported;
     float native_authoring_face_edit_tools_reported_y;
     bool native_authoring_face_normal_controls_reported;
+    bool native_authoring_base_cage_reported;
+    int native_authoring_base_cage_reported_mode;
     bool native_authoring_move_reported;
     float native_authoring_move_reported_y;
     bool native_authoring_component_edited;
@@ -6404,10 +6406,15 @@ static void sandbox3d_draw_authoring_vertex_marker(
     bool loose)
 {
     const henka_vec4 outer = (henka_vec4){0.01f, 0.02f, 0.04f, 0.98f};
+    /* The authored cage is always visible in component-editing mode, but
+     * ordinary cage vertices are diagnostic context rather than selection.
+     * Keep them subordinate to the surface and to the selected-component
+     * highlights drawn by sandbox3d_draw_selection_highlight(). */
     const henka_vec4 inner = loose
-        ? (henka_vec4){1.0f, 0.30f, 0.76f, 1.0f}
-        : (henka_vec4){1.0f, 0.84f, 0.20f, 1.0f};
-    const float marker = loose ? 8.0f : 6.0f;
+        ? (henka_vec4){0.92f, 0.36f, 0.76f, 0.88f}
+        : (henka_vec4){0.48f, 0.65f, 0.82f, 0.62f};
+    const float marker = loose ? 6.0f : 3.0f;
+    const float inner_width = loose ? 2.25f : 1.5f;
 
     (void)sandbox3d_draw_viewport_clipped_overlay_line(
         state, viewport,
@@ -6418,7 +6425,7 @@ static void sandbox3d_draw_authoring_vertex_marker(
         state, viewport,
         (henka_vec2){center.x - marker, center.y},
         (henka_vec2){center.x + marker, center.y},
-        2.5f, inner);
+        inner_width, inner);
     (void)sandbox3d_draw_viewport_clipped_overlay_line(
         state, viewport,
         (henka_vec2){center.x, center.y - marker},
@@ -6428,7 +6435,7 @@ static void sandbox3d_draw_authoring_vertex_marker(
         state, viewport,
         (henka_vec2){center.x, center.y - marker},
         (henka_vec2){center.x, center.y + marker},
-        2.5f, inner);
+        inner_width, inner);
 }
 
 /* Object mode identifies the logical object as one bounded selection. Do
@@ -6562,6 +6569,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
             state->authoring_topology_overlay_enabled =
                 SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT;
             state->authoring_topology_overlay_entity = authoring_entity;
+            state->native_authoring_base_cage_reported = false;
         }
     }
     else
@@ -6571,6 +6579,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
         state->authoring_topology_overlay_enabled =
             SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT;
         state->authoring_topology_overlay_entity = HENKA_INVALID_ENTITY;
+        state->native_authoring_base_cage_reported = false;
     }
     memset(&gate, 0, sizeof(gate));
     gate.selected_object_present = selected_entity != HENKA_INVALID_ENTITY;
@@ -6637,10 +6646,10 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
             size_t authoring_cage_edge_count = 0U;
             size_t authoring_cage_edge_index;
 
-            /* The topology toggle owns the authored cage only. The evaluated
-             * scene mesh remains the visible surface in Solid mode; keeping
-             * renderer tessellation out of this screen-space pass prevents
-             * the editor from presenting triangles as authored topology. */
+            /* Edit Mode always shows the authored cage. The toggle is reserved
+             * for the optional filled diagnostic overlay; keeping renderer
+             * tessellation out of this screen-space pass prevents the editor
+             * from presenting triangles as authored topology. */
             if (state->authoring_topology_overlay_enabled)
             {
                 sandbox3d_draw_authoring_surface_overlay(
@@ -6649,14 +6658,28 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                     transform,
                     state->authoring_object);
             }
-            if (state->authoring_topology_overlay_enabled &&
-                sandbox3d_build_authoring_cage(
+            if (sandbox3d_build_authoring_cage(
                     mesh,
                     authoring_cage_edges,
                     sizeof(authoring_cage_edges) /
                         sizeof(authoring_cage_edges[0]),
                     &authoring_cage_edge_count) == HENKA_SUCCESS)
             {
+                if (!state->native_authoring_base_cage_reported ||
+                    state->native_authoring_base_cage_reported_mode !=
+                        (int)selection_mode)
+                {
+                    printf(
+                        "Native authoring base edit cage: entity=%u mode=%d overlay=%d edges=%zu.\n",
+                        (unsigned int)authoring_entity,
+                        (int)selection_mode,
+                        state->authoring_topology_overlay_enabled ? 1 : 0,
+                        authoring_cage_edge_count);
+                    fflush(stdout);
+                    state->native_authoring_base_cage_reported = true;
+                    state->native_authoring_base_cage_reported_mode =
+                        (int)selection_mode;
+                }
                 for (authoring_cage_edge_index = 0U;
                      authoring_cage_edge_index <
                          authoring_cage_edge_count;
@@ -6754,11 +6777,23 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                                 continue;
                             }
 
-                            sandbox3d_draw_authoring_vertex_marker(
-                                state,
-                                viewport,
-                                center,
-                                point->loose);
+                            /* Vertex mode exposes every authored position;
+                             * Edge/Face modes keep the cage readable without
+                             * turning every intersection into a selection-like
+                             * glyph. Loose vertices remain visible because
+                             * they have no boundary edge to locate them. An
+                             * explicit topology diagnostic can restore the
+                             * complete marker field when it is useful. */
+                            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
+                                point->loose ||
+                                state->authoring_topology_overlay_enabled)
+                            {
+                                sandbox3d_draw_authoring_vertex_marker(
+                                    state,
+                                    viewport,
+                                    center,
+                                    point->loose);
+                            }
                         }
                     }
                 }
@@ -24877,6 +24912,12 @@ details_group_authoring:
                             context_move_row.x + 96.0f,
                             context_move_row.y);
                         fflush(stdout);
+                        printf(
+                            "Native authoring Vertex selection control: name=%s x=%.1f y=%.1f width=88.0 height=24.0.\n",
+                            display_name,
+                            context_move_row.x,
+                            context_move_row.y);
+                        fflush(stdout);
                         state->native_authoring_face_controls_reported = true;
                         state->native_authoring_face_controls_reported_y = context_move_row.y;
                     }
@@ -25697,6 +25738,12 @@ details_group_authoring:
                         "Native authoring Edge selection control: name=%s x=%.1f y=%.1f width=88.0 height=24.0.\n",
                         display_name,
                         row.x + 96.0f,
+                        row.y);
+                    fflush(stdout);
+                    printf(
+                        "Native authoring Vertex selection control: name=%s x=%.1f y=%.1f width=88.0 height=24.0.\n",
+                        display_name,
+                        row.x,
                         row.y);
                     fflush(stdout);
                     state->native_authoring_face_controls_reported = true;
