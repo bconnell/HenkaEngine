@@ -36,6 +36,61 @@ function Get-LastMatch {
     return $match
 }
 
+function Read-SharedLogText {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return ""
+    }
+    $stream = [System.IO.File]::Open(
+        $Path,
+        [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read,
+        [System.IO.FileShare]::ReadWrite)
+    try {
+        $reader = New-Object System.IO.StreamReader($stream)
+        try {
+            $text = $reader.ReadToEnd()
+        }
+        finally {
+            $reader.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+    return $text
+}
+
+function Get-LogMatchCount {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Pattern
+    )
+
+    return [Regex]::Matches(
+        (Read-SharedLogText -Path $Path),
+        $Pattern).Count
+}
+
+function Wait-LogMatchCountIncrease {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][int]$InitialCount,
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][int]$TimeoutMilliseconds
+    )
+
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
+    do {
+        if ((Get-LogMatchCount -Path $Path -Pattern $Pattern) -gt $InitialCount) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return $false
+}
+
 function Clear-TextField {
     param([Parameter(Mandatory = $true)][string]$EventPath)
 
@@ -491,7 +546,24 @@ try {
         -XGroup "x" -YGroup "y"
     Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
     Start-Sleep -Milliseconds 450
-    Send-HenkaAutomationClick -EventPath $automationInputPath -X ($viewportX + $viewportWidth * 0.5) -Y ($viewportY + $viewportHeight * 0.5)
+    $reopenedPickPattern = "Native authoring component picked: name=" + [Regex]::Escape($authoringName) + ' .* mode=face .* selected=1'
+    $reopenedPicked = $false
+    for ($xStep = 5; $xStep -le 6 -and -not $reopenedPicked; $xStep += 1) {
+        for ($yStep = 3; $yStep -le 4 -and -not $reopenedPicked; $yStep += 1) {
+            $reopenedPickCount = Get-LogMatchCount -Path $stdoutPath -Pattern $reopenedPickPattern
+            $reopenedPickX = [double]($viewportX + $viewportWidth * ([double]$xStep / 10.0))
+            $reopenedPickY = [double]($viewportY + $viewportHeight * ([double]$yStep / 10.0))
+            Send-HenkaAutomationClick -EventPath $automationInputPath -X $reopenedPickX -Y $reopenedPickY
+            $reopenedPicked = Wait-LogMatchCountIncrease `
+                -Path $stdoutPath `
+                -InitialCount $reopenedPickCount `
+                -Pattern $reopenedPickPattern `
+                -TimeoutMilliseconds 750
+        }
+    }
+    if (-not $reopenedPicked) {
+        throw "The visible reopened asset did not produce a fresh selected face before re-edit."
+    }
     Click-LoggedControl `
         -LogPath $stdoutPath `
         -EventPath $automationInputPath `
