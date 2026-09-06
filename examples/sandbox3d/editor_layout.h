@@ -85,6 +85,19 @@ henka_result sandbox3d_editor_frame_layout_build(
 bool sandbox3d_editor_frame_layout_is_valid(
     const sandbox3d_editor_frame_layout* layout);
 
+/* Return the editor-owned modeling toolbar bounds for the current scene
+ * frame. The navigation overlay consumes the same bounds so it cannot cover
+ * the toolbar or its hit targets. */
+henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
+    henka_ui_rect scene_frame,
+    bool authoring_available);
+
+/* Return the scene viewport region reserved for navigation overlays. This is
+ * editor presentation geometry; it does not change the renderer viewport. */
+henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
+    const sandbox3d_editor_frame_layout* layout,
+    bool authoring_available);
+
 henka_ui_rect sandbox3d_editor_frame_layout_panel_rect(
     const sandbox3d_editor_frame_layout* layout,
     sandbox3d_workspace_panel_id panel_id);

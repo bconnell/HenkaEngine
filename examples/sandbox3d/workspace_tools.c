@@ -431,7 +431,7 @@ static void sandbox3d_workspace_topology_initialize(
         5U,
         6U,
         SANDBOX3D_WORKSPACE_SPLIT_VERTICAL,
-        0.82f);
+        0.62f);
     sandbox3d_workspace_topology_make_section(
         &model->topology_nodes[5], SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
     sandbox3d_workspace_topology_make_section(
@@ -1111,7 +1111,7 @@ bool sandbox3d_workspace_apply_named_layout(
         layout == SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY ? 0.82f :
         layout == SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING ? 0.58f :
         layout == SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT ? 0.76f :
-        0.82f;
+        0.62f;
     if (layout == SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT)
     {
         candidate.left_dock_width = 260.0f;

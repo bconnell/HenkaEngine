@@ -1,6 +1,19 @@
 #include "test_suite.h"
 
 #include "../examples/sandbox3d/editor_layout.h"
+#include "../examples/sandbox3d/view_compass.h"
+
+extern henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
+    const sandbox3d_editor_frame_layout* layout,
+    bool authoring_available);
+
+static bool henka_test_rects_overlap(henka_ui_rect left, henka_ui_rect right)
+{
+    return left.x < right.x + right.width &&
+        left.x + left.width > right.x &&
+        left.y < right.y + right.height &&
+        left.y + left.height > right.y;
+}
 
 void henka_test_sandbox3d_editor_layout(void)
 {
@@ -190,6 +203,35 @@ void henka_test_sandbox3d_editor_layout(void)
         HENKA_TEST_ASSERT(object_details_panel.width > 0.0f);
         HENKA_TEST_ASSERT(scene_objects_panel.x + scene_objects_panel.width <= 1280.01f);
         HENKA_TEST_ASSERT(object_details_panel.x + object_details_panel.width <= 1280.01f);
+
+        {
+            sandbox3d_view_compass_preferences compass_preferences;
+            sandbox3d_view_compass_layout compass_layout;
+            const henka_viewport navigation_viewport =
+                sandbox3d_editor_frame_layout_navigation_viewport(&frame, false);
+            const henka_ui_rect compact_toolbar = {
+                frame.scene_frame.x + 10.0f,
+                frame.scene_frame.y + 76.0f,
+                frame.scene_frame.width - 20.0f,
+                52.0f};
+
+            sandbox3d_view_compass_preferences_defaults(&compass_preferences);
+            HENKA_TEST_ASSERT(henka_viewport_is_valid(navigation_viewport));
+            HENKA_TEST_ASSERT(navigation_viewport.y > frame.scene_viewport.y);
+            HENKA_TEST_ASSERT(
+                sandbox3d_view_compass_compute_layout(
+                    navigation_viewport,
+                    &compass_preferences,
+                    &compass_layout));
+            HENKA_TEST_ASSERT(
+                !henka_test_rects_overlap(
+                    compass_layout.circle_bounds,
+                    compact_toolbar));
+            HENKA_TEST_ASSERT(
+                !henka_test_rects_overlap(
+                    compass_layout.info_bounds,
+                    compact_toolbar));
+        }
 
         visibility.docked_content_visible = false;
         HENKA_TEST_ASSERT(

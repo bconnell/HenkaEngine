@@ -688,6 +688,10 @@ static const float g_default_camera_movement_speed = 4.0f;
 static const henka_vec3 g_camera_start_position = {0.0f, 2.4f, 8.6f};
 static const float g_camera_start_yaw = -HENKA_PI * 0.5f;
 static const float g_camera_start_pitch = -0.22f;
+/* The product-native starter scene is a ground-first workspace. Keep the
+ * camera pitched down enough that the editable plane reads as the opening
+ * surface instead of presenting its horizon across the viewport midpoint. */
+static const float g_default_scene_camera_pitch = -0.45f;
 static const henka_vec3 g_textured_cube_position = {0.0f, 0.5f, 0.0f};
 static const henka_vec3 g_colored_cube_position = {-2.6f, 0.5f, 1.4f};
 static const henka_vec3 g_missing_texture_position = {2.6f, 0.5f, 1.4f};
@@ -4581,7 +4585,7 @@ sandbox3d_get_saved_viewport_shading_mode(
 
     if (state == NULL || state->settings == NULL)
     {
-        return HENKA_VIEWPORT_SHADING_SOLID;
+        return HENKA_VIEWPORT_SHADING_RENDERED;
     }
 
     if (henka_settings_has_key(
@@ -4600,9 +4604,9 @@ sandbox3d_get_saved_viewport_shading_mode(
         }
 
         HENKA_LOG_WARN(
-            "Invalid viewport shading setting '%s'; Solid was restored.",
+            "Invalid viewport shading setting '%s'; Rendered scene shading was restored.",
             value);
-        return HENKA_VIEWPORT_SHADING_SOLID;
+        return HENKA_VIEWPORT_SHADING_RENDERED;
     }
 
     return henka_settings_get_bool(
@@ -4610,7 +4614,7 @@ sandbox3d_get_saved_viewport_shading_mode(
         g_setting_key_wireframe_enabled,
         false) ?
         HENKA_VIEWPORT_SHADING_WIREFRAME :
-        HENKA_VIEWPORT_SHADING_SOLID;
+        HENKA_VIEWPORT_SHADING_RENDERED;
 }
 static const char* sandbox3d_get_utility_label(sandbox3d_utility_view utility)
 {
@@ -5819,22 +5823,14 @@ static henka_ui_rect sandbox3d_get_modeling_toolbar_bounds(
     const sandbox3d_state* state,
     henka_ui_rect scene_frame)
 {
-    const bool authoring_available =
-        sandbox3d_modeling_toolbar_has_editable_selection(state);
-
     if (state == NULL ||
-        scene_frame.width < 500.0f ||
-        scene_frame.height < 150.0f ||
         state->workspace.context.active != SANDBOX3D_WORK_CONTEXT_BUILD)
     {
         return (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
     }
-
-    return (henka_ui_rect){
-        scene_frame.x + 10.0f,
-        scene_frame.y + (authoring_available ? 82.0f : 34.0f),
-        scene_frame.width - 20.0f,
-        136.0f};
+    return sandbox3d_editor_layout_modeling_toolbar_bounds(
+        scene_frame,
+        sandbox3d_modeling_toolbar_has_editable_selection(state));
 }
 
 static bool sandbox3d_rects_overlap(henka_ui_rect left, henka_ui_rect right)
@@ -7241,12 +7237,11 @@ static bool sandbox3d_get_scene_framing_bounds(
         return false;
     }
 
-    /* Pass zero gives the normal Sandbox's authored showcase priority. Pass
+    /* Pass zero gives explicit showcase/reference workflows priority. Pass
      * one remains project-agnostic and frames any visible non-helper mesh when
-     * a future project has no showcase naming convention. Ground and grid are
-     * deliberately excluded from both passes because neither is scene content
-     * a user opens the editor to inspect. */
-    for (pass = 0U; pass < 2U; ++pass)
+     * a future project has no showcase naming convention. Pass two is the
+     * product-native fallback for the ordinary ground-only starting scene. */
+    for (pass = 0U; pass < 3U; ++pass)
     {
         found = false;
         minimum = (henka_vec3){0.0f, 0.0f, 0.0f};
@@ -7267,16 +7262,22 @@ static bool sandbox3d_get_scene_framing_bounds(
             entity = henka_scene_get_entity_at_index(state->scene, entity_index);
             if (entity == HENKA_INVALID_ENTITY ||
                 entity == state->grid_entity ||
-                entity == state->ground_entity ||
                 !henka_scene_is_entity_visible(state->scene, entity) ||
                 henka_scene_is_entity_helper(state->scene, entity))
             {
                 continue;
             }
 
+            if ((pass == 2U && entity != state->ground_entity) ||
+                (pass != 2U && entity == state->ground_entity))
+            {
+                continue;
+            }
+
             name = henka_scene_get_entity_name(state->scene, entity);
             showcase_name = name != NULL && strncmp(name, "Showcase ", 9U) == 0;
-            if ((pass == 0U && !showcase_name) || (pass == 1U && showcase_name))
+            if ((pass == 0U && !showcase_name) ||
+                (pass == 1U && showcase_name))
             {
                 continue;
             }
@@ -7742,6 +7743,72 @@ static henka_entity sandbox3d_find_showcase_entity(
         }
     }
     return HENKA_INVALID_ENTITY;
+}
+
+static bool sandbox3d_default_scene_requested(const sandbox3d_state* state)
+{
+    if (state == NULL)
+    {
+        return false;
+    }
+    /* Generic capture-mode runs are explicit reference workflows for the
+     * checked-in showcase pair.  Ordinary startup and --capture-startup are
+     * the product-native scene and must not acquire reference fixtures. */
+    return !state->smoke_test &&
+        !state->primitive_gallery &&
+        !state->capture_mode_requested &&
+        !state->terrain_capture_mode_requested &&
+        !state->showcase_capture_view_requested &&
+        !state->realism_reference_capture_requested;
+}
+
+static henka_result sandbox3d_create_default_ground_authoring(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    henka_authoring_mesh* ground_source = NULL;
+    sandbox3d_authoring_object* ground_object = NULL;
+    henka_authoring_mesh_desc ground_desc;
+    henka_result result;
+
+    if (engine == NULL || state == NULL || state->scene == NULL ||
+        !sandbox3d_default_scene_requested(state))
+    {
+        return HENKA_SUCCESS;
+    }
+
+    ground_desc = henka_authoring_mesh_desc_default();
+    result = henka_authoring_mesh_create_plane(
+        &ground_desc,
+        16.0f,
+        16.0f,
+        &ground_source);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = sandbox3d_authoring_object_create_from_mesh(
+        engine,
+        state->scene,
+        state->ground_entity,
+        ground_source,
+        32U,
+        &ground_object);
+    henka_authoring_mesh_destroy(ground_source);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (!sandbox3d_register_authoring_object(state, ground_object))
+    {
+        sandbox3d_authoring_object_destroy(ground_object);
+        return HENKA_ERROR_LIMIT;
+    }
+    state->authoring_object = ground_object;
+    printf(
+        "DEFAULT_SCENE_READY ground=1 ground_editable=1 camera=1 showcase_assets=0 diagnostic_entities=0 scene_content=product_native\n");
+    fflush(stdout);
+    return HENKA_SUCCESS;
 }
 
 static bool sandbox3d_request_capture_frame(
@@ -8443,7 +8510,8 @@ static void sandbox3d_report_capture_ready(
     bool subject_capture;
 
     if (engine == NULL || state == NULL ||
-        (!state->capture_mode_requested && !state->startup_capture_requested) ||
+        (!state->capture_mode_requested && !state->startup_capture_requested &&
+            !sandbox3d_default_scene_requested(state)) ||
         state->capture_metadata_reported)
     {
         return;
@@ -8457,6 +8525,106 @@ static void sandbox3d_report_capture_ready(
             return;
         }
         sandbox3d_report_realism_reference_capture_ready(engine, state);
+        return;
+    }
+    if (sandbox3d_default_scene_requested(state) && !state->capture_mode_requested)
+    {
+        henka_bounds startup_bounds;
+        henka_scene_environment_desc environment;
+        size_t user_scene_object_count;
+        size_t editor_helper_count;
+        size_t unexpected_entity_count;
+        size_t scene_index;
+        henka_camera scene_camera;
+        bool scene_camera_ready;
+        bool environment_ready;
+
+        viewport = state->frame_layout.scene_viewport;
+        scene_camera_ready = henka_scene_get_camera(state->scene, &scene_camera) == HENKA_SUCCESS;
+        environment_ready = henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS;
+        if (viewport.width <= 0 || viewport.height <= 0 ||
+            !sandbox3d_get_scene_framing_bounds(state, &startup_bounds) ||
+            !scene_camera_ready || !henka_camera_is_valid(&scene_camera) ||
+            !environment_ready ||
+            !henka_scene_is_entity_valid(state->scene, state->ground_entity) ||
+            !henka_scene_is_entity_visible(state->scene, state->ground_entity) ||
+            sandbox3d_find_authoring_object(state, state->ground_entity) == NULL ||
+            sandbox3d_find_showcase_entity(state, "Showcase Giraffe ") != HENKA_INVALID_ENTITY ||
+            sandbox3d_find_showcase_entity(state, "Showcase Rocket ") != HENKA_INVALID_ENTITY)
+        {
+            state->capture_settled_frames = 0U;
+            return;
+        }
+        if (henka_camera_world_to_screen(
+                &scene_camera,
+                viewport.width,
+                viewport.height,
+                startup_bounds.center,
+                &combined_midpoint,
+                NULL) != HENKA_SUCCESS ||
+            !isfinite(combined_midpoint.x) || !isfinite(combined_midpoint.y))
+        {
+            state->capture_settled_frames = 0U;
+            return;
+        }
+        if (state->capture_settled_frames < 3U)
+        {
+            ++state->capture_settled_frames;
+            return;
+        }
+        user_scene_object_count = 0U;
+        editor_helper_count = 0U;
+        unexpected_entity_count = 0U;
+        for (scene_index = 0U;
+             scene_index < henka_scene_get_entity_count(state->scene);
+             ++scene_index)
+        {
+            const henka_entity scene_entity = henka_scene_get_entity_at_index(
+                state->scene,
+                scene_index);
+            if (scene_entity == state->ground_entity)
+            {
+                ++user_scene_object_count;
+            }
+            else if (scene_entity != HENKA_INVALID_ENTITY &&
+                henka_scene_is_entity_helper(state->scene, scene_entity))
+            {
+                ++editor_helper_count;
+            }
+            else if (scene_entity != HENKA_INVALID_ENTITY)
+            {
+                ++unexpected_entity_count;
+            }
+        }
+        printf(
+            "CAPTURE_READY_STARTUP mode=startup viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f ground_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f ground_screen=%.2f,%.2f starter_ground=1 scene_camera=1 environment_owner=scene user_scene_objects=%zu editor_helpers=%zu runtime_entities=%zu showcase_assets=0 diagnostic_entities=0 terrain_content=%d hidden_cleanup=0 ground_authoring=canonical settled_frames=%u draw_expected=1\n",
+            viewport.x,
+            viewport.y,
+            viewport.width,
+            viewport.height,
+            henka_viewport_get_aspect_ratio(viewport),
+            scene_camera.position.x,
+            scene_camera.position.y,
+            scene_camera.position.z,
+            scene_camera.yaw_radians,
+            scene_camera.pitch_radians,
+            scene_camera.roll_radians,
+            scene_camera.field_of_view_radians,
+            startup_bounds.center.x,
+            startup_bounds.center.y,
+            startup_bounds.center.z,
+            startup_bounds.extents.x,
+            startup_bounds.extents.y,
+            startup_bounds.extents.z,
+            combined_midpoint.x,
+            combined_midpoint.y,
+            user_scene_object_count,
+            editor_helper_count,
+            unexpected_entity_count,
+            state->terrain_world == NULL && state->terrain_render == NULL ? 0 : 1,
+            state->capture_settled_frames);
+        fflush(stdout);
+        state->capture_metadata_reported = true;
         return;
     }
     subject_capture = state->showcase_capture_view_requested &&
@@ -9343,6 +9511,11 @@ static void sandbox3d_set_active_utility(sandbox3d_state* state, sandbox3d_utili
         return;
     }
 
+    if (state->workspace.active_utility != utility && utility == SANDBOX3D_UTILITY_TERRAIN)
+    {
+        printf("Utility active: Terrain.\n");
+        fflush(stdout);
+    }
     state->workspace.active_utility = utility;
 }
 
@@ -10014,6 +10187,14 @@ static void sandbox3d_print_scene_legend(const sandbox3d_state* state)
     size_t index;
 
     printf("Scene examples:\n");
+    if (sandbox3d_default_scene_requested(state))
+    {
+        printf("  Ground: the ordinary editable product-native plane starting point.\n");
+        printf("  Default environment: the normal sky/environment lighting and editor grid.\n");
+        printf("  Showcase Giraffe and Showcase Rocket: explicit reference assets available through their capture/regression workflows.\n");
+        printf("  Use --primitive-gallery or an explicit showcase capture to inspect reference and diagnostic assets.\n");
+        return;
+    }
     if (!state->primitive_gallery)
     {
         printf("  Showcase Giraffe: central-left, the Anatomical Giraffe Study loaded through the packaged glTF scene/material path.\n");
@@ -10096,7 +10277,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
 {
     printf("Henka Engine Sandbox 3D\n");
     printf("Build: local %s %s %s\n", sandbox3d_get_build_configuration_label(), __DATE__, __TIME__);
-    printf("This scene presents the Anatomical Giraffe Study and Original Realistic Rocket through the packaged glTF scene/material path; use --primitive-gallery for the primitive and fallback QA samples.\n");
+    printf("Normal startup opens a clean product-native scene with an editable ground plane, the default environment, and editor presentation helpers. The Giraffe and Rocket remain explicit packaged reference assets for capture and regression workflows. Use --primitive-gallery for primitive and fallback QA samples.\n");
     printf("Controls:\n");
     printf("  W A S D          Move across the scene\n");
     printf("  Q / E            Move down / up\n");
@@ -10137,7 +10318,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
     printf("  Select an authored scene object and open Object Details > Audio to edit its persisted clip path, enabled, looping, and spatial settings; Preview and Stop Preview use the real scene entity and manager-owned Audio asset.\n");
-     printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, bounded loose Vertex/Edge Extrude, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge. The same Edge-mode amount control routes one open boundary edge through bounded face-normal surface-connected Edge Extrude; broader surface-connected Vertex/Edge Extrude remains unfinished. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
+    printf("  Select the editable Ground Plane or an explicit reference asset, open Object Details > Authoring, and choose Make Editable when available; the generic component Move, bounded loose Vertex/Edge Extrude, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge. The same Edge-mode amount control routes one open boundary edge through bounded face-normal surface-connected Edge Extrude; broader surface-connected Vertex/Edge Extrude remains unfinished. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources remain explicit editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Tools panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Tools provides Build, Game, and World work contexts plus saved/custom workspace layouts; topology edits mark the workspace Custom.\n");
@@ -10476,6 +10657,15 @@ static henka_result sandbox3d_initialize_physics(sandbox3d_state* state)
     state->physics.debug_colliders = false;
     state->physics.debug_contacts = false;
     snprintf(state->physics.last_action, sizeof(state->physics.last_action), "Physics ready; use Enable Physics");
+
+    if (sandbox3d_default_scene_requested(state))
+    {
+        return sandbox3d_add_physics_body(
+            state,
+            SANDBOX3D_OBJECT_GROUND,
+            sandbox3d_physics_initial_body_type(SANDBOX3D_PHYSICS_SAMPLE_GROUND),
+            henka_physics_collider_plane((henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f));
+    }
 
     if (sandbox3d_add_physics_body(
             state,
@@ -12692,12 +12882,15 @@ static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
     bool has_framing_bounds;
     bool has_giraffe_showcase;
     bool has_rocket_showcase;
+    bool product_native_default_scene;
     size_t entity_index;
 
     if (state == NULL)
     {
         return;
     }
+
+    product_native_default_scene = sandbox3d_default_scene_requested(state);
 
     sandbox3d_view_compass_cancel_transition(&state->compass);
 
@@ -12752,6 +12945,11 @@ static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
              * orbit heading from a prior editor session. */
             state->camera.yaw_radians = -HENKA_PI * 0.5f;
             state->camera.pitch_radians = 0.0f;
+        }
+        else if (preset == HENKA_CAMERA_PRESET_PERSPECTIVE_3D &&
+            product_native_default_scene)
+        {
+            state->camera.pitch_radians = g_default_scene_camera_pitch;
         }
         if (!henka_camera_frame_bounds(
                 &state->camera,
@@ -20205,6 +20403,11 @@ static void sandbox3d_draw_scene_viewport_frame(
         const float tools_width = bounds.width >= 760.0f ? 62.0f : 58.0f;
         const float focus_width = bounds.width >= 760.0f ? 82.0f : 0.0f;
         const float context_x = bounds.x + (compact_header ? 104.0f : 112.0f);
+        const henka_ui_rect tools_rect = {
+            context_x + context_width + 4.0f,
+            bounds.y + 4.0f,
+            tools_width,
+            22.0f};
         size_t context_selection = (size_t)state->workspace.context.active;
         bool context_changed = false;
 
@@ -20238,11 +20441,7 @@ static void sandbox3d_draw_scene_viewport_frame(
         if (henka_ui_tab(
                 state->ui,
                 "header_tools",
-                (henka_ui_rect){
-                    context_x + context_width + 4.0f,
-                    bounds.y + 4.0f,
-                    tools_width,
-                    22.0f},
+                tools_rect,
                 "Tools",
                 state->workspace.tools_panel_visible))
         {
@@ -20254,6 +20453,23 @@ static void sandbox3d_draw_scene_viewport_frame(
                 state->workspace.tools_panel_visible
                     ? "Secondary tools shown."
                     : "Secondary tools hidden.");
+        }
+        {
+            static henka_ui_rect last_tools_rect = {-1.0f, -1.0f, -1.0f, -1.0f};
+            if (fabsf(tools_rect.x - last_tools_rect.x) > 0.01f ||
+                fabsf(tools_rect.y - last_tools_rect.y) > 0.01f ||
+                fabsf(tools_rect.width - last_tools_rect.width) > 0.01f ||
+                fabsf(tools_rect.height - last_tools_rect.height) > 0.01f)
+            {
+                printf(
+                    "Scene View Tools control: x=%.1f y=%.1f width=%.1f height=%.1f.\n",
+                    tools_rect.x,
+                    tools_rect.y,
+                    tools_rect.width,
+                    tools_rect.height);
+                fflush(stdout);
+                last_tools_rect = tools_rect;
+            }
         }
 
         if (focus_width > 0.0f &&
@@ -22418,11 +22634,49 @@ static void sandbox3d_draw_scene_objects_panel(
             action_rects[0],
             "Add Cube"))
     {
-        if (sandbox3d_add_native_asset_primitive(
+        const bool use_product_scene_operation =
+            sandbox3d_default_scene_requested(state) &&
+            sandbox3d_authoring_asset_controller_get_document(
+                state->authoring_asset_controller) == NULL;
+        const bool created = use_product_scene_operation
+            ? sandbox3d_add_primitive_object(engine, state)
+            : sandbox3d_add_native_asset_primitive(
                 engine,
                 state,
                 SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_BOX,
-                "box"))
+                "box");
+
+        if (created && use_product_scene_operation)
+        {
+            henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+            henka_scene_document_object document_object;
+
+            if (state->game_authoring == NULL ||
+                sandbox3d_game_authoring_get_object_for_entity(
+                    state->game_authoring,
+                    sandbox3d_get_real_selected_entity(state),
+                    &document_id,
+                    &document_object) != HENKA_SUCCESS)
+            {
+                sandbox3d_set_status(
+                    state,
+                    true,
+                    "Product-native Add Cube was created without a readable Scene Document binding.");
+            }
+            else
+            {
+                printf(
+                    "DEFAULT_SCENE_ADD_CUBE_READY entity=%llu document_id=%llu source=primitive canonical_document=1.\n",
+                    (unsigned long long)sandbox3d_get_real_selected_entity(state),
+                    (unsigned long long)document_id);
+                fflush(stdout);
+                sandbox3d_set_status(
+                    state,
+                    false,
+                    "Created and selected a product-native cube.");
+            }
+        }
+        else if (created)
         {
             sandbox3d_set_status(state, false, "Created and selected a native-authored box part.");
         }
@@ -29624,6 +29878,24 @@ static void sandbox3d_draw_utility_panel(
         {
             sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_TERRAIN);
         }
+        {
+            static henka_ui_rect last_terrain_tab = {-1.0f, -1.0f, -1.0f, -1.0f};
+            const henka_ui_rect terrain_tab = utility_tab_rects[0];
+            if (fabsf(terrain_tab.x - last_terrain_tab.x) > 0.01f ||
+                fabsf(terrain_tab.y - last_terrain_tab.y) > 0.01f ||
+                fabsf(terrain_tab.width - last_terrain_tab.width) > 0.01f ||
+                fabsf(terrain_tab.height - last_terrain_tab.height) > 0.01f)
+            {
+                printf(
+                    "Terrain utility tab: x=%.1f y=%.1f width=%.1f height=%.1f.\n",
+                    terrain_tab.x,
+                    terrain_tab.y,
+                    terrain_tab.width,
+                    terrain_tab.height);
+                fflush(stdout);
+                last_terrain_tab = terrain_tab;
+            }
+        }
     }
 
     y_start = panel_bounds.y + 126.0f;
@@ -29887,6 +30159,70 @@ static void sandbox3d_draw_utility_panel(
             henka_texture_info terrain_base_info;
             henka_texture_info terrain_normal_info;
             henka_texture_info terrain_metallic_roughness_info;
+
+            /* The fourth Utility tab ends at panel_y + 152.  Keep Terrain
+             * content below that live tab row so the starter action remains
+             * visible and clickable in the minimum desktop layout. */
+            y_start = panel_bounds.y + 156.0f;
+
+            if (state->terrain_world == NULL || state->terrain_render == NULL)
+            {
+                sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Terrain authoring");
+                (void)henka_ui_label_colored(
+                    state->ui,
+                    x_left,
+                    y_start + 22.0f,
+                    1.0f,
+                    "No terrain content is authored in this starter scene.",
+                    HENKA_UI_COLOR_MUTED);
+                (void)henka_ui_label_colored(
+                    state->ui,
+                    x_left,
+                    y_start + 42.0f,
+                    1.0f,
+                    "Create Terrain activates the normal streaming, render, and collision path.",
+                    HENKA_UI_COLOR_INFO);
+                {
+                    static henka_ui_rect last_create_terrain = {-1.0f, -1.0f, -1.0f, -1.0f};
+                    const henka_ui_rect create_terrain_rect =
+                        (henka_ui_rect){x_left, y_start + 68.0f, 132.0f, 26.0f};
+                    if (fabsf(create_terrain_rect.x - last_create_terrain.x) > 0.01f ||
+                        fabsf(create_terrain_rect.y - last_create_terrain.y) > 0.01f ||
+                        fabsf(create_terrain_rect.width - last_create_terrain.width) > 0.01f ||
+                        fabsf(create_terrain_rect.height - last_create_terrain.height) > 0.01f)
+                    {
+                        printf(
+                            "Terrain Create control: x=%.1f y=%.1f width=%.1f height=%.1f.\n",
+                            create_terrain_rect.x,
+                            create_terrain_rect.y,
+                            create_terrain_rect.width,
+                            create_terrain_rect.height);
+                        fflush(stdout);
+                        last_create_terrain = create_terrain_rect;
+                    }
+                if (henka_ui_primary_button(
+                        state->ui,
+                        "terrain_create",
+                        create_terrain_rect,
+                        "Create Terrain"))
+                {
+                    const henka_result terrain_result =
+                        sandbox3d_initialize_terrain_rendering(engine, state);
+                    sandbox3d_set_statusf(
+                        state,
+                        terrain_result != HENKA_SUCCESS,
+                        true,
+                        terrain_result == HENKA_SUCCESS
+                            ? "Terrain authoring content created."
+                            : "Terrain creation failed: %s.",
+                        henka_result_to_string(terrain_result));
+                }
+                }
+                if (state->terrain_world == NULL || state->terrain_render == NULL)
+                {
+                    break;
+                }
+            }
 
             memset(&terrain_world_stats, 0, sizeof(terrain_world_stats));
             memset(&terrain_stream_stats, 0, sizeof(terrain_stream_stats));
@@ -30981,9 +31317,13 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         if (state->authoring_object == NULL)
         {
             const sandbox3d_view_compass_preferences previous_preferences = state->compass_preferences;
+            const henka_viewport compass_viewport =
+                sandbox3d_editor_frame_layout_navigation_viewport(
+                    &layout,
+                    sandbox3d_modeling_toolbar_has_editable_selection(state));
             const bool compass_changed = sandbox3d_view_compass_draw(
                 state->ui,
-                layout.scene_viewport,
+                compass_viewport,
                 &state->camera,
                 &state->view_navigation.orbit_target,
                 &state->view_navigation.orbit_target_valid,
@@ -31392,13 +31732,19 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         }
         {
             henka_scene_environment_desc environment = henka_scene_environment_default();
-            environment.ground_color = (henka_vec3){0.04f, 0.05f, 0.08f};
-            environment.horizon_color = (henka_vec3){0.12f, 0.18f, 0.30f};
-            environment.zenith_color = (henka_vec3){0.18f, 0.24f, 0.42f};
-            environment.intensity = 1.0f;
-            environment.hdr_texture = state->environment_texture;
-            environment.hdr_rotation = 0.0f;
-            environment.mode = HENKA_SCENE_ENVIRONMENT_HDRI;
+            if (!sandbox3d_default_scene_requested(state))
+            {
+                /* The studio HDRI belongs to explicit reference/capture
+                 * workflows. Ordinary startup uses the canonical scene
+                 * gradient and its environment-owned sun. */
+                environment.ground_color = (henka_vec3){0.04f, 0.05f, 0.08f};
+                environment.horizon_color = (henka_vec3){0.12f, 0.18f, 0.30f};
+                environment.zenith_color = (henka_vec3){0.18f, 0.24f, 0.42f};
+                environment.intensity = 1.0f;
+                environment.hdr_texture = state->environment_texture;
+                environment.hdr_rotation = 0.0f;
+                environment.mode = HENKA_SCENE_ENVIRONMENT_HDRI;
+            }
             result = henka_scene_set_environment(state->scene, environment);
         }
         if (result != HENKA_SUCCESS)
@@ -31606,7 +31952,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         wet_dry_roughness_pixels = NULL;
         henka_free(color_space_reference_pixels);
         color_space_reference_pixels = NULL;
-        if (!sandbox3d_is_ibl_reference_kind(state->realism_reference_kind))
+        if (!sandbox3d_default_scene_requested(state) &&
+            !sandbox3d_is_ibl_reference_kind(state->realism_reference_kind))
         {
             result = henka_scene_add_reflection_probe(
                 state->scene,
@@ -31661,10 +32008,17 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    result = sandbox3d_initialize_terrain_rendering(engine, state);
-    if (result != HENKA_SUCCESS)
+    /* Terrain is dormant only for the ordinary product-native starter scene.
+     * Explicit smoke/stress/reference workflows retain their declared fixture
+     * content so validation continues to exercise the production Terrain path. */
+    if (state->smoke_test || state->terrain_stream_stress ||
+        state->terrain_capture_mode_requested)
     {
-        goto fail;
+        result = sandbox3d_initialize_terrain_rendering(engine, state);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
     }
 
     {
@@ -31688,10 +32042,16 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    result = henka_assets_load_texture(assets, "assets/textures/missing_texture.png", &state->missing_texture);
-    if (result != HENKA_SUCCESS)
+    if (!sandbox3d_default_scene_requested(state))
     {
-        goto fail;
+        result = henka_assets_load_texture(
+            assets,
+            "assets/textures/missing_texture.png",
+            &state->missing_texture);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
     }
 
     result = henka_mesh_create_cube(engine, &state->cube_mesh);
@@ -31719,7 +32079,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
      * Rendered and Material Preview captures as the camera framed the
      * showcase assets. This remains bounded geometry, while grid lines stay
      * an independent editor helper above the surface. */
-    result = henka_mesh_create_plane(engine, 64.0f, 64.0f, &state->ground_mesh);
+    result = henka_mesh_create_plane(engine, 16.0f, 16.0f, &state->ground_mesh);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
@@ -31731,94 +32091,99 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    result = henka_assets_load_gltf_mesh_with_material(
-        assets,
-        "assets/models/henka_marker.gltf",
-        state->basic_shader,
-        &state->marker_mesh,
-        &marker_material);
-    if (result != HENKA_SUCCESS)
+    if (!sandbox3d_default_scene_requested(state))
     {
-        goto fail;
-    }
-    result = henka_assets_load_gltf_material_asset(
-        assets,
-        "assets/models/henka_marker.gltf",
-        state->basic_shader,
-        &marker_material_asset);
-    if (result != HENKA_SUCCESS)
-    {
-        goto fail;
-    }
-    {
-        henka_material_asset* stable_marker_material_asset = marker_material_asset;
-        result = henka_assets_reload_gltf_material_asset(
+        result = henka_assets_load_gltf_mesh_with_material(
             assets,
             "assets/models/henka_marker.gltf",
+            state->basic_shader,
+            &state->marker_mesh,
+            &marker_material);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        result = henka_assets_load_gltf_material_asset(
+            assets,
+            "assets/models/henka_marker.gltf",
+            state->basic_shader,
             &marker_material_asset);
-        if (result != HENKA_SUCCESS || marker_material_asset != stable_marker_material_asset)
+        if (result != HENKA_SUCCESS)
         {
             goto fail;
         }
-    }
-    state->marker_material_asset = marker_material_asset;
-    result = henka_assets_create_material_instance(
-        state->marker_material_asset, &state->marker_material_instance);
-    if (result != HENKA_SUCCESS)
-    {
-        goto fail;
-    }
-    state->marker_material_instance_valid = true;
-    state->material_editor_parameter = HENKA_MATERIAL_INSTANCE_METALLIC;
-    state->material_editor_component = 0U;
-    result = henka_assets_load_gltf_scene_asset(
-        assets,
-        "assets/models/henka_marker.gltf",
-        state->basic_shader,
-        &marker_scene_asset);
-    if (result != HENKA_SUCCESS)
-    {
-        goto fail;
-    }
-    {
-        henka_gltf_scene_asset* stable_marker_scene_asset = marker_scene_asset;
-        result = henka_assets_reload_gltf_scene_asset(
+        {
+            henka_material_asset* stable_marker_material_asset = marker_material_asset;
+            result = henka_assets_reload_gltf_material_asset(
+                assets,
+                "assets/models/henka_marker.gltf",
+                &marker_material_asset);
+            if (result != HENKA_SUCCESS || marker_material_asset != stable_marker_material_asset)
+            {
+                goto fail;
+            }
+        }
+        state->marker_material_asset = marker_material_asset;
+        result = henka_assets_create_material_instance(
+            state->marker_material_asset, &state->marker_material_instance);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        state->marker_material_instance_valid = true;
+        state->material_editor_parameter = HENKA_MATERIAL_INSTANCE_METALLIC;
+        state->material_editor_component = 0U;
+        result = henka_assets_load_gltf_scene_asset(
             assets,
             "assets/models/henka_marker.gltf",
+            state->basic_shader,
             &marker_scene_asset);
-        if (result != HENKA_SUCCESS || marker_scene_asset != stable_marker_scene_asset)
+        if (result != HENKA_SUCCESS)
         {
             goto fail;
         }
-    }
-    imported_scene = NULL;
-    result = henka_scene_create(&imported_scene);
-    if (result != HENKA_SUCCESS)
-    {
-        goto fail;
-    }
-    imported_entity_count = 0U;
-    result = henka_assets_instantiate_gltf_scene(
-        assets,
-        marker_scene_asset,
-        imported_scene,
-        "Imported ",
-        &imported_entity_count);
-    {
-        henka_scene_light_desc imported_light;
-        if (result == HENKA_SUCCESS &&
-            henka_scene_get_light(imported_scene, 0U, &imported_light) != HENKA_SUCCESS)
         {
-            result = HENKA_ERROR_UNKNOWN;
+            henka_gltf_scene_asset* stable_marker_scene_asset = marker_scene_asset;
+            result = henka_assets_reload_gltf_scene_asset(
+                assets,
+                "assets/models/henka_marker.gltf",
+                &marker_scene_asset);
+            if (result != HENKA_SUCCESS || marker_scene_asset != stable_marker_scene_asset)
+            {
+                goto fail;
+            }
         }
-    }
-    henka_scene_destroy(imported_scene);
-    imported_scene = NULL;
-    if (result != HENKA_SUCCESS || imported_entity_count != 1U)
-    {
-        goto fail;
+        imported_scene = NULL;
+        result = henka_scene_create(&imported_scene);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        imported_entity_count = 0U;
+        result = henka_assets_instantiate_gltf_scene(
+            assets,
+            marker_scene_asset,
+            imported_scene,
+            "Imported ",
+            &imported_entity_count);
+        {
+            henka_scene_light_desc imported_light;
+            if (result == HENKA_SUCCESS &&
+                henka_scene_get_light(imported_scene, 0U, &imported_light) != HENKA_SUCCESS)
+            {
+                result = HENKA_ERROR_UNKNOWN;
+            }
+        }
+        henka_scene_destroy(imported_scene);
+        imported_scene = NULL;
+        if (result != HENKA_SUCCESS || imported_entity_count != 1U)
+        {
+            goto fail;
+        }
     }
 
+    if (!sandbox3d_default_scene_requested(state))
+    {
     giraffe_scene_asset = NULL;
     result = henka_assets_load_gltf_scene_asset(
         assets,
@@ -32035,30 +32400,47 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         "Showcase assets: Anatomical Giraffe Study (%zu parts), Original Realistic Rocket (%zu parts), loaded through glTF scene/material assets.\n",
         giraffe_entity_count,
         rocket_entity_count);
+    }
 
-    result = henka_assets_load_obj_mesh(assets, "assets/models/missing_marker.obj", &state->missing_model_mesh);
-    if (result != HENKA_SUCCESS)
+    if (!sandbox3d_default_scene_requested(state))
     {
-        goto fail;
+        result = henka_assets_load_obj_mesh(
+            assets,
+            "assets/models/missing_marker.obj",
+            &state->missing_model_mesh);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
     }
 
     state->ground_entity = henka_scene_create_entity_named(state->scene, "Ground");
-    state->cube_entity = henka_scene_create_entity_named(state->scene, "Textured Cube");
-    state->colored_cube_entity = henka_scene_create_entity_named(state->scene, "Material Ball");
-    state->marker_entity = henka_scene_create_entity_named(state->scene, "glTF Marker");
-    state->fallback_cube_entity = henka_scene_create_entity_named(state->scene, "Missing Texture");
-    state->fallback_model_entity = henka_scene_create_entity_named(state->scene, "Missing Model");
-    state->foliage_entity = henka_scene_create_entity_named(state->scene, "Masked Foliage");
     state->grid_entity = henka_scene_create_entity_named(state->scene, "Debug Grid");
+    state->cube_entity = HENKA_INVALID_ENTITY;
+    state->colored_cube_entity = HENKA_INVALID_ENTITY;
+    state->marker_entity = HENKA_INVALID_ENTITY;
+    state->fallback_cube_entity = HENKA_INVALID_ENTITY;
+    state->fallback_model_entity = HENKA_INVALID_ENTITY;
+    state->foliage_entity = HENKA_INVALID_ENTITY;
+    if (!sandbox3d_default_scene_requested(state))
+    {
+        state->cube_entity = henka_scene_create_entity_named(state->scene, "Textured Cube");
+        state->colored_cube_entity = henka_scene_create_entity_named(state->scene, "Material Ball");
+        state->marker_entity = henka_scene_create_entity_named(state->scene, "glTF Marker");
+        state->fallback_cube_entity = henka_scene_create_entity_named(state->scene, "Missing Texture");
+        state->fallback_model_entity = henka_scene_create_entity_named(state->scene, "Missing Model");
+        state->foliage_entity = henka_scene_create_entity_named(state->scene, "Masked Foliage");
+    }
 
     if (state->ground_entity == HENKA_INVALID_ENTITY ||
-        state->cube_entity == HENKA_INVALID_ENTITY ||
-        state->colored_cube_entity == HENKA_INVALID_ENTITY ||
-        state->marker_entity == HENKA_INVALID_ENTITY ||
-        state->fallback_cube_entity == HENKA_INVALID_ENTITY ||
-        state->fallback_model_entity == HENKA_INVALID_ENTITY ||
-        state->foliage_entity == HENKA_INVALID_ENTITY ||
-        state->grid_entity == HENKA_INVALID_ENTITY)
+        state->grid_entity == HENKA_INVALID_ENTITY ||
+        (!sandbox3d_default_scene_requested(state) &&
+            (state->cube_entity == HENKA_INVALID_ENTITY ||
+             state->colored_cube_entity == HENKA_INVALID_ENTITY ||
+             state->marker_entity == HENKA_INVALID_ENTITY ||
+             state->fallback_cube_entity == HENKA_INVALID_ENTITY ||
+             state->fallback_model_entity == HENKA_INVALID_ENTITY ||
+             state->foliage_entity == HENKA_INVALID_ENTITY)))
     {
         result = HENKA_ERROR_OUT_OF_MEMORY;
         goto fail;
@@ -32141,6 +32523,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     grid_material.use_texture = false;
     grid_material.use_lighting = false;
 
+    if (!sandbox3d_default_scene_requested(state))
     {
         static const char* realism_names[SANDBOX3D_REALISM_ENTITY_COUNT] =
         {
@@ -32438,8 +32821,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     result = henka_scene_set_entity_flags(
         state->scene,
         state->ground_entity,
-        HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED |
-            HENKA_SCENE_ENTITY_FLAG_HELPER);
+        0U);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
@@ -32459,6 +32841,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         true,
         transform);
 
+    if (!sandbox3d_default_scene_requested(state))
+    {
     transform = sandbox3d_make_transform(g_textured_cube_position, (henka_vec3){1.0f, 1.0f, 1.0f});
     result = sandbox3d_configure_entity(state->scene, state->cube_entity, state->cube_mesh, cube_material, transform);
     if (result != HENKA_SUCCESS)
@@ -32715,6 +33099,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         true,
         "Inspect masked foliage alpha test");
 
+    }
+
     transform = sandbox3d_make_transform((henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec3){1.0f, 1.0f, 1.0f});
     result = sandbox3d_configure_entity(state->scene, state->grid_entity, state->grid_mesh, grid_material, transform);
     if (result != HENKA_SUCCESS)
@@ -32750,7 +33136,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         true,
         transform);
 
-    if (!state->primitive_gallery)
+    if (!state->primitive_gallery && !sandbox3d_default_scene_requested(state))
     {
         const henka_entity diagnostic_entities[] =
         {
@@ -32788,6 +33174,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         }
     }
 
+    result = sandbox3d_create_default_ground_authoring(engine, state);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
     result = sandbox3d_initialize_physics(state);
     if (result != HENKA_SUCCESS)
     {
@@ -32822,7 +33214,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         HENKA_LOG_WARN(
             "Audio playback device is unavailable; authored Audio Play will fail closed.");
     }
-    if (state->authoring_object != NULL)
+    if (state->authoring_object != NULL &&
+        state->cube_entity != HENKA_INVALID_ENTITY &&
+        sandbox3d_authoring_object_get_entity(state->authoring_object) == state->cube_entity)
     {
         const henka_physics_body_id authoring_body =
             sandbox3d_get_physics_body_for_entity(state, state->cube_entity);
@@ -32940,7 +33334,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
          * lights so its roughness ladder measures the filtered environment.
          * These sources are scene-owned fixtures; imported glTF materials
          * remain unchanged and the settings file does not own these lights. */
-        if (!isolated_ibl_reference)
+        if (!sandbox3d_default_scene_requested(state) &&
+            !isolated_ibl_reference)
         {
             result = henka_scene_add_light(
                 state->scene,
@@ -32960,7 +33355,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 goto fail;
             }
         }
-        if (!isolated_ibl_reference)
+        if (!sandbox3d_default_scene_requested(state) &&
+            !isolated_ibl_reference)
         {
             result = henka_scene_add_light(
                 state->scene,
@@ -32980,7 +33376,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 goto fail;
             }
         }
-        if (!isolated_ibl_reference &&
+        if (!sandbox3d_default_scene_requested(state) &&
+            !isolated_ibl_reference &&
             (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_PBR ||
              state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_HDR ||
              state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_NORMAL_MAP ||

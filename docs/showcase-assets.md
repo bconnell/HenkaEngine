@@ -1,6 +1,6 @@
 # Sandbox Showcase Assets
 
-Henka's normal Windows Sandbox startup presents two repository-owned sample models: the Anatomical Giraffe Study and the realistic rocket fixture.
+Henka's Windows Sandbox retains two repository-owned reference models: the Anatomical Giraffe Study and the realistic rocket fixture. They are loaded by explicit showcase, import, persistence, packaging, and regression workflows rather than ordinary startup.
 
 > **Purpose:** These assets are deterministic repository-owned samples for imported content, material instances, native editing, persistence, packaging, and runtime inspection. Their provenance remains explicit throughout the workflow.
 
@@ -350,9 +350,9 @@ silhouette, surface continuity, materials, textures, lighting, and shadows.
 
 ### Inspection views
 
-The standard showcase views include:
+The explicit showcase views include:
 
-- Giraffe startup, close front, close three-quarter, close profile, wide
+- Giraffe explicit startup-style, close front, close three-quarter, close profile, wide
   silhouette, and front Material Preview;
 - Rocket close front, close three-quarter, and profile views.
 
@@ -410,7 +410,7 @@ Normal Sandbox loading uses:
 - `henka_assets_load_gltf_scene_asset`;
 - `henka_assets_instantiate_gltf_scene`.
 
-Normal non-smoke startup can then restore a compatible checked-in HAMS derivative.
+Explicit showcase workflows can then restore a compatible checked-in HAMS derivative.
 
 A stale or invalid checked-in derivative is rejected. The validation includes authored-vertex count consistency against the current imported source. Rejection preserves the imported render.
 

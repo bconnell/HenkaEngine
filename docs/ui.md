@@ -375,7 +375,7 @@ See [editor-controls.md](editor-controls.md) for the current bindings and profil
 
 Normal startup and `Home` share the scene-first framing path after final Scene View dimensions are known.
 
-With the default showcase pair loaded, framing targets the front side of the Giraffe and Rocket around their shared midpoint.
+With the ordinary startup scene, framing uses the editable ground plane as the fallback subject. Explicit showcase capture workflows frame the Giraffe and Rocket around their reference bounds.
 
 Capture mode reapplies deterministic framing after final docked/full-viewport aspect is known.
 

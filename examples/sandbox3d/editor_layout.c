@@ -597,6 +597,66 @@ bool sandbox3d_editor_frame_layout_is_valid(
     return layout != NULL && henka_viewport_is_valid(layout->scene_viewport);
 }
 
+henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
+    henka_ui_rect scene_frame,
+    bool authoring_available)
+{
+    const bool compact_toolbar = scene_frame.width < 760.0f;
+    const float y = authoring_available
+        ? scene_frame.y + 82.0f
+        : compact_toolbar ? scene_frame.y + 76.0f : scene_frame.y + 34.0f;
+    const float height = authoring_available
+        ? compact_toolbar ? 166.0f : 136.0f
+        : compact_toolbar ? 52.0f : 136.0f;
+
+    if (scene_frame.width < 500.0f || scene_frame.height < 150.0f)
+    {
+        return (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    }
+    return (henka_ui_rect){
+        scene_frame.x + 10.0f,
+        y,
+        scene_frame.width - 20.0f,
+        height};
+}
+
+henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
+    const sandbox3d_editor_frame_layout* layout,
+    bool authoring_available)
+{
+    henka_viewport navigation_viewport;
+    const henka_ui_rect toolbar = layout == NULL
+        ? (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f}
+        : sandbox3d_editor_layout_modeling_toolbar_bounds(
+            layout->scene_frame,
+            authoring_available);
+    float safe_top;
+    int bottom;
+
+    if (layout == NULL || !henka_viewport_is_valid(layout->scene_viewport))
+    {
+        return (henka_viewport){0, 0, 0, 0};
+    }
+    navigation_viewport = layout->scene_viewport;
+    if (toolbar.width <= 0.0f || toolbar.height <= 0.0f)
+    {
+        return navigation_viewport;
+    }
+
+    safe_top = toolbar.y + toolbar.height + 8.0f;
+    bottom = navigation_viewport.y + navigation_viewport.height;
+    if (safe_top > (float)navigation_viewport.y)
+    {
+        navigation_viewport.y = (int)ceilf(safe_top);
+        navigation_viewport.height = bottom - navigation_viewport.y;
+    }
+    if (!henka_viewport_is_valid(navigation_viewport))
+    {
+        return (henka_viewport){0, 0, 0, 0};
+    }
+    return navigation_viewport;
+}
+
 henka_ui_rect* sandbox3d_editor_frame_layout_panel_rect_slot(
     sandbox3d_editor_frame_layout* layout,
     sandbox3d_workspace_panel_id panel_id)

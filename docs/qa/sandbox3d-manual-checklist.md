@@ -173,11 +173,15 @@ shaded mode. It writes generated images plus per-mode logs under
 
 ## Expected scene examples
 
-The normal startup should show these showcase assets:
+The normal startup should show a clean product-native starting scene:
 
-- `Showcase Giraffe`: the Anatomical Giraffe Study, loaded from the packaged glTF scene/material path.
-- `Showcase Rocket`: the Original Realistic Rocket, loaded from the packaged glTF scene/material path.
-- `Ground`: the restrained graphite plane beneath the showcase, with subtle surface variation, beneath the debug grid.
+- `Ground`: one editable restrained graphite plane with the normal surface material;
+- the default sky/environment lighting;
+- the editor grid as presentation, not showcase scene content;
+- no `Showcase Giraffe`, `Showcase Rocket`, diagnostic primitives, or fallback samples.
+- no terrain content until `Utility > Terrain > Create Terrain` is explicitly chosen.
+
+Use the explicit showcase capture and regression workflows to inspect the Giraffe and Rocket reference assets.
 
 Use `--primitive-gallery` when the engineering samples are specifically under test. In that opt-in mode you should be able to identify these additional examples:
 

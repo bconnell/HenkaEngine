@@ -137,7 +137,7 @@ function Wait-HenkaCaptureReady {
 
     for ($attempt = 0; $attempt -lt 600; ++$attempt) {
         if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
-            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE|_SSGI_PERFORMANCE_REFERENCE|_NORMAL_MAP_REFERENCE|_COLOR_SPACE_REFERENCE|_ENERGY_REFERENCE|_IBL_REFERENCE|_SCENE_PROBE_REFERENCE)? ' |
+            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_STARTUP|_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE|_SSS_REFERENCE|_SSGI_REFERENCE|_SSGI_MOTION_REFERENCE|_SSGI_PERFORMANCE_REFERENCE|_NORMAL_MAP_REFERENCE|_COLOR_SPACE_REFERENCE|_ENERGY_REFERENCE|_IBL_REFERENCE|_SCENE_PROBE_REFERENCE)? ' |
                 Select-Object -Last 1
             if ($null -ne $line) {
                 return $line.Line
@@ -416,6 +416,46 @@ function Assert-HenkaCaptureMetadata {
     return [pscustomobject]@{
         Canonical = ($Line -replace 'mode=[^ ]+', 'mode=shared')
         Mode = $match.Groups["mode"].Value
+    }
+}
+
+function Assert-HenkaStartupCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $pattern = '^\s*CAPTURE_READY_STARTUP mode=startup viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) ground_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) ground_screen=(?<sx>[-0-9.]+),(?<sy>[-0-9.]+) starter_ground=1 scene_camera=1 environment_owner=scene user_scene_objects=(?<users>\d+) editor_helpers=(?<helpers>\d+) runtime_entities=(?<runtime>\d+) showcase_assets=0 diagnostic_entities=0 terrain_content=(?<terrain>\d+) hidden_cleanup=0 ground_authoring=canonical settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success) {
+        throw "Startup capture readiness metadata was malformed for $Label."
+    }
+    $width = [int]$match.Groups["vw"].Value
+    $height = [int]$match.Groups["vh"].Value
+    $pitch = [double]::Parse($match.Groups["pitch"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $screenX = [double]::Parse($match.Groups["sx"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $screenY = [double]::Parse($match.Groups["sy"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    # The medium editor layout deliberately allocates a 520px scene viewport
+    # at the 1280px desktop acceptance size. Keep this tied to that layout
+    # contract instead of rejecting the supported medium breakpoint.
+    if ($width -lt 520 -or $height -lt 360 -or
+        [int]$match.Groups["users"].Value -ne 1 -or
+        [int]$match.Groups["helpers"].Value -lt 1 -or
+        [int]$match.Groups["runtime"].Value -ne 0 -or
+        [int]$match.Groups["terrain"].Value -ne 0 -or
+        [int]$match.Groups["sf"].Value -lt 3 -or
+        [double]::IsNaN($pitch) -or
+        [double]::IsInfinity($pitch) -or
+        $pitch -gt -0.35 -or
+        [double]::IsNaN($screenX) -or
+        [double]::IsInfinity($screenX) -or
+        [double]::IsNaN($screenY) -or
+        [double]::IsInfinity($screenY)) {
+        throw "Startup capture readiness did not prove a clean editable default scene and downward ground-focused framing for $Label."
+    }
+    return [pscustomobject]@{
+        Canonical = ($Line -replace 'camera_position=[^ ]+', 'camera_position=shared')
+        Mode = "startup"
     }
 }
 
@@ -919,7 +959,7 @@ if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
 }
 if ($IncludeStartupShowcase) {
     $modes = @(
-            @{ Label = "startup"; Arguments = @("--capture-startup"); File = "startup-showcase.png" }
+            @{ Label = "startup"; Arguments = @(); File = "startup-showcase.png" }
     ) + $modes
 }
 $records = New-Object System.Collections.Generic.List[string]
@@ -927,7 +967,7 @@ $records.Add("Same-camera viewport evidence")
 $records.Add("Source: $executable")
 $records.Add("Isolated runtime: $captureExecutable")
 $records.Add("Evidence profile: $EvidenceProfile")
-$records.Add("Camera policy: capture-mode runs use the same deterministic two-model showcase camera and never save capture-mode settings")
+$records.Add("Camera policy: ordinary startup uses the product-native starter camera; explicit capture-mode runs use the deterministic reference camera and never save capture-mode settings")
 if ($EvidenceProfile -eq "SSGI_REFERENCE") {
     $records.Add("Modes: Rendered only; SSGI is a fullscreen HDR post-process")
 }
@@ -1042,7 +1082,11 @@ foreach ($mode in $modes) {
         else {
             Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $mode.Label
         }
-        if ($EvidenceProfile -eq "REALISM_REFERENCE") {
+        if ($mode.Label -eq "startup") {
+            [void]$captureMetadata.Add(
+                (Assert-HenkaStartupCaptureMetadata -Line $metadataLine -Label $mode.Label))
+        }
+        elseif ($EvidenceProfile -eq "REALISM_REFERENCE") {
             [void]$captureMetadata.Add(
                 (Assert-HenkaReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
         }
@@ -1226,8 +1270,14 @@ foreach ($mode in $modes) {
 }
 
 if ($captureMetadata.Count -gt 1) {
-    $canonical = $captureMetadata[0].Canonical
-    foreach ($metadata in $captureMetadata) {
+    # Startup readiness describes the ordinary product scene. It is not a
+    # shading-mode capture, so do not compare its record with Solid/Material/
+    # Rendered metadata. The latter still share the same camera contract.
+    $compositionMetadata = @($captureMetadata | Where-Object { $_.Mode -ne "startup" })
+    $canonical = if ($compositionMetadata.Count -gt 0) {
+        $compositionMetadata[0].Canonical
+    }
+    foreach ($metadata in $compositionMetadata) {
         if ($metadata.Canonical -ne $canonical) {
             throw "Same-camera capture metadata diverged between shading modes."
         }

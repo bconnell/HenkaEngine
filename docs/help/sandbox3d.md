@@ -2,7 +2,7 @@
 
 `henka_sandbox3d` is Henka Engine's current visible example, editor workspace, and QA surface.
 
-> **Default startup:** The Sandbox opens the `Standard` workspace with no selected scene object. The normal scene contains the Anatomical Giraffe Study, the realistic rocket fixture, a manager-owned graphite ground surface, and the editor grid.
+> **Default startup:** The Sandbox opens the `Standard` workspace with no selected scene object. The normal scene contains one editable product-native ground plane, the default sky/environment, and the editor grid. The Giraffe and Rocket are explicit reference assets loaded by capture and regression workflows.
 
 ## Contents
 
@@ -27,20 +27,26 @@
 
 ## Default scene
 
-The normal showcase contains:
+The normal product-native scene contains:
 
-- **Showcase Giraffe** — Anatomical Giraffe Study;
-- **Showcase Rocket** — realistic rocket fixture;
-- **Ground** — restrained graphite/slate surface with subtle albedo, normal, and wet/dry roughness variation;
+- **Ground** — editable restrained graphite/slate surface with subtle albedo, normal, and wet/dry roughness variation;
+- **Default environment** — the normal sky/environment lighting path;
 - **Debug Grid** — floor grid for scale, depth, and movement reference.
 
-The glTF files are deterministic repository-owned fixture assets generated during the Windows build and packaged beside their binary buffers.
+The Giraffe and Rocket glTF files are deterministic repository-owned fixture assets generated during the Windows build and packaged beside their binary buffers. They are not instantiated by ordinary startup.
 
 Normal startup follows this content path:
 
-1. load and instantiate the packaged glTF scene/material data;
-2. restore checked-in HAMS geometry when available;
+1. create the ordinary ground through the supported native authoring path;
+2. create the normal scene camera and default sky/environment;
 3. restore valid saved local Sandbox/editor state.
+
+Use the explicit showcase capture and regression workflows when the imported Giraffe or Rocket reference assets are required.
+
+Terrain is dormant in the starter scene. Open `Utility > Terrain` and choose
+`Create Terrain` to request the normal streaming, rendering, collision, and
+editing path. This explicit product action creates terrain content; startup
+does not seed terrain regions automatically.
 
 The HAMS files are persisted native-editing derivatives of fixture geometry. Their provenance does not establish independent user-authored geometry.
 
@@ -146,16 +152,17 @@ A missing navigation target disables target-dependent snap/projection actions an
 
 Use Orbit, Pan, Mouse Wheel or touchpad scrolling, `F`, and `Home` to test framing, projection-aware zoom, navigation, and preset reset.
 
-Normal startup and `Home` share the scene-first framing path. Old transient camera-pose settings are not automatically restored.
+Normal startup and `Home` share the scene-first framing path. The ordinary ground plane is the fallback framing subject when no authored object is selected. Old transient camera-pose settings are not automatically restored.
 
 ## Scene legend
 
 | Object | Purpose |
 | --- | --- |
-| `Showcase Giraffe` | Anatomical Giraffe Study through the packaged glTF scene/material path |
-| `Showcase Rocket` | Realistic rocket fixture through the packaged glTF scene/material path |
-| `Ground` | Slate/graphite receiver for scale and lighting |
+| `Ground` | Editable slate/graphite receiver and ordinary starting surface |
+| `Default environment` | Product-native sky/environment lighting |
 | `Debug Grid` | Floor reference for position, depth, and movement |
+
+The `Showcase Giraffe` and `Showcase Rocket` entries appear only in explicit reference and regression workflows.
 
 ## Primitive gallery
 
@@ -619,6 +626,9 @@ With a bound Textured Cube physics body, use Extrude and Undo and inspect Physic
 ## Terrain tools
 
 Utility > Terrain exposes current Terrain editing and dependency inspection.
+The starter scene reports no terrain content until `Create Terrain` is chosen.
+That action is the ordinary user-facing entry point for creating terrain and
+activating its streaming, rendering, collision, and editing services.
 
 ### Material layers
 
@@ -639,6 +649,10 @@ The Material layers section reports, for base color, normal, and metallic/roughn
 This is read-only dependency inspection. Complete viewport material-preview authoring remains future work.
 
 ### Terrain editing
+
+Choose `Create Terrain` before using the terrain brush in a clean starter
+scene. Existing authored or loaded terrain content can use the same tools
+without a startup-only fixture path.
 
 Current buttons include:
 

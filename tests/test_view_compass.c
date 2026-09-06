@@ -145,6 +145,8 @@ void henka_test_view_compass(void)
 
     sandbox3d_view_compass_preferences_defaults(&preferences);
     HENKA_TEST_ASSERT(sandbox3d_view_compass_compute_layout((henka_viewport){0, 0, 640, 480}, &preferences, &layout));
+    HENKA_TEST_ASSERT(layout.circle_bounds.width <= 160.0f);
+    HENKA_TEST_ASSERT(layout.circle_bounds.height <= 160.0f);
     HENKA_TEST_ASSERT(layout.circle_bounds.x > 400.0f);
     preferences.side = SANDBOX3D_VIEW_COMPASS_SIDE_LEFT;
     HENKA_TEST_ASSERT(sandbox3d_view_compass_compute_layout((henka_viewport){0, 0, 640, 480}, &preferences, &layout));

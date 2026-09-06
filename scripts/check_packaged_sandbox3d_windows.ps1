@@ -3,6 +3,10 @@ param(
 
     [switch]$ContractOnly,
 
+    [switch]$TerrainStartupOnly,
+
+    [switch]$ProductStartupPrimitiveOnly,
+
     # Ordinary packaged validation is application-local and must not take
     # ownership of the user's foreground window.  Use this only for a test
     # that explicitly covers Windows foreground integration itself.
@@ -862,6 +866,9 @@ $logDir = Join-Path $repoRoot "build\test_tmp"
 $stdoutPath = Join-Path $logDir "check_packaged_sandbox3d_stdout.log"
 $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
 $startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png"
+$productStartupPrimitiveScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_product_startup_add_cube.png"
+$terrainUiBeforeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_before_create.png"
+$terrainUiAfterScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_after_create.png"
 $qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
 $nativeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_panel.png"
 $nativeAuthoringScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_authoring.png"
@@ -1148,6 +1155,7 @@ Remove-Item `
         $stdoutPath,
         $stderrPath,
         $startupScreenshotPath,
+        $productStartupPrimitiveScreenshotPath,
         $qaScreenshotPath,
         $nativeScreenshotPath,
         $nativeAuthoringScreenshotPath,
@@ -1170,11 +1178,24 @@ try {
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
     Write-Step "Launching the packaged sandbox"
-    $capturedProcess = Start-HenkaCapturedProcess `
-        -FilePath $packagedExe `
-        -WorkingDirectory $packageRoot `
-        -StdoutPath $stdoutPath `
-        -StderrPath $stderrPath
+    # The native authoring workflow is an explicit reference-asset path.
+    # Ordinary no-argument startup is validated separately as the clean
+    # product-native scene and must not be repopulated for this check.
+    if ($TerrainStartupOnly -or $ProductStartupPrimitiveOnly) {
+        $capturedProcess = Start-HenkaCapturedProcess `
+            -FilePath $packagedExe `
+            -WorkingDirectory $packageRoot `
+            -StdoutPath $stdoutPath `
+            -StderrPath $stderrPath
+    }
+    else {
+        $capturedProcess = Start-HenkaCapturedProcess `
+            -FilePath $packagedExe `
+            -WorkingDirectory $packageRoot `
+            -Arguments @("--capture-showcase-view", "wide", "solid") `
+            -StdoutPath $stdoutPath `
+            -StderrPath $stderrPath
+    }
     $process = $capturedProcess.Process
 
     for ($index = 0; $index -lt 80 -and $mainWindowHandle -eq [System.IntPtr]::Zero; $index++) {
@@ -1267,16 +1288,32 @@ try {
             }
             $preflightFramebufferWidth = [int]$preflightFramebufferMatch.Groups[1].Value
             $preflightFramebufferHeight = [int]$preflightFramebufferMatch.Groups[2].Value
-            $preflightViewportX = [double]$preflightViewportMatch.Groups[1].Value
-            $preflightViewportY = [double]$preflightViewportMatch.Groups[2].Value
+            $preflightToolsMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Scene View Tools control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)\.'
+            if ($null -eq $preflightToolsMatch) {
+                throw "The packaged Scene View Tools control geometry was not reported."
+            }
+            $preflightToolsX = [double]$preflightToolsMatch.Groups[1].Value
+            $preflightToolsY = [double]$preflightToolsMatch.Groups[2].Value
+            $preflightToolsWidth = [double]$preflightToolsMatch.Groups[3].Value
+            $preflightToolsHeight = [double]$preflightToolsMatch.Groups[4].Value
+            Assert-FramebufferRect `
+                -Name "Scene View Tools control" `
+                -FramebufferWidth $preflightFramebufferWidth `
+                -FramebufferHeight $preflightFramebufferHeight `
+                -X $preflightToolsX `
+                -Y $preflightToolsY `
+                -Width $preflightToolsWidth `
+                -Height $preflightToolsHeight
             Write-Output "[check] Opening the hidden Tools dock through the Scene View header"
             $nativeOpenLogOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $preflightFramebufferWidth `
                 -FramebufferHeight $preflightFramebufferHeight `
-                -FramebufferX ($preflightViewportX + 235.0) `
-                -FramebufferY ($preflightViewportY - 23.0)
+                -FramebufferX ($preflightToolsX + $preflightToolsWidth * 0.5) `
+                -FramebufferY ($preflightToolsY + $preflightToolsHeight * 0.5)
             if (-not (Wait-FileContains `
                     -Path $stdoutPath `
                     -Pattern "Tools QA tab:" `
@@ -1618,6 +1655,144 @@ try {
             Write-Output "[pass] Collapsed right dock requires no active section coverage"
         }
         Write-Output "[pass] Inactive merged tabs may report zero content rectangles safely"
+
+        if ($ProductStartupPrimitiveOnly) {
+            Write-Step "Checking product-native Add Cube through the visible Scene Objects UI"
+            $addCubeX = $sceneObjectsX + 14.0
+            $addCubeY = $sceneObjectsY + 60.0
+            $addCubeWidth = $sceneObjectsWidth - 28.0
+            $addCubeHeight = 24.0
+            Assert-FramebufferRect `
+                -Name "Scene Objects Add Cube control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $addCubeX `
+                -Y $addCubeY `
+                -Width $addCubeWidth `
+                -Height $addCubeHeight
+
+            $addCubeOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($addCubeX + $addCubeWidth * 0.5) `
+                -FramebufferY ($addCubeY + $addCubeHeight * 0.5)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern 'DEFAULT_SCENE_ADD_CUBE_READY entity=[0-9]+ document_id=[0-9]+ source=primitive canonical_document=1\.' `
+                    -StartingOffset $addCubeOffset `
+                    -TimeoutMilliseconds 6000)) {
+                throw "The visible default-scene Add Cube control did not publish a canonical primitive Scene Document object."
+            }
+            if ((Get-Content -LiteralPath $stdoutPath -Raw) -match 'Native asset document: name=NativeAsset action=created parts=0\.') {
+                throw "The ordinary default-scene Add Cube path created an asset document instead of using the canonical scene operation."
+            }
+            Write-Output "[pass] Default-scene Add Cube reached the canonical scene operation and Scene Document binding"
+            Set-HenkaAutomationForeground -Handle $mainWindowHandle
+            Start-Sleep -Milliseconds 700
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $productStartupPrimitiveScreenshotPath `
+                -Description "Packaged product-native Add Cube"
+            Write-Output "[pass] Product-native Add Cube visual proof captured"
+            return
+        }
+
+        Write-Step "Checking packaged Terrain creation through the visible Utility UI"
+        $terrainTabMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Terrain utility tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)\.'
+        if ($null -eq $terrainTabMatch) {
+            throw "The packaged Terrain Utility tab geometry was not reported."
+        }
+        $terrainTabX = [double]$terrainTabMatch.Groups[1].Value
+        $terrainTabY = [double]$terrainTabMatch.Groups[2].Value
+        $terrainTabWidth = [double]$terrainTabMatch.Groups[3].Value
+        $terrainTabHeight = [double]$terrainTabMatch.Groups[4].Value
+        Assert-FramebufferRect `
+            -Name "Terrain Utility tab" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $terrainTabX `
+            -Y $terrainTabY `
+            -Width $terrainTabWidth `
+            -Height $terrainTabHeight
+
+        $terrainUtilityOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($terrainTabX + $terrainTabWidth * 0.5) `
+            -FramebufferY ($terrainTabY + $terrainTabHeight * 0.5)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Utility active: Terrain\.' `
+                -StartingOffset $terrainUtilityOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "The visible Utility > Terrain tab did not become active after a real framebuffer click."
+        }
+        Write-Output "[pass] Utility > Terrain activated through a real packaged UI click"
+        Set-HenkaAutomationForeground -Handle $mainWindowHandle
+        Start-Sleep -Milliseconds 350
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $terrainUiBeforeScreenshotPath `
+            -Description "Packaged Terrain Utility before Create Terrain"
+
+        $terrainCreateMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Terrain Create control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)\.'
+        if ($null -eq $terrainCreateMatch) {
+            throw "The visible Create Terrain control geometry was not reported after opening Utility > Terrain."
+        }
+        $terrainCreateX = [double]$terrainCreateMatch.Groups[1].Value
+        $terrainCreateY = [double]$terrainCreateMatch.Groups[2].Value
+        $terrainCreateWidth = [double]$terrainCreateMatch.Groups[3].Value
+        $terrainCreateHeight = [double]$terrainCreateMatch.Groups[4].Value
+        Assert-FramebufferRect `
+            -Name "Create Terrain control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $terrainCreateX `
+            -Y $terrainCreateY `
+            -Width $terrainCreateWidth `
+            -Height $terrainCreateHeight
+
+        $terrainCreateOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($terrainCreateX + $terrainCreateWidth * 0.5) `
+            -FramebufferY ($terrainCreateY + $terrainCreateHeight * 0.5)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Terrain authoring content created\.' `
+                -StartingOffset $terrainCreateOffset `
+                -TimeoutMilliseconds 10000)) {
+            throw "The visible Create Terrain button did not create terrain through the normal UI path."
+        }
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Terrain render: 16 bounded chunks resident;' `
+                -StartingOffset $terrainCreateOffset `
+                -TimeoutMilliseconds 10000)) {
+            throw "The visible Create Terrain action did not initialize the production Terrain render path."
+        }
+        Write-Output "[pass] Create Terrain activated the production streaming, render, and collision path"
+        Set-HenkaAutomationForeground -Handle $mainWindowHandle
+        Start-Sleep -Milliseconds 700
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $terrainUiAfterScreenshotPath `
+            -Description "Packaged Terrain Utility after Create Terrain"
+
+        if ($TerrainStartupOnly) {
+            Write-Output "[pass] Packaged product-startup/Terrain gate completed without entering the explicit showcase authoring suite"
+            return
+        }
 
         Write-Step "Checking imported showcase native authoring bridge"
 
