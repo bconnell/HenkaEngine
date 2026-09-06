@@ -206,6 +206,23 @@ add_test(
 )
 
 if(HENKA_BUILD_CLIENT)
+add_executable(henka_sandbox3d_mcp_server_tests
+    ../examples/sandbox3d/mcp_server.c
+    test_sandbox3d_mcp_server.c
+)
+
+target_link_libraries(henka_sandbox3d_mcp_server_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_sandbox3d_mcp_server_tests)
+
+add_test(
+    NAME henka_sandbox3d_mcp_server_tests
+    COMMAND henka_sandbox3d_mcp_server_tests
+)
+
 add_executable(henka_sandbox3d_play_session_tests
     ../examples/sandbox3d/scene_document_bridge.c
     ../examples/sandbox3d/play_session.c
@@ -815,6 +832,13 @@ add_test(
 )
 
 if(WIN32)
+    add_test(
+        NAME henka_sandbox3d_mcp_stdio_smoke
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_sandbox3d_mcp_stdio_windows.ps1
+            -SandboxPath $<TARGET_FILE:henka_sandbox3d>
+            -CandidateIdentity mcp-ctest-candidate)
+
     add_test(
         NAME henka_sandbox3d_fixture_scope_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File

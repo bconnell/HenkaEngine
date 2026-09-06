@@ -230,6 +230,7 @@ current public Audio workflow. Complete game project serialization remains futur
 - [Terrain](docs/terrain.md)
 - [Physics](docs/physics.md)
 - [Audio runtime](docs/audio.md)
+- [MCP QA harness](docs/mcp-qa-harness.md)
 - [Editor controls and Sandbox help](docs/editor-controls.md) · [offline help](docs/help/sandbox3d.md)
 - [External game projects](docs/external-game-projects.md)
 - [Showcase asset provenance](docs/showcase-assets.md)

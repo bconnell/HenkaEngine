@@ -36,6 +36,7 @@
 #include "terrain_autosave.h"
 #include "physics_tools.h"
 #include "game_authoring.h"
+#include "mcp_server.h"
 #include "audio_runtime.h"
 #include "realism_detail.h"
 #include "script_editor.h"
@@ -43,6 +44,20 @@
 #include "workspace_tools.h"
 #include "workspace_persistence.h"
 #include "view_compass.h"
+
+static bool g_sandbox3d_mcp_stdio = false;
+
+static int sandbox3d_product_printf(const char* format, ...)
+{
+    va_list arguments;
+    int result;
+    va_start(arguments, format);
+    result = vfprintf(g_sandbox3d_mcp_stdio ? stderr : stdout, format, arguments);
+    va_end(arguments);
+    return result;
+}
+
+#define printf(...) sandbox3d_product_printf(__VA_ARGS__)
 
 /* HENKA_COMMERCIAL_AUTHORING_INSPECTOR_V2
  * Modeling controls prioritize readable names, predictable hierarchy,
@@ -402,6 +417,7 @@ typedef struct sandbox3d_imported_source_binding
 
 typedef struct sandbox3d_state
 {
+    henka_engine* engine;
     henka_scene* scene;
     henka_action_context* actions;
     henka_settings* settings;
@@ -575,6 +591,8 @@ typedef struct sandbox3d_state
     henka_entity realism_entities[SANDBOX3D_REALISM_ENTITY_COUNT];
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
     sandbox3d_game_authoring* game_authoring;
+    sandbox3d_mcp_server* mcp_server;
+    bool mcp_stdio;
     sandbox3d_audio_runtime* audio_runtime;
     bool audio_runtime_error_reported;
     bool audio_smoke_test;
@@ -3624,6 +3642,23 @@ static void sandbox3d_update_physics(sandbox3d_state* state, double delta_second
 static henka_result sandbox3d_initialize_game_authoring(
     henka_engine* engine,
     sandbox3d_state* state);
+static henka_result sandbox3d_mcp_observe(
+    void* user_data,
+    char* out_json,
+    size_t out_json_capacity);
+static henka_result sandbox3d_mcp_select_object(
+    void* user_data,
+    uint64_t document_id,
+    char* out_json,
+    size_t out_json_capacity);
+static henka_result sandbox3d_mcp_request_exit(
+    void* user_data,
+    char* out_json,
+    size_t out_json_capacity);
+static bool sandbox3d_copy_environment_value(
+    const char* name,
+    char* out_value,
+    size_t out_value_capacity);
 static bool sandbox3d_query_game_authoring_input(
     void* user_data,
     uint32_t action_id);
@@ -13323,6 +13358,392 @@ static sandbox3d_authoring_object* sandbox3d_find_authoring_object(
         }
     }
     return NULL;
+}
+
+typedef struct sandbox3d_mcp_json_writer
+{
+    char* buffer;
+    size_t capacity;
+    size_t length;
+    bool valid;
+} sandbox3d_mcp_json_writer;
+
+static bool sandbox3d_mcp_json_append(
+    sandbox3d_mcp_json_writer* writer,
+    const char* format,
+    ...)
+{
+    va_list arguments;
+    int written;
+    if (writer == NULL || !writer->valid || format == NULL ||
+        writer->length >= writer->capacity)
+    {
+        return false;
+    }
+    va_start(arguments, format);
+    written = vsnprintf(
+        writer->buffer + writer->length,
+        writer->capacity - writer->length,
+        format,
+        arguments);
+    va_end(arguments);
+    if (written < 0 || (size_t)written >= writer->capacity - writer->length)
+    {
+        writer->valid = false;
+        return false;
+    }
+    writer->length += (size_t)written;
+    return true;
+}
+
+static bool sandbox3d_mcp_json_string(
+    sandbox3d_mcp_json_writer* writer,
+    const char* value)
+{
+    size_t index;
+    if (!sandbox3d_mcp_json_append(writer, "\"") || value == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; value[index] != '\0'; ++index)
+    {
+        const unsigned char character = (unsigned char)value[index];
+        const char* escaped = NULL;
+        switch (character)
+        {
+            case '"': escaped = "\\\""; break;
+            case '\\': escaped = "\\\\"; break;
+            case '\n': escaped = "\\n"; break;
+            case '\r': escaped = "\\r"; break;
+            case '\t': escaped = "\\t"; break;
+            default: break;
+        }
+        if (character < 0x20U)
+        {
+            writer->valid = false;
+            return false;
+        }
+        if (escaped != NULL)
+        {
+            if (!sandbox3d_mcp_json_append(writer, "%s", escaped))
+            {
+                return false;
+            }
+        }
+        else if (!sandbox3d_mcp_json_append(writer, "%c", (char)character))
+        {
+            return false;
+        }
+    }
+    return sandbox3d_mcp_json_append(writer, "\"");
+}
+
+static bool sandbox3d_mcp_json_bool(
+    sandbox3d_mcp_json_writer* writer,
+    bool value)
+{
+    return sandbox3d_mcp_json_append(writer, "%s", value ? "true" : "false");
+}
+
+static const char* sandbox3d_mcp_selection_mode_name(
+    sandbox3d_authoring_selection_mode mode)
+{
+    switch (mode)
+    {
+        case SANDBOX3D_AUTHORING_SELECTION_VERTEX: return "vertex";
+        case SANDBOX3D_AUTHORING_SELECTION_EDGE: return "edge";
+        case SANDBOX3D_AUTHORING_SELECTION_FACE: return "face";
+        default: return "none";
+    }
+}
+
+static bool sandbox3d_copy_environment_value(
+    const char* name,
+    char* out_value,
+    size_t out_value_capacity)
+{
+    if (name == NULL || out_value == NULL || out_value_capacity == 0U)
+    {
+        return false;
+    }
+    out_value[0] = '\0';
+#if defined(_WIN32)
+    {
+        char* value = NULL;
+        size_t value_length = 0U;
+        if (_dupenv_s(&value, &value_length, name) != 0 || value == NULL)
+        {
+            free(value);
+            return false;
+        }
+        if (value_length == 0U || value_length >= out_value_capacity)
+        {
+            free(value);
+            return false;
+        }
+        memcpy(out_value, value, value_length + 1U);
+        free(value);
+        return true;
+    }
+#else
+    {
+        const char* value = getenv(name);
+        size_t value_length;
+        if (value == NULL)
+        {
+            return false;
+        }
+        value_length = strlen(value);
+        if (value_length == 0U || value_length >= out_value_capacity)
+        {
+            return false;
+        }
+        memcpy(out_value, value, value_length + 1U);
+        return true;
+    }
+#endif
+}
+
+static henka_result sandbox3d_mcp_observe(
+    void* user_data,
+    char* out_json,
+    size_t out_json_capacity)
+{
+    sandbox3d_state* state = (sandbox3d_state*)user_data;
+    sandbox3d_mcp_json_writer writer;
+    henka_action_scene_summary summary;
+    henka_viewport viewport;
+    int framebuffer_width;
+    int framebuffer_height;
+    size_t scene_index;
+    size_t object_count = 0U;
+    bool first_object = true;
+    if (out_json == NULL || out_json_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_json[0] = '\0';
+    if (state == NULL || state->scene == NULL || state->actions == NULL ||
+        state->game_authoring == NULL || state->engine == NULL ||
+        henka_action_get_scene_summary(state->actions, &summary) != HENKA_SUCCESS ||
+        henka_engine_get_framebuffer_size(
+            state->engine, &framebuffer_width, &framebuffer_height) != HENKA_SUCCESS ||
+        henka_engine_get_scene_viewport(state->engine, &viewport) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    writer = (sandbox3d_mcp_json_writer){out_json, out_json_capacity, 0U, true};
+    if (!sandbox3d_mcp_json_append(
+            &writer,
+            "{\"success\":true,\"render_revision\":%llu,\"framebuffer\":{\"width\":%d,\"height\":%d},\"viewport\":{\"x\":%d,\"y\":%d,\"width\":%d,\"height\":%d},\"shading\":",
+            (unsigned long long)henka_scene_get_render_revision(state->scene),
+            framebuffer_width,
+            framebuffer_height,
+            viewport.x,
+            viewport.y,
+            viewport.width,
+            viewport.height) ||
+        !sandbox3d_mcp_json_string(
+            &writer,
+            henka_viewport_shading_mode_get_setting_value(
+                henka_engine_get_viewport_shading_mode(state->engine))) ||
+        !sandbox3d_mcp_json_append(&writer, ",\"selected_runtime_entity\":"))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    if (summary.selected_entity != HENKA_INVALID_ENTITY)
+    {
+        if (!sandbox3d_mcp_json_append(
+                &writer,
+                "%llu",
+                (unsigned long long)summary.selected_entity))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+    }
+    else if (!sandbox3d_mcp_json_append(&writer, "null"))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    if (!sandbox3d_mcp_json_append(&writer, ",\"objects\":["))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (scene_index = 0U;
+         scene_index < henka_scene_get_entity_count(state->scene);
+         ++scene_index)
+    {
+        const henka_entity entity = henka_scene_get_entity_at_index(state->scene, scene_index);
+        henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+        henka_scene_document_object document_object;
+        henka_scene_object_info info;
+        sandbox3d_authoring_object* authoring_object;
+        if (entity == HENKA_INVALID_ENTITY ||
+            !sandbox3d_is_logical_scene_object(state, entity))
+        {
+            continue;
+        }
+        if (sandbox3d_game_authoring_get_object_for_entity(
+                state->game_authoring,
+                entity,
+                &document_id,
+                &document_object) != HENKA_SUCCESS ||
+            henka_scene_get_entity_info(state->scene, entity, &info) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (!first_object && !sandbox3d_mcp_json_append(&writer, ","))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        first_object = false;
+        if (!sandbox3d_mcp_json_append(
+                &writer,
+                "{\"document_id\":%llu,\"runtime_entity\":%llu,\"name\":",
+                (unsigned long long)document_id,
+                (unsigned long long)entity) ||
+            !sandbox3d_mcp_json_string(&writer, info.name == NULL ? "Object" : info.name) ||
+            !sandbox3d_mcp_json_append(&writer, ",\"visible\":") ||
+            !sandbox3d_mcp_json_bool(&writer, info.visible) ||
+            !sandbox3d_mcp_json_append(
+                &writer,
+                ",\"selected\":%s",
+                entity == summary.selected_entity ? "true" : "false"))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        authoring_object = sandbox3d_find_authoring_object(state, entity);
+        if (authoring_object != NULL)
+        {
+            const henka_authoring_mesh_counts counts =
+                henka_authoring_mesh_get_counts(
+                    sandbox3d_authoring_object_get_mesh(authoring_object));
+            if (!sandbox3d_mcp_json_append(
+                    &writer,
+                    ",\"authoring\":{\"geometry_revision\":%llu,\"selection_mode\":",
+                    (unsigned long long)sandbox3d_authoring_object_get_geometry_revision(
+                        authoring_object)) ||
+                !sandbox3d_mcp_json_string(
+                    &writer,
+                    sandbox3d_mcp_selection_mode_name(
+                        sandbox3d_authoring_object_get_selection_mode(authoring_object))) ||
+                !sandbox3d_mcp_json_append(
+                    &writer,
+                    ",\"selected_components\":%zu,\"active_component_id\":%u,\"topology\":{\"vertices\":%zu,\"edges\":%zu,\"faces\":%zu}}",
+                    sandbox3d_authoring_object_get_selected_component_count(authoring_object),
+                    sandbox3d_authoring_object_get_active_component_id(authoring_object),
+                    counts.vertices,
+                    counts.edges,
+                    counts.faces))
+            {
+                return HENKA_ERROR_LIMIT;
+            }
+        }
+        if (!sandbox3d_mcp_json_append(&writer, "}"))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        ++object_count;
+    }
+    if (!sandbox3d_mcp_json_append(
+            &writer,
+            "],\"object_count\":%zu,\"helper_entity_count\":%zu,\"visible_user_entity_count\":%zu}",
+            object_count,
+            summary.helper_entity_count,
+            summary.visible_user_entity_count) || !writer.valid)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return HENKA_SUCCESS;
+}
+
+static henka_result sandbox3d_mcp_select_object(
+    void* user_data,
+    uint64_t document_id,
+    char* out_json,
+    size_t out_json_capacity)
+{
+    sandbox3d_state* state = (sandbox3d_state*)user_data;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_action_request request;
+    henka_action_result action_result;
+    const uint64_t revision_before = state != NULL && state->scene != NULL
+        ? henka_scene_get_render_revision(state->scene)
+        : 0U;
+    uint64_t revision_after;
+    sandbox3d_mcp_json_writer writer;
+    if (out_json == NULL || out_json_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_json[0] = '\0';
+    if (state == NULL || state->scene == NULL || state->actions == NULL ||
+        state->game_authoring == NULL || document_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            state->game_authoring, document_id, &entity) != HENKA_SUCCESS ||
+        !henka_scene_is_entity_valid(state->scene, entity))
+    {
+        (void)snprintf(
+            out_json,
+            out_json_capacity,
+            "{\"success\":false,\"document_id\":%llu,\"error\":\"not_found\"}",
+            (unsigned long long)document_id);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_SELECT_OBJECT;
+    request.params.entity.entity = entity;
+    memset(&action_result, 0, sizeof(action_result));
+    if (!sandbox3d_execute_action(state, &request, &action_result))
+    {
+        revision_after = henka_scene_get_render_revision(state->scene);
+        (void)snprintf(
+            out_json,
+            out_json_capacity,
+            "{\"success\":false,\"document_id\":%llu,\"runtime_entity\":%llu,\"action_status\":\"%s\",\"render_revision_before\":%llu,\"render_revision_after\":%llu}",
+            (unsigned long long)document_id,
+            (unsigned long long)entity,
+            henka_action_status_to_string(action_result.status),
+            (unsigned long long)revision_before,
+            (unsigned long long)revision_after);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    revision_after = henka_scene_get_render_revision(state->scene);
+    writer = (sandbox3d_mcp_json_writer){out_json, out_json_capacity, 0U, true};
+    if (!sandbox3d_mcp_json_append(
+            &writer,
+            "{\"success\":true,\"document_id\":%llu,\"runtime_entity\":%llu,\"action_status\":",
+            (unsigned long long)document_id,
+            (unsigned long long)entity) ||
+        !sandbox3d_mcp_json_string(&writer, henka_action_status_to_string(action_result.status)) ||
+        !sandbox3d_mcp_json_append(
+            &writer,
+            ",\"render_revision_before\":%llu,\"render_revision_after\":%llu,\"selection\":{\"selected_runtime_entity\":%llu}}",
+            (unsigned long long)revision_before,
+            (unsigned long long)revision_after,
+            (unsigned long long)state->selected_entity))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return HENKA_SUCCESS;
+}
+
+static henka_result sandbox3d_mcp_request_exit(
+    void* user_data,
+    char* out_json,
+    size_t out_json_capacity)
+{
+    sandbox3d_state* state = (sandbox3d_state*)user_data;
+    if (out_json == NULL || out_json_capacity == 0U || state == NULL || state->engine == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    (void)snprintf(
+        out_json,
+        out_json_capacity,
+        "{\"success\":true,\"shutdown_requested\":true}");
+    henka_engine_request_exit(state->engine);
+    return HENKA_SUCCESS;
 }
 
 static bool sandbox3d_source_node_is_active(
@@ -33075,6 +33496,32 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
+    if (state->mcp_stdio)
+    {
+        char candidate_id[256];
+        const char* candidate_id_value =
+            sandbox3d_copy_environment_value(
+                "HENKA_CANDIDATE_ID",
+                candidate_id,
+                sizeof(candidate_id)) ? candidate_id : NULL;
+        const sandbox3d_mcp_host mcp_host = {
+            state,
+            sandbox3d_mcp_observe,
+            sandbox3d_mcp_select_object,
+            sandbox3d_mcp_request_exit};
+        result = sandbox3d_mcp_server_create(
+            &mcp_host,
+            candidate_id_value,
+            &state->mcp_server);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        printf(
+            "MCP stdio ready: stateless local semantic adapter enabled; tools=observe,select_object,exit candidate=%s.\n",
+            candidate_id_value == NULL ? "unprovided" : candidate_id_value);
+        fflush(stdout);
+    }
     result = sandbox3d_audio_runtime_create(state->scene, &state->audio_runtime);
     if (result != HENKA_SUCCESS)
     {
@@ -33493,6 +33940,8 @@ fail:
     henka_free(color_space_reference_pixels);
     sandbox3d_script_editor_model_destroy(state->script_editor_model);
     state->script_editor_model = NULL;
+    sandbox3d_mcp_server_destroy(state->mcp_server);
+    state->mcp_server = NULL;
     sandbox3d_game_authoring_destroy(state->game_authoring);
     state->game_authoring = NULL;
     sandbox3d_audio_runtime_destroy(state->audio_runtime);
@@ -34777,6 +35226,10 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    if (state != NULL && state->mcp_server != NULL)
+    {
+        (void)sandbox3d_mcp_server_poll(state->mcp_server);
+    }
     /* Stop destroys the runtime scene during UI dispatch.  Reconcile the
      * engine-owned scene before any frame work can dereference the previous
      * runtime pointer (environment, terrain, input, or physics). */
@@ -36372,6 +36825,8 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
         SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS);
     sandbox3d_script_editor_model_destroy(state->script_editor_model);
     state->script_editor_model = NULL;
+    sandbox3d_mcp_server_destroy(state->mcp_server);
+    state->mcp_server = NULL;
     sandbox3d_game_authoring_destroy(state->game_authoring);
     state->game_authoring = NULL;
     sandbox3d_audio_runtime_destroy(state->audio_runtime);
@@ -36396,6 +36851,7 @@ int main(int argc, char** argv)
     bool terrain_stream_stress;
     bool capture_mode_requested;
     bool startup_capture_requested;
+    bool mcp_stdio;
     bool terrain_capture_mode_requested;
     bool showcase_capture_view_requested;
     bool showcase_capture_rocket_requested;
@@ -36422,6 +36878,7 @@ int main(int argc, char** argv)
     terrain_stream_stress = false;
     capture_mode_requested = false;
     startup_capture_requested = false;
+    mcp_stdio = false;
     terrain_capture_mode_requested = false;
     showcase_capture_view_requested = false;
     showcase_capture_rocket_requested = false;
@@ -36478,6 +36935,10 @@ int main(int argc, char** argv)
     else if (argc == 2 && strcmp(argv[1], "--capture-startup") == 0)
     {
         startup_capture_requested = true;
+    }
+    else if (argc == 2 && strcmp(argv[1], "--mcp-stdio") == 0)
+    {
+        mcp_stdio = true;
     }
     else if (argc == 3 && strcmp(argv[1], "--capture-mode") == 0 &&
         henka_viewport_shading_mode_parse(argv[2], &capture_mode) == HENKA_SUCCESS)
@@ -36709,7 +37170,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference ibl_normal|ibl_diffuse|ibl_specular|ibl_simple|ibl_empty wide|close rendered | --capture-realism-reference ibl_rotation -360..360 wide|close rendered | --capture-realism-reference ibl_mip 0..6 wide|close rendered | --capture-realism-reference ibl_ordinary_mip 0..6 wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --mcp-stdio | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference ibl_normal|ibl_diffuse|ibl_specular|ibl_simple|ibl_empty wide|close rendered | --capture-realism-reference ibl_rotation -360..360 wide|close rendered | --capture-realism-reference ibl_mip 0..6 wide|close rendered | --capture-realism-reference ibl_ordinary_mip 0..6 wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -36721,6 +37182,7 @@ int main(int argc, char** argv)
     }
 #endif
 
+    g_sandbox3d_mcp_stdio = mcp_stdio;
     memset(&state, 0, sizeof(state));
     if (sandbox3d_authoring_asset_controller_create(
             &state.authoring_asset_controller) != HENKA_SUCCESS)
@@ -36778,6 +37240,7 @@ int main(int argc, char** argv)
     state.terrain_stream_stress = terrain_stream_stress;
     state.capture_mode_requested = capture_mode_requested;
     state.startup_capture_requested = startup_capture_requested;
+    state.mcp_stdio = mcp_stdio;
     state.terrain_capture_mode_requested = terrain_capture_mode_requested;
     state.showcase_capture_view_requested = showcase_capture_view_requested;
     state.showcase_capture_rocket_requested = showcase_capture_rocket_requested;
@@ -36843,6 +37306,7 @@ int main(int argc, char** argv)
         HENKA_LOG_ERROR("Unable to start the sandbox: %s", henka_result_to_string(result));
         return 1;
     }
+    state.engine = engine;
 
     result = henka_engine_run(engine);
     if (result != HENKA_SUCCESS)

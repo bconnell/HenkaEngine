@@ -491,6 +491,26 @@ henka_result sandbox3d_game_authoring_get_object_for_entity(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_game_authoring_get_entity_for_document_id(
+    const sandbox3d_game_authoring* authoring,
+    henka_scene_document_id document_id,
+    henka_entity* out_entity)
+{
+    if (out_entity != NULL)
+    {
+        *out_entity = HENKA_INVALID_ENTITY;
+    }
+    if (authoring == NULL || authoring->bridge == NULL ||
+        document_id == HENKA_INVALID_SCENE_DOCUMENT_ID || out_entity == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_scene_document_bridge_get_entity(
+        authoring->bridge,
+        document_id,
+        out_entity);
+}
+
 henka_result sandbox3d_game_authoring_update_object_for_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,

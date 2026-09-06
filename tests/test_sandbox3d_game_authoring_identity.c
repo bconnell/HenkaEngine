@@ -30,6 +30,7 @@ int main(void)
     henka_scene_document_id unchanged_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id asset_override_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_entity new_entity = HENKA_INVALID_ENTITY;
+    henka_entity resolved_entity = HENKA_INVALID_ENTITY;
     henka_entity asset_override_entity = HENKA_INVALID_ENTITY;
     henka_result load_result = HENKA_ERROR_INVALID_ARGUMENT;
     henka_result register_result = HENKA_ERROR_INVALID_ARGUMENT;
@@ -96,6 +97,9 @@ int main(void)
         sandbox3d_game_authoring_get_object_for_entity(
             authoring, new_entity, &unchanged_id, &loaded_object) != HENKA_SUCCESS ||
         unchanged_id != new_object_id ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            authoring, new_object_id, &resolved_entity) != HENKA_SUCCESS ||
+        resolved_entity != new_entity ||
         fabsf(loaded_object.renderer.base_color.x - authored_material.base_color.x) > 0.0001f ||
         fabsf(loaded_object.renderer.base_color.y - authored_material.base_color.y) > 0.0001f ||
         fabsf(loaded_object.renderer.base_color.z - authored_material.base_color.z) > 0.0001f ||

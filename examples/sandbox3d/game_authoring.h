@@ -40,6 +40,13 @@ henka_result sandbox3d_game_authoring_get_object_for_entity(
     henka_entity entity,
     henka_scene_document_id* out_document_id,
     henka_scene_document_object* out_object);
+/* Resolves a persistent authored identity to its currently bound live entity.
+ * The coordinator remains the sole owner of this mapping; callers do not
+ * receive a raw document or bridge pointer. */
+henka_result sandbox3d_game_authoring_get_entity_for_document_id(
+    const sandbox3d_game_authoring* authoring,
+    henka_scene_document_id document_id,
+    henka_entity* out_entity);
 henka_result sandbox3d_game_authoring_update_object_for_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
