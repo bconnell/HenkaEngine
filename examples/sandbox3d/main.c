@@ -22898,6 +22898,13 @@ static void sandbox3d_draw_scene_objects_panel(
         {
             sandbox3d_set_status(state, true, "Asset name input was rejected; use a shorter printable name.");
         }
+        else if (name_changed)
+        {
+            printf(
+                "Native authoring asset name accepted: value=%s.\n",
+                state->authoring_asset_name);
+            fflush(stdout);
+        }
         if (asset_action_count >= 2U && henka_ui_primary_button(
                 state->ui,
                 "scene_asset_new",

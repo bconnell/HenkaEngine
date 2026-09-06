@@ -154,6 +154,18 @@ function Wait-AssetTransition {
     }
 }
 
+function Wait-AssetNameInput {
+    param(
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $pattern = "Native authoring asset name accepted: value=$([Regex]::Escape($Name))\."
+    if (-not (Wait-FileContains -Path $LogPath -Pattern $pattern -TimeoutMilliseconds 60000)) {
+        throw "The editor did not report the requested native asset name was accepted."
+    }
+}
+
 try {
     $interactionToolsPath = Join-Path $repoRoot "examples\sandbox3d\interaction_tools.h"
     $sandboxSourcePath = Join-Path $repoRoot "examples\sandbox3d\main.c"
@@ -232,9 +244,9 @@ try {
     Send-HenkaAutomationClick -EventPath $automationInputPath -X $nameX -Y $nameY
     Clear-TextField -EventPath $automationInputPath
     Send-HenkaAutomationText -EventPath $automationInputPath -Text $assetName
-    # The runtime consumes one bounded automation event per frame. Allow the
-    # text replacement to drain before the following button click is queued.
-    Start-Sleep -Milliseconds 3000
+    # The runtime consumes one bounded automation event per frame. Wait for the
+    # actual product state instead of guessing how long a slow renderer needs.
+    Wait-AssetNameInput -LogPath $stdoutPath -Name $assetName
     Send-HenkaAutomationClick -EventPath $automationInputPath -X $newAssetX -Y $newAssetY
     Wait-AssetTransition -LogPath $stdoutPath -Action "created" -PartCount 0
 
