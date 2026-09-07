@@ -93,6 +93,7 @@ function Get-HenkaCTestPath {
 function Get-HenkaCMakeFetchContentArguments {
     param(
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string]$DependencyRoot,
 
         [ValidateSet("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")]
@@ -150,7 +151,11 @@ function Get-HenkaCMakeFetchContentArguments {
         }
 
         $definition = $definitions[$provider]
-        $sourceRoot = Join-Path $DependencyRoot $definition.RelativePath
+        $sourceRoot = if ([string]::IsNullOrWhiteSpace($DependencyRoot)) {
+            $definition.RelativePath
+        } else {
+            Join-Path $DependencyRoot $definition.RelativePath
+        }
         $markerPath = Join-Path $sourceRoot $definition.Marker
         $available = (-not $NoLocalProviders) -and
             (Test-Path -LiteralPath $markerPath -PathType Leaf)

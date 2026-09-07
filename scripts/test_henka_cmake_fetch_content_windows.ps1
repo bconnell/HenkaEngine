@@ -85,6 +85,13 @@ try {
     Assert-Condition ($network.Arguments -contains "-DFETCHCONTENT_SOURCE_DIR_ENET=") "No-local ENet fallback is missing."
     Assert-Condition ($network.Arguments -contains "-DFETCHCONTENT_SOURCE_DIR_LUA=") "No-local Lua fallback is missing."
 
+    $emptyRoot = Get-HenkaCMakeFetchContentArguments `
+        -DependencyRoot "" `
+        -Providers @("STB")
+    Assert-Condition ($emptyRoot.MissingCount -eq 1) "An empty dependency root should use the network fallback contract."
+    Assert-Condition (-not [bool]$emptyRoot.FullyDisconnected) "An empty dependency root must not claim disconnected operation."
+    Assert-Condition ($emptyRoot.Arguments -contains "-DFETCHCONTENT_SOURCE_DIR_STB=") "Empty-root STB fallback is missing."
+
     Write-Host "[pass] Shared FetchContent provider resolution reports availability, emits one argument per selected provider, and derives disconnected mode from complete local coverage."
 }
 finally {
