@@ -121,7 +121,13 @@ try
     $tools = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":2,`"method`":`"tools/list`",`"params`":{$meta}}"
     Assert-McpSuccess $tools 2 "tools/list"
     $tool_names = @($tools.Value.result.structuredContent.state.tools | ForEach-Object { $_.name })
-    foreach ($required_tool in @("henka.observe", "henka.select_object", "henka.exit"))
+    foreach ($required_tool in @(
+        "henka.observe",
+        "henka.select_object",
+        "henka.authoring_set_selection_mode",
+        "henka.authoring_select_face",
+        "henka.authoring_extrude_faces",
+        "henka.exit"))
     {
         if ($tool_names -notcontains $required_tool)
         {
@@ -160,14 +166,81 @@ try
         throw "henka.observe did not expose the canonical selection result."
     }
 
-    $invalid_select = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":6,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.select_object`",`"arguments`":{`"document_id`":999999},$meta}}"
+    if ($null -eq $selected_object.authoring -or
+        [int]$selected_object.authoring.topology.faces -lt 1 -or
+        $null -eq $selected_object.authoring.first_face_id)
+    {
+        throw "henka.observe did not expose an authoritative face on the selected editable object."
+    }
+    $first_face_id = [UInt64]$selected_object.authoring.first_face_id
+    if ($first_face_id -eq 0)
+    {
+        throw "henka.observe returned an invalid first face identity."
+    }
+
+    $mode = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":6,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.authoring_set_selection_mode`",`"arguments`":{`"document_id`":$document_id,`"mode`":`"face`"},$meta}}"
+    Assert-McpSuccess $mode 6 "henka.authoring_set_selection_mode"
+    if ($mode.Value.result.structuredContent.state.selection_mode -ne "face" -or
+        $mode.Value.result.structuredContent.state.authoring_mode -ne "edit")
+    {
+        throw "Face authoring mode was not established through the live authoring path."
+    }
+
+    $face = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":7,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.authoring_select_face`",`"arguments`":{`"document_id`":$document_id,`"face_id`":$first_face_id},$meta}}"
+    Assert-McpSuccess $face 7 "henka.authoring_select_face"
+    if ([int]$face.Value.result.structuredContent.state.selected_components -ne 1)
+    {
+        throw "The authoritative face selection did not select exactly one component."
+    }
+
+    $before_extrude = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":8,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.observe`",`"arguments`":{},$meta}}"
+    Assert-McpSuccess $before_extrude 8 "henka.observe before face extrusion"
+    $before_object = @($before_extrude.Value.result.structuredContent.state.objects) |
+        Where-Object { [UInt64]$_.document_id -eq $document_id } |
+        Select-Object -First 1
+    if ($null -eq $before_object.authoring)
+    {
+        throw "The selected object lost its authoring state before extrusion."
+    }
+    $revision_before = [UInt64]$before_object.authoring.geometry_revision
+    $faces_before = [int]$before_object.authoring.topology.faces
+
+    $extrude = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":9,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.authoring_extrude_faces`",`"arguments`":{`"document_id`":$document_id,`"distance`":0.18},$meta}}"
+    Assert-McpSuccess $extrude 9 "henka.authoring_extrude_faces"
+    $extrude_state = $extrude.Value.result.structuredContent.state
+    if ([UInt64]$extrude_state.geometry_revision_after -le $revision_before -or
+        [int]$extrude_state.topology_after.faces -le $faces_before)
+    {
+        throw "Canonical face extrusion did not advance geometry revision and topology."
+    }
+
+    $after_extrude = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":10,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.observe`",`"arguments`":{},$meta}}"
+    Assert-McpSuccess $after_extrude 10 "henka.observe after face extrusion"
+    $after_object = @($after_extrude.Value.result.structuredContent.state.objects) |
+        Where-Object { [UInt64]$_.document_id -eq $document_id } |
+        Select-Object -First 1
+    if ($null -eq $after_object -or
+        [UInt64]$after_object.authoring.geometry_revision -ne [UInt64]$extrude_state.geometry_revision_after -or
+        [int]$after_object.authoring.topology.faces -ne [int]$extrude_state.topology_after.faces -or
+        $after_object.authoring.selection_mode -ne "face")
+    {
+        throw "Post-extrusion observation did not preserve the authoritative modeling result."
+    }
+
+    $invalid_face = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":11,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.authoring_select_face`",`"arguments`":{`"document_id`":$document_id,`"face_id`":999999},$meta}}"
+    if (-not $invalid_face.Value.result.isError)
+    {
+        throw "Invalid face identity was accepted by the live MCP authoring path."
+    }
+
+    $invalid_select = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":12,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.select_object`",`"arguments`":{`"document_id`":999999},$meta}}"
     if (-not $invalid_select.Value.result.isError)
     {
         throw "Invalid persistent identity was accepted by the live MCP path."
     }
 
-    $exit = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":7,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.exit`",`"arguments`":{},$meta}}"
-    Assert-McpSuccess $exit 7 "henka.exit"
+    $exit = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":13,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.exit`",`"arguments`":{},$meta}}"
+    Assert-McpSuccess $exit 13 "henka.exit"
     if (-not $process.WaitForExit((Get-RemainingMilliseconds)))
     {
         throw "Sandbox did not exit after henka.exit before the hard deadline."

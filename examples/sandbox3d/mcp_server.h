@@ -27,6 +27,24 @@ typedef struct sandbox3d_mcp_host
         uint64_t document_id,
         char* out_json,
         size_t out_json_capacity);
+    henka_result (*set_authoring_selection_mode)(
+        void* user_data,
+        uint64_t document_id,
+        const char* mode,
+        char* out_json,
+        size_t out_json_capacity);
+    henka_result (*select_face)(
+        void* user_data,
+        uint64_t document_id,
+        uint64_t face_id,
+        char* out_json,
+        size_t out_json_capacity);
+    henka_result (*extrude_selected_faces)(
+        void* user_data,
+        uint64_t document_id,
+        float distance,
+        char* out_json,
+        size_t out_json_capacity);
     henka_result (*request_exit)(
         void* user_data,
         char* out_json,

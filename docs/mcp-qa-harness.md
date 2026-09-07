@@ -1,6 +1,6 @@
 # MCP QA Harness
 
-> **Status:** Foundation
+> **Status:** Foundation plus face-authoring validation
 
 Henka Sandbox3D provides a bounded local MCP adapter for executable inspection
 and semantic editor checks. The adapter exposes the existing Henka Action API
@@ -15,7 +15,7 @@ authority.
 | Live scene observation | Available | Scene, viewport, and Action API state |
 | Persistent-object selection | Available | Scene Document ID resolved by Game Authoring, then Action API selection |
 | Clean candidate exit | Available | Henka engine lifecycle |
-| Component editing | Planned | Modeling and authoring systems |
+| Face component editing (mode, selection, extrusion) | Available | Live authoring bridge and canonical mesh operation |
 | Framebuffer capture | Planned | Renderer and visual-proof path |
 | Undo, redo, save, and reload workflow | Planned | Authoring and persistence systems |
 
@@ -66,6 +66,29 @@ that ID to the live entity, then the existing `HENKA_ACTION_COMMAND_SELECT_OBJEC
 path performs the selection. Missing or stale IDs return a structured semantic
 error and do not silently select another object.
 
+### `henka.authoring_set_selection_mode`
+
+Sets the live authoring component-selection mode for the currently selected
+editable object. The supported values are `vertex`, `edge`, and `face`. The
+returned `authoring_mode` value is `edit`, which describes the existing
+authoring surface; the MCP adapter does not create a separate hidden edit-mode
+authority.
+
+### `henka.authoring_select_face`
+
+Selects a face by its persistent object document ID and authoritative face ID.
+The target must already be selected through `henka.select_object`, be editable,
+and be in face-selection mode. Face IDs are discovered from the live
+authoring mesh; callers must not guess them. Invalid, stale, or unavailable
+faces return a semantic error.
+
+### `henka.authoring_extrude_faces`
+
+Extrudes the currently selected live faces through the same transactional
+authoring operation used by the editor. The response reports the geometry
+revision and topology counts before and after the operation. It does not
+implement a second mesh mutation path.
+
 ### `henka.exit`
 
 Requests clean shutdown of the local Sandbox3D candidate. It does not terminate
@@ -92,6 +115,11 @@ live Sandbox3D scene
   -> resolve its persistent Scene Document ID
   -> select it through the canonical Action API
   -> observe the resulting live selection
+  -> enter the existing face authoring selection mode
+  -> discover and select the first authoritative face
+  -> extrude it through the canonical authoring operation
+  -> verify revision and topology advancement in a fresh observation
+  -> reject an invalid face identity
   -> reject an invalid persistent ID
   -> request clean exit
 ```
@@ -99,6 +127,10 @@ live Sandbox3D scene
 The smoke validates that protocol output remains on stdout while product
 diagnostics remain on stderr. It uses a bounded progress-aware response
 deadline rather than waiting for a fixed startup log line.
+
+Undo, redo, framebuffer capture, save, and reload are not part of this slice.
+They remain separate validation work until the corresponding canonical product
+paths are exposed through the harness.
 
 ## Security and ownership boundaries
 

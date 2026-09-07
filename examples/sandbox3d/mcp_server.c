@@ -1,7 +1,10 @@
 #include "mcp_server.h"
 
 #include <ctype.h>
+#include <errno.h>
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if defined(_WIN32)
@@ -226,6 +229,43 @@ static bool sandbox3d_mcp_parse_uint64_at(
     return true;
 }
 
+static bool sandbox3d_mcp_parse_float_at(
+    const char* field_start,
+    float* out_value)
+{
+    const char* cursor;
+    char* end = NULL;
+    float value;
+
+    if (field_start == NULL || out_value == NULL)
+    {
+        return false;
+    }
+    cursor = strchr(field_start, ':');
+    if (cursor == NULL)
+    {
+        return false;
+    }
+    cursor = sandbox3d_mcp_skip_space(cursor + 1);
+    if (cursor == NULL || *cursor == '\0')
+    {
+        return false;
+    }
+    errno = 0;
+    value = strtof(cursor, &end);
+    if (end == cursor || errno == ERANGE || !isfinite(value))
+    {
+        return false;
+    }
+    end = (char*)sandbox3d_mcp_skip_space(end);
+    if (*end != '\0' && *end != ',' && *end != '}' && *end != ']')
+    {
+        return false;
+    }
+    *out_value = value;
+    return true;
+}
+
 static bool sandbox3d_mcp_parse_id(
     const char* json,
     char* out_id,
@@ -369,7 +409,8 @@ henka_result sandbox3d_mcp_server_create(
     }
     *out_server = NULL;
     if (host == NULL || host->observe == NULL || host->select_object == NULL ||
-        host->request_exit == NULL)
+        host->set_authoring_selection_mode == NULL || host->select_face == NULL ||
+        host->extrude_selected_faces == NULL || host->request_exit == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -410,7 +451,9 @@ static void sandbox3d_mcp_write_discovery(
     const char* state =
         "{\"protocol\":\"mcp\",\"spec_version\":\"2026-07-28\","
         "\"transport\":\"stdio\",\"stateless\":true,"
-        "\"tools\":[\"henka.observe\",\"henka.select_object\",\"henka.exit\"]}";
+        "\"tools\":[\"henka.observe\",\"henka.select_object\","
+        "\"henka.authoring_set_selection_mode\",\"henka.authoring_select_face\","
+        "\"henka.authoring_extrude_faces\",\"henka.exit\"]}";
     sandbox3d_mcp_write_semantic_result(
         server,
         request_id,
@@ -431,6 +474,9 @@ static void sandbox3d_mcp_write_tools(
         "{\"tools\":["
         "{\"name\":\"henka.observe\",\"description\":\"Read authoritative live scene, persistent identity, revision, viewport, and selection state.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}},"
         "{\"name\":\"henka.select_object\",\"description\":\"Select one live editable scene object by persistent Scene Document ID through the canonical Action API.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"document_id\":{\"type\":\"integer\",\"minimum\":1}},\"required\":[\"document_id\"],\"additionalProperties\":false}},"
+        "{\"name\":\"henka.authoring_set_selection_mode\",\"description\":\"Set the canonical authoring component-selection mode for one selected editable object.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"document_id\":{\"type\":\"integer\",\"minimum\":1},\"mode\":{\"type\":\"string\",\"enum\":[\"vertex\",\"edge\",\"face\"]}},\"required\":[\"document_id\",\"mode\"],\"additionalProperties\":false}},"
+        "{\"name\":\"henka.authoring_select_face\",\"description\":\"Select one real source-authoritative face by persistent object identity and face identity.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"document_id\":{\"type\":\"integer\",\"minimum\":1},\"face_id\":{\"type\":\"integer\",\"minimum\":1}},\"required\":[\"document_id\",\"face_id\"],\"additionalProperties\":false}},"
+        "{\"name\":\"henka.authoring_extrude_faces\",\"description\":\"Extrude the currently selected real faces through the canonical transactional authoring operation.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"document_id\":{\"type\":\"integer\",\"minimum\":1},\"distance\":{\"type\":\"number\",\"minimum\":-1000000,\"maximum\":1000000}},\"required\":[\"document_id\",\"distance\"],\"additionalProperties\":false}},"
         "{\"name\":\"henka.exit\",\"description\":\"Request clean shutdown of this local validation candidate.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}"
         "]}";
     sandbox3d_mcp_write_semantic_result(
@@ -452,7 +498,10 @@ henka_result sandbox3d_mcp_server_process_line(
     char request_id[96];
     char method[64];
     char tool_name[96];
+    char mode[32];
     uint64_t document_id = 0U;
+    uint64_t face_id = 0U;
+    float distance = 0.0f;
     henka_result result;
     char state_json[SANDBOX3D_MCP_MAX_RESPONSE_BYTES];
     if (out_response == NULL || out_response_capacity == 0U)
@@ -528,6 +577,85 @@ henka_result sandbox3d_mcp_server_process_line(
             request_id,
             result != HENKA_SUCCESS,
             result == HENKA_SUCCESS ? "Henka selection" : henka_result_to_string(result),
+            state_json[0] == '\0' ? "null" : state_json,
+            out_response,
+            out_response_capacity);
+        return result;
+    }
+    if (strcmp(tool_name, "henka.authoring_set_selection_mode") == 0)
+    {
+        const char* document_field = sandbox3d_mcp_find_field(line, "document_id");
+        if (!sandbox3d_mcp_parse_uint64_at(document_field, &document_id) || document_id == 0U ||
+            !sandbox3d_mcp_parse_string_at(
+                sandbox3d_mcp_find_field(line, "mode"), mode, sizeof(mode)))
+        {
+            sandbox3d_mcp_write_error(request_id, -32602, "henka.authoring_set_selection_mode requires document_id and mode.", out_response, out_response_capacity);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = server->host.set_authoring_selection_mode(
+            server->host.user_data,
+            document_id,
+            mode,
+            state_json,
+            sizeof(state_json));
+        sandbox3d_mcp_write_semantic_result(
+            server,
+            request_id,
+            result != HENKA_SUCCESS,
+            result == HENKA_SUCCESS ? "Henka authoring selection mode" : henka_result_to_string(result),
+            state_json[0] == '\0' ? "null" : state_json,
+            out_response,
+            out_response_capacity);
+        return result;
+    }
+    if (strcmp(tool_name, "henka.authoring_select_face") == 0)
+    {
+        const char* document_field = sandbox3d_mcp_find_field(line, "document_id");
+        const char* face_field = sandbox3d_mcp_find_field(line, "face_id");
+        if (!sandbox3d_mcp_parse_uint64_at(document_field, &document_id) || document_id == 0U ||
+            !sandbox3d_mcp_parse_uint64_at(face_field, &face_id) || face_id == 0U ||
+            face_id > UINT32_MAX)
+        {
+            sandbox3d_mcp_write_error(request_id, -32602, "henka.authoring_select_face requires positive bounded document_id and face_id.", out_response, out_response_capacity);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = server->host.select_face(
+            server->host.user_data,
+            document_id,
+            face_id,
+            state_json,
+            sizeof(state_json));
+        sandbox3d_mcp_write_semantic_result(
+            server,
+            request_id,
+            result != HENKA_SUCCESS,
+            result == HENKA_SUCCESS ? "Henka authoring face selection" : henka_result_to_string(result),
+            state_json[0] == '\0' ? "null" : state_json,
+            out_response,
+            out_response_capacity);
+        return result;
+    }
+    if (strcmp(tool_name, "henka.authoring_extrude_faces") == 0)
+    {
+        const char* document_field = sandbox3d_mcp_find_field(line, "document_id");
+        if (!sandbox3d_mcp_parse_uint64_at(document_field, &document_id) || document_id == 0U ||
+            !sandbox3d_mcp_parse_float_at(
+                sandbox3d_mcp_find_field(line, "distance"), &distance))
+        {
+            sandbox3d_mcp_write_error(request_id, -32602, "henka.authoring_extrude_faces requires document_id and finite distance.", out_response, out_response_capacity);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = server->host.extrude_selected_faces(
+            server->host.user_data,
+            document_id,
+            distance,
+            state_json,
+            sizeof(state_json));
+        sandbox3d_mcp_write_semantic_result(
+            server,
+            request_id,
+            result != HENKA_SUCCESS,
+            result == HENKA_SUCCESS ? "Henka authoring face extrusion" : henka_result_to_string(result),
             state_json[0] == '\0' ? "null" : state_json,
             out_response,
             out_response_capacity);
