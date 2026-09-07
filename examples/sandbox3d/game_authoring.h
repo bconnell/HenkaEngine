@@ -64,6 +64,16 @@ henka_result sandbox3d_game_authoring_unparent_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity child,
     henka_scene_parenting_mode mode);
+/* Hierarchy edits use the shared Game Authoring history boundary. Undo and
+ * redo restore both the authored Scene Document object and its live entity. */
+bool sandbox3d_game_authoring_can_undo(
+    const sandbox3d_game_authoring* authoring);
+bool sandbox3d_game_authoring_can_redo(
+    const sandbox3d_game_authoring* authoring);
+henka_result sandbox3d_game_authoring_undo(
+    sandbox3d_game_authoring* authoring);
+henka_result sandbox3d_game_authoring_redo(
+    sandbox3d_game_authoring* authoring);
 henka_result sandbox3d_game_authoring_set_play_input_context(
     sandbox3d_game_authoring* authoring,
     sandbox3d_game_authoring_input_query input_query,

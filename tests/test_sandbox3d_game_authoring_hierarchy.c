@@ -15,6 +15,8 @@ int main(void)
     henka_entity parent_b = HENKA_INVALID_ENTITY;
     henka_entity parent_c = HENKA_INVALID_ENTITY;
     henka_entity child = HENKA_INVALID_ENTITY;
+    henka_entity cycle_parent = HENKA_INVALID_ENTITY;
+    henka_entity history_runtime_parent = HENKA_INVALID_ENTITY;
     henka_scene_document_id parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id duplicate_parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
@@ -22,6 +24,9 @@ int main(void)
     henka_scene_document_id parent_c_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id duplicate_child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_object child_object;
+    henka_scene_document_object before_history_object;
+    henka_scene_document_object after_history_object;
+    henka_scene_document_object restored_history_object;
     henka_transform child_world;
     henka_transform parent_transform = henka_transform_identity();
     henka_transform child_transform = henka_transform_identity();
@@ -132,16 +137,55 @@ int main(void)
             parent,
             child,
             HENKA_SCENE_PARENT_KEEP_WORLD) == HENKA_SUCCESS ||
-        henka_scene_get_entity_parent(scene, child, &parent_b) != HENKA_SUCCESS ||
-        parent_b != parent ||
-        henka_scene_get_entity_parent(scene, parent, &parent_b) != HENKA_SUCCESS ||
-        parent_b != HENKA_INVALID_ENTITY ||
+        henka_scene_get_entity_parent(scene, child, &cycle_parent) != HENKA_SUCCESS ||
+        cycle_parent != parent ||
+        henka_scene_get_entity_parent(scene, parent, &cycle_parent) != HENKA_SUCCESS ||
+        cycle_parent != HENKA_INVALID_ENTITY ||
         sandbox3d_game_authoring_unparent_entity(
             authoring,
             child,
             HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS)
     {
         fprintf(stderr, "game authoring hierarchy test accepted a cycle\n");
+        goto cleanup;
+    }
+
+    if (sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &before_history_object) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_reparent_entity(
+            authoring,
+            child,
+            parent_b,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &after_history_object) != HENKA_SUCCESS ||
+        after_history_object.parent_id != parent_b_id ||
+        !sandbox3d_game_authoring_can_undo(authoring) ||
+        sandbox3d_game_authoring_undo(authoring) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(
+            scene, child, &history_runtime_parent) != HENKA_SUCCESS ||
+        history_runtime_parent != HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &restored_history_object) != HENKA_SUCCESS ||
+        restored_history_object.parent_id != before_history_object.parent_id ||
+        fabsf(restored_history_object.transform.position.x -
+            before_history_object.transform.position.x) > 0.0001f ||
+        fabsf(restored_history_object.transform.position.y -
+            before_history_object.transform.position.y) > 0.0001f ||
+        fabsf(restored_history_object.transform.position.z -
+            before_history_object.transform.position.z) > 0.0001f ||
+        !sandbox3d_game_authoring_can_redo(authoring) ||
+        sandbox3d_game_authoring_redo(authoring) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(
+            scene, child, &history_runtime_parent) != HENKA_SUCCESS ||
+        history_runtime_parent != parent_b ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &restored_history_object) != HENKA_SUCCESS ||
+        restored_history_object.parent_id != after_history_object.parent_id ||
+        !sandbox3d_game_authoring_can_undo(authoring) ||
+        sandbox3d_game_authoring_undo(authoring) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "game authoring hierarchy history test failed\n");
         goto cleanup;
     }
 

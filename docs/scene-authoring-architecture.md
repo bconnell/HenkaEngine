@@ -252,8 +252,11 @@ World operations through the Game Authoring coordinator. The coordinator
 preflights the operation on a cloned production scene, then publishes the
 parent ID and resulting world transform through the existing Scene Document
 and runtime bridge. The controls are presentation state; the Scene Document
-remains the hierarchy authority. Hierarchy history, durable project manifests,
-and participation by every runtime subsystem remain open work.
+remains the hierarchy authority. The Game Authoring coordinator records a
+bounded hierarchy-edit history and replays undo/redo through the same
+transactional document/runtime bridge. Durable project manifests,
+cross-subsystem history, and participation by every runtime subsystem remain
+open work.
 
 ## Input ownership
 
