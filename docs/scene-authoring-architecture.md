@@ -9,6 +9,7 @@ This document defines the durable ownership, identity, persistence, Play-session
 - [Object identity](#object-identity)
 - [Scene Document ownership](#scene-document-ownership)
 - [Runtime materialization](#runtime-materialization)
+- [Project entry selection](#project-entry-selection)
 - [`.hscene` representation](#hscene-representation)
 - [Authored components and runtime state](#authored-components-and-runtime-state)
 - [Play-session lifecycle](#play-session-lifecycle)
@@ -98,6 +99,19 @@ flowchart LR
 Asset-manager resources remain manager-owned borrowed objects.
 
 A failed materialization keeps the active scene intact. Candidate state is validated before publication.
+
+## Project entry selection
+
+Game Authoring saves a bounded `henka.project` file beside the selected scene.
+The manifest stores a schema version and one confined `startup_scene` path. It
+selects the Scene Document to open; it does not duplicate Scene Document
+objects, runtime state, or subsystem-owned resources.
+
+When `henka.project` is absent, the coordinator uses its existing scene path
+for compatibility. A malformed manifest, unsafe startup path, or missing
+selected scene fails before candidate publication and leaves the active Scene
+Document and runtime scene unchanged. The manifest and `.hscene` files use the
+existing confined-path and atomic settings/document persistence boundaries.
 
 ## `.hscene` representation
 

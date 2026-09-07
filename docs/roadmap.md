@@ -501,7 +501,7 @@ The next persistence work extends these bounded foundations into broader scene/p
 
 ### Future Work
 
-A complete project-wide authoring serializer, hierarchy/project manifests, and remote or network-backed save policy remain future work beyond the current HAMS and V1 `.hscene` foundations.
+A complete project-wide authoring serializer, broader project manifests, and remote or network-backed save policy remain future work beyond the current HAMS, `henka.project` startup selection, and V1 `.hscene` foundations.
 
 ## Scripting and behavior authoring
 

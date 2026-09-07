@@ -134,11 +134,15 @@ henka_result sandbox3d_game_authoring_attach_script_template(
     henka_entity entity,
     henka_script_language language);
 
+/* Saves the bound Scene Document and a bounded henka.project entry containing
+ * the confined startup scene path. */
 henka_result sandbox3d_game_authoring_save(
     sandbox3d_game_authoring* authoring,
     const char* project_root);
-/* Loads only a candidate whose persistent object IDs exactly match the live
- * bindings. Missing or extra objects are rejected before publication. */
+/* Loads the manifest-selected startup scene when henka.project is present;
+ * an absent manifest falls back to the coordinator path. Malformed manifests,
+ * unsafe paths, missing scenes, or candidates whose persistent object IDs do
+ * not exactly match the live bindings are rejected before publication. */
 henka_result sandbox3d_game_authoring_load(
     sandbox3d_game_authoring* authoring,
     const char* project_root);

@@ -1091,5 +1091,6 @@ cleanup:
     henka_audio_system_destroy(audio_system);
     henka_scene_destroy(scene);
     (void)remove(audio_path);
+    (void)remove("build/test_tmp/henka.project");
     return exit_code;
 }

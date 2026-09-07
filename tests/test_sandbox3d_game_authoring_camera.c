@@ -52,7 +52,7 @@ static bool test_write_invalid_document(const char* path)
 
 int main(void)
 {
-    const char* relative_path = "build/test_tmp/game_authoring_camera.hscene";
+    const char* relative_path = "game_authoring_camera.hscene";
     henka_scene* scene = NULL;
     sandbox3d_game_authoring* authoring = NULL;
     henka_scene_document* replacement = NULL;
@@ -86,7 +86,7 @@ int main(void)
     authored_camera.pitch_radians = 0.35f;
     authored_camera.roll_radians = 0.1f;
     if (henka_scene_set_camera(scene, &authored_camera) != HENKA_SUCCESS ||
-        sandbox3d_game_authoring_save(authoring, ".") != HENKA_SUCCESS)
+        sandbox3d_game_authoring_save(authoring, "build/test_tmp") != HENKA_SUCCESS)
     {
         fprintf(stderr, "game authoring camera test failed during save\n");
         goto cleanup;
@@ -96,7 +96,7 @@ int main(void)
     runtime_camera.position = (henka_vec3){-6.0f, 2.0f, 1.0f};
     runtime_camera.yaw_radians = 0.2f;
     if (henka_scene_set_camera(scene, &runtime_camera) != HENKA_SUCCESS ||
-        sandbox3d_game_authoring_load(authoring, ".") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, "build/test_tmp") != HENKA_SUCCESS ||
         henka_scene_get_camera(scene, &loaded_camera) != HENKA_SUCCESS ||
         !test_camera_matches(&loaded_camera, &authored_camera))
     {
@@ -106,7 +106,7 @@ int main(void)
 
     if (henka_scene_document_create(&replacement) != HENKA_SUCCESS ||
         henka_scene_document_add_object(replacement, &object, &replacement_id) != HENKA_SUCCESS ||
-        henka_scene_document_save_file(replacement, ".", relative_path) != HENKA_SUCCESS)
+        henka_scene_document_save_file(replacement, "build/test_tmp", relative_path) != HENKA_SUCCESS)
     {
         fprintf(stderr, "game authoring camera test failed creating legacy document\n");
         goto cleanup;
@@ -115,7 +115,7 @@ int main(void)
     runtime_camera.yaw_radians = 1.1f;
     runtime_camera.pitch_radians = -0.2f;
     if (henka_scene_set_camera(scene, &runtime_camera) != HENKA_SUCCESS ||
-        sandbox3d_game_authoring_load(authoring, ".") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, "build/test_tmp") != HENKA_SUCCESS ||
         henka_scene_get_camera(scene, &loaded_camera) != HENKA_SUCCESS ||
         !test_camera_matches(&loaded_camera, &runtime_camera))
     {
@@ -125,13 +125,14 @@ int main(void)
     henka_scene_document_destroy(replacement);
     replacement = NULL;
 
-    if (!test_write_invalid_document(relative_path))
+    if (!test_write_invalid_document(
+            "build/test_tmp/game_authoring_camera.hscene"))
     {
         fprintf(stderr, "game authoring camera test failed creating invalid document\n");
         goto cleanup;
     }
     if (henka_scene_get_camera(scene, &runtime_camera) != HENKA_SUCCESS ||
-        sandbox3d_game_authoring_load(authoring, ".") == HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, "build/test_tmp") == HENKA_SUCCESS ||
         henka_scene_get_camera(scene, &loaded_camera) != HENKA_SUCCESS ||
         !test_camera_matches(&loaded_camera, &runtime_camera))
     {
@@ -141,7 +142,8 @@ int main(void)
     result = 0;
 
 cleanup:
-    remove(relative_path);
+    remove("build/test_tmp/game_authoring_camera.hscene");
+    remove("build/test_tmp/henka.project");
     henka_scene_document_destroy(replacement);
     sandbox3d_game_authoring_destroy(authoring);
     henka_scene_destroy(scene);

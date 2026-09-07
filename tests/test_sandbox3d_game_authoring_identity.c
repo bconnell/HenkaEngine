@@ -12,7 +12,7 @@
 int main(void)
 {
     const char* relative_path =
-        "build/test_tmp/game_authoring_identity_watermark.hscene";
+        "game_authoring_identity_watermark.hscene";
     const henka_scene_document_id watermark_id = UINT64_C(500);
     henka_scene* scene = NULL;
     henka_camera camera;
@@ -56,9 +56,9 @@ int main(void)
             replacement, &watermark_object, &replacement_id) != HENKA_SUCCESS ||
         replacement_id != watermark_id ||
         henka_scene_document_remove_object(replacement, replacement_id) != HENKA_SUCCESS ||
-        henka_scene_document_save_file(replacement, ".", relative_path) != HENKA_SUCCESS ||
+        henka_scene_document_save_file(replacement, "build/test_tmp", relative_path) != HENKA_SUCCESS ||
         henka_scene_document_create(&loaded) != HENKA_SUCCESS ||
-        henka_scene_document_load_file(loaded, ".", relative_path) != HENKA_SUCCESS)
+        henka_scene_document_load_file(loaded, "build/test_tmp", relative_path) != HENKA_SUCCESS)
     {
         fprintf(stderr, "game authoring identity test failed during file setup\n");
         goto cleanup;
@@ -67,7 +67,7 @@ int main(void)
     if (henka_scene_document_add_object(
             loaded, &loaded_object, &loaded_id) != HENKA_SUCCESS ||
         loaded_id != watermark_id + 1U ||
-        (load_result = sandbox3d_game_authoring_load(authoring, ".")) != HENKA_SUCCESS ||
+        (load_result = sandbox3d_game_authoring_load(authoring, "build/test_tmp")) != HENKA_SUCCESS ||
         (new_entity = henka_scene_create_entity_named(
              scene, "Identity Watermark New Object")) == HENKA_INVALID_ENTITY)
     {
@@ -136,7 +136,7 @@ int main(void)
         goto cleanup;
     }
 
-    if (sandbox3d_game_authoring_save(authoring, ".") != HENKA_SUCCESS ||
+    if (sandbox3d_game_authoring_save(authoring, "build/test_tmp") != HENKA_SUCCESS ||
         sandbox3d_game_authoring_get_object_for_entity(
             authoring,
             new_entity,
@@ -157,7 +157,7 @@ int main(void)
     changed_material.emissive_color = (henka_vec3){0.0f, 0.0f, 0.0f};
     changed_material.emissive_strength = 0.0f;
     if (henka_scene_set_entity_material(scene, new_entity, changed_material) != HENKA_SUCCESS ||
-        sandbox3d_game_authoring_load(authoring, ".") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, "build/test_tmp") != HENKA_SUCCESS ||
         henka_scene_get_entity_material(scene, new_entity, &restored_material) != HENKA_SUCCESS ||
         fabsf(restored_material.base_color.x - authored_material.base_color.x) > 0.0001f ||
         fabsf(restored_material.base_color.y - authored_material.base_color.y) > 0.0001f ||
@@ -184,8 +184,8 @@ int main(void)
     if (henka_scene_document_add_object(
             replacement, &watermark_object, &replacement_id) != HENKA_SUCCESS ||
         replacement_id != watermark_id + 2U ||
-        henka_scene_document_save_file(replacement, ".", relative_path) != HENKA_SUCCESS ||
-        sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_scene_document_save_file(replacement, "build/test_tmp", relative_path) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, "build/test_tmp") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_get_object_for_entity(
             authoring,
             new_entity,
@@ -201,8 +201,8 @@ int main(void)
     henka_scene_document_destroy(replacement);
     replacement = NULL;
     if (henka_scene_document_create(&replacement) != HENKA_SUCCESS ||
-        henka_scene_document_save_file(replacement, ".", relative_path) != HENKA_SUCCESS ||
-        sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_scene_document_save_file(replacement, "build/test_tmp", relative_path) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, "build/test_tmp") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_get_object_for_entity(
             authoring,
             new_entity,
@@ -218,7 +218,8 @@ int main(void)
     result = 0;
 
 cleanup:
-    (void)remove(relative_path);
+    (void)remove("build/test_tmp/game_authoring_identity_watermark.hscene");
+    (void)remove("build/test_tmp/henka.project");
     henka_scene_document_destroy(loaded);
     henka_scene_document_destroy(replacement);
     sandbox3d_game_authoring_destroy(authoring);

@@ -1,15 +1,19 @@
 #include "game_authoring.h"
 
 #include <stdio.h>
+#include <errno.h>
 #include <math.h>
 #include <string.h>
 
 #include <henka/memory.h>
+#include <henka/persistence.h>
 #include <henka/script_asset.h>
 
 #define SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS HENKA_SCENE_DOCUMENT_MAX_OBJECTS
 #define SANDBOX3D_GAME_AUTHORING_MAX_RELATIVE_PATH_BYTES HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES
 #define SANDBOX3D_GAME_AUTHORING_MAX_HISTORY_STEPS 32U
+#define SANDBOX3D_GAME_AUTHORING_PROJECT_MANIFEST_PATH "henka.project"
+#define SANDBOX3D_GAME_AUTHORING_PROJECT_MANIFEST_SCHEMA_VERSION 1
 
 typedef struct sandbox3d_game_authoring_binding
 {
@@ -209,6 +213,181 @@ static henka_result sandbox3d_game_authoring_set_project_root(
     return written < 0
         ? HENKA_ERROR_INVALID_ARGUMENT
         : (size_t)written >= sizeof(authoring->project_root)
+            ? HENKA_ERROR_LIMIT
+            : HENKA_SUCCESS;
+}
+
+static henka_result sandbox3d_game_authoring_get_project_manifest_path(
+    const char* project_root,
+    char** out_manifest_path)
+{
+    if (project_root == NULL || project_root[0] == '\0' ||
+        out_manifest_path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_path_resolve_confined(
+        project_root,
+        SANDBOX3D_GAME_AUTHORING_PROJECT_MANIFEST_PATH,
+        out_manifest_path);
+}
+
+static henka_result sandbox3d_game_authoring_save_project_manifest(
+    const sandbox3d_game_authoring* authoring,
+    const char* project_root)
+{
+    henka_settings* settings = NULL;
+    char* manifest_path = NULL;
+    char* scene_path = NULL;
+    henka_result result;
+
+    if (authoring == NULL || project_root == NULL ||
+        authoring->relative_path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_path_resolve_confined(
+        project_root,
+        authoring->relative_path,
+        &scene_path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    henka_free(scene_path);
+    result = sandbox3d_game_authoring_get_project_manifest_path(
+        project_root,
+        &manifest_path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_settings_create(&settings);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_set_int(
+            settings,
+            "schema_version",
+            SANDBOX3D_GAME_AUTHORING_PROJECT_MANIFEST_SCHEMA_VERSION);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_set_string(
+            settings,
+            "startup_scene",
+            authoring->relative_path);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_save_file(settings, manifest_path);
+    }
+    henka_settings_destroy(settings);
+    henka_free(manifest_path);
+    return result;
+}
+
+static henka_result sandbox3d_game_authoring_get_startup_scene_path(
+    const sandbox3d_game_authoring* authoring,
+    const char* project_root,
+    char* out_relative_path,
+    size_t out_relative_path_capacity)
+{
+    FILE* manifest_file = NULL;
+    henka_settings* settings = NULL;
+    const char* startup_scene;
+    char* manifest_path = NULL;
+    char* scene_path = NULL;
+    int written;
+    henka_result result;
+
+    if (authoring == NULL || project_root == NULL ||
+        out_relative_path == NULL || out_relative_path_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_game_authoring_get_project_manifest_path(
+        project_root,
+        &manifest_path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+#if defined(_MSC_VER)
+    {
+        const errno_t open_result = fopen_s(&manifest_file, manifest_path, "rb");
+        if (open_result != 0 && open_result != ENOENT)
+        {
+            henka_free(manifest_path);
+            return HENKA_ERROR_UNKNOWN;
+        }
+    }
+#else
+    errno = 0;
+    manifest_file = fopen(manifest_path, "rb");
+    if (manifest_file == NULL && errno != ENOENT)
+    {
+        henka_free(manifest_path);
+        return HENKA_ERROR_UNKNOWN;
+    }
+#endif
+    if (manifest_file == NULL)
+    {
+        henka_free(manifest_path);
+        written = snprintf(
+            out_relative_path,
+            out_relative_path_capacity,
+            "%s",
+            authoring->relative_path);
+        return written < 0
+            ? HENKA_ERROR_INVALID_ARGUMENT
+            : (size_t)written >= out_relative_path_capacity
+                ? HENKA_ERROR_LIMIT
+                : HENKA_SUCCESS;
+    }
+    if (fclose(manifest_file) != 0)
+    {
+        henka_free(manifest_path);
+        return HENKA_ERROR_UNKNOWN;
+    }
+    result = henka_settings_create(&settings);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_load_file(settings, manifest_path);
+    }
+    henka_free(manifest_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_settings_destroy(settings);
+        return result;
+    }
+    if (!henka_settings_has_key(settings, "schema_version") ||
+        henka_settings_get_int(settings, "schema_version", 0) !=
+            SANDBOX3D_GAME_AUTHORING_PROJECT_MANIFEST_SCHEMA_VERSION ||
+        !henka_settings_has_key(settings, "startup_scene"))
+    {
+        henka_settings_destroy(settings);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    startup_scene = henka_settings_get_string(settings, "startup_scene", "");
+    result = henka_path_resolve_confined(
+        project_root,
+        startup_scene,
+        &scene_path);
+    henka_free(scene_path);
+    if (result != HENKA_SUCCESS || startup_scene[0] == '\0')
+    {
+        henka_settings_destroy(settings);
+        return result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
+    }
+    written = snprintf(
+        out_relative_path,
+        out_relative_path_capacity,
+        "%s",
+        startup_scene);
+    henka_settings_destroy(settings);
+    return written < 0
+        ? HENKA_ERROR_INVALID_ARGUMENT
+        : (size_t)written >= out_relative_path_capacity
             ? HENKA_ERROR_LIMIT
             : HENKA_SUCCESS;
 }
@@ -1113,6 +1292,13 @@ henka_result sandbox3d_game_authoring_save(
         }
         return result;
     }
+    result = sandbox3d_game_authoring_save_project_manifest(
+        authoring,
+        project_root);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
     if (result == HENKA_SUCCESS)
     {
         result = sandbox3d_game_authoring_set_project_root(authoring, project_root);
@@ -1127,6 +1313,8 @@ henka_result sandbox3d_game_authoring_load(
     henka_scene_document* candidate = NULL;
     henka_scene* candidate_scene = NULL;
     sandbox3d_scene_document_bridge* candidate_bridge = NULL;
+    char selected_relative_path[
+        SANDBOX3D_GAME_AUTHORING_MAX_RELATIVE_PATH_BYTES];
     size_t index;
     henka_result result;
     if (authoring == NULL || project_root == NULL ||
@@ -1135,12 +1323,24 @@ henka_result sandbox3d_game_authoring_load(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    result = sandbox3d_game_authoring_get_startup_scene_path(
+        authoring,
+        project_root,
+        selected_relative_path,
+        sizeof(selected_relative_path));
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
     result = henka_scene_document_create(&candidate);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
-    result = henka_scene_document_load_file(candidate, project_root, authoring->relative_path);
+    result = henka_scene_document_load_file(
+        candidate,
+        project_root,
+        selected_relative_path);
     if (result != HENKA_SUCCESS)
     {
         henka_scene_document_destroy(candidate);
@@ -1229,6 +1429,11 @@ henka_result sandbox3d_game_authoring_load(
     henka_scene_destroy(candidate_scene);
     candidate_scene = NULL;
     (void)sandbox3d_game_authoring_set_project_root(authoring, project_root);
+    (void)snprintf(
+        authoring->relative_path,
+        sizeof(authoring->relative_path),
+        "%s",
+        selected_relative_path);
     return result;
 
 load_cleanup:
