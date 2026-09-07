@@ -71,7 +71,17 @@ function Invoke-ExactCandidate {
         }
     }
 
-    $childOutput = @(& powershell.exe @arguments 2>&1)
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Git may report successful worktree preparation on stderr. Preserve
+        # the child exit code as the authority instead of letting PowerShell
+        # turn that native diagnostic into a terminating test error.
+        $ErrorActionPreference = "Continue"
+        $childOutput = @(& powershell.exe @arguments 2>&1)
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     $childOutput | ForEach-Object { Write-Host ([string]$_) }
     return [int]$LASTEXITCODE
 }

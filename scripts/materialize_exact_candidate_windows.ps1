@@ -46,7 +46,10 @@ function Invoke-RepositoryGit {
         [string[]]$Arguments
     )
 
-    $output = @(& $git -C $repository @Arguments)
+    # Git writes the normal worktree preparation notice to stderr. Capture it
+    # as command output so PowerShell's Stop policy does not misclassify a
+    # successful exact-candidate materialization as a harness failure.
+    $output = @(& $git -C $repository @Arguments 2>&1)
     if ($LASTEXITCODE -ne 0) {
         $details = ($output | ForEach-Object { [string]$_ }) -join "`n"
         throw "Git command failed: git -C $repository $($Arguments -join ' ')`n$details"
@@ -245,8 +248,19 @@ foreach ($stagedPath in $stagedPaths) {
 
 $candidateCreated = $false
 try {
-    $worktreeOutput = @(& $git -C $repository worktree add --detach $candidate $candidateCommit)
-    if ($LASTEXITCODE -ne 0) {
+    # A successful worktree add writes a progress notice to stderr. Keep the
+    # native diagnostic observable without allowing PowerShell Stop semantics
+    # to convert it into a terminating error before the exit code is checked.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $worktreeOutput = @(& $git -C $repository worktree add --detach $candidate $candidateCommit 2>&1)
+        $worktreeExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($worktreeExitCode -ne 0) {
         $details = ($worktreeOutput | ForEach-Object { [string]$_ }) -join "`n"
         throw "Git could not create the exact candidate worktree: $details"
     }

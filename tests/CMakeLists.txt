@@ -831,7 +831,7 @@ add_test(
     COMMAND henka_sandbox3d_realism_detail_tests
 )
 
-if(WIN32)
+if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
     add_test(
         NAME henka_sandbox3d_mcp_stdio_smoke
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
