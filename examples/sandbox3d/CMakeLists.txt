@@ -23,6 +23,7 @@ add_executable(henka_sandbox3d
     workspace_tools.c
     workspace_persistence.c
     editor_layout.c
+    scene_hierarchy_projection.c
     scene_document_bridge.c
     play_session.c
     game_authoring.c

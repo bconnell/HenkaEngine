@@ -44,6 +44,7 @@
 #include "workspace_tools.h"
 #include "workspace_persistence.h"
 #include "view_compass.h"
+#include "scene_hierarchy_projection.h"
 
 static bool g_sandbox3d_mcp_stdio = false;
 
@@ -9981,6 +9982,18 @@ static henka_entity sandbox3d_get_selection_owner(const sandbox3d_state* state, 
 static bool sandbox3d_is_logical_scene_object(const sandbox3d_state* state, henka_entity entity)
 {
     return entity != HENKA_INVALID_ENTITY && sandbox3d_get_selection_owner(state, entity) == entity;
+}
+
+static bool sandbox3d_scene_hierarchy_includes_entity(
+    const henka_scene* scene,
+    henka_entity entity,
+    void* context)
+{
+    const sandbox3d_state* state = (const sandbox3d_state*)context;
+
+    return state != NULL && state->scene == scene &&
+        sandbox3d_is_selectable_entity(state, entity) &&
+        sandbox3d_is_logical_scene_object(state, entity);
 }
 
 static const char* sandbox3d_get_descriptor_role_label(const sandbox3d_object_descriptor* descriptor)
@@ -23400,7 +23413,9 @@ static void sandbox3d_draw_scene_objects_panel(
     int page_count;
     int page_index;
     char row_label[96];
+    char row_id[64];
     char subtitle_text[96];
+    char indentation[32];
     const char* entity_name;
     float footer_y;
     float row_y;
@@ -23417,8 +23432,14 @@ static void sandbox3d_draw_scene_objects_panel(
     size_t primitive_action_count;
     size_t asset_action_count;
     size_t selectable_count;
-    size_t scene_index;
+    size_t hierarchy_capacity;
+    size_t hierarchy_row_count;
+    size_t row_index;
     size_t visible_index;
+    size_t row_depth;
+    size_t indentation_length;
+    size_t name_limit;
+    sandbox3d_scene_hierarchy_row* hierarchy_rows;
     bool has_selection;
 
     if (engine == NULL || state == NULL || layout == NULL || state->scene == NULL || !sandbox3d_workspace_shows_scene_panel(state))
@@ -23429,6 +23450,31 @@ static void sandbox3d_draw_scene_objects_panel(
     panel_bounds = layout->scene_objects_panel;
     if (panel_bounds.width <= 0.0f || panel_bounds.height <= 0.0f)
     {
+        return;
+    }
+    hierarchy_capacity = henka_scene_get_entity_count(state->scene);
+    if (hierarchy_capacity == 0U)
+    {
+        hierarchy_capacity = 1U;
+    }
+    hierarchy_rows = (sandbox3d_scene_hierarchy_row*)calloc(
+        hierarchy_capacity,
+        sizeof(*hierarchy_rows));
+    hierarchy_row_count = 0U;
+    if (hierarchy_rows == NULL ||
+        sandbox3d_scene_hierarchy_projection_build(
+            state->scene,
+            sandbox3d_scene_hierarchy_includes_entity,
+            state,
+            hierarchy_rows,
+            hierarchy_capacity,
+            &hierarchy_row_count) != HENKA_SUCCESS)
+    {
+        free(hierarchy_rows);
+        sandbox3d_set_status(
+            state,
+            true,
+            "Scene hierarchy could not be projected; the canonical scene remains unchanged.");
         return;
     }
     henka_ui_panel_with_border_mask(
@@ -23771,17 +23817,7 @@ static void sandbox3d_draw_scene_objects_panel(
         row_start_y = asset_action_y + 34.0f;
     }
 
-    selectable_count = 0U;
-    for (scene_index = 0U; scene_index < henka_scene_get_entity_count(state->scene); ++scene_index)
-    {
-        entity = henka_scene_get_entity_at_index(state->scene, scene_index);
-        if (sandbox3d_is_selectable_entity(state, entity) &&
-            sandbox3d_is_logical_scene_object(
-                state, entity))
-        {
-            ++selectable_count;
-        }
-    }
+    selectable_count = hierarchy_row_count;
 
     items_per_page = (int)((panel_bounds.height -
         (row_start_y - panel_bounds.y) - 34.0f) / 34.0f);
@@ -23802,14 +23838,9 @@ static void sandbox3d_draw_scene_objects_panel(
 
     row_y = row_start_y;
     visible_index = 0U;
-    for (scene_index = 0U; scene_index < henka_scene_get_entity_count(state->scene); ++scene_index)
+    for (row_index = 0U; row_index < hierarchy_row_count; ++row_index)
     {
-        entity = henka_scene_get_entity_at_index(state->scene, scene_index);
-        if (!sandbox3d_is_selectable_entity(state, entity) ||
-            !sandbox3d_is_logical_scene_object(state, entity))
-        {
-            continue;
-        }
+        entity = hierarchy_rows[row_index].entity;
 
         if ((int)(visible_index / (size_t)items_per_page) != page_index)
         {
@@ -23824,24 +23855,35 @@ static void sandbox3d_draw_scene_objects_panel(
             continue;
         }
 
-        /* Keep the object identity first. The previous label prefixed hidden
-         * rows with a long status phrase, which made several unrelated rows
-         * look like the same "Visibility: Hidden" object. */
+        /* Keep object identity in the UI id, not in display text. The
+         * projection supplies canonical parent-first order and depth, so the
+         * panel remains a view of the scene rather than a second hierarchy. */
+        row_depth = hierarchy_rows[row_index].depth;
+        indentation_length = row_depth > 12U ? 24U : row_depth * 2U;
+        memset(indentation, ' ', indentation_length);
+        indentation[indentation_length] = '\0';
+        name_limit = indentation_length >= 24U ? 22U : 34U - indentation_length;
         sandbox3d_truncate_text(
             entity_name != NULL ? entity_name : "Object",
             subtitle_text,
             sizeof(subtitle_text),
-            34U);
+            name_limit);
         snprintf(
             row_label,
             sizeof(row_label),
-            "%s%s",
+            "%s%s%s",
+            indentation,
             subtitle_text,
             henka_scene_is_entity_visible(state->scene, entity) ? "" : "  - Hidden");
+        snprintf(
+            row_id,
+            sizeof(row_id),
+            "scene_object_%llu",
+            (unsigned long long)entity);
 
         if (henka_ui_selectable(
             state->ui,
-            entity_name != NULL ? entity_name : row_label,
+            row_id,
             (henka_ui_rect){panel_bounds.x + 14.0f, row_y, panel_bounds.width - 28.0f, 28.0f},
             row_label,
             sandbox3d_get_real_selected_entity(state) == entity))
@@ -23918,6 +23960,7 @@ static void sandbox3d_draw_scene_objects_panel(
             sandbox3d_advance_panel_paging(state, SANDBOX3D_PANEL_SCROLL_SCENE_OBJECTS, 1);
         }
     }
+    free(hierarchy_rows);
 }
 
 static bool sandbox3d_details_row_fully_visible(
