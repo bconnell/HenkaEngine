@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 
 #include <henka/core.h>
 #include <henka/scene.h>
@@ -27,6 +28,7 @@ int main(void)
     henka_scene_document_object before_history_object;
     henka_scene_document_object after_history_object;
     henka_scene_document_object restored_history_object;
+    henka_scene_document_object authored_history_object;
     henka_transform child_world;
     henka_transform parent_transform = henka_transform_identity();
     henka_transform child_transform = henka_transform_identity();
@@ -189,6 +191,61 @@ int main(void)
         goto cleanup;
     }
 
+    if (sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &authored_history_object) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "game authoring generic history test failed during capture\n");
+        goto cleanup;
+    }
+    if (snprintf(
+            authored_history_object.name,
+            sizeof(authored_history_object.name),
+            "Authored history rename") < 0 ||
+        sandbox3d_game_authoring_update_object_for_entity(
+            authoring,
+            child,
+            &authored_history_object) != HENKA_SUCCESS ||
+        !sandbox3d_game_authoring_can_undo(authoring) ||
+        sandbox3d_game_authoring_can_redo(authoring) ||
+        sandbox3d_game_authoring_undo(authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &restored_history_object) != HENKA_SUCCESS ||
+        strcmp(restored_history_object.name, before_history_object.name) != 0 ||
+        !sandbox3d_game_authoring_can_redo(authoring) ||
+        sandbox3d_game_authoring_redo(authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &restored_history_object) != HENKA_SUCCESS ||
+        strcmp(restored_history_object.name, "Authored history rename") != 0 ||
+        sandbox3d_game_authoring_undo(authoring) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "game authoring generic object history test failed\n");
+        goto cleanup;
+    }
+
+    if (sandbox3d_game_authoring_reparent_entity(
+            authoring,
+            child,
+            parent_b,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_unparent_entity(
+            authoring,
+            child,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        !sandbox3d_game_authoring_can_undo(authoring) ||
+        sandbox3d_game_authoring_undo(authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &restored_history_object) != HENKA_SUCCESS ||
+        restored_history_object.parent_id != parent_b_id ||
+        !sandbox3d_game_authoring_can_redo(authoring) ||
+        sandbox3d_game_authoring_redo(authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &restored_history_object) != HENKA_SUCCESS ||
+        restored_history_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        fprintf(stderr, "game authoring unparent history test failed\n");
+        goto cleanup;
+    }
+
     henka_scene_destroy_entity(scene, parent_c);
     if (sandbox3d_game_authoring_reparent_entity(
             authoring,
@@ -215,6 +272,15 @@ int main(void)
         child_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
     {
         fprintf(stderr, "game authoring hierarchy test accepted invalid self-parenting\n");
+        goto cleanup;
+    }
+
+    if (sandbox3d_game_authoring_unregister_entity(authoring, child) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_can_undo(authoring) ||
+        sandbox3d_game_authoring_can_redo(authoring) ||
+        sandbox3d_game_authoring_undo(authoring) == HENKA_SUCCESS)
+    {
+        fprintf(stderr, "game authoring history invalidation test failed\n");
         goto cleanup;
     }
 

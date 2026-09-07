@@ -64,8 +64,9 @@ henka_result sandbox3d_game_authoring_unparent_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity child,
     henka_scene_parenting_mode mode);
-/* Hierarchy edits use the shared Game Authoring history boundary. Undo and
- * redo restore both the authored Scene Document object and its live entity. */
+/* Supported Game Authoring Scene Document object transactions use one bounded
+ * history owner. Undo and redo restore the authored object and its live
+ * entity; binding changes explicitly invalidate entries that may be stale. */
 bool sandbox3d_game_authoring_can_undo(
     const sandbox3d_game_authoring* authoring);
 bool sandbox3d_game_authoring_can_redo(

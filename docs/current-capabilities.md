@@ -213,7 +213,6 @@ The Play-session seam can transactionally reload a persisted behavior backend wh
 
 This is not a complete game editor. Remaining gaps include:
 
-- hierarchy authoring;
 - broader imported-object registration;
 - complete source/material/project serialization;
 - production gameplay workflows;
@@ -238,12 +237,14 @@ new controller component to disabled.
 The Sandbox Scene Document bridge applies persisted hierarchy and synchronizes
 runtime reparenting back to bound document IDs; unbound runtime parents are
 rejected without changing authored hierarchy state. The Game Authoring
-coordinator provides a bounded undo/redo history for hierarchy reparent and
-unparent operations, restoring both the authored object and its live runtime
-relationship through the transactional bridge.
-Hierarchy editing in the Sandbox, broader imported object registration,
-complete source/material/project serialization, cross-subsystem/project
-history, and production gameplay workflows remain open. The public
+coordinator owns bounded authored-object transaction history for hierarchy
+reparent/unparent operations and other supported Scene Document object updates,
+restoring both the authored object and its live runtime state through the
+transactional bridge. Native mesh, material, terrain, and workspace histories
+remain separate subsystem owners.
+Broader imported object registration, complete source/material/project
+serialization, cross-subsystem/project history, and production gameplay
+workflows remain open. The public
 Action API can author a parent or unparent operation through this runtime
 foundation with explicit keep-local or keep-world behavior; rejected helper,
 stale, locked, invalid, or cycle-producing relationships leave the hierarchy
