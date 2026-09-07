@@ -1,6 +1,6 @@
 # MCP QA Harness
 
-> **Status:** Foundation plus face-authoring validation
+> **Status:** Foundation plus face-authoring history validation
 
 Henka Sandbox3D provides a bounded local MCP adapter for executable inspection
 and semantic editor checks. The adapter exposes the existing Henka Action API
@@ -17,7 +17,8 @@ authority.
 | Clean candidate exit | Available | Henka engine lifecycle |
 | Face component editing (mode, selection, extrusion) | Available | Live authoring bridge and canonical mesh operation |
 | Framebuffer capture | Planned | Renderer and visual-proof path |
-| Undo, redo, save, and reload workflow | Planned | Authoring and persistence systems |
+| Undo and redo through canonical authoring history | Available | Live authoring bridge and canonical history |
+| Save and reload workflow | Planned | Authoring and persistence systems |
 
 The initial adapter is intentionally small. A tool is added only when the
 same operation is available through a supported Henka product path.
@@ -89,6 +90,13 @@ authoring operation used by the editor. The response reports the geometry
 revision and topology counts before and after the operation. It does not
 implement a second mesh mutation path.
 
+### `henka.authoring_undo` and `henka.authoring_redo`
+
+Move the selected live editable object through its existing canonical
+authoring history. Each response reports the operation, geometry revision,
+topology counts before and after, and current selection state. The adapter
+does not retain a second history or reconstruct mesh state itself.
+
 ### `henka.exit`
 
 Requests clean shutdown of the local Sandbox3D candidate. It does not terminate
@@ -119,6 +127,8 @@ live Sandbox3D scene
   -> discover and select the first authoritative face
   -> extrude it through the canonical authoring operation
   -> verify revision and topology advancement in a fresh observation
+  -> undo through canonical authoring history and verify restored topology
+  -> redo through canonical authoring history and verify restored topology
   -> reject an invalid face identity
   -> reject an invalid persistent ID
   -> request clean exit
@@ -128,9 +138,9 @@ The smoke validates that protocol output remains on stdout while product
 diagnostics remain on stderr. It uses a bounded progress-aware response
 deadline rather than waiting for a fixed startup log line.
 
-Undo, redo, framebuffer capture, save, and reload are not part of this slice.
-They remain separate validation work until the corresponding canonical product
-paths are exposed through the harness.
+Framebuffer capture, save, and reload are not part of this slice. They remain
+separate validation work until the corresponding canonical product paths are
+exposed through the harness.
 
 ## Security and ownership boundaries
 

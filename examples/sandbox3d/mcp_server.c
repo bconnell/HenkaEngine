@@ -410,7 +410,8 @@ henka_result sandbox3d_mcp_server_create(
     *out_server = NULL;
     if (host == NULL || host->observe == NULL || host->select_object == NULL ||
         host->set_authoring_selection_mode == NULL || host->select_face == NULL ||
-        host->extrude_selected_faces == NULL || host->request_exit == NULL)
+        host->extrude_selected_faces == NULL || host->undo_authoring == NULL ||
+        host->redo_authoring == NULL || host->request_exit == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -453,7 +454,8 @@ static void sandbox3d_mcp_write_discovery(
         "\"transport\":\"stdio\",\"stateless\":true,"
         "\"tools\":[\"henka.observe\",\"henka.select_object\","
         "\"henka.authoring_set_selection_mode\",\"henka.authoring_select_face\","
-        "\"henka.authoring_extrude_faces\",\"henka.exit\"]}";
+        "\"henka.authoring_extrude_faces\",\"henka.authoring_undo\","
+        "\"henka.authoring_redo\",\"henka.exit\"]}";
     sandbox3d_mcp_write_semantic_result(
         server,
         request_id,
@@ -477,6 +479,8 @@ static void sandbox3d_mcp_write_tools(
         "{\"name\":\"henka.authoring_set_selection_mode\",\"description\":\"Set the canonical authoring component-selection mode for one selected editable object.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"document_id\":{\"type\":\"integer\",\"minimum\":1},\"mode\":{\"type\":\"string\",\"enum\":[\"vertex\",\"edge\",\"face\"]}},\"required\":[\"document_id\",\"mode\"],\"additionalProperties\":false}},"
         "{\"name\":\"henka.authoring_select_face\",\"description\":\"Select one real source-authoritative face by persistent object identity and face identity.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"document_id\":{\"type\":\"integer\",\"minimum\":1},\"face_id\":{\"type\":\"integer\",\"minimum\":1}},\"required\":[\"document_id\",\"face_id\"],\"additionalProperties\":false}},"
         "{\"name\":\"henka.authoring_extrude_faces\",\"description\":\"Extrude the currently selected real faces through the canonical transactional authoring operation.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"document_id\":{\"type\":\"integer\",\"minimum\":1},\"distance\":{\"type\":\"number\",\"minimum\":-1000000,\"maximum\":1000000}},\"required\":[\"document_id\",\"distance\"],\"additionalProperties\":false}},"
+        "{\"name\":\"henka.authoring_undo\",\"description\":\"Move the selected real editable object through its canonical authoring history undo path.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"document_id\":{\"type\":\"integer\",\"minimum\":1}},\"required\":[\"document_id\"],\"additionalProperties\":false}},"
+        "{\"name\":\"henka.authoring_redo\",\"description\":\"Move the selected real editable object through its canonical authoring history redo path.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"document_id\":{\"type\":\"integer\",\"minimum\":1}},\"required\":[\"document_id\"],\"additionalProperties\":false}},"
         "{\"name\":\"henka.exit\",\"description\":\"Request clean shutdown of this local validation candidate.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}"
         "]}";
     sandbox3d_mcp_write_semantic_result(
@@ -656,6 +660,47 @@ henka_result sandbox3d_mcp_server_process_line(
             request_id,
             result != HENKA_SUCCESS,
             result == HENKA_SUCCESS ? "Henka authoring face extrusion" : henka_result_to_string(result),
+            state_json[0] == '\0' ? "null" : state_json,
+            out_response,
+            out_response_capacity);
+        return result;
+    }
+    if (strcmp(tool_name, "henka.authoring_undo") == 0 ||
+        strcmp(tool_name, "henka.authoring_redo") == 0)
+    {
+        const char* document_field = sandbox3d_mcp_find_field(line, "document_id");
+        if (!sandbox3d_mcp_parse_uint64_at(document_field, &document_id) || document_id == 0U)
+        {
+            sandbox3d_mcp_write_error(
+                request_id,
+                -32602,
+                strcmp(tool_name, "henka.authoring_undo") == 0
+                    ? "henka.authoring_undo requires a positive document_id."
+                    : "henka.authoring_redo requires a positive document_id.",
+                out_response,
+                out_response_capacity);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = strcmp(tool_name, "henka.authoring_undo") == 0
+            ? server->host.undo_authoring(
+                server->host.user_data,
+                document_id,
+                state_json,
+                sizeof(state_json))
+            : server->host.redo_authoring(
+                server->host.user_data,
+                document_id,
+                state_json,
+                sizeof(state_json));
+        sandbox3d_mcp_write_semantic_result(
+            server,
+            request_id,
+            result != HENKA_SUCCESS,
+            result == HENKA_SUCCESS
+                ? (strcmp(tool_name, "henka.authoring_undo") == 0
+                    ? "Henka authoring undo"
+                    : "Henka authoring redo")
+                : henka_result_to_string(result),
             state_json[0] == '\0' ? "null" : state_json,
             out_response,
             out_response_capacity);

@@ -12,6 +12,8 @@ typedef struct test_host_state
     size_t mode_changes;
     size_t face_selections;
     size_t extrusions;
+    size_t undoes;
+    size_t redoes;
     size_t exits;
     uint64_t selected_id;
     uint64_t selected_face_id;
@@ -114,6 +116,48 @@ static henka_result test_exit(void* user_data, char* out_json, size_t capacity)
     return HENKA_SUCCESS;
 }
 
+static henka_result test_undo(
+    void* user_data,
+    uint64_t document_id,
+    char* out_json,
+    size_t capacity)
+{
+    test_host_state* state = (test_host_state*)user_data;
+    ++state->undoes;
+    if (document_id != 7U)
+    {
+        (void)snprintf(out_json, capacity, "{\"success\":false,\"error\":\"invalid_history_target\"}");
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    (void)snprintf(
+        out_json,
+        capacity,
+        "{\"success\":true,\"document_id\":%llu,\"operation\":\"undo\"}",
+        (unsigned long long)document_id);
+    return HENKA_SUCCESS;
+}
+
+static henka_result test_redo(
+    void* user_data,
+    uint64_t document_id,
+    char* out_json,
+    size_t capacity)
+{
+    test_host_state* state = (test_host_state*)user_data;
+    ++state->redoes;
+    if (document_id != 7U)
+    {
+        (void)snprintf(out_json, capacity, "{\"success\":false,\"error\":\"invalid_history_target\"}");
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    (void)snprintf(
+        out_json,
+        capacity,
+        "{\"success\":true,\"document_id\":%llu,\"operation\":\"redo\"}",
+        (unsigned long long)document_id);
+    return HENKA_SUCCESS;
+}
+
 static int expect_contains(const char* value, const char* needle, const char* label)
 {
     if (value == NULL || needle == NULL || strstr(value, needle) == NULL)
@@ -205,6 +249,8 @@ int main(void)
     host.set_authoring_selection_mode = test_set_selection_mode;
     host.select_face = test_select_face;
     host.extrude_selected_faces = test_extrude_selected_faces;
+    host.undo_authoring = test_undo;
+    host.redo_authoring = test_redo;
     host.request_exit = test_exit;
     memset(oversized, 'x', sizeof(oversized));
     oversized[sizeof(oversized) - 1U] = '\0';
@@ -229,6 +275,8 @@ int main(void)
         !expect_contains(response, "henka.select_object", "select tool discovery") ||
         !expect_contains(response, "henka.authoring_select_face", "face selection tool discovery") ||
         !expect_contains(response, "henka.authoring_extrude_faces", "face extrusion tool discovery") ||
+        !expect_contains(response, "henka.authoring_undo", "authoring undo tool discovery") ||
+        !expect_contains(response, "henka.authoring_redo", "authoring redo tool discovery") ||
         !expect_contains(response, "additionalProperties\":false", "bounded tool schema")) goto cleanup;
     if (sandbox3d_mcp_server_process_line(
             server,
@@ -275,20 +323,36 @@ int main(void)
         !expect_contains(response, "distance\":0.250", "face extrusion result")) goto cleanup;
     if (sandbox3d_mcp_server_process_line(
             server,
-            "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"henka.select_object\",\"arguments\":{\"document_id\":8}}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"henka.authoring_undo\",\"arguments\":{\"document_id\":7}}}",
+        response,
+        sizeof(response)) != HENKA_SUCCESS ||
+        state.undoes != 1U ||
+        !expect_balanced_json(response, "valid authoring undo JSON") ||
+        !expect_contains(response, "operation\":\"undo\"", "authoring undo result")) goto cleanup;
+    if (sandbox3d_mcp_server_process_line(
+            server,
+            "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"henka.authoring_redo\",\"arguments\":{\"document_id\":7}}}",
+        response,
+        sizeof(response)) != HENKA_SUCCESS ||
+        state.redoes != 1U ||
+        !expect_balanced_json(response, "valid authoring redo JSON") ||
+        !expect_contains(response, "operation\":\"redo\"", "authoring redo result")) goto cleanup;
+    if (sandbox3d_mcp_server_process_line(
+            server,
+            "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\",\"params\":{\"name\":\"henka.select_object\",\"arguments\":{\"document_id\":8}}}",
         response,
         sizeof(response)) != HENKA_ERROR_INVALID_ARGUMENT ||
         !expect_balanced_json(response, "valid semantic error JSON") ||
         !expect_contains(response, "isError\":true", "structured semantic failure")) goto cleanup;
     if (sandbox3d_mcp_server_process_line(
             server,
-            "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"henka.unknown\",\"arguments\":{}}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"henka.unknown\",\"arguments\":{}}}",
             response,
             sizeof(response)) != HENKA_ERROR_UNKNOWN ||
         !expect_contains(response, "not advertised", "unknown tool rejection")) goto cleanup;
     if (sandbox3d_mcp_server_process_line(
             server,
-            "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\",\"params\":{\"name\":\"henka.select_object\",\"arguments\":{}}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tools/call\",\"params\":{\"name\":\"henka.select_object\",\"arguments\":{}}}",
             response,
             sizeof(response)) != HENKA_ERROR_INVALID_ARGUMENT ||
         !expect_contains(response, "-32602", "invalid argument rejection")) goto cleanup;
@@ -296,7 +360,7 @@ int main(void)
         !expect_contains(response, "exceeds", "bounded oversized request rejection")) goto cleanup;
     if (sandbox3d_mcp_server_process_line(
             server,
-            "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"henka.exit\",\"arguments\":{}}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tools/call\",\"params\":{\"name\":\"henka.exit\",\"arguments\":{}}}",
             response,
             sizeof(response)) != HENKA_SUCCESS ||
         state.exits != 1U ||

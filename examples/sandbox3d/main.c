@@ -3669,6 +3669,16 @@ static henka_result sandbox3d_mcp_extrude_selected_faces(
     float distance,
     char* out_json,
     size_t out_json_capacity);
+static henka_result sandbox3d_mcp_undo_authoring(
+    void* user_data,
+    uint64_t document_id,
+    char* out_json,
+    size_t out_json_capacity);
+static henka_result sandbox3d_mcp_redo_authoring(
+    void* user_data,
+    uint64_t document_id,
+    char* out_json,
+    size_t out_json_capacity);
 static henka_result sandbox3d_mcp_request_exit(
     void* user_data,
     char* out_json,
@@ -13986,6 +13996,105 @@ static henka_result sandbox3d_mcp_extrude_selected_faces(
         after_counts.faces,
         sandbox3d_authoring_object_get_active_component_id(object));
     return result;
+}
+
+static henka_result sandbox3d_mcp_move_authoring_history(
+    sandbox3d_state* state,
+    uint64_t document_id,
+    bool undo,
+    char* out_json,
+    size_t out_json_capacity)
+{
+    sandbox3d_authoring_object* object = NULL;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    const henka_authoring_mesh* mesh;
+    henka_authoring_mesh_counts before_counts;
+    henka_authoring_mesh_counts after_counts;
+    uint64_t revision_before;
+    uint64_t revision_after;
+    henka_result result;
+
+    if (out_json == NULL || out_json_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_json[0] = '\0';
+    if (sandbox3d_mcp_resolve_selected_authoring_object(
+            state, document_id, &entity, &object) != HENKA_SUCCESS)
+    {
+        (void)snprintf(
+            out_json,
+            out_json_capacity,
+            "{\"success\":false,\"document_id\":%llu,\"error\":\"selected_editable_object_not_found\"}",
+            (unsigned long long)document_id);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    mesh = sandbox3d_authoring_object_get_mesh(object);
+    if (mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    before_counts = henka_authoring_mesh_get_counts(mesh);
+    revision_before = sandbox3d_authoring_object_get_geometry_revision(object);
+    result = undo
+        ? sandbox3d_authoring_object_undo(object)
+        : sandbox3d_authoring_object_redo(object);
+    after_counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    revision_after = sandbox3d_authoring_object_get_geometry_revision(object);
+    if (result == HENKA_SUCCESS)
+    {
+        sandbox3d_mark_generic_modeling_applied(state, entity);
+    }
+    (void)snprintf(
+        out_json,
+        out_json_capacity,
+        "{\"success\":%s,\"document_id\":%llu,\"runtime_entity\":%llu,\"operation\":\"%s\",\"geometry_revision_before\":%llu,\"geometry_revision_after\":%llu,\"topology_before\":{\"vertices\":%zu,\"edges\":%zu,\"faces\":%zu},\"topology_after\":{\"vertices\":%zu,\"edges\":%zu,\"faces\":%zu},\"selection_mode\":\"%s\",\"selected_components\":%zu,\"active_component_id\":%u}",
+        result == HENKA_SUCCESS ? "true" : "false",
+        (unsigned long long)document_id,
+        (unsigned long long)entity,
+        undo ? "undo" : "redo",
+        (unsigned long long)revision_before,
+        (unsigned long long)revision_after,
+        before_counts.vertices,
+        before_counts.edges,
+        before_counts.faces,
+        after_counts.vertices,
+        after_counts.edges,
+        after_counts.faces,
+        sandbox3d_mcp_selection_mode_name(
+            sandbox3d_authoring_object_get_selection_mode(object)),
+        sandbox3d_authoring_object_get_selected_component_count(object),
+        sandbox3d_authoring_object_get_active_component_id(object));
+    return result;
+}
+
+static henka_result sandbox3d_mcp_undo_authoring(
+    void* user_data,
+    uint64_t document_id,
+    char* out_json,
+    size_t out_json_capacity)
+{
+    return sandbox3d_mcp_move_authoring_history(
+        (sandbox3d_state*)user_data,
+        document_id,
+        true,
+        out_json,
+        out_json_capacity);
+}
+
+static henka_result sandbox3d_mcp_redo_authoring(
+    void* user_data,
+    uint64_t document_id,
+    char* out_json,
+    size_t out_json_capacity)
+{
+    return sandbox3d_mcp_move_authoring_history(
+        (sandbox3d_state*)user_data,
+        document_id,
+        false,
+        out_json,
+        out_json_capacity);
 }
 
 static henka_result sandbox3d_mcp_request_exit(
@@ -33771,6 +33880,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             sandbox3d_mcp_set_authoring_selection_mode,
             sandbox3d_mcp_select_face,
             sandbox3d_mcp_extrude_selected_faces,
+            sandbox3d_mcp_undo_authoring,
+            sandbox3d_mcp_redo_authoring,
             sandbox3d_mcp_request_exit};
         result = sandbox3d_mcp_server_create(
             &mcp_host,
@@ -33781,7 +33892,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             goto fail;
         }
         printf(
-            "MCP stdio ready: stateless local semantic adapter enabled; tools=observe,select_object,authoring_set_selection_mode,authoring_select_face,authoring_extrude_faces,exit candidate=%s.\n",
+            "MCP stdio ready: stateless local semantic adapter enabled; tools=observe,select_object,authoring_set_selection_mode,authoring_select_face,authoring_extrude_faces,authoring_undo,authoring_redo,exit candidate=%s.\n",
             candidate_id_value == NULL ? "unprovided" : candidate_id_value);
         fflush(stdout);
     }

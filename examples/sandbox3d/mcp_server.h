@@ -45,6 +45,16 @@ typedef struct sandbox3d_mcp_host
         float distance,
         char* out_json,
         size_t out_json_capacity);
+    henka_result (*undo_authoring)(
+        void* user_data,
+        uint64_t document_id,
+        char* out_json,
+        size_t out_json_capacity);
+    henka_result (*redo_authoring)(
+        void* user_data,
+        uint64_t document_id,
+        char* out_json,
+        size_t out_json_capacity);
     henka_result (*request_exit)(
         void* user_data,
         char* out_json,

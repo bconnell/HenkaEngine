@@ -127,6 +127,8 @@ try
         "henka.authoring_set_selection_mode",
         "henka.authoring_select_face",
         "henka.authoring_extrude_faces",
+        "henka.authoring_undo",
+        "henka.authoring_redo",
         "henka.exit"))
     {
         if ($tool_names -notcontains $required_tool)
@@ -208,8 +210,9 @@ try
     $extrude = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":9,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.authoring_extrude_faces`",`"arguments`":{`"document_id`":$document_id,`"distance`":0.18},$meta}}"
     Assert-McpSuccess $extrude 9 "henka.authoring_extrude_faces"
     $extrude_state = $extrude.Value.result.structuredContent.state
+    $faces_after = [int]$extrude_state.topology_after.faces
     if ([UInt64]$extrude_state.geometry_revision_after -le $revision_before -or
-        [int]$extrude_state.topology_after.faces -le $faces_before)
+        $faces_after -le $faces_before)
     {
         throw "Canonical face extrusion did not advance geometry revision and topology."
     }
@@ -227,20 +230,64 @@ try
         throw "Post-extrusion observation did not preserve the authoritative modeling result."
     }
 
-    $invalid_face = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":11,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.authoring_select_face`",`"arguments`":{`"document_id`":$document_id,`"face_id`":999999},$meta}}"
+    $undo = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":11,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.authoring_undo`",`"arguments`":{`"document_id`":$document_id},$meta}}"
+    Assert-McpSuccess $undo 11 "henka.authoring_undo"
+    $undo_state = $undo.Value.result.structuredContent.state
+    if ([UInt64]$undo_state.geometry_revision_after -le [UInt64]$extrude_state.geometry_revision_after -or
+        [int]$undo_state.topology_after.faces -ne $faces_before -or
+        $undo_state.operation -ne "undo")
+    {
+        throw "Canonical authoring undo did not restore the prior topology state."
+    }
+
+    $after_undo = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":12,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.observe`",`"arguments`":{},$meta}}"
+    Assert-McpSuccess $after_undo 12 "henka.observe after authoring undo"
+    $after_undo_object = @($after_undo.Value.result.structuredContent.state.objects) |
+        Where-Object { [UInt64]$_.document_id -eq $document_id } |
+        Select-Object -First 1
+    if ($null -eq $after_undo_object -or
+        [UInt64]$after_undo_object.authoring.geometry_revision -ne [UInt64]$undo_state.geometry_revision_after -or
+        [int]$after_undo_object.authoring.topology.faces -ne $faces_before)
+    {
+        throw "Post-undo observation did not preserve the canonical prior topology state."
+    }
+
+    $redo = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":13,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.authoring_redo`",`"arguments`":{`"document_id`":$document_id},$meta}}"
+    Assert-McpSuccess $redo 13 "henka.authoring_redo"
+    $redo_state = $redo.Value.result.structuredContent.state
+    if ([UInt64]$redo_state.geometry_revision_after -le [UInt64]$undo_state.geometry_revision_after -or
+        [int]$redo_state.topology_after.faces -ne $faces_after -or
+        $redo_state.operation -ne "redo")
+    {
+        throw "Canonical authoring redo did not restore the extruded topology state."
+    }
+
+    $after_redo = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":14,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.observe`",`"arguments`":{},$meta}}"
+    Assert-McpSuccess $after_redo 14 "henka.observe after authoring redo"
+    $after_redo_object = @($after_redo.Value.result.structuredContent.state.objects) |
+        Where-Object { [UInt64]$_.document_id -eq $document_id } |
+        Select-Object -First 1
+    if ($null -eq $after_redo_object -or
+        [UInt64]$after_redo_object.authoring.geometry_revision -ne [UInt64]$redo_state.geometry_revision_after -or
+        [int]$after_redo_object.authoring.topology.faces -ne $faces_after)
+    {
+        throw "Post-redo observation did not preserve the canonical extruded topology state."
+    }
+
+    $invalid_face = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":15,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.authoring_select_face`",`"arguments`":{`"document_id`":$document_id,`"face_id`":999999},$meta}}"
     if (-not $invalid_face.Value.result.isError)
     {
         throw "Invalid face identity was accepted by the live MCP authoring path."
     }
 
-    $invalid_select = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":12,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.select_object`",`"arguments`":{`"document_id`":999999},$meta}}"
+    $invalid_select = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":16,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.select_object`",`"arguments`":{`"document_id`":999999},$meta}}"
     if (-not $invalid_select.Value.result.isError)
     {
         throw "Invalid persistent identity was accepted by the live MCP path."
     }
 
-    $exit = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":13,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.exit`",`"arguments`":{},$meta}}"
-    Assert-McpSuccess $exit 13 "henka.exit"
+    $exit = Send-McpRequest "{`"jsonrpc`":`"2.0`",`"id`":17,`"method`":`"tools/call`",`"params`":{`"name`":`"henka.exit`",`"arguments`":{},$meta}}"
+    Assert-McpSuccess $exit 17 "henka.exit"
     if (-not $process.WaitForExit((Get-RemainingMilliseconds)))
     {
         throw "Sandbox did not exit after henka.exit before the hard deadline."
