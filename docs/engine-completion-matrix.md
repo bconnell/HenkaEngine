@@ -5,12 +5,12 @@ implementation, public APIs, editor paths, persistence, runtime use,
 packaging, and executable validation. It is an evidence summary, not a claim
 that every future engine feature is complete.
 
-Evidence snapshot: published `main` at `748432d5604e58d7a1e901982078f944f063622e`.
-Local exact-candidate validation passed for the Git-object candidate mechanism,
+Evidence snapshot: published `main` at `f520412fb9c87e79b5425b503c8d9671f95be288`.
+The Git-object candidate mechanism, canonical Windows dependency configuration,
 repository integrity, public-content hygiene, documentation truth, and the
-product-native modeling evidence boundary. Hosted Windows CI for this snapshot
-is still pending after the examples-off sanitizer configuration repair; it is
-not counted as closed until that run completes.
+product-native modeling evidence boundary are published. Hosted Windows CI for
+the snapshot is the authoritative validation boundary; the snapshot is not
+counted as closed until that run completes.
 
 ## Status rules
 
@@ -33,9 +33,6 @@ inside the declared scope does lower it.
 These are the material open items that currently prevent the 3D completion gate
 from closing:
 
-- **Validation boundary:** hosted Windows CI for `748432d` must complete after
-  the sanitizer configuration repair. Local green results do not substitute
-  for that hosted boundary.
 - **Modeling and authoring:** the product-native generic workflow is validated
   for the current bounded topology slice, but broader authoring coverage,
   production-quality arbitrary asset authoring, and the remaining packaged
