@@ -18,13 +18,20 @@ $cmake = Get-HenkaCMakePath
 $executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $resolvedDependencyRoot = $DependencyRoot
-if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoot)) {
-    $resolvedDependencyRoot = Join-Path $buildRoot "_deps"
-} else {
+$dependencyRootWasExplicit = -not [string]::IsNullOrWhiteSpace($resolvedDependencyRoot)
+if ($dependencyRootWasExplicit) {
     $resolvedDependencyRoot = [System.IO.Path]::GetFullPath($resolvedDependencyRoot)
-}
-if (-not (Test-Path -LiteralPath $resolvedDependencyRoot -PathType Container)) {
-    throw "Henka dependency root was not found: $resolvedDependencyRoot"
+    if (-not (Test-Path -LiteralPath $resolvedDependencyRoot -PathType Container)) {
+        throw "Henka dependency root was not found: $resolvedDependencyRoot"
+    }
+} else {
+    $defaultDependencyRoot = Join-Path $buildRoot "_deps"
+    if (Test-Path -LiteralPath $defaultDependencyRoot -PathType Container) {
+        $resolvedDependencyRoot = $defaultDependencyRoot
+    } else {
+        $resolvedDependencyRoot = ""
+        Write-Host "No populated local dependency root was found; FetchContent network fallback remains enabled."
+    }
 }
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
     -DependencyRoot $resolvedDependencyRoot `
@@ -46,7 +53,12 @@ if ($fetchContent.FullyDisconnected) {
 Write-Host "cmake: $cmake"
 Write-Host "repo: $repoRoot"
 Write-Host "configuration: $Configuration"
-Write-Host "dependency root: $resolvedDependencyRoot"
+$dependencyDescription = if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoot)) {
+    "<none; FetchContent fallback>"
+} else {
+    $resolvedDependencyRoot
+}
+Write-Host "dependency root: $dependencyDescription"
 
 Invoke-HenkaNative `
     -FilePath $cmake `
