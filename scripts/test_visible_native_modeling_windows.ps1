@@ -263,7 +263,7 @@ try {
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
     $capturedProcess = Start-HenkaCapturedProcess `
         -FilePath $runtimeExecutable `
-        -Arguments @("--primitive-gallery") `
+        -Arguments @() `
         -WorkingDirectory $runtimeDirectory `
         -StdoutPath $stdoutPath `
         -StderrPath $stderrPath
@@ -280,6 +280,17 @@ try {
             $startupDiagnostics = $startupDiagnostics.Substring($startupDiagnostics.Length - 2048)
         }
         throw "The editor did not report a usable UI. Startup diagnostics: $startupDiagnostics"
+    }
+
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern 'DEFAULT_SCENE_READY ground=1 ground_editable=1 camera=1 showcase_assets=0 diagnostic_entities=0 scene_content=product_native' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The generic modeling workflow did not start from the clean product-native scene."
+    }
+    $startupText = Read-HenkaSharedText -Path $stdoutPath
+    if ($startupText -match '(?m)^Native authoring (?:source )?row: name=Showcase (?:Giraffe|Rocket)') {
+        throw "The generic modeling evidence was contaminated by a showcase/reference authoring row."
     }
 
     $sceneGeometry = Get-LastMatch `
@@ -654,7 +665,8 @@ try {
         }
     }
 
-    Write-Output "[pass] Visible native modeling workflow: new asset, component pick, extrude, inset, material ownership, save, close, reopen, and re-edit completed."
+    Write-Output "[pass] Product-native generic modeling workflow: clean startup, new asset, component pick, extrude, inset, material ownership, save, close, reopen, and re-edit completed."
+    Write-Output "[pass] Evidence scope: PRODUCT_NATIVE_GENERIC; showcase/reference fixtures were not loaded."
     Write-Output "[pass] Runtime evidence retained: $runtimeDirectory"
 }
 finally {

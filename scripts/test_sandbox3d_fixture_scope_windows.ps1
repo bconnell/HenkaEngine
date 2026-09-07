@@ -14,8 +14,9 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 $sandboxCMakePath = Join-Path $RepositoryRoot "examples\sandbox3d\CMakeLists.txt"
 $packageScriptPath = Join-Path $RepositoryRoot "scripts\package_sandbox3d_windows.ps1"
 $generatorScriptPath = Join-Path $RepositoryRoot "scripts\generate_residency_fixtures_windows.ps1"
+$genericModelingScriptPath = Join-Path $RepositoryRoot "scripts\test_visible_native_modeling_windows.ps1"
 
-foreach ($path in @($sandboxCMakePath, $packageScriptPath, $generatorScriptPath)) {
+foreach ($path in @($sandboxCMakePath, $packageScriptPath, $generatorScriptPath, $genericModelingScriptPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Fixture-scope contract input is missing: $path"
     }
@@ -24,6 +25,7 @@ foreach ($path in @($sandboxCMakePath, $packageScriptPath, $generatorScriptPath)
 $sandboxLines = Get-Content -LiteralPath $sandboxCMakePath
 $sandboxText = $sandboxLines -join "`n"
 $packageText = Get-Content -LiteralPath $packageScriptPath -Raw
+$genericModelingText = Get-Content -LiteralPath $genericModelingScriptPath -Raw
 $insideNormalPostBuild = $false
 $normalPostBuildLines = New-Object System.Collections.Generic.List[string]
 foreach ($line in $sandboxLines) {
@@ -67,5 +69,12 @@ if ($packageText -notmatch 'generate_residency_fixtures_windows\.ps1') {
 if ($packageText -match '(?s)\$residencyFixtureSource\s+-Destination.*?-Recurse') {
     throw "Packaging must copy only the bounded named residency fixtures, not the whole output directory."
 }
+if ($genericModelingText -match '(?m)-Arguments\s+@\("--primitive-gallery"\)') {
+    throw "Generic modeling evidence must not launch the showcase/reference gallery."
+}
+if ($genericModelingText -notmatch 'DEFAULT_SCENE_READY ground=1 ground_editable=1 camera=1 showcase_assets=0 diagnostic_entities=0 scene_content=product_native') {
+    throw "Generic modeling evidence must prove clean product-native startup before authoring."
+}
 
 Write-Output "[pass] Sandbox3D residency fixtures are excluded from normal builds and generated only by the explicit stress target."
+Write-Output "[pass] Generic modeling evidence starts from the product-native scene and keeps showcase/reference fixtures explicit."

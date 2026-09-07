@@ -1231,6 +1231,12 @@ try {
     Assert-FileContains -Path $stdoutPath -Pattern "Tools and Physics QA are discoverable immediately" -Description "Startup auto panel cue"
     Assert-FileContains -Path $stdoutPath -Pattern "use the in-window .*utilities" -Description "Startup utility cue"
     Assert-FileContains -Path $stdoutPath -Pattern "recent actions and warnings appear" -Description "Startup status cue"
+    if ($TerrainStartupOnly -or $ProductStartupPrimitiveOnly) {
+        Assert-FileContains `
+            -Path $stdoutPath `
+            -Pattern "DEFAULT_SCENE_READY ground=1 ground_editable=1 camera=1 showcase_assets=0 diagnostic_entities=0 scene_content=product_native" `
+            -Description "Clean product-native packaged startup"
+    }
 
     Write-Step "Checking packaged UI open and close"
     Set-HenkaAutomationForeground -Handle $mainWindowHandle

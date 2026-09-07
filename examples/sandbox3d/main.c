@@ -6709,10 +6709,12 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
             size_t authoring_cage_edge_count = 0U;
             size_t authoring_cage_edge_index;
 
-            /* Edit Mode always shows the authored cage. The toggle is reserved
-             * for the optional filled diagnostic overlay; keeping renderer
-             * tessellation out of this screen-space pass prevents the editor
-             * from presenting triangles as authored topology. */
+            /* Edit Mode keeps the evaluated surface and authored cage visible
+             * by default so the mesh remains readable. The filled diagnostic
+             * overlay and complete marker field are explicit topology
+             * diagnostics; keeping those behind the toggle prevents ordinary
+             * component editing from becoming a dense all-topology view and
+             * keeps renderer tessellation out of this screen-space pass. */
             if (state->authoring_topology_overlay_enabled)
             {
                 sandbox3d_draw_authoring_surface_overlay(
@@ -6809,7 +6811,8 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                     size_t authoring_vertex_point_count = 0U;
                     size_t authoring_vertex_point_index;
 
-                    if (sandbox3d_build_authoring_vertex_points(
+                    if (state->authoring_topology_overlay_enabled &&
+                        sandbox3d_build_authoring_vertex_points(
                             mesh,
                             authoring_vertex_points,
                             sizeof(authoring_vertex_points) /
