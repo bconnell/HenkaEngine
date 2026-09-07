@@ -240,7 +240,7 @@ The resulting document:
 
 This workflow establishes native asset creation through Henka's visible authoring path.
 
-The default Giraffe and Rocket remain imported/generated sample assets. The New
+The Giraffe and Rocket remain imported/generated reference assets. The New
 Asset workflow creates separate native-authored documents.
 
 ### Generic showcase editing

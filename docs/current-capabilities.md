@@ -2,7 +2,7 @@
 
 This is the detailed, code-backed inventory for the current Henka Engine checkout. It records implemented foundations and their boundaries without turning the public README into an implementation ledger.
 
-README capability statuses are maintained in the small public contract at [capability-statuses.tsv](capability-statuses.tsv); each entry names the authoritative section below.
+README capability statuses are maintained in the small public contract at [capability-statuses.tsv](capability-statuses.tsv); each entry names the authoritative section below. The cross-path evidence summary is maintained in the [3D engine completion matrix](engine-completion-matrix.md).
 
 > **Reading rule:** This document separates implemented capability from incomplete or planned work. A long list of foundations does not imply production readiness.
 
@@ -766,4 +766,4 @@ Major open areas include:
 - complete scene serialization;
 - remaining renderer and Terrain visual validation.
 
-The default Giraffe and Rocket are deterministic imported/generated sample assets maintained by the repository. They exercise current import, material, editing, persistence, packaging, and rendering workflows. They do not establish complete arbitrary production-asset authoring coverage. See [showcase-assets.md](showcase-assets.md).
+The Giraffe and Rocket are deterministic imported/generated reference assets maintained by the repository. They exercise current import, material, editing, persistence, packaging, and rendering workflows when explicitly loaded by showcase or regression paths. They are not ordinary startup content and do not establish complete arbitrary production-asset authoring coverage. See [showcase-assets.md](showcase-assets.md).

@@ -216,6 +216,7 @@ current public Audio workflow. Complete game project serialization remains futur
 ### Start here
 
 - [Detailed current capabilities](docs/current-capabilities.md)
+- [3D engine completion matrix](docs/engine-completion-matrix.md)
 - [Roadmap](docs/roadmap.md)
 - [Architecture](docs/architecture.md)
 - [Building and validation](docs/building.md)
@@ -255,10 +256,11 @@ continues to affect status.
   and step-offset behavior remain open.
   Slope-aware grounding classification is available.
 - Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
-- The default Giraffe and Rocket are deterministic imported/generated sample
-  assets maintained by the repository. They exercise current import, material,
-  editing, persistence, packaging, and rendering workflows. They do not establish
-  complete arbitrary production-asset authoring coverage.
+- The Giraffe and Rocket are deterministic imported/generated reference assets
+  maintained by the repository. They exercise current import, material,
+  editing, persistence, packaging, and rendering workflows when explicitly
+  loaded by showcase or regression paths. They are not ordinary startup content
+  and do not establish complete arbitrary production-asset authoring coverage.
 - Editor feel, detached windows, terrain corners, rendering, and modeling quality
   remain active quality areas.
 
