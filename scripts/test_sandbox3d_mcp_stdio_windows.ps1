@@ -58,7 +58,11 @@ function Read-McpResponse
     $line = $read_task.Result
     if ([string]::IsNullOrWhiteSpace($line))
     {
-        throw "MCP stdio closed before returning a JSON-RPC response."
+        if ($process.HasExited)
+        {
+            throw "MCP stdio closed before returning a JSON-RPC response (process exit code $($process.ExitCode))."
+        }
+        throw "MCP stdio returned an empty response before returning a JSON-RPC response."
     }
     try
     {
