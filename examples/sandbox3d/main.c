@@ -32314,6 +32314,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         HENKA_UI_THEME_DARK);
     if (result != HENKA_SUCCESS)
     {
+        if (state->mcp_stdio)
+        {
+            fprintf(stderr, "MCP initialization failed at main UI theme: %s.\n", henka_result_to_string(result));
+            fflush(stderr);
+        }
         return result;
     }
 
@@ -32328,6 +32333,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         HENKA_UI_THEME_DARK);
     if (result != HENKA_SUCCESS)
     {
+        if (state->mcp_stdio)
+        {
+            fprintf(stderr, "MCP initialization failed at native panel UI theme: %s.\n", henka_result_to_string(result));
+            fflush(stderr);
+        }
         return result;
     }
 
@@ -32346,6 +32356,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             HENKA_UI_THEME_DARK);
         if (result != HENKA_SUCCESS)
         {
+            if (state->mcp_stdio)
+            {
+                fprintf(stderr, "MCP initialization failed at detached panel UI theme %d: %s.\n", panel_index, henka_result_to_string(result));
+                fflush(stderr);
+            }
             return result;
         }
         henka_ui_set_visible(state->detached_panel_ui[panel_index], true);
@@ -34310,6 +34325,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     return HENKA_SUCCESS;
 
 fail:
+    if (state->mcp_stdio)
+    {
+        fprintf(stderr, "MCP initialization failed before stdio ready: %s.\n", henka_result_to_string(result));
+        fflush(stderr);
+    }
     henka_free(detail_normal_pixels);
     henka_free(macro_variation_pixels);
     henka_free(wood_grain_pixels);
@@ -37680,6 +37700,11 @@ int main(int argc, char** argv)
     result = henka_engine_create(&config, &engine);
     if (result != HENKA_SUCCESS)
     {
+        if (mcp_stdio)
+        {
+            fprintf(stderr, "MCP startup failed while creating the engine: %s.\n", henka_result_to_string(result));
+            fflush(stderr);
+        }
         HENKA_LOG_ERROR("Unable to start the sandbox: %s", henka_result_to_string(result));
         return 1;
     }
@@ -37688,6 +37713,11 @@ int main(int argc, char** argv)
     result = henka_engine_run(engine);
     if (result != HENKA_SUCCESS)
     {
+        if (mcp_stdio)
+        {
+            fprintf(stderr, "MCP startup stopped with an engine error: %s.\n", henka_result_to_string(result));
+            fflush(stderr);
+        }
         HENKA_LOG_ERROR("The sandbox stopped with an error: %s", henka_result_to_string(result));
         henka_engine_destroy(engine);
         return 1;
