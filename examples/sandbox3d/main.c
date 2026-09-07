@@ -37580,6 +37580,11 @@ int main(int argc, char** argv)
 #endif
 
     g_sandbox3d_mcp_stdio = mcp_stdio;
+    if (mcp_stdio)
+    {
+        fprintf(stderr, "MCP startup entered with the Release/Debug executable argument path.\n");
+        fflush(stderr);
+    }
     memset(&state, 0, sizeof(state));
     if (sandbox3d_authoring_asset_controller_create(
             &state.authoring_asset_controller) != HENKA_SUCCESS)
