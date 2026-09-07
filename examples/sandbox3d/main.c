@@ -603,6 +603,9 @@ typedef struct sandbox3d_state
     sandbox3d_gizmo_state gizmo;
     sandbox3d_gizmo_render_state gizmo_render;
     henka_entity selected_entity;
+    bool hierarchy_parent_picker_open;
+    henka_entity hierarchy_parent_picker_child;
+    henka_scene_parenting_mode hierarchy_parent_mode;
     bool settings_file_found;
     bool startup_panels_auto_opened;
     bool ui_visibility_report_pending;
@@ -25006,6 +25009,8 @@ details_group_dispatch:
             goto details_group_physics;
         case SANDBOX3D_EDITOR_DETAILS_GROUP_AUDIO:
             goto details_group_audio;
+        case SANDBOX3D_EDITOR_DETAILS_GROUP_HIERARCHY:
+            goto details_group_hierarchy;
         case SANDBOX3D_EDITOR_DETAILS_GROUP_INTERACTION:
             goto details_group_interaction;
         case SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS:
@@ -30072,6 +30077,227 @@ details_group_audio:
                         state,
                         false,
                         "Audio preview stopped.");
+                }
+            }
+        }
+    }
+    }
+    goto details_group_dispatch;
+
+details_group_hierarchy:
+    {
+    henka_entity current_parent = HENKA_INVALID_ENTITY;
+    char hierarchy_parent_text[160];
+
+    if (state->hierarchy_parent_picker_child != entity)
+    {
+        state->hierarchy_parent_picker_open = false;
+        state->hierarchy_parent_picker_child = HENKA_INVALID_ENTITY;
+    }
+    (void)sandbox3d_details_flow_disclosure(
+        state,
+        flow_desc.bounds,
+        "object_details.hierarchy",
+        "Hierarchy",
+        SANDBOX3D_EDITOR_DETAILS_GROUP_HIERARCHY,
+        details_display_order,
+        &state->editor_ui.details_hierarchy_expanded,
+        &disclosure_changed);
+    if (state->editor_ui.details_hierarchy_expanded &&
+        sandbox3d_details_flow_next_row(
+            state,
+            flow_desc.bounds,
+            22.0f,
+            1U,
+            &row))
+    {
+        if (authored_object_available &&
+            authored_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+        {
+            (void)sandbox3d_game_authoring_get_entity_for_document_id(
+                state->game_authoring,
+                authored_object.parent_id,
+                &current_parent);
+        }
+        if (current_parent == HENKA_INVALID_ENTITY)
+        {
+            (void)snprintf(
+                hierarchy_parent_text,
+                sizeof(hierarchy_parent_text),
+                "Root");
+        }
+        else
+        {
+            (void)snprintf(
+                hierarchy_parent_text,
+                sizeof(hierarchy_parent_text),
+                "%s",
+                sandbox3d_safe_entity_name(state, current_parent, "Parent"));
+        }
+        sandbox3d_draw_value_row(
+            state->ui,
+            row.x,
+            row.y,
+            row.width,
+            "Parent",
+            hierarchy_parent_text);
+    }
+    if (state->editor_ui.details_hierarchy_expanded &&
+        authored_object_available &&
+        sandbox3d_details_flow_next_row(
+            state,
+            flow_desc.bounds,
+            28.0f,
+            1U,
+            &row))
+    {
+        const float gap = 6.0f;
+        const float button_width = (row.width - gap) * 0.5f;
+        if (henka_ui_button(
+                state->ui,
+                "game_authoring_hierarchy_choose_parent",
+                (henka_ui_rect){row.x, row.y, button_width, row.height},
+                state->hierarchy_parent_picker_open ? "Close Parent List" : "Choose Parent"))
+        {
+            state->hierarchy_parent_picker_open =
+                !state->hierarchy_parent_picker_open;
+            state->hierarchy_parent_picker_child =
+                state->hierarchy_parent_picker_open
+                    ? entity
+                    : HENKA_INVALID_ENTITY;
+            state->hierarchy_parent_mode = HENKA_SCENE_PARENT_KEEP_WORLD;
+        }
+        if (henka_ui_button(
+                state->ui,
+                "game_authoring_hierarchy_unparent",
+                (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
+                "Unparent") &&
+            !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+        {
+            const henka_result unparent_result =
+                sandbox3d_game_authoring_unparent_entity(
+                    state->game_authoring,
+                    entity,
+                    HENKA_SCENE_PARENT_KEEP_WORLD);
+            sandbox3d_set_statusf(
+                state,
+                unparent_result != HENKA_SUCCESS,
+                false,
+                unparent_result == HENKA_SUCCESS
+                    ? "Object unparented; world transform preserved."
+                    : "Unparent rejected: %s.",
+                henka_result_to_string(unparent_result));
+            if (unparent_result == HENKA_SUCCESS)
+            {
+                state->hierarchy_parent_picker_open = false;
+                state->hierarchy_parent_picker_child = HENKA_INVALID_ENTITY;
+            }
+        }
+    }
+    if (state->editor_ui.details_hierarchy_expanded &&
+        authored_object_available &&
+        state->hierarchy_parent_picker_open &&
+        sandbox3d_details_flow_next_row(
+            state,
+            flow_desc.bounds,
+            26.0f,
+            1U,
+            &row))
+    {
+        const float gap = 6.0f;
+        const float button_width = (row.width - gap) * 0.5f;
+        if (henka_ui_button(
+                state->ui,
+                "game_authoring_hierarchy_keep_world",
+                (henka_ui_rect){row.x, row.y, button_width, row.height},
+                state->hierarchy_parent_mode == HENKA_SCENE_PARENT_KEEP_WORLD
+                    ? "Keep World *"
+                    : "Keep World"))
+        {
+            state->hierarchy_parent_mode = HENKA_SCENE_PARENT_KEEP_WORLD;
+        }
+        if (henka_ui_button(
+                state->ui,
+                "game_authoring_hierarchy_keep_local",
+                (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
+                state->hierarchy_parent_mode == HENKA_SCENE_PARENT_KEEP_LOCAL
+                    ? "Keep Local *"
+                    : "Keep Local"))
+        {
+            state->hierarchy_parent_mode = HENKA_SCENE_PARENT_KEEP_LOCAL;
+        }
+    }
+    if (state->editor_ui.details_hierarchy_expanded &&
+        authored_object_available &&
+        state->hierarchy_parent_picker_open)
+    {
+        size_t entity_index;
+        const size_t entity_count = henka_scene_get_entity_count(state->scene);
+        for (entity_index = 0U; entity_index < entity_count; ++entity_index)
+        {
+            henka_entity candidate_parent = henka_scene_get_entity_at_index(
+                state->scene,
+                entity_index);
+            char parent_label[192];
+            char parent_button_id[64];
+            const char* candidate_name;
+
+            if (candidate_parent == HENKA_INVALID_ENTITY ||
+                candidate_parent == entity ||
+                !henka_scene_is_entity_valid(state->scene, candidate_parent))
+            {
+                continue;
+            }
+            candidate_name = sandbox3d_safe_entity_name(
+                state,
+                candidate_parent,
+                "Object");
+            (void)snprintf(
+                parent_label,
+                sizeof(parent_label),
+                "%s [%llu]",
+                candidate_name,
+                (unsigned long long)candidate_parent);
+            if (!sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    26.0f,
+                    1U,
+                    &row))
+            {
+                continue;
+            }
+            (void)snprintf(
+                parent_button_id,
+                sizeof(parent_button_id),
+                "game_authoring_parent_%llu",
+                (unsigned long long)candidate_parent);
+            if (henka_ui_button(
+                    state->ui,
+                    parent_button_id,
+                    row,
+                    parent_label))
+            {
+                const henka_result parent_result =
+                    sandbox3d_game_authoring_reparent_entity(
+                        state->game_authoring,
+                        entity,
+                        candidate_parent,
+                        state->hierarchy_parent_mode);
+                sandbox3d_set_statusf(
+                    state,
+                    parent_result != HENKA_SUCCESS,
+                    false,
+                    parent_result == HENKA_SUCCESS
+                        ? "Parent changed; %s transform preserved."
+                        : "Parent change rejected: %s.",
+                    state->hierarchy_parent_mode == HENKA_SCENE_PARENT_KEEP_WORLD
+                        ? "world"
+                        : "local");
+                if (parent_result == HENKA_SUCCESS)
+                {
+                    state->hierarchy_parent_picker_open = false;
+                    state->hierarchy_parent_picker_child = HENKA_INVALID_ENTITY;
                 }
             }
         }

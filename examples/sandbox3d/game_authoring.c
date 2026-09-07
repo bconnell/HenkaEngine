@@ -619,6 +619,105 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
     return result;
 }
 
+static henka_result sandbox3d_game_authoring_set_parent_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity child,
+    henka_entity parent,
+    henka_scene_parenting_mode mode)
+{
+    henka_scene_document_object candidate_object;
+    henka_scene_document_id child_document_id;
+    henka_scene_document_object parent_object;
+    henka_scene_document_id parent_document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene* candidate_scene = NULL;
+    henka_result result;
+
+    if (authoring == NULL || sandbox3d_game_authoring_is_play_locked(authoring) ||
+        child == HENKA_INVALID_ENTITY ||
+        (parent != HENKA_INVALID_ENTITY && parent == child) ||
+        (mode != HENKA_SCENE_PARENT_KEEP_LOCAL &&
+            mode != HENKA_SCENE_PARENT_KEEP_WORLD) ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring,
+            child,
+            &child_document_id,
+            &candidate_object) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (parent != HENKA_INVALID_ENTITY &&
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring,
+            parent,
+            &parent_document_id,
+            &parent_object) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    /* Resolve the requested parenting semantics through the production scene
+     * operation before changing the authored document. The clone preserves
+     * generation-checked handles and the same bounded transform contract. */
+    result = henka_scene_clone(authoring->scene, &candidate_scene);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_scene_set_entity_parent(
+        candidate_scene,
+        child,
+        parent,
+        mode);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_get_entity_world_transform(
+            candidate_scene,
+            child,
+            &candidate_object.transform);
+    }
+    henka_scene_destroy(candidate_scene);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    candidate_object.parent_id = parent == HENKA_INVALID_ENTITY
+        ? HENKA_INVALID_SCENE_DOCUMENT_ID
+        : parent_document_id;
+    return sandbox3d_game_authoring_update_object_for_entity(
+        authoring,
+        child,
+        &candidate_object);
+}
+
+henka_result sandbox3d_game_authoring_reparent_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity child,
+    henka_entity parent,
+    henka_scene_parenting_mode mode)
+{
+    if (parent == HENKA_INVALID_ENTITY)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_game_authoring_set_parent_entity(
+        authoring,
+        child,
+        parent,
+        mode);
+}
+
+henka_result sandbox3d_game_authoring_unparent_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity child,
+    henka_scene_parenting_mode mode)
+{
+    return sandbox3d_game_authoring_set_parent_entity(
+        authoring,
+        child,
+        HENKA_INVALID_ENTITY,
+        mode);
+}
+
 size_t sandbox3d_game_authoring_get_behavior_count_for_entity(
     const sandbox3d_game_authoring* authoring,
     henka_entity entity)

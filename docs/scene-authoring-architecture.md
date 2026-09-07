@@ -245,9 +245,15 @@ camera values, and controller values during load; v1-v6 documents migrate in
 memory without being rewritten, while v7 data defaults the new controller
 component to disabled. Legacy documents without an authored camera remain
 valid and expose no authored camera value.
-Sandbox hierarchy editing, hierarchy history, and participation by every
-runtime subsystem remain subsequent work. The runtime foundation is independent
-of the selection-owner relationship used for editor presentation.
+The Sandbox Object Details > Hierarchy group provides an explicit parent
+picker and Unparent action for registered scene objects. It presents stable
+runtime entity identities beside display names and routes Keep Local and Keep
+World operations through the Game Authoring coordinator. The coordinator
+preflights the operation on a cloned production scene, then publishes the
+parent ID and resulting world transform through the existing Scene Document
+and runtime bridge. The controls are presentation state; the Scene Document
+remains the hierarchy authority. Hierarchy history, durable project manifests,
+and participation by every runtime subsystem remain open work.
 
 ## Input ownership
 

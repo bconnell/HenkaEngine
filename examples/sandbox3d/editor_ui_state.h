@@ -24,6 +24,7 @@ typedef enum sandbox3d_editor_details_group_id
     SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS,
     /* Append new groups so persisted numeric group identities remain stable. */
     SANDBOX3D_EDITOR_DETAILS_GROUP_AUDIO,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_HIERARCHY,
     SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT
 } sandbox3d_editor_details_group_id;
 
@@ -42,6 +43,7 @@ typedef struct sandbox3d_editor_ui_state
     bool details_interaction_expanded;
     bool details_actions_expanded;
     bool details_audio_expanded;
+    bool details_hierarchy_expanded;
     unsigned char details_group_order[SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT];
 
     float controls_scroll_offset;

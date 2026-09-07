@@ -43,6 +43,8 @@ static const char* g_details_actions_key =
     "ui.object_details.actions.expanded";
 static const char* g_details_audio_key =
     "ui.object_details.audio.expanded";
+static const char* g_details_hierarchy_key =
+    "ui.object_details.hierarchy.expanded";
 
 static const char* g_details_group_order_prefix =
     "ui.object_details.group_order.";
@@ -92,6 +94,7 @@ void sandbox3d_editor_ui_state_reset(
     state->details_interaction_expanded = false;
     state->details_actions_expanded = false;
     state->details_audio_expanded = false;
+    state->details_hierarchy_expanded = false;
     sandbox3d_editor_ui_details_group_order_reset(state->details_group_order);
 
     state->controls_scroll_offset = 0.0f;
@@ -136,7 +139,8 @@ void sandbox3d_editor_ui_state_load(
             {g_details_physics_key, &state->details_physics_expanded},
             {g_details_interaction_key, &state->details_interaction_expanded},
             {g_details_actions_key, &state->details_actions_expanded},
-            {g_details_audio_key, &state->details_audio_expanded}
+            {g_details_audio_key, &state->details_audio_expanded},
+            {g_details_hierarchy_key, &state->details_hierarchy_expanded}
         };
 
         for (index = 0U;
@@ -234,7 +238,8 @@ henka_result sandbox3d_editor_ui_state_store(
             {g_details_physics_key, &state->details_physics_expanded},
             {g_details_interaction_key, &state->details_interaction_expanded},
             {g_details_actions_key, &state->details_actions_expanded},
-            {g_details_audio_key, &state->details_audio_expanded}
+            {g_details_audio_key, &state->details_audio_expanded},
+            {g_details_hierarchy_key, &state->details_hierarchy_expanded}
         };
 
         for (index = 0U;

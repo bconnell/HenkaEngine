@@ -51,6 +51,19 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
     const henka_scene_document_object* object);
+/* Reparents through the canonical Scene Document and runtime bridge. The
+ * requested mode is evaluated on a disposable clone first so invalid
+ * parents, cycles, stale entities, and unsupported transform relationships
+ * fail before authored or live state is changed. */
+henka_result sandbox3d_game_authoring_reparent_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity child,
+    henka_entity parent,
+    henka_scene_parenting_mode mode);
+henka_result sandbox3d_game_authoring_unparent_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity child,
+    henka_scene_parenting_mode mode);
 henka_result sandbox3d_game_authoring_set_play_input_context(
     sandbox3d_game_authoring* authoring,
     sandbox3d_game_authoring_input_query input_query,

@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <math.h>
 
 #include <henka/core.h>
 #include <henka/scene.h>
@@ -11,12 +12,17 @@ int main(void)
     henka_scene* scene = NULL;
     sandbox3d_game_authoring* authoring = NULL;
     henka_entity parent = HENKA_INVALID_ENTITY;
+    henka_entity parent_b = HENKA_INVALID_ENTITY;
+    henka_entity parent_c = HENKA_INVALID_ENTITY;
     henka_entity child = HENKA_INVALID_ENTITY;
     henka_scene_document_id parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id duplicate_parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id parent_b_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id parent_c_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id duplicate_child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_object child_object;
+    henka_transform child_world;
     henka_transform parent_transform = henka_transform_identity();
     henka_transform child_transform = henka_transform_identity();
     int result = 1;
@@ -27,6 +33,10 @@ int main(void)
         (child = henka_scene_create_entity_named(scene, "Child Registered First")) ==
             HENKA_INVALID_ENTITY ||
         (parent = henka_scene_create_entity_named(scene, "Parent Registered Recursively")) ==
+            HENKA_INVALID_ENTITY ||
+        (parent_b = henka_scene_create_entity_named(scene, "Second Parent")) ==
+            HENKA_INVALID_ENTITY ||
+        (parent_c = henka_scene_create_entity_named(scene, "Deleted Parent")) ==
             HENKA_INVALID_ENTITY ||
         henka_scene_set_entity_transform(scene, parent, parent_transform) != HENKA_SUCCESS ||
         henka_scene_set_entity_transform(scene, child, child_transform) != HENKA_SUCCESS ||
@@ -64,6 +74,103 @@ int main(void)
         duplicate_child_id != child_id)
     {
         fprintf(stderr, "game authoring hierarchy test failed during idempotent registration\n");
+        goto cleanup;
+    }
+
+    if (sandbox3d_game_authoring_register_entity(
+            authoring, parent_b, &parent_b_id) != HENKA_SUCCESS ||
+        parent_b_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, parent_c, &parent_c_id) != HENKA_SUCCESS ||
+        parent_c_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_reparent_entity(
+            authoring,
+            child,
+            parent_b,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(scene, child, &child_world) != HENKA_SUCCESS ||
+        fabsf(child_world.position.x - child_transform.position.x) > 0.0001f ||
+        fabsf(child_world.position.y - child_transform.position.y) > 0.0001f ||
+        fabsf(child_world.position.z - child_transform.position.z) > 0.0001f ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &child_object) != HENKA_SUCCESS ||
+        duplicate_child_id != child_id ||
+        child_object.parent_id != parent_b_id ||
+        sandbox3d_game_authoring_unparent_entity(
+            authoring,
+            child,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(scene, child, &child_world) != HENKA_SUCCESS ||
+        fabsf(child_world.position.x - child_transform.position.x) > 0.0001f ||
+        fabsf(child_world.position.y - child_transform.position.y) > 0.0001f ||
+        fabsf(child_world.position.z - child_transform.position.z) > 0.0001f ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &child_object) != HENKA_SUCCESS ||
+        duplicate_child_id != child_id ||
+        child_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_reparent_entity(
+            authoring,
+            child,
+            parent_b,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_unparent_entity(
+            authoring,
+            child,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "game authoring hierarchy test failed during reparent/unparent\n");
+        goto cleanup;
+    }
+
+    if (sandbox3d_game_authoring_reparent_entity(
+            authoring,
+            child,
+            parent,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_reparent_entity(
+            authoring,
+            parent,
+            child,
+            HENKA_SCENE_PARENT_KEEP_WORLD) == HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(scene, child, &parent_b) != HENKA_SUCCESS ||
+        parent_b != parent ||
+        henka_scene_get_entity_parent(scene, parent, &parent_b) != HENKA_SUCCESS ||
+        parent_b != HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_unparent_entity(
+            authoring,
+            child,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "game authoring hierarchy test accepted a cycle\n");
+        goto cleanup;
+    }
+
+    henka_scene_destroy_entity(scene, parent_c);
+    if (sandbox3d_game_authoring_reparent_entity(
+            authoring,
+            child,
+            parent_c,
+            HENKA_SCENE_PARENT_KEEP_WORLD) == HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &child_object) != HENKA_SUCCESS ||
+        duplicate_child_id != child_id ||
+        child_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        fprintf(stderr, "game authoring hierarchy test accepted a deleted parent\n");
+        goto cleanup;
+    }
+
+    if (sandbox3d_game_authoring_reparent_entity(
+            authoring,
+            child,
+            child,
+            HENKA_SCENE_PARENT_KEEP_WORLD) == HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, child, &duplicate_child_id, &child_object) != HENKA_SUCCESS ||
+        duplicate_child_id != child_id ||
+        child_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        fprintf(stderr, "game authoring hierarchy test accepted invalid self-parenting\n");
         goto cleanup;
     }
 
