@@ -37584,6 +37584,11 @@ int main(int argc, char** argv)
     if (sandbox3d_authoring_asset_controller_create(
             &state.authoring_asset_controller) != HENKA_SUCCESS)
     {
+        if (mcp_stdio)
+        {
+            fprintf(stderr, "MCP startup failed while creating the authoring asset controller.\n");
+            fflush(stderr);
+        }
         HENKA_LOG_ERROR("Unable to allocate the native authoring controller");
         return 1;
     }
