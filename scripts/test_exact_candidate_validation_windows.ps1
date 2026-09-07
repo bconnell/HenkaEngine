@@ -127,6 +127,9 @@ exit 17
         throw "The exact-candidate wrapper did not report the failing package stage exit code."
     }
 
+    # The package failure is an intentional negative control. Do not leak its
+    # expected native exit code into the enclosing PowerShell process.
+    $global:LASTEXITCODE = 0
     Write-Host "Exact-candidate orchestration regression passed."
 } finally {
     if (Test-Path -LiteralPath $fixture) {
