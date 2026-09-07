@@ -5,9 +5,12 @@ implementation, public APIs, editor paths, persistence, runtime use,
 packaging, and executable validation. It is an evidence summary, not a claim
 that every future engine feature is complete.
 
-Evidence snapshot: published `main` at `0c63b7cea867304732cc033a3375392136a57169`.
-The exact-candidate publication validation for this boundary configured and
-built the complete target graph and passed all 57 registered CTest tests.
+Evidence snapshot: published `main` at `748432d5604e58d7a1e901982078f944f063622e`.
+Local exact-candidate validation passed for the Git-object candidate mechanism,
+repository integrity, public-content hygiene, documentation truth, and the
+product-native modeling evidence boundary. Hosted Windows CI for this snapshot
+is still pending after the examples-off sanitizer configuration repair; it is
+not counted as closed until that run completes.
 
 ## Status rules
 
@@ -24,6 +27,28 @@ built the complete target graph and passed all 57 registered CTest tests.
 The scope column is part of each status. A future backend, advanced mode, or
 larger workflow outside that scope does not lower the current status. A gap
 inside the declared scope does lower it.
+
+## Current closure blockers
+
+These are the material open items that currently prevent the 3D completion gate
+from closing:
+
+- **Validation boundary:** hosted Windows CI for `748432d` must complete after
+  the sanitizer configuration repair. Local green results do not substitute
+  for that hosted boundary.
+- **Modeling and authoring:** the product-native generic workflow is validated
+  for the current bounded topology slice, but broader authoring coverage,
+  production-quality arbitrary asset authoring, and the remaining packaged
+  native Box-add validation contradiction remain open.
+- **Editor workspace:** desktop readability, long-label presentation, dense
+  control layout, and human visual QA remain unresolved.
+- **Camera and interaction:** laptop/touchpad navigation and reliable
+  cold-start scene-first framing still require direct validation.
+- **Rendering and environment:** the remaining IBL/specular visual defect is
+  separate from the completed near-directional shadow repair and remains open.
+- **Cross-subsystem completion:** hierarchy, prefabs, broader persistence,
+  project/external-project workflows, and complete runtime/package coverage
+  remain foundations rather than closed product workflows.
 
 ## Current matrix
 
