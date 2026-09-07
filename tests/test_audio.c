@@ -913,6 +913,64 @@ int main(void)
         henka_audio_emitter_destroy(scene_first_stream_emitter);
         henka_audio_stream_destroy(scene_first_stream);
     }
+
+    /* A real child emitter must spatialize from its effective world transform,
+     * rather than the local transform stored before hierarchy composition. */
+    {
+        henka_entity parented_parent;
+        henka_entity parented_child;
+        henka_audio_voice_id parented_voice = HENKA_INVALID_AUDIO_VOICE_ID;
+        float root_sum;
+        float parented_sum;
+        float moved_sum;
+
+        desc.spatial = true;
+        desc.min_distance = 0.5f;
+        desc.max_distance = 30.0f;
+        listener.position = (henka_vec3){0.0f, 0.0f, 0.0f};
+        HENKA_TEST_ASSERT(henka_audio_system_set_listener(system, listener) == HENKA_SUCCESS);
+        parented_parent = henka_scene_create_entity_named(scene, "Audio hierarchy parent");
+        parented_child = henka_scene_create_entity_named(scene, "Audio hierarchy child");
+        HENKA_TEST_ASSERT(parented_parent != HENKA_INVALID_ENTITY &&
+            parented_child != HENKA_INVALID_ENTITY);
+        HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+            scene,
+            parented_child,
+            (henka_transform){
+                (henka_vec3){0.0f, 0.0f, 0.0f},
+                (henka_quat){0.0f, 0.0f, 0.0f, 1.0f},
+                (henka_vec3){1.0f, 1.0f, 1.0f}}) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_voice_play(
+            system, scene, parented_child, clip, &desc, &parented_voice) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+        root_sum = fabsf(samples[0]) + fabsf(samples[1]);
+        HENKA_TEST_ASSERT(henka_audio_voice_stop(system, parented_voice) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+            scene,
+            parented_parent,
+            (henka_transform){
+                (henka_vec3){20.0f, 0.0f, 0.0f},
+                (henka_quat){0.0f, 0.0f, 0.0f, 1.0f},
+                (henka_vec3){1.0f, 1.0f, 1.0f}}) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+            scene,
+            parented_child,
+            parented_parent,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_voice_play(
+            system, scene, parented_child, clip, &desc, &parented_voice) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+        parented_sum = fabsf(samples[0]) + fabsf(samples[1]);
+        HENKA_TEST_ASSERT(parented_sum < root_sum * 0.5f);
+        HENKA_TEST_ASSERT(henka_scene_translate_entity(
+            scene, parented_parent, (henka_vec3){-20.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+        moved_sum = fabsf(samples[0]) + fabsf(samples[1]);
+        HENKA_TEST_ASSERT(moved_sum > parented_sum * 2.0f);
+        HENKA_TEST_ASSERT(henka_audio_voice_stop(system, parented_voice) == HENKA_SUCCESS);
+        henka_scene_destroy_entity(scene, parented_child);
+        henka_scene_destroy_entity(scene, parented_parent);
+    }
     result = EXIT_SUCCESS;
 
     remove(wav_path);
