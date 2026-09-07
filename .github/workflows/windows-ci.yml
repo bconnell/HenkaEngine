@@ -71,6 +71,10 @@ jobs:
         shell: powershell
         run: .\scripts\test_source_provenance_windows.ps1
 
+      - name: Check exact candidate validation orchestration
+        shell: powershell
+        run: .\scripts\test_exact_candidate_validation_windows.ps1
+
       - name: Build Debug
         shell: powershell
         run: .\scripts\build_windows.ps1 -Configuration Debug

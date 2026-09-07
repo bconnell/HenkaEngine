@@ -1,6 +1,10 @@
 param(
     [ValidateSet("Debug", "Release")]
-    [string]$Configuration = "Debug"
+    [string]$Configuration = "Debug",
+
+    [string]$DependencyRoot = "",
+
+    [string]$BuildTarget = ""
 )
 
 Set-StrictMode -Version Latest
@@ -13,9 +17,18 @@ $buildRoot = Join-Path $repoRoot "build"
 $cmake = Get-HenkaCMakePath
 $executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
+$resolvedDependencyRoot = $DependencyRoot
+if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoot)) {
+    $resolvedDependencyRoot = Join-Path $buildRoot "_deps"
+} else {
+    $resolvedDependencyRoot = [System.IO.Path]::GetFullPath($resolvedDependencyRoot)
+}
+if (-not (Test-Path -LiteralPath $resolvedDependencyRoot -PathType Container)) {
+    throw "Henka dependency root was not found: $resolvedDependencyRoot"
+}
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
-    -DependencyRoot (Join-Path $buildRoot "_deps") `
-    -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA")
+    -DependencyRoot $resolvedDependencyRoot `
+    -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
 $configureArguments = @("-S", $repoRoot, "-B", $buildRoot) + @($fetchContent.Arguments)
 foreach ($provider in $fetchContent.ProviderStates) {
     if ($provider.Available) {
@@ -33,6 +46,7 @@ if ($fetchContent.FullyDisconnected) {
 Write-Host "cmake: $cmake"
 Write-Host "repo: $repoRoot"
 Write-Host "configuration: $Configuration"
+Write-Host "dependency root: $resolvedDependencyRoot"
 
 Invoke-HenkaNative `
     -FilePath $cmake `
@@ -40,9 +54,14 @@ Invoke-HenkaNative `
     -WorkingDirectory $repoRoot `
     -Label "Configure Henka Engine"
 
+$buildArguments = @("--build", $buildRoot, "--config", $Configuration)
+if (-not [string]::IsNullOrWhiteSpace($BuildTarget)) {
+    $buildArguments += @("--target", $BuildTarget)
+}
+
 Invoke-HenkaNative `
     -FilePath $cmake `
-    -Arguments @("--build", $buildRoot, "--config", $Configuration) `
+    -Arguments $buildArguments `
     -WorkingDirectory $repoRoot `
     -Label "Build Henka Engine $Configuration"
 

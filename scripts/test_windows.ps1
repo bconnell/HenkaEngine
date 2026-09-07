@@ -1,6 +1,10 @@
 param(
     [ValidateSet("Debug", "Release")]
-    [string]$Configuration = "Debug"
+    [string]$Configuration = "Debug",
+
+    [string]$DependencyRoot = "",
+
+    [string]$TestFilter = ""
 )
 
 Set-StrictMode -Version Latest
@@ -14,9 +18,18 @@ $cmake = Get-HenkaCMakePath
 $ctest = Get-HenkaCTestPath -CMakePath $cmake
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
+$resolvedDependencyRoot = $DependencyRoot
+if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoot)) {
+    $resolvedDependencyRoot = Join-Path $buildRoot "_deps"
+} else {
+    $resolvedDependencyRoot = [System.IO.Path]::GetFullPath($resolvedDependencyRoot)
+}
+if (-not (Test-Path -LiteralPath $resolvedDependencyRoot -PathType Container)) {
+    throw "Henka dependency root was not found: $resolvedDependencyRoot"
+}
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
-    -DependencyRoot (Join-Path $buildRoot "_deps") `
-    -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA")
+    -DependencyRoot $resolvedDependencyRoot `
+    -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
 $configureArguments = @("-S", $repoRoot, "-B", $buildRoot) + @($fetchContent.Arguments)
 foreach ($provider in $fetchContent.ProviderStates) {
     if ($provider.Available) {
@@ -34,6 +47,7 @@ if ($fetchContent.FullyDisconnected) {
 Write-Host "cmake: $cmake"
 Write-Host "ctest: $ctest"
 Write-Host "repo: $repoRoot"
+Write-Host "dependency root: $resolvedDependencyRoot"
 
 Invoke-HenkaNative `
     -FilePath $cmake `
@@ -71,9 +85,14 @@ if (-not [string]::IsNullOrWhiteSpace($softwareOpenGLRoot)) {
     }
 }
 
+$ctestArguments = @("--test-dir", $buildRoot, "--output-on-failure", "-C", $Configuration)
+if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
+    $ctestArguments += @("-R", $TestFilter)
+}
+
 Invoke-HenkaNative `
     -FilePath $ctest `
-    -Arguments @("--test-dir", $buildRoot, "--output-on-failure", "-C", $Configuration) `
+    -Arguments $ctestArguments `
     -WorkingDirectory $repoRoot `
     -Label "Run Henka Engine tests"
 

@@ -5,12 +5,13 @@ implementation, public APIs, editor paths, persistence, runtime use,
 packaging, and executable validation. It is an evidence summary, not a claim
 that every future engine feature is complete.
 
-Evidence snapshot: published `main` at `f520412fb9c87e79b5425b503c8d9671f95be288`.
-The Git-object candidate mechanism, canonical Windows dependency configuration,
+Review baseline: the matrix contents apply to the commit containing this file.
+Exact commit identity, build provenance, and hosted Windows CI status are
+recorded by the repository's validation systems; this document does not encode
+a future `main` SHA or claim that an unpublished run has completed. The
+Git-object candidate mechanism, canonical Windows dependency configuration,
 repository integrity, public-content hygiene, documentation truth, and the
-product-native modeling evidence boundary are published. Hosted Windows CI for
-the snapshot is the authoritative validation boundary; the snapshot is not
-counted as closed until that run completes.
+product-native modeling evidence boundary are published.
 
 ## Status rules
 
