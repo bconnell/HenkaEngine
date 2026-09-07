@@ -50,16 +50,25 @@ Invoke-HenkaNative `
 $softwareOpenGLRoot = [string]$env:HENKA_CI_SOFTWARE_OPENGL_ROOT
 if (-not [string]::IsNullOrWhiteSpace($softwareOpenGLRoot)) {
     $softwareOpenGLInstaller = Join-Path $PSScriptRoot "install_windows_software_opengl.ps1"
-    Invoke-HenkaNative `
-        -FilePath "powershell.exe" `
-        -Arguments @(
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", $softwareOpenGLInstaller,
-            "-SourceDirectory", $softwareOpenGLRoot,
-            "-TargetDirectory", (Join-Path $buildRoot "tests\$Configuration")) `
-        -WorkingDirectory $repoRoot `
-        -Label "Install CI-only OpenGL runtime for tests"
+    $softwareOpenGLTargets = @(
+        (Join-Path $buildRoot "tests\$Configuration")
+    )
+    $sandboxDirectory = Join-Path $buildRoot "examples\sandbox3d\$Configuration"
+    if (Test-Path -LiteralPath $sandboxDirectory -PathType Container) {
+        $softwareOpenGLTargets += $sandboxDirectory
+    }
+    foreach ($targetDirectory in $softwareOpenGLTargets) {
+        Invoke-HenkaNative `
+            -FilePath "powershell.exe" `
+            -Arguments @(
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", $softwareOpenGLInstaller,
+                "-SourceDirectory", $softwareOpenGLRoot,
+                "-TargetDirectory", $targetDirectory) `
+            -WorkingDirectory $repoRoot `
+            -Label "Install CI-only OpenGL runtime for $Configuration tests and Sandbox3D"
+    }
 }
 
 Invoke-HenkaNative `
