@@ -12,52 +12,20 @@ $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $buildRoot = Join-Path $repoRoot "build"
 $cmake = Get-HenkaCMakePath
 $ctest = Get-HenkaCTestPath -CMakePath $cmake
-$localSdlSource = Join-Path $buildRoot "_deps\sdl3-src"
-$localKtxSource = Join-Path $buildRoot "_deps\ktxsoftware-src"
-$localEnetSource = Join-Path $buildRoot "_deps\enet-src"
-$localLuaSource = Join-Path $buildRoot "_deps\lua-src"
-$offlineProviderCount = 0
-$configureArguments = @("-S", $repoRoot, "-B", $buildRoot)
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
-if (Test-Path -LiteralPath (Join-Path $localSdlSource "CMakeLists.txt")) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3=$localSdlSource"
-    $offlineProviderCount += 1
-    Write-Host "SDL3 provider: repository-local populated source"
-} else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "SDL3 provider: FetchContent network fallback"
+$fetchContent = Get-HenkaCMakeFetchContentArguments `
+    -DependencyRoot (Join-Path $buildRoot "_deps") `
+    -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA")
+$configureArguments = @("-S", $repoRoot, "-B", $buildRoot) + @($fetchContent.Arguments)
+foreach ($provider in $fetchContent.ProviderStates) {
+    if ($provider.Available) {
+        Write-Host "$($provider.Label) provider: repository-local populated source"
+    } else {
+        Write-Host "$($provider.Label) provider: FetchContent network fallback"
+    }
 }
-if (Test-Path -LiteralPath (Join-Path $localKtxSource "CMakeLists.txt")) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE=$localKtxSource"
-    $offlineProviderCount += 1
-    Write-Host "KTX-Software provider: repository-local populated source"
-} else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "KTX-Software provider: FetchContent network fallback"
-}
-if (Test-Path -LiteralPath (Join-Path $localEnetSource "CMakeLists.txt")) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET=$localEnetSource"
-    $offlineProviderCount += 1
-    Write-Host "ENet provider: repository-local populated source"
-} else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "ENet provider: FetchContent network fallback"
-}
-if (Test-Path -LiteralPath (Join-Path $localLuaSource "lua.h")) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA=$localLuaSource"
-    $offlineProviderCount += 1
-    Write-Host "Lua provider: repository-local populated source"
-} else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "Lua provider: FetchContent network fallback"
-}
-if ($offlineProviderCount -eq 4) {
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+if ($fetchContent.FullyDisconnected) {
     Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
 } else {
     Write-Host "FetchContent mode: normal network-capable fallback for missing providers"

@@ -64,89 +64,30 @@ $validationRoot = Join-Path $validationParent "external_game_minimal"
 $validationSource = Join-Path $validationRoot "external_game_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_game_minimal_build"
 $cmake = Get-HenkaCMakePath
-$localSdlSource = Join-Path $repoRoot "build\_deps\sdl3-src"
-$localKtxSource = Join-Path $repoRoot "build\_deps\ktxsoftware-src"
-$localEnetSource = Join-Path $repoRoot "build\_deps\enet-src"
-$localLuaSource = Join-Path $repoRoot "build\_deps\lua-src"
-$localMiniaudioSource = Join-Path $repoRoot "build\_deps\miniaudio-src"
-$localStbSource = Join-Path $repoRoot "build\_deps\stb-src"
-$offlineProviderCount = 0
 $configureArguments = @(
     "-S", $validationSource,
     "-B", $validationBuild,
     "-DHENKA_ENGINE_DIR=$repoRoot"
 )
-
-if (-not $NoLocalProviders -and (Test-Path -LiteralPath $localSdlSource -PathType Container)) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3=$localSdlSource"
-    $offlineProviderCount += 1
-    Write-Host "SDL3 provider: repository-local populated source"
+$fetchArguments = @{
+    DependencyRoot = Join-Path $repoRoot "build\_deps"
+    Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
 }
-else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "SDL3 provider: FetchContent network fallback"
+if ($NoLocalProviders) {
+    $fetchArguments.NoLocalProviders = $true
 }
-
-if (-not $NoLocalProviders -and (Test-Path -LiteralPath $localKtxSource -PathType Container)) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE=$localKtxSource"
-    $offlineProviderCount += 1
-    Write-Host "KTX-Software provider: repository-local populated source"
+$fetchContent = Get-HenkaCMakeFetchContentArguments @fetchArguments
+$configureArguments += @($fetchContent.Arguments)
+foreach ($provider in $fetchContent.ProviderStates) {
+    if ($provider.Available) {
+        Write-Host "$($provider.Label) provider: repository-local populated source"
+    } else {
+        Write-Host "$($provider.Label) provider: FetchContent network fallback"
+    }
 }
-else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "KTX-Software provider: FetchContent network fallback"
-}
-if (-not $NoLocalProviders -and (Test-Path -LiteralPath $localEnetSource -PathType Container)) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET=$localEnetSource"
-    $offlineProviderCount += 1
-    Write-Host "ENet provider: repository-local populated source"
-}
-else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "ENet provider: FetchContent network fallback"
-}
-
-if (-not $NoLocalProviders -and (Test-Path -LiteralPath (Join-Path $localLuaSource "lua.h") -PathType Leaf)) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA=$localLuaSource"
-    $offlineProviderCount += 1
-    Write-Host "Lua provider: repository-local populated source"
-}
-else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "Lua provider: FetchContent network fallback"
-}
-
-if (-not $NoLocalProviders -and (Test-Path -LiteralPath (Join-Path $localMiniaudioSource "miniaudio.h") -PathType Leaf)) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_MINIAUDIO=$localMiniaudioSource"
-    $offlineProviderCount += 1
-    Write-Host "miniaudio provider: repository-local populated source"
-}
-else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_MINIAUDIO="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "miniaudio provider: FetchContent network fallback"
-}
-
-if (-not $NoLocalProviders -and (Test-Path -LiteralPath (Join-Path $localStbSource "stb_vorbis.c") -PathType Leaf)) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_STB=$localStbSource"
-    $offlineProviderCount += 1
-    Write-Host "stb provider: repository-local populated source"
-}
-else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_STB="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "stb provider: FetchContent network fallback"
-}
-
-if ($offlineProviderCount -eq 6) {
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+if ($fetchContent.FullyDisconnected) {
     Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
-}
-else {
+} else {
     Write-Host "FetchContent mode: normal network-capable fallback for missing providers"
 }
 

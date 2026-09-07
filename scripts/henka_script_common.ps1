@@ -90,6 +90,100 @@ function Get-HenkaCTestPath {
     throw "CTest was not found beside CMake or on PATH."
 }
 
+function Get-HenkaCMakeFetchContentArguments {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DependencyRoot,
+
+        [ValidateSet("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")]
+        [string[]]$Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB"),
+
+        [switch]$NoLocalProviders
+    )
+
+    $definitions = @{
+        SDL3 = [pscustomobject]@{
+            CacheName = "SDL3"
+            RelativePath = "sdl3-src"
+            Marker = "CMakeLists.txt"
+            Label = "SDL3"
+        }
+        KTXSOFTWARE = [pscustomobject]@{
+            CacheName = "KTXSOFTWARE"
+            RelativePath = "ktxsoftware-src"
+            Marker = "CMakeLists.txt"
+            Label = "KTX-Software"
+        }
+        ENET = [pscustomobject]@{
+            CacheName = "ENET"
+            RelativePath = "enet-src"
+            Marker = "CMakeLists.txt"
+            Label = "ENet"
+        }
+        LUA = [pscustomobject]@{
+            CacheName = "LUA"
+            RelativePath = "lua-src"
+            Marker = "lua.h"
+            Label = "Lua"
+        }
+        MINIAUDIO = [pscustomobject]@{
+            CacheName = "MINIAUDIO"
+            RelativePath = "miniaudio-src"
+            Marker = "miniaudio.h"
+            Label = "miniaudio"
+        }
+        STB = [pscustomobject]@{
+            CacheName = "STB"
+            RelativePath = "stb-src"
+            Marker = "stb_vorbis.c"
+            Label = "stb"
+        }
+    }
+
+    $arguments = @()
+    $states = @()
+    $missingCount = 0
+
+    foreach ($provider in @($Providers)) {
+        if (-not $definitions.ContainsKey($provider)) {
+            throw "Unknown Henka FetchContent provider: $provider"
+        }
+
+        $definition = $definitions[$provider]
+        $sourceRoot = Join-Path $DependencyRoot $definition.RelativePath
+        $markerPath = Join-Path $sourceRoot $definition.Marker
+        $available = (-not $NoLocalProviders) -and
+            (Test-Path -LiteralPath $markerPath -PathType Leaf)
+        $sourceValue = if ($available) { [System.IO.Path]::GetFullPath($sourceRoot) } else { "" }
+        $arguments += "-DFETCHCONTENT_SOURCE_DIR_$($definition.CacheName)=$sourceValue"
+        if (-not $available) {
+            $missingCount++
+        }
+        $states += [pscustomobject]@{
+            Name = $provider
+            Label = $definition.Label
+            SourceRoot = $sourceValue
+            Available = [bool]$available
+            CMakeArgument = [string]$arguments[$arguments.Count - 1]
+        }
+    }
+
+    $fullyDisconnected = ($missingCount -eq 0)
+    $modeArgument = if ($fullyDisconnected) {
+        "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+    } else {
+        "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
+    }
+    $arguments += $modeArgument
+
+    return [pscustomobject]@{
+        Arguments = [string[]]$arguments
+        ProviderStates = [object[]]$states
+        MissingCount = $missingCount
+        FullyDisconnected = $fullyDisconnected
+    }
+}
+
 function Get-HenkaGitPath {
     $gitCommand = Get-Command git.exe -ErrorAction SilentlyContinue
     if ($null -eq $gitCommand) {

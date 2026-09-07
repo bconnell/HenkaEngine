@@ -43,34 +43,32 @@ $validationRoot = Join-Path $validationParent "external_server_minimal"
 $validationSource = Join-Path $validationRoot "external_server_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_server_minimal_build"
 $cmake = Get-HenkaCMakePath
-$localEnetSource = Join-Path $repoRoot "build\_deps\enet-src"
-$localLuaSource = Join-Path $repoRoot "build\_deps\lua-src"
 $configureArguments = @(
     "-S", $validationSource,
     "-B", $validationBuild,
     "-DHENKA_ENGINE_DIR=$repoRoot",
     "-DCMAKE_SUPPRESS_REGENERATION=ON"
 )
-
-if (-not $NoLocalProviders -and (Test-Path -LiteralPath $localEnetSource -PathType Container)) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET=$localEnetSource"
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
-    Write-Host "ENet provider: repository-local populated source"
+$fetchArguments = @{
+    DependencyRoot = Join-Path $repoRoot "build\_deps"
+    Providers = @("ENET", "LUA")
 }
-else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "ENet provider: FetchContent network fallback"
+if ($NoLocalProviders) {
+    $fetchArguments.NoLocalProviders = $true
 }
-
-if (-not $NoLocalProviders -and (Test-Path -LiteralPath (Join-Path $localLuaSource "lua.h") -PathType Leaf)) {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA=$localLuaSource"
-    Write-Host "Lua provider: repository-local populated source"
+$fetchContent = Get-HenkaCMakeFetchContentArguments @fetchArguments
+$configureArguments += @($fetchContent.Arguments)
+foreach ($provider in $fetchContent.ProviderStates) {
+    if ($provider.Available) {
+        Write-Host "$($provider.Label) provider: repository-local populated source"
+    } else {
+        Write-Host "$($provider.Label) provider: FetchContent network fallback"
+    }
 }
-else {
-    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA="
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    Write-Host "Lua provider: FetchContent network fallback"
+if ($fetchContent.FullyDisconnected) {
+    Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
+} else {
+    Write-Host "FetchContent mode: normal network-capable fallback for missing providers"
 }
 
 Write-Host "cmake: $cmake"
