@@ -601,6 +601,108 @@ static void henka_test_character_controller_syncs_linked_scene_entity(void)
     henka_scene_destroy(scene);
 }
 
+static void henka_test_character_controller_syncs_linked_hierarchy_entity(void)
+{
+    henka_scene* scene = NULL;
+    henka_physics_world* world = NULL;
+    henka_character_controller* controller = NULL;
+    henka_character_controller_desc desc = henka_test_character_controller_desc();
+    henka_entity parent = HENKA_INVALID_ENTITY;
+    henka_entity child = HENKA_INVALID_ENTITY;
+    henka_character_controller_state state;
+    henka_transform parent_transform = henka_transform_identity();
+    henka_transform child_transform = henka_transform_identity();
+    henka_transform world_transform;
+    henka_transform local_transform;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+
+    parent = henka_scene_create_entity_named(scene, "Character hierarchy parent");
+    child = henka_scene_create_entity_named(scene, "Character hierarchy child");
+    HENKA_TEST_ASSERT(parent != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(child != HENKA_INVALID_ENTITY);
+
+    parent_transform.position = (henka_vec3){10.0f, 0.0f, 0.0f};
+    child_transform.position = (henka_vec3){2.0f, 2.0f, 0.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+        scene,
+        parent,
+        parent_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+        scene,
+        child,
+        child_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene,
+        child,
+        parent,
+        HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+
+    desc.transform.position = (henka_vec3){12.0f, 2.0f, 0.0f};
+    desc.linked_scene = scene;
+    desc.linked_entity = child;
+    HENKA_TEST_ASSERT(henka_character_controller_create(
+        world,
+        &desc,
+        &controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(
+        scene,
+        child,
+        &world_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_transform(
+        scene,
+        child,
+        &local_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_transform.position.x, 12.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(local_transform.position.x, 2.0f, 0.0001f);
+
+    world_transform = desc.transform;
+    world_transform.position.x = 14.0f;
+    HENKA_TEST_ASSERT(henka_character_controller_teleport(
+        controller,
+        world_transform,
+        true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(
+        scene,
+        child,
+        &world_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_transform(
+        scene,
+        child,
+        &local_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_transform.position.x, 14.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(local_transform.position.x, 4.0f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_character_controller_prepare_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_sync_after_step(controller) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_character_controller_get_state(
+        controller,
+        &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_transform(
+        scene,
+        child,
+        &world_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_transform(
+        scene,
+        child,
+        &local_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.transform.position.x,
+        world_transform.position.x,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(world_transform.position.x, 14.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(local_transform.position.x, 4.0f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_character_controller_destroy(controller) == HENKA_SUCCESS);
+    henka_physics_world_destroy(world);
+    henka_scene_destroy(scene);
+}
+
 static void henka_test_character_controller_failure_boundaries(void)
 {
     henka_physics_world* world = NULL;
@@ -653,5 +755,6 @@ void henka_test_character_controller(void)
     henka_test_character_controller_traverses_walkable_slope();
     henka_test_character_controller_follows_kinematic_platform();
     henka_test_character_controller_syncs_linked_scene_entity();
+    henka_test_character_controller_syncs_linked_hierarchy_entity();
     henka_test_character_controller_failure_boundaries();
 }
