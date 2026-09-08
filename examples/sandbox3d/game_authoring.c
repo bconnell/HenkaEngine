@@ -525,6 +525,7 @@ static bool sandbox3d_game_authoring_path_has_suffix(
 }
 
 static henka_result sandbox3d_game_authoring_materialize_source(
+    const char* project_root,
     henka_engine* engine,
     henka_asset_manager* assets,
     henka_scene* scene,
@@ -540,7 +541,8 @@ static henka_result sandbox3d_game_authoring_materialize_source(
     {
         *out_owned_mesh = NULL;
     }
-    if (scene == NULL || object == NULL ||
+    if (project_root == NULL || project_root[0] == '\0' ||
+        scene == NULL || object == NULL ||
         !henka_scene_is_entity_valid(scene, entity))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -626,7 +628,7 @@ static henka_result sandbox3d_game_authoring_materialize_source(
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
         result = henka_assets_resolve_path(
-            henka_engine_get_asset_base_path(engine),
+            project_root,
             object->source.path,
             &resolved_path);
         if (result == HENKA_SUCCESS)
@@ -800,6 +802,7 @@ static henka_result sandbox3d_game_authoring_open_project_internal(
             {
                 henka_mesh* owned_mesh = NULL;
                 result = sandbox3d_game_authoring_materialize_source(
+                    project_root,
                     engine,
                     assets,
                     candidate_scene,

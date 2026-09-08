@@ -172,7 +172,7 @@ sources are rebuilt through the bounded native authoring constructors and
 retained as coordinator-owned runtime meshes. BOX uses X/Y/Z dimensions,
 SPHERE requires equal X/Y/Z values and uses that value as its radius, and
 PLANE uses X/Z as width/depth. Persisted authoring-mesh sources are resolved
-confined beneath the engine asset base path, loaded through the versioned HAMS
+beneath the project root, loaded through the versioned HAMS
 reader, converted through the runtime mesh bridge, and retained with the same
 coordinator ownership. The returned coordinator must remain alive while the
 reopened scene uses those generated meshes, and the engine's renderer must

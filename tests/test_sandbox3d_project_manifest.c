@@ -424,7 +424,7 @@ static int test_project_reopen_materializes_authoring_mesh(void)
     config.window_width = 320;
     config.window_height = 240;
     config.enable_vsync = false;
-    config.asset_base_path = project_root;
+    config.asset_base_path = ".";
     if (henka_engine_create(&config, &engine) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_open_project_with_engine(
             project_root,
