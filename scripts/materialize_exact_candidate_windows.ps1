@@ -22,6 +22,28 @@ $git = Get-HenkaGitPath
 $repository = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $candidate = [System.IO.Path]::GetFullPath($CandidatePath)
 
+# A Windows PowerShell 5.1 process cannot bind the same array parameter more
+# than once. The caller may therefore serialize multiple repository-relative
+# paths as one pipe-delimited argument. The pipe character is not valid in a
+# Windows filename, while direct in-process callers may continue passing a
+# normal [string[]].
+function Expand-DelimitedRepositoryPaths {
+    param(
+        [AllowEmptyCollection()]
+        [Parameter(Mandatory = $true)]
+        [string[]]$Paths
+    )
+
+    $expanded = @()
+    foreach ($path in @($Paths)) {
+        $expanded += @($path -split "\|")
+    }
+    return $expanded
+}
+
+$RequireIncludedPath = @(Expand-DelimitedRepositoryPaths -Paths $RequireIncludedPath)
+$RequireExcludedPath = @(Expand-DelimitedRepositoryPaths -Paths $RequireExcludedPath)
+
 function Assert-DirectoryIsSafe {
     param(
         [Parameter(Mandatory = $true)]

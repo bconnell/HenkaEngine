@@ -61,14 +61,12 @@ function Invoke-ExactCandidate {
         $arguments += "-Remove"
     }
     if ($null -ne $RequireIncludedPath) {
-        foreach ($path in @($RequireIncludedPath)) {
-            $arguments += @("-RequireIncludedPath", $path)
-        }
+        $serializedIncludedPaths = (@($RequireIncludedPath) | ForEach-Object { [string]$_ }) -join "|"
+        $arguments += @("-RequireIncludedPath", $serializedIncludedPaths)
     }
     if ($null -ne $RequireExcludedPath) {
-        foreach ($path in @($RequireExcludedPath)) {
-            $arguments += @("-RequireExcludedPath", $path)
-        }
+        $serializedExcludedPaths = (@($RequireExcludedPath) | ForEach-Object { [string]$_ }) -join "|"
+        $arguments += @("-RequireExcludedPath", $serializedExcludedPaths)
     }
 
     $previousErrorActionPreference = $ErrorActionPreference
@@ -96,26 +94,36 @@ try {
     Invoke-FixtureGit @("config", "user.name", "Henka exact-candidate regression") | Out-Null
     Invoke-FixtureGit @("config", "user.email", "henka-exact-candidate@example.invalid") | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $fixtureRoot "shared.txt"), "baseline")
+    [System.IO.File]::WriteAllText((Join-Path $fixtureRoot "secondary.txt"), "secondary baseline")
     Invoke-FixtureGit @("add", "shared.txt") | Out-Null
+    Invoke-FixtureGit @("add", "secondary.txt") | Out-Null
     Invoke-FixtureGit @("commit", "--quiet", "-m", "baseline") | Out-Null
 
     [System.IO.File]::WriteAllText((Join-Path $fixtureRoot "shared.txt"), "staged")
     Invoke-FixtureGit @("add", "shared.txt") | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $fixtureRoot "secondary.txt"), "secondary staged")
+    Invoke-FixtureGit @("add", "secondary.txt") | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $fixtureRoot "shared.txt"), "unstaged")
+    [System.IO.File]::WriteAllText((Join-Path $fixtureRoot "secondary.txt"), "secondary unstaged")
     [System.IO.File]::WriteAllText((Join-Path $fixtureRoot "untracked.txt"), "must not enter candidate")
+    [System.IO.File]::WriteAllText((Join-Path $fixtureRoot "also-untracked.txt"), "must also not enter candidate")
 
     $createExit = Invoke-ExactCandidate `
         -TargetPath $candidatePath `
-        -RequireIncludedPath "shared.txt" `
-        -RequireExcludedPath "untracked.txt"
+        -RequireIncludedPath @("shared.txt", "secondary.txt") `
+        -RequireExcludedPath @("untracked.txt", "also-untracked.txt")
     Assert-Condition ($createExit -eq 0) `
         "Exact candidate creation failed with exit code $createExit."
     Assert-Condition (Test-Path -LiteralPath $candidatePath -PathType Container) `
         "Exact candidate checkout was not created."
     Assert-Condition (([System.IO.File]::ReadAllText((Join-Path $candidatePath "shared.txt"))) -eq "staged") `
         "Candidate used the unstaged file content instead of the staged blob."
+    Assert-Condition (([System.IO.File]::ReadAllText((Join-Path $candidatePath "secondary.txt"))) -eq "secondary staged") `
+        "Candidate used the unstaged content for the second required path instead of the staged blob."
     Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $candidatePath "untracked.txt"))) `
         "Candidate unexpectedly included an untracked path."
+    Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $candidatePath "also-untracked.txt"))) `
+        "Candidate unexpectedly included a second untracked path."
 
     $candidateStatus = @(& $git -C $candidatePath status --short --branch)
     Assert-Condition (($candidateStatus -join "`n") -match "^## HEAD \(no branch\)$") `
