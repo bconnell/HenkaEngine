@@ -40,6 +40,15 @@ henka_result sandbox3d_game_authoring_open_project_with_assets(
     henka_asset_manager* assets,
     henka_scene** out_scene,
     sandbox3d_game_authoring** out_authoring);
+/* Opens a project with the owning engine available for native primitive
+ * reconstruction. Generated primitive meshes are owned by the returned
+ * coordinator and remain valid until it is destroyed; the coordinator still
+ * borrows the returned scene. Unsupported sources fail closed. */
+henka_result sandbox3d_game_authoring_open_project_with_engine(
+    const char* project_root,
+    henka_engine* engine,
+    henka_scene** out_scene,
+    sandbox3d_game_authoring** out_authoring);
 void sandbox3d_game_authoring_destroy(
     sandbox3d_game_authoring* authoring);
 

@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #include <henka/memory.h>
+#include <henka/authoring_modeling.h>
 #include <henka/persistence.h>
 #include <henka/script_asset.h>
 
@@ -52,6 +53,11 @@ struct sandbox3d_game_authoring
     char project_root[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
     sandbox3d_game_authoring_binding bindings[SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
     size_t binding_count;
+    /* Scene entities borrow render meshes. Native primitive sources reconstructed
+     * during project open are retained here until the coordinator is destroyed;
+     * manager-backed sources remain owned by the asset manager. */
+    henka_mesh* owned_project_meshes[SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
+    size_t owned_project_mesh_count;
     sandbox3d_game_authoring_history_entry history[
         SANDBOX3D_GAME_AUTHORING_MAX_HISTORY_STEPS];
     size_t history_entry_count;
@@ -518,14 +524,21 @@ static bool sandbox3d_game_authoring_path_has_suffix(
 }
 
 static henka_result sandbox3d_game_authoring_materialize_source(
+    henka_engine* engine,
     henka_asset_manager* assets,
     henka_scene* scene,
     henka_entity entity,
-    const henka_scene_document_object* object)
+    const henka_scene_document_object* object,
+    henka_mesh** out_owned_mesh)
 {
+    henka_authoring_mesh* authoring_mesh = NULL;
     henka_mesh* mesh = NULL;
     henka_result result;
 
+    if (out_owned_mesh != NULL)
+    {
+        *out_owned_mesh = NULL;
+    }
     if (scene == NULL || object == NULL ||
         !henka_scene_is_entity_valid(scene, entity))
     {
@@ -535,15 +548,82 @@ static henka_result sandbox3d_game_authoring_materialize_source(
     {
         return HENKA_SUCCESS;
     }
+    if (object->source.kind == HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE)
+    {
+        const henka_authoring_mesh_desc description =
+            henka_authoring_mesh_desc_default();
+
+        if (engine == NULL)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        switch (object->source.primitive)
+        {
+            case HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX:
+                result = henka_authoring_mesh_create_box(
+                    &description,
+                    object->source.primitive_dimensions.x,
+                    object->source.primitive_dimensions.y,
+                    object->source.primitive_dimensions.z,
+                    &authoring_mesh);
+                break;
+            case HENKA_SCENE_DOCUMENT_PRIMITIVE_SPHERE:
+                if (object->source.primitive_dimensions.x !=
+                        object->source.primitive_dimensions.y ||
+                    object->source.primitive_dimensions.x !=
+                        object->source.primitive_dimensions.z)
+                {
+                    return HENKA_ERROR_INVALID_ARGUMENT;
+                }
+                result = henka_authoring_mesh_create_uv_sphere(
+                    &description,
+                    object->source.primitive_dimensions.x,
+                    32U,
+                    16U,
+                    &authoring_mesh);
+                break;
+            case HENKA_SCENE_DOCUMENT_PRIMITIVE_PLANE:
+                result = henka_authoring_mesh_create_plane(
+                    &description,
+                    object->source.primitive_dimensions.x,
+                    object->source.primitive_dimensions.z,
+                    &authoring_mesh);
+                break;
+            default:
+                return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_mesh_create_from_authoring_mesh(
+                engine,
+                authoring_mesh,
+                &mesh);
+        }
+        henka_authoring_mesh_destroy(authoring_mesh);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        result = henka_scene_set_entity_mesh(scene, entity, mesh);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_mesh_destroy(mesh);
+            return result;
+        }
+        if (out_owned_mesh != NULL)
+        {
+            *out_owned_mesh = mesh;
+        }
+        return HENKA_SUCCESS;
+    }
     if (assets == NULL ||
         object->source.kind != HENKA_SCENE_DOCUMENT_SOURCE_ASSET ||
         object->source.asset_kind != HENKA_SCENE_DOCUMENT_ASSET_MESH ||
         object->source.path[0] == '\0')
     {
         /* Do not expose an entity whose persisted source was silently lost.
-         * Primitive and authoring-source materialization need their owning
-         * resource paths/resolvers before this project-open seam can claim
-         * support for them. */
+         * Authoring-source materialization still needs its owning source
+         * paths/resolvers before this project-open seam can claim support. */
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (sandbox3d_game_authoring_path_has_suffix(object->source.path, ".obj"))
@@ -568,6 +648,7 @@ static henka_result sandbox3d_game_authoring_materialize_source(
 
 static henka_result sandbox3d_game_authoring_open_project_internal(
     const char* project_root,
+    henka_engine* engine,
     henka_asset_manager* assets,
     henka_scene** out_scene,
     sandbox3d_game_authoring** out_authoring)
@@ -673,14 +754,31 @@ static henka_result sandbox3d_game_authoring_open_project_internal(
                 result = HENKA_ERROR_OUT_OF_MEMORY;
                 break;
             }
-            result = sandbox3d_game_authoring_materialize_source(
-                assets,
-                candidate_scene,
-                entity,
-                &object);
-            if (result != HENKA_SUCCESS)
             {
-                break;
+                henka_mesh* owned_mesh = NULL;
+                result = sandbox3d_game_authoring_materialize_source(
+                    engine,
+                    assets,
+                    candidate_scene,
+                    entity,
+                    &object,
+                    &owned_mesh);
+                if (result != HENKA_SUCCESS)
+                {
+                    break;
+                }
+                if (owned_mesh != NULL)
+                {
+                    if (candidate_authoring->owned_project_mesh_count >=
+                        SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS)
+                    {
+                        henka_mesh_destroy(owned_mesh);
+                        result = HENKA_ERROR_LIMIT;
+                        break;
+                    }
+                    candidate_authoring->owned_project_meshes[
+                        candidate_authoring->owned_project_mesh_count++] = owned_mesh;
+                }
             }
             bind_result = sandbox3d_scene_document_bridge_bind(
                 candidate_authoring->bridge,
@@ -736,6 +834,7 @@ henka_result sandbox3d_game_authoring_open_project(
     return sandbox3d_game_authoring_open_project_internal(
         project_root,
         NULL,
+        NULL,
         out_scene,
         out_authoring);
 }
@@ -754,6 +853,36 @@ henka_result sandbox3d_game_authoring_open_project_with_assets(
     }
     return sandbox3d_game_authoring_open_project_internal(
         project_root,
+        NULL,
+        assets,
+        out_scene,
+        out_authoring);
+}
+
+henka_result sandbox3d_game_authoring_open_project_with_engine(
+    const char* project_root,
+    henka_engine* engine,
+    henka_scene** out_scene,
+    sandbox3d_game_authoring** out_authoring)
+{
+    henka_asset_manager* assets;
+
+    if (engine == NULL)
+    {
+        if (out_scene != NULL) *out_scene = NULL;
+        if (out_authoring != NULL) *out_authoring = NULL;
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL)
+    {
+        if (out_scene != NULL) *out_scene = NULL;
+        if (out_authoring != NULL) *out_authoring = NULL;
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_game_authoring_open_project_internal(
+        project_root,
+        engine,
         assets,
         out_scene,
         out_authoring);
@@ -778,6 +907,15 @@ void sandbox3d_game_authoring_destroy(
     henka_script_state_store_destroy(authoring->script_state_store);
     sandbox3d_scene_document_bridge_destroy(authoring->bridge);
     henka_scene_document_destroy(authoring->document);
+    while (authoring->owned_project_mesh_count > 0U)
+    {
+        --authoring->owned_project_mesh_count;
+        henka_mesh_destroy(
+            authoring->owned_project_meshes[
+                authoring->owned_project_mesh_count]);
+        authoring->owned_project_meshes[
+            authoring->owned_project_mesh_count] = NULL;
+    }
     henka_free(authoring);
 }
 

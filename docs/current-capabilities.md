@@ -167,6 +167,14 @@ When opened with the asset manager, persisted mesh sources with confined OBJ,
 glTF, or GLB paths are materialized as manager-owned runtime meshes. Other
 persisted source kinds remain unsupported by this project-open entry point and
 fail closed rather than being silently replaced.
+When opened with the owning engine, persisted BOX, SPHERE, and PLANE primitive
+sources are rebuilt through the bounded native authoring constructors and
+retained as coordinator-owned runtime meshes. BOX uses X/Y/Z dimensions,
+SPHERE requires equal X/Y/Z values and uses that value as its radius, and
+PLANE uses X/Z as width/depth. The returned coordinator must remain alive
+while the reopened scene uses those meshes, and the engine's renderer must
+remain alive until the coordinator releases them. Authoring-mesh source
+materialization remains unsupported at this boundary and fails closed.
 
 ### Play lifecycle
 
