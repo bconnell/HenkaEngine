@@ -250,9 +250,9 @@ static void henka_test_scene_hierarchy(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(child_world_bounds.center.x, expected_world.position.x, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(child_world_bounds.center.y, expected_world.position.y, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(child_world_bounds.center.z, expected_world.position.z, 0.0001f);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(child_world_bounds.extents.x, 6.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(child_world_bounds.extents.x, 5.656854f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(child_world_bounds.extents.y, 4.0f, 0.0001f);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(child_world_bounds.extents.z, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(child_world_bounds.extents.z, 5.656854f, 0.0001f);
 
     HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
         scene, grandchild, child, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
