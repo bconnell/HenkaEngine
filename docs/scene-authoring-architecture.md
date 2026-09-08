@@ -113,6 +113,15 @@ selected scene fails before candidate publication and leaves the active Scene
 Document and runtime scene unchanged. The manifest and `.hscene` files use the
 existing confined-path and atomic settings/document persistence boundaries.
 
+The public project-open entry point reads the manifest into a newly created
+runtime scene and authoring coordinator. It materializes fresh runtime entity
+bindings for the persisted object IDs, applies authored objects, hierarchy, and
+camera state through the existing bridge, and returns neither output until the
+candidate is fully validated. Project open therefore supports a real
+close/reopen/edit/save/reopen cycle without reusing stale runtime entities or a
+caller-held scene path. It requires a valid `henka.project`; the compatibility
+fallback above remains specific to in-session `load`.
+
 ## `.hscene` representation
 
 Scene Document V1 uses a deterministic little-endian binary format with the `HSCN` magic.

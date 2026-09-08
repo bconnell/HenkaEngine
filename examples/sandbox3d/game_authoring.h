@@ -23,6 +23,14 @@ henka_result sandbox3d_game_authoring_create(
     henka_scene* scene,
     const char* relative_path,
     sandbox3d_game_authoring** out_authoring);
+/* Opens a project into freshly-created runtime/session state. The returned
+ * scene is owned by the caller and is borrowed by the returned coordinator;
+ * both outputs remain NULL unless manifest selection, document loading,
+ * runtime entity binding, and bridge publication all succeed. */
+henka_result sandbox3d_game_authoring_open_project(
+    const char* project_root,
+    henka_scene** out_scene,
+    sandbox3d_game_authoring** out_authoring);
 void sandbox3d_game_authoring_destroy(
     sandbox3d_game_authoring* authoring);
 

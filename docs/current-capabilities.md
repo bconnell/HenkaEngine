@@ -158,6 +158,12 @@ Save Scene and Reload Scene use the confined, checksummed `.hscene` format.
 
 Candidate loads, rebinding, and runtime presentation updates fail closed and retain the prior authoring state on failure.
 
+Project Open reads the confined `henka.project` startup-scene selection into a
+fresh runtime scene and authoring coordinator, binds newly created runtime
+entities to the persisted Scene Document IDs, and applies authored object,
+hierarchy, and camera state only after the candidate validates. This supports a
+close/reopen/edit/save/reopen cycle without reusing the prior runtime scene.
+
 ### Play lifecycle
 
 Play, Pause, Resume, Step, and Stop are owned by a dedicated bounded session.

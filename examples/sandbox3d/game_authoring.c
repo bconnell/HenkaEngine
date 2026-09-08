@@ -290,7 +290,8 @@ static henka_result sandbox3d_game_authoring_get_startup_scene_path(
     const sandbox3d_game_authoring* authoring,
     const char* project_root,
     char* out_relative_path,
-    size_t out_relative_path_capacity)
+    size_t out_relative_path_capacity,
+    bool allow_legacy_fallback)
 {
     FILE* manifest_file = NULL;
     henka_settings* settings = NULL;
@@ -333,6 +334,10 @@ static henka_result sandbox3d_game_authoring_get_startup_scene_path(
     if (manifest_file == NULL)
     {
         henka_free(manifest_path);
+        if (!allow_legacy_fallback)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
         written = snprintf(
             out_relative_path,
             out_relative_path_capacity,
@@ -478,6 +483,158 @@ henka_result sandbox3d_game_authoring_create(
         return result;
     }
     *out_authoring = authoring;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_game_authoring_open_project(
+    const char* project_root,
+    henka_scene** out_scene,
+    sandbox3d_game_authoring** out_authoring)
+{
+    const char* bootstrap_relative_path = "project.hscene";
+    henka_scene* candidate_scene = NULL;
+    sandbox3d_game_authoring* candidate_authoring = NULL;
+    char selected_relative_path[
+        SANDBOX3D_GAME_AUTHORING_MAX_RELATIVE_PATH_BYTES];
+    henka_scene_document_object object;
+    henka_result result;
+    size_t index;
+
+    if (out_scene != NULL)
+    {
+        *out_scene = NULL;
+    }
+    if (out_authoring != NULL)
+    {
+        *out_authoring = NULL;
+    }
+    if (project_root == NULL || project_root[0] == '\0' ||
+        strlen(project_root) >= HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES ||
+        out_scene == NULL || out_authoring == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    /* Open always starts from fresh runtime state. The bootstrap path is
+     * private to this constructor and is never used when a valid manifest is
+     * present; an absent manifest is rejected instead of falling back to a
+     * path held by another authoring session. */
+    result = henka_scene_create(&candidate_scene);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = sandbox3d_game_authoring_create(
+        candidate_scene,
+        bootstrap_relative_path,
+        &candidate_authoring);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_scene_destroy(candidate_scene);
+        return result;
+    }
+    result = sandbox3d_game_authoring_get_startup_scene_path(
+        candidate_authoring,
+        project_root,
+        selected_relative_path,
+        sizeof(selected_relative_path),
+        false);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_game_authoring_set_project_root(
+            candidate_authoring,
+            project_root);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        if (snprintf(
+                candidate_authoring->relative_path,
+                sizeof(candidate_authoring->relative_path),
+                "%s",
+                selected_relative_path) < 0 ||
+            strlen(selected_relative_path) >=
+                sizeof(candidate_authoring->relative_path))
+        {
+            result = HENKA_ERROR_LIMIT;
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_document_load_file(
+            candidate_authoring->document,
+            project_root,
+            selected_relative_path);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        for (index = 0U;
+            index < henka_scene_document_get_object_count(
+                candidate_authoring->document);
+            ++index)
+        {
+            henka_entity entity;
+            henka_result bind_result;
+            if (henka_scene_document_get_object_at(
+                    candidate_authoring->document,
+                    index,
+                    &object) != HENKA_SUCCESS ||
+                candidate_authoring->binding_count >=
+                    SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                break;
+            }
+            entity = henka_scene_create_entity_named(
+                candidate_scene,
+                object.name);
+            if (entity == HENKA_INVALID_ENTITY)
+            {
+                result = HENKA_ERROR_OUT_OF_MEMORY;
+                break;
+            }
+            bind_result = sandbox3d_scene_document_bridge_bind(
+                candidate_authoring->bridge,
+                object.id,
+                entity);
+            if (bind_result != HENKA_SUCCESS)
+            {
+                result = bind_result;
+                break;
+            }
+            candidate_authoring->bindings[
+                candidate_authoring->binding_count++] =
+                (sandbox3d_game_authoring_binding){object.id, entity};
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_validate(
+            candidate_authoring->bridge);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_apply_objects(
+            candidate_authoring->bridge);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_apply_hierarchy(
+            candidate_authoring->bridge);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_apply_camera(
+            candidate_authoring->bridge);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        sandbox3d_game_authoring_destroy(candidate_authoring);
+        henka_scene_destroy(candidate_scene);
+        return result;
+    }
+
+    *out_scene = candidate_scene;
+    *out_authoring = candidate_authoring;
     return HENKA_SUCCESS;
 }
 
@@ -1327,7 +1484,8 @@ henka_result sandbox3d_game_authoring_load(
         authoring,
         project_root,
         selected_relative_path,
-        sizeof(selected_relative_path));
+        sizeof(selected_relative_path),
+        true);
     if (result != HENKA_SUCCESS)
     {
         return result;
