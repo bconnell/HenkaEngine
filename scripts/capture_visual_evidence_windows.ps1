@@ -768,8 +768,13 @@ function Assert-HenkaIblReferenceCaptureMetadata {
         [int]$match.Groups["settled"].Value -lt 3) {
         throw "PBR IBL reference capture readiness metadata was malformed for $Label."
     }
+    $canonical = (($Line -replace 'mode=[^ ]+', 'mode=shared') -replace 'ibl_diagnostic=[^ ]+ ', 'ibl_diagnostic=shared ' -replace 'ibl_control=[^ ]+ ', 'ibl_control=shared ' -replace 'ibl_rotation_degrees=[^ ]+ ', 'ibl_rotation_degrees=shared ' -replace 'ibl_prefilter_lod_override=[^ ]+ ', 'ibl_prefilter_lod_override=shared ')
+    # Ordinary-path LOD diagnostics intentionally differ between controls;
+    # retain them in the evidence record but exclude them from composition
+    # identity so the fractional-LOD profile compares the same scene/camera.
+    $canonical = $canonical -replace ' ibl_ordinary_path=[^ ]+(?: ibl_ordinary_[^= ]+=[^ ]+)+', ''
     return [pscustomobject]@{
-        Canonical = (($Line -replace 'mode=[^ ]+', 'mode=shared') -replace 'ibl_diagnostic=[^ ]+ ', 'ibl_diagnostic=shared ' -replace 'ibl_control=[^ ]+ ', 'ibl_control=shared ' -replace 'ibl_rotation_degrees=[^ ]+ ', 'ibl_rotation_degrees=shared ' -replace 'ibl_prefilter_lod_override=[^ ]+ ', 'ibl_prefilter_lod_override=shared ')
+        Canonical = $canonical
         Mode = "rendered"
         View = $match.Groups["view"].Value
         Layout = $match.Groups["layout"].Value

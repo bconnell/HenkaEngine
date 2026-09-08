@@ -53,6 +53,11 @@ if ($capture -notmatch 'PBR_IBL_FRACTIONAL') {
 if ($capture -notmatch 'ibl_ordinary_mip') {
     $missing += 'fractional-LOD evidence commands'
 }
+if ($capture -notmatch 'ibl_ordinary_path=\[\^ \]\+' -or
+    $capture -notmatch 'ibl_ordinary_\[\^= \]\+=\[\^ \]\+' -or
+    $capture -notmatch 'exclude them from composition') {
+    $missing += 'fractional-LOD metadata canonicalization'
+}
 if ($renderer -match 'ibl_prefilter_max_lod = renderer->ibl_diagnostic_prefilter_lod') {
     $missing += 'diagnostic override mutating resource-derived maximum LOD'
 }
