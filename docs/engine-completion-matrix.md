@@ -79,6 +79,31 @@ from closing:
 | 2D | No dedicated production 2D renderer or complete 2D authoring surface yet | Roadmap and current-capabilities boundary; no material production implementation | No complete 2D persistence/package path exists | **Planned** | Renderer, sprites, cameras, animation, physics, tile/world authoring, effects, scripting, persistence, and packaging require a dedicated campaign. |
 | Animation and character production | No complete rigging, skinning, animation authoring, or runtime production workflow | Public headers and roadmap references are foundation hooks, not completion evidence | No complete persistence/editor/package chain exists | **Planned** | Requires a deliberate production asset and runtime animation campaign. |
 
+## Renderer completion ledger
+
+This ledger makes the supported renderer boundary explicit without creating a
+second roadmap. It covers the current Windows OpenGL backend only. Vulkan,
+Direct3D, Metal, mobile backends, and advanced effects outside the listed
+scope are future expansion and do not change the status of this boundary.
+
+| Renderer area | Supported scope | Production evidence | Status | Remaining closure condition |
+| --- | --- | --- | --- | --- |
+| View modes and viewport presentation | Wire, Solid, Material Preview, and Rendered Scene View policies with bounded viewport resize | `engine/include/henka/renderer.h`; `engine/src/renderer/renderer.c`; `renderer_opengl.c`; packaged startup and viewport validation | **Available** | Direct laptop/touchpad navigation and broader editor presentation remain outside this row. |
+| Geometry submission and draw state | Runtime scene meshes, indexed parts, depth/cull/blend state, scene viewport targets, and terrain draw submission | `renderer_opengl.c`; mesh/renderer tests; packaged Sandbox startup and scene rendering | **Available within OpenGL scope** | Broader geometry-quality and modeling claims remain owned by the authoring/assets rows. |
+| PBR material evaluation | Bounded base color, metallic/roughness, normal, occlusion, emission, transmission, clearcoat, sheen, and subsurface inputs in the Rendered path | `assets/shaders/basic_lit.frag`; shader contracts and material tests; packaged material/reference paths | **In Progress** | Visual material acceptance and the remaining IBL/specular defect must close without weakening authored-material semantics. |
+| Direct lighting and shadows | Scene directional, local spot, point, and bounded near/cascade shadow paths with PCF and contact response | `basic_lit.frag`; `renderer_opengl.c`; shadow tests and packaged shadow evidence | **Available within bounded scope** | Broader lighting authoring and visual-quality expansion remain open; the repaired near-directional regression must remain protected. |
+| Environment, IBL, and reflection probes | Scene sky/environment, HDR-to-cubemap conversion, irradiance, prefiltered specular, BRDF LUT, bounded local probes, and probe blending | `henka_opengl_build_ibl_resources`; IBL shader contracts; IBL/probe tests and diagnostic captures | **In Progress** | Resolve the human-visible pinhole/nipple reflection defect and complete causal visual acceptance for ordinary and probe-backed materials. |
+| Post-processing and reconstruction | HDR target, bloom, tone mapping, AO, SSGI, SSR, motion/reactive inputs, temporal history, and bounded fallback behavior | `henka_opengl_present_hdr`; embedded post shaders; post-effect tests and diagnostics | **Foundation** | Validate visual quality, fallback transitions, temporal history invalidation, and cross-effect interaction through the packaged product path. |
+| Texture, color, and sampling | Bounded OpenGL texture formats, color-space descriptors, mip/filter/wrap state, anisotropy, and material texture binding | `engine/include/henka/texture.h`; `texture.c`; OpenGL texture upload path; texture/material tests | **Available within bounded texture scope** | High-resolution residency, broader compressed-format coverage, and material-detail quality remain open expansions. |
+| Renderer resource lifetime and resize | Transactional IBL/HDR/bloom/temporal target creation, failure fallback, deletion, memory accounting, and viewport-driven recreation | `renderer_opengl.c`; renderer diagnostics; resize, failure, and package smoke coverage | **Available within bounded OpenGL scope** | Stress/soak and device-loss recovery require broader evidence before the renderer gate closes. |
+| Editor and authoring integration | Scene View shading controls, runtime scene/material authority, topology-safe presentation, and renderer diagnostics used by the editor | `examples/sandbox3d/main.c`; editor/authoring bridge; packaged interaction scripts | **In Progress** | Clean selection/topology presentation, desktop readability, and direct user-facing authoring proof remain open. |
+| Persistence, Play, and package boundary | Rendered startup, scene/material/environment state consumed through Scene Document, Play, exact candidate packaging, and external runtime smoke | Scene Document/Game Authoring paths; package/provenance scripts; hosted Windows package jobs | **Foundation** | Complete renderer-state persistence and full external-project/package visual proof are still required. |
+
+The ledger is intentionally evidence-based: source implementation, shader
+contracts, unit tests, or reference fixtures alone do not close a user-facing
+renderer area when packaged behavior or human visual inspection remains part
+of the declared scope.
+
 ## Completion interpretation
 
 The matrix separates a real production foundation from a completed user-facing
