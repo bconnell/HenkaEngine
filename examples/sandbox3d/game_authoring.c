@@ -1,9 +1,10 @@
 #include "game_authoring.h"
 
-#include <stdio.h>
+#include <ctype.h>
 #include <errno.h>
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <henka/memory.h>
 #include <henka/persistence.h>
@@ -486,8 +487,88 @@ henka_result sandbox3d_game_authoring_create(
     return HENKA_SUCCESS;
 }
 
-henka_result sandbox3d_game_authoring_open_project(
+static bool sandbox3d_game_authoring_path_has_suffix(
+    const char* path,
+    const char* suffix)
+{
+    size_t path_length;
+    size_t suffix_length;
+    size_t index;
+
+    if (path == NULL || suffix == NULL)
+    {
+        return false;
+    }
+    path_length = strlen(path);
+    suffix_length = strlen(suffix);
+    if (suffix_length > path_length)
+    {
+        return false;
+    }
+    path += path_length - suffix_length;
+    for (index = 0U; index < suffix_length; ++index)
+    {
+        if (tolower((unsigned char)path[index]) !=
+            tolower((unsigned char)suffix[index]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static henka_result sandbox3d_game_authoring_materialize_source(
+    henka_asset_manager* assets,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_scene_document_object* object)
+{
+    henka_mesh* mesh = NULL;
+    henka_result result;
+
+    if (scene == NULL || object == NULL ||
+        !henka_scene_is_entity_valid(scene, entity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (object->source.kind == HENKA_SCENE_DOCUMENT_SOURCE_NONE)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (assets == NULL ||
+        object->source.kind != HENKA_SCENE_DOCUMENT_SOURCE_ASSET ||
+        object->source.asset_kind != HENKA_SCENE_DOCUMENT_ASSET_MESH ||
+        object->source.path[0] == '\0')
+    {
+        /* Do not expose an entity whose persisted source was silently lost.
+         * Primitive and authoring-source materialization need their owning
+         * resource paths/resolvers before this project-open seam can claim
+         * support for them. */
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (sandbox3d_game_authoring_path_has_suffix(object->source.path, ".obj"))
+    {
+        result = henka_assets_load_obj_mesh(assets, object->source.path, &mesh);
+    }
+    else if (sandbox3d_game_authoring_path_has_suffix(object->source.path, ".gltf") ||
+             sandbox3d_game_authoring_path_has_suffix(object->source.path, ".glb"))
+    {
+        result = henka_assets_load_gltf_mesh(assets, object->source.path, &mesh);
+    }
+    else
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_entity_mesh(scene, entity, mesh);
+    }
+    return result;
+}
+
+static henka_result sandbox3d_game_authoring_open_project_internal(
     const char* project_root,
+    henka_asset_manager* assets,
     henka_scene** out_scene,
     sandbox3d_game_authoring** out_authoring)
 {
@@ -592,6 +673,15 @@ henka_result sandbox3d_game_authoring_open_project(
                 result = HENKA_ERROR_OUT_OF_MEMORY;
                 break;
             }
+            result = sandbox3d_game_authoring_materialize_source(
+                assets,
+                candidate_scene,
+                entity,
+                &object);
+            if (result != HENKA_SUCCESS)
+            {
+                break;
+            }
             bind_result = sandbox3d_scene_document_bridge_bind(
                 candidate_authoring->bridge,
                 object.id,
@@ -636,6 +726,37 @@ henka_result sandbox3d_game_authoring_open_project(
     *out_scene = candidate_scene;
     *out_authoring = candidate_authoring;
     return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_game_authoring_open_project(
+    const char* project_root,
+    henka_scene** out_scene,
+    sandbox3d_game_authoring** out_authoring)
+{
+    return sandbox3d_game_authoring_open_project_internal(
+        project_root,
+        NULL,
+        out_scene,
+        out_authoring);
+}
+
+henka_result sandbox3d_game_authoring_open_project_with_assets(
+    const char* project_root,
+    henka_asset_manager* assets,
+    henka_scene** out_scene,
+    sandbox3d_game_authoring** out_authoring)
+{
+    if (assets == NULL)
+    {
+        if (out_scene != NULL) *out_scene = NULL;
+        if (out_authoring != NULL) *out_authoring = NULL;
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_game_authoring_open_project_internal(
+        project_root,
+        assets,
+        out_scene,
+        out_authoring);
 }
 
 void sandbox3d_game_authoring_destroy(

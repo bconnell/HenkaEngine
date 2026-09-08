@@ -785,6 +785,7 @@ static henka_result henka_build_face_vertices(
             return HENKA_ERROR_UNKNOWN;
         }
 
+        out_vertices[index] = (henka_model_vertex){0};
         out_vertices[index].position = positions->items[position_index];
         out_vertices[index].uv = (henka_vec2){0.0f, 0.0f};
         out_vertices[index].normal = (henka_vec3){0.0f, 1.0f, 0.0f};

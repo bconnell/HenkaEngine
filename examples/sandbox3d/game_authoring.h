@@ -31,6 +31,15 @@ henka_result sandbox3d_game_authoring_open_project(
     const char* project_root,
     henka_scene** out_scene,
     sandbox3d_game_authoring** out_authoring);
+/* Opens a project and materializes supported manager-owned mesh sources into
+ * the fresh runtime scene. The asset manager is borrowed and must outlive
+ * the returned scene and coordinator. Unsupported or unresolvable sources
+ * fail closed before the candidate becomes observable. */
+henka_result sandbox3d_game_authoring_open_project_with_assets(
+    const char* project_root,
+    henka_asset_manager* assets,
+    henka_scene** out_scene,
+    sandbox3d_game_authoring** out_authoring);
 void sandbox3d_game_authoring_destroy(
     sandbox3d_game_authoring* authoring);
 

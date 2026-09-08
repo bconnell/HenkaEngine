@@ -1,9 +1,19 @@
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
+#if defined(_WIN32)
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
+
 #include <henka/core.h>
 #include <henka/camera.h>
+#include <henka/engine.h>
+#include <henka/mesh.h>
 #include <henka/scene.h>
+#include <henka/assets.h>
 
 #include "../examples/sandbox3d/game_authoring.h"
 
@@ -13,7 +23,7 @@ static int test_float_close(float left, float right)
     return difference < 0.0001f && difference > -0.0001f;
 }
 
-static int test_write_manifest(const char* path, const char* contents)
+static int test_write_file(const char* path, const char* contents)
 {
     FILE* file = NULL;
     int close_result;
@@ -32,6 +42,156 @@ static int test_write_manifest(const char* path, const char* contents)
         return 0;
     }
     return 1;
+}
+
+static int test_ensure_directory(const char* path)
+{
+    int result;
+    if (path == NULL || path[0] == '\0')
+    {
+        return 0;
+    }
+#if defined(_WIN32)
+    result = _mkdir(path);
+#else
+    result = mkdir(path, 0700);
+#endif
+    return result == 0 || errno == EEXIST;
+}
+
+static int test_project_reopen_materializes_asset(void)
+{
+    const char* project_root = "build/test_tmp/project_asset_reopen_root";
+    const char* scene_path = "asset_scene.hscene";
+    const char* asset_path = "build/test_tmp/project_asset_reopen_root/triangle.obj";
+    const char* manifest_path =
+        "build/test_tmp/project_asset_reopen_root/henka.project";
+    const char* scene_file_path =
+        "build/test_tmp/project_asset_reopen_root/asset_scene.hscene";
+    const char* obj_source =
+        "v 0 0 0\n"
+        "v 1 0 0\n"
+        "v 0 1 0\n"
+        "f 1 2 3\n";
+    henka_scene* source_scene = NULL;
+    henka_scene* reopened_scene = NULL;
+    sandbox3d_game_authoring* source_authoring = NULL;
+    sandbox3d_game_authoring* reopened_authoring = NULL;
+    henka_engine* engine = NULL;
+    henka_asset_manager* assets = NULL;
+    henka_engine_config config = {0};
+    henka_camera camera;
+    henka_entity source_entity = HENKA_INVALID_ENTITY;
+    henka_entity reopened_entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id reopened_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object object;
+    henka_mesh* reopened_mesh = NULL;
+    henka_result open_result = HENKA_ERROR_UNKNOWN;
+    henka_result entity_result = HENKA_ERROR_UNKNOWN;
+    henka_result object_result = HENKA_ERROR_UNKNOWN;
+    henka_result mesh_result = HENKA_ERROR_UNKNOWN;
+    int success = 0;
+
+    if (!test_ensure_directory("build/test_tmp")) goto cleanup;
+    if (!test_ensure_directory(project_root)) goto cleanup;
+    if (!test_write_file(asset_path, obj_source)) goto cleanup;
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        1.0f,
+        0.1f,
+        100.0f);
+    if (henka_scene_create(&source_scene) != HENKA_SUCCESS ||
+        henka_scene_set_camera(source_scene, &camera) != HENKA_SUCCESS) goto cleanup;
+    source_entity = henka_scene_create_entity_named(
+        source_scene, "Imported Project Triangle");
+    if (source_entity == HENKA_INVALID_ENTITY) goto cleanup;
+    if (sandbox3d_game_authoring_create(
+            source_scene, scene_path, &source_authoring) != HENKA_SUCCESS) goto cleanup;
+    if (sandbox3d_game_authoring_register_entity(
+            source_authoring, source_entity, &document_id) != HENKA_SUCCESS) goto cleanup;
+    if (sandbox3d_game_authoring_get_object_for_entity(
+            source_authoring, source_entity, &document_id, &object) != HENKA_SUCCESS) goto cleanup;
+    {
+        object.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_ASSET;
+        object.source.asset_kind = HENKA_SCENE_DOCUMENT_ASSET_MESH;
+        (void)snprintf(
+            object.source.path,
+            sizeof(object.source.path),
+            "%s",
+            "triangle.obj");
+        if (sandbox3d_game_authoring_update_object_for_entity(
+                source_authoring, source_entity, &object) != HENKA_SUCCESS) goto cleanup;
+    }
+    if (sandbox3d_game_authoring_save(source_authoring, project_root) !=
+        HENKA_SUCCESS) goto cleanup;
+    sandbox3d_game_authoring_destroy(source_authoring);
+    source_authoring = NULL;
+    henka_scene_destroy(source_scene);
+    source_scene = NULL;
+
+    if (sandbox3d_game_authoring_open_project(
+            project_root,
+            &reopened_scene,
+            &reopened_authoring) == HENKA_SUCCESS ||
+        reopened_scene != NULL || reopened_authoring != NULL)
+    {
+        goto cleanup;
+    }
+
+    config.application_name = "Henka Project Asset Reopen Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = project_root;
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS) goto cleanup;
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL) goto cleanup;
+    open_result = sandbox3d_game_authoring_open_project_with_assets(
+            project_root,
+            assets,
+            &reopened_scene,
+            &reopened_authoring);
+    if (open_result == HENKA_SUCCESS && reopened_scene != NULL &&
+        reopened_authoring != NULL &&
+        henka_scene_get_entity_count(reopened_scene) == 1U)
+    {
+        entity_result = sandbox3d_game_authoring_get_entity_for_document_id(
+            reopened_authoring, document_id, &reopened_entity);
+    }
+    if (entity_result == HENKA_SUCCESS)
+    {
+        object_result = sandbox3d_game_authoring_get_object_for_entity(
+            reopened_authoring, reopened_entity, &reopened_id, &object);
+    }
+    if (object_result == HENKA_SUCCESS)
+    {
+        mesh_result = henka_scene_get_entity_mesh(
+            reopened_scene, reopened_entity, &reopened_mesh);
+    }
+    if (open_result != HENKA_SUCCESS || reopened_scene == NULL ||
+        reopened_authoring == NULL ||
+        henka_scene_get_entity_count(reopened_scene) != 1U ||
+        entity_result != HENKA_SUCCESS || object_result != HENKA_SUCCESS ||
+        reopened_id != document_id ||
+        strcmp(object.source.path, "triangle.obj") != 0 ||
+        mesh_result != HENKA_SUCCESS || reopened_mesh == NULL)
+    {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(reopened_authoring);
+    sandbox3d_game_authoring_destroy(source_authoring);
+    henka_scene_destroy(reopened_scene);
+    henka_scene_destroy(source_scene);
+    henka_engine_destroy(engine);
+    (void)remove(asset_path);
+    (void)remove(manifest_path);
+    (void)remove(scene_file_path);
+    (void)remove(project_root);
+    return success;
 }
 
 static int test_project_reopen_cycle(void)
@@ -254,7 +414,7 @@ int main(void)
         goto cleanup;
     }
 
-    if (!test_write_manifest(
+    if (!test_write_file(
             manifest_path,
             "schema_version=1\nstartup_scene=missing.hscene\n") ||
         henka_scene_set_entity_transform(scene, entity, changed_transform) !=
@@ -268,7 +428,7 @@ int main(void)
         goto cleanup;
     }
 
-    if (!test_write_manifest(
+    if (!test_write_file(
             manifest_path,
             "schema_version=1\nstartup_scene=../outside.hscene\n") ||
         henka_scene_set_entity_transform(scene, entity, authored_transform) !=
@@ -282,7 +442,7 @@ int main(void)
         goto cleanup;
     }
 
-    if (!test_write_manifest(manifest_path, "schema_version=1\n") ||
+    if (!test_write_file(manifest_path, "schema_version=1\n") ||
         henka_scene_set_entity_transform(scene, entity, changed_transform) !=
             HENKA_SUCCESS ||
         sandbox3d_game_authoring_load(reloader, project_root) == HENKA_SUCCESS ||
@@ -297,6 +457,11 @@ int main(void)
     if (!test_project_reopen_cycle())
     {
         fprintf(stderr, "project reopen cycle failed\n");
+        goto cleanup;
+    }
+    if (!test_project_reopen_materializes_asset())
+    {
+        fprintf(stderr, "project asset reopen did not materialize the source\n");
         goto cleanup;
     }
 

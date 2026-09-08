@@ -163,6 +163,10 @@ fresh runtime scene and authoring coordinator, binds newly created runtime
 entities to the persisted Scene Document IDs, and applies authored object,
 hierarchy, and camera state only after the candidate validates. This supports a
 close/reopen/edit/save/reopen cycle without reusing the prior runtime scene.
+When opened with the asset manager, persisted mesh sources with confined OBJ,
+glTF, or GLB paths are materialized as manager-owned runtime meshes. Other
+persisted source kinds remain unsupported by this project-open entry point and
+fail closed rather than being silently replaced.
 
 ### Play lifecycle
 
