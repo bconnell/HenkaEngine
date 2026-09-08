@@ -351,18 +351,24 @@ static int test_project_reopen_materializes_authoring_mesh(void)
     henka_authoring_mesh* source_mesh = NULL;
     henka_scene* source_scene = NULL;
     henka_scene* reopened_scene = NULL;
+    henka_scene* continued_scene = NULL;
     sandbox3d_game_authoring* source_authoring = NULL;
     sandbox3d_game_authoring* reopened_authoring = NULL;
+    sandbox3d_game_authoring* continued_authoring = NULL;
     henka_engine* engine = NULL;
     henka_engine_config config = {0};
     henka_authoring_mesh_desc description = henka_authoring_mesh_desc_default();
     henka_camera camera;
     henka_entity source_entity = HENKA_INVALID_ENTITY;
     henka_entity reopened_entity = HENKA_INVALID_ENTITY;
+    henka_entity continued_entity = HENKA_INVALID_ENTITY;
     henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id reopened_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id continued_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_object object;
+    henka_scene_document_object continued_object;
     henka_mesh* reopened_mesh = NULL;
+    henka_mesh* continued_mesh = NULL;
     henka_authoring_mesh_counts counts;
     int success = 0;
 
@@ -446,9 +452,64 @@ static int test_project_reopen_materializes_authoring_mesh(void)
     {
         goto cleanup;
     }
+
+    object.transform.position.x = 4.5f;
+    (void)snprintf(
+        object.name,
+        sizeof(object.name),
+        "%s",
+        "Continued Persisted Authoring Mesh");
+    if (sandbox3d_game_authoring_update_object_for_entity(
+            reopened_authoring,
+            reopened_entity,
+            &object) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_save(reopened_authoring, project_root) !=
+            HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    sandbox3d_game_authoring_destroy(reopened_authoring);
+    reopened_authoring = NULL;
+    henka_scene_destroy(reopened_scene);
+    reopened_scene = NULL;
+    henka_engine_destroy(engine);
+    engine = NULL;
+
+    config.asset_base_path = ".";
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_open_project_with_engine(
+            project_root,
+            engine,
+            &continued_scene,
+            &continued_authoring) != HENKA_SUCCESS ||
+        continued_scene == NULL || continued_authoring == NULL ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            continued_authoring,
+            document_id,
+            &continued_entity) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            continued_authoring,
+            continued_entity,
+            &continued_id,
+            &continued_object) != HENKA_SUCCESS ||
+        continued_id != document_id ||
+        strcmp(continued_object.name, "Continued Persisted Authoring Mesh") != 0 ||
+        !test_float_close(continued_object.transform.position.x, 4.5f) ||
+        continued_object.source.kind !=
+            HENKA_SCENE_DOCUMENT_SOURCE_AUTHORING_MESH ||
+        strcmp(continued_object.source.path, "authored_source.hams") != 0 ||
+        henka_scene_get_entity_mesh(
+            continued_scene,
+            continued_entity,
+            &continued_mesh) != HENKA_SUCCESS ||
+        continued_mesh == NULL)
+    {
+        goto cleanup;
+    }
     success = 1;
 
 cleanup:
+    sandbox3d_game_authoring_destroy(continued_authoring);
     sandbox3d_game_authoring_destroy(reopened_authoring);
     sandbox3d_game_authoring_destroy(source_authoring);
     henka_scene_destroy(reopened_scene);
