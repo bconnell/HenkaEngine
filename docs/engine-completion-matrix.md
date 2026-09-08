@@ -36,8 +36,9 @@ from closing:
 
 - **Modeling and authoring:** the product-native generic workflow is validated
   for the current bounded topology slice, but broader authoring coverage,
-  production-quality arbitrary asset authoring, and the remaining packaged
-  native Box-add validation contradiction remain open.
+  production-quality arbitrary asset authoring, and broader packaged authoring
+  coverage remain open. The default-scene product-native Add Cube path has a
+  dedicated executable packaged gate.
 - **Editor workspace:** desktop readability, long-label presentation, dense
   control layout, and human visual QA remain unresolved.
 - **Camera and interaction:** laptop/touchpad navigation and reliable

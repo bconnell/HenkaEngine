@@ -107,6 +107,10 @@ jobs:
         shell: powershell
         run: .\scripts\install_windows_software_opengl.ps1 -SourceDirectory "$env:HENKA_CI_SOFTWARE_OPENGL_ROOT" -TargetDirectory "out\HenkaSandbox3D"
 
+      - name: Verify packaged product-native startup primitive
+        shell: powershell
+        run: .\scripts\check_packaged_sandbox3d_windows.ps1 -NonInteractive -ProductStartupPrimitiveOnly
+
       - name: Verify visible native modeling workflow
         shell: powershell
         run: .\scripts\test_visible_native_modeling_windows.ps1
