@@ -960,11 +960,15 @@ static void henka_test_prefab_allocation_failure_transaction(void)
     henka_entity source_root;
     henka_entity source_child;
     henka_entity instance_root = HENKA_INVALID_ENTITY;
+    henka_entity seed_entity;
+    henka_entity stale_entity;
+    henka_entity probe_entity;
     size_t target_count;
     size_t failure_budget;
     size_t instance_index;
     henka_entity instance_entity;
     bool observed_failure = false;
+    bool observed_identity_advancement = false;
 
     HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
     source_root = henka_scene_create_entity_named(source, "Allocation Root");
@@ -985,6 +989,13 @@ static void henka_test_prefab_allocation_failure_transaction(void)
         henka_result result;
 
         HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
+        seed_entity = henka_scene_create_entity_named(target, "Allocation Seed");
+        stale_entity = henka_scene_create_entity_named(target, "Allocation Stale");
+        HENKA_TEST_ASSERT(seed_entity != HENKA_INVALID_ENTITY);
+        HENKA_TEST_ASSERT(stale_entity != HENKA_INVALID_ENTITY);
+        HENKA_TEST_ASSERT(seed_entity != stale_entity);
+        HENKA_TEST_ASSERT(henka_scene_destroy_entity(target, stale_entity) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(target, stale_entity));
         target_count = henka_scene_get_entity_count(target);
         render_revision_before = henka_scene_get_render_revision(target);
         content_revision_before = target->content_revision;
@@ -1006,6 +1017,19 @@ static void henka_test_prefab_allocation_failure_transaction(void)
                 henka_scene_get_render_revision(target) == render_revision_before);
             HENKA_TEST_ASSERT(
                 target->content_revision == content_revision_before);
+
+            /*
+             * A partial publication may reuse stale_entity's slot before
+             * failing. Rollback must consume that generation so a later
+             * allocation cannot resurrect the stale opaque identity.
+             */
+            probe_entity = henka_scene_create_entity_named(target, "Post-failure Probe");
+            HENKA_TEST_ASSERT(probe_entity != HENKA_INVALID_ENTITY);
+            if (probe_entity != stale_entity)
+            {
+                observed_identity_advancement = true;
+            }
+            HENKA_TEST_ASSERT(henka_scene_destroy_entity(target, probe_entity) == HENKA_SUCCESS);
         }
         else
         {
@@ -1031,6 +1055,7 @@ static void henka_test_prefab_allocation_failure_transaction(void)
     }
 
     HENKA_TEST_ASSERT(observed_failure);
+    HENKA_TEST_ASSERT(observed_identity_advancement);
     henka_prefab_destroy(prefab);
     henka_scene_destroy(source);
 }
