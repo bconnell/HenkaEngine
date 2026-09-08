@@ -236,7 +236,11 @@ void henka_test_camera(void)
         henka_camera_follow_desc invalid_desc;
         henka_scene* follow_scene = NULL;
         henka_entity follow_target;
+        henka_entity follow_parent;
+        henka_entity follow_child;
         henka_transform target_transform;
+        henka_transform parent_transform;
+        henka_transform child_transform;
 
         HENKA_TEST_ASSERT(henka_scene_create(&follow_scene) == HENKA_SUCCESS);
         followed_camera = henka_camera_create_perspective(
@@ -278,6 +282,50 @@ void henka_test_camera(void)
         HENKA_TEST_ASSERT(henka_scene_get_camera(follow_scene, &followed_camera) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(followed_camera.position.x > before.position.x);
         HENKA_TEST_ASSERT(followed_camera.position.x < 15.0f);
+
+        /* Camera follow must consume the child's effective world transform,
+         * not the stale local transform, when a live parent moves. */
+        follow_parent = henka_scene_create_entity_named(
+            follow_scene, "Camera Follow Parent");
+        follow_child = henka_scene_create_entity_named(
+            follow_scene, "Camera Follow Child");
+        HENKA_TEST_ASSERT(follow_parent != HENKA_INVALID_ENTITY);
+        HENKA_TEST_ASSERT(follow_child != HENKA_INVALID_ENTITY);
+        parent_transform = henka_transform_identity();
+        parent_transform.position = (henka_vec3){10.0f, 1.0f, 2.0f};
+        child_transform = henka_transform_identity();
+        child_transform.position = (henka_vec3){2.0f, 3.0f, -4.0f};
+        HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+            follow_scene, follow_parent, parent_transform) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+            follow_scene, follow_child, child_transform) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+            follow_scene,
+            follow_child,
+            follow_parent,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+        follow_desc.position_lag_seconds = 0.0;
+        HENKA_TEST_ASSERT(henka_camera_follow_scene_entity(
+            follow_scene, follow_child, &follow_desc, 0.0) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_get_camera(
+            follow_scene, &followed_camera) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(followed_camera.position.x, 12.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(followed_camera.position.y, 6.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(followed_camera.position.z, -8.0f, 0.0001f);
+
+        parent_transform.position.x = 20.0f;
+        HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+            follow_scene, follow_parent, parent_transform) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_camera_follow_scene_entity(
+            follow_scene, follow_child, &follow_desc, 0.0) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_get_camera(
+            follow_scene, &followed_camera) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(followed_camera.position.x, 22.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(followed_camera.position.y, 6.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(followed_camera.position.z, -8.0f, 0.0001f);
+
+        henka_scene_destroy_entity(follow_scene, follow_child);
+        henka_scene_destroy_entity(follow_scene, follow_parent);
 
         invalid_desc = follow_desc;
         invalid_desc.position_lag_seconds = -1.0;
