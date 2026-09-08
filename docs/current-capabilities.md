@@ -171,10 +171,13 @@ When opened with the owning engine, persisted BOX, SPHERE, and PLANE primitive
 sources are rebuilt through the bounded native authoring constructors and
 retained as coordinator-owned runtime meshes. BOX uses X/Y/Z dimensions,
 SPHERE requires equal X/Y/Z values and uses that value as its radius, and
-PLANE uses X/Z as width/depth. The returned coordinator must remain alive
-while the reopened scene uses those meshes, and the engine's renderer must
-remain alive until the coordinator releases them. Authoring-mesh source
-materialization remains unsupported at this boundary and fails closed.
+PLANE uses X/Z as width/depth. Persisted authoring-mesh sources are resolved
+confined beneath the engine asset base path, loaded through the versioned HAMS
+reader, converted through the runtime mesh bridge, and retained with the same
+coordinator ownership. The returned coordinator must remain alive while the
+reopened scene uses those generated meshes, and the engine's renderer must
+remain alive until the coordinator releases them. Unsupported or unresolvable
+sources fail closed.
 
 ### Play lifecycle
 

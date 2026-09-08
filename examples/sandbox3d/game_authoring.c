@@ -8,6 +8,7 @@
 
 #include <henka/memory.h>
 #include <henka/authoring_modeling.h>
+#include <henka/engine.h>
 #include <henka/persistence.h>
 #include <henka/script_asset.h>
 
@@ -616,14 +617,56 @@ static henka_result sandbox3d_game_authoring_materialize_source(
         }
         return HENKA_SUCCESS;
     }
+    if (object->source.kind == HENKA_SCENE_DOCUMENT_SOURCE_AUTHORING_MESH)
+    {
+        char* resolved_path = NULL;
+
+        if (engine == NULL || object->source.path[0] == '\0')
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = henka_assets_resolve_path(
+            henka_engine_get_asset_base_path(engine),
+            object->source.path,
+            &resolved_path);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_authoring_mesh_load_file_new(
+                resolved_path,
+                &authoring_mesh);
+        }
+        henka_free(resolved_path);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        result = henka_mesh_create_from_authoring_mesh(
+            engine,
+            authoring_mesh,
+            &mesh);
+        henka_authoring_mesh_destroy(authoring_mesh);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        result = henka_scene_set_entity_mesh(scene, entity, mesh);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_mesh_destroy(mesh);
+            return result;
+        }
+        if (out_owned_mesh != NULL)
+        {
+            *out_owned_mesh = mesh;
+        }
+        return HENKA_SUCCESS;
+    }
     if (assets == NULL ||
         object->source.kind != HENKA_SCENE_DOCUMENT_SOURCE_ASSET ||
         object->source.asset_kind != HENKA_SCENE_DOCUMENT_ASSET_MESH ||
         object->source.path[0] == '\0')
     {
-        /* Do not expose an entity whose persisted source was silently lost.
-         * Authoring-source materialization still needs its owning source
-         * paths/resolvers before this project-open seam can claim support. */
+        /* Do not expose an entity whose persisted source was silently lost. */
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (sandbox3d_game_authoring_path_has_suffix(object->source.path, ".obj"))
