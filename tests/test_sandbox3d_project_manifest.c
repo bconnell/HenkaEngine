@@ -6,6 +6,7 @@
 #include <direct.h>
 #else
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 #include <henka/core.h>
@@ -58,6 +59,21 @@ static int test_ensure_directory(const char* path)
     result = mkdir(path, 0700);
 #endif
     return result == 0 || errno == EEXIST;
+}
+
+static int test_remove_directory(const char* path)
+{
+    int result;
+    if (path == NULL || path[0] == '\0')
+    {
+        return 0;
+    }
+#if defined(_WIN32)
+    result = _rmdir(path);
+#else
+    result = rmdir(path);
+#endif
+    return result == 0 || errno == ENOENT;
 }
 
 static int test_project_reopen_materializes_asset(void)
@@ -709,6 +725,101 @@ cleanup:
     return success;
 }
 
+static int test_save_rejects_manifest_failure_without_scene_mutation(void)
+{
+    const char* project_root =
+        "build/test_tmp/project_save_manifest_failure_root";
+    const char* scene_path = "save_failure.hscene";
+    const char* scene_file_path =
+        "build/test_tmp/project_save_manifest_failure_root/save_failure.hscene";
+    const char* manifest_path =
+        "build/test_tmp/project_save_manifest_failure_root/henka.project";
+    const char* manifest_temp_blocker_path =
+        "build/test_tmp/project_save_manifest_failure_root/henka.project.henka-tmp";
+    const char* manifest_temp_blocker_file_path =
+        "build/test_tmp/project_save_manifest_failure_root/henka.project.henka-tmp/locked.txt";
+    const char* existing_scene_contents = "existing scene\n";
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_camera camera;
+    henka_result save_result = HENKA_ERROR_UNKNOWN;
+    FILE* scene_file = NULL;
+    char observed_scene_contents[sizeof("existing scene\n")] = {0};
+    int success = 0;
+
+    if (!test_ensure_directory("build/test_tmp") ||
+        !test_ensure_directory(project_root))
+    {
+        goto cleanup;
+    }
+    (void)remove(scene_file_path);
+    (void)remove(manifest_path);
+    (void)test_remove_directory(manifest_path);
+    (void)remove(manifest_temp_blocker_path);
+    (void)test_remove_directory(manifest_temp_blocker_path);
+    (void)remove(manifest_temp_blocker_file_path);
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        1.0f,
+        0.1f,
+        100.0f);
+    if (!test_ensure_directory(manifest_temp_blocker_path) ||
+        !test_write_file(manifest_temp_blocker_file_path, "occupied\n") ||
+        !test_write_file(scene_file_path, existing_scene_contents) ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+            scene, "Manifest Failure Object")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create(
+            scene, scene_path, &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, entity, &document_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    save_result = sandbox3d_game_authoring_save(authoring, project_root);
+    if (save_result == HENKA_SUCCESS ||
+        fopen_s(&scene_file, scene_file_path, "rb") != 0 ||
+        scene_file == NULL ||
+        fread(
+            observed_scene_contents,
+            1U,
+            sizeof(observed_scene_contents) - 1U,
+            scene_file) != sizeof(observed_scene_contents) - 1U ||
+        memcmp(
+            observed_scene_contents,
+            existing_scene_contents,
+            sizeof(observed_scene_contents) - 1U) != 0)
+    {
+        if (scene_file != NULL)
+        {
+            fclose(scene_file);
+            scene_file = NULL;
+        }
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    if (scene_file != NULL)
+    {
+        fclose(scene_file);
+    }
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove(scene_file_path);
+    (void)remove(manifest_path);
+    (void)remove(manifest_temp_blocker_file_path);
+    if (!test_remove_directory(manifest_temp_blocker_path))
+    {
+        success = 0;
+    }
+    return success;
+}
+
 static int test_project_reopen_cycle(void)
 {
     const char* project_root = "build/test_tmp/project_reopen_root";
@@ -992,6 +1103,11 @@ int main(void)
     if (!test_project_load_materializes_authoring_mesh_with_engine_context())
     {
         fprintf(stderr, "project load did not materialize the source with engine context\n");
+        goto cleanup;
+    }
+    if (!test_save_rejects_manifest_failure_without_scene_mutation())
+    {
+        fprintf(stderr, "project save partially mutated the scene on manifest failure\n");
         goto cleanup;
     }
 

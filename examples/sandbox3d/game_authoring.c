@@ -1839,6 +1839,22 @@ henka_result sandbox3d_game_authoring_save(
     {
         return result;
     }
+    result = sandbox3d_game_authoring_save_project_manifest(
+        authoring,
+        project_root);
+    if (result != HENKA_SUCCESS)
+    {
+        if (had_authored_camera)
+        {
+            (void)henka_scene_document_set_camera(authoring->document, &previous_camera);
+        }
+        else
+        {
+            (void)henka_scene_document_clear_camera(authoring->document);
+        }
+        return result;
+    }
+
     result = henka_scene_document_save_file(
         authoring->document,
         project_root,
@@ -1855,17 +1871,9 @@ henka_result sandbox3d_game_authoring_save(
         }
         return result;
     }
-    result = sandbox3d_game_authoring_save_project_manifest(
+    result = sandbox3d_game_authoring_set_project_root(
         authoring,
         project_root);
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        result = sandbox3d_game_authoring_set_project_root(authoring, project_root);
-    }
     return result;
 }
 
