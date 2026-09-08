@@ -945,6 +945,193 @@ cleanup:
     return success;
 }
 
+static int test_project_reopen_preserves_hierarchy_edit(void)
+{
+    const char* project_root =
+        "build/test_tmp/project_hierarchy_reopen_root";
+    const char* scene_path = "hierarchy.hscene";
+    const char* manifest_path =
+        "build/test_tmp/project_hierarchy_reopen_root/henka.project";
+    const char* scene_file_path =
+        "build/test_tmp/project_hierarchy_reopen_root/hierarchy.hscene";
+    henka_scene* source_scene = NULL;
+    henka_scene* first_scene = NULL;
+    henka_scene* second_scene = NULL;
+    sandbox3d_game_authoring* source_authoring = NULL;
+    sandbox3d_game_authoring* first_authoring = NULL;
+    sandbox3d_game_authoring* second_authoring = NULL;
+    henka_engine* engine = NULL;
+    henka_engine_config config = {0};
+    henka_entity source_parent = HENKA_INVALID_ENTITY;
+    henka_entity source_child = HENKA_INVALID_ENTITY;
+    henka_entity first_parent = HENKA_INVALID_ENTITY;
+    henka_entity first_child = HENKA_INVALID_ENTITY;
+    henka_entity second_parent = HENKA_INVALID_ENTITY;
+    henka_entity second_child = HENKA_INVALID_ENTITY;
+    henka_entity actual_parent = HENKA_INVALID_ENTITY;
+    henka_scene_document_id parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id first_child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id second_child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object child_object;
+    henka_scene_document_object first_child_object;
+    henka_scene_document_object second_child_object;
+    henka_transform parent_transform = henka_transform_identity();
+    henka_transform child_transform = henka_transform_identity();
+    henka_camera camera;
+    int success = 0;
+
+    (void)remove(manifest_path);
+    (void)remove(scene_file_path);
+    parent_transform.position = (henka_vec3){10.0f, 2.0f, -3.0f};
+    child_transform.position = (henka_vec3){1.0f, 3.0f, 4.0f};
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        1.0f,
+        0.1f,
+        100.0f);
+    if (!test_ensure_directory("build/test_tmp") ||
+        !test_ensure_directory(project_root) ||
+        henka_scene_create(&source_scene) != HENKA_SUCCESS ||
+        henka_scene_set_camera(source_scene, &camera) != HENKA_SUCCESS ||
+        (source_parent = henka_scene_create_entity_named(
+            source_scene, "Hierarchy Project Parent")) == HENKA_INVALID_ENTITY ||
+        (source_child = henka_scene_create_entity_named(
+            source_scene, "Hierarchy Project Child")) == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_transform(
+            source_scene, source_parent, parent_transform) != HENKA_SUCCESS ||
+        henka_scene_set_entity_transform(
+            source_scene, source_child, child_transform) != HENKA_SUCCESS ||
+        henka_scene_set_entity_parent(
+            source_scene,
+            source_child,
+            source_parent,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create(
+            source_scene, scene_path, &source_authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            source_authoring, source_child, &child_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            source_authoring, source_parent, &parent_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            source_authoring, source_child, &child_id, &child_object) !=
+            HENKA_SUCCESS ||
+        child_object.parent_id != parent_id ||
+        sandbox3d_game_authoring_save(source_authoring, project_root) !=
+            HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    sandbox3d_game_authoring_destroy(source_authoring);
+    source_authoring = NULL;
+    henka_scene_destroy(source_scene);
+    source_scene = NULL;
+
+    config.application_name = "Henka Hierarchy Project Reopen Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_open_project_with_engine(
+            project_root,
+            engine,
+            &first_scene,
+            &first_authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            first_authoring, parent_id, &first_parent) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            first_authoring, child_id, &first_child) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(
+            first_scene, first_child, &actual_parent) != HENKA_SUCCESS ||
+        actual_parent != first_parent ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            first_authoring,
+            first_child,
+            &first_child_id,
+            &first_child_object) != HENKA_SUCCESS ||
+        first_child_id != child_id ||
+        first_child_object.parent_id != parent_id)
+    {
+        goto cleanup;
+    }
+
+    (void)snprintf(
+        first_child_object.name,
+        sizeof(first_child_object.name),
+        "%s",
+        "Continued Hierarchy Child");
+    first_child_object.transform.position.x = 6.5f;
+    if (sandbox3d_game_authoring_update_object_for_entity(
+            first_authoring, first_child, &first_child_object) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_unparent_entity(
+            first_authoring,
+            first_child,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_save(first_authoring, project_root) !=
+            HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    sandbox3d_game_authoring_destroy(first_authoring);
+    first_authoring = NULL;
+    henka_scene_destroy(first_scene);
+    first_scene = NULL;
+
+    if (sandbox3d_game_authoring_open_project_with_engine(
+            project_root,
+            engine,
+            &second_scene,
+            &second_authoring) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_get_entity_for_document_id(
+            second_authoring, child_id, &second_child) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_get_entity_for_document_id(
+            second_authoring, parent_id, &second_parent) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_get_entity_parent(
+            second_scene, second_child, &actual_parent) != HENKA_SUCCESS ||
+        actual_parent != HENKA_INVALID_ENTITY ||
+        second_parent == HENKA_INVALID_ENTITY)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_get_object_for_entity(
+            second_authoring,
+            second_child,
+            &second_child_id,
+            &second_child_object) != HENKA_SUCCESS ||
+        second_child_id != child_id ||
+        second_child_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        strcmp(second_child_object.name, "Continued Hierarchy Child") != 0 ||
+        !test_float_close(second_child_object.transform.position.x, -3.5f))
+    {
+        goto cleanup;
+    }
+
+    success = 1;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(second_authoring);
+    sandbox3d_game_authoring_destroy(first_authoring);
+    sandbox3d_game_authoring_destroy(source_authoring);
+    henka_scene_destroy(second_scene);
+    henka_scene_destroy(first_scene);
+    henka_scene_destroy(source_scene);
+    henka_engine_destroy(engine);
+    (void)remove(manifest_path);
+    (void)remove(scene_file_path);
+    (void)test_remove_directory(project_root);
+    return success;
+}
+
 static int test_project_open_reopen_continues_authoring_mesh_edit(void)
 {
     const char* project_root =
@@ -1252,6 +1439,11 @@ int main(void)
     if (!test_project_reopen_cycle())
     {
         fprintf(stderr, "project reopen cycle failed\n");
+        goto cleanup;
+    }
+    if (!test_project_reopen_preserves_hierarchy_edit())
+    {
+        fprintf(stderr, "project reopen hierarchy edit cycle failed\n");
         goto cleanup;
     }
     if (!test_project_open_reopen_continues_authoring_mesh_edit())
