@@ -778,6 +778,22 @@ static bool henka_scene_bounds_are_valid(henka_bounds bounds)
         bounds.extents.z >= 0.0f;
 }
 
+static bool henka_scene_transform_equal(
+    henka_transform left,
+    henka_transform right)
+{
+    return left.position.x == right.position.x &&
+        left.position.y == right.position.y &&
+        left.position.z == right.position.z &&
+        left.rotation.x == right.rotation.x &&
+        left.rotation.y == right.rotation.y &&
+        left.rotation.z == right.rotation.z &&
+        left.rotation.w == right.rotation.w &&
+        left.scale.x == right.scale.x &&
+        left.scale.y == right.scale.y &&
+        left.scale.z == right.scale.z;
+}
+
 static bool henka_scene_material_is_valid(henka_material material)
 {
     return henka_material_validate(&material) == HENKA_SUCCESS;
@@ -1097,16 +1113,7 @@ static bool henka_scene_presentation_transform_equal(
     henka_transform left,
     henka_transform right)
 {
-    return left.position.x == right.position.x &&
-        left.position.y == right.position.y &&
-        left.position.z == right.position.z &&
-        left.rotation.x == right.rotation.x &&
-        left.rotation.y == right.rotation.y &&
-        left.rotation.z == right.rotation.z &&
-        left.rotation.w == right.rotation.w &&
-        left.scale.x == right.scale.x &&
-        left.scale.y == right.scale.y &&
-        left.scale.z == right.scale.z;
+    return henka_scene_transform_equal(left, right);
 }
 
 henka_result henka_scene_apply_entity_presentation(
@@ -2735,6 +2742,11 @@ henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity e
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (henka_scene_transform_equal(record->transform, sanitized_transform) &&
+        henka_scene_transform_equal(record->local_transform, local_transform))
+    {
+        return HENKA_SUCCESS;
+    }
     if (!henka_scene_render_revision_available(scene))
     {
         return HENKA_ERROR_LIMIT;
@@ -2786,6 +2798,11 @@ henka_result henka_scene_set_entity_local_transform(
             0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_scene_transform_equal(record->transform, world_transform) &&
+        henka_scene_transform_equal(record->local_transform, sanitized_transform))
+    {
+        return HENKA_SUCCESS;
     }
     if (!henka_scene_render_revision_available(scene))
     {
@@ -2861,6 +2878,12 @@ henka_result henka_scene_set_entity_parent(
             0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (record->parent == parent &&
+        henka_scene_transform_equal(record->transform, world_transform) &&
+        henka_scene_transform_equal(record->local_transform, local_transform))
+    {
+        return HENKA_SUCCESS;
     }
     if (!henka_scene_render_revision_available(scene))
     {
