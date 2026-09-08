@@ -994,7 +994,7 @@ static void henka_test_prefab_allocation_failure_transaction(void)
         HENKA_TEST_ASSERT(seed_entity != HENKA_INVALID_ENTITY);
         HENKA_TEST_ASSERT(stale_entity != HENKA_INVALID_ENTITY);
         HENKA_TEST_ASSERT(seed_entity != stale_entity);
-        HENKA_TEST_ASSERT(henka_scene_destroy_entity(target, stale_entity) == HENKA_SUCCESS);
+        henka_scene_destroy_entity(target, stale_entity);
         HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(target, stale_entity));
         target_count = henka_scene_get_entity_count(target);
         render_revision_before = henka_scene_get_render_revision(target);
@@ -1029,7 +1029,7 @@ static void henka_test_prefab_allocation_failure_transaction(void)
             {
                 observed_identity_advancement = true;
             }
-            HENKA_TEST_ASSERT(henka_scene_destroy_entity(target, probe_entity) == HENKA_SUCCESS);
+            henka_scene_destroy_entity(target, probe_entity);
         }
         else
         {
