@@ -349,6 +349,7 @@ static int test_project_reopen_materializes_authoring_mesh(void)
     const char* scene_file_path =
         "build/test_tmp/project_authoring_mesh_reopen_root/authoring_mesh_scene.hscene";
     henka_authoring_mesh* source_mesh = NULL;
+    henka_authoring_mesh* replacement_mesh = NULL;
     henka_scene* source_scene = NULL;
     henka_scene* reopened_scene = NULL;
     henka_scene* continued_scene = NULL;
@@ -368,6 +369,7 @@ static int test_project_reopen_materializes_authoring_mesh(void)
     henka_scene_document_object object;
     henka_scene_document_object continued_object;
     henka_mesh* reopened_mesh = NULL;
+    henka_mesh* reloaded_mesh = NULL;
     henka_mesh* continued_mesh = NULL;
     henka_authoring_mesh_counts counts;
     int success = 0;
@@ -453,6 +455,66 @@ static int test_project_reopen_materializes_authoring_mesh(void)
         goto cleanup;
     }
 
+    if (henka_authoring_mesh_create_box(
+            &description,
+            6.0f,
+            7.0f,
+            8.0f,
+            &replacement_mesh) != HENKA_SUCCESS ||
+        replacement_mesh == NULL ||
+        henka_authoring_mesh_save_file(replacement_mesh, source_path) !=
+            HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(replacement_mesh);
+    replacement_mesh = NULL;
+    if (sandbox3d_game_authoring_load(reopened_authoring, project_root) !=
+            HENKA_SUCCESS ||
+        henka_scene_get_entity_mesh(
+            reopened_scene, reopened_entity, &reloaded_mesh) != HENKA_SUCCESS ||
+        reloaded_mesh == NULL ||
+        reloaded_mesh == reopened_mesh)
+    {
+        goto cleanup;
+    }
+    {
+        henka_mesh* stable_mesh = reloaded_mesh;
+        const uint64_t stable_render_revision =
+            henka_scene_get_render_revision(reopened_scene);
+        const bool wrote_invalid_source =
+            test_write_file(source_path, "not a valid HAMS file\n");
+        const henka_result failed_reload_result = wrote_invalid_source
+            ? sandbox3d_game_authoring_load(reopened_authoring, project_root)
+            : HENKA_ERROR_UNKNOWN;
+        const henka_result failed_mesh_result = henka_scene_get_entity_mesh(
+            reopened_scene, reopened_entity, &reloaded_mesh);
+        const uint64_t failed_render_revision =
+            henka_scene_get_render_revision(reopened_scene);
+        if (!wrote_invalid_source || failed_reload_result == HENKA_SUCCESS ||
+            failed_mesh_result != HENKA_SUCCESS || reloaded_mesh == NULL ||
+            reloaded_mesh != stable_mesh ||
+            failed_render_revision != stable_render_revision)
+        {
+            goto cleanup;
+        }
+    }
+
+    if (henka_authoring_mesh_create_box(
+            &description,
+            6.0f,
+            7.0f,
+            8.0f,
+            &replacement_mesh) != HENKA_SUCCESS ||
+        replacement_mesh == NULL ||
+        henka_authoring_mesh_save_file(replacement_mesh, source_path) !=
+            HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(replacement_mesh);
+    replacement_mesh = NULL;
+
     object.transform.position.x = 4.5f;
     (void)snprintf(
         object.name,
@@ -515,6 +577,7 @@ cleanup:
     henka_scene_destroy(reopened_scene);
     henka_scene_destroy(source_scene);
     henka_authoring_mesh_destroy(source_mesh);
+    henka_authoring_mesh_destroy(replacement_mesh);
     henka_engine_destroy(engine);
     (void)remove(source_path);
     (void)remove(manifest_path);

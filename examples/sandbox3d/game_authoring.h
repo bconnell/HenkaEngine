@@ -167,9 +167,12 @@ henka_result sandbox3d_game_authoring_save(
     sandbox3d_game_authoring* authoring,
     const char* project_root);
 /* Loads the manifest-selected startup scene when henka.project is present;
- * an absent manifest falls back to the coordinator path. Malformed manifests,
- * unsafe paths, missing scenes, or candidates whose persistent object IDs do
- * not exactly match the live bindings are rejected before publication. */
+ * an absent manifest falls back to the coordinator path. When the coordinator
+ * was opened with an engine or asset manager, supported persisted mesh sources
+ * are rematerialized into the candidate before publication. Malformed
+ * manifests, unsafe paths, missing scenes, unsupported sources, or candidates
+ * whose persistent object IDs do not exactly match the live bindings are
+ * rejected before publication. */
 henka_result sandbox3d_game_authoring_load(
     sandbox3d_game_authoring* authoring,
     const char* project_root);

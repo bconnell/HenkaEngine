@@ -52,6 +52,11 @@ struct sandbox3d_game_authoring
     bool play_observer_position_valid;
     char relative_path[SANDBOX3D_GAME_AUTHORING_MAX_RELATIVE_PATH_BYTES];
     char project_root[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
+    /* Project source authorities are borrowed. The engine must outlive this
+     * coordinator when native or authoring meshes are materialized; the asset
+     * manager must outlive it when manager-owned sources are rematerialized. */
+    henka_engine* project_engine;
+    henka_asset_manager* project_assets;
     sandbox3d_game_authoring_binding bindings[SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
     size_t binding_count;
     /* Scene entities borrow render meshes. Native primitive sources reconstructed
@@ -691,6 +696,63 @@ static henka_result sandbox3d_game_authoring_materialize_source(
     return result;
 }
 
+static bool sandbox3d_game_authoring_mesh_in_list(
+    henka_mesh* const* meshes,
+    size_t mesh_count,
+    const henka_mesh* target)
+{
+    size_t index;
+    if (meshes == NULL || target == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < mesh_count; ++index)
+    {
+        if (meshes[index] == target)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool sandbox3d_game_authoring_scene_references_mesh(
+    const henka_scene* scene,
+    const sandbox3d_game_authoring* authoring,
+    const henka_mesh* target)
+{
+    size_t index;
+    if (scene == NULL || authoring == NULL || target == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < authoring->binding_count; ++index)
+    {
+        henka_mesh* mesh = NULL;
+        if (henka_scene_get_entity_mesh(
+                scene,
+                authoring->bindings[index].entity,
+                &mesh) == HENKA_SUCCESS &&
+            mesh == target)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void sandbox3d_game_authoring_destroy_mesh_list(
+    henka_mesh** meshes,
+    size_t mesh_count)
+{
+    while (mesh_count > 0U)
+    {
+        --mesh_count;
+        henka_mesh_destroy(meshes[mesh_count]);
+        meshes[mesh_count] = NULL;
+    }
+}
+
 static henka_result sandbox3d_game_authoring_open_project_internal(
     const char* project_root,
     henka_engine* engine,
@@ -751,6 +813,11 @@ static henka_result sandbox3d_game_authoring_open_project_internal(
         result = sandbox3d_game_authoring_set_project_root(
             candidate_authoring,
             project_root);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        candidate_authoring->project_engine = engine;
+        candidate_authoring->project_assets = assets;
     }
     if (result == HENKA_SUCCESS)
     {
@@ -1772,12 +1839,18 @@ henka_result sandbox3d_game_authoring_load(
     sandbox3d_game_authoring* authoring,
     const char* project_root)
 {
+    henka_mesh* candidate_owned_meshes[
+        SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS] = {0};
+    henka_mesh* published_owned_meshes[
+        SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS] = {0};
     henka_scene_document* candidate = NULL;
     henka_scene* candidate_scene = NULL;
     sandbox3d_scene_document_bridge* candidate_bridge = NULL;
     char selected_relative_path[
         SANDBOX3D_GAME_AUTHORING_MAX_RELATIVE_PATH_BYTES];
     size_t index;
+    size_t candidate_owned_mesh_count = 0U;
+    size_t published_owned_mesh_count = 0U;
     henka_result result;
     if (authoring == NULL || project_root == NULL ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
@@ -1827,6 +1900,45 @@ henka_result sandbox3d_game_authoring_load(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     result = henka_scene_clone(authoring->scene, &candidate_scene);
+    if (result != HENKA_SUCCESS)
+    {
+        goto load_cleanup;
+    }
+    for (index = 0U;
+        index < authoring->binding_count && result == HENKA_SUCCESS;
+        ++index)
+    {
+        henka_scene_document_object object;
+        henka_mesh* owned_mesh = NULL;
+        result = henka_scene_document_get_object(
+            candidate,
+            authoring->bindings[index].document_id,
+            &object);
+        if (result == HENKA_SUCCESS)
+        {
+            result = sandbox3d_game_authoring_materialize_source(
+                project_root,
+                authoring->project_engine,
+                authoring->project_assets,
+                candidate_scene,
+                authoring->bindings[index].entity,
+                &object,
+                &owned_mesh);
+        }
+        if (result == HENKA_SUCCESS && owned_mesh != NULL)
+        {
+            if (candidate_owned_mesh_count >=
+                SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS)
+            {
+                henka_mesh_destroy(owned_mesh);
+                result = HENKA_ERROR_LIMIT;
+            }
+            else
+            {
+                candidate_owned_meshes[candidate_owned_mesh_count++] = owned_mesh;
+            }
+        }
+    }
     if (result != HENKA_SUCCESS)
     {
         goto load_cleanup;
@@ -1891,6 +2003,46 @@ henka_result sandbox3d_game_authoring_load(
     candidate = NULL;
     henka_scene_destroy(candidate_scene);
     candidate_scene = NULL;
+    for (index = 0U; index < candidate_owned_mesh_count; ++index)
+    {
+        published_owned_meshes[published_owned_mesh_count++] =
+            candidate_owned_meshes[index];
+    }
+    for (index = 0U; index < authoring->owned_project_mesh_count; ++index)
+    {
+        henka_mesh* old_mesh = authoring->owned_project_meshes[index];
+        if (sandbox3d_game_authoring_scene_references_mesh(
+                authoring->scene,
+                authoring,
+                old_mesh) &&
+            !sandbox3d_game_authoring_mesh_in_list(
+                published_owned_meshes,
+                published_owned_mesh_count,
+                old_mesh))
+        {
+            published_owned_meshes[published_owned_mesh_count++] = old_mesh;
+        }
+    }
+    for (index = 0U; index < authoring->owned_project_mesh_count; ++index)
+    {
+        henka_mesh* old_mesh = authoring->owned_project_meshes[index];
+        if (!sandbox3d_game_authoring_mesh_in_list(
+                published_owned_meshes,
+                published_owned_mesh_count,
+                old_mesh))
+        {
+            henka_mesh_destroy(old_mesh);
+        }
+    }
+    memset(
+        authoring->owned_project_meshes,
+        0,
+        sizeof(authoring->owned_project_meshes));
+    memcpy(
+        authoring->owned_project_meshes,
+        published_owned_meshes,
+        published_owned_mesh_count * sizeof(published_owned_meshes[0]));
+    authoring->owned_project_mesh_count = published_owned_mesh_count;
     (void)sandbox3d_game_authoring_set_project_root(authoring, project_root);
     (void)snprintf(
         authoring->relative_path,
@@ -1903,6 +2055,9 @@ load_cleanup:
     sandbox3d_scene_document_bridge_destroy(candidate_bridge);
     henka_scene_destroy(candidate_scene);
     henka_scene_document_destroy(candidate);
+    sandbox3d_game_authoring_destroy_mesh_list(
+        candidate_owned_meshes,
+        candidate_owned_mesh_count);
     return result;
 }
 
