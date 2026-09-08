@@ -584,13 +584,18 @@ The analytical gradient remains the fallback when derivation fails.
 
 The renderer never owns the borrowed scene environment pointer.
 
-IBL material roughness lookup is capped at the generated 32x32 prefilter level.
+IBL material roughness lookup selects the generated seven-level 256x256
+through 4x4 prefilter chain. The renderer supplies the chain's resource-owned
+maximum LOD to the material shader; this does not by itself close the separate
+IBL visual-quality boundary.
 
 ### Local reflection probes
 
 Optional local probes own bounded 64x64 RGBA16F cubemaps with a seven-level mip chain.
 
-Roughness lookup is capped at the 16x16 prefilter level.
+Roughness lookup selects the generated seven-level 64x64 through 1x1
+prefilter chain. The probe resource owns the available LOD range, while the
+bounded probe-quality and visual-acceptance limits remain separately tracked.
 
 One changed probe is captured at a time using:
 

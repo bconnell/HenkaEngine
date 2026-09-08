@@ -80,7 +80,9 @@ HDR environment lighting derives the following resources transactionally:
 - 128-sample GGX-prefiltered specular environment data across bounded mip levels;
 - a 128-sample split-sum BRDF lookup texture.
 
-IBL roughness lookup is capped at the supported 32x32 prefilter level. High-roughness subjects therefore avoid the under-resolved 4x4 and 2x2 prefilter levels.
+IBL roughness lookup selects the supported seven-level 256x256 through 4x4
+prefilter chain. The resource-derived maximum LOD is authoritative for the
+shader lookup; the remaining IBL visual-quality defect stays open separately.
 
 This is the current rasterized environment-lighting foundation. Path tracing and full-scene global illumination are not implemented.
 
@@ -98,7 +100,10 @@ The chain contains:
 - 2x2;
 - 1x1 faces.
 
-Local-probe roughness lookup is capped at the supported 16x16 prefilter level. The 8x8, 4x4, 2x2, and 1x1 levels are not used for high-roughness lookup.
+Local-probe roughness lookup selects the supported seven-level 64x64 through
+1x1 prefilter chain. The resource-derived maximum LOD is authoritative for
+the shader lookup; probe quality and visual acceptance remain bounded by the
+current capture and blending contract.
 
 The current probe system is a bounded local approximation. Production probe grids remain future work.
 
