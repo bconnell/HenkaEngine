@@ -586,6 +586,129 @@ cleanup:
     return success;
 }
 
+static int test_project_load_materializes_authoring_mesh_with_engine_context(void)
+{
+    const char* project_root =
+        "build/test_tmp/project_authoring_mesh_load_context_root";
+    const char* scene_path = "authoring_mesh_scene.hscene";
+    const char* source_path =
+        "build/test_tmp/project_authoring_mesh_load_context_root/authored_source.hams";
+    const char* manifest_path =
+        "build/test_tmp/project_authoring_mesh_load_context_root/henka.project";
+    const char* scene_file_path =
+        "build/test_tmp/project_authoring_mesh_load_context_root/authoring_mesh_scene.hscene";
+    henka_authoring_mesh* source_mesh = NULL;
+    henka_scene* source_scene = NULL;
+    henka_scene* runtime_scene = NULL;
+    sandbox3d_game_authoring* source_authoring = NULL;
+    sandbox3d_game_authoring* runtime_authoring = NULL;
+    henka_engine* engine = NULL;
+    henka_engine_config config = {0};
+    henka_authoring_mesh_desc description = henka_authoring_mesh_desc_default();
+    henka_entity source_entity = HENKA_INVALID_ENTITY;
+    henka_entity runtime_entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id source_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id runtime_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object object;
+    henka_mesh* runtime_mesh = NULL;
+    henka_camera camera;
+    int success = 0;
+
+    if (!test_ensure_directory("build/test_tmp") ||
+        !test_ensure_directory(project_root) ||
+        henka_authoring_mesh_create_box(
+            &description,
+            2.0f,
+            3.0f,
+            4.0f,
+            &source_mesh) != HENKA_SUCCESS ||
+        source_mesh == NULL ||
+        henka_authoring_mesh_save_file(source_mesh, source_path) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        1.0f,
+        0.1f,
+        100.0f);
+    if (henka_scene_create(&source_scene) != HENKA_SUCCESS ||
+        henka_scene_set_camera(source_scene, &camera) != HENKA_SUCCESS ||
+        (source_entity = henka_scene_create_entity_named(
+            source_scene, "Persisted Startup Mesh")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create(
+            source_scene, scene_path, &source_authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            source_authoring, source_entity, &source_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            source_authoring, source_entity, &source_id, &object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    object.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_AUTHORING_MESH;
+    (void)snprintf(
+        object.source.path,
+        sizeof(object.source.path),
+        "%s",
+        "authored_source.hams");
+    if (sandbox3d_game_authoring_update_object_for_entity(
+            source_authoring, source_entity, &object) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_save(source_authoring, project_root) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    sandbox3d_game_authoring_destroy(source_authoring);
+    source_authoring = NULL;
+    henka_scene_destroy(source_scene);
+    source_scene = NULL;
+    henka_authoring_mesh_destroy(source_mesh);
+    source_mesh = NULL;
+
+    config.application_name = "Henka Project Load Context Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS ||
+        henka_scene_create(&runtime_scene) != HENKA_SUCCESS ||
+        henka_scene_set_camera(runtime_scene, &camera) != HENKA_SUCCESS ||
+        (runtime_entity = henka_scene_create_entity_named(
+            runtime_scene, "Runtime Startup Entity")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create_with_engine(
+            runtime_scene,
+            scene_path,
+            engine,
+            &runtime_authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            runtime_authoring, runtime_entity, &runtime_id) != HENKA_SUCCESS ||
+        runtime_id != source_id ||
+        sandbox3d_game_authoring_load(runtime_authoring, project_root) !=
+            HENKA_SUCCESS ||
+        henka_scene_get_entity_mesh(runtime_scene, runtime_entity, &runtime_mesh) !=
+            HENKA_SUCCESS ||
+        runtime_mesh == NULL ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            runtime_authoring, runtime_entity, &runtime_id, &object) != HENKA_SUCCESS ||
+        strcmp(object.name, "Persisted Startup Mesh") != 0)
+    {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(runtime_authoring);
+    sandbox3d_game_authoring_destroy(source_authoring);
+    henka_scene_destroy(runtime_scene);
+    henka_scene_destroy(source_scene);
+    henka_authoring_mesh_destroy(source_mesh);
+    henka_engine_destroy(engine);
+    (void)remove(source_path);
+    (void)remove(manifest_path);
+    (void)remove(scene_file_path);
+    (void)remove(project_root);
+    return success;
+}
+
 static int test_project_reopen_cycle(void)
 {
     const char* project_root = "build/test_tmp/project_reopen_root";
@@ -864,6 +987,11 @@ int main(void)
     if (!test_project_reopen_materializes_authoring_mesh())
     {
         fprintf(stderr, "project authoring-mesh reopen did not materialize the source\n");
+        goto cleanup;
+    }
+    if (!test_project_load_materializes_authoring_mesh_with_engine_context())
+    {
+        fprintf(stderr, "project load did not materialize the source with engine context\n");
         goto cleanup;
     }
 

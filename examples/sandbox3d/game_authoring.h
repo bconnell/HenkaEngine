@@ -23,6 +23,15 @@ henka_result sandbox3d_game_authoring_create(
     henka_scene* scene,
     const char* relative_path,
     sandbox3d_game_authoring** out_authoring);
+/* Creates a coordinator for the normal in-place project-load path with the
+ * owning engine's borrowed source authorities attached. The engine must
+ * outlive the returned coordinator; generated meshes remain coordinator-owned
+ * until destruction. */
+henka_result sandbox3d_game_authoring_create_with_engine(
+    henka_scene* scene,
+    const char* relative_path,
+    henka_engine* engine,
+    sandbox3d_game_authoring** out_authoring);
 /* Opens a project into freshly-created runtime/session state. The returned
  * scene is owned by the caller and is borrowed by the returned coordinator;
  * both outputs remain NULL unless manifest selection, document loading,

@@ -10840,9 +10840,10 @@ static henka_result sandbox3d_initialize_game_authoring(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = sandbox3d_game_authoring_create(
+    result = sandbox3d_game_authoring_create_with_engine(
         state->scene,
         "sandbox3d_scene.hscene",
+        engine,
         &state->game_authoring);
     if (result != HENKA_SUCCESS)
     {

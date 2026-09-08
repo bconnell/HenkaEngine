@@ -499,6 +499,40 @@ henka_result sandbox3d_game_authoring_create(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_game_authoring_create_with_engine(
+    henka_scene* scene,
+    const char* relative_path,
+    henka_engine* engine,
+    sandbox3d_game_authoring** out_authoring)
+{
+    henka_asset_manager* assets;
+    henka_result result;
+
+    if (out_authoring != NULL)
+    {
+        *out_authoring = NULL;
+    }
+    if (engine == NULL || out_authoring == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_game_authoring_create(
+        scene,
+        relative_path,
+        out_authoring);
+    if (result == HENKA_SUCCESS)
+    {
+        (*out_authoring)->project_engine = engine;
+        (*out_authoring)->project_assets = assets;
+    }
+    return result;
+}
+
 static bool sandbox3d_game_authoring_path_has_suffix(
     const char* path,
     const char* suffix)
