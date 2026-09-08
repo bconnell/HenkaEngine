@@ -4231,6 +4231,20 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+    if (glIsEnabled(GL_TEXTURE_CUBE_MAP_SEAMLESS) != GL_TRUE)
+    {
+        HENKA_LOG_ERROR("could not enable OpenGL cubemap seamless filtering");
+        if (state->scene_gpu_query != 0U && g_gl.DeleteQueries != NULL)
+        {
+            g_gl.DeleteQueries(1, &state->scene_gpu_query);
+        }
+        SDL_GL_DestroyContext(state->gl_context);
+        henka_free(state);
+        renderer->backend_state = NULL;
+        return HENKA_ERROR_RENDERER;
+    }
+    HENKA_LOG_INFO("HENKA_OPENGL_CUBEMAP_SEAMLESS status=PASS");
 
     result = henka_opengl_renderer_set_vsync(renderer, enable_vsync);
     if (result != HENKA_SUCCESS)

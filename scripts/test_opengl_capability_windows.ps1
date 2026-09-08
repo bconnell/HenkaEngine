@@ -40,6 +40,17 @@ if ($capabilityMatches.Count -eq 0) {
     throw "OpenGL capability probe did not emit a structured HENKA_OPENGL_CAPABILITY record."
 }
 
+$seamlessMatches = [regex]::Matches(
+    $probeOutput,
+    "HENKA_OPENGL_CUBEMAP_SEAMLESS status=(?<status>PASS|FAILED)")
+if ($seamlessMatches.Count -eq 0) {
+    throw "OpenGL capability probe did not prove that Henka enabled cubemap seamless filtering during renderer initialization."
+}
+$seamless = $seamlessMatches[$seamlessMatches.Count - 1]
+if ($seamless.Groups["status"].Value -ne "PASS") {
+    throw "Henka cubemap seamless filtering initialization failed."
+}
+
 $capability = $capabilityMatches[$capabilityMatches.Count - 1]
 $status = $capability.Groups["status"].Value
 $stage = $capability.Groups["stage"].Value
