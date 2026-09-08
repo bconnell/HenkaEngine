@@ -10453,7 +10453,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Confirm each scene example is visible, object selection updates the details panel, and camera focus and reset actions stay predictable.\n");
     printf("Current limitations:\n");
     printf("  OBJ and glTF loading remain bounded to the documented interchange subsets.\n");
-    printf("  OBJ material libraries, negative indices, animation, hierarchy tools, scene saving, and broader 2D or 2.5D workflows are not available yet.\n");
+    printf("  OBJ material libraries, negative indices, animation, broader project serialization, and broader 2D or 2.5D workflows are not available yet.\n");
     printf("  The UI overlay is intentionally small and is not a full editor.\n");
     printf("  Detached production panels show matching controls with Dock L, Dock R, and Home return actions; moving a focused detached title bar into the main-window envelope redocks it. Scene View does not detach yet.\n");
     printf("  Rigid-body physics v1 uses sphere, axis-aligned box, and plane colliders; advanced physics features remain future work.\n");
