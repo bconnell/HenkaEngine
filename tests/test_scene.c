@@ -36,10 +36,12 @@ static void henka_test_scene_capacity_growth(void)
 
     {
         const uint64_t initial_revision = henka_scene_get_render_revision(scene);
+        henka_transform changed_transform = henka_transform_identity();
+        changed_transform.position.x = 1.0f;
         HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
             scene,
             entities[0],
-            henka_transform_identity()) == HENKA_SUCCESS);
+            changed_transform) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) > initial_revision);
     }
 
