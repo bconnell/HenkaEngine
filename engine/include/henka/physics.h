@@ -194,6 +194,11 @@ henka_result henka_physics_body_create(henka_physics_world* world, const henka_p
 henka_result henka_physics_body_destroy(henka_physics_world* world, henka_physics_body_id body);
 henka_result henka_physics_body_get_state(const henka_physics_world* world, henka_physics_body_id body, henka_physics_body_state* out_state);
 henka_result henka_physics_body_set_transform(henka_physics_world* world, henka_physics_body_id body, henka_transform transform, bool clear_velocity);
+/* Reads the linked scene entity's current world transform into the body. This
+ * does not write the scene or change the body's initial reset transform. A
+ * live link is required; clear_velocity controls whether an explicit scene
+ * move also clears the body's accumulated motion. */
+henka_result henka_physics_body_sync_from_scene(henka_physics_world* world, henka_physics_body_id body, bool clear_velocity);
 henka_result henka_physics_body_set_type(henka_physics_world* world, henka_physics_body_id body, henka_physics_body_type type);
 henka_result henka_physics_body_set_collider(henka_physics_world* world, henka_physics_body_id body, henka_physics_collider_desc collider);
 henka_result henka_physics_body_set_material(henka_physics_world* world, henka_physics_body_id body, henka_physics_material material);

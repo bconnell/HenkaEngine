@@ -2582,6 +2582,38 @@ henka_result henka_physics_body_set_transform(henka_physics_world* world, henka_
     return HENKA_SUCCESS;
 }
 
+henka_result henka_physics_body_sync_from_scene(
+    henka_physics_world* world,
+    henka_physics_body_id body,
+    bool clear_velocity)
+{
+    henka_physics_body_record* record = henka_physics_find_body(world, body);
+    henka_transform transform;
+
+    if (record == NULL || !henka_physics_scene_link_is_live(record) ||
+        henka_scene_get_entity_world_transform(
+            record->state.linked_scene,
+            record->state.linked_entity,
+            &transform) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    transform.rotation = henka_quat_normalize(transform.rotation);
+    if (!henka_physics_transform_valid(transform) ||
+        !henka_physics_geometry_valid(transform, record->state.collider))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->state.transform = transform;
+    if (clear_velocity)
+    {
+        record->state.linear_velocity = (henka_vec3){0.0f, 0.0f, 0.0f};
+        record->state.angular_velocity = (henka_vec3){0.0f, 0.0f, 0.0f};
+    }
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_physics_body_set_type(henka_physics_world* world, henka_physics_body_id body, henka_physics_body_type type)
 {
     henka_physics_body_record* record = henka_physics_find_body(world, body);

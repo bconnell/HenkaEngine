@@ -23,6 +23,11 @@ The public physics API provides:
   world is destroyed. Destroying the scene first retires its entity data
   immediately, prevents further scene writes, and reports the body link as
   absent until the physics owner releases it.
+- linked bodies can explicitly sample a live linked entity's effective world
+  transform before simulation with `henka_physics_body_sync_from_scene`. The
+  operation updates the current runtime transform without changing the reset
+  transform or writing the scene; callers choose whether the explicit move
+  clears accumulated velocity.
 - a bounded public character-controller foundation backed by a real dynamic
   upright capsule body, with planar velocity limits, configurable airborne
   control, grounded jump queuing, and configurable slope-aware grounding,
@@ -100,7 +105,10 @@ Physics simulation writes linked-body transforms to the real scene entities.
 The character controller's optional live scene/entity link uses this same
 production path after creation, teleport, and successful fixed steps. A
 destroyed, stale, or replaced linked entity is ignored and cannot receive
-controller writes. Editor-style transforms continue to use the Action API and
+controller writes. Before each prepared controller step, a live linked entity
+is sampled through `henka_physics_body_sync_from_scene`, so a parent move is
+consumed before physics advances while the controller's reset transform stays
+unchanged. Editor-style transforms continue to use the Action API and
 synchronize their linked body so gizmos and Transform QA remain usable.
 
 ## Current Limits

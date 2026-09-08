@@ -535,6 +535,32 @@ henka_result henka_character_controller_prepare_step(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    /* Scene hierarchy edits are an explicit input to the controller before
+     * the next simulation step. Physics remains authoritative after the
+     * step, while this bridge prevents a valid parent move from being
+     * overwritten by the controller's stale body transform. */
+    if (body_state.linked_scene != NULL &&
+        body_state.linked_entity != HENKA_INVALID_ENTITY &&
+        henka_scene_is_entity_valid(
+            body_state.linked_scene,
+            body_state.linked_entity) &&
+        !henka_scene_is_entity_helper(
+            body_state.linked_scene,
+            body_state.linked_entity))
+    {
+        if (henka_physics_body_sync_from_scene(
+                controller->world,
+                controller->body,
+                false) != HENKA_SUCCESS ||
+            henka_physics_body_get_state(
+                controller->world,
+                controller->body,
+                &body_state) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
     if (controller->grounded &&
         controller->ground_body != HENKA_INVALID_PHYSICS_BODY_ID)
     {
