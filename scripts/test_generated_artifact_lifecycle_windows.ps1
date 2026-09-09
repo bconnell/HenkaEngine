@@ -109,11 +109,22 @@ try {
         throw "The capture-runtime cleanup regression requires the built Debug Sandbox3D and its assets."
     }
     $captureBefore = @(Get-VisualCaptureRuntimePaths)
-    $captureOutput = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $captureScript `
-        -ExecutablePath $captureExecutable `
-        -EvidenceProfile "FULL_SHOWCASE" `
-        -OutputDirectory $testRoot 2>&1)
-    $captureExitCode = $LASTEXITCODE
+    $captureErrorActionPreference = $ErrorActionPreference
+    try {
+        # This subprocess is expected to fail its deliberate FULL_SHOWCASE
+        # precondition. Keep the nonzero result inspectable on hosted Windows
+        # PowerShell instead of promoting it to a terminating native-command
+        # exception before the assertions below can run.
+        $ErrorActionPreference = "Continue"
+        $captureOutput = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $captureScript `
+            -ExecutablePath $captureExecutable `
+            -EvidenceProfile "FULL_SHOWCASE" `
+            -OutputDirectory $testRoot 2>&1)
+        $captureExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $captureErrorActionPreference
+    }
     $captureAfter = @(Get-VisualCaptureRuntimePaths)
     $captureProbeNewPaths = @($captureAfter | Where-Object { $captureBefore -notcontains $_ })
     $captureOutputText = (($captureOutput | ForEach-Object { [string]$_ }) -join "`n")
