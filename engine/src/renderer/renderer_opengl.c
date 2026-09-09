@@ -286,6 +286,10 @@ typedef struct henka_opengl_renderer_state
     henka_opengl_tool_window_target tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
 
+static bool henka_opengl_scene_target_is_ready(
+    const henka_opengl_renderer_state* state,
+    henka_viewport viewport);
+
 static bool henka_opengl_memory_add(uint64_t* value, uint64_t amount)
 {
     if (value == NULL || UINT64_MAX - *value < amount)
@@ -5881,8 +5885,7 @@ henka_result henka_opengl_renderer_draw_scene(
     {
         henka_viewport scene_viewport = henka_renderer_get_scene_viewport(renderer);
 
-        if (state->hdr_width != scene_viewport.width ||
-            state->hdr_height != scene_viewport.height)
+        if (!henka_opengl_scene_target_is_ready(state, scene_viewport))
         {
             henka_opengl_renderer_sync_scene_target(renderer);
         }
@@ -7804,6 +7807,33 @@ void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int 
     henka_opengl_renderer_sync_scene_target(renderer);
 }
 
+static bool henka_opengl_scene_target_is_ready(
+    const henka_opengl_renderer_state* state,
+    henka_viewport viewport)
+{
+    if (state == NULL || viewport.width <= 0 || viewport.height <= 0)
+    {
+        return false;
+    }
+    return !henka_opengl_scene_target_requires_sync(
+        &(henka_opengl_scene_target_policy){
+            state->hdr_framebuffer != 0U && state->hdr_framebuffer_complete,
+            state->hdr_width == viewport.width && state->hdr_height == viewport.height,
+            state->bloom_ready &&
+                state->bloom_framebuffer != 0U &&
+                state->bloom_blur_framebuffer != 0U &&
+                state->bloom_color_texture != 0U &&
+                state->bloom_blur_texture != 0U,
+            state->bloom_width == (viewport.width > 1 ? viewport.width / 2 : 1) &&
+                state->bloom_height == (viewport.height > 1 ? viewport.height / 2 : 1),
+            state->temporal_history_ready &&
+                state->temporal_history_texture != 0U &&
+                state->temporal_history_depth_texture != 0U &&
+                state->temporal_history_depth_framebuffer != 0U,
+            state->temporal_history_width == viewport.width &&
+                state->temporal_history_height == viewport.height});
+}
+
 void henka_opengl_renderer_sync_scene_target(struct henka_renderer* renderer)
 {
     henka_opengl_renderer_state* state;
@@ -7819,23 +7849,7 @@ void henka_opengl_renderer_sync_scene_target(struct henka_renderer* renderer)
         return;
     }
     state = (henka_opengl_renderer_state*)renderer->backend_state;
-    if (!henka_opengl_scene_target_requires_sync(
-            &(henka_opengl_scene_target_policy){
-                state->hdr_framebuffer != 0U && state->hdr_framebuffer_complete,
-                state->hdr_width == viewport.width && state->hdr_height == viewport.height,
-                state->bloom_ready &&
-                    state->bloom_framebuffer != 0U &&
-                    state->bloom_blur_framebuffer != 0U &&
-                    state->bloom_color_texture != 0U &&
-                    state->bloom_blur_texture != 0U,
-                state->bloom_width == (viewport.width > 1 ? viewport.width / 2 : 1) &&
-                    state->bloom_height == (viewport.height > 1 ? viewport.height / 2 : 1),
-                state->temporal_history_ready &&
-                    state->temporal_history_texture != 0U &&
-                    state->temporal_history_depth_texture != 0U &&
-                    state->temporal_history_depth_framebuffer != 0U,
-                state->temporal_history_width == viewport.width &&
-                    state->temporal_history_height == viewport.height}))
+    if (henka_opengl_scene_target_is_ready(state, viewport))
     {
         return;
     }

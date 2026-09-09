@@ -450,6 +450,12 @@ if(WIN32)
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_renderer_material_preview_windows.ps1
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
+        NAME henka_renderer_scene_target_retry_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_renderer_scene_target_retry_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
 endif()
 
 add_executable(henka_terrain_tests
