@@ -302,18 +302,21 @@ The Sandbox remains an engine sample and QA target. Production editor maturity i
 
 ## Near-term direction
 
-Planned architecture work includes:
+Planned architecture work follows the current 3D completion sequence: renderer hardening, integrated modeling/content authoring, assets/materials, physics, durable Game Authoring and Scene Document workflows, prefabs, camera/viewport maturity, terrain/world, lighting/environment, scripting, Character Controller, Audio, networking/server behavior, editor workspace, packaging/external projects, animation/character production, and the final integrated 3D audit.
+
+Supporting architecture work includes:
 
 - safer camera orientation controls;
 - broader material import;
 - broader model loading beyond the current OBJ subset;
 - stronger asset management;
 - broader persistence and external-project workflows beyond the current local-first save and bounded consumer-validation paths;
-- production-quality 2.5D sprites, regions, layered depth, sorting, parallax, animation, movement constraints, physics constraints, and authoring tools after current defect repair;
 - richer engine UI controls built on the existing docked and native detached workspace;
 - object inspection and transactional authoring that can grow without an editor rewrite;
 - saved workspace placement, full detached controls, bounded title-bar drag-back recognition, and detachable Scene View;
 - continued editable-authoring data and runtime-asset integration for broader modeling, UV, rigging, and animation workflows.
+
+First-class 2D begins only after the current general 3D completion boundary closes. First-class 2.5D follows the completed 2D boundary and must compose the same canonical scene, identity, asset, renderer, persistence, physics, scripting, Audio, packaging, and editor authorities rather than introducing parallel engine truths. Existing 2.5D camera presets remain valid foundations, not the current lead architecture track.
 
 ## Viewport shading
 
@@ -325,11 +328,11 @@ The Scene View owns an explicit shading mode with Wireframe, Solid, Material Pre
 
 **Solid** draws neutral filled surfaces under a neutral editor surface policy and preserves explicit unlit line materials for the editor grid.
 
-**Material Preview** uses the bounded Cook-Torrance material evaluation and Scene View-sized linear HDR-to-display presentation with deterministic editor lighting.
+**Material Preview** uses the bounded Cook-Torrance material evaluation and Scene View-sized linear HDR-to-display presentation with deterministic editor lighting. It deliberately does not consume authored scene lights, scene environment/IBL, or reflection probes.
 
-**Rendered** uses scene light policy, optional bounded scene fog, exposure, tone mapping, bloom, temporal history, fitted directional shadows, and bounded local-light shadows.
+**Rendered** uses scene light policy, optional bounded scene fog, exposure, tone mapping, bloom, temporal history, fitted directional shadows, bounded local-light shadows, and scene-owned environment/IBL/probe response.
 
-Material Preview and Rendered both use validated scene-owned environment controls for visible surroundings and diffuse/specular response. Rendered derives transactional IBL resources from the same environment texture.
+Rendered consumes validated scene-owned environment controls for visible surroundings and diffuse/specular response and derives transactional IBL resources from the environment texture when applicable. Material Preview remains scene-independent by policy.
 
 ### Rendered pipeline details
 

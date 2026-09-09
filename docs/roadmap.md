@@ -1,6 +1,6 @@
 # Roadmap
 
-Henka Engine is an early-stage open source C17 game engine and integrated development workspace. Current work combines runtime and integrity hardening, modeling and content authoring, terrain and world usability, renderer and asset maturity, and the next layers of 2.5D support.
+Henka Engine is an early-stage open source C17 game engine and integrated development workspace. The current roadmap completes the general 3D engine and integrated authoring/product path first, then builds first-class 2D, then first-class 2.5D on the same shared architecture.
 
 > **Roadmap status:** This page describes direction and priority. It does not define a release schedule. Capability claims remain governed by the current implementation and the repository's capability documentation.
 
@@ -28,54 +28,74 @@ Henka Engine is an early-stage open source C17 game engine and integrated develo
 
 ## Current focus
 
-Current work hardens runtime, workspace, renderer, platform, assets, physics, persistence, packaging, external-project paths, and the integrated authoring foundation already present in the Sandbox.
+Current work is closing the current general 3D engine boundary through explicit subsystem campaigns rather than treating partially implemented foundations as complete. Renderer completion is the active lead campaign. Later 3D campaigns retain the same canonical scene, identity, authoring, asset, persistence, physics, scripting, Audio, networking, editor, and packaging authorities.
 
 Current priorities include:
 
-1. Stable engine startup and shutdown.
-2. Clear platform, renderer, input, scene, camera, and authoring boundaries.
-3. Reliable object and component selection and transform behavior.
-4. Transactional modeling, UV, material, persistence, and undo/redo paths.
-5. Terrain editing, streaming, collision, and visual validation.
-6. Asset loading and material ownership with explicit failure behavior.
-7. A packaged Sandbox with public setup and validation paths.
-8. Documentation aligned with live product behavior.
-9. Executable test coverage for core behavior.
+1. Complete and harden the supported Windows/OpenGL renderer path with real visual, package, resource-lifetime, and hardware-portability evidence.
+2. Complete integrated 3D modeling/content authoring and assets/materials on the existing source/runtime ownership boundaries.
+3. Mature physics, Game Authoring/Scene Document/project workflows, Prefabs, camera/viewport, Terrain/world, and lighting/environment without parallel sources of truth.
+4. Complete scripting/behaviors, Character Controller, Audio, and networking/dedicated-server integration through real runtime and package paths.
+5. Complete the editor workspace, packaging/distribution/external-project path, and animation/character-production boundary.
+6. Run a final overall 3D integration, documentation, regression, and release-readiness audit before starting 2D.
+7. Keep local and hosted validation deterministic across builds, tests, package provenance, startup, external projects, repository integrity, and visual evidence.
+8. Keep README, architecture, roadmap, runtime help, capability status, and the completion matrix aligned with live product behavior.
 
 ## Active major-system sequence
 
-The current major-system order is:
+The current owner-approved major-system order is:
 
-1. **Complete Audio** to its defined production boundary.
-2. **Character Controller**.
-3. **Scene Hierarchy / Parenting Maturity**.
-4. **Prefabs / Reusable Scene Objects**.
+1. **Renderer Completion**.
+2. **3D Modeling & Native Content Authoring**.
+3. **3D Assets & Materials**.
+4. **3D Physics**.
+5. **3D Game Authoring / Scene Document / Project Workflow**.
+6. **3D Prefab**.
+7. **3D Camera / Viewport**.
+8. **3D Terrain & World**.
+9. **3D Lighting / Sky / Environment**.
+10. **3D Scripting & Behaviors**.
+11. **3D Character Controller**.
+12. **3D Audio**.
+13. **3D Networking / Dedicated Server**.
+14. **Editor Workspace / UI / UX**.
+15. **Packaging / Distribution / External Project**.
+16. **Animation / Character Production**.
+17. **Final Overall 3D Integration / Documentation / Release Readiness / Engine Completion Audit**.
+18. **Full First-Class 2D Engine Completion Campaign**.
+19. **Full First-Class 2.5D Engine Completion Campaign**.
+20. **Final Whole-Engine Integration / Regression / Documentation / Release-Readiness / Completion Audit** for 3D + 2D + 2.5D.
+21. **Stop for owner direction** before any new major campaign, release, or tag.
 
-Renderer, realism, modeling, terrain, 2D/2.5D, scripting, and other roadmap work remain active supporting tracks. The sequence identifies the lead major-system work after each clean completion boundary.
+2D remains frozen until the current general 3D completion boundary closes. First-class 2.5D remains frozen until both the general 3D and first-class 2D boundaries close. Existing 2.5D camera presets remain implemented foundations inside the 3D editor; they do not change the campaign order.
 
 ```mermaid
 flowchart LR
-    Audio[Audio completion]
-    Controller[Character Controller]
-    Hierarchy[Scene Hierarchy / Parenting]
-    Prefabs[Prefabs / Reusable Scene Objects]
+    Renderer[Renderer completion]
+    ThreeD[Remaining 3D completion campaigns]
+    Final3D[Final 3D audit]
+    TwoD[First-class 2D]
+    TwoFiveD[First-class 2.5D]
+    FinalAll[Final whole-engine audit]
+    Owner[Owner direction]
 
-    Audio --> Controller --> Hierarchy --> Prefabs
+    Renderer --> ThreeD --> Final3D --> TwoD --> TwoFiveD --> FinalAll --> Owner
 ```
 
 ## Near-term priorities
 
-1. Finish asset cache ownership, identity, retry, metadata, and failure-output contracts.
-2. Continue recursive audits across rendering, platform, physics, persistence, scene, workspace, packaging, and external-project paths.
-3. Keep viewport interaction helpers aligned with live Sandbox behavior and complete remaining manual transform QA.
-4. Keep local and GitHub validation deterministic across build, tests, package provenance, packaged startup, repository integrity, and external-project checks.
-5. Keep README, architecture, roadmap, runtime help, and repository description aligned with the implemented product.
-6. Preserve stable identities, transactional editing boundaries, versionable data, and external-tool compatibility needed by 2.5D and later modeling.
-7. Shape the Action API toward a versioned semantic agent surface after stable Scene Document identities, capability discovery, permission boundaries, dry-run behavior, auditability, and structured failure contracts are dependable.
+1. Close the current renderer ledger without reopening evidence-backed defects unless fresh evidence reproduces them.
+2. Keep GPU state ownership, shader/format behavior, reflection/probe paths, post-processing, package behavior, and the declared Windows/OpenGL hardware baseline explicit and testable.
+3. Keep exact-candidate, visual-evidence, and generated-output lifecycles bounded so validation does not silently accumulate unmanaged artifacts.
+4. Move from Renderer into 3D Modeling & Native Content Authoring only after the renderer boundary is coherently closed.
+5. Keep local and GitHub validation deterministic across build, tests, package provenance, packaged startup, repository integrity, and external-project checks.
+6. Keep README, architecture, roadmap, runtime help, capability status, and repository description aligned with implemented product behavior.
+7. Preserve stable identities, transactional editing boundaries, versionable data, and external-tool compatibility needed by the remaining 3D campaigns and later first-class 2D/2.5D work.
+8. Shape the Action API toward a versioned semantic agent surface only as the underlying Scene Document identities, capability discovery, permission boundaries, dry-run behavior, auditability, and structured failure contracts become dependable.
 
 ## Character Controller
 
-> **Status:** Foundation; collision-aware planar movement is available and full movement maturity remains current development.
+> **Status:** Foundation; collision-aware planar movement is available and full movement maturity remains queued later in the current 3D completion sequence.
 
 The public Character Controller foundation currently supports a real dynamic
 upright capsule body, bounded planar input, optional acceleration and
@@ -140,16 +160,19 @@ A mature controller should remain stable across slopes, steps, moving platforms,
 
 ## Scene Hierarchy / Parenting Maturity
 
-> **Status:** Foundation; editor and cross-subsystem hierarchy maturity is planned after Character Controller.
+> **Status:** In Progress; runtime, Scene Document, Scene Objects/Object Details, and bounded Game Authoring history foundations are connected, while broader cross-subsystem and project maturity remains open.
 
 The runtime hierarchy foundation establishes an authoritative composition model
 for real Henka objects, including deterministic direct-child enumeration and
 root enumeration. The Scene Document bridge applies persisted hierarchy and
-synchronizes runtime reparenting for bound document identities. Editor
-hierarchy authoring, history, and participation across all major subsystems
-remain planned work. The public Action API now exposes
-transactional parent and unparent operations with explicit keep-local and
-keep-world behavior; the Sandbox outliner and hierarchy history remain planned.
+synchronizes runtime reparenting for bound document identities. The Scene
+Objects panel and Object Details hierarchy controls project and mutate that
+canonical relationship without introducing a second hierarchy authority. The
+public Action API exposes transactional parent and unparent operations with
+explicit keep-local and keep-world behavior, and bounded Game Authoring history
+replays supported hierarchy transactions through the same bridge. Broader
+subsystem transform propagation, project serialization, and package-level
+hierarchy proof remain open.
 
 ### Core hierarchy
 
@@ -173,22 +196,20 @@ Rendering, physics, Audio, cameras, scripting, animation hooks, networking, pers
 
 Hierarchy maturity includes:
 
-- tree/outliner presentation;
+- tree/outliner presentation through the current Scene Objects projection;
 - selection synchronization with the viewport;
-- parent, unparent, reparent, and subtree duplication are available through
-  runtime APIs; complete editor-facing hierarchy operations remain planned;
-- editor subtree duplication with new stable identities and correct internal
-  reference remapping;
-- undo/redo for hierarchy edits;
-- exact save/reload round trips;
+- parent, unparent, reparent, and subtree duplication through supported runtime/authoring APIs;
+- broader editor subtree duplication with new stable identities and correct internal reference remapping;
+- bounded undo/redo for supported hierarchy edits, with broader cross-subsystem history still open;
+- exact save/reload round trips for supported persisted parent identity;
 - safe lifecycle behavior when roots, parents, children, or subtrees are destroyed;
-- package and external-project verification.
+- broader package and external-project verification.
 
 Weapons attached to hands, Audio emitters attached to world objects, cameras attached to player rigs, and lights attached to vehicles should all consume this hierarchy.
 
 ## Prefabs / Reusable Scene Objects
 
-> **Status:** Foundation; in-memory snapshot refresh and revision tracking are available; full reusable authored-object workflows are planned on the hierarchy foundation.
+> **Status:** Foundation; in-memory snapshot refresh and revision tracking are available; full reusable authored-object workflows are queued after the durable Game Authoring / Scene Document / project-workflow campaign.
 
 The runtime prefab foundation captures bounded scene snapshots and instantiates
 independent normal Henka scene objects with traceable source relationships. Its
@@ -364,39 +385,41 @@ Procedural shader work should follow sufficient material-system maturity.
 
 ## 2D and 2.5D direction
 
-Henka plans first-class 2D and 2.5D workflows.
+Henka plans first-class 2D and 2.5D workflows on the same canonical engine architecture. The dimensional order is fixed for the current roadmap: finish the general 3D boundary first, then complete first-class 2D, then complete first-class 2.5D as deliberate integration of the mature 2D and 3D systems.
 
-### Planned 2D work
+### First-class 2D campaign
 
-1. A dedicated 2D renderer path.
-2. Sprites.
-3. Texture regions.
-4. Layers.
-5. A 2D camera.
-6. A focused 2D sample.
+2D begins only after the final overall 3D completion audit closes the current general 3D boundary. Its dedicated campaign covers the production renderer, sprites/texture regions, layers, camera, TileSet/TileMap workflows, physics, controllers, input, animation, scripting, Audio, persistence, Play, packaging, external projects, and product-native acceptance evidence required for a real 2D engine path.
 
 ### Current 2.5D camera foundation
+
+The existing 3D editor already contains useful camera-side foundations:
 
 1. Perspective 3D, side, top-down, and isometric camera presets.
 2. Stable exact-vertical top-down camera basis handling.
 3. Orthographic zoom and frame-selected sizing.
 4. Sandbox controls and local persistence for the selected camera preset.
 
-### Next 2.5D work
+These foundations remain supported, but first-class 2.5D work is not an active supporting track during the current 3D campaign.
 
-1. Sprite-facing quad and texture-sampling foundations.
-2. Transparent and cutout material render states.
-3. Sprite and texture-region data.
-4. Layered depth and deterministic sorting. The current renderer provides bounded transparent sorting; sprite/layer authoring remains future work.
-5. Parallax.
-6. Movement-plane and physics-axis constraints.
-7. Tools for 2D-style layout in 3D space.
+### Deferred first-class 2.5D work
+
+First-class 2.5D begins only after both the general 3D and first-class 2D boundaries are closed. It should compose the completed systems rather than introduce a third scene, project, history, selection, physics, scripting, prefab, camera, material, or asset authority.
+
+Expected work includes:
+
+1. Sprite-facing quad and texture-sampling foundations where the mature shared renderer needs them.
+2. Transparent and cutout material/render-state behavior for supported hybrid profiles.
+3. Sprite and texture-region data reused from first-class 2D.
+4. Deliberate layered-depth, world-depth, and deterministic sorting policy for mixed 2D/3D content.
+5. Parallax and billboarding/orientation policy.
+6. Movement-plane and physics-axis constraints with one authoritative physics domain per entity.
+7. Tools for deliberate 2D-style layout and constrained gameplay in 3D space.
+8. Mixed 2D/3D persistence, Play, package, external-project, visual, and regression proof.
 
 ## Integrated modeling and content authoring
 
-Integrated authoring is already underway alongside the 2D/2.5D roadmap. The camera-side
-2.5D foundation and modeling foundation share renderer, asset, persistence, and
-workspace boundaries.
+Integrated authoring is already underway as part of the current 3D completion path, including modeling and content authoring. Later first-class 2D and 2.5D work should reuse the stable renderer, asset, persistence, history, scene, and workspace boundaries established here instead of running as parallel authoring tracks.
 
 ### Implemented Foundation
 
@@ -483,9 +506,9 @@ workspace boundaries.
 4. Complete scene/project serialization and wider adapter-based interchange
    beyond the current bounded paths.
 
-2D and 2.5D remain first-class roadmap work. Future sprite, layer, parallax,
-animation, and movement-constraint systems share foundations with the
-integrated authoring work already present.
+First-class 2D and 2.5D remain later roadmap work. Their sprite, layer, parallax,
+animation, and movement-constraint systems should reuse the canonical
+foundations completed by the 3D authoring campaigns.
 
 ## Persistence and undo/redo
 
