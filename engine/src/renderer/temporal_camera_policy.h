@@ -2,6 +2,7 @@
 #define HENKA_TEMPORAL_CAMERA_POLICY_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include <henka/camera.h>
 
@@ -36,5 +37,11 @@ bool henka_temporal_camera_should_jitter(
     bool camera_transform_moving,
     bool camera_static,
     bool camera_cut);
+
+bool henka_temporal_history_requires_scene_reset(
+    bool previous_scene_valid,
+    bool scene_identity_changed,
+    uint64_t previous_content_revision,
+    uint64_t content_revision);
 
 #endif

@@ -219,3 +219,14 @@ bool henka_temporal_camera_should_jitter(
         (camera_transform_moving || camera_static) &&
         !camera_cut;
 }
+
+bool henka_temporal_history_requires_scene_reset(
+    bool previous_scene_valid,
+    bool scene_identity_changed,
+    uint64_t previous_content_revision,
+    uint64_t content_revision)
+{
+    return previous_scene_valid &&
+        (scene_identity_changed ||
+         previous_content_revision != content_revision);
+}

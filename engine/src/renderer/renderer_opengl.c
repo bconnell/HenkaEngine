@@ -182,6 +182,9 @@ typedef struct henka_opengl_renderer_state
     uint64_t temporal_jitter_index;
     float temporal_jitter_x;
     float temporal_jitter_y;
+    const struct henka_scene* previous_scene;
+    uint64_t previous_scene_content_revision;
+    bool previous_scene_valid;
     henka_mat4 current_projection;
     henka_mat4 previous_view_projection;
     bool previous_view_projection_valid;
@@ -5601,6 +5604,8 @@ henka_result henka_opengl_renderer_draw_scene(
     bool temporal_camera_static = false;
     bool temporal_camera_transform_moving = false;
     bool temporal_camera_cut = false;
+    bool scene_identity_changed = false;
+    bool scene_content_changed = false;
     bool use_temporal_jitter = false;
     bool gpu_query_active = false;
 
@@ -5625,6 +5630,20 @@ henka_result henka_opengl_renderer_draw_scene(
         state->viewport_program == 0U)
     {
         return HENKA_ERROR_RENDERER;
+    }
+    scene_identity_changed = state->previous_scene_valid &&
+        state->previous_scene != scene;
+    scene_content_changed =
+        henka_temporal_history_requires_scene_reset(
+            state->previous_scene_valid,
+            scene_identity_changed,
+            state->previous_scene_content_revision,
+            scene->content_revision);
+    if (scene_content_changed)
+    {
+        henka_opengl_invalidate_temporal_history(
+            state,
+            scene_identity_changed ? "scene identity changed" : "scene content changed");
     }
     state->reflection_probe_enabled_count = 0U;
     state->reflection_probe_captured_count = 0U;
@@ -6907,6 +6926,9 @@ henka_result henka_opengl_renderer_draw_scene(
         state->previous_view_projection_valid = true;
         state->previous_cut_camera = scene->camera;
         state->previous_cut_camera_valid = true;
+        state->previous_scene = scene;
+        state->previous_scene_content_revision = scene->content_revision;
+        state->previous_scene_valid = true;
     }
     return HENKA_SUCCESS;
 }
