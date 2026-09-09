@@ -42,7 +42,13 @@ if ($sandbox -notmatch 'if \(!sandbox3d_is_ibl_reference_kind\(') {
 if ($sandbox -notmatch 'henka_scene_set_light_intensity\(state->scene, 0\.0f\)') {
     $missing += 'IBL reference isolation from direct directional light'
 }
-if ($sandbox -notmatch 'ibl_direct_lighting=0') {
+if ($sandbox -notmatch 'henka_scene_get_environment\(state->scene, &capture_environment\)' -or
+    $sandbox -notmatch 'capture_environment\.moon\.enabled = false' -or
+    $sandbox -notmatch 'henka_scene_set_environment\(state->scene, capture_environment\)') {
+    $missing += 'IBL reference isolation from the environment moon light'
+}
+if ($sandbox -notmatch 'ibl_direct_lighting=0' -or
+    $sandbox -notmatch 'ibl_moon_lighting=0') {
     $missing += 'IBL direct-light isolation metadata'
 }
 if ($sandbox -notmatch 'henka_mesh_create_uv_sphere\(engine, 0\.5f, 128, 64') {
@@ -138,7 +144,11 @@ else {
         $checker -notmatch '\$lumas \| Where-Object \{ \$_ -lt 8\.0 \}' -or
         $checker -notmatch 'lowerBlemishes' -or
         $checker -notmatch 'concentratedHighlights' -or
-        $checker -notmatch 'lower-blemishes') {
+        $checker -notmatch 'localizedBrightKnots' -or
+        $checker -notmatch 'localized-bright-knots' -or
+        $checker -notmatch '0\.225' -or
+        $checker -notmatch '0\.520' -or
+        $checker -notmatch '0\.815') {
         $missing += 'IBL response checks'
     }
 }

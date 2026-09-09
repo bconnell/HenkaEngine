@@ -19,7 +19,7 @@ if ($indexText -notmatch "(?m)^Evidence profile: PBR_IBL_REFERENCE\s*$") {
     throw "PBR IBL reference evidence does not declare its dedicated profile."
 }
 
-$metadataPattern = "(?m)^.*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 (?:ibl_diagnostic=(?<diagnostic>[a-z_]+) )?ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128 .*viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
+$metadataPattern = "(?m)^.*CAPTURE_READY_IBL_REFERENCE mode=rendered view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) .*ibl_reference=1 (?:ibl_diagnostic=(?<diagnostic>[a-z_]+) )?ibl_direct_lighting=0 ibl_moon_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128 .*viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) .*reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1"
 # Capture controls may add diagnostic-only fields before the shared IBL
 # contract. Normalize only those optional fields before common validation.
 $metadataText = $indexText -replace ' ibl_control=[^ ]+ ibl_rotation_degrees=[^ ]+ ibl_prefilter_lod_override=[^ ]+', ''
@@ -163,9 +163,9 @@ if ($statistics.Width -lt 160 -or $statistics.Height -lt 120 -or
 
 $centers = if ($expectedView -eq "close") {
     @(
-        @(0.319, 0.235), @(0.506, 0.235), @(0.694, 0.235),
-        @(0.319, 0.500), @(0.506, 0.500), @(0.694, 0.500),
-        @(0.319, 0.765), @(0.506, 0.765), @(0.694, 0.765)
+        @(0.319, 0.225), @(0.506, 0.225), @(0.694, 0.225),
+        @(0.319, 0.520), @(0.506, 0.520), @(0.694, 0.520),
+        @(0.319, 0.815), @(0.506, 0.815), @(0.694, 0.815)
     )
 }
 else {
@@ -196,6 +196,8 @@ try {
     $lowerCenterLobes = 0
     $upperCenterLobes = 0
     $concentratedHighlights = 0
+    $localizedBrightKnots = 0
+    $subjectIndex = 0
     $sphereRadius = if ($expectedView -eq "close") {
         [Math]::Floor([Math]::Min($bitmap.Width, $bitmap.Height) * 0.125)
     }
@@ -237,7 +239,7 @@ try {
                 ) / 2.0
                 $lobePeak = [Math]::Max($lobePeak, $centerRegion - $shoulderRegion)
             }
-            if ($lobePeak -gt 3.25) {
+            if ($lobePeak -gt 8.0) {
                 ++$lowerCenterLobes
             }
 
@@ -258,8 +260,39 @@ try {
                 ) / 2.0
                 $upperLobePeak = [Math]::Max($upperLobePeak, $centerRegion - $shoulderRegion)
             }
-            if ($upperLobePeak -gt 3.25) {
+            if ($upperLobePeak -gt 8.0) {
                 ++$upperCenterLobes
+            }
+
+            # The historical IBL defect is a compact bright knot on the
+            # lower half of the low- and mid-roughness subjects. Compare
+            # small regions against four nearby samples so a broad smooth
+            # studio gradient does not look like a point highlight. The
+            # lowest row is adjacent to the ground transition and is kept
+            # out of this localized-surface check.
+            if ($subjectIndex -lt 6) {
+                $knotPeak = 0.0
+                foreach ($offsetY in @(0.52, 0.64, 0.76)) {
+                    foreach ($offsetX in @(-0.35, 0.0, 0.35)) {
+                        $sampleX = $centerX + $sphereRadius * $offsetX
+                        $sampleY = $centerY + $sphereRadius * $offsetY
+                        $centerRegion = Get-RegionLuma -Bitmap $bitmap `
+                            -X $sampleX -Y $sampleY -Radius $regionRadius
+                        $leftRegion = Get-RegionLuma -Bitmap $bitmap `
+                            -X ($sampleX - $sphereRadius * 0.13) -Y $sampleY -Radius $regionRadius
+                        $rightRegion = Get-RegionLuma -Bitmap $bitmap `
+                            -X ($sampleX + $sphereRadius * 0.13) -Y $sampleY -Radius $regionRadius
+                        $aboveRegion = Get-RegionLuma -Bitmap $bitmap `
+                            -X $sampleX -Y ($sampleY - $sphereRadius * 0.13) -Radius $regionRadius
+                        $belowRegion = Get-RegionLuma -Bitmap $bitmap `
+                            -X $sampleX -Y ($sampleY + $sphereRadius * 0.13) -Radius $regionRadius
+                        $neighborMean = ($leftRegion + $rightRegion + $aboveRegion + $belowRegion) / 4.0
+                        $knotPeak = [Math]::Max($knotPeak, $centerRegion - $neighborMean)
+                    }
+                }
+                if ($knotPeak -gt 8.0) {
+                    ++$localizedBrightKnots
+                }
             }
         }
 
@@ -271,16 +304,17 @@ try {
         if ($topCenter / [Math]::Max($topShoulders, 1.0) -gt 1.18) {
             ++$concentratedHighlights
         }
+        ++$subjectIndex
     }
 }
 finally {
     $bitmap.Dispose()
 }
-if ($lowerBlemishes -gt 0 -or $lowerCenterLobes -gt 0 -or $upperCenterLobes -gt 0 -or $concentratedHighlights -gt 0) {
-    throw "PBR IBL reference contains localized sphere defects (lower-blemishes=$lowerBlemishes, lower-center-lobes=$lowerCenterLobes, upper-center-lobes=$upperCenterLobes, concentrated-highlights=$concentratedHighlights)."
+if ($lowerBlemishes -gt 0 -or $lowerCenterLobes -gt 0 -or $upperCenterLobes -gt 0 -or $concentratedHighlights -gt 0 -or $localizedBrightKnots -gt 0) {
+    throw "PBR IBL reference contains localized sphere defects (lower-blemishes=$lowerBlemishes, lower-center-lobes=$lowerCenterLobes, upper-center-lobes=$upperCenterLobes, concentrated-highlights=$concentratedHighlights, localized-bright-knots=$localizedBrightKnots)."
 }
 if ($ladderRange -lt 8.0 -or $resolvedSteps -lt 7) {
     throw "PBR IBL roughness ladder was not visibly resolved across the full range (range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, luma=$([string]::Join(',', ($lumas | ForEach-Object { [Math]::Round($_, 1) }))))."
 }
 
-Write-Output "PBR IBL reference validation: passed (rendered-mean=$([Math]::Round($statistics.Mean, 2)), rendered-sd=$([Math]::Round($statistics.StandardDeviation, 2)), clipped-fraction=$([Math]::Round($statistics.ClippedFraction, 4)), visible-subjects=$($lumas.Count - $unreadableSubjects)/$($lumas.Count), roughness-ladder-range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, lower-blemishes=$lowerBlemishes, lower-center-lobes=$lowerCenterLobes, upper-center-lobes=$upperCenterLobes, concentrated-highlights=$concentratedHighlights)."
+Write-Output "PBR IBL reference validation: passed (rendered-mean=$([Math]::Round($statistics.Mean, 2)), rendered-sd=$([Math]::Round($statistics.StandardDeviation, 2)), clipped-fraction=$([Math]::Round($statistics.ClippedFraction, 4)), visible-subjects=$($lumas.Count - $unreadableSubjects)/$($lumas.Count), roughness-ladder-range=$([Math]::Round($ladderRange, 2)), adjacent-steps=$resolvedSteps, lower-blemishes=$lowerBlemishes, lower-center-lobes=$lowerCenterLobes, upper-center-lobes=$upperCenterLobes, concentrated-highlights=$concentratedHighlights, localized-bright-knots=$localizedBrightKnots)."

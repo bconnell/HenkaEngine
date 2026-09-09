@@ -860,6 +860,7 @@ void main()
     if (useLighting)
     {
         float nDotV = saturate(dot(normal, viewDirection));
+        vec3 viewFresnel = fresnelSchlick(nDotV, f0);
         float nDotL = saturate(dot(normal, lightDir));
         vec3 halfVector = safeNormalize(viewDirection + lightDir, normal);
         float nDotH = saturate(dot(normal, halfVector));
@@ -955,7 +956,7 @@ void main()
 
         // Ambient remains an indirect fallback for scenes without a richer probe path.
         vec3 safeAmbient = min(max(ambientColor, vec3(0.0)), vec3(16.0));
-        color += min(safeAmbient * ((1.0 - surfaceTransmission) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight + fresnel * 0.5) *
+        color += min(safeAmbient * ((1.0 - surfaceTransmission) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight + viewFresnel * 0.5) *
             baseLayerTransmission * occlusion, vec3(65504.0));
         if (useEnvironment)
         {
@@ -990,6 +991,11 @@ void main()
             float environmentPrefilterLod =
                 clamp(surfaceRoughness, 0.0, 1.0) *
                 clamp(iblPrefilterMaxLod, 0.0, 1024.0);
+            /* The direct-light Fresnel factor above is based on the sun
+             * half-vector. Environment reflection and transmission are
+             * view-dependent terms, so keep their Fresnel response separate
+             * from directional-light evaluation. */
+            vec3 environmentFresnel = viewFresnel;
             /* The bounded fractional-LOD capture keeps the ordinary
              * production branch intact while replacing only its calculated
              * LOD. This isolates hardware trilinear/face sampling from the
@@ -1034,11 +1040,11 @@ void main()
             color += min(
                 environmentDiffuse * ((1.0 - surfaceTransmission) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI) *
                     baseLayerTransmission * occlusion * 0.55 +
-                environmentSpecular * (fresnel * brdf.x + brdf.y) * baseLayerTransmission * occlusion *
+                environmentSpecular * (environmentFresnel * brdf.x + brdf.y) * baseLayerTransmission * occlusion *
                     (0.35 + 0.65 * (1.0 - surfaceRoughness)) +
                 environmentBackScatter * albedo * surfaceSubsurfaceColor * surfaceSubsurface *
                     (0.08 + 0.12 * surfaceThickness) * occlusion +
-                sampleEnvironment(transmissionDirection) * albedo * surfaceTransmission * volumeTransmittance * (1.0 - fresnel) * 0.55,
+                sampleEnvironment(transmissionDirection) * albedo * surfaceTransmission * volumeTransmittance * (1.0 - environmentFresnel) * 0.55,
                 vec3(65504.0));
         }
         for (int lightIndex = 0; lightIndex < 4; ++lightIndex)

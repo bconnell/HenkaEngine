@@ -8473,7 +8473,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
         (void)snprintf(
             capture_ibl_details,
             sizeof(capture_ibl_details),
-            " ibl_reference=1 ibl_diagnostic=%s ibl_control=%s ibl_rotation_degrees=%.2f ibl_prefilter_lod_override=%.2f ibl_direct_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128%s",
+            " ibl_reference=1 ibl_diagnostic=%s ibl_control=%s ibl_rotation_degrees=%.2f ibl_prefilter_lod_override=%.2f ibl_direct_lighting=0 ibl_moon_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128%s",
             sandbox3d_ibl_diagnostic_label(state->realism_reference_kind),
             capture_ibl_control,
             state->ibl_rotation_degrees,
@@ -34510,6 +34510,21 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
     if (sandbox3d_is_ibl_reference_kind(state->realism_reference_kind))
     {
+        henka_scene_environment_desc capture_environment;
+        if (henka_scene_get_environment(state->scene, &capture_environment) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR("IBL reference environment could not be inspected before isolation.");
+            goto fail;
+        }
+        /* IBL reference captures measure the filtered environment response.
+         * Keep the scene's optional moon light out of that isolated fixture;
+         * normal production scenes still retain their authored moon source. */
+        capture_environment.moon.enabled = false;
+        if (henka_scene_set_environment(state->scene, capture_environment) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR("IBL reference environment could not disable direct moon illumination.");
+            goto fail;
+        }
         /* The public setter validates and clamps its input. In this bounded
          * capture fixture, zero removes direct directional illumination while
          * leaving the environment/IBL path active. */
