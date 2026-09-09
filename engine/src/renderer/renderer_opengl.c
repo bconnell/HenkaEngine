@@ -2377,6 +2377,8 @@ static henka_result henka_opengl_build_ibl_resources(
     GLuint prefilter_cube = 0U;
     GLuint brdf_lut = 0U;
     GLint previous_framebuffer = 0;
+    GLint previous_draw_buffer = GL_BACK;
+    GLint previous_read_buffer = GL_BACK;
     GLint previous_pack_alignment = 4;
     GLint previous_viewport[4] = {0, 0, 0, 0};
     GLboolean previous_scissor_enabled;
@@ -2402,6 +2404,8 @@ static henka_result henka_opengl_build_ibl_resources(
     if (environment_levels <= 0)
         return HENKA_ERROR_RENDERER;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
+    glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
     henka_opengl_capture_texture_binding_state(&texture_state);
     glGetIntegerv(GL_PACK_ALIGNMENT, &previous_pack_alignment);
     glGetIntegerv(GL_VIEWPORT, previous_viewport);
@@ -2561,6 +2565,8 @@ static henka_result henka_opengl_build_ibl_resources(
     if (previous_cull_enabled) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
     if (previous_blend_enabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    glDrawBuffer((GLenum)previous_draw_buffer);
+    glReadBuffer((GLenum)previous_read_buffer);
     glViewport(
         previous_viewport[0], previous_viewport[1],
         previous_viewport[2], previous_viewport[3]);
@@ -2598,6 +2604,8 @@ ibl_failure:
     if (previous_cull_enabled) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
     if (previous_blend_enabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    glDrawBuffer((GLenum)previous_draw_buffer);
+    glReadBuffer((GLenum)previous_read_buffer);
     glViewport(
         previous_viewport[0], previous_viewport[1],
         previous_viewport[2], previous_viewport[3]);

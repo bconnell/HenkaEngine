@@ -615,6 +615,7 @@ Capture validation and restoration cover:
 - latent OpenGL errors;
 - caller cube-texture binding;
 - framebuffer;
+- framebuffer draw/read buffers;
 - renderbuffer;
 - viewport;
 - clear color;
@@ -623,8 +624,10 @@ Capture validation and restoration cover:
 
 IBL derivation and point-shadow target allocation also restore the active
 texture unit and the prior 2D/cubemap bindings on both the working texture
-unit and the caller's active unit before returning. Temporary resource work
-therefore cannot leak its intermediate bindings into the next scene draw.
+unit and the caller's active unit before returning. IBL derivation also restores
+the caller's framebuffer draw/read buffers. Temporary resource work therefore
+cannot leak its intermediate bindings or framebuffer routing into the next
+scene draw.
 If IBL derivation fails, the prior derived IBL resource set is released before
 the renderer records the unavailable state, so repeated failed source changes
 cannot retain superseded GPU targets.
