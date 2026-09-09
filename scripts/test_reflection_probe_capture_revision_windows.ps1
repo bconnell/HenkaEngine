@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$sceneHeader = Get-Content -Raw (Join-Path $repoRoot 'engine/src/henka_internal.h')
+$sceneStorageHeader = Get-Content -Raw (Join-Path $repoRoot 'engine/src/scene/scene_internal.h')
 $runtimeHeader = Get-Content -Raw (Join-Path $repoRoot 'engine/src/runtime_internal.h')
 $sceneSource = Get-Content -Raw (Join-Path $repoRoot 'engine/src/scene/scene.c')
 $rendererSource = Get-Content -Raw (Join-Path $repoRoot 'engine/src/renderer/renderer_opengl.c')
@@ -12,13 +12,13 @@ function Assert-Contract([bool]$condition, [string]$message) {
     }
 }
 
-Assert-Contract ($sceneHeader -match '(?m)^\s*uint64_t content_revision;') `
+Assert-Contract ($sceneStorageHeader -match '(?m)^\s*uint64_t content_revision;') `
     'henka_scene must carry a content revision separate from the camera-sensitive render revision.'
-Assert-Contract ($runtimeHeader -match '(?m)^\s*uint64_t content_revision;') `
-    'runtime scene state must carry the same content revision.'
-Assert-Contract ($sceneSource -match '(?s)static void henka_scene_bump_render_revision\(henka_scene\* scene\).*?content_revision') `
+Assert-Contract ($runtimeHeader -match '(?m)^\s*#include "scene/scene_internal\.h"') `
+    'runtime scene code must use the shared scene storage layout instead of a duplicate revision state.'
+Assert-Contract ($sceneSource -match '(?s)static bool henka_scene_bump_render_revision\(henka_scene\* scene\).*?content_revision') `
     'content mutations must advance content_revision.'
-Assert-Contract ($sceneSource -match '(?s)static void henka_scene_bump_camera_revision\(henka_scene\* scene\).*?render_revision') `
+Assert-Contract ($sceneSource -match '(?s)static bool henka_scene_bump_camera_revision\(henka_scene\* scene\).*?render_revision') `
     'camera-only mutations must have an explicit render-revision helper.'
 Assert-Contract ($sceneSource -match '(?s)henka_result henka_scene_set_camera\(.*?henka_scene_bump_camera_revision\(scene\);') `
     'camera updates must not invalidate content-only reflection-probe captures.'
