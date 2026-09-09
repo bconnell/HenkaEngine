@@ -544,6 +544,9 @@ Current GL 3.3 local shadow resources include:
 - one deterministic 512² depth map for the first enabled spot light;
 - one bounded 256² cubemap for the first enabled point light.
 
+Temporary point-shadow target allocation preserves the caller's OpenGL texture
+bindings, including bindings on texture unit 0 when another unit was active.
+
 Distance fog supports:
 
 - linear;
@@ -617,6 +620,11 @@ Capture validation and restoration cover:
 - clear color;
 - active cube-texture state;
 - per-face draw-path GL errors.
+
+IBL derivation and point-shadow target allocation also restore the active
+texture unit and the prior 2D/cubemap bindings on both the working texture
+unit and the caller's active unit before returning. Temporary resource work
+therefore cannot leak its intermediate bindings into the next scene draw.
 
 Enabled probes are ranked deterministically. When two captured volumes overlap a receiver, bounded inverse-score weighting blends both specular and diffuse contributions.
 

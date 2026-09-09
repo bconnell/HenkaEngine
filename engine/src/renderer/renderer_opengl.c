@@ -545,6 +545,49 @@ typedef struct henka_opengl_texture_data
 
 static henka_opengl_functions g_gl;
 
+typedef struct henka_opengl_texture_binding_state
+{
+    GLint previous_active_texture;
+    GLint previous_texture_2d;
+    GLint previous_cube_texture;
+    GLint texture0_2d;
+    GLint texture0_cube;
+} henka_opengl_texture_binding_state;
+
+static void henka_opengl_capture_texture_binding_state(
+    henka_opengl_texture_binding_state* state)
+{
+    if (state == NULL)
+        return;
+
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &state->previous_active_texture);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &state->previous_texture_2d);
+    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &state->previous_cube_texture);
+    state->texture0_2d = state->previous_texture_2d;
+    state->texture0_cube = state->previous_cube_texture;
+    if (state->previous_active_texture != GL_TEXTURE0)
+    {
+        g_gl.ActiveTexture(GL_TEXTURE0);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &state->texture0_2d);
+        glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &state->texture0_cube);
+        g_gl.ActiveTexture((GLenum)state->previous_active_texture);
+    }
+}
+
+static void henka_opengl_restore_texture_binding_state(
+    const henka_opengl_texture_binding_state* state)
+{
+    if (state == NULL)
+        return;
+
+    g_gl.ActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)state->texture0_2d);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)state->texture0_cube);
+    g_gl.ActiveTexture((GLenum)state->previous_active_texture);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)state->previous_texture_2d);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)state->previous_cube_texture);
+}
+
 static bool henka_opengl_extension_supported(const char* name)
 {
     GLint extension_count = 0;
@@ -2334,9 +2377,6 @@ static henka_result henka_opengl_build_ibl_resources(
     GLuint prefilter_cube = 0U;
     GLuint brdf_lut = 0U;
     GLint previous_framebuffer = 0;
-    GLint previous_active_texture = GL_TEXTURE0;
-    GLint previous_texture = 0;
-    GLint previous_cube_texture = 0;
     GLint previous_pack_alignment = 4;
     GLint previous_viewport[4] = {0, 0, 0, 0};
     GLboolean previous_scissor_enabled;
@@ -2344,6 +2384,7 @@ static henka_result henka_opengl_build_ibl_resources(
     GLboolean previous_cull_enabled;
     GLboolean previous_blend_enabled;
     const henka_opengl_texture_data* source_data;
+    henka_opengl_texture_binding_state texture_state;
     henka_mat4 projection;
     int face;
     int mip;
@@ -2361,9 +2402,7 @@ static henka_result henka_opengl_build_ibl_resources(
     if (environment_levels <= 0)
         return HENKA_ERROR_RENDERER;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
-    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
-    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_cube_texture);
+    henka_opengl_capture_texture_binding_state(&texture_state);
     glGetIntegerv(GL_PACK_ALIGNMENT, &previous_pack_alignment);
     glGetIntegerv(GL_VIEWPORT, previous_viewport);
     previous_scissor_enabled = glIsEnabled(GL_SCISSOR_TEST);
@@ -2525,9 +2564,7 @@ static henka_result henka_opengl_build_ibl_resources(
     glViewport(
         previous_viewport[0], previous_viewport[1],
         previous_viewport[2], previous_viewport[3]);
-    g_gl.ActiveTexture((GLenum)previous_active_texture);
-    glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_cube_texture);
+    henka_opengl_restore_texture_binding_state(&texture_state);
     henka_opengl_delete_ibl_resources(state);
     state->ibl_framebuffer = framebuffer;
     state->ibl_environment_cube = environment_cube;
@@ -2564,9 +2601,7 @@ ibl_failure:
     glViewport(
         previous_viewport[0], previous_viewport[1],
         previous_viewport[2], previous_viewport[3]);
-    g_gl.ActiveTexture((GLenum)previous_active_texture);
-    glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_cube_texture);
+    henka_opengl_restore_texture_binding_state(&texture_state);
     if (environment_cube != 0U) glDeleteTextures(1, &environment_cube);
     if (irradiance_cube != 0U) glDeleteTextures(1, &irradiance_cube);
     if (prefilter_cube != 0U) glDeleteTextures(1, &prefilter_cube);
@@ -3161,10 +3196,9 @@ static henka_result henka_opengl_create_point_shadow_target(
     GLuint depth_texture = 0U;
     GLuint framebuffer = 0U;
     GLint previous_framebuffer = 0;
-    GLint previous_active_texture = GL_TEXTURE0;
-    GLint previous_texture = 0;
     GLint previous_draw_buffer = GL_BACK;
     GLint previous_read_buffer = GL_BACK;
+    henka_opengl_texture_binding_state texture_state;
 
     if (state == NULL || resolution <= 0 || resolution > 1024)
     {
@@ -3177,8 +3211,7 @@ static henka_result henka_opengl_create_point_shadow_target(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
-    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
-    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_texture);
+    henka_opengl_capture_texture_binding_state(&texture_state);
     glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
     glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
     g_gl.ActiveTexture(GL_TEXTURE0);
@@ -3191,8 +3224,7 @@ static henka_result henka_opengl_create_point_shadow_target(
         (void)snprintf(state->point_shadow_failure_reason,
             sizeof(state->point_shadow_failure_reason),
             "point shadow GPU allocation failed");
-        g_gl.ActiveTexture((GLenum)previous_active_texture);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
+        henka_opengl_restore_texture_binding_state(&texture_state);
         return HENKA_ERROR_RENDERER;
     }
     glBindTexture(GL_TEXTURE_CUBE_MAP, depth_texture);
@@ -3219,8 +3251,7 @@ static henka_result henka_opengl_create_point_shadow_target(
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
         glDrawBuffer((GLenum)previous_draw_buffer);
         glReadBuffer((GLenum)previous_read_buffer);
-        g_gl.ActiveTexture((GLenum)previous_active_texture);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
+        henka_opengl_restore_texture_binding_state(&texture_state);
         glDeleteTextures(1, &depth_texture);
         g_gl.DeleteFramebuffers(1, &framebuffer);
         return HENKA_ERROR_RENDERER;
@@ -3228,8 +3259,7 @@ static henka_result henka_opengl_create_point_shadow_target(
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
     glDrawBuffer((GLenum)previous_draw_buffer);
     glReadBuffer((GLenum)previous_read_buffer);
-    g_gl.ActiveTexture((GLenum)previous_active_texture);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
+    henka_opengl_restore_texture_binding_state(&texture_state);
     henka_opengl_delete_point_shadow_target(state);
     state->point_shadow_framebuffer = framebuffer;
     state->point_shadow_depth_texture = depth_texture;
