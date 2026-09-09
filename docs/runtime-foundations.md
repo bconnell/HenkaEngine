@@ -589,8 +589,9 @@ The renderer never owns the borrowed scene environment pointer.
 
 IBL material roughness lookup selects the generated seven-level 256x256
 through 4x4 prefilter chain. The renderer supplies the chain's resource-owned
-maximum LOD to the material shader; this does not by itself close the separate
-IBL visual-quality boundary.
+maximum LOD to the material shader. The earlier localized IBL reflection-knot
+defect is covered by the current reference checker and retained known-bad
+evidence; broader renderer/probe visual-quality acceptance remains open.
 
 ### Local reflection probes
 
@@ -609,6 +610,8 @@ One changed probe is captured at a time using:
 Probe sampling is disabled during capture to prevent recursion.
 
 Candidate faces are committed only after the complete capture succeeds.
+
+Local-probe prefiltering keeps the captured source cubemap distinct from the generated filtered destination chain. The prefilter pass therefore does not sample from the texture object it is simultaneously rendering into.
 
 Capture validation and restoration cover:
 
