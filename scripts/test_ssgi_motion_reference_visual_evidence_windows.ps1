@@ -4,6 +4,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $fixtureRoot = Join-Path $repoRoot (".ssgi-motion-visual-validator-test-" + [Guid]::NewGuid().ToString("N"))
 $sandbox = Get-Content (Join-Path $repoRoot 'examples/sandbox3d/main.c') -Raw
+$renderer = Get-Content (Join-Path $repoRoot 'engine/src/renderer/renderer_opengl.c') -Raw
 $capture = Get-Content (Join-Path $repoRoot 'scripts/capture_visual_evidence_windows.ps1') -Raw
 $checker = Get-Content (Join-Path $repoRoot 'scripts/check_ssgi_motion_reference_visual_evidence_windows.ps1') -Raw
 $missing = @()
@@ -13,6 +14,10 @@ if ($sandbox -notmatch 'temporal_history_ready' -or
     $sandbox -notmatch 'capture_motion_phase == 2U' -or
     $sandbox -notmatch 'rendered_temporal_history_valid') {
     $missing += 'temporal readiness metadata in the sandbox'
+}
+if ($renderer -notmatch 'henka_temporal_history_should_commit\(' -or
+    $renderer -notmatch 'use_rendered_post_processing,') {
+    $missing += 'rendered-only temporal history commit in the OpenGL renderer'
 }
 if ($capture -notmatch 'temporal_resolve_count' -or
     $capture -notmatch 'temporal_jitter_enabled') {

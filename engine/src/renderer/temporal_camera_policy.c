@@ -230,3 +230,21 @@ bool henka_temporal_history_requires_scene_reset(
         (scene_identity_changed ||
          previous_content_revision != content_revision);
 }
+
+bool henka_temporal_history_should_commit(
+    bool rendered_post_processing,
+    bool history_ready,
+    int history_width,
+    int history_height,
+    int viewport_width,
+    int viewport_height)
+{
+    return rendered_post_processing &&
+        history_ready &&
+        history_width > 0 &&
+        history_height > 0 &&
+        viewport_width > 0 &&
+        viewport_height > 0 &&
+        history_width == viewport_width &&
+        history_height == viewport_height;
+}

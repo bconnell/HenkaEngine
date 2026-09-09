@@ -593,6 +593,45 @@ static void camera_hardening_scene_changes_invalidate_history(void)
             7U));
 }
 
+static void camera_hardening_history_commit_requires_rendered_post_processing(void)
+{
+    HENKA_TEST_ASSERT(
+        henka_temporal_history_should_commit(
+            true,
+            true,
+            640,
+            360,
+            640,
+            360));
+
+    HENKA_TEST_ASSERT(
+        !henka_temporal_history_should_commit(
+            false,
+            true,
+            640,
+            360,
+            640,
+            360));
+
+    HENKA_TEST_ASSERT(
+        !henka_temporal_history_should_commit(
+            true,
+            true,
+            640,
+            360,
+            1280,
+            720));
+
+    HENKA_TEST_ASSERT(
+        !henka_temporal_history_should_commit(
+            true,
+            false,
+            640,
+            360,
+            640,
+            360));
+}
+
 static void camera_hardening_inactive_projection_values_are_ignored(void)
 {
     henka_camera previous;
@@ -685,4 +724,5 @@ void henka_test_camera_hardening(void)
     camera_hardening_perspective_motion_can_jitter();
     camera_hardening_static_history_can_jitter();
     camera_hardening_scene_changes_invalidate_history();
+    camera_hardening_history_commit_requires_rendered_post_processing();
 }

@@ -44,4 +44,12 @@ bool henka_temporal_history_requires_scene_reset(
     uint64_t previous_content_revision,
     uint64_t content_revision);
 
+bool henka_temporal_history_should_commit(
+    bool rendered_post_processing,
+    bool history_ready,
+    int history_width,
+    int history_height,
+    int viewport_width,
+    int viewport_height);
+
 #endif

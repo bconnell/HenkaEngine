@@ -4097,9 +4097,13 @@ static void henka_opengl_present_hdr(
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture((GLenum)previous_active_texture);
     g_gl.UseProgram(0);
-    if (state->temporal_history_ready &&
-        state->temporal_history_width == viewport.width &&
-        state->temporal_history_height == viewport.height)
+    if (henka_temporal_history_should_commit(
+            use_rendered_post_processing,
+            state->temporal_history_ready,
+            state->temporal_history_width,
+            state->temporal_history_height,
+            viewport.width,
+            viewport.height))
     {
         bool depth_history_copied = false;
         GLint previous_read_framebuffer = 0;
