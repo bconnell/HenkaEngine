@@ -625,6 +625,9 @@ IBL derivation and point-shadow target allocation also restore the active
 texture unit and the prior 2D/cubemap bindings on both the working texture
 unit and the caller's active unit before returning. Temporary resource work
 therefore cannot leak its intermediate bindings into the next scene draw.
+If IBL derivation fails, the prior derived IBL resource set is released before
+the renderer records the unavailable state, so repeated failed source changes
+cannot retain superseded GPU targets.
 
 Enabled probes are ranked deterministically. When two captured volumes overlap a receiver, bounded inverse-score weighting blends both specular and diffuse contributions.
 

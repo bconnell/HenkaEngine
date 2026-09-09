@@ -2666,6 +2666,7 @@ static void henka_opengl_sync_ibl_resources(
     state->ibl_ready = false;
     if (henka_opengl_build_ibl_resources(state, scene) != HENKA_SUCCESS)
     {
+        henka_opengl_delete_ibl_resources(state);
         state->ibl_ready = false;
         if (state->ibl_failure_reason[0] == '\0')
             (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "derived IBL target unavailable");
