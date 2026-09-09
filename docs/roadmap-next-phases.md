@@ -1,30 +1,28 @@
-# Henka Engine Post-Foundation Roadmap
+# Henka Engine Dimensional Expansion and Post-3D Roadmap
 
-This document complements [roadmap.md](roadmap.md) by recording the intended sequence after the current 3D engine and integrated authoring foundation reaches its defined production boundary. It describes direction, dependency order, and acceptance expectations. It does not define dates or change current capability status.
+This document complements [roadmap.md](roadmap.md) by recording the requirements for dimensional expansion and longer-range product work. It does not create a second active campaign order, define dates, or change current capability status.
 
-Henka remains a general-purpose MIT-licensed game engine. Later phases should build on the same canonical scene, identity, persistence, asset, input, scripting, Audio, packaging, and external-project boundaries while keeping one shared engine architecture across dimensions and device classes.
+Henka remains a general-purpose MIT-licensed game engine. The current general 3D completion sequence already includes editor/workspace maturity, packaging/distribution/external-project work, animation/character production, and a final integrated 3D audit. Those areas therefore are not separate post-3D campaigns here.
+
+Later phases must build on the same canonical scene, identity, persistence, asset, input, scripting, Audio, packaging, and external-project boundaries while keeping one shared engine architecture across dimensions and device classes.
 
 ## Planned sequence
 
-The intended high-level order is:
+The owner-approved high-level dimensional order is:
 
-1. Complete the current 3D engine and integrated modeling/content-authoring production boundary.
-2. Run a dedicated commercial-grade editor/product-experience and branding maturity campaign.
-3. Establish versioned binary distribution and release engineering for ordinary game developers.
-4. Reframe the public README and primary documentation around the GameDev workflow once the binary product path is ready.
-5. Ship and harden a mature Windows release path.
-6. Build first-class 2D on the mature common engine foundations.
-7. Release and harden the 2D path.
-8. Complete first-class 2.5D as deliberate composition of mature 2D and 3D systems.
-9. Release and harden the 2.5D path.
-10. Reconcile and execute the remaining advanced-engine wishlist against the then-current engine so already-absorbed work is not duplicated.
-11. Pursue later immersive/XR and device-expansion work through generic capability-driven engine interfaces.
+1. Complete the current general 3D engine boundary, including the editor/product-experience, packaging/distribution/external-project, animation/character-production, and Final Overall 3D Audit steps defined by [roadmap.md](roadmap.md).
+2. Complete the Full First-Class 2D Engine campaign on the mature shared engine foundations.
+3. Complete the Full First-Class 2.5D Engine campaign as deliberate composition of the mature 2D and 3D systems.
+4. Run the Final Whole-Engine Integration / Regression / Documentation / Release-Readiness / Completion Audit across 3D, 2D, and 2.5D.
+5. Stop for owner direction before any new major expansion, release, or tag.
 
-The ordering is dependency-driven. Independent preparation may overlap when it does not create competing sources of truth, unstable public contracts, or duplicate work.
+Versioned public release hardening, a later GameDev-oriented documentation reframe, advanced-engine wishlist work, XR, and device expansion remain owner-directed future work. They do not insert themselves between the queued dimensional campaigns unless the owner explicitly changes the order.
 
-## Commercial-grade editor and product experience
+The ordering is dependency-driven. Independent preparation may overlap only when it does not create competing sources of truth, unstable public contracts, duplicate work, or a hidden second campaign sequence.
 
-After the current engine/content-authoring completion campaign, Henka should receive a dedicated product-experience pass. The goal is not cosmetic polish alone. The editor should behave like a mature commercial-style application while remaining MIT licensed and source-available.
+## Editor and product experience
+
+Editor/product-experience maturity is already part of the current 3D completion sequence before the Final Overall 3D Audit. The requirements below define that boundary; they do not establish a duplicate post-3D editor campaign.
 
 ### Product identity
 
@@ -33,7 +31,7 @@ The normal developer-facing application should present a consistent Henka Engine
 - consistent application naming, iconography, version/build identity, About information, and license presentation;
 - intentional startup, project-open, loading, failure, and shutdown presentation;
 - coherent terminology across menus, inspectors, dialogs, help, diagnostics, and packaging;
-- restrained use of Henka branding so the workspace remains professional for long work sessions.
+- restrained use of Henka branding so the workspace remains suitable for long work sessions.
 
 The Sandbox may remain an internal reference and QA target, but game developers should interact with a deliberate product surface.
 
@@ -74,7 +72,7 @@ Undo/redo should use meaningful action labels such as `Undo Bevel Edges` or `Und
 
 ### Viewport and authoring polish
 
-Commercial-quality viewport work includes clear selection/hover feedback, unobtrusive grids and overlays, polished gizmos, snapping indicators, camera previews, topology displays, pivots, safe-frame/debug views, and presentation that never lets diagnostics obscure the edited subject.
+Viewport maturity includes clear selection/hover feedback, unobtrusive grids and overlays, polished gizmos, snapping indicators, camera previews, topology displays, pivots, safe-frame/debug views, and presentation that does not let diagnostics obscure the edited subject.
 
 Modeling UX should make component mode, selection state, preview, numeric input, Apply/Cancel, snapping, proportional/soft editing, topology warnings, material preview, and relevant close-up inspection obvious without requiring knowledge of the C API.
 
@@ -82,21 +80,21 @@ Modeling UX should make component mode, selection state, preview, numeric input,
 
 The editor should deliberately validate keyboard navigation, focus indicators, UI scaling, readable text, contrast, color-independent status cues, high-DPI behavior, and reduced-motion options where relevant.
 
-Executable layout/visual validation should exercise at least representative 1280x720, 1920x1080, 2560x1440, ultrawide, and high-DPI cases and detect clipping, overlap, inaccessible controls, off-screen dialogs, zero-width regions, and broken layout restoration.
+Executable layout/visual validation should exercise representative 1280x720, 1920x1080, 2560x1440, ultrawide, and high-DPI cases and detect clipping, overlap, inaccessible controls, off-screen dialogs, zero-width regions, and broken layout restoration.
 
-## Binary distribution and release engineering
+## Packaging, distribution, and release engineering
 
-Binary distribution should become a first-class product boundary before 2D begins so later dimensional expansion lands on a mature user-facing engine instead of a source-only development workflow.
+Packaging/distribution/external-project maturity is already part of the current 3D completion sequence. The requirements below belong to that campaign and the Final Overall 3D Audit. They do not authorize a release or tag, which remains owner-controlled.
 
-### Initial Windows distribution
+### Initial Windows distribution direction
 
-The preferred initial mature distribution is a versioned portable Windows package because it is straightforward to reproduce and validate. An installer and updater may follow after the binary layout and migration contracts stabilize.
+The preferred initial mature distribution remains a versioned portable Windows package because it is straightforward to reproduce and validate. An installer and updater may follow after the binary layout and migration contracts stabilize.
 
-A release package should include the editor/runtime pieces required by the supported GameDev workflow, public SDK/header material where applicable, templates, required runtime assets/dependencies, packaging tools, offline/help content, exact build identity, and licensing notices.
+A release-oriented package should include the editor/runtime pieces required by the supported GameDev workflow, public SDK/header material where applicable, templates, required runtime assets/dependencies, packaging tools, offline/help content, exact build identity, and licensing notices.
 
-### Release guarantees
+### Distribution guarantees
 
-Release engineering should provide:
+The mature distribution boundary should provide:
 
 - explicit engine version and build identity;
 - exact source provenance for shipped binaries and supporting assets;
@@ -113,20 +111,22 @@ Normal game-development workflows should not require shell commands once the pro
 
 ### GameDev-oriented documentation transition
 
-When the binary path is genuinely ready, the README and primary docs should be reorganized around a game developer's questions:
+When the binary product path is genuinely ready, the README and primary docs may be reorganized around a game developer's questions:
 
 - What is Henka?
 - What can I build with it?
-- Where do I download it?
+- Where do I obtain it?
 - How do I create/open a project?
 - How do I author, Play, and package a game?
 - Where are the editor, scripting, asset, and packaging guides?
 
-Implementation language, source-building, architecture, and contribution details remain important but should move below the normal product workflow instead of leading it.
+Implementation language, source-building, architecture, and contribution details remain important but can move below the normal product workflow when that transition is supported by the actual product. This documentation reframe is not a substitute for the current capability/status documentation and is not an automatic release action.
 
 ## First-class 2D
 
 2D is a first-class dimensional mode over Henka's existing canonical foundations, sharing the same scene graph and engine architecture while receiving dedicated 2D runtime, editor, asset, physics, rendering, validation, and release support.
+
+It begins only after the current general 3D completion boundary closes.
 
 ### Dimensional authority
 
@@ -209,7 +209,9 @@ A permanent 2D end-to-end fixture should combine representative tilemap, control
 
 ## First-class 2.5D
 
-2.5D is a first-class Henka dimensional capability with dedicated workflows, editor tools, runtime contracts, packaging, validation, and release support. Its implementation should deliberately compose the mature shared 2D and 3D foundations so 2.5D receives full product-level support while preserving one canonical engine architecture.
+2.5D is a first-class Henka dimensional capability with dedicated workflows, editor tools, runtime contracts, packaging, validation, and release support. It begins only after both the general 3D and first-class 2D completion boundaries close.
+
+Its implementation should deliberately compose the mature shared 2D and 3D foundations so 2.5D receives full product-level support while preserving one canonical engine architecture.
 
 ### Supported composition profiles
 
@@ -259,13 +261,15 @@ The editor should expose the gameplay plane, depth guides, dimensional object di
 
 Permanent executable fixtures should include at least a 3D side-scrolling level, a sprite character in a 3D room, an isometric hybrid, a top-down hybrid, and a tilemap-plus-3D-props scene.
 
-## Advanced expansion after 2D and 2.5D
+## Advanced expansion after dimensional completion
 
-After the dimensional roadmap is complete, Henka should reconcile the maintained long-range wishlist against the mature engine. Each requested item should be classified as already absorbed, partially absorbed, still missing, superseded by a better architecture, or still desired advanced work before implementation begins.
+Advanced expansion begins only after the Final Whole-Engine Audit closes the integrated 3D/2D/2.5D boundary and the owner explicitly chooses the next direction.
 
-This phase includes the advanced systems already represented in the broader roadmap and should continue to deepen areas such as:
+At that point Henka should reconcile the maintained long-range wishlist against the mature engine. Each requested item should be classified as already absorbed, partially absorbed, still missing, superseded by a better architecture, or still desired advanced work before implementation begins.
 
-- advanced renderer quality including robust glass/transmission, skin, hair, water, temporal anti-aliasing, streaming/resource residency, and later backend-specific improvements;
+Possible later areas include:
+
+- advanced renderer quality including glass/transmission, skin, hair, water, temporal anti-aliasing, streaming/resource residency, and backend-specific improvements;
 - VFX, decals, vegetation, world interaction, destruction, and Smart Assets/Objects;
 - production asset database/browser and later catalog/distribution workflows with search, preview, versions, dependencies, licensing/provenance, install/update behavior, and safe project integration;
 - replay/deterministic capture, developer console, profiling, frame/resource diagnostics, crash/recovery, and performance tooling;
@@ -277,7 +281,7 @@ The mature engine should absorb these as coherent subsystem improvements with st
 
 ## XR and immersive-device direction
 
-XR should be treated as a presentation/input capability over native 2D, 2.5D, and 3D worlds, not as another dimensional engine.
+XR is owner-directed future work after the integrated dimensional completion boundary. It should be treated as a presentation/input capability over native 2D, 2.5D, and 3D worlds, not as another dimensional engine.
 
 Standards, headset runtimes, and hardware capabilities evolve quickly. Henka should preserve backend isolation and reassess the best standards-oriented implementation path when this phase becomes active, keeping the design open to the best available standards and devices at that time.
 
