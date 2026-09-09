@@ -11324,22 +11324,6 @@ static henka_result sandbox3d_initialize_terrain_rendering(
         {
             goto fail;
         }
-        if (!sandbox3d_is_ibl_reference_kind(state->realism_reference_kind))
-        {
-            result = henka_scene_add_reflection_probe(
-                state->scene,
-                (henka_scene_reflection_probe_desc){
-                    (henka_vec3){1.5f, 1.0f, -1.5f},
-                    (henka_vec3){6.5f, 4.0f, 7.0f},
-                    1.0f,
-                    true,
-                    true},
-                &(uint32_t){UINT32_MAX});
-            if (result != HENKA_SUCCESS)
-            {
-                goto fail;
-            }
-        }
         result = sandbox3d_create_runtime_rgba8_texture(
             engine,
             SANDBOX3D_TERRAIN_TEXTURE_SIZE,
@@ -32906,6 +32890,19 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             result = henka_scene_add_reflection_probe(
                 state->scene,
                 (henka_scene_reflection_probe_desc){
+                    (henka_vec3){1.5f, 1.0f, -1.5f},
+                    (henka_vec3){6.5f, 4.0f, 7.0f},
+                    1.0f,
+                    true,
+                    true},
+                &(uint32_t){UINT32_MAX});
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
+            result = henka_scene_add_reflection_probe(
+                state->scene,
+                (henka_scene_reflection_probe_desc){
                     (henka_vec3){0.0f, 1.0f, -1.5f},
                     (henka_vec3){8.0f, 4.0f, 8.0f},
                     1.0f,
@@ -32957,8 +32954,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     /* Terrain is dormant only for the ordinary product-native starter scene.
-     * Explicit smoke/stress/reference workflows retain their declared fixture
-     * content so validation continues to exercise the production Terrain path. */
+     * Explicit smoke/stress workflows retain their declared fixture content so
+     * validation continues to exercise the production Terrain path. */
     if (state->smoke_test || state->terrain_stream_stress ||
         state->terrain_capture_mode_requested)
     {

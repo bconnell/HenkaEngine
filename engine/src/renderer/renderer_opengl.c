@@ -4575,7 +4575,6 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
 henka_result henka_opengl_renderer_begin_frame(struct henka_renderer* renderer)
 {
     henka_opengl_renderer_state* state;
-
     if (renderer == NULL || renderer->backend_state == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -5016,7 +5015,9 @@ static bool henka_opengl_ensure_reflection_probe_target(
     return true;
 }
 
-static bool henka_opengl_allocate_reflection_probe_cube(GLuint* out_texture)
+static bool henka_opengl_allocate_reflection_probe_cube(
+    GLuint* out_texture,
+    int levels)
 {
     GLuint texture = 0U;
     GLint previous_active_texture = GL_TEXTURE0;
@@ -5024,10 +5025,12 @@ static bool henka_opengl_allocate_reflection_probe_cube(GLuint* out_texture)
     bool valid = false;
     int face;
 
-    if (out_texture == NULL)
+    if (out_texture == NULL || levels <= 0 ||
+        levels > HENKA_REFLECTION_PROBE_PREFILTER_LEVELS)
     {
         return false;
     }
+    *out_texture = 0U;
     while (glGetError() != GL_NO_ERROR) {}
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_texture);
@@ -5038,15 +5041,18 @@ static bool henka_opengl_allocate_reflection_probe_cube(GLuint* out_texture)
         return false;
     }
     glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(
+        GL_TEXTURE_CUBE_MAP,
+        GL_TEXTURE_MIN_FILTER,
+        levels > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL,
-        HENKA_REFLECTION_PROBE_PREFILTER_LEVELS - 1);
-    for (int mip = 0; mip < HENKA_REFLECTION_PROBE_PREFILTER_LEVELS; ++mip)
+        levels - 1);
+    for (int mip = 0; mip < levels; ++mip)
     {
         int resolution = HENKA_REFLECTION_PROBE_RESOLUTION >> mip;
         if (resolution < 1)
@@ -5079,7 +5085,8 @@ static bool henka_opengl_allocate_reflection_probe_cube(GLuint* out_texture)
 
 static bool henka_opengl_prefilter_reflection_probe(
     henka_opengl_renderer_state* state,
-    GLuint texture)
+    GLuint source_texture,
+    GLuint destination_texture)
 {
     static const henka_vec3 face_directions[6] =
     {
@@ -5097,12 +5104,17 @@ static bool henka_opengl_prefilter_reflection_probe(
     GLint previous_renderbuffer = 0;
     GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
+    GLint previous_program = 0;
+    GLint previous_vertex_array = 0;
+    GLint previous_draw_buffer = GL_BACK;
+    GLint previous_read_buffer = GL_BACK;
     GLint previous_viewport[4] = {0, 0, 0, 0};
     bool success = false;
     int mip;
     int face;
 
-    if (state == NULL || texture == 0U ||
+    if (state == NULL || source_texture == 0U || destination_texture == 0U ||
+        source_texture == destination_texture ||
         state->reflection_probe_framebuffer == 0U ||
         state->ibl_prefilter_program == 0U || state->tone_vertex_array == 0U)
     {
@@ -5112,6 +5124,10 @@ static bool henka_opengl_prefilter_reflection_probe(
     glGetIntegerv(GL_RENDERBUFFER_BINDING, &previous_renderbuffer);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_texture);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &previous_program);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previous_vertex_array);
+    glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
+    glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
     glGetIntegerv(GL_VIEWPORT, previous_viewport);
     while (glGetError() != GL_NO_ERROR) {}
 
@@ -5122,7 +5138,37 @@ static bool henka_opengl_prefilter_reflection_probe(
         GL_RENDERBUFFER,
         0U);
     g_gl.ActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, source_texture);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    for (face = 0; face < 6; ++face)
+    {
+        g_gl.FramebufferTexture2D(
+            GL_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
+            source_texture,
+            0);
+        if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            goto prefilter_restore;
+        }
+        glBindTexture(GL_TEXTURE_CUBE_MAP, destination_texture);
+        glCopyTexSubImage2D(
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
+            0,
+            0,
+            0,
+            0,
+            0,
+            HENKA_REFLECTION_PROBE_RESOLUTION,
+            HENKA_REFLECTION_PROBE_RESOLUTION);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, source_texture);
+        if (glGetError() != GL_NO_ERROR)
+        {
+            goto prefilter_restore;
+        }
+    }
     g_gl.UseProgram(state->ibl_prefilter_program);
     henka_set_uniform_int_owned(
         state->ibl_prefilter_program,
@@ -5138,7 +5184,7 @@ static bool henka_opengl_prefilter_reflection_probe(
         state->ibl_prefilter_program,
         &state->ibl_prefilter_shader_data,
         "sourceMipMaxLod",
-        (float)(HENKA_REFLECTION_PROBE_PREFILTER_LEVELS - 1));
+        0.0f);
     for (mip = 1; mip < HENKA_REFLECTION_PROBE_PREFILTER_LEVELS; ++mip)
     {
         int resolution = HENKA_REFLECTION_PROBE_RESOLUTION >> mip;
@@ -5164,7 +5210,7 @@ static bool henka_opengl_prefilter_reflection_probe(
                 GL_FRAMEBUFFER,
                 GL_COLOR_ATTACHMENT0,
                 GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
-                texture,
+                destination_texture,
                 mip);
             if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
                 break;
@@ -5183,6 +5229,7 @@ static bool henka_opengl_prefilter_reflection_probe(
     }
     success = mip == HENKA_REFLECTION_PROBE_PREFILTER_LEVELS;
 
+prefilter_restore:
     g_gl.FramebufferRenderbuffer(
         GL_FRAMEBUFFER,
         GL_DEPTH_ATTACHMENT,
@@ -5190,9 +5237,13 @@ static bool henka_opengl_prefilter_reflection_probe(
         state->reflection_probe_depth_buffer);
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
     g_gl.BindRenderbuffer(GL_RENDERBUFFER, (GLuint)previous_renderbuffer);
+    glDrawBuffer((GLenum)previous_draw_buffer);
+    glReadBuffer((GLenum)previous_read_buffer);
     glViewport(
         previous_viewport[0], previous_viewport[1],
         previous_viewport[2], previous_viewport[3]);
+    g_gl.UseProgram((GLuint)previous_program);
+    g_gl.BindVertexArray((GLuint)previous_vertex_array);
     g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
     return success;
@@ -5218,6 +5269,7 @@ static void henka_opengl_capture_next_reflection_probe(
     henka_scene_reflection_probe_desc probe = {0};
     henka_scene capture_scene;
     GLuint candidate = 0U;
+    GLuint source = 0U;
     GLint previous_framebuffer = 0;
     GLint previous_renderbuffer = 0;
     GLint previous_active_texture = GL_TEXTURE0;
@@ -5267,8 +5319,21 @@ static void henka_opengl_capture_next_reflection_probe(
         return;
     }
     if (!henka_opengl_ensure_reflection_probe_target(state) ||
-        !henka_opengl_allocate_reflection_probe_cube(&candidate))
+        !henka_opengl_allocate_reflection_probe_cube(
+            &candidate,
+            HENKA_REFLECTION_PROBE_PREFILTER_LEVELS) ||
+        !henka_opengl_allocate_reflection_probe_cube(&source, 1))
     {
+        if (candidate != 0U)
+        {
+            glDeleteTextures(1, &candidate);
+            candidate = 0U;
+        }
+        if (source != 0U)
+        {
+            glDeleteTextures(1, &source);
+            source = 0U;
+        }
         if (state->reflection_probe_capture_failure_count < UINT32_MAX)
             ++state->reflection_probe_capture_failure_count;
         return;
@@ -5304,7 +5369,7 @@ static void henka_opengl_capture_next_reflection_probe(
             GL_FRAMEBUFFER,
             GL_COLOR_ATTACHMENT0,
             GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
-            candidate,
+            source,
             0);
         if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE ||
             !henka_camera_look_at_with_up(
@@ -5343,7 +5408,12 @@ static void henka_opengl_capture_next_reflection_probe(
     if (success)
     {
         while (glGetError() != GL_NO_ERROR) {}
-        success = henka_opengl_prefilter_reflection_probe(state, candidate);
+        success = henka_opengl_prefilter_reflection_probe(state, source, candidate);
+    }
+    if (source != 0U)
+    {
+        glDeleteTextures(1, &source);
+        source = 0U;
     }
     if (success)
     {
@@ -5651,7 +5721,6 @@ henka_result henka_opengl_renderer_draw_scene(
     bool scene_content_changed = false;
     bool use_temporal_jitter = false;
     bool gpu_query_active = false;
-
     if (renderer == NULL ||
         scene == NULL ||
         !scene->has_camera)
@@ -7366,7 +7435,6 @@ henka_result henka_opengl_renderer_end_frame(
     struct henka_renderer* renderer)
 {
     henka_opengl_renderer_state* state;
-
     if (renderer == NULL || renderer->backend_state == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;

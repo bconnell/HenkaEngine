@@ -45,11 +45,76 @@ try {
     try {
         for ($y = 0; $y -lt $bitmap.Height; ++$y) {
             for ($x = 0; $x -lt $bitmap.Width; ++$x) {
+                $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb(250, 245, 240))
+            }
+        }
+        foreach ($centerY in @(0.194, 0.5, 0.806)) {
+            foreach ($centerX in @(0.3125, 0.5, 0.6875)) {
+                $centerPixelX = $bitmap.Width * $centerX
+                $centerPixelY = $bitmap.Height * $centerY
+                for ($y = 0; $y -lt $bitmap.Height; ++$y) {
+                    for ($x = 0; $x -lt $bitmap.Width; ++$x) {
+                        $dx = $x - $centerPixelX
+                        $dy = $y - $centerPixelY
+                        $distance = [Math]::Sqrt(($dx * $dx) + ($dy * $dy))
+                        if ($distance -le 75.0) {
+                            $shade = if ($distance -le 42.0) {
+                                [Math]::Max(40, [Math]::Min(210, [int](190.0 - ($distance * 2.1))))
+                            }
+                            else {
+                                220
+                            }
+                            $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($shade, [Math]::Max(0, $shade - 20), [Math]::Max(0, $shade - 35)))
+                        }
+                    }
+                }
+            }
+        }
+        $bitmap.Save((Join-Path $fixtureRoot "ssgi-reference-close-rendered.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally { $bitmap.Dispose() }
+    & (Join-Path $PSScriptRoot "check_ssgi_reference_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
+
+    (Get-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt") -Raw) -replace 'view=close reference_layout=close_grid', 'view=wide reference_layout=wide_row' |
+        Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
+    $wideBitmap = [System.Drawing.Bitmap]::new(640, 360)
+    try {
+        for ($y = 0; $y -lt $wideBitmap.Height; ++$y) {
+            for ($x = 0; $x -lt $wideBitmap.Width; ++$x) {
+                $wideBitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb(250, 245, 240))
+            }
+        }
+        foreach ($centerX in @(0.118, 0.229, 0.338, 0.445, 0.499, 0.555, 0.663, 0.771, 0.879)) {
+            $centerPixelX = $wideBitmap.Width * $centerX
+            $centerPixelY = $wideBitmap.Height * 0.5
+            for ($y = 0; $y -lt $wideBitmap.Height; ++$y) {
+                for ($x = 0; $x -lt $wideBitmap.Width; ++$x) {
+                    $dx = $x - $centerPixelX
+                    $dy = $y - $centerPixelY
+                    $distance = [Math]::Sqrt(($dx * $dx) + ($dy * $dy))
+                    if ($distance -le 40.0) {
+                        $shade = [Math]::Max(40, [Math]::Min(210, [int](190.0 - ($distance * 2.1))))
+                        $wideBitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($shade, [Math]::Max(0, $shade - 20), [Math]::Max(0, $shade - 35)))
+                    }
+                }
+            }
+        }
+        $wideBitmap.Save((Join-Path $fixtureRoot "ssgi-reference-wide-rendered.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally { $wideBitmap.Dispose() }
+    & (Join-Path $PSScriptRoot "check_ssgi_reference_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
+
+    (Get-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt") -Raw) -replace 'view=wide reference_layout=wide_row', 'view=close reference_layout=close_grid' |
+        Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
+    $bitmap = [System.Drawing.Bitmap]::new(640, 360)
+    try {
+        for ($y = 0; $y -lt $bitmap.Height; ++$y) {
+            for ($x = 0; $x -lt $bitmap.Width; ++$x) {
                 $wave = [int](22.0 * [Math]::Sin($x * 0.035) + 14.0 * [Math]::Cos($y * 0.045))
                 $red = [Math]::Max(0, [Math]::Min(255, 64 + $wave + [int]($x / 18)))
                 $green = [Math]::Max(0, [Math]::Min(255, 76 + $wave + [int]($y / 24)))
                 $blue = [Math]::Max(0, [Math]::Min(255, 58 + $wave))
-                $distance = [Math]::Sqrt((($x - 209.92) * ($x - 209.92)) + (($y - 76.68) * ($y - 76.68)))
+                $distance = [Math]::Sqrt((($x - 200.0) * ($x - 200.0)) + (($y - 69.84) * ($y - 69.84)))
                 if ($distance -ge 54.0 -and $distance -le 60.0) {
                     $red = 255
                     $green = 255
@@ -117,8 +182,8 @@ try {
                 $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($red, $green, $blue))
             }
         }
-        for ($y = 59; $y -le 107; ++$y) {
-            for ($x = 176; $x -le 224; ++$x) {
+        for ($y = 40; $y -le 100; ++$y) {
+            for ($x = 170; $x -le 230; ++$x) {
                 $bitmap.SetPixel($x, $y, [System.Drawing.Color]::Black)
             }
         }

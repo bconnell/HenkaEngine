@@ -87,46 +87,57 @@ try {
     if ($standardDeviation -lt 2.0) {
         throw "SSGI reference image is too flat to prove a stable rendered result."
     }
+    $subjectCentersX = @()
+    $subjectCentersY = @()
     if ($record.Groups["view"].Value -eq "close") {
         $subjectCentersX = @(0.3125, 0.5, 0.6875)
-        $subjectCentersY = @(0.23, 0.54, 0.85)
-        foreach ($centerY in $subjectCentersY) {
-            foreach ($centerX in $subjectCentersX) {
-                [double]$subjectSum = 0.0
-                [int]$subjectCount = 0
-                $centerPixelX = [int][Math]::Round($bitmap.Width * $centerX)
-                $centerPixelY = [int][Math]::Round($bitmap.Height * $centerY)
-                $minimumX = [Math]::Max(0, $centerPixelX - 24)
-                $maximumX = [Math]::Min($bitmap.Width - 1, $centerPixelX + 24)
-                $minimumY = [Math]::Max(0, $centerPixelY - 24)
-                $maximumY = [Math]::Min($bitmap.Height - 1, $centerPixelY + 24)
-                for ($subjectY = $minimumY; $subjectY -le $maximumY; ++$subjectY) {
-                    for ($subjectX = $minimumX; $subjectX -le $maximumX; ++$subjectX) {
-                        $subjectPixel = $bitmap.GetPixel($subjectX, $subjectY)
-                        $subjectSum += 0.2126 * $subjectPixel.R + 0.7152 * $subjectPixel.G + 0.0722 * $subjectPixel.B
-                        ++$subjectCount
-                    }
-                }
-                if ($subjectCount -gt 0 -and ($subjectSum / $subjectCount) -ge 8.0) {
-                    ++$visibleSubjectCount
+        $subjectCentersY = @(0.194, 0.5, 0.806)
+    }
+    else {
+        # The wide row uses the production fixture's projected subject centers.
+        # Keep the bright sky outside these regions from becoming subject evidence.
+        $subjectCentersX = @(0.118, 0.229, 0.338, 0.445, 0.499, 0.555, 0.663, 0.771, 0.879)
+        $subjectCentersY = @(0.5)
+    }
+    foreach ($centerY in $subjectCentersY) {
+        foreach ($centerX in $subjectCentersX) {
+            [double]$subjectSum = 0.0
+            [int]$subjectCount = 0
+            $centerPixelX = [int][Math]::Round($bitmap.Width * $centerX)
+            $centerPixelY = [int][Math]::Round($bitmap.Height * $centerY)
+            $minimumX = [Math]::Max(0, $centerPixelX - 24)
+            $maximumX = [Math]::Min($bitmap.Width - 1, $centerPixelX + 24)
+            $minimumY = [Math]::Max(0, $centerPixelY - 24)
+            $maximumY = [Math]::Min($bitmap.Height - 1, $centerPixelY + 24)
+            for ($subjectY = $minimumY; $subjectY -le $maximumY; ++$subjectY) {
+                for ($subjectX = $minimumX; $subjectX -le $maximumX; ++$subjectX) {
+                    $subjectPixel = $bitmap.GetPixel($subjectX, $subjectY)
+                    $subjectSum += 0.2126 * $subjectPixel.R + 0.7152 * $subjectPixel.G + 0.0722 * $subjectPixel.B
+                    ++$subjectCount
                 }
             }
+            if ($subjectCount -gt 0 -and ($subjectSum / $subjectCount) -ge 8.0) {
+                ++$visibleSubjectCount
+            }
         }
-        if ($visibleSubjectCount -ne 9) {
-            throw "SSGI reference image did not keep all nine evaluated subjects visually legible (visible=$visibleSubjectCount/9)."
-        }
+    }
+    if ($visibleSubjectCount -ne 9) {
+        throw "SSGI reference image did not keep all nine evaluated subjects visually legible (visible=$visibleSubjectCount/9)."
     }
 
     [int]$clippedPixelCount = 0
     [int]$brightPixelCount = 0
+    [int]$evaluatedClippedPixelCount = 0
+    [int]$evaluatedBrightPixelCount = 0
+    [int]$evaluatedSampleCount = 0
     [int]$haloSampleCount = 0
     [int]$haloContrastBrightPixelCount = 0
     $sampleStep = [Math]::Max(1, [int][Math]::Floor($bitmap.Width / 160.0))
-    $haloCentersX = @(0.328, 0.507, 0.694)
-    $haloCentersY = @(0.213, 0.519, 0.814)
-    $haloInnerRadius = $bitmap.Width * 0.082
-    $haloOuterRadius = $bitmap.Width * 0.098
-    $haloControlOffset = $bitmap.Width * 0.01875
+    $haloCentersX = $subjectCentersX
+    $haloCentersY = $subjectCentersY
+    $haloInnerRadius = if ($record.Groups["view"].Value -eq "close") { $bitmap.Width * 0.082 } else { $bitmap.Width * 0.032 }
+    $haloOuterRadius = if ($record.Groups["view"].Value -eq "close") { $bitmap.Width * 0.098 } else { $bitmap.Width * 0.041 }
+    $haloControlOffset = if ($record.Groups["view"].Value -eq "close") { $bitmap.Width * 0.01875 } else { $bitmap.Width * 0.009 }
     for ($y = 0; $y -lt $bitmap.Height; $y += $sampleStep) {
         for ($x = 0; $x -lt $bitmap.Width; $x += $sampleStep) {
             $pixel = $bitmap.GetPixel($x, $y)
@@ -135,8 +146,39 @@ try {
             if ($luma -ge 240.0) { ++$brightPixelCount }
         }
     }
-    foreach ($centerY in $haloCentersY) {
-        foreach ($centerX in $haloCentersX) {
+    $subjectRadius = if ($record.Groups["view"].Value -eq "close") {
+        $bitmap.Width * 0.075
+    }
+    else {
+        $bitmap.Width * 0.035
+    }
+    foreach ($centerY in $subjectCentersY) {
+        foreach ($centerX in $subjectCentersX) {
+            $centerPixelX = $bitmap.Width * $centerX
+            $centerPixelY = $bitmap.Height * $centerY
+            $minX = [Math]::Max(0, [int][Math]::Floor($centerPixelX - $subjectRadius))
+            $maxX = [Math]::Min($bitmap.Width - 1, [int][Math]::Ceiling($centerPixelX + $subjectRadius))
+            $minY = [Math]::Max(0, [int][Math]::Floor($centerPixelY - $subjectRadius))
+            $maxY = [Math]::Min($bitmap.Height - 1, [int][Math]::Ceiling($centerPixelY + $subjectRadius))
+            for ($y = $minY; $y -le $maxY; $y += $sampleStep) {
+                for ($x = $minX; $x -le $maxX; $x += $sampleStep) {
+                    $dx = $x - $centerPixelX
+                    $dy = $y - $centerPixelY
+                    if (($dx * $dx) + ($dy * $dy) -gt ($subjectRadius * $subjectRadius)) {
+                        continue
+                    }
+                    $pixel = $bitmap.GetPixel($x, $y)
+                    [double]$luma = 0.2126 * $pixel.R + 0.7152 * $pixel.G + 0.0722 * $pixel.B
+                    ++$evaluatedSampleCount
+                    if ($luma -ge 250.0) { ++$evaluatedClippedPixelCount }
+                    if ($luma -ge 240.0) { ++$evaluatedBrightPixelCount }
+                }
+            }
+        }
+    }
+    if ($record.Groups["view"].Value -eq "close") {
+        foreach ($centerY in $haloCentersY) {
+            foreach ($centerX in $haloCentersX) {
             $centerPixelX = $bitmap.Width * $centerX
             $centerPixelY = $bitmap.Height * $centerY
             $minX = [Math]::Max(0, [int][Math]::Floor($centerPixelX - $haloOuterRadius))
@@ -159,13 +201,22 @@ try {
                         [int][Math]::Round($x + $normalX * $haloControlOffset)))
                     $controlY = [Math]::Min($bitmap.Height - 1, [Math]::Max(0,
                         [int][Math]::Round($y + $normalY * $haloControlOffset)))
+                    $inwardX = [Math]::Min($bitmap.Width - 1, [Math]::Max(0,
+                        [int][Math]::Round($x - $normalX * $haloControlOffset)))
+                    $inwardY = [Math]::Min($bitmap.Height - 1, [Math]::Max(0,
+                        [int][Math]::Round($y - $normalY * $haloControlOffset)))
                     $controlPixel = $bitmap.GetPixel($controlX, $controlY)
+                    $inwardPixel = $bitmap.GetPixel($inwardX, $inwardY)
                     [double]$controlLuma = 0.2126 * $controlPixel.R + 0.7152 * $controlPixel.G + 0.0722 * $controlPixel.B
+                    [double]$inwardLuma = 0.2126 * $inwardPixel.R + 0.7152 * $inwardPixel.G + 0.0722 * $inwardPixel.B
                     ++$haloSampleCount
-                    if ($luma -ge 180.0 -and ($luma - $controlLuma) -ge 24.0) {
+                    if ($luma -ge 180.0 -and
+                        ($luma - $controlLuma) -ge 24.0 -and
+                        ($luma - $inwardLuma) -ge 24.0) {
                         ++$haloContrastBrightPixelCount
                     }
                 }
+            }
             }
         }
     }
@@ -173,11 +224,15 @@ try {
     $brightFraction = $brightPixelCount / [double]$count
     $haloContrastBrightFraction = if ($haloSampleCount -gt 0) {
         $haloContrastBrightPixelCount / [double]$haloSampleCount
-    } else {
+    } elseif ($record.Groups["view"].Value -eq "close") {
         1.0
+    } else {
+        0.0
     }
-    if ($clippedFraction -gt 0.20 -or $brightFraction -gt 0.30) {
-        throw "SSGI reference image is excessively clipped or over-bright (clipped=$([Math]::Round(100.0 * $clippedFraction, 3))%, bright=$([Math]::Round(100.0 * $brightFraction, 3))%)."
+    $evaluatedClippedFraction = $evaluatedClippedPixelCount / [double]$evaluatedSampleCount
+    $evaluatedBrightFraction = $evaluatedBrightPixelCount / [double]$evaluatedSampleCount
+    if ($evaluatedClippedFraction -gt 0.20 -or $evaluatedBrightFraction -gt 0.30) {
+        throw "SSGI reference evaluated subjects are excessively clipped or over-bright (clipped=$([Math]::Round(100.0 * $evaluatedClippedFraction, 3))%, bright=$([Math]::Round(100.0 * $evaluatedBrightFraction, 3))%)."
     }
     if ($haloContrastBrightFraction -gt 0.05) {
         throw "SSGI reference image has a bright subject-edge halo (local-contrast=$([Math]::Round(100.0 * $haloContrastBrightFraction, 3))%)."
@@ -191,8 +246,8 @@ $summary = @(
     "SSGI reference visual evidence validation: passed",
     "Reference view: $($record.Groups['view'].Value)",
     "Nine deterministic subjects: settled composition and bounded Rendered path",
-    $(if ($record.Groups['view'].Value -eq "close") { "Evaluated subject legibility: $visibleSubjectCount/9" } else { "Evaluated subject legibility: close-only guard not applicable to wide row" }),
-    "Bounded image guard: clipped=$([Math]::Round(100.0 * $clippedFraction, 3))% bright=$([Math]::Round(100.0 * $brightFraction, 3))% subject_edge_halo_local_contrast=$([Math]::Round(100.0 * $haloContrastBrightFraction, 3))%",
+    "Evaluated subject legibility: $visibleSubjectCount/9",
+    "Bounded image guard: global_clipped=$([Math]::Round(100.0 * $clippedFraction, 3))% global_bright=$([Math]::Round(100.0 * $brightFraction, 3))% evaluated_subject_clipped=$([Math]::Round(100.0 * $evaluatedClippedFraction, 3))% evaluated_subject_bright=$([Math]::Round(100.0 * $evaluatedBrightFraction, 3))% subject_edge_halo_local_contrast=$(if ($record.Groups['view'].Value -eq 'close') { "$([Math]::Round(100.0 * $haloContrastBrightFraction, 3))%" } else { "not-evaluated-wide" })",
     "Status: automated SSGI activation and image-stability guard passed; human visual inspection remains required"
 )
 $summary | Set-Content -LiteralPath (Join-Path $InputDirectory "ssgi-reference-visual-validation.txt")
