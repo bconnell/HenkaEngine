@@ -1,6 +1,6 @@
 # Support Henka Engine
 
-Henka Engine is an open source C engine project focused on building practical foundations for 3D, 2D, and 2.5D development.
+Henka Engine is an open source C engine project focused on completing a practical 3D game-development workflow first, followed by first-class 2D and then first-class 2.5D on the same shared engine architecture.
 
 Sponsorship helps keep the project moving by supporting development time, testing, documentation, examples, packaged builds, and future workspace tooling.
 
@@ -37,9 +37,9 @@ Use the Sponsor button on the Henka Engine GitHub repository.
 
 ## Project direction
 
-Henka Engine is still early. Current work is focused on repairing and hardening existing runtime, workspace, asset, physics, packaging, and external-project behavior.
+Henka Engine is still early. The active product sequence is to finish the current general 3D engine boundary, including renderer, authoring, assets/materials, physics, project/scene workflows, prefabs, camera, terrain/world, lighting, scripting, character control, Audio, networking, editor/workspace, packaging/external-project behavior, animation, and a final integrated 3D audit.
 
-After the existing integrity work, the primary feature track is production-quality 2.5D. Integrated modeling, UV, rigging, animation-authoring, and broader content-creation tools follow without removing compatibility with external asset pipelines. Docked and detached workspace panels plus the first 2.5D camera presets already exist; they are implemented foundations, not hypothetical future features.
+First-class 2D begins only after the current general 3D boundary closes. First-class 2.5D follows the completed 2D boundary and deliberately composes the mature 2D and 3D foundations instead of becoming a separate engine architecture. Existing side, top-down, isometric, and orthographic camera presets are useful 2.5D foundations, but they do not make 2.5D the current lead feature track.
 
 ## Other ways to help
 
