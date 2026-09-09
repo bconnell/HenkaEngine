@@ -88,6 +88,7 @@ if(HENKA_BUILD_CLIENT)
         src/renderer/renderer.c
         src/renderer/temporal_camera_policy.c
         src/renderer/reflection_probe_policy.c
+        src/renderer/scene_target_policy.c
         src/renderer/renderer_opengl.c
         src/renderer/shader.c
         src/renderer/texture.c

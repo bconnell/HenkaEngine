@@ -19,6 +19,7 @@
 #include "../core/checked.h"
 #include "../ui/ui_internal.h"
 #include "reflection_probe_policy.h"
+#include "scene_target_policy.h"
 #include "temporal_camera_policy.h"
 
 #ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
@@ -7669,10 +7670,23 @@ void henka_opengl_renderer_sync_scene_target(struct henka_renderer* renderer)
         return;
     }
     state = (henka_opengl_renderer_state*)renderer->backend_state;
-    if (state->hdr_width == viewport.width && state->hdr_height == viewport.height &&
-        state->hdr_framebuffer != 0U && state->hdr_framebuffer_complete &&
-        state->temporal_history_ready && state->temporal_history_width == viewport.width &&
-        state->temporal_history_height == viewport.height)
+    if (!henka_opengl_scene_target_requires_sync(
+            &(henka_opengl_scene_target_policy){
+                state->hdr_framebuffer != 0U && state->hdr_framebuffer_complete,
+                state->hdr_width == viewport.width && state->hdr_height == viewport.height,
+                state->bloom_ready &&
+                    state->bloom_framebuffer != 0U &&
+                    state->bloom_blur_framebuffer != 0U &&
+                    state->bloom_color_texture != 0U &&
+                    state->bloom_blur_texture != 0U,
+                state->bloom_width == (viewport.width > 1 ? viewport.width / 2 : 1) &&
+                    state->bloom_height == (viewport.height > 1 ? viewport.height / 2 : 1),
+                state->temporal_history_ready &&
+                    state->temporal_history_texture != 0U &&
+                    state->temporal_history_depth_texture != 0U &&
+                    state->temporal_history_depth_framebuffer != 0U,
+                state->temporal_history_width == viewport.width &&
+                    state->temporal_history_height == viewport.height}))
     {
         return;
     }

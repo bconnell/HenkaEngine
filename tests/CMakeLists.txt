@@ -754,6 +754,16 @@ target_link_libraries(henka_reflection_probe_policy_tests
 )
 henka_enable_project_warnings(henka_reflection_probe_policy_tests)
 add_test(NAME henka_reflection_probe_policy_tests COMMAND henka_reflection_probe_policy_tests)
+
+add_executable(henka_renderer_scene_target_policy_tests
+    test_renderer_scene_target_policy.c
+)
+target_link_libraries(henka_renderer_scene_target_policy_tests
+    PRIVATE
+        henka
+)
+henka_enable_project_warnings(henka_renderer_scene_target_policy_tests)
+add_test(NAME henka_renderer_scene_target_policy_tests COMMAND henka_renderer_scene_target_policy_tests)
 endif()
 
 if(HENKA_ENABLE_NETWORK)
