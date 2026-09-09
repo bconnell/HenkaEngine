@@ -155,3 +155,8 @@ finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
 }
+
+# Expected negative-control subprocesses leave a non-zero LASTEXITCODE in the
+# hosting PowerShell session.  The regression itself is green only after its
+# scoped cleanup has completed, so make that result explicit to CI callers.
+exit 0
