@@ -55,6 +55,10 @@ jobs:
         shell: powershell
         run: .\scripts\test_reflection_probe_prefilter_windows.ps1
 
+      - name: Check renderer scene target limits
+        shell: powershell
+        run: .\scripts\test_renderer_scene_target_limits_windows.ps1
+
       - name: Check bounded PBR clearcoat response
         shell: powershell
         run: .\scripts\test_pbr_clearcoat_response_windows.ps1

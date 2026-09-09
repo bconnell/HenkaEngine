@@ -2776,9 +2776,13 @@ static henka_result henka_opengl_create_hdr_target(
     }
     state->hdr_requested_width = width;
     state->hdr_requested_height = height;
-    if (width <= 0 || height <= 0)
+    if (width <= 0 || height <= 0 || width > 8192 || height > 8192)
     {
-        (void)snprintf(state->hdr_failure_reason, sizeof(state->hdr_failure_reason), "invalid target size");
+        (void)snprintf(
+            state->hdr_failure_reason,
+            sizeof(state->hdr_failure_reason),
+            width > 8192 || height > 8192 ?
+                "target size exceeds limit" : "invalid target size");
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
