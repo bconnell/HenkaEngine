@@ -139,6 +139,10 @@ jobs:
         shell: powershell
         run: .\scripts\check_generated_output_lifecycle_windows.ps1
 
+      - name: Test generated artifact lifecycle
+        shell: powershell
+        run: .\scripts\test_generated_artifact_lifecycle_windows.ps1
+
   sanitizer-runtime:
     runs-on: windows-2022
     timeout-minutes: 40

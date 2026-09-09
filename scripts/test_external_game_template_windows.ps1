@@ -137,6 +137,14 @@ if ($legacyValidationRoots.Count -gt 0) {
 
 Write-Step "Preparing repo-local template validation folder"
 [System.IO.Directory]::CreateDirectory($validationRoot) | Out-Null
+Write-HenkaGeneratedRootMarker `
+    -RepoRoot $repoRoot `
+    -Path $validationRoot `
+    -Purpose "stable external game template validation scratch" `
+    -RetentionClass "CACHE" `
+    -Active $true `
+    -CleanupEligible $false `
+    -CleanupCondition "retained_for_reuse" | Out-Null
 Remove-GeneratedValidationTree -Path $validationSource
 Copy-Item -LiteralPath $templateRoot -Destination $validationSource -Recurse
 
@@ -181,5 +189,14 @@ if ($result.Stdout -notmatch "External game template initialized\." -or
     $result.Stdout -notmatch "External Terrain graphical Rendered path passed\.") {
     throw "The external game template public-API workflow did not complete its expected checks."
 }
+
+Write-HenkaGeneratedRootMarker `
+    -RepoRoot $repoRoot `
+    -Path $validationRoot `
+    -Purpose "stable external game template validation scratch" `
+    -RetentionClass "CACHE" `
+    -Active $false `
+    -CleanupEligible $false `
+    -CleanupCondition "retained_for_reuse" | Out-Null
 
 Write-Host "[pass] External game template configured, built, and ran successfully."

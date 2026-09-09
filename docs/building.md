@@ -64,13 +64,33 @@ build/tv/external_server_minimal/
 out/terrain-process-integration/
 ```
 
-The validation scripts reuse these roots and retire old generated validation trees. Inspect generated-output bounds with:
+The validation scripts reuse these roots and retire old generated validation trees. Newly created persistent validation roots carry a `.henka-generated.json` marker with their owner, source commit, purpose, configuration, retention class, and cleanup condition. Inspect generated-output bounds with:
 
 ```powershell
 .\scripts\check_generated_output_lifecycle_windows.ps1
 ```
 
 The check fails when generated-tree growth violates the repository's bounded output policy.
+
+Use the repository-native lifecycle manager to inspect approved generated roots or
+retire one exact, marked candidate after its proof is consumed:
+
+```powershell
+.\scripts\manage_generated_artifacts_windows.ps1 -Mode Report
+.\scripts\manage_generated_artifacts_windows.ps1 -Mode DryRun -CandidatePath .\build\test_tmp\some-candidate
+.\scripts\manage_generated_artifacts_windows.ps1 -Mode Cleanup -ConfirmNoActiveProcess -CandidatePath .\build\test_tmp\some-candidate
+```
+
+Report mode preserves unmarked roots as `UNMARKED`. Dry-run and cleanup require
+one exact candidate under `build/` or `out/`, a valid marker, no tracked files,
+no reparse-point path, a non-active cleanup-eligible retention class, and an
+explicit confirmation that no active process uses the candidate. The manager
+never removes an approved root itself or an unclassified path. Validate this
+contract with:
+
+```powershell
+.\scripts\test_generated_artifact_lifecycle_windows.ps1
+```
 
 ## Renderer-free runtime build
 

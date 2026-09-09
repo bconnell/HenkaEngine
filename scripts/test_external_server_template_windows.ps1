@@ -104,6 +104,14 @@ if ($legacyValidationRoots.Count -gt 0) {
 }
 
 [System.IO.Directory]::CreateDirectory($validationRoot) | Out-Null
+Write-HenkaGeneratedRootMarker `
+    -RepoRoot $repoRoot `
+    -Path $validationRoot `
+    -Purpose "stable external server template validation scratch" `
+    -RetentionClass "CACHE" `
+    -Active $true `
+    -CleanupEligible $false `
+    -CleanupCondition "retained_for_reuse" | Out-Null
 Remove-GeneratedValidationTree -Path $validationSource
 Copy-Item -LiteralPath $templateRoot -Destination $validationSource -Recurse
 
@@ -122,4 +130,12 @@ $result = Invoke-HenkaNativeCapture `
 if ($result.Stdout -notmatch "External server template initialized\.") {
     throw "The external server template smoke test did not print the expected initialization output."
 }
+Write-HenkaGeneratedRootMarker `
+    -RepoRoot $repoRoot `
+    -Path $validationRoot `
+    -Purpose "stable external server template validation scratch" `
+    -RetentionClass "CACHE" `
+    -Active $false `
+    -CleanupEligible $false `
+    -CleanupCondition "retained_for_reuse" | Out-Null
 Write-Host "[pass] External server template configured, built, and ran successfully."

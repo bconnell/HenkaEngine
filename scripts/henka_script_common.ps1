@@ -9,6 +9,59 @@ function Get-HenkaRepoRoot {
     return (Resolve-Path (Join-Path $ScriptDirectory "..")).Path
 }
 
+function Write-HenkaGeneratedRootMarker {
+    param(
+        [Parameter(Mandatory = $true)] [string]$RepoRoot,
+        [Parameter(Mandatory = $true)] [string]$Path,
+        [Parameter(Mandatory = $true)] [string]$Purpose,
+        [Parameter(Mandatory = $true)] [ValidateSet("SCRATCH", "ACTIVE_CANDIDATE", "PUBLISHED_BOUNDARY_EVIDENCE", "NEGATIVE_CONTROL", "CACHE")]
+        [string]$RetentionClass,
+        [Parameter(Mandatory = $true)] [bool]$Active,
+        [Parameter(Mandatory = $true)] [bool]$CleanupEligible,
+        [Parameter(Mandatory = $true)] [string]$CleanupCondition,
+        [string]$Configuration = "n/a"
+    )
+
+    $repo = (Resolve-Path -LiteralPath $RepoRoot).Path.TrimEnd("\")
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $buildRoot = [System.IO.Path]::GetFullPath((Join-Path $repo "build")).TrimEnd("\")
+    $outRoot = [System.IO.Path]::GetFullPath((Join-Path $repo "out")).TrimEnd("\")
+    $underBuild = $fullPath.StartsWith($buildRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
+    $underOut = $fullPath.StartsWith($outRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
+    if (-not $underBuild -and -not $underOut) {
+        throw "Generated root marker path must be under the repository build or out root: $fullPath"
+    }
+    [System.IO.Directory]::CreateDirectory($fullPath) | Out-Null
+    $item = Get-Item -LiteralPath $fullPath -Force
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Generated root marker path is a reparse point: $fullPath"
+    }
+    $git = Get-HenkaGitPath
+    $sourceSha = ([string](& $git -C $repo rev-parse HEAD 2>$null)).Trim()
+    if ($LASTEXITCODE -ne 0 -or $sourceSha -notmatch "^[0-9a-fA-F]{40}$") {
+        throw "Could not resolve the source commit for generated root marker: $fullPath"
+    }
+    $marker = [ordered]@{
+        schema_version = 1
+        owner = "Henka repository validation"
+        purpose = $Purpose
+        source_sha = $sourceSha
+        configuration = $Configuration
+        created_utc = [DateTime]::UtcNow.ToString("o")
+        retention_class = $RetentionClass
+        cleanup_owner = "Henka repository validation"
+        cleanup_condition = $CleanupCondition
+        active = $Active
+        cleanup_eligible = $CleanupEligible
+    }
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText(
+        (Join-Path $fullPath ".henka-generated.json"),
+        (($marker | ConvertTo-Json -Depth 4) + [Environment]::NewLine),
+        $encoding)
+    return (Join-Path $fullPath ".henka-generated.json")
+}
+
 function Get-HenkaCMakePath {
     $cmakeCommand = Get-Command cmake.exe -ErrorAction SilentlyContinue
     if ($null -eq $cmakeCommand) {

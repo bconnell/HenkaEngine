@@ -41,6 +41,14 @@ if ($legacyEvidenceRoots.Count -gt 0) {
 }
 Remove-GeneratedIntegrationTree -Path $evidenceRoot
 [System.IO.Directory]::CreateDirectory($evidenceRoot) | Out-Null
+Write-HenkaGeneratedRootMarker `
+    -RepoRoot $repoRoot `
+    -Path $evidenceRoot `
+    -Purpose "stable Terrain process integration evidence" `
+    -RetentionClass "PUBLISHED_BOUNDARY_EVIDENCE" `
+    -Active $true `
+    -CleanupEligible $false `
+    -CleanupCondition "retained_for_current_boundary" | Out-Null
 Invoke-HenkaNative -FilePath $cmake -Arguments @(
     "--build", (Join-Path $repoRoot "build"), "--config", "Debug",
     "--target", "henka_dedicated_server", "henka_terrain_process_client", "--parallel", "8"
@@ -175,6 +183,14 @@ try {
         $restartChecksumMatch.Groups[1].Value -ne $reconnectChecksumMatch.Groups[1].Value) {
         throw "The restarted Terrain server did not restore the reconnect client's committed region exactly."
     }
+    Write-HenkaGeneratedRootMarker `
+        -RepoRoot $repoRoot `
+        -Path $evidenceRoot `
+        -Purpose "stable Terrain process integration evidence" `
+        -RetentionClass "PUBLISHED_BOUNDARY_EVIDENCE" `
+        -Active $false `
+        -CleanupEligible $false `
+        -CleanupCondition "retained_for_current_boundary" | Out-Null
     Write-Host "[pass] Two-client authority, late join, explicit reconnect, exact checksum convergence, clean duration shutdown, and restart persistence passed."
     Write-Host "Evidence: $evidenceRoot"
 }
