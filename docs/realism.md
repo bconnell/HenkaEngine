@@ -82,7 +82,9 @@ HDR environment lighting derives the following resources transactionally:
 
 IBL roughness lookup selects the supported seven-level 256x256 through 4x4
 prefilter chain. The resource-derived maximum LOD is authoritative for the
-shader lookup; the remaining IBL visual-quality defect stays open separately.
+shader lookup. The earlier localized IBL reflection-knot regression is covered
+by the current reference checker and retained known-bad evidence; broader
+IBL/probe visual quality remains part of renderer acceptance.
 
 This is the current rasterized environment-lighting foundation. Path tracing and full-scene global illumination are not implemented.
 
@@ -320,7 +322,10 @@ The checker verifies:
 
 - visible roughness resolution across the prefiltered environment response;
 - bounded image output;
-- all nine close-view subjects remain readable.
+- all nine close-view subjects remain readable;
+- localized bright-knot/lobe regressions remain absent in the supported close-view fixture.
+
+The current checker is also exercised against retained known-bad historical evidence for the localized reflection-knot defect. Passing that regression does not establish universal IBL accuracy across arbitrary HDR environments, materials, or hardware.
 
 The shared UV-sphere fixture keeps triangle winding aligned with authored outward normals.
 
