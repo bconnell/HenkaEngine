@@ -419,7 +419,7 @@ Expected work includes:
 
 ## Integrated modeling and content authoring
 
-Integrated modeling and content authoring are part of the current 3D completion path. Later first-class 2D and 2.5D work should reuse the stable renderer, asset, persistence, history, scene, and workspace boundaries established here instead of running as parallel authoring tracks.
+Integrated authoring is already underway as part of the current 3D completion path, including modeling and content authoring. Later first-class 2D and 2.5D work should reuse the stable renderer, asset, persistence, history, scene, and workspace boundaries established here instead of running as parallel authoring tracks.
 
 ### Implemented Foundation
 
