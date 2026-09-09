@@ -5,9 +5,24 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $manager = Join-Path $PSScriptRoot "manage_generated_artifacts_windows.ps1"
+$captureScript = Join-Path $PSScriptRoot "capture_visual_evidence_windows.ps1"
+$captureExecutable = Join-Path $repoRoot "build\examples\sandbox3d\Debug\henka_sandbox3d.exe"
+$captureRuntimeRoot = Join-Path $repoRoot "build\test_tmp"
 $testRoot = Join-Path $repoRoot ("build\test_tmp\generated-artifact-lifecycle-regression-" + [Guid]::NewGuid().ToString("N"))
 $outside = Join-Path $repoRoot ("generated-artifact-lifecycle-outside-" + [Guid]::NewGuid().ToString("N"))
 $junction = Join-Path $testRoot "junction"
+$captureProbeNewPaths = @()
+
+function Get-VisualCaptureRuntimePaths {
+    if (-not (Test-Path -LiteralPath $captureRuntimeRoot -PathType Container)) {
+        return @()
+    }
+
+    return @(
+        Get-ChildItem -LiteralPath $captureRuntimeRoot -Directory -Filter "visual-evidence-runtime-*" -Force -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty FullName
+    )
+}
 
 function Write-TestMarker {
     param(
@@ -89,6 +104,25 @@ try {
     Write-TestMarker -Path $eligible -RetentionClass "PROOF_CONSUMED" -Active $false -CleanupEligible $true
     Write-TestMarker -Path $active -RetentionClass "ACTIVE_CANDIDATE" -Active $true -CleanupEligible $false
 
+    if (-not (Test-Path -LiteralPath $captureExecutable -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $captureExecutable) "assets") -PathType Container)) {
+        throw "The capture-runtime cleanup regression requires the built Debug Sandbox3D and its assets."
+    }
+    $captureBefore = @(Get-VisualCaptureRuntimePaths)
+    $captureOutput = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $captureScript `
+        -ExecutablePath $captureExecutable `
+        -EvidenceProfile "FULL_SHOWCASE" `
+        -OutputDirectory $testRoot 2>&1)
+    $captureExitCode = $LASTEXITCODE
+    $captureAfter = @(Get-VisualCaptureRuntimePaths)
+    $captureProbeNewPaths = @($captureAfter | Where-Object { $captureBefore -notcontains $_ })
+    $captureOutputText = (($captureOutput | ForEach-Object { [string]$_ }) -join "`n")
+    if ($captureExitCode -eq 0 -or
+        $captureOutputText -notmatch "FULL_SHOWCASE evidence requires" -or
+        $captureProbeNewPaths.Count -ne 0) {
+        throw "Visual capture runtime cleanup regression failed. Exit=$captureExitCode; NewPaths=$($captureProbeNewPaths -join ', '); Output=$captureOutputText"
+    }
+
     $dryRun = Invoke-Manager -Arguments @("-Mode", "DryRun", "-CandidatePath", $eligible)
     if ($dryRun.ExitCode -ne 0 -or $dryRun.Output -notmatch "cleanup_eligible=True" -or $dryRun.Output -notmatch "bytes=") {
         throw "Eligible generated artifact was not accepted by dry-run. Output: $($dryRun.Output)"
@@ -131,6 +165,7 @@ try {
         Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $junction) -ExpectedText "reparse"
     }
 
+    Write-Output "Visual capture runtime cleanup regression passed."
     Write-Output "Generated artifact lifecycle regression tests passed."
 }
 finally {
@@ -142,6 +177,15 @@ finally {
             if ($null -ne $junctionItem -and
                 ($junctionItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
                 [System.IO.Directory]::Delete($junction, $false)
+            }
+        }
+        foreach ($capturePath in @($captureProbeNewPaths)) {
+            if (Test-Path -LiteralPath $capturePath -PathType Container) {
+                $captureItem = Get-Item -LiteralPath $capturePath -Force -ErrorAction SilentlyContinue
+                if ($null -ne $captureItem -and
+                    ($captureItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+                    [System.IO.Directory]::Delete($capturePath, $true)
+                }
             }
         }
         if (Test-Path -LiteralPath $testRoot) {

@@ -53,8 +53,9 @@ if (-not (Test-Path -LiteralPath $captureAssets -PathType Container)) {
     throw "Sandbox runtime assets were not found beside the executable: $captureAssets"
 }
 New-Item -ItemType Directory -Path $captureRuntimeDirectory -Force | Out-Null
-Copy-Item -LiteralPath $executable -Destination $captureExecutable -Force
-Copy-Item -LiteralPath $captureAssets -Destination (Join-Path $captureRuntimeDirectory "assets") -Recurse -Force
+try {
+    Copy-Item -LiteralPath $executable -Destination $captureExecutable -Force
+    Copy-Item -LiteralPath $captureAssets -Destination (Join-Path $captureRuntimeDirectory "assets") -Recurse -Force
 if ($EvidenceProfile -eq "FULL_SHOWCASE" -and -not $IncludeStartupShowcase) {
     throw "FULL_SHOWCASE evidence requires -IncludeStartupShowcase. Use GIRAFFE_INSPECTION for inspection-only captures."
 }
@@ -1581,3 +1582,21 @@ else {
     "Same-camera Solid, Material Preview, and Rendered evidence"
 }
 Write-Host "[pass] $captureSummary captured in $OutputDirectory"
+}
+finally {
+    if (Test-Path -LiteralPath $captureRuntimeDirectory -PathType Container) {
+        $runtimeItem = Get-Item -LiteralPath $captureRuntimeDirectory -Force -ErrorAction SilentlyContinue
+        if ($null -ne $runtimeItem -and
+            ($runtimeItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+            try {
+                Remove-Item -LiteralPath $captureRuntimeDirectory -Recurse -Force -ErrorAction Stop
+            }
+            catch {
+                Write-Warning "Could not retire visual-capture runtime $captureRuntimeDirectory; preserving it as a protected remainder."
+            }
+        }
+        elseif ($null -ne $runtimeItem) {
+            Write-Warning "Refusing to recurse through reparse-point visual-capture runtime $captureRuntimeDirectory."
+        }
+    }
+}

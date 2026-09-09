@@ -92,6 +92,22 @@ contract with:
 .\scripts\test_generated_artifact_lifecycle_windows.ps1
 ```
 
+### Evidence retention
+
+Visual capture output defaults to `build/visual_evidence`. Capture runtime copies
+under `build/test_tmp/visual-evidence-runtime-*` are temporary and are retired by
+the capture script after each run. If operating-system or security controls block
+that exact cleanup, the path is preserved as a protected remainder for later
+classification; the workflow does not bypass those controls.
+
+Evidence is temporary by default. Retain a small representative set only when an
+owner requests it, a subjective product decision remains open, a major campaign
+boundary requires it, or the raw capture is still the smallest useful diagnostic.
+Do not create routine Desktop evidence bundles. After a result is classified and
+protected by source, tests, and regressions, retire disposable output with the
+lifecycle manager using one exact marked candidate path. Unmarked paths remain
+preserved until their ownership and retention purpose are established.
+
 ## Renderer-free runtime build
 
 The normal client build produces the graphical compatibility target `henka` and the Sandbox. The renderer-independent public runtime is `henka_runtime`.
