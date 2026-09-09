@@ -6,11 +6,11 @@
 
 Henka Engine is an early-stage open-source C17 game engine and integrated
 development workspace. It has a native 3D runtime/editor path, terrain,
-rendering, physics, Audio foundations, 2.5D camera foundations, modeling and
-content authoring, asset/material workflows, persistence, and external-project
-support.
+rendering, physics, Audio foundations, modeling and content authoring,
+asset/material workflows, persistence, external-project support, and existing
+camera-side 2.5D foundations.
 
-> **Project status:** Henka is an early-stage engine foundation. Production game-platform maturity is in progress. The repository's Sandbox is the engine sample and QA target. Games built with Henka live in separate repositories.
+> **Project status:** Henka is an early-stage engine foundation. The active product sequence is to complete the current general 3D engine boundary first. First-class 2D follows that closure, then first-class 2.5D on the same shared architecture. The repository's Sandbox is the engine sample and QA target. Games built with Henka live in separate repositories.
 
 ## At a glance
 
@@ -23,6 +23,7 @@ support.
 | Future renderer direction | Vulkan / Direct3D 12 / Metal through backend isolation |
 | Editor | Native integrated workspace |
 | Game project boundary | Separate external projects supported through validated templates |
+| Dimensional roadmap | Complete current 3D boundary → first-class 2D → first-class 2.5D |
 | License | MIT |
 
 Integrated authoring is underway alongside runtime and workspace hardening. The
@@ -135,9 +136,12 @@ The current 2.5D foundation is camera-side:
 - Isometric
 - Orthographic zoom
 
-Sprites, texture regions, layered depth, parallax, animation, and movement
-constraints remain future work. See [docs/terrain.md](docs/terrain.md) and
-[docs/roadmap.md](docs/roadmap.md).
+These presets are existing foundations inside the current 3D editor. They do
+not define the present development priority. First-class 2.5D is deferred until
+after the current general 3D completion boundary and the later first-class 2D
+campaign. Sprites, texture regions, layered depth, parallax, animation, and
+movement constraints remain future work. See [docs/terrain.md](docs/terrain.md)
+and [docs/roadmap.md](docs/roadmap.md).
 
 ## Platform direction
 
@@ -218,6 +222,7 @@ current public Audio workflow. Complete game project serialization remains futur
 - [Detailed current capabilities](docs/current-capabilities.md)
 - [3D engine completion matrix](docs/engine-completion-matrix.md)
 - [Roadmap](docs/roadmap.md)
+- [Post-3D dimensional roadmap](docs/roadmap-next-phases.md)
 - [Architecture](docs/architecture.md)
 - [Building and validation](docs/building.md)
 - [Documentation presentation standard](docs/documentation-style.md)
@@ -247,7 +252,7 @@ Current status applies to that stated scope. Open work inside the stated scope
 continues to affect status.
 
 - Henka and its editor are early-stage; the native workspace is not a complete production editor.
-- 2D, broader scripting/behavior authoring, full character-controller movement,
+- First-class 2D and first-class 2.5D, broader scripting/behavior authoring, full character-controller movement,
   advanced physics, broader renderer backends, mature Game/Play workflows, and
   advanced audio effects/occlusion remain unfinished. A bounded dynamic-body
   character-controller foundation is available, including contact-aware planar
@@ -270,11 +275,17 @@ contracts owned by the linked documentation above.
 
 ## Roadmap
 
-Current priorities are runtime and editor integrity, integrated authoring,
-terrain/world usability, renderer and asset hardening, and the next layers of
-2.5D workflow. Longer-term work includes complete Game authoring, 2D,
-animation, advanced audio expansion, scripting, additional renderer backends, and broader release
-distribution. See the [roadmap](docs/roadmap.md) for the maintained direction.
+The current roadmap is 3D-first. Renderer completion leads the active sequence,
+followed by integrated modeling/content authoring, assets/materials, physics,
+Game Authoring/Scene Document/project workflow, prefabs, camera/viewport,
+terrain/world, lighting/environment, scripting, Character Controller, Audio,
+networking/server behavior, editor workspace, packaging/external projects,
+animation/character production, and a final overall 3D integration audit.
+
+First-class 2D starts only after the current general 3D boundary closes.
+First-class 2.5D follows the completed 2D boundary. A final whole-engine audit
+then revalidates 3D, 2D, 2.5D, and their shared architecture before further
+major expansion. See the [roadmap](docs/roadmap.md) for the maintained direction.
 
 ## Support Henka Engine
 
