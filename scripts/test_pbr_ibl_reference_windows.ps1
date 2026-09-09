@@ -36,7 +36,9 @@ if ($sandbox -notmatch 'IBL Roughness 0\.05' -or
 if ($sandbox -notmatch 'sandbox3d_is_ibl_reference_kind\(') {
     $missing += 'IBL reference isolation from local reflection probes'
 }
-if ($sandbox -notmatch 'if \(!sandbox3d_is_ibl_reference_kind\(') {
+$directLightIsolationPattern = 'if \(!sandbox3d_default_scene_requested\(state\) &&\s+!isolated_ibl_reference\)\s*\{\s*result = henka_scene_add_light'
+if ($sandbox -notmatch 'const bool isolated_ibl_reference = sandbox3d_is_ibl_reference_kind\(' -or
+    [regex]::Matches($sandbox, $directLightIsolationPattern).Count -lt 2) {
     $missing += 'IBL reference isolation from direct local lights'
 }
 if ($sandbox -notmatch 'henka_scene_set_light_intensity\(state->scene, 0\.0f\)') {
