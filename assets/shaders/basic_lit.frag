@@ -865,7 +865,7 @@ void main()
         vec3 halfVector = safeNormalize(viewDirection + lightDir, normal);
         float nDotH = saturate(dot(normal, halfVector));
         float vDotH = saturate(dot(viewDirection, halfVector));
-        float alpha = surfaceRoughness * surfaceRoughness;
+        float alpha = surfaceRoughness;
         vec3 fresnel = fresnelSchlick(vDotH, f0);
         float distribution = distributionGGX(nDotH, alpha);
         float visibility = visibilitySmithGGXCorrelated(nDotV, nDotL, alpha);
@@ -928,7 +928,7 @@ void main()
 
         if (surfaceClearcoat > 0.0)
         {
-            float clearcoatAlpha = surfaceClearcoatRoughness * surfaceClearcoatRoughness;
+            float clearcoatAlpha = surfaceClearcoatRoughness;
             vec3 clearcoatFresnel = fresnelSchlick(vDotH, vec3(0.04));
             float clearcoatDistribution = distributionGGX(nDotH, clearcoatAlpha);
             float clearcoatVisibility = visibilitySmithGGXCorrelated(nDotV, nDotL, clearcoatAlpha);
@@ -946,7 +946,7 @@ void main()
 
         if (max(max(surfaceSheenColor.r, surfaceSheenColor.g), surfaceSheenColor.b) > 0.0)
         {
-            float sheenAlpha = surfaceSheenRoughness * surfaceSheenRoughness;
+            float sheenAlpha = surfaceSheenRoughness;
             vec3 sheenFresnel = fresnelSchlick(vDotH, surfaceSheenColor);
             float sheenDistribution = distributionGGX(nDotH, sheenAlpha);
             float sheenVisibility = visibilitySmithGGXCorrelated(nDotV, nDotL, sheenAlpha);

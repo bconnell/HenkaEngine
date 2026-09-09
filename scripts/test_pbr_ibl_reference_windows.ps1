@@ -102,6 +102,16 @@ if ($shader -notmatch 'uniform float iblPrefilterMaxLod;' -or
 if ($shader -notmatch 'texture\(iblBrdfLut,\s*vec2\(nDotV,\s*1\.0\s*-\s*surfaceRoughness\)\)') {
     $missing += 'view-aware BRDF LUT sampling'
 }
+if ($shader -notmatch '(?m)^\s*float alpha = surfaceRoughness;\s*$' -or
+    $shader -notmatch '(?m)^\s*float clearcoatAlpha = surfaceClearcoatRoughness;\s*$' -or
+    $shader -notmatch '(?m)^\s*float sheenAlpha = surfaceSheenRoughness;\s*$' -or
+    $shader -match 'float alpha = surfaceRoughness \* surfaceRoughness;') {
+    $missing += 'single roughness-to-alpha mapping for direct GGX lobes'
+}
+if ($renderer -notmatch 'float boundedRoughness=clamp\(roughness,0\.0,1\.0\); float alpha=max\(boundedRoughness,0\.001\);' -or
+    $renderer -notmatch 'void main\(\)\{ float nDotV=clamp\(uv\.x,0\.0,1\.0\); float roughness=clamp\(1\.0-uv\.y,0\.0,1\.0\); outColor=vec4\(integrateBrdf\(nDotV,roughness\)') {
+    $missing += 'single roughness-to-alpha mapping for IBL prefilter and BRDF generation'
+}
 if ($mesh -notmatch 'indices\[index\+\+\] = top;\s*indices\[index\+\+\] = first \+ 1U;\s*indices\[index\+\+\] = first;' -or
     $mesh -notmatch 'indices\[index\+\+\] = first;\s*indices\[index\+\+\] = first \+ 1U;\s*indices\[index\+\+\] = second;\s*indices\[index\+\+\] = second;\s*indices\[index\+\+\] = first \+ 1U;\s*indices\[index\+\+\] = second \+ 1U;' -or
     $mesh -notmatch 'indices\[index\+\+\] = first;\s*indices\[index\+\+\] = first \+ 1U;\s*indices\[index\+\+\] = bottom;') {
