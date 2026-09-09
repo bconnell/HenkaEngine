@@ -803,7 +803,7 @@ Solid draws neutral filled surfaces.
 
 ### Material Preview
 
-Material Preview evaluates supported metallic-roughness materials under stable editor lighting and the shared linear HDR-to-display presentation.
+Material Preview evaluates supported metallic-roughness materials under stable editor lighting and the shared linear HDR-to-display presentation. It does not consume scene lights, scene environment/IBL, or reflection probes.
 
 ### Rendered
 

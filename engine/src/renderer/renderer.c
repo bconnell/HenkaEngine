@@ -365,6 +365,7 @@ henka_result henka_viewport_render_policy_resolve(
         case HENKA_VIEWPORT_SHADING_MATERIAL_PREVIEW:
             policy.use_material_base_color = true;
             policy.sample_material_texture = true;
+            policy.use_scene_environment = false;
             policy.use_preview_lighting = true;
             policy.use_hdr_presentation = true;
             break;
@@ -372,6 +373,7 @@ henka_result henka_viewport_render_policy_resolve(
             policy.use_material_base_color = true;
             policy.sample_material_texture = true;
             policy.use_scene_lighting = true;
+            policy.use_scene_environment = true;
             policy.use_hdr_presentation = true;
             policy.use_rendered_post_processing = true;
             break;

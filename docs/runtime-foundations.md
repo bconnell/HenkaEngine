@@ -1330,7 +1330,7 @@ Solid draws neutral filled surfaces under an editor surface policy. Explicit unl
 
 ### Material Preview
 
-Material Preview uses the bounded Cook-Torrance material evaluation and Scene View-sized linear HDR-to-display presentation with deterministic editor lighting.
+Material Preview uses the bounded Cook-Torrance material evaluation and Scene View-sized linear HDR-to-display presentation with deterministic editor lighting. It does not consume scene lights, scene environment/IBL, or reflection probes; those remain Rendered-mode authorities.
 
 It omits scene-dependent Rendered post effects.
 

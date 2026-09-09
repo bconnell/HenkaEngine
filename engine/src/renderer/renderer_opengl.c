@@ -5746,6 +5746,10 @@ henka_result henka_opengl_renderer_draw_scene(
     for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
     {
         const henka_scene_light_desc* light = &scene->local_lights[index];
+        if (!policy.use_scene_lighting)
+        {
+            continue;
+        }
         if (!scene->local_light_active[index] || !light->enabled)
         {
             continue;
@@ -5854,7 +5858,10 @@ henka_result henka_opengl_renderer_draw_scene(
         glClearColor(0.075f, 0.09f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         henka_opengl_sync_ibl_resources(state, scene);
-        henka_opengl_capture_next_reflection_probe(renderer, scene);
+        if (policy.use_scene_environment)
+        {
+            henka_opengl_capture_next_reflection_probe(renderer, scene);
+        }
         henka_opengl_draw_environment(state, renderer, scene);
     }
     else if (!state->reflection_probe_capture_active)
@@ -6117,7 +6124,8 @@ henka_result henka_opengl_renderer_draw_scene(
         {
             reflection_probe_center = world_bounds.center;
         }
-        use_reflection_probe = !helper_entity && !state->reflection_probe_capture_active &&
+        use_reflection_probe = policy.use_scene_environment &&
+            !helper_entity && !state->reflection_probe_capture_active &&
             state->ibl_ready && henka_opengl_select_reflection_probes(
                 scene,
                 reflection_probe_center,
@@ -6162,6 +6170,7 @@ henka_result henka_opengl_renderer_draw_scene(
                 shader_data->program;
         use_reflection_probe_diffuse = use_reflection_probe_map &&
             !editor_surface &&
+            policy.use_scene_environment &&
             policy.use_hdr_presentation &&
             (!helper_entity || entity->material.terrain_layers_enabled) &&
             henka_opengl_shader_uniform_location(
@@ -6370,6 +6379,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_bool(
             program,
             "useEnvironment",
+            policy.use_scene_environment &&
             policy.use_hdr_presentation &&
             (!helper_entity || entity->material.terrain_layers_enabled));
         henka_set_uniform_vec3(
@@ -6416,6 +6426,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_bool(
             program,
             "useEnvironmentTexture",
+            policy.use_scene_environment &&
             (!helper_entity || entity->material.terrain_layers_enabled) &&
             scene->environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
             scene->environment.hdr_texture != NULL &&
@@ -6438,6 +6449,7 @@ henka_result henka_opengl_renderer_draw_scene(
             program,
             shader_data,
             "useIBL",
+            policy.use_scene_environment &&
             (!helper_entity || entity->material.terrain_layers_enabled) &&
             scene->environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
             state->ibl_ready);
