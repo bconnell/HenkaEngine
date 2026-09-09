@@ -18,6 +18,7 @@
 
 #include "../core/checked.h"
 #include "../ui/ui_internal.h"
+#include "reflection_probe_policy.h"
 #include "temporal_camera_policy.h"
 
 #ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
@@ -4890,14 +4891,6 @@ static bool henka_opengl_select_reflection_probes(
     return found;
 }
 
-static bool henka_opengl_reflection_probe_desc_equal(
-    const henka_scene_reflection_probe_desc* left,
-    const henka_scene_reflection_probe_desc* right)
-{
-    return left != NULL && right != NULL &&
-        memcmp(left, right, sizeof(*left)) == 0;
-}
-
 static bool henka_opengl_ensure_reflection_probe_target(
     henka_opengl_renderer_state* state)
 {
@@ -5205,7 +5198,7 @@ static void henka_opengl_capture_next_reflection_probe(
         }
         if (state->reflection_probe_capture_ready[index] &&
             state->reflection_probe_captured_content_revision[index] == scene->content_revision &&
-            henka_opengl_reflection_probe_desc_equal(
+            henka_reflection_probe_desc_equal(
                 &state->reflection_probe_captured_desc[index],
                 &scene->reflection_probes[index]) )
         {
