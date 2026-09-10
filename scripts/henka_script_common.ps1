@@ -62,85 +62,136 @@ function Write-HenkaGeneratedRootMarker {
     return (Join-Path $fullPath ".henka-generated.json")
 }
 
-function Get-HenkaCMakePath {
-    $cmakeCommand = Get-Command cmake.exe -ErrorAction SilentlyContinue
-    if ($null -eq $cmakeCommand) {
-        $cmakeCommand = Get-Command cmake -ErrorAction SilentlyContinue
-    }
-    if ($null -ne $cmakeCommand) {
-        return $cmakeCommand.Source
-    }
+function Get-HenkaToolVersionLine {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
 
-    $vswhereCandidates = @(
-        (Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"),
-        (Join-Path $env:ProgramFiles "Microsoft Visual Studio\Installer\vswhere.exe")
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("cmake", "ctest")]
+        [string]$ToolName
     )
 
-    foreach ($vswhere in $vswhereCandidates) {
-        if ([string]::IsNullOrWhiteSpace($vswhere) -or -not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
-            continue
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "$ToolName executable does not exist: $Path"
+    }
+    $output = @(& $Path --version 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "$ToolName did not report a valid version: $Path"
+    }
+    $prefix = "$ToolName version "
+    $versionLine = @($output | ForEach-Object { [string]$_ } |
+        Where-Object { $_ -like "$prefix*" } | Select-Object -First 1)
+    if ($versionLine.Count -ne 1 -or [string]::IsNullOrWhiteSpace($versionLine[0])) {
+        throw "$ToolName reported an unrecognized version: $Path"
+    }
+    return $versionLine[0].Trim()
+}
+
+function Get-HenkaToolchain {
+    param(
+        [string]$CMakePath = ""
+    )
+
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($CMakePath)) {
+        $candidates += [System.IO.Path]::GetFullPath($CMakePath)
+    }
+    else {
+        $cmakeCommand = Get-Command cmake.exe -ErrorAction SilentlyContinue
+        if ($null -eq $cmakeCommand) {
+            $cmakeCommand = Get-Command cmake -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $cmakeCommand -and
+            -not [string]::IsNullOrWhiteSpace([string]$cmakeCommand.Source)) {
+            $candidates += [System.IO.Path]::GetFullPath([string]$cmakeCommand.Source)
         }
 
-        $arguments = @(
-            "-latest",
-            "-products", "*",
-            "-requires", "Microsoft.VisualStudio.Component.VC.CMake.Project",
-            "-property", "installationPath"
+        $vswhereCandidates = @(
+            (Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"),
+            (Join-Path $env:ProgramFiles "Microsoft Visual Studio\Installer\vswhere.exe")
         )
-        $installationPaths = @(& $vswhere @arguments)
-        if ($LASTEXITCODE -ne 0) {
-            continue
-        }
-
-        foreach ($installationPath in $installationPaths) {
-            if ([string]::IsNullOrWhiteSpace($installationPath)) {
+        foreach ($vswhere in $vswhereCandidates) {
+            if ([string]::IsNullOrWhiteSpace($vswhere) -or
+                -not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
                 continue
             }
-
-            $candidate = Join-Path $installationPath.Trim() "Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
-            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-                return $candidate
+            $arguments = @(
+                "-latest",
+                "-products", "*",
+                "-requires", "Microsoft.VisualStudio.Component.VC.CMake.Project",
+                "-property", "installationPath"
+            )
+            $installationPaths = @(& $vswhere @arguments)
+            if ($LASTEXITCODE -ne 0) {
+                continue
+            }
+            foreach ($installationPath in $installationPaths) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$installationPath)) {
+                    $candidates += Join-Path ([string]$installationPath).Trim() `
+                        "Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+                }
             }
         }
+
+        $candidates += @(
+            "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
+            "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
+            "C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
+            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
+            "C:\Program Files\CMake\bin\cmake.exe"
+        )
     }
 
-    $candidates = @(
-        "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
-        "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
-        "C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
-        "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
-        "C:\Program Files\CMake\bin\cmake.exe"
-    )
-
-    foreach ($candidate in $candidates) {
-        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            return $candidate
+    $failures = @()
+    foreach ($candidate in @($candidates | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+            ForEach-Object { [System.IO.Path]::GetFullPath([string]$_) } | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            $failures += "$candidate (missing)"
+            continue
+        }
+        $ctest = Join-Path (Split-Path -Parent $candidate) "ctest.exe"
+        if (-not (Test-Path -LiteralPath $ctest -PathType Leaf)) {
+            $failures += "$candidate (paired ctest.exe missing)"
+            continue
+        }
+        try {
+            $cmakeVersion = Get-HenkaToolVersionLine -Path $candidate -ToolName "cmake"
+            $ctestVersion = Get-HenkaToolVersionLine -Path $ctest -ToolName "ctest"
+            $cmakeValue = $cmakeVersion.Substring("cmake version ".Length)
+            $ctestValue = $ctestVersion.Substring("ctest version ".Length)
+            if ($cmakeValue -ne $ctestValue) {
+                throw "CMake/CTest version mismatch ($cmakeValue versus $ctestValue)."
+            }
+            return [pscustomobject]@{
+                CMakePath = $candidate
+                CTestPath = $ctest
+                CMakeVersion = $cmakeVersion
+                CTestVersion = $ctestVersion
+            }
+        }
+        catch {
+            $failures += "$candidate ($($_.Exception.Message))"
         }
     }
 
-    throw "CMake was not found on PATH, through vswhere, or in supported Visual Studio and standalone locations."
+    $details = if ($failures.Count -eq 0) { "no supported candidates were found" } else { $failures -join "; " }
+    throw "Henka could not resolve a compatible CMake/CTest pair: $details"
+}
+
+function Get-HenkaCMakePath {
+    return (Get-HenkaToolchain).CMakePath
 }
 
 function Get-HenkaCTestPath {
     param(
-        [Parameter(Mandatory = $true)]
-        [string]$CMakePath
+        [string]$CMakePath = ""
     )
 
-    $sibling = Join-Path (Split-Path -Parent $CMakePath) "ctest.exe"
-    if (Test-Path -LiteralPath $sibling -PathType Leaf) {
-        return $sibling
+    if ([string]::IsNullOrWhiteSpace($CMakePath)) {
+        return (Get-HenkaToolchain).CTestPath
     }
-
-    $ctestCommand = Get-Command ctest.exe -ErrorAction SilentlyContinue
-    if ($null -eq $ctestCommand) {
-        $ctestCommand = Get-Command ctest -ErrorAction SilentlyContinue
-    }
-    if ($null -ne $ctestCommand) {
-        return $ctestCommand.Source
-    }
-
-    throw "CTest was not found beside CMake or on PATH."
+    return (Get-HenkaToolchain -CMakePath $CMakePath).CTestPath
 }
 
 function Get-HenkaCMakeFetchContentArguments {

@@ -8,8 +8,9 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
-$cmake = Get-HenkaCMakePath
-$ctest = Get-HenkaCTestPath -CMakePath $cmake
+$toolchain = Get-HenkaToolchain
+$cmake = $toolchain.CMakePath
+$ctest = $toolchain.CTestPath
 if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
     $BuildDirectory = Join-Path $repoRoot "build\test_tmp\sanitized-runtime"
 }

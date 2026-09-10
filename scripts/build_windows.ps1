@@ -14,7 +14,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $buildRoot = Join-Path $repoRoot "build"
-$cmake = Get-HenkaCMakePath
+$toolchain = Get-HenkaToolchain
+$cmake = $toolchain.CMakePath
 $executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $resolvedDependencyRoot = $DependencyRoot

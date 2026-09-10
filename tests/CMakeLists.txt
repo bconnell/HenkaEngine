@@ -1084,6 +1084,12 @@ if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_ctest_working_directory_windows.ps1
             -BuildDirectory ${CMAKE_BINARY_DIR})
+
+    add_test(
+        NAME henka_toolchain_resolution_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_henka_toolchain_resolution_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
 endif()
 
 # Tests use bounded fixtures under build/test_tmp relative to the repository
