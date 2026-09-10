@@ -532,6 +532,12 @@ if(WIN32)
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
     add_test(
+        NAME henka_renderer_reflection_probe_prefilter_texture_state_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_renderer_reflection_probe_prefilter_texture_state_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_renderer_framebuffer_state_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_renderer_framebuffer_state_windows.ps1
