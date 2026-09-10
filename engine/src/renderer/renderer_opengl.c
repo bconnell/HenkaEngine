@@ -1980,6 +1980,29 @@ static void henka_opengl_delete_temporal_history(henka_opengl_renderer_state* st
         "history unavailable");
 }
 
+static void henka_opengl_mark_temporal_history_failure(
+    henka_opengl_renderer_state* state,
+    bool previous_history_ready,
+    const char* reason)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+    if (state->temporal_history_allocation_failure_count < UINT32_MAX)
+    {
+        ++state->temporal_history_allocation_failure_count;
+    }
+    state->temporal_previous_history_retained = previous_history_ready;
+    state->temporal_history_valid = false;
+    state->temporal_fallback_active = true;
+    (void)snprintf(
+        state->temporal_invalidation_reason,
+        sizeof(state->temporal_invalidation_reason),
+        "%s",
+        reason != NULL && reason[0] != '\0' ? reason : "history allocation failed");
+}
+
 static henka_result henka_opengl_create_temporal_history(
     henka_opengl_renderer_state* state,
     int width,
@@ -2013,9 +2036,8 @@ static henka_result henka_opengl_create_temporal_history(
         if (depth_framebuffer != 0U) g_gl.DeleteFramebuffers(1, &depth_framebuffer);
         if (depth_texture != 0U) glDeleteTextures(1, &depth_texture);
         if (texture != 0U) glDeleteTextures(1, &texture);
-        if (state->temporal_history_allocation_failure_count < UINT32_MAX)
-            ++state->temporal_history_allocation_failure_count;
-        state->temporal_previous_history_retained = previous_history_ready;
+        henka_opengl_mark_temporal_history_failure(
+            state, previous_history_ready, "history allocation failed");
         g_gl.ActiveTexture((GLenum)previous_active_texture);
         glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
         return HENKA_ERROR_RENDERER;
@@ -2049,15 +2071,8 @@ static henka_result henka_opengl_create_temporal_history(
         glDeleteTextures(1, &texture);
         glDeleteTextures(1, &depth_texture);
         g_gl.DeleteFramebuffers(1, &depth_framebuffer);
-        if (state->temporal_history_allocation_failure_count < UINT32_MAX)
-            ++state->temporal_history_allocation_failure_count;
-        state->temporal_previous_history_retained = previous_history_ready;
-        state->temporal_history_valid = false;
-        state->temporal_fallback_active = true;
-        (void)snprintf(
-            state->temporal_invalidation_reason,
-            sizeof(state->temporal_invalidation_reason),
-            "history allocation failed");
+        henka_opengl_mark_temporal_history_failure(
+            state, previous_history_ready, "history allocation failed");
         return HENKA_ERROR_RENDERER;
     }
     henka_opengl_delete_temporal_history(state);

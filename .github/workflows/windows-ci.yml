@@ -95,6 +95,10 @@ jobs:
         shell: powershell
         run: .\scripts\test_renderer_scene_target_limits_windows.ps1
 
+      - name: Check renderer temporal failure contract
+        shell: powershell
+        run: .\scripts\test_renderer_temporal_failure_windows.ps1
+
       - name: Check bounded PBR clearcoat response
         shell: powershell
         run: .\scripts\test_pbr_clearcoat_response_windows.ps1
