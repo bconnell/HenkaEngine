@@ -8930,13 +8930,17 @@ static henka_result henka_opengl_collect_texture_errors(
 static henka_result henka_opengl_restore_texture_binding(
     GLint previous_active_texture,
     GLint previous_texture_binding,
-    GLint previous_unpack_alignment)
+    GLint previous_unpack_alignment,
+    GLint previous_unpack_buffer)
 {
     g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(
         GL_TEXTURE_2D,
         (GLuint)previous_texture_binding);
     glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
+    g_gl.BindBuffer(
+        GL_PIXEL_UNPACK_BUFFER,
+        (GLuint)previous_unpack_buffer);
     g_gl.ActiveTexture((GLenum)previous_active_texture);
     return henka_opengl_collect_texture_errors(
         "texture binding restoration");
@@ -9076,6 +9080,7 @@ static henka_result henka_opengl_create_texture_from_pixels(
     GLint previous_active_texture;
     GLint previous_texture_binding;
     GLint previous_unpack_alignment;
+    GLint previous_unpack_buffer;
     henka_result restore_result;
     henka_texture* texture;
     henka_opengl_texture_data* texture_data;
@@ -9122,6 +9127,7 @@ static henka_result henka_opengl_create_texture_from_pixels(
     previous_active_texture = GL_TEXTURE0;
     previous_texture_binding = 0;
     previous_unpack_alignment = 4;
+    previous_unpack_buffer = 0;
     glGetIntegerv(
         GL_ACTIVE_TEXTURE,
         &previous_active_texture);
@@ -9132,6 +9138,10 @@ static henka_result henka_opengl_create_texture_from_pixels(
     glGetIntegerv(
         GL_UNPACK_ALIGNMENT,
         &previous_unpack_alignment);
+    glGetIntegerv(
+        GL_PIXEL_UNPACK_BUFFER_BINDING,
+        &previous_unpack_buffer);
+    g_gl.BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0U);
     operation_result = henka_opengl_collect_texture_errors(
         "texture state capture");
     if (operation_result != HENKA_SUCCESS)
@@ -9139,7 +9149,8 @@ static henka_result henka_opengl_create_texture_from_pixels(
         (void)henka_opengl_restore_texture_binding(
             previous_active_texture,
             previous_texture_binding,
-            previous_unpack_alignment);
+            previous_unpack_alignment,
+            previous_unpack_buffer);
         context_result = henka_opengl_end_texture_context(
             state,
             &context_guard,
@@ -9157,7 +9168,8 @@ static henka_result henka_opengl_create_texture_from_pixels(
         (void)henka_opengl_restore_texture_binding(
             previous_active_texture,
             previous_texture_binding,
-            previous_unpack_alignment);
+            previous_unpack_alignment,
+            previous_unpack_buffer);
         context_result = henka_opengl_end_texture_context(
             state,
             &context_guard,
@@ -9255,7 +9267,8 @@ static henka_result henka_opengl_create_texture_from_pixels(
     restore_result = henka_opengl_restore_texture_binding(
         previous_active_texture,
         previous_texture_binding,
-        previous_unpack_alignment);
+        previous_unpack_alignment,
+        previous_unpack_buffer);
     if (operation_result == HENKA_SUCCESS &&
         restore_result != HENKA_SUCCESS)
     {
@@ -9372,6 +9385,7 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory_with_mip_limi
     GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture_binding = 0;
     GLint previous_unpack_alignment = 4;
+    GLint previous_unpack_buffer = 0;
     uint32_t level;
     GLenum internal_format;
     uint64_t logical_texture_bytes;
@@ -9420,6 +9434,8 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory_with_mip_limi
     g_gl.ActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture_binding);
     glGetIntegerv(GL_UNPACK_ALIGNMENT, &previous_unpack_alignment);
+    glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &previous_unpack_buffer);
+    g_gl.BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0U);
     operation_result = henka_opengl_collect_texture_errors("KTX2 texture state capture");
     if (operation_result == HENKA_SUCCESS)
     {
@@ -9495,7 +9511,10 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory_with_mip_limi
             "KTX2 texture upload");
     }
     restore_result = henka_opengl_restore_texture_binding(
-        previous_active_texture, previous_texture_binding, previous_unpack_alignment);
+        previous_active_texture,
+        previous_texture_binding,
+        previous_unpack_alignment,
+        previous_unpack_buffer);
     if (operation_result == HENKA_SUCCESS && restore_result != HENKA_SUCCESS)
         operation_result = restore_result;
     if (operation_result != HENKA_SUCCESS && texture_data != NULL && texture_data->texture_id != 0U)

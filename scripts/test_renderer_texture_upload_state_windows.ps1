@@ -49,10 +49,13 @@ function Test-TextureUploadFunction {
         'previous_active_texture',
         'previous_texture_binding',
         'previous_unpack_alignment',
+        'previous_unpack_buffer',
         'GL_ACTIVE_TEXTURE',
         'g_gl\.ActiveTexture\(GL_TEXTURE0\)',
         'GL_TEXTURE_BINDING_2D',
         'GL_UNPACK_ALIGNMENT',
+        'GL_PIXEL_UNPACK_BUFFER_BINDING',
+        'g_gl\.BindBuffer\(GL_PIXEL_UNPACK_BUFFER, 0U\)',
         'glPixelStorei\(GL_UNPACK_ALIGNMENT, 1\)',
         'restore_result\s*=\s*henka_opengl_restore_texture_binding\('
     )) {
@@ -65,17 +68,29 @@ function Test-TextureUploadFunction {
         $Body,
         'glGetIntegerv\s*\(\s*GL_UNPACK_ALIGNMENT\s*,')
     $captureIndex = $captureMatch.Index
+    $unpackBufferCaptureMatch = [regex]::Match(
+        $Body,
+        'glGetIntegerv\s*\(\s*GL_PIXEL_UNPACK_BUFFER_BINDING\s*,')
+    $unpackBufferCaptureIndex = $unpackBufferCaptureMatch.Index
+    $unbindMatch = [regex]::Match(
+        $Body,
+        'g_gl\.BindBuffer\(GL_PIXEL_UNPACK_BUFFER, 0U\)')
+    $unbindIndex = $unbindMatch.Index
     $uploadIndex = $Body.IndexOf('glPixelStorei(GL_UNPACK_ALIGNMENT, 1)')
     $restoreMatch = [regex]::Match(
         $Body,
         'restore_result\s*=\s*henka_opengl_restore_texture_binding\s*\(')
     $restoreIndex = $restoreMatch.Index
-    if ($captureIndex -lt 0 -or $uploadIndex -le $captureIndex -or $restoreIndex -le $uploadIndex) {
+    if ($captureIndex -lt 0 -or
+        $unpackBufferCaptureIndex -lt 0 -or
+        $unbindIndex -le $unpackBufferCaptureIndex -or
+        $uploadIndex -le $unbindIndex -or
+        $restoreIndex -le $uploadIndex) {
         $missing.Add("${Name}: capture, upload, and restore order")
     }
 
-    if ($Body -notmatch '(?s)henka_opengl_restore_texture_binding\(\s*previous_active_texture\s*,\s*previous_texture_binding\s*,\s*previous_unpack_alignment\s*\)') {
-        $missing.Add("${Name}: complete binding/alignment restoration arguments")
+    if ($Body -notmatch '(?s)henka_opengl_restore_texture_binding\(\s*previous_active_texture\s*,\s*previous_texture_binding\s*,\s*previous_unpack_alignment\s*,\s*previous_unpack_buffer\s*\)') {
+        $missing.Add("${Name}: complete binding/alignment/unpack-buffer restoration arguments")
     }
 
     return $missing
