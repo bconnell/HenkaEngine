@@ -290,7 +290,7 @@ Texture info reports:
 - total mip count;
 - resident mip count;
 - compressed-GPU-format selection;
-- selected BC, ETC2, ASTC, or RGBA8 resident format.
+- selected BC, ETC2, ASTC, RGBA8, or RGBA16F resident format.
 
 Uncompressed and Basis sources can use RGBA8 when compressed upload is unavailable.
 

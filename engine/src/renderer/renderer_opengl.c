@@ -9313,7 +9313,8 @@ static henka_result henka_opengl_create_texture_from_pixels(
     texture->last_failure = HENKA_TEXTURE_FAILURE_NONE;
     texture->content_revision = 1U;
     texture->gpu_compressed = false;
-    texture->gpu_format = HENKA_TEXTURE_GPU_FORMAT_RGBA8;
+    texture->gpu_format = source_class == HENKA_TEXTURE_SOURCE_CLASS_HDR ?
+        HENKA_TEXTURE_GPU_FORMAT_RGBA16F : HENKA_TEXTURE_GPU_FORMAT_RGBA8;
     texture->resident_gpu_bytes = logical_texture_bytes;
     texture->resident_mip_count = 1U;
     texture->mip_count = 1U;

@@ -490,6 +490,12 @@ if(WIN32)
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
     add_test(
+        NAME henka_renderer_texture_upload_state_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_renderer_texture_upload_state_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_renderer_ibl_failure_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_renderer_ibl_failure_windows.ps1
@@ -859,6 +865,16 @@ target_link_libraries(henka_terrain_render_tests
 )
 henka_enable_project_warnings(henka_terrain_render_tests)
 add_test(NAME henka_terrain_render_tests COMMAND henka_terrain_render_tests)
+
+add_executable(henka_renderer_texture_format_tests
+    test_renderer_texture_formats.c
+)
+target_link_libraries(henka_renderer_texture_format_tests
+    PRIVATE
+        henka
+)
+henka_enable_project_warnings(henka_renderer_texture_format_tests)
+add_test(NAME henka_renderer_texture_format_tests COMMAND henka_renderer_texture_format_tests)
 
 add_executable(henka_reflection_probe_policy_tests
     test_reflection_probe_policy.c

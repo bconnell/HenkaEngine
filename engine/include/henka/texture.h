@@ -58,7 +58,8 @@ typedef enum henka_texture_source_class
 
 /* The backend format currently resident on the GPU. RGBA8 is also the
  * truthful fallback for compressed sources when no compatible block format
- * is available. */
+ * is available. Values are appended so existing serialized format values
+ * remain stable. */
 typedef enum henka_texture_gpu_format
 {
     HENKA_TEXTURE_GPU_FORMAT_UNKNOWN = 0,
@@ -71,7 +72,8 @@ typedef enum henka_texture_gpu_format
     HENKA_TEXTURE_GPU_FORMAT_ETC2_RGBA,
     HENKA_TEXTURE_GPU_FORMAT_ETC2_RG,
     HENKA_TEXTURE_GPU_FORMAT_ASTC_4X4,
-    HENKA_TEXTURE_GPU_FORMAT_BC1_RGBA
+    HENKA_TEXTURE_GPU_FORMAT_BC1_RGBA,
+    HENKA_TEXTURE_GPU_FORMAT_RGBA16F
 } henka_texture_gpu_format;
 
 typedef enum henka_texture_failure_category
