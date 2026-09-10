@@ -7443,6 +7443,7 @@ henka_result henka_opengl_renderer_end_frame(
     struct henka_renderer* renderer)
 {
     henka_opengl_renderer_state* state;
+    GLint previous_pack_alignment = 4;
     if (renderer == NULL || renderer->backend_state == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -7479,6 +7480,7 @@ henka_result henka_opengl_renderer_end_frame(
             HENKA_LOG_ERROR("application-owned frame capture could not allocate its bounded readback buffer");
             return HENKA_ERROR_OUT_OF_MEMORY;
         }
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previous_pack_alignment);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
         glReadBuffer(GL_BACK);
         glReadPixels(
@@ -7489,6 +7491,7 @@ henka_result henka_opengl_renderer_end_frame(
             GL_RGBA,
             GL_UNSIGNED_BYTE,
             pixels);
+        glPixelStorei(GL_PACK_ALIGNMENT, previous_pack_alignment);
         capture_success = glGetError() == GL_NO_ERROR &&
             henka_opengl_write_bmp(
                 renderer->frame_capture_path,
