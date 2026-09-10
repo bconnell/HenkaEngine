@@ -54,11 +54,14 @@ function Test-RendererIblFailureContract {
 
     $failureBranch = $sync.Substring($buildStart, $elseStart - $buildStart)
     $missing = [System.Collections.Generic.List[string]]::new()
-    if (-not $failureBranch.Contains('henka_opengl_delete_ibl_resources(state);')) {
-        $missing.Add('failure path releases the prior derived IBL resources')
+    if ($failureBranch.Contains('henka_opengl_delete_ibl_resources(state);')) {
+        $missing.Add('failure path preserves the prior derived IBL resources')
     }
-    if ($failureBranch -notmatch 'state->ibl_ready\s*=\s*false;') {
-        $missing.Add('failure path keeps IBL unavailable')
+    if ($failureBranch -notmatch 'previous_ibl_ready') {
+        $missing.Add('failure path preserves the prior IBL readiness state')
+    }
+    if ($failureBranch -notmatch 'ibl_failed_source_texture') {
+        $missing.Add('failure path records the failed source identity')
     }
     if ($failureBranch -notmatch 'ibl_failure_reason') {
         $missing.Add('failure path records an IBL failure reason')
@@ -73,14 +76,9 @@ if ($missing.Count -gt 0) {
     throw "Renderer IBL failure cleanup contract failed: $($missing -join ', ')"
 }
 
-$negative = $renderer.Replace(
-    "        henka_opengl_delete_ibl_resources(state);`r`n        state->ibl_ready = false;",
-    "        /* deliberate negative-control omission */`r`n        state->ibl_ready = false;")
-if ($negative -eq $renderer) {
-    $negative = $renderer.Replace(
-        "        henka_opengl_delete_ibl_resources(state);`n        state->ibl_ready = false;",
-        "        /* deliberate negative-control omission */`n        state->ibl_ready = false;")
-}
+$negative = $renderer -replace '(?m)^    bool previous_ibl_ready;\r?\n', ''
+$negative = $negative -replace '(?m)^    previous_ibl_ready = state->ibl_ready;\r?\n', ''
+$negative = $negative -replace '(?m)^        state->ibl_ready = previous_ibl_ready;\r?\n', "        /* deliberate negative-control omission */`r`n        state->ibl_ready = false;`r`n"
 $negativeMissing = Test-RendererIblFailureContract -Source $negative
 if ($negativeMissing.Count -eq 0) {
     throw 'Renderer IBL failure cleanup negative control unexpectedly passed.'

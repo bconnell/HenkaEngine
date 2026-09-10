@@ -200,6 +200,9 @@ typedef struct henka_opengl_renderer_state
     const henka_texture* ibl_source_texture;
     uint64_t ibl_source_revision;
     float ibl_source_rotation;
+    const henka_texture* ibl_failed_source_texture;
+    uint64_t ibl_failed_source_revision;
+    float ibl_failed_source_rotation;
     GLuint reflection_probe_cubes[HENKA_SCENE_MAX_REFLECTION_PROBES];
     bool reflection_probe_capture_ready[HENKA_SCENE_MAX_REFLECTION_PROBES];
     uint64_t reflection_probe_captured_content_revision[HENKA_SCENE_MAX_REFLECTION_PROBES];
@@ -2700,6 +2703,7 @@ static void henka_opengl_sync_ibl_resources(
     uint64_t revision;
     float rotation;
     bool environment_uses_ibl;
+    bool previous_ibl_ready;
 
     if (state == NULL || scene == NULL)
         return;
@@ -2734,23 +2738,38 @@ static void henka_opengl_sync_ibl_resources(
         return;
     }
     if (state->ibl_source_texture == source && state->ibl_source_revision == revision &&
-        state->ibl_source_rotation == rotation &&
-        (state->ibl_ready || state->ibl_failure_reason[0] != '\0'))
+        state->ibl_source_rotation == rotation && state->ibl_ready)
+    {
+        state->ibl_failed_source_texture = NULL;
+        state->ibl_failed_source_revision = 0U;
+        state->ibl_failed_source_rotation = 0.0f;
+        state->ibl_failure_reason[0] = '\0';
         return;
-    state->ibl_source_texture = source;
-    state->ibl_source_revision = revision;
-    state->ibl_source_rotation = rotation;
+    }
+    if (state->ibl_failed_source_texture == source &&
+        state->ibl_failed_source_revision == revision &&
+        state->ibl_failed_source_rotation == rotation &&
+        state->ibl_failure_reason[0] != '\0')
+        return;
+    previous_ibl_ready = state->ibl_ready;
+    state->ibl_failed_source_texture = NULL;
+    state->ibl_failed_source_revision = 0U;
+    state->ibl_failed_source_rotation = 0.0f;
     state->ibl_failure_reason[0] = '\0';
-    state->ibl_ready = false;
     if (henka_opengl_build_ibl_resources(state, scene) != HENKA_SUCCESS)
     {
-        henka_opengl_delete_ibl_resources(state);
-        state->ibl_ready = false;
+        state->ibl_failed_source_texture = source;
+        state->ibl_failed_source_revision = revision;
+        state->ibl_failed_source_rotation = rotation;
+        state->ibl_ready = previous_ibl_ready;
         if (state->ibl_failure_reason[0] == '\0')
             (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "derived IBL target unavailable");
     }
     else
     {
+        state->ibl_source_texture = source;
+        state->ibl_source_revision = revision;
+        state->ibl_source_rotation = rotation;
         state->ibl_failure_reason[0] = '\0';
     }
 }

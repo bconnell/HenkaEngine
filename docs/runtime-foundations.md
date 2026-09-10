@@ -631,9 +631,11 @@ unit and the caller's active unit before returning. IBL derivation also restores
 the caller's framebuffer draw/read buffers. Temporary resource work therefore
 cannot leak its intermediate bindings or framebuffer routing into the next
 scene draw.
-If IBL derivation fails, the prior derived IBL resource set is released before
-the renderer records the unavailable state, so repeated failed source changes
-cannot retain superseded GPU targets.
+If IBL derivation fails, an existing ready derived IBL resource set remains
+active as a fallback while the renderer records the failed source identity and
+reason. When no prior set is ready, IBL remains unavailable. Repeated failure
+for the same source, content revision, and rotation is suppressed until the
+candidate changes.
 
 Enabled probes are ranked deterministically. When two captured volumes overlap a receiver, bounded inverse-score weighting blends both specular and diffuse contributions.
 
