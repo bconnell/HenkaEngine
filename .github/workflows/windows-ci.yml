@@ -55,6 +55,10 @@ jobs:
         shell: powershell
         run: .\scripts\test_reflection_probe_prefilter_windows.ps1
 
+      - name: Check reflection probe blending contract
+        shell: powershell
+        run: .\scripts\test_reflection_probe_blending_windows.ps1
+
       - name: Check renderer scene target limits
         shell: powershell
         run: .\scripts\test_renderer_scene_target_limits_windows.ps1
