@@ -8559,6 +8559,8 @@ henka_result henka_opengl_renderer_set_terrain_weights(
     henka_opengl_mesh_data* mesh_data;
     GLuint candidate_buffer = 0U;
     GLuint previous_buffer;
+    GLint previous_array_buffer = 0;
+    GLint previous_vertex_array = 0;
     uint64_t previous_weight_bytes;
     size_t weight_size;
     uint64_t weight_bytes;
@@ -8576,6 +8578,8 @@ henka_result henka_opengl_renderer_set_terrain_weights(
     {
         return HENKA_ERROR_NUMERIC_RANGE;
     }
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previous_array_buffer);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previous_vertex_array);
     while (glGetError() != GL_NO_ERROR) {}
     g_gl.GenBuffers(1, &candidate_buffer);
     if (candidate_buffer == 0U)
@@ -8587,7 +8591,8 @@ henka_result henka_opengl_renderer_set_terrain_weights(
     if (glGetError() != GL_NO_ERROR)
     {
         g_gl.DeleteBuffers(1, &candidate_buffer);
-        g_gl.BindBuffer(GL_ARRAY_BUFFER, 0U);
+        g_gl.BindVertexArray((GLuint)previous_vertex_array);
+        g_gl.BindBuffer(GL_ARRAY_BUFFER, (GLuint)previous_array_buffer);
         return HENKA_ERROR_RENDERER;
     }
     previous_buffer = mesh_data->terrain_weight_buffer;
@@ -8607,13 +8612,13 @@ henka_result henka_opengl_renderer_set_terrain_weights(
         {
             g_gl.DisableVertexAttribArray(14);
         }
-        g_gl.BindVertexArray(0U);
         g_gl.DeleteBuffers(1, &candidate_buffer);
-        g_gl.BindBuffer(GL_ARRAY_BUFFER, 0U);
+        g_gl.BindVertexArray((GLuint)previous_vertex_array);
+        g_gl.BindBuffer(GL_ARRAY_BUFFER, (GLuint)previous_array_buffer);
         return HENKA_ERROR_RENDERER;
     }
-    g_gl.BindVertexArray(0U);
-    g_gl.BindBuffer(GL_ARRAY_BUFFER, 0U);
+    g_gl.BindVertexArray((GLuint)previous_vertex_array);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, (GLuint)previous_array_buffer);
     mesh_data->terrain_weight_buffer = candidate_buffer;
     mesh_data->terrain_weight_count = (GLsizei)vertex_count;
     mesh_data->terrain_weight_bytes = weight_bytes;
