@@ -89,6 +89,9 @@ typedef struct henka_opengl_tool_window_target
 #define HENKA_OPENGL_SCENE_DRAW_BUDGET 8192U
 #define HENKA_OPENGL_INSTANCE_CAPACITY 256U
 
+static void henka_opengl_discard_prior_texture_errors(const char* operation);
+static henka_result henka_opengl_collect_texture_errors(const char* operation);
+
 typedef struct henka_opengl_transparent_sort_item
 {
     size_t entity_index;
@@ -2922,6 +2925,8 @@ static henka_result henka_opengl_create_hdr_target(
     GLint previous_framebuffer = 0;
     GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
+    henka_result texture_storage_result = HENKA_SUCCESS;
+    henka_result operation_result;
 
     if (state == NULL)
     {
@@ -2938,6 +2943,7 @@ static henka_result henka_opengl_create_hdr_target(
                 "target size exceeds limit" : "invalid target size");
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    henka_opengl_discard_prior_texture_errors("HDR target texture storage");
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
@@ -2969,6 +2975,9 @@ static henka_result henka_opengl_create_hdr_target(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
+    operation_result = henka_opengl_collect_texture_errors("HDR target texture storage");
+    if (operation_result != HENKA_SUCCESS && texture_storage_result == HENKA_SUCCESS)
+        texture_storage_result = operation_result;
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_texture, 0);
     glBindTexture(GL_TEXTURE_2D, motion_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -2976,6 +2985,9 @@ static henka_result henka_opengl_create_hdr_target(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, width, height, 0, GL_RG, GL_HALF_FLOAT, NULL);
+    operation_result = henka_opengl_collect_texture_errors("HDR target texture storage");
+    if (operation_result != HENKA_SUCCESS && texture_storage_result == HENKA_SUCCESS)
+        texture_storage_result = operation_result;
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, motion_texture, 0);
     glBindTexture(GL_TEXTURE_2D, reactive_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -2983,6 +2995,9 @@ static henka_result henka_opengl_create_hdr_target(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+    operation_result = henka_opengl_collect_texture_errors("HDR target texture storage");
+    if (operation_result != HENKA_SUCCESS && texture_storage_result == HENKA_SUCCESS)
+        texture_storage_result = operation_result;
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, reactive_texture, 0);
     glBindTexture(GL_TEXTURE_2D, roughness_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -2990,6 +3005,9 @@ static henka_result henka_opengl_create_hdr_target(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+    operation_result = henka_opengl_collect_texture_errors("HDR target texture storage");
+    if (operation_result != HENKA_SUCCESS && texture_storage_result == HENKA_SUCCESS)
+        texture_storage_result = operation_result;
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, roughness_texture, 0);
     {
         static const GLenum draw_buffers[] = {
@@ -3004,6 +3022,23 @@ static henka_result henka_opengl_create_hdr_target(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+    operation_result = henka_opengl_collect_texture_errors("HDR target texture storage");
+    if (operation_result != HENKA_SUCCESS && texture_storage_result == HENKA_SUCCESS)
+        texture_storage_result = operation_result;
+    if (texture_storage_result != HENKA_SUCCESS)
+    {
+        (void)snprintf(state->hdr_failure_reason, sizeof(state->hdr_failure_reason), "HDR texture allocation failed");
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+        glDeleteTextures(1, &depth_buffer);
+        glDeleteTextures(1, &color_texture);
+        glDeleteTextures(1, &motion_texture);
+        glDeleteTextures(1, &reactive_texture);
+        glDeleteTextures(1, &roughness_texture);
+        g_gl.DeleteFramebuffers(1, &framebuffer);
+        return texture_storage_result;
+    }
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_buffer, 0);
     if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
     {
@@ -3055,6 +3090,7 @@ static henka_result henka_opengl_create_shadow_target(
     GLint previous_texture = 0;
     GLint previous_draw_buffer = GL_BACK;
     GLint previous_read_buffer = GL_BACK;
+    henka_result texture_storage_result = HENKA_SUCCESS;
 
     if (state == NULL || resolution <= 0)
     {
@@ -3065,6 +3101,7 @@ static henka_result henka_opengl_create_shadow_target(
         (void)snprintf(state->shadow_failure_reason, sizeof(state->shadow_failure_reason), "shadow resolution exceeds limit");
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    henka_opengl_discard_prior_texture_errors("directional shadow texture storage");
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
@@ -3098,6 +3135,19 @@ static henka_result henka_opengl_create_shadow_target(
         glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border_color);
     }
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, resolution, resolution, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+    texture_storage_result = henka_opengl_collect_texture_errors("directional shadow texture storage");
+    if (texture_storage_result != HENKA_SUCCESS)
+    {
+        (void)snprintf(state->shadow_failure_reason, sizeof(state->shadow_failure_reason), "shadow texture allocation failed");
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+        glDrawBuffer((GLenum)previous_draw_buffer);
+        glReadBuffer((GLenum)previous_read_buffer);
+        glDeleteTextures(1, &depth_texture);
+        g_gl.DeleteFramebuffers(1, &framebuffer);
+        return texture_storage_result;
+    }
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
@@ -3146,6 +3196,7 @@ static henka_result henka_opengl_create_local_shadow_target(
     GLint previous_texture = 0;
     GLint previous_draw_buffer = 0;
     GLint previous_read_buffer = 0;
+    henka_result texture_storage_result = HENKA_SUCCESS;
 
     if (state == NULL || resolution <= 0 || resolution > 2048)
     {
@@ -3157,6 +3208,7 @@ static henka_result henka_opengl_create_local_shadow_target(
         }
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    henka_opengl_discard_prior_texture_errors("local shadow texture storage");
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
@@ -3190,6 +3242,19 @@ static henka_result henka_opengl_create_local_shadow_target(
     }
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, resolution, resolution, 0,
         GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+    texture_storage_result = henka_opengl_collect_texture_errors("local shadow texture storage");
+    if (texture_storage_result != HENKA_SUCCESS)
+    {
+        (void)snprintf(state->local_shadow_failure_reason, sizeof(state->local_shadow_failure_reason), "local shadow texture allocation failed");
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+        glDrawBuffer((GLenum)previous_draw_buffer);
+        glReadBuffer((GLenum)previous_read_buffer);
+        glDeleteTextures(1, &depth_texture);
+        g_gl.DeleteFramebuffers(1, &framebuffer);
+        return texture_storage_result;
+    }
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
@@ -3238,6 +3303,7 @@ static henka_result henka_opengl_create_cascade_shadow_target(
     GLint previous_texture = 0;
     GLint previous_draw_buffer = 0;
     GLint previous_read_buffer = 0;
+    henka_result texture_storage_result = HENKA_SUCCESS;
 
     if (state == NULL || resolution <= 0 || resolution > 4096)
     {
@@ -3249,6 +3315,7 @@ static henka_result henka_opengl_create_cascade_shadow_target(
         }
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    henka_opengl_discard_prior_texture_errors("cascade shadow texture storage");
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
@@ -3282,6 +3349,19 @@ static henka_result henka_opengl_create_cascade_shadow_target(
     }
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, resolution, resolution, 0,
         GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+    texture_storage_result = henka_opengl_collect_texture_errors("cascade shadow texture storage");
+    if (texture_storage_result != HENKA_SUCCESS)
+    {
+        (void)snprintf(state->cascade_shadow_failure_reason, sizeof(state->cascade_shadow_failure_reason), "cascade shadow texture allocation failed");
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+        glDrawBuffer((GLenum)previous_draw_buffer);
+        glReadBuffer((GLenum)previous_read_buffer);
+        glDeleteTextures(1, &depth_texture);
+        g_gl.DeleteFramebuffers(1, &framebuffer);
+        return texture_storage_result;
+    }
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
@@ -3329,6 +3409,8 @@ static henka_result henka_opengl_create_point_shadow_target(
     GLint previous_draw_buffer = GL_BACK;
     GLint previous_read_buffer = GL_BACK;
     henka_opengl_texture_binding_state texture_state;
+    henka_result texture_storage_result = HENKA_SUCCESS;
+    henka_result operation_result;
 
     if (state == NULL || resolution <= 0 || resolution > 1024)
     {
@@ -3340,6 +3422,7 @@ static henka_result henka_opengl_create_point_shadow_target(
         }
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    henka_opengl_discard_prior_texture_errors("point shadow texture storage");
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
     henka_opengl_capture_texture_binding_state(&texture_state);
     glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
@@ -3365,6 +3448,20 @@ static henka_result henka_opengl_create_point_shadow_target(
     {
         glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, GL_DEPTH_COMPONENT24,
             resolution, resolution, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+        operation_result = henka_opengl_collect_texture_errors("point shadow texture storage");
+        if (operation_result != HENKA_SUCCESS && texture_storage_result == HENKA_SUCCESS)
+            texture_storage_result = operation_result;
+    }
+    if (texture_storage_result != HENKA_SUCCESS)
+    {
+        (void)snprintf(state->point_shadow_failure_reason, sizeof(state->point_shadow_failure_reason), "point shadow texture allocation failed");
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        glDrawBuffer((GLenum)previous_draw_buffer);
+        glReadBuffer((GLenum)previous_read_buffer);
+        henka_opengl_restore_texture_binding_state(&texture_state);
+        glDeleteTextures(1, &depth_texture);
+        g_gl.DeleteFramebuffers(1, &framebuffer);
+        return texture_storage_result;
     }
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);

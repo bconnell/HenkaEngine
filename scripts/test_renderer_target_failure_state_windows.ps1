@@ -151,6 +151,38 @@ function Test-RendererTargetFailureStateContract {
         }
     }
 
+    foreach ($entry in @(
+        @{ Name = 'HDR target'; Function = 'henka_opengl_create_hdr_target'; Operation = 'HDR target texture storage'; Count = 5 },
+        @{ Name = 'directional shadow target'; Function = 'henka_opengl_create_shadow_target'; Operation = 'directional shadow texture storage'; Count = 1 },
+        @{ Name = 'local shadow target'; Function = 'henka_opengl_create_local_shadow_target'; Operation = 'local shadow texture storage'; Count = 1 },
+        @{ Name = 'cascade shadow target'; Function = 'henka_opengl_create_cascade_shadow_target'; Operation = 'cascade shadow texture storage'; Count = 1 },
+        @{ Name = 'point shadow target'; Function = 'henka_opengl_create_point_shadow_target'; Operation = 'point shadow texture storage'; Count = 1 }
+    )) {
+        $body = Get-FunctionBody -Source $Source -FunctionName $entry.Function
+        if ($null -eq $body) {
+            $missing.Add("$($entry.Name) function")
+            continue
+        }
+
+        $escapedOperation = [regex]::Escape($entry.Operation)
+        $discardPattern = 'henka_opengl_discard_prior_texture_errors\(\s*"' + $escapedOperation + '"\s*\);'
+        if ($body -notmatch $discardPattern) {
+            $missing.Add("$($entry.Name) must discard stale texture errors before allocation")
+        }
+        $collectPattern = 'henka_opengl_collect_texture_errors\(\s*"' + $escapedOperation + '"\s*\)'
+        $collectCount = [regex]::Matches($body, $collectPattern).Count
+        if ($collectCount -ne $entry.Count) {
+            $missing.Add("$($entry.Name) must collect $($entry.Count) texture-storage result(s); found $collectCount")
+        }
+
+        $failureIndex = $body.IndexOf('if (texture_storage_result != HENKA_SUCCESS)')
+        $framebufferCheckIndex = $body.IndexOf('g_gl.CheckFramebufferStatus')
+        if ($failureIndex -lt 0 -or $framebufferCheckIndex -lt 0 -or
+            $failureIndex -gt $framebufferCheckIndex) {
+            $missing.Add("$($entry.Name) must reject texture-storage failure before framebuffer validation")
+        }
+    }
+
     return $missing
 }
 
@@ -190,6 +222,20 @@ if ($negativeMissing.Count -eq 0) {
     throw 'Renderer bloom allocation-error negative control unexpectedly passed.'
 }
 
+$shadowBody = Get-FunctionBody -Source $renderer -FunctionName 'henka_opengl_create_shadow_target'
+$negativeShadowBody = $shadowBody.Replace(
+    '    texture_storage_result = henka_opengl_collect_texture_errors("directional shadow texture storage");',
+    '    /* deliberate negative-control omission */')
+if ($negativeShadowBody -eq $shadowBody) {
+    throw 'Renderer shadow allocation-error negative control could not remove error collection.'
+}
+$negativeRenderer = $renderer.Replace($shadowBody, $negativeShadowBody)
+$negativeMissing = Test-RendererTargetFailureStateContract -Source $negativeRenderer
+if ($negativeMissing.Count -eq 0) {
+    throw 'Renderer shadow allocation-error negative control unexpectedly passed.'
+}
+
 Write-Output 'Renderer target allocation-failure state contract passed.'
 Write-Output 'Renderer target allocation-failure state negative control passed.'
 Write-Output 'Renderer bloom allocation-error negative control passed.'
+Write-Output 'Renderer target texture-storage error negative control passed.'
