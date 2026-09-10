@@ -5380,8 +5380,18 @@ static void henka_opengl_capture_next_reflection_probe(
     GLint previous_renderbuffer = 0;
     GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
+    GLint previous_program = 0;
+    GLint previous_vertex_array = 0;
+    GLint previous_draw_buffer = GL_BACK;
+    GLint previous_read_buffer = GL_BACK;
+    GLint previous_polygon_mode[2] = {GL_FILL, GL_FILL};
     GLint previous_viewport[4] = {0, 0, 0, 0};
     GLfloat previous_clear_color[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    GLboolean previous_scissor_enabled = GL_FALSE;
+    GLboolean previous_depth_enabled = GL_TRUE;
+    GLboolean previous_cull_enabled = GL_TRUE;
+    GLboolean previous_blend_enabled = GL_FALSE;
+    GLboolean previous_depth_mask = GL_TRUE;
     uint32_t probe_index = UINT32_MAX;
     uint32_t offset;
     int face;
@@ -5449,8 +5459,18 @@ static void henka_opengl_capture_next_reflection_probe(
     glGetIntegerv(GL_RENDERBUFFER_BINDING, &previous_renderbuffer);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_texture);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &previous_program);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previous_vertex_array);
+    glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
+    glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
+    glGetIntegerv(GL_POLYGON_MODE, previous_polygon_mode);
     glGetIntegerv(GL_VIEWPORT, previous_viewport);
     glGetFloatv(GL_COLOR_CLEAR_VALUE, previous_clear_color);
+    previous_scissor_enabled = glIsEnabled(GL_SCISSOR_TEST);
+    previous_depth_enabled = glIsEnabled(GL_DEPTH_TEST);
+    previous_cull_enabled = glIsEnabled(GL_CULL_FACE);
+    previous_blend_enabled = glIsEnabled(GL_BLEND);
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &previous_depth_mask);
     while (glGetError() != GL_NO_ERROR) {}
     capture_scene = *scene;
     capture_scene.has_camera = true;
@@ -5469,6 +5489,8 @@ static void henka_opengl_capture_next_reflection_probe(
         GL_DEPTH_ATTACHMENT,
         GL_RENDERBUFFER,
         state->reflection_probe_depth_buffer);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
     for (face = 0; face < 6; ++face)
     {
         g_gl.FramebufferTexture2D(
@@ -5503,12 +5525,35 @@ static void henka_opengl_capture_next_reflection_probe(
     state->reflection_probe_capture_index = UINT32_MAX;
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
     g_gl.BindRenderbuffer(GL_RENDERBUFFER, (GLuint)previous_renderbuffer);
+    glDrawBuffer((GLenum)previous_draw_buffer);
+    glReadBuffer((GLenum)previous_read_buffer);
     glViewport(
         previous_viewport[0], previous_viewport[1],
         previous_viewport[2], previous_viewport[3]);
     glClearColor(
         previous_clear_color[0], previous_clear_color[1],
         previous_clear_color[2], previous_clear_color[3]);
+    g_gl.UseProgram((GLuint)previous_program);
+    g_gl.BindVertexArray((GLuint)previous_vertex_array);
+    glPolygonMode(GL_FRONT, (GLenum)previous_polygon_mode[0]);
+    glPolygonMode(GL_BACK, (GLenum)previous_polygon_mode[1]);
+    if (previous_scissor_enabled)
+        glEnable(GL_SCISSOR_TEST);
+    else
+        glDisable(GL_SCISSOR_TEST);
+    if (previous_depth_enabled)
+        glEnable(GL_DEPTH_TEST);
+    else
+        glDisable(GL_DEPTH_TEST);
+    if (previous_cull_enabled)
+        glEnable(GL_CULL_FACE);
+    else
+        glDisable(GL_CULL_FACE);
+    if (previous_blend_enabled)
+        glEnable(GL_BLEND);
+    else
+        glDisable(GL_BLEND);
+    glDepthMask(previous_depth_mask);
     g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
     if (success)

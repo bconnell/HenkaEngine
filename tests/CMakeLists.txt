@@ -478,6 +478,12 @@ if(WIN32)
             ${CMAKE_SOURCE_DIR}/scripts/test_reflection_probe_capture_revision_windows.ps1)
 
     add_test(
+        NAME henka_renderer_reflection_probe_capture_state_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_renderer_reflection_probe_capture_state_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_packaged_startup_readiness_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_packaged_startup_readiness_windows.ps1
