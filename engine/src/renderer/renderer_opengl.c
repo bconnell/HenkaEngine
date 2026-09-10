@@ -676,14 +676,17 @@ static GLint henka_opengl_uniform_location(GLuint program, const char* name)
 bool henka_opengl_renderer_is_hdr_ready(const struct henka_renderer* renderer)
 {
     const henka_opengl_renderer_state* state;
+    henka_viewport viewport;
 
     if (renderer == NULL || renderer->backend_state == NULL)
     {
         return false;
     }
     state = (const henka_opengl_renderer_state*)renderer->backend_state;
+    viewport = henka_renderer_get_scene_viewport(renderer);
     return state->hdr_framebuffer != 0U && state->hdr_color_texture != 0U &&
-        state->hdr_framebuffer_complete && state->hdr_width > 0 && state->hdr_height > 0;
+        state->hdr_framebuffer_complete && state->hdr_width > 0 && state->hdr_height > 0 &&
+        state->hdr_width == viewport.width && state->hdr_height == viewport.height;
 }
 
 bool henka_opengl_renderer_is_shadow_ready(const struct henka_renderer* renderer)
