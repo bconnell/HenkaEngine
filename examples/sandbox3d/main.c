@@ -4517,22 +4517,22 @@ static void sandbox3d_sync_audio_authoring_fields(
     (void)snprintf(
         state->audio_authoring_gain,
         sizeof(state->audio_authoring_gain),
-        "%.3f",
+        "%.9g",
         config->gain);
     (void)snprintf(
         state->audio_authoring_pitch,
         sizeof(state->audio_authoring_pitch),
-        "%.3f",
+        "%.9g",
         config->pitch);
     (void)snprintf(
         state->audio_authoring_min_distance,
         sizeof(state->audio_authoring_min_distance),
-        "%.3f",
+        "%.9g",
         config->min_distance);
     (void)snprintf(
         state->audio_authoring_max_distance,
         sizeof(state->audio_authoring_max_distance),
-        "%.3f",
+        "%.9g",
         config->max_distance);
     state->audio_authoring_form_entity = entity;
     state->audio_authoring_form_initialized = true;
