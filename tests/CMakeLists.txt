@@ -508,6 +508,12 @@ if(WIN32)
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
     add_test(
+        NAME henka_renderer_resource_context_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_renderer_resource_context_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_renderer_ibl_failure_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_renderer_ibl_failure_windows.ps1

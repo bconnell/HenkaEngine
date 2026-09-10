@@ -286,6 +286,23 @@ typedef struct henka_opengl_renderer_state
     henka_opengl_tool_window_target tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
 
+typedef struct henka_opengl_texture_context_guard
+{
+    SDL_Window* previous_window;
+    SDL_GLContext previous_context;
+    bool restore_previous;
+} henka_opengl_texture_context_guard;
+
+static henka_result henka_opengl_begin_texture_context(
+    henka_opengl_renderer_state* state,
+    henka_opengl_texture_context_guard* guard,
+    const char* operation);
+
+static henka_result henka_opengl_end_texture_context(
+    henka_opengl_renderer_state* state,
+    const henka_opengl_texture_context_guard* guard,
+    const char* operation);
+
 static bool henka_opengl_scene_target_is_ready(
     const henka_opengl_renderer_state* state,
     henka_viewport viewport);
@@ -8510,11 +8527,35 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
 
 void henka_opengl_renderer_destroy_mesh(struct henka_mesh* mesh)
 {
+    henka_opengl_renderer_state* state = NULL;
+    henka_opengl_texture_context_guard context_guard;
+    henka_result context_result;
+    bool context_active = false;
     uint32_t part_index;
 
     if (mesh == NULL || mesh->part_count == 0U || mesh->part_count > HENKA_MESH_MAX_PRIMITIVE_PARTS)
     {
         return;
+    }
+
+    if (mesh->renderer != NULL && mesh->renderer->backend_state != NULL)
+    {
+        state = (henka_opengl_renderer_state*)mesh->renderer->backend_state;
+    }
+    context_result = state != NULL ?
+        henka_opengl_begin_texture_context(
+            state,
+            &context_guard,
+            "mesh destruction") :
+        HENKA_ERROR_INVALID_ARGUMENT;
+    if (context_result == HENKA_SUCCESS)
+    {
+        context_active = true;
+    }
+    else
+    {
+        HENKA_LOG_ERROR(
+            "mesh backend could not be deleted because the main context was unavailable");
     }
 
     for (part_index = 0U; part_index < mesh->part_count; ++part_index)
@@ -8538,15 +8579,30 @@ void henka_opengl_renderer_destroy_mesh(struct henka_mesh* mesh)
                 --memory_state->tracked_mesh_count;
             }
         }
-        if (mesh_data->terrain_weight_buffer != 0U)
+        if (context_active && mesh_data->terrain_weight_buffer != 0U)
         {
             g_gl.DeleteBuffers(1, &mesh_data->terrain_weight_buffer);
         }
-        g_gl.DeleteBuffers(1, &mesh_data->index_buffer);
-        g_gl.DeleteBuffers(1, &mesh_data->vertex_buffer);
-        g_gl.DeleteVertexArrays(1, &mesh_data->vao);
+        if (context_active)
+        {
+            g_gl.DeleteBuffers(1, &mesh_data->index_buffer);
+            g_gl.DeleteBuffers(1, &mesh_data->vertex_buffer);
+            g_gl.DeleteVertexArrays(1, &mesh_data->vao);
+        }
         henka_free(mesh_data);
         part->backend_data = NULL;
+    }
+    if (context_active)
+    {
+        context_result = henka_opengl_end_texture_context(
+            state,
+            &context_guard,
+            "mesh destruction");
+        if (context_result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "the previous OpenGL context could not be restored after mesh destruction");
+        }
     }
     henka_free(mesh);
 }
@@ -8792,6 +8848,9 @@ henka_result henka_opengl_renderer_create_shader_from_files_with_contract(
 void henka_opengl_renderer_destroy_shader(struct henka_shader* shader)
 {
     henka_opengl_shader_data* shader_data;
+    henka_opengl_renderer_state* state = NULL;
+    henka_opengl_texture_context_guard context_guard;
+    henka_result context_result;
 
     if (shader == NULL || shader->backend_data == NULL)
     {
@@ -8799,17 +8858,37 @@ void henka_opengl_renderer_destroy_shader(struct henka_shader* shader)
     }
 
     shader_data = (henka_opengl_shader_data*)shader->backend_data;
-    g_gl.DeleteProgram(shader_data->program);
+    if (shader->renderer != NULL && shader->renderer->backend_state != NULL)
+    {
+        state = (henka_opengl_renderer_state*)shader->renderer->backend_state;
+    }
+    context_result = state != NULL ?
+        henka_opengl_begin_texture_context(
+            state,
+            &context_guard,
+            "shader destruction") :
+        HENKA_ERROR_INVALID_ARGUMENT;
+    if (context_result == HENKA_SUCCESS)
+    {
+        g_gl.DeleteProgram(shader_data->program);
+        context_result = henka_opengl_end_texture_context(
+            state,
+            &context_guard,
+            "shader destruction");
+        if (context_result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "the previous OpenGL context could not be restored after shader destruction");
+        }
+    }
+    else
+    {
+        HENKA_LOG_ERROR(
+            "shader backend could not be deleted because the main context was unavailable");
+    }
     henka_free(shader_data);
     henka_free(shader);
 }
-
-typedef struct henka_opengl_texture_context_guard
-{
-    SDL_Window* previous_window;
-    SDL_GLContext previous_context;
-    bool restore_previous;
-} henka_opengl_texture_context_guard;
 
 static henka_result henka_opengl_begin_texture_context(
     henka_opengl_renderer_state* state,
