@@ -2399,14 +2399,19 @@ static void henka_opengl_delete_ibl_resources(henka_opengl_renderer_state* state
 static bool henka_opengl_allocate_ibl_cube(GLuint* out_texture, int resolution, int levels)
 {
     GLuint texture = 0U;
+    henka_opengl_texture_binding_state texture_state = {0};
+    bool valid = false;
     int face;
     int mip;
 
     if (out_texture == NULL || resolution <= 0 || levels <= 0)
         return false;
+    *out_texture = 0U;
+    henka_opengl_discard_prior_texture_errors("IBL cube texture allocation");
+    henka_opengl_capture_texture_binding_state(&texture_state);
     glGenTextures(1, &texture);
     if (texture == 0U)
-        return false;
+        goto cleanup;
     glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER,
         levels > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
@@ -2432,16 +2437,22 @@ static bool henka_opengl_allocate_ibl_cube(GLuint* out_texture, int resolution, 
                 GL_RGBA,
                 GL_HALF_FLOAT,
                 NULL);
+            if (henka_opengl_collect_texture_errors("IBL cube texture storage") != HENKA_SUCCESS)
+                goto cleanup;
         }
     }
-    if (glGetError() != GL_NO_ERROR)
+    valid = true;
+
+cleanup:
+    if (!valid && texture != 0U)
     {
         glDeleteTextures(1, &texture);
-        return false;
+        texture = 0U;
+        (void)henka_opengl_collect_texture_errors("failed IBL cube texture cleanup");
     }
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0U);
+    henka_opengl_restore_texture_binding_state(&texture_state);
     *out_texture = texture;
-    return true;
+    return valid;
 }
 
 static henka_result henka_opengl_build_ibl_resources(
@@ -5240,8 +5251,7 @@ static bool henka_opengl_allocate_reflection_probe_cube(
     int levels)
 {
     GLuint texture = 0U;
-    GLint previous_active_texture = GL_TEXTURE0;
-    GLint previous_texture = 0;
+    henka_opengl_texture_binding_state texture_state = {0};
     bool valid = false;
     int face;
 
@@ -5251,15 +5261,11 @@ static bool henka_opengl_allocate_reflection_probe_cube(
         return false;
     }
     *out_texture = 0U;
-    while (glGetError() != GL_NO_ERROR) {}
-    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
-    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_texture);
+    henka_opengl_discard_prior_texture_errors("reflection-probe cube texture allocation");
+    henka_opengl_capture_texture_binding_state(&texture_state);
     glGenTextures(1, &texture);
     if (texture == 0U)
-    {
-        g_gl.ActiveTexture((GLenum)previous_active_texture);
-        return false;
-    }
+        goto cleanup;
     glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
     glTexParameteri(
         GL_TEXTURE_CUBE_MAP,
@@ -5289,16 +5295,21 @@ static bool henka_opengl_allocate_reflection_probe_cube(
                 GL_RGBA,
                 GL_HALF_FLOAT,
                 NULL);
+            if (henka_opengl_collect_texture_errors("reflection-probe cube texture storage") != HENKA_SUCCESS)
+                goto cleanup;
         }
     }
-    valid = glGetError() == GL_NO_ERROR;
-    if (!valid)
+
+    valid = true;
+
+cleanup:
+    if (!valid && texture != 0U)
     {
         glDeleteTextures(1, &texture);
         texture = 0U;
+        (void)henka_opengl_collect_texture_errors("failed reflection-probe cube texture cleanup");
     }
-    g_gl.ActiveTexture((GLenum)previous_active_texture);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
+    henka_opengl_restore_texture_binding_state(&texture_state);
     *out_texture = texture;
     return valid;
 }

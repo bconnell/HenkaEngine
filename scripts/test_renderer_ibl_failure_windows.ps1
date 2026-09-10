@@ -84,6 +84,40 @@ function Test-RendererIblFailureContract {
     return $missing
 }
 
+function Test-RendererDerivedTextureAllocationContract {
+    param([string]$Source)
+
+    $missing = [System.Collections.Generic.List[string]]::new()
+    foreach ($entry in @(
+        @{ Name = 'IBL cubemap allocator'; Function = 'henka_opengl_allocate_ibl_cube'; Discard = 'IBL cube texture allocation'; Collect = 'IBL cube texture storage' },
+        @{ Name = 'reflection-probe cubemap allocator'; Function = 'henka_opengl_allocate_reflection_probe_cube'; Discard = 'reflection-probe cube texture allocation'; Collect = 'reflection-probe cube texture storage' }
+    )) {
+        $body = Get-FunctionBody -Source $Source -FunctionName $entry.Function
+        if ($null -eq $body) {
+            $missing.Add("$($entry.Name) function")
+            continue
+        }
+
+        $discardPattern = 'henka_opengl_discard_prior_texture_errors\(\s*"' + [regex]::Escape($entry.Discard) + '"\s*\);'
+        if ($body -notmatch $discardPattern) {
+            $missing.Add("$($entry.Name) must discard stale texture errors before allocation")
+        }
+        $collectPattern = 'henka_opengl_collect_texture_errors\(\s*"' + [regex]::Escape($entry.Collect) + '"\s*\)'
+        if ($body -notmatch $collectPattern) {
+            $missing.Add("$($entry.Name) must collect texture-storage errors")
+        }
+        if ($body -notmatch 'henka_opengl_capture_texture_binding_state\(\s*&texture_state\s*\)' -or
+            $body -notmatch 'henka_opengl_restore_texture_binding_state\(\s*&texture_state\s*\)') {
+            $missing.Add("$($entry.Name) must restore texture binding state")
+        }
+        if ($body -notmatch 'glDeleteTextures\(\s*1\s*,\s*&texture\s*\)') {
+            $missing.Add("$($entry.Name) must delete a failed candidate texture")
+        }
+    }
+
+    return $missing
+}
+
 $rendererPath = Join-Path $RepositoryRoot 'engine/src/renderer/renderer_opengl.c'
 $renderer = Get-Content -LiteralPath $rendererPath -Raw
 $missing = Test-RendererIblFailureContract -Source $renderer
@@ -99,5 +133,20 @@ if ($negativeMissing.Count -eq 0) {
     throw 'Renderer IBL failure cleanup negative control unexpectedly passed.'
 }
 
+$allocationMissing = Test-RendererDerivedTextureAllocationContract -Source $renderer
+if ($allocationMissing.Count -gt 0) {
+    throw "Renderer derived texture allocation contract failed: $($allocationMissing -join ', ')"
+}
+
+$negativeAllocation = $renderer.Replace(
+    'henka_opengl_discard_prior_texture_errors("IBL cube texture allocation");',
+    '/* deliberate negative-control omission */')
+$negativeAllocationMissing = Test-RendererDerivedTextureAllocationContract -Source $negativeAllocation
+if ($negativeAllocationMissing.Count -eq 0) {
+    throw 'Renderer derived texture allocation negative control unexpectedly passed.'
+}
+
 Write-Output 'Renderer IBL failure cleanup contract passed.'
 Write-Output 'Renderer IBL failure cleanup negative control passed.'
+Write-Output 'Renderer derived texture allocation contract passed.'
+Write-Output 'Renderer derived texture allocation negative control passed.'
