@@ -64,6 +64,9 @@ if ($generator -match '\$frequency = if \(\$Subject -eq "giraffe"\)' -or
     $generator -match '\$variation = 0\.5 \+ \(0\.5 \* \[Math\]::Sin\(\(\$x \+ 2\) \* 0\.24') {
     $missing += 'single-frequency showcase normal or roughness bands'
 }
+if ($checker -notmatch 'function Get-TexturedSubjectNeighborDifference') {
+    $missing += 'textured-subject visual quality metric'
+}
 if ($checker -notmatch '\[int\]\$metadata\[0\]\.Groups\["texture_edge"\]\.Value -lt 128') {
     $missing += 'visual gate 128-pixel minimum texture resolution'
 }

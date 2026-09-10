@@ -425,6 +425,11 @@ if(WIN32)
             ${CMAKE_SOURCE_DIR}/scripts/test_pbr_energy_reference_windows.ps1)
 
     add_test(
+        NAME henka_realism_reference_visual_evidence_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_realism_reference_visual_evidence_windows.ps1)
+
+    add_test(
         NAME henka_pbr_normal_map_reference_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_pbr_normal_map_reference_windows.ps1)
