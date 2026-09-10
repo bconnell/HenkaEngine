@@ -16,4 +16,13 @@ typedef struct henka_opengl_scene_target_policy
 bool henka_opengl_scene_target_requires_sync(
     const henka_opengl_scene_target_policy* policy);
 
+bool henka_opengl_scene_target_requires_hdr_sync(
+    const henka_opengl_scene_target_policy* policy);
+
+bool henka_opengl_scene_target_requires_bloom_sync(
+    const henka_opengl_scene_target_policy* policy);
+
+bool henka_opengl_scene_target_requires_temporal_sync(
+    const henka_opengl_scene_target_policy* policy);
+
 #endif

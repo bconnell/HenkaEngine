@@ -7807,31 +7807,44 @@ void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int 
     henka_opengl_renderer_sync_scene_target(renderer);
 }
 
-static bool henka_opengl_scene_target_is_ready(
+static henka_opengl_scene_target_policy henka_opengl_scene_target_get_policy(
     const henka_opengl_renderer_state* state,
     henka_viewport viewport)
 {
     if (state == NULL || viewport.width <= 0 || viewport.height <= 0)
     {
+        return (henka_opengl_scene_target_policy){0};
+    }
+    return (henka_opengl_scene_target_policy){
+        state->hdr_framebuffer != 0U && state->hdr_framebuffer_complete,
+        state->hdr_width == viewport.width && state->hdr_height == viewport.height,
+        state->bloom_ready &&
+            state->bloom_framebuffer != 0U &&
+            state->bloom_blur_framebuffer != 0U &&
+            state->bloom_color_texture != 0U &&
+            state->bloom_blur_texture != 0U,
+        state->bloom_width == (viewport.width > 1 ? viewport.width / 2 : 1) &&
+            state->bloom_height == (viewport.height > 1 ? viewport.height / 2 : 1),
+        state->temporal_history_ready &&
+            state->temporal_history_texture != 0U &&
+            state->temporal_history_depth_texture != 0U &&
+            state->temporal_history_depth_framebuffer != 0U,
+        state->temporal_history_width == viewport.width &&
+            state->temporal_history_height == viewport.height};
+}
+
+static bool henka_opengl_scene_target_is_ready(
+    const henka_opengl_renderer_state* state,
+    henka_viewport viewport)
+{
+    henka_opengl_scene_target_policy policy;
+
+    if (state == NULL || viewport.width <= 0 || viewport.height <= 0)
+    {
         return false;
     }
-    return !henka_opengl_scene_target_requires_sync(
-        &(henka_opengl_scene_target_policy){
-            state->hdr_framebuffer != 0U && state->hdr_framebuffer_complete,
-            state->hdr_width == viewport.width && state->hdr_height == viewport.height,
-            state->bloom_ready &&
-                state->bloom_framebuffer != 0U &&
-                state->bloom_blur_framebuffer != 0U &&
-                state->bloom_color_texture != 0U &&
-                state->bloom_blur_texture != 0U,
-            state->bloom_width == (viewport.width > 1 ? viewport.width / 2 : 1) &&
-                state->bloom_height == (viewport.height > 1 ? viewport.height / 2 : 1),
-            state->temporal_history_ready &&
-                state->temporal_history_texture != 0U &&
-                state->temporal_history_depth_texture != 0U &&
-                state->temporal_history_depth_framebuffer != 0U,
-            state->temporal_history_width == viewport.width &&
-                state->temporal_history_height == viewport.height});
+    policy = henka_opengl_scene_target_get_policy(state, viewport);
+    return !henka_opengl_scene_target_requires_sync(&policy);
 }
 
 void henka_opengl_renderer_sync_scene_target(struct henka_renderer* renderer)
@@ -7853,30 +7866,48 @@ void henka_opengl_renderer_sync_scene_target(struct henka_renderer* renderer)
     {
         return;
     }
-    if (henka_opengl_create_hdr_target(state, viewport.width, viewport.height) != HENKA_SUCCESS)
     {
-        HENKA_LOG_ERROR(
-            "Scene View HDR target resize failed for %dx%d; previous target remains active (%s)",
-            viewport.width,
-            viewport.height,
-            state->hdr_failure_reason[0] != '\0' ? state->hdr_failure_reason : "unknown reason");
-        return;
+        henka_opengl_scene_target_policy policy =
+            henka_opengl_scene_target_get_policy(state, viewport);
+
+        if (!henka_opengl_scene_target_requires_sync(&policy))
+        {
+            return;
+        }
+        if (henka_opengl_scene_target_requires_hdr_sync(&policy))
+        {
+            if (henka_opengl_create_hdr_target(state, viewport.width, viewport.height) != HENKA_SUCCESS)
+            {
+                HENKA_LOG_ERROR(
+                    "Scene View HDR target resize failed for %dx%d; previous target remains active (%s)",
+                    viewport.width,
+                    viewport.height,
+                    state->hdr_failure_reason[0] != '\0' ? state->hdr_failure_reason : "unknown reason");
+                return;
+            }
+        }
+        if (henka_opengl_scene_target_requires_bloom_sync(&policy) &&
+            henka_opengl_create_bloom_target(state, viewport.width, viewport.height) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "Scene View bloom target resize failed for %dx%d; HDR presentation remains active without bloom (%s)",
+                viewport.width,
+                viewport.height,
+                state->bloom_failure_reason[0] != '\0' ? state->bloom_failure_reason : "unknown reason");
+        }
+        if (henka_opengl_scene_target_requires_temporal_sync(&policy) &&
+            henka_opengl_create_temporal_history(state, viewport.width, viewport.height) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "Scene View temporal history resize failed for %dx%d; temporal accumulation disabled",
+                viewport.width,
+                viewport.height);
+        }
     }
-    if (henka_opengl_create_bloom_target(state, viewport.width, viewport.height) != HENKA_SUCCESS)
-    {
-        HENKA_LOG_ERROR(
-            "Scene View bloom target resize failed for %dx%d; HDR presentation remains active without bloom (%s)",
-            viewport.width,
-            viewport.height,
-            state->bloom_failure_reason[0] != '\0' ? state->bloom_failure_reason : "unknown reason");
-    }
-    if (henka_opengl_create_temporal_history(state, viewport.width, viewport.height) != HENKA_SUCCESS)
-    {
-        HENKA_LOG_ERROR(
-            "Scene View temporal history resize failed for %dx%d; temporal accumulation disabled",
-            viewport.width,
-            viewport.height);
-    }
+    /* The per-target attempts above intentionally use the policy captured
+     * before this retry. A failed optional target remains eligible for the
+     * next frame, while a ready sibling is not recreated just because the
+     * optional retry is still unavailable. */
 }
 
 void henka_opengl_renderer_get_hdr_diagnostics(

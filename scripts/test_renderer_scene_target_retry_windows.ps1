@@ -60,6 +60,11 @@ function Test-RendererSceneTargetRetryContract {
     if ($sync -notmatch 'henka_opengl_scene_target_is_ready\s*\(\s*state\s*,\s*viewport\s*\)') {
         $missing.Add('synchronization uses the shared readiness helper')
     }
+    if ($sync -notmatch 'henka_opengl_scene_target_requires_hdr_sync\s*\(\s*&policy\s*\)' -or
+        $sync -notmatch 'henka_opengl_scene_target_requires_bloom_sync\s*\(\s*&policy\s*\)' -or
+        $sync -notmatch 'henka_opengl_scene_target_requires_temporal_sync\s*\(\s*&policy\s*\)') {
+        $missing.Add('synchronization retries only the scene targets that are unavailable or stale')
+    }
     if ($draw -notmatch 'henka_opengl_scene_target_is_ready\s*\(\s*state\s*,\s*scene_viewport\s*\)\s*\)\s*\{\s*henka_opengl_renderer_sync_scene_target\s*\(\s*renderer\s*\)\s*;') {
         $missing.Add('draw path retries every incomplete scene target, not only HDR dimensions')
     }
@@ -90,5 +95,19 @@ if ($negativeMissing.Count -eq 0) {
     throw 'Renderer scene-target retry negative control unexpectedly passed.'
 }
 
+$syncBody = Get-FunctionBody -Source $renderer -FunctionName 'henka_opengl_renderer_sync_scene_target'
+$negativeSyncBody = $syncBody.Replace(
+    'if (henka_opengl_scene_target_requires_hdr_sync(&policy))',
+    'if (true)')
+if ($negativeSyncBody -eq $syncBody) {
+    throw 'Renderer scene-target per-target retry negative control could not remove the HDR policy guard.'
+}
+$negativeSyncRenderer = $renderer.Replace($syncBody, $negativeSyncBody)
+$negativeSyncMissing = Test-RendererSceneTargetRetryContract -Source $negativeSyncRenderer
+if ($negativeSyncMissing.Count -eq 0) {
+    throw 'Renderer scene-target per-target retry negative control unexpectedly passed.'
+}
+
 Write-Output 'Renderer scene-target retry contract passed.'
 Write-Output 'Renderer scene-target retry negative control passed.'
+Write-Output 'Renderer scene-target per-target retry negative control passed.'
