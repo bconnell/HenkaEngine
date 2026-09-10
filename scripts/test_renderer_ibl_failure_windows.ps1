@@ -37,8 +37,12 @@ function Test-RendererIblFailureContract {
     param([string]$Source)
 
     $sync = Get-FunctionBody -Source $Source -FunctionName 'henka_opengl_sync_ibl_resources'
+    $delete = Get-FunctionBody -Source $Source -FunctionName 'henka_opengl_delete_ibl_resources'
     if ($null -eq $sync) {
         return @('IBL resource synchronization function')
+    }
+    if ($null -eq $delete) {
+        return @('IBL resource deletion function')
     }
 
     $buildCall = 'if (henka_opengl_build_ibl_resources(state, scene) != HENKA_SUCCESS)'
@@ -65,6 +69,17 @@ function Test-RendererIblFailureContract {
     }
     if ($failureBranch -notmatch 'ibl_failure_reason') {
         $missing.Add('failure path records an IBL failure reason')
+    }
+    foreach ($field in @(
+        'state->ibl_failed_source_texture = NULL;',
+        'state->ibl_failed_source_revision = 0U;',
+        'state->ibl_failed_source_rotation = 0.0f;')) {
+        if ($delete.IndexOf($field, [System.StringComparison]::Ordinal) -lt 0) {
+            $missing.Add("resource teardown clears failed-candidate state: $field")
+        }
+    }
+    if ($delete.IndexOf("state->ibl_failure_reason[0] = '\0';", [System.StringComparison]::Ordinal) -lt 0) {
+        $missing.Add('resource teardown clears the stale IBL failure reason')
     }
     return $missing
 }

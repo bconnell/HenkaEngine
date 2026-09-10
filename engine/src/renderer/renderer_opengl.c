@@ -2374,6 +2374,10 @@ static void henka_opengl_delete_ibl_resources(henka_opengl_renderer_state* state
     state->ibl_brdf_lut = 0U;
     state->ibl_framebuffer = 0U;
     state->ibl_ready = false;
+    state->ibl_failed_source_texture = NULL;
+    state->ibl_failed_source_revision = 0U;
+    state->ibl_failed_source_rotation = 0.0f;
+    state->ibl_failure_reason[0] = '\0';
 }
 
 static bool henka_opengl_allocate_ibl_cube(GLuint* out_texture, int resolution, int levels)
