@@ -44,7 +44,9 @@ function Test-RendererFramebufferStateContract {
     $missing = [System.Collections.Generic.List[string]]::new()
     foreach ($capture in @(
         'glGetIntegerv\(GL_DRAW_BUFFER, &previous_draw_buffer\);',
-        'glGetIntegerv\(GL_READ_BUFFER, &previous_read_buffer\);')) {
+        'glGetIntegerv\(GL_READ_BUFFER, &previous_read_buffer\);',
+        'glGetIntegerv\(GL_CURRENT_PROGRAM, &previous_program\);',
+        'glGetIntegerv\(GL_VERTEX_ARRAY_BINDING, &previous_vertex_array\);')) {
         if ($build -notmatch $capture) {
             $missing.Add("framebuffer state capture: $capture")
         }
@@ -54,6 +56,12 @@ function Test-RendererFramebufferStateContract {
     }
     if ([regex]::Matches($build, 'glReadBuffer\(\(GLenum\)previous_read_buffer\);').Count -lt 2) {
         $missing.Add('read-buffer restoration on both success and failure')
+    }
+    if ([regex]::Matches($build, 'g_gl\.UseProgram\(\(GLuint\)previous_program\);').Count -lt 2) {
+        $missing.Add('program restoration on both success and failure')
+    }
+    if ([regex]::Matches($build, 'g_gl\.BindVertexArray\(\(GLuint\)previous_vertex_array\);').Count -lt 2) {
+        $missing.Add('vertex-array restoration on both success and failure')
     }
 
     return $missing

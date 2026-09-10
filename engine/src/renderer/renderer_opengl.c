@@ -2401,6 +2401,8 @@ static henka_result henka_opengl_build_ibl_resources(
     GLint previous_framebuffer = 0;
     GLint previous_draw_buffer = GL_BACK;
     GLint previous_read_buffer = GL_BACK;
+    GLint previous_program = 0;
+    GLint previous_vertex_array = 0;
     GLint previous_pack_alignment = 4;
     GLint previous_viewport[4] = {0, 0, 0, 0};
     GLboolean previous_scissor_enabled;
@@ -2428,6 +2430,8 @@ static henka_result henka_opengl_build_ibl_resources(
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
     glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
     glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &previous_program);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previous_vertex_array);
     henka_opengl_capture_texture_binding_state(&texture_state);
     glGetIntegerv(GL_PACK_ALIGNMENT, &previous_pack_alignment);
     glGetIntegerv(GL_VIEWPORT, previous_viewport);
@@ -2579,8 +2583,8 @@ static henka_result henka_opengl_build_ibl_resources(
             goto ibl_failure;
         }
     }
-    g_gl.BindVertexArray(0);
-    g_gl.UseProgram(0);
+    g_gl.BindVertexArray((GLuint)previous_vertex_array);
+    g_gl.UseProgram((GLuint)previous_program);
     glPixelStorei(GL_PACK_ALIGNMENT, previous_pack_alignment);
     if (previous_scissor_enabled) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
     if (previous_depth_enabled) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
@@ -2637,8 +2641,8 @@ ibl_failure:
     if (prefilter_cube != 0U) glDeleteTextures(1, &prefilter_cube);
     if (brdf_lut != 0U) glDeleteTextures(1, &brdf_lut);
     if (framebuffer != 0U) g_gl.DeleteFramebuffers(1, &framebuffer);
-    g_gl.BindVertexArray(0);
-    g_gl.UseProgram(0);
+    g_gl.BindVertexArray((GLuint)previous_vertex_array);
+    g_gl.UseProgram((GLuint)previous_program);
     if (state->ibl_failure_reason[0] == '\0')
         (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "derived IBL allocation or render failed");
     return HENKA_ERROR_RENDERER;
