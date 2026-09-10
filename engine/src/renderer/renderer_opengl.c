@@ -2159,6 +2159,9 @@ static henka_result henka_opengl_create_bloom_target(
     GLint previous_framebuffer = 0;
     GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
+    GLenum color_texture_error = GL_NO_ERROR;
+    GLenum blur_texture_error = GL_NO_ERROR;
+    GLenum texture_error = GL_NO_ERROR;
     int bloom_width;
     int bloom_height;
 
@@ -2191,18 +2194,23 @@ static henka_result henka_opengl_create_bloom_target(
         (void)snprintf(state->bloom_failure_reason, sizeof(state->bloom_failure_reason), "GPU object allocation failed");
         return HENKA_ERROR_RENDERER;
     }
+    while (glGetError() != GL_NO_ERROR) {}
     glBindTexture(GL_TEXTURE_2D, color_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, bloom_width, bloom_height, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
+    color_texture_error = glGetError();
     glBindTexture(GL_TEXTURE_2D, blur_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, bloom_width, bloom_height, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
+    blur_texture_error = glGetError();
+    texture_error = color_texture_error != GL_NO_ERROR ? color_texture_error : blur_texture_error;
+    if (texture_error != GL_NO_ERROR) goto bloom_target_failure;
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_texture, 0);
     if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
@@ -2238,7 +2246,10 @@ bloom_target_failure:
     g_gl.DeleteFramebuffers(1, &framebuffer);
     g_gl.DeleteFramebuffers(1, &blur_framebuffer);
     state->bloom_ready = false;
-    (void)snprintf(state->bloom_failure_reason, sizeof(state->bloom_failure_reason), "incomplete bloom framebuffer");
+    (void)snprintf(
+        state->bloom_failure_reason,
+        sizeof(state->bloom_failure_reason),
+        texture_error != GL_NO_ERROR ? "bloom texture allocation failed" : "incomplete bloom framebuffer");
     return HENKA_ERROR_RENDERER;
 }
 

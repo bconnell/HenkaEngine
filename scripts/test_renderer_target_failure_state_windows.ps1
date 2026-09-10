@@ -139,6 +139,18 @@ function Test-RendererTargetFailureStateContract {
         $missing.Add('bloom invalid-input branch must retain the prior ready target')
     }
 
+    foreach ($pattern in @(
+        'while\s*\(glGetError\(\)\s*!=\s*GL_NO_ERROR\)\s*\{\}',
+        'color_texture_error\s*=\s*glGetError\(\);',
+        'blur_texture_error\s*=\s*glGetError\(\);',
+        'texture_error\s*=\s*color_texture_error\s*!=\s*GL_NO_ERROR\s*\?\s*color_texture_error\s*:\s*blur_texture_error\s*;',
+        'if\s*\(texture_error\s*!=\s*GL_NO_ERROR\)\s*goto\s+bloom_target_failure\s*;'
+    )) {
+        if ($bloomBody -notmatch $pattern) {
+            $missing.Add("bloom texture allocation error contract: $pattern")
+        }
+    }
+
     return $missing
 }
 
@@ -165,5 +177,19 @@ if ($negativeMissing.Count -eq 0) {
     throw 'Renderer target allocation-failure negative control unexpectedly passed.'
 }
 
+$bloomBody = Get-FunctionBody -Source $renderer -FunctionName 'henka_opengl_create_bloom_target'
+$negativeBloomBody = $bloomBody.Replace(
+    '    blur_texture_error = glGetError();',
+    '    /* deliberate negative-control omission */')
+if ($negativeBloomBody -eq $bloomBody) {
+    throw 'Renderer bloom allocation-error negative control could not remove the second error read.'
+}
+$negativeRenderer = $renderer.Replace($bloomBody, $negativeBloomBody)
+$negativeMissing = Test-RendererTargetFailureStateContract -Source $negativeRenderer
+if ($negativeMissing.Count -eq 0) {
+    throw 'Renderer bloom allocation-error negative control unexpectedly passed.'
+}
+
 Write-Output 'Renderer target allocation-failure state contract passed.'
 Write-Output 'Renderer target allocation-failure state negative control passed.'
+Write-Output 'Renderer bloom allocation-error negative control passed.'
