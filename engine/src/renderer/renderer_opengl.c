@@ -2065,6 +2065,7 @@ static henka_result henka_opengl_create_temporal_history(
     GLint previous_texture = 0;
     bool previous_history_ready;
     GLenum texture_error;
+    GLenum depth_texture_error;
 
     if (state == NULL || width <= 0 || height <= 0 || width > 8192 || height > 8192)
     {
@@ -2105,7 +2106,8 @@ static henka_result henka_opengl_create_temporal_history(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
-    texture_error = texture_error == GL_NO_ERROR ? glGetError() : texture_error;
+    depth_texture_error = glGetError();
+    texture_error = texture_error == GL_NO_ERROR ? depth_texture_error : texture_error;
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, depth_framebuffer);
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
     glDrawBuffer(GL_NONE);

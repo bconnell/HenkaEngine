@@ -61,6 +61,11 @@ function Test-TemporalFailureContract {
     if ($create -notmatch 'if\s*\(texture_error\s*!=\s*GL_NO_ERROR\)\s*\{(?s:.*?)henka_opengl_mark_temporal_history_failure\s*\(') {
         $missing.Add('texture or framebuffer failure uses the failure transition')
     }
+    if ($create -notmatch 'GLenum\s+depth_texture_error\s*;' -or
+        $create -notmatch 'depth_texture_error\s*=\s*glGetError\(\)\s*;' -or
+        $create -notmatch 'texture_error\s*=\s*texture_error\s*==\s*GL_NO_ERROR\s*\?\s*depth_texture_error\s*:\s*texture_error\s*;') {
+        $missing.Add('depth texture allocation always drains the GL error queue while preserving the first allocation error')
+    }
     if ($create -match 'henka_opengl_delete_temporal_history\s*\(state\)\s*;(?s:.*?)if\s*\(texture_error\s*!=\s*GL_NO_ERROR\)') {
         $missing.Add('failed replacement retires no prior temporal history')
     }
@@ -101,6 +106,18 @@ if ($negativeFailureMissing.Count -eq 0) {
     throw 'Renderer temporal failure state negative control unexpectedly passed.'
 }
 
+$negativeErrorDrain = $renderer.Replace(
+    '    depth_texture_error = glGetError();',
+    '    /* deliberate negative-control omission */')
+if ($negativeErrorDrain -eq $renderer) {
+    throw 'Renderer temporal error-drain negative control could not remove the second error read.'
+}
+$negativeErrorDrainMissing = Test-TemporalFailureContract -Source $negativeErrorDrain
+if ($negativeErrorDrainMissing.Count -eq 0) {
+    throw 'Renderer temporal error-drain negative control unexpectedly passed.'
+}
+
 Write-Output 'Renderer temporal failure contract passed.'
 Write-Output 'Renderer temporal failure transition negative control passed.'
 Write-Output 'Renderer temporal invalidation negative control passed.'
+Write-Output 'Renderer temporal GL error-drain negative control passed.'
