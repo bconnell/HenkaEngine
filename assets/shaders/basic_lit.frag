@@ -915,7 +915,10 @@ void main()
             vec3 moonFresnel = fresnelSchlick(moonVDotH, f0);
             float moonDistribution = distributionGGX(moonNDotH, alpha);
             float moonVisibility = visibilitySmithGGXCorrelated(nDotV, moonNDotL, alpha);
-            vec3 moonSpecular = moonDistribution * moonVisibility * moonFresnel;
+            float moonMicrofacetResponse = min(
+                moonDistribution * moonVisibility,
+                8.0);
+            vec3 moonSpecular = moonMicrofacetResponse * moonFresnel;
             vec3 moonDiffuse = (1.0 - surfaceTransmission) *
                 (1.0 - moonFresnel) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI;
             color += (moonDiffuse + moonSpecular) * baseLayerTransmission *
@@ -950,7 +953,10 @@ void main()
             vec3 sheenFresnel = fresnelSchlick(vDotH, surfaceSheenColor);
             float sheenDistribution = distributionGGX(nDotH, sheenAlpha);
             float sheenVisibility = visibilitySmithGGXCorrelated(nDotV, nDotL, sheenAlpha);
-            color += sheenFresnel * sheenDistribution * sheenVisibility *
+            float sheenMicrofacetResponse = min(
+                sheenDistribution * sheenVisibility,
+                32.0);
+            color += sheenFresnel * sheenMicrofacetResponse *
                 radiance * nDotL * shadow * (1.0 - surfaceMetallic) * 0.35;
         }
 
@@ -1082,7 +1088,10 @@ void main()
                 pointShadowFactor(normal, localLightDirection) :
                 (localLightOuterType[lightIndex].z > 0.5 ?
                     localShadowFactor(normal, localLightDirection) : 1.0);
-            vec3 localSpecular = localDistribution * localVisibility * localFresnel;
+            float localMicrofacetResponse = min(
+                localDistribution * localVisibility,
+                8.0);
+            vec3 localSpecular = localMicrofacetResponse * localFresnel;
             vec3 localDiffuse = (1.0 - surfaceTransmission) * (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI;
             color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
             color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *

@@ -11,6 +11,12 @@ function Assert-Contract([bool]$condition, [string]$message) {
 
 Assert-Contract ($shader -match '(?s)float microfacetResponse\s*=\s*min\(\s*distribution\s*\*\s*visibility\s*,\s*8\.0\s*\).*?vec3 specular\s*=\s*microfacetResponse\s*\*\s*fresnel') `
     'the direct GGX response must have a finite per-pixel bound.'
+Assert-Contract ($shader -match '(?s)float localMicrofacetResponse\s*=\s*min\(\s*localDistribution\s*\*\s*localVisibility\s*,\s*8\.0\s*\).*?vec3 localSpecular\s*=\s*localMicrofacetResponse\s*\*\s*localFresnel') `
+    'the local-light GGX response must have the same finite per-pixel bound as the main direct-light path.'
+Assert-Contract ($shader -match '(?s)float moonMicrofacetResponse\s*=\s*min\(\s*moonDistribution\s*\*\s*moonVisibility\s*,\s*8\.0\s*\).*?vec3 moonSpecular\s*=\s*moonMicrofacetResponse\s*\*\s*moonFresnel') `
+    'the secondary directional-light GGX response must have the same finite per-pixel bound as the main direct-light path.'
+Assert-Contract ($shader -match '(?s)float sheenMicrofacetResponse\s*=\s*min\(\s*sheenDistribution\s*\*\s*sheenVisibility\s*,\s*32\.0\s*\).*?color \+= sheenFresnel \* sheenMicrofacetResponse') `
+    'the direct sheen GGX response must have a finite per-pixel bound.'
 Assert-Contract ($shader -match '(?s)float clearcoatMicrofacet\s*=\s*min\(\s*clearcoatDistribution\s*\*\s*clearcoatVisibility\s*,\s*32\.0\s*\)') `
     'the direct clearcoat microfacet response must have a finite per-pixel bound.'
 Assert-Contract ($shader -match '(?s)clearcoatMicrofacet.*?surfaceClearcoat\s*\*\s*0\.25') `

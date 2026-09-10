@@ -430,6 +430,11 @@ if(WIN32)
             ${CMAKE_SOURCE_DIR}/scripts/test_pbr_normal_map_reference_windows.ps1)
 
     add_test(
+        NAME henka_pbr_clearcoat_response_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_pbr_clearcoat_response_windows.ps1)
+
+    add_test(
         NAME henka_pbr_reference_lighting_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_pbr_reference_lighting_windows.ps1)
