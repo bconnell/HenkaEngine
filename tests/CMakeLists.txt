@@ -1086,9 +1086,21 @@ if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
             -BuildDirectory ${CMAKE_BINARY_DIR})
 
     add_test(
+        NAME henka_exact_candidate_lifecycle_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_exact_candidate_lifecycle_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_toolchain_resolution_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_henka_toolchain_resolution_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
+        NAME henka_build_state_lock_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_henka_build_state_lock_windows.ps1
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 endif()
 

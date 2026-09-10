@@ -194,6 +194,80 @@ function Get-HenkaCTestPath {
     return (Get-HenkaToolchain -CMakePath $CMakePath).CTestPath
 }
 
+function Get-HenkaBuildArtifact {
+    param(
+        [Parameter(Mandatory = $true)] [string]$BuildRoot,
+        [Parameter(Mandatory = $true)] [ValidateSet("Debug", "Release")][string]$Configuration,
+        [string]$BuildTarget = ""
+    )
+
+    $target = [string]$BuildTarget
+    if ([string]::IsNullOrWhiteSpace($target) -or $target -eq "henka_sandbox3d") {
+        return [pscustomobject]@{
+            Path = Join-Path $BuildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
+            Kind = "executable"
+            Target = if ([string]::IsNullOrWhiteSpace($target)) { "default" } else { $target }
+        }
+    }
+    if ($target -eq "henka" -or $target -eq "henka_runtime") {
+        return [pscustomobject]@{
+            Path = Join-Path $BuildRoot "engine\$Configuration\$target.lib"
+            Kind = "static-library"
+            Target = $target
+        }
+    }
+    if ($target.EndsWith("_tests", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return [pscustomobject]@{
+            Path = Join-Path $BuildRoot "tests\$Configuration\$target.exe"
+            Kind = "executable"
+            Target = $target
+        }
+    }
+    throw "No target-aware provenance artifact mapping exists for CMake target '$target'. Supply a supported target or extend the explicit mapping."
+}
+
+function Enter-HenkaBuildStateLock {
+    param(
+        [ValidateRange(0, 3600)]
+        [int]$TimeoutSeconds = 900
+    )
+
+    $mutexName = "Local\HenkaEngineSharedGeneratedBuildState"
+    $mutex = New-Object System.Threading.Mutex($false, $mutexName)
+    $acquired = $false
+    try {
+        try {
+            $acquired = $mutex.WaitOne([TimeSpan]::FromSeconds($TimeoutSeconds))
+        } catch [System.Threading.AbandonedMutexException] {
+            $acquired = $true
+            Write-Warning "Recovered an abandoned shared generated build-state lock."
+        }
+        if (-not $acquired) {
+            throw "Could not acquire the shared generated build-state lock within $TimeoutSeconds seconds. Another Henka build/configure operation may be using the shared generated tree."
+        }
+        return [pscustomobject]@{
+            Mutex = $mutex
+            Name = $mutexName
+        }
+    } catch {
+        $mutex.Dispose()
+        throw
+    }
+}
+
+function Exit-HenkaBuildStateLock {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Lock
+    )
+
+    try {
+        $Lock.Mutex.ReleaseMutex()
+    } finally {
+        $Lock.Mutex.Dispose()
+    }
+}
+
 function Get-HenkaCMakeFetchContentArguments {
     param(
         [Parameter(Mandatory = $true)]

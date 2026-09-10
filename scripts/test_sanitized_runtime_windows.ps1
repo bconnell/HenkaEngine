@@ -15,6 +15,8 @@ if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
     $BuildDirectory = Join-Path $repoRoot "build\test_tmp\sanitized-runtime"
 }
 $BuildDirectory = [System.IO.Path]::GetFullPath($BuildDirectory)
+$buildStateLock = Enter-HenkaBuildStateLock
+try {
 $testFixtureDirectory = Join-Path $repoRoot "build\test_tmp"
 New-Item -ItemType Directory -Path $testFixtureDirectory -Force | Out-Null
 
@@ -92,3 +94,6 @@ Invoke-HenkaNative `
     -Label "Run first-party sanitizer runtime tests"
 
 Write-Host "[pass] First-party sanitizer runtime gate passed."
+} finally {
+    Exit-HenkaBuildStateLock -Lock $buildStateLock
+}

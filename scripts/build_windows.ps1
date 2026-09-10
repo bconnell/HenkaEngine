@@ -16,7 +16,7 @@ $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $buildRoot = Join-Path $repoRoot "build"
 $toolchain = Get-HenkaToolchain
 $cmake = $toolchain.CMakePath
-$executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
+$artifact = Get-HenkaBuildArtifact -BuildRoot $buildRoot -Configuration $Configuration -BuildTarget $BuildTarget
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $resolvedDependencyRoot = $DependencyRoot
 $dependencyRootWasExplicit = -not [string]::IsNullOrWhiteSpace($resolvedDependencyRoot)
@@ -61,32 +61,38 @@ $dependencyDescription = if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoo
 }
 Write-Host "dependency root: $dependencyDescription"
 
-Invoke-HenkaNative `
-    -FilePath $cmake `
-    -Arguments $configureArguments `
-    -WorkingDirectory $repoRoot `
-    -Label "Configure Henka Engine"
+$buildStateLock = Enter-HenkaBuildStateLock
+try {
+    Invoke-HenkaNative `
+        -FilePath $cmake `
+        -Arguments $configureArguments `
+        -WorkingDirectory $repoRoot `
+        -Label "Configure Henka Engine"
 
-$buildArguments = @("--build", $buildRoot, "--config", $Configuration)
-if (-not [string]::IsNullOrWhiteSpace($BuildTarget)) {
-    $buildArguments += @("--target", $BuildTarget)
+    $buildArguments = @("--build", $buildRoot, "--config", $Configuration)
+    if (-not [string]::IsNullOrWhiteSpace($BuildTarget)) {
+        $buildArguments += @("--target", $BuildTarget)
+    }
+
+    Invoke-HenkaNative `
+        -FilePath $cmake `
+        -Arguments $buildArguments `
+        -WorkingDirectory $repoRoot `
+        -Label "Build Henka Engine $Configuration"
+
+    Invoke-HenkaNative `
+        -FilePath "powershell.exe" `
+        -Arguments @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", $provenanceScript,
+            "-RepoRoot", $repoRoot,
+            "-Configuration", $Configuration,
+            "-ExecutablePath", $artifact.Path,
+            "-ArtifactKind", $artifact.Kind,
+            "-CMakePath", $cmake) `
+        -WorkingDirectory $repoRoot `
+        -Label "Record build provenance"
+} finally {
+    Exit-HenkaBuildStateLock -Lock $buildStateLock
 }
-
-Invoke-HenkaNative `
-    -FilePath $cmake `
-    -Arguments $buildArguments `
-    -WorkingDirectory $repoRoot `
-    -Label "Build Henka Engine $Configuration"
-
-Invoke-HenkaNative `
-    -FilePath "powershell.exe" `
-    -Arguments @(
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-File", $provenanceScript,
-        "-RepoRoot", $repoRoot,
-        "-Configuration", $Configuration,
-        "-ExecutablePath", $executablePath,
-        "-CMakePath", $cmake) `
-    -WorkingDirectory $repoRoot `
-    -Label "Record build provenance"

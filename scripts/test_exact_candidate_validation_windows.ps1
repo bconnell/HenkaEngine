@@ -48,8 +48,8 @@ Add-Content -LiteralPath '$logLiteral' -Value ("build|" + `$Configuration + "|" 
 exit 0
 "@
     Write-FixtureScript -Path (Join-Path $candidateScripts "test_windows.ps1") -Body @"
-param([ValidateSet("Debug", "Release")][string]`$Configuration = "Debug", [string]`$DependencyRoot = "", [string]`$TestFilter = "")
-Add-Content -LiteralPath '$logLiteral' -Value ("test|" + `$Configuration + "|" + `$DependencyRoot + "|" + `$TestFilter)
+param([ValidateSet("Debug", "Release")][string]`$Configuration = "Debug", [string]`$DependencyRoot = "", [string]`$TestFilter = "", [switch]`$SkipBuild)
+Add-Content -LiteralPath '$logLiteral' -Value ("test|" + `$Configuration + "|" + `$DependencyRoot + "|" + `$TestFilter + "|skipbuild=" + [bool]`$SkipBuild)
 exit 0
 "@
     Write-FixtureScript -Path (Join-Path $candidateScripts "package_sandbox3d_windows.ps1") -Body @"
@@ -74,7 +74,7 @@ exit 0
 
     $expectedCalls = @(
         "build|Debug|$dependencyRoot|",
-        "test|Debug|$dependencyRoot|",
+        "test|Debug|$dependencyRoot||skipbuild=True",
         "package|Debug"
     )
     $actualCalls = @(Get-Content -LiteralPath $logPath)
@@ -106,12 +106,41 @@ exit 0
     $focusedCalls = @(Get-Content -LiteralPath $logPath | Select-Object -Last 2)
     $expectedFocusedCalls = @(
         "build|Debug|$dependencyRoot|henka_tests",
-        "test|Debug|$dependencyRoot|^henka_tests$"
+        "test|Debug|$dependencyRoot|^henka_tests$|skipbuild=True"
     )
     for ($index = 0; $index -lt $expectedFocusedCalls.Count; $index++) {
         if ($focusedCalls[$index] -ne $expectedFocusedCalls[$index]) {
             throw "Unexpected focused exact-candidate stage $($index): '$($focusedCalls[$index])'. Expected '$($expectedFocusedCalls[$index])'."
         }
+    }
+
+    $targetAwareArguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $wrapper,
+        "-RepositoryRoot", $repoRoot,
+        "-CandidatePath", $candidate,
+        "-Configuration", "Debug",
+        "-DependencyRoot", $dependencyRoot,
+        "-BuildTarget", "henka_tests",
+        "-TestFilter", "^henka_tests$"
+    )
+    $targetAware = Invoke-ValidationWrapper -Arguments $targetAwareArguments
+    if ($targetAware.ExitCode -ne 0) {
+        throw "The target-aware exact-candidate wrapper unexpectedly failed: $($targetAware.Output -join [Environment]::NewLine)"
+    }
+    $targetAwareCalls = @(Get-Content -LiteralPath $logPath | Select-Object -Last 2)
+    $expectedTargetAwareCalls = @(
+        "build|Debug|$dependencyRoot|henka_tests",
+        "test|Debug|$dependencyRoot|^henka_tests$|skipbuild=True"
+    )
+    for ($index = 0; $index -lt $expectedTargetAwareCalls.Count; $index++) {
+        if ($targetAwareCalls[$index] -ne $expectedTargetAwareCalls[$index]) {
+            throw "Unexpected target-aware exact-candidate stage $($index): '$($targetAwareCalls[$index])'. Expected '$($expectedTargetAwareCalls[$index])'."
+        }
+    }
+    if (($targetAware.Output -join [Environment]::NewLine) -notmatch "package: skipped") {
+        throw "A focused build target unexpectedly required unrelated package staging."
     }
 
     Write-FixtureScript -Path (Join-Path $candidateScripts "package_sandbox3d_windows.ps1") -Body @"

@@ -15,6 +15,8 @@ param(
 
     [string]$TestFilter = "",
 
+    [switch]$RequirePackage,
+
     [switch]$SkipPackage
 )
 
@@ -79,6 +81,7 @@ $testArguments = @(
 if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
     $testArguments += @("-TestFilter", $TestFilter)
 }
+$testArguments += "-SkipBuild"
 
 Invoke-HenkaNative `
     -FilePath "powershell.exe" `
@@ -92,7 +95,7 @@ Invoke-HenkaNative `
     -WorkingDirectory $candidate `
     -Label "Test exact Henka candidate"
 
-if (-not $SkipPackage) {
+if (-not $SkipPackage -and ([string]::IsNullOrWhiteSpace($BuildTarget) -or $RequirePackage)) {
     Invoke-HenkaNative `
         -FilePath "powershell.exe" `
         -Arguments @(
@@ -112,6 +115,6 @@ if (-not [string]::IsNullOrWhiteSpace($BuildTarget)) {
 if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
     Write-Host "test filter: $TestFilter"
 }
-if ($SkipPackage) {
+if ($SkipPackage -or (-not [string]::IsNullOrWhiteSpace($BuildTarget) -and -not $RequirePackage)) {
     Write-Host "package: skipped by explicit option"
 }

@@ -9,6 +9,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ExecutablePath,
 
+    [ValidateSet("executable", "static-library", "shared-library", "other")]
+    [string]$ArtifactKind = "executable",
+
     [Parameter(Mandatory = $true)]
     [string]$CMakePath
 )
@@ -98,6 +101,10 @@ $manifest = [ordered]@{
     architecture = if ([string]::IsNullOrWhiteSpace($env:PROCESSOR_ARCHITECTURE)) { "unknown" } else { $env:PROCESSOR_ARCHITECTURE }
     cmake_path = $cmakePath
     cmake_version = ([string]$cmakeVersionLines[0]).Trim()
+    artifact_kind = $ArtifactKind
+    artifact_relative_path = $relativeExe
+    artifact_sha256 = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    artifact_last_write_utc = (Get-Item -LiteralPath $exePath).LastWriteTimeUtc.ToString("o")
     executable_relative_path = $relativeExe
     executable_sha256 = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash.ToLowerInvariant()
     executable_last_write_utc = (Get-Item -LiteralPath $exePath).LastWriteTimeUtc.ToString("o")

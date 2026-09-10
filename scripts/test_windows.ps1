@@ -4,7 +4,9 @@ param(
 
     [string]$DependencyRoot = "",
 
-    [string]$TestFilter = ""
+    [string]$TestFilter = "",
+
+    [switch]$SkipBuild
 )
 
 Set-StrictMode -Version Latest
@@ -20,6 +22,23 @@ $ctest = $toolchain.CTestPath
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
 $resolvedDependencyRoot = $DependencyRoot
+
+if ($SkipBuild) {
+    $toolchain = Get-HenkaToolchain
+    $ctestArguments = @("--test-dir", $buildRoot, "--output-on-failure", "-C", $Configuration)
+    if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
+        $ctestArguments += @("-R", $TestFilter)
+    }
+    Write-Host "Build: skipped; executing tests against the already-proven candidate outputs"
+    Write-Host "ctest: $($toolchain.CTestPath)"
+    Invoke-HenkaNative `
+        -FilePath $toolchain.CTestPath `
+        -Arguments $ctestArguments `
+        -WorkingDirectory $repoRoot `
+        -Label "Run Henka Engine tests without rebuild"
+    exit 0
+}
+
 $dependencyRootWasExplicit = -not [string]::IsNullOrWhiteSpace($resolvedDependencyRoot)
 if ($dependencyRootWasExplicit) {
     $resolvedDependencyRoot = [System.IO.Path]::GetFullPath($resolvedDependencyRoot)
@@ -62,40 +81,46 @@ $dependencyDescription = if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoo
 }
 Write-Host "dependency root: $dependencyDescription"
 
-Invoke-HenkaNative `
-    -FilePath $cmake `
-    -Arguments $configureArguments `
-    -WorkingDirectory $repoRoot `
-    -Label "Configure Henka Engine for tests"
+$buildStateLock = Enter-HenkaBuildStateLock
+try {
+    Invoke-HenkaNative `
+        -FilePath $cmake `
+        -Arguments $configureArguments `
+        -WorkingDirectory $repoRoot `
+        -Label "Configure Henka Engine for tests"
 
-Invoke-HenkaNative `
-    -FilePath $cmake `
-    -Arguments @("--build", $buildRoot, "--config", $Configuration) `
-    -WorkingDirectory $repoRoot `
-    -Label "Build Henka Engine tests"
+    Invoke-HenkaNative `
+        -FilePath $cmake `
+        -Arguments @("--build", $buildRoot, "--config", $Configuration) `
+        -WorkingDirectory $repoRoot `
+        -Label "Build Henka Engine tests"
 
-$softwareOpenGLRoot = [string]$env:HENKA_CI_SOFTWARE_OPENGL_ROOT
-if (-not [string]::IsNullOrWhiteSpace($softwareOpenGLRoot)) {
-    $softwareOpenGLInstaller = Join-Path $PSScriptRoot "install_windows_software_opengl.ps1"
-    $softwareOpenGLTargets = @(
-        (Join-Path $buildRoot "tests\$Configuration")
-    )
-    $sandboxDirectory = Join-Path $buildRoot "examples\sandbox3d\$Configuration"
-    if (Test-Path -LiteralPath $sandboxDirectory -PathType Container) {
-        $softwareOpenGLTargets += $sandboxDirectory
+    $softwareOpenGLRoot = [string]$env:HENKA_CI_SOFTWARE_OPENGL_ROOT
+    if (-not [string]::IsNullOrWhiteSpace($softwareOpenGLRoot)) {
+        $softwareOpenGLInstaller = Join-Path $PSScriptRoot "install_windows_software_opengl.ps1"
+        $softwareOpenGLTargets = @(
+            (Join-Path $buildRoot "tests\$Configuration")
+        )
+        $sandboxDirectory = Join-Path $buildRoot "examples\sandbox3d\$Configuration"
+        if (Test-Path -LiteralPath $sandboxDirectory -PathType Container) {
+            $softwareOpenGLTargets += $sandboxDirectory
+        }
+        foreach ($targetDirectory in $softwareOpenGLTargets) {
+            Invoke-HenkaNative `
+                -FilePath "powershell.exe" `
+                -Arguments @(
+                    "-NoProfile",
+                    "-ExecutionPolicy", "Bypass",
+                    "-File", $softwareOpenGLInstaller,
+                    "-SourceDirectory", $softwareOpenGLRoot,
+                    "-TargetDirectory", $targetDirectory) `
+                -WorkingDirectory $repoRoot `
+                -Label "Install CI-only OpenGL runtime for $Configuration tests and Sandbox3D"
+        }
     }
-    foreach ($targetDirectory in $softwareOpenGLTargets) {
-        Invoke-HenkaNative `
-            -FilePath "powershell.exe" `
-            -Arguments @(
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", $softwareOpenGLInstaller,
-                "-SourceDirectory", $softwareOpenGLRoot,
-                "-TargetDirectory", $targetDirectory) `
-            -WorkingDirectory $repoRoot `
-            -Label "Install CI-only OpenGL runtime for $Configuration tests and Sandbox3D"
-    }
+
+} finally {
+    Exit-HenkaBuildStateLock -Lock $buildStateLock
 }
 
 $ctestArguments = @("--test-dir", $buildRoot, "--output-on-failure", "-C", $Configuration)
@@ -109,15 +134,20 @@ Invoke-HenkaNative `
     -WorkingDirectory $repoRoot `
     -Label "Run Henka Engine tests"
 
-Invoke-HenkaNative `
-    -FilePath "powershell.exe" `
-    -Arguments @(
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-File", $provenanceScript,
-        "-RepoRoot", $repoRoot,
-        "-Configuration", $Configuration,
-        "-ExecutablePath", $executablePath,
-        "-CMakePath", $cmake) `
-    -WorkingDirectory $repoRoot `
-    -Label "Record build provenance"
+$buildStateLock = Enter-HenkaBuildStateLock
+try {
+    Invoke-HenkaNative `
+        -FilePath "powershell.exe" `
+        -Arguments @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", $provenanceScript,
+            "-RepoRoot", $repoRoot,
+            "-Configuration", $Configuration,
+            "-ExecutablePath", $executablePath,
+            "-CMakePath", $cmake) `
+        -WorkingDirectory $repoRoot `
+        -Label "Record build provenance"
+} finally {
+    Exit-HenkaBuildStateLock -Lock $buildStateLock
+}

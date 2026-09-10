@@ -7,9 +7,9 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $git = Get-HenkaGitPath
 $helper = Join-Path $repoRoot "scripts\materialize_exact_candidate_windows.ps1"
 $fixtureParent = Join-Path $repoRoot "build\test_tmp"
-$fixtureRoot = Join-Path $fixtureParent ("exact-candidate-fixture-" + [Guid]::NewGuid().ToString("N"))
-$candidatePath = Join-Path $fixtureParent ("exact-candidate-checkout-" + [Guid]::NewGuid().ToString("N"))
-$invalidCandidatePath = Join-Path $fixtureParent ("exact-candidate-invalid-" + [Guid]::NewGuid().ToString("N"))
+$fixtureRoot = Join-Path $fixtureParent ("ecf-" + [Guid]::NewGuid().ToString("N"))
+$candidatePath = Join-Path $fixtureRoot ("build\ec-" + [Guid]::NewGuid().ToString("N"))
+$invalidCandidatePath = Join-Path $fixtureRoot ("build\bad-" + [Guid]::NewGuid().ToString("N"))
 
 function Invoke-FixtureGit {
     param(
@@ -88,6 +88,7 @@ try {
     Assert-Condition (Test-Path -LiteralPath $helper -PathType Leaf) `
         "The exact candidate helper is missing: $helper"
     New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path -Parent $candidatePath) -Force | Out-Null
     New-Item -ItemType Directory -Path $fixtureParent -Force | Out-Null
 
     Invoke-FixtureGit @("init", "--quiet") | Out-Null
