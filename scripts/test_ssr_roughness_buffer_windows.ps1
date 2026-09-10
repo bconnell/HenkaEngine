@@ -36,6 +36,9 @@ if ($renderer -notmatch 'schlickFresnel' -or
     $renderer -notmatch 'filteredScreenReflection') {
     $missing += 'validated Fresnel-weighted screen-space reflection surface and roughness safeguards'
 }
+if ($renderer -notmatch 'previousValid=depthDelta<0\.0;') {
+    $missing += 'SSR refinement bracket limited to samples in front of the depth surface'
+}
 if ($renderer -notmatch 'hdr_roughness_texture != 0U') {
     $missing += 'fail-closed SSR roughness readiness gate'
 }
