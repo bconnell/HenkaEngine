@@ -59,6 +59,38 @@ jobs:
         shell: powershell
         run: .\scripts\test_reflection_probe_blending_windows.ps1
 
+      - name: Check PBR IBL reference contract
+        shell: powershell
+        run: .\scripts\test_pbr_ibl_reference_windows.ps1
+
+      - name: Check PBR color-space reference contract
+        shell: powershell
+        run: .\scripts\test_pbr_color_space_reference_windows.ps1
+
+      - name: Check PBR energy reference contract
+        shell: powershell
+        run: .\scripts\test_pbr_energy_reference_windows.ps1
+
+      - name: Check PBR normal-map reference contract
+        shell: powershell
+        run: .\scripts\test_pbr_normal_map_reference_windows.ps1
+
+      - name: Check PBR reference-lighting contract
+        shell: powershell
+        run: .\scripts\test_pbr_reference_lighting_windows.ps1
+
+      - name: Check lighting-shadow reference contract
+        shell: powershell
+        run: .\scripts\test_lighting_shadow_reference_windows.ps1
+
+      - name: Check scene-probe diffuse contract
+        shell: powershell
+        run: .\scripts\test_scene_probe_diffuse_windows.ps1
+
+      - name: Check scene-probe reference contract
+        shell: powershell
+        run: .\scripts\test_scene_probe_reference_windows.ps1
+
       - name: Check renderer scene target limits
         shell: powershell
         run: .\scripts\test_renderer_scene_target_limits_windows.ps1

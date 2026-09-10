@@ -410,6 +410,46 @@ if(WIN32)
             ${CMAKE_SOURCE_DIR}/scripts/test_reflection_probe_blending_windows.ps1)
 
     add_test(
+        NAME henka_pbr_ibl_reference_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_pbr_ibl_reference_windows.ps1)
+
+    add_test(
+        NAME henka_pbr_color_space_reference_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_pbr_color_space_reference_windows.ps1)
+
+    add_test(
+        NAME henka_pbr_energy_reference_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_pbr_energy_reference_windows.ps1)
+
+    add_test(
+        NAME henka_pbr_normal_map_reference_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_pbr_normal_map_reference_windows.ps1)
+
+    add_test(
+        NAME henka_pbr_reference_lighting_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_pbr_reference_lighting_windows.ps1)
+
+    add_test(
+        NAME henka_lighting_shadow_reference_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_lighting_shadow_reference_windows.ps1)
+
+    add_test(
+        NAME henka_scene_probe_diffuse_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_scene_probe_diffuse_windows.ps1)
+
+    add_test(
+        NAME henka_scene_probe_reference_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_scene_probe_reference_windows.ps1)
+
+    add_test(
         NAME henka_ibl_diagnostic_control_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_ibl_diagnostic_controls_windows.ps1
