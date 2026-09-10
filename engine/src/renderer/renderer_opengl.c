@@ -592,6 +592,32 @@ static void henka_opengl_restore_texture_binding_state(
     glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)state->previous_cube_texture);
 }
 
+#define HENKA_OPENGL_FRAME_TEXTURE_UNIT_COUNT 27U
+
+static void henka_opengl_reset_frame_texture_bindings(void)
+{
+    size_t unit;
+
+    for (unit = 0U; unit < HENKA_OPENGL_FRAME_TEXTURE_UNIT_COUNT; ++unit)
+    {
+        g_gl.ActiveTexture(GL_TEXTURE0 + (GLenum)unit);
+        switch (unit)
+        {
+            case 7U:
+            case 8U:
+            case 10U:
+            case 13U:
+            case 26U:
+                glBindTexture(GL_TEXTURE_CUBE_MAP, 0U);
+                break;
+            default:
+                glBindTexture(GL_TEXTURE_2D, 0U);
+                break;
+        }
+    }
+    g_gl.ActiveTexture(GL_TEXTURE0);
+}
+
 static bool henka_opengl_extension_supported(const char* name)
 {
     GLint extension_count = 0;
@@ -4641,8 +4667,7 @@ henka_result henka_opengl_renderer_abort_frame(
     g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
     g_gl.BindVertexArray(0);
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
-    g_gl.ActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    henka_opengl_reset_frame_texture_bindings();
     g_gl.UseProgram(0);
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
@@ -7010,49 +7035,7 @@ henka_result henka_opengl_renderer_draw_scene(
     }
     g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
     g_gl.BindVertexArray(0);
-    g_gl.ActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    g_gl.ActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    g_gl.ActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    g_gl.ActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    g_gl.ActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    g_gl.ActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    g_gl.ActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    g_gl.ActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-    g_gl.ActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-    g_gl.ActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    g_gl.ActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-    g_gl.ActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    g_gl.ActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    g_gl.ActiveTexture(GL_TEXTURE13);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-    {
-        uint32_t layer_index;
-        for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
-        {
-            g_gl.ActiveTexture((GLenum)(GL_TEXTURE14 + layer_index));
-            glBindTexture(GL_TEXTURE_2D, 0);
-            g_gl.ActiveTexture((GLenum)(GL_TEXTURE18 + layer_index));
-            glBindTexture(GL_TEXTURE_2D, 0);
-            g_gl.ActiveTexture((GLenum)(GL_TEXTURE22 + layer_index));
-            glBindTexture(GL_TEXTURE_2D, 0);
-        }
-    }
-    g_gl.ActiveTexture(GL_TEXTURE26);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-    g_gl.ActiveTexture(GL_TEXTURE0);
+    henka_opengl_reset_frame_texture_bindings();
     g_gl.UseProgram(0);
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
