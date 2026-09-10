@@ -8244,6 +8244,8 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     henka_vec3* tangents;
     henka_vertex* upload_vertices;
     size_t vertex_bytes;
+    GLint previous_array_buffer = 0;
+    GLint previous_vertex_array = 0;
 
     if (renderer == NULL || vertices == NULL || indices == NULL || out_mesh == NULL || *out_mesh != NULL ||
         vertex_count <= 0 || index_count <= 0 ||
@@ -8436,6 +8438,8 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
         }
     }
 
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previous_array_buffer);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previous_vertex_array);
     g_gl.GenVertexArrays(1, &mesh_data->vao);
     g_gl.GenBuffers(1, &mesh_data->vertex_buffer);
     g_gl.GenBuffers(1, &mesh_data->index_buffer);
@@ -8461,7 +8465,8 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     /* Terrain enables this attribute after creation. Keeping it disabled for
      * ordinary meshes preserves the default (0, 0, 0, 1) input. */
     g_gl.DisableVertexAttribArray(14);
-    g_gl.BindVertexArray(0);
+    g_gl.BindVertexArray((GLuint)previous_vertex_array);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, (GLuint)previous_array_buffer);
 
     henka_free(bitangents);
     henka_free(tangents);
