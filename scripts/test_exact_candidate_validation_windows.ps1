@@ -143,6 +143,28 @@ exit 0
         throw "A focused build target unexpectedly required unrelated package staging."
     }
 
+    $invalidTargetArguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $wrapper,
+        "-RepositoryRoot", $repoRoot,
+        "-CandidatePath", $candidate,
+        "-Configuration", "Debug",
+        "-DependencyRoot", $dependencyRoot,
+        "-BuildTarget", "sandbox"
+    )
+    $invalidTarget = Invoke-ValidationWrapper -Arguments $invalidTargetArguments
+    if ($invalidTarget.ExitCode -eq 0) {
+        throw "The exact-candidate wrapper accepted the unsupported sandbox build target alias."
+    }
+    $invalidTargetText = $invalidTarget.Output -join [Environment]::NewLine
+    if ($invalidTargetText -notmatch "No target-aware provenance artifact mapping exists") {
+        throw "The unsupported build target failure did not identify the target mapping boundary: $invalidTargetText"
+    }
+    if ((Get-Content -LiteralPath $logPath).Count -ne $actualCalls.Count + $focusedCalls.Count + $targetAwareCalls.Count) {
+        throw "The unsupported build target reached a candidate validation stage before failing preflight."
+    }
+
     Write-FixtureScript -Path (Join-Path $candidateScripts "package_sandbox3d_windows.ps1") -Body @"
 param([ValidateSet("Debug", "Release")][string]`$Configuration = "Debug")
 Add-Content -LiteralPath '$logLiteral' -Value ("package-failure|" + `$Configuration)

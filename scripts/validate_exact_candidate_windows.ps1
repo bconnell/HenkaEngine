@@ -38,6 +38,15 @@ if (-not (Test-Path -LiteralPath $candidateCommon -PathType Leaf)) {
 }
 . $candidateCommon
 
+# Resolve the requested build target before creating candidate build state or
+# invoking any candidate validation stage. The artifact mapping is the shared
+# authority for accepted CMake target names and prevents a friendly alias from
+# reaching an expensive configure/build operation.
+$null = Get-HenkaBuildArtifact `
+    -BuildRoot (Join-Path $candidate "build") `
+    -Configuration $Configuration `
+    -BuildTarget $BuildTarget
+
 $dependency = $DependencyRoot
 if ([string]::IsNullOrWhiteSpace($dependency)) {
     $dependency = Join-Path $repository "build\_deps"
