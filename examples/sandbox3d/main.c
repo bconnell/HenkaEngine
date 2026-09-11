@@ -14871,8 +14871,6 @@ static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state
     material.name = "New Cube Material";
     material.type = HENKA_MATERIAL_TYPE_LIT;
     material.shader = state->basic_shader;
-    material.base_color_texture = state->cube_texture;
-    material.use_texture = state->cube_texture != NULL;
     material.base_color = (henka_vec4){0.72f, 0.82f, 0.96f, 1.0f};
     material.roughness = 0.46f;
     material.metallic = 0.0f;
@@ -14921,7 +14919,7 @@ static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state
     }
 
     if (state->physics.world != NULL &&
-        sandbox3d_bind_authoring_physics(state, authoring_object, state->cube_entity) != HENKA_SUCCESS)
+        sandbox3d_bind_authoring_physics(state, authoring_object, result.affected_entity) != HENKA_SUCCESS)
     {
         sandbox3d_unregister_authoring_object(state, authoring_object);
         sandbox3d_release_authoring_physics(state, authoring_object);
