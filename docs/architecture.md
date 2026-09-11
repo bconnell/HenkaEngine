@@ -261,7 +261,10 @@ Texture upload supports sRGB and linear internal formats, sampler policy, mip se
 
 The material path evaluates base color, normal, metallic-roughness, validated dielectric specular factor/color and IOR, occlusion, emissive data, and clearcoat.
 
-The renderer reserves explicit program identities for future environment, IBL, shadow, post, debug, and UI contracts.
+The renderer assigns explicit program identities to the current environment,
+IBL conversion and filtering, shadow, tone-map, bloom, viewport, and UI
+contracts. Dedicated debug shader identities remain reserved for future
+diagnostic programs.
 
 ### Sandbox
 
