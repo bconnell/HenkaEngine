@@ -451,7 +451,8 @@ Interior bevel rejects:
 Mixed interior/boundary bevel, branching or otherwise unsupported connected
 interior domains, and broader edge topology operations remain in progress.
 
-The shared Sandbox modeling session and Authoring panel expose the bounded preview/cancel/apply path for boundary-edge extrusion.
+The shared Sandbox modeling session and Authoring panel expose the bounded
+preview/cancel/apply path for face and boundary-edge extrusion.
 
 ### Current limitations
 
@@ -497,7 +498,11 @@ Both reject unsupported source topology and invalid direction/distance inputs.
 
 The topology overlay presents all authored source vertices and distinguishes loose vertices, boundary edges, and manifold edges with deterministic high-contrast markers.
 
-The shared Sandbox modeling-operator session and Authoring panel can preview, cancel, and apply explicit-axis extrusion for exactly one selected loose vertex or standalone edge through core transactional operations. The same control routes one or a bounded pairwise batch of selected open boundary edges through face-normal surface-connected extrusion.
+The shared Sandbox modeling-operator session and Authoring panel can preview,
+cancel, and apply extrusion for exactly one selected face, loose vertex, or
+standalone edge through core transactional operations. The same control routes
+one or a bounded pairwise batch of selected open boundary edges through
+face-normal surface-connected extrusion.
 
 ### Renderer-backed loose geometry
 

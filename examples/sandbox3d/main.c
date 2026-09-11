@@ -884,6 +884,12 @@ static sandbox3d_modeling_operator_kind sandbox3d_authoring_extrude_operator_kin
     {
         return SANDBOX3D_MODELING_OPERATOR_NONE;
     }
+    if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)
+    {
+        return selected_count == 1U
+            ? SANDBOX3D_MODELING_OPERATOR_EXTRUDE
+            : SANDBOX3D_MODELING_OPERATOR_NONE;
+    }
     if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
     {
         return selected_count == 1U
@@ -935,8 +941,12 @@ static henka_result sandbox3d_preview_authoring_extrude(
         sandbox3d_authoring_object_get_selected_component_count(
             state->authoring_object) == 0U ||
         (selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
-         selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE) ||
+         selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE &&
+         selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE) ||
         (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+         sandbox3d_authoring_object_get_selected_component_count(
+             state->authoring_object) != 1U) ||
+        (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
          sandbox3d_authoring_object_get_selected_component_count(
              state->authoring_object) != 1U) ||
         operator_kind == SANDBOX3D_MODELING_OPERATOR_NONE)
@@ -949,7 +959,8 @@ static henka_result sandbox3d_preview_authoring_extrude(
         state->authoring_object,
         operator_kind);
     if (result == HENKA_SUCCESS &&
-        operator_kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE)
+        operator_kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+        selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE)
     {
         result = sandbox3d_modeling_operator_set_axis(
             &state->modeling_operator,
@@ -24850,41 +24861,33 @@ static void sandbox3d_draw_object_details_panel(
                 state->ui,
                 "authoring_priority_face_extrude_stable",
                 (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
-                "Extrude"))
+                "Preview Extrude"))
         {
             const henka_result extrude_result =
-                sandbox3d_authoring_object_extrude_selected_face(
-                    state->authoring_object,
-                    0.25f);
+                sandbox3d_preview_authoring_extrude(state, "0.25");
             printf(
-                "Native authoring face extrude request: name=%s result=%s selected_components=%zu.\n",
+                "Native authoring face extrude preview: name=%s result=%s selected_components=%zu.\n",
                 display_name,
                 henka_result_to_string(extrude_result),
                 sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
             fflush(stdout);
             if (extrude_result == HENKA_SUCCESS)
             {
-                const henka_authoring_mesh_counts counts =
-                    henka_authoring_mesh_get_counts(
-                        sandbox3d_authoring_object_get_mesh(state->authoring_object));
-                sandbox3d_mark_generic_modeling_applied(state, entity);
                 printf(
-                    "Native authoring workflow: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
-                    display_name,
-                    counts.vertices,
-                    counts.faces);
+                    "Native authoring workflow: face extrude preview ready for %s; source_state=HENKA_NATIVE_EDITABLE_SOURCE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                    display_name);
                 fflush(stdout);
                 sandbox3d_set_status(
                     state,
                     false,
-                    "Authoring face extruded and evaluated into the scene.");
+                    "Face Extrude preview ready; use Apply or Cancel.");
             }
             else
             {
                 sandbox3d_set_status(
                     state,
                     true,
-                    "Authoring face extrude rejected; source retained.");
+                    "Face Extrude preview rejected; source retained.");
             }
         }
         if (henka_ui_button(
@@ -26450,8 +26453,11 @@ details_group_authoring:
                         }
                     }
                     if ((selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
-                         selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE) &&
+                         selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE ||
+                         selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE) &&
                         selected_component_count > 0U &&
+                        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
+                         selected_component_count == 1U) &&
                         sandbox3d_details_flow_next_row(
                             state, flow_desc.bounds, 28.0f, 1U, &row) &&
                         row.width >= 290.0f)
@@ -26493,12 +26499,16 @@ details_group_authoring:
                                 state,
                                 preview_result != HENKA_SUCCESS,
                                 preview_result == HENKA_SUCCESS
-                                    ? (boundary_edge_extrude
-                                        ? "Boundary Edge Extrude preview ready along face normal; Apply or Cancel."
-                                        : "Loose Extrude preview ready on Y; Apply or Cancel.")
-                                    : (selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
-                                        ? "Edge Extrude rejected; select a standalone or open boundary edge and use a nonzero amount."
-                                        : "Loose Extrude rejected; select one loose vertex and use a nonzero amount."));
+                                    ? (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE
+                                        ? "Face Extrude preview ready along face normal; Apply or Cancel."
+                                        : boundary_edge_extrude
+                                            ? "Boundary Edge Extrude preview ready along face normal; Apply or Cancel."
+                                            : "Loose Extrude preview ready on Y; Apply or Cancel.")
+                                    : (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE
+                                        ? "Face Extrude rejected; select one valid face and use a nonzero amount."
+                                        : selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
+                                            ? "Edge Extrude rejected; select a standalone or open boundary edge and use a nonzero amount."
+                                            : "Loose Extrude rejected; select one loose vertex and use a nonzero amount."));
                         }
                         if (extrude_preview_active &&
                             sandbox3d_details_flow_next_row(
@@ -26518,12 +26528,16 @@ details_group_authoring:
                                     state,
                                     apply_result != HENKA_SUCCESS,
                                     apply_result == HENKA_SUCCESS
-                                        ? (boundary_edge_extrude
-                                            ? "Boundary Edge Extrude applied transactionally."
-                                            : "Loose Extrude applied transactionally.")
-                                        : (boundary_edge_extrude
-                                            ? "Boundary Edge Extrude could not be applied; source retained."
-                                            : "Loose Extrude could not be applied; source retained."));
+                                        ? (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE
+                                            ? "Face Extrude applied transactionally."
+                                            : boundary_edge_extrude
+                                                ? "Boundary Edge Extrude applied transactionally."
+                                                : "Loose Extrude applied transactionally.")
+                                        : (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE
+                                            ? "Face Extrude could not be applied; source retained."
+                                            : boundary_edge_extrude
+                                                ? "Boundary Edge Extrude could not be applied; source retained."
+                                                : "Loose Extrude could not be applied; source retained."));
                                 if (apply_result == HENKA_SUCCESS)
                                 {
                                     sandbox3d_mark_generic_modeling_applied(state, entity);
@@ -26542,12 +26556,16 @@ details_group_authoring:
                                     state,
                                     cancel_result != HENKA_SUCCESS,
                                     cancel_result == HENKA_SUCCESS
-                                        ? (boundary_edge_extrude
-                                            ? "Boundary Edge Extrude canceled; source retained."
-                                            : "Loose Extrude canceled; source retained.")
-                                        : (boundary_edge_extrude
-                                            ? "Boundary Edge Extrude cancellation failed; inspect the authoring state."
-                                            : "Loose Extrude cancellation failed; inspect the authoring state."));
+                                        ? (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE
+                                            ? "Face Extrude canceled; source retained."
+                                            : boundary_edge_extrude
+                                                ? "Boundary Edge Extrude canceled; source retained."
+                                                : "Loose Extrude canceled; source retained.")
+                                        : (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE
+                                            ? "Face Extrude cancellation failed; inspect the authoring state."
+                                            : boundary_edge_extrude
+                                                ? "Boundary Edge Extrude cancellation failed; inspect the authoring state."
+                                                : "Loose Extrude cancellation failed; inspect the authoring state."));
                             }
                         }
                     }

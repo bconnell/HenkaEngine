@@ -103,7 +103,8 @@ henka_result sandbox3d_modeling_operator_begin(
     }
     if (kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
         (selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
-         selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE))
+         selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE &&
+         selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -394,10 +395,12 @@ henka_result sandbox3d_modeling_operator_preview(
             session->selection_count != 1U) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
-             session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE)) ||
+             session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE &&
+             session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
             session->selection_count != 1U) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+            session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE &&
             session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_NONE) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE ||
@@ -600,7 +603,7 @@ henka_result sandbox3d_modeling_operator_preview(
                     &report);
             }
         }
-        else
+        else if (session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
         {
             result = henka_authoring_mesh_extrude_loose_edge(
                 candidate,
@@ -610,6 +613,14 @@ henka_result sandbox3d_modeling_operator_preview(
                 &extrude_result_edge,
                 &extrude_result_face,
                 &report);
+        }
+        else
+        {
+            result = henka_authoring_mesh_extrude_face(
+                candidate,
+                (henka_authoring_face_id)session->selection_ids[0U],
+                applied_amount,
+                &extrude_result_face);
         }
     }
     if (result == HENKA_SUCCESS)

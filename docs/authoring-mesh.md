@@ -104,6 +104,10 @@ Current operations include:
 
 Each operation works on a clone and publishes only a validated result. Capacity, topology, geometry, or non-manifold rejection preserves the committed source.
 
+The shared Sandbox modeling session also routes one selected face through the
+same preview, Apply, Cancel, and undo boundary as the vertex and edge
+extrusion paths.
+
 Face flip preserves:
 
 - logical face identity;
@@ -469,7 +473,10 @@ It rejects face-backed edges, mismatched endpoint materials, degenerate offsets,
 
 ### Sandbox loose-component session
 
-The shared Sandbox modeling-operator session previews, cancels, and applies explicit-axis extrusion for exactly one selected loose vertex or standalone edge. The Authoring panel exposes the same bounded Preview/Apply/Cancel path with a numeric Y-axis amount.
+The shared Sandbox modeling-operator session previews, cancels, and applies
+extrusion for exactly one selected face, loose vertex, or standalone edge.
+The Authoring panel exposes the same bounded Preview/Apply/Cancel path with a
+face-normal amount for faces or a numeric Y-axis amount for loose components.
 
 Dedicated broader loose-component creation and generalized extrusion workflows remain unfinished.
 
