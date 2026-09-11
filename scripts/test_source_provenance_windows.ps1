@@ -45,6 +45,38 @@ function Assert-Test {
 }
 
 try {
+    [System.IO.Directory]::CreateDirectory($tempRoot) | Out-Null
+    $crossShellScript = Join-Path $tempRoot "cross-shell.ps1"
+    Write-HenkaUtf8NoBom -Path $crossShellScript -Text @'
+param(
+    [Parameter(Mandatory = $true)][string]$RepoRoot,
+    [Parameter(Mandatory = $true)][string]$CommonPath
+)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+. $CommonPath
+$identity = Get-HenkaSourceIdentity -RepoRoot $RepoRoot
+Write-Output ("{0}|{1}|{2}" -f $identity.commit_sha,$identity.source_state,$identity.source_identity)
+'@
+    $crossShellOutput = @(
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $crossShellScript `
+            -RepoRoot $repoRoot `
+            -CommonPath (Join-Path $PSScriptRoot "henka_script_common.ps1") 2>&1 |
+            ForEach-Object { [string]$_ }
+    )
+    $crossShellExitCode = $LASTEXITCODE
+    Assert-Test ($crossShellExitCode -eq 0) `
+        "The Windows PowerShell source identity probe failed: $($crossShellOutput -join [Environment]::NewLine)"
+    $crossShellRecord = @($crossShellOutput | Where-Object { $_ -match '^[0-9a-f]{40}\|(clean|working-tree)\|[0-9a-f]{64}$' })
+    Assert-Test ($crossShellRecord.Count -eq 1) `
+        "The Windows PowerShell source identity probe returned an unexpected record: $($crossShellOutput -join [Environment]::NewLine)"
+    $crossShellFields = $crossShellRecord[0].Split('|', 3)
+    $currentIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
+    Assert-Test ($crossShellFields[0] -eq $currentIdentity.commit_sha -and
+        $crossShellFields[1] -eq $currentIdentity.source_state -and
+        $crossShellFields[2] -eq $currentIdentity.source_identity) `
+        "Source identity must be identical across the repository's supported PowerShell hosts."
+
     [System.IO.Directory]::CreateDirectory($repoA) | Out-Null
     Invoke-TestGit -WorkingDirectory $repoA -Arguments @("init", "--quiet") | Out-Null
     Invoke-TestGit -WorkingDirectory $repoA -Arguments @("config", "user.name", "Henka provenance test") | Out-Null

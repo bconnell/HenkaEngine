@@ -390,9 +390,13 @@ function Get-HenkaSourceIdentity {
     $commitExitCode = $LASTEXITCODE
     $statusLines = @(& $git -C $repoPath status --porcelain=v1 --untracked-files=all 2>$null)
     $statusExitCode = $LASTEXITCODE
-    $trackedRaw = [string](& $git -C $repoPath ls-files -z 2>$null)
+    # Keep Git path enumeration line-oriented here. Native NUL-delimited
+    # output is decoded differently by Windows PowerShell and PowerShell 7,
+    # which made the same clean tree receive different identities depending
+    # on which supported host invoked this shared helper.
+    $trackedPaths = @(& $git -C $repoPath ls-files --cached 2>$null)
     $trackedExitCode = $LASTEXITCODE
-    $untrackedRaw = [string](& $git -C $repoPath ls-files --others --exclude-standard -z 2>$null)
+    $untrackedPaths = @(& $git -C $repoPath ls-files --others --exclude-standard 2>$null)
     $untrackedExitCode = $LASTEXITCODE
 
     if ($commitExitCode -ne 0 -or
@@ -404,13 +408,19 @@ function Get-HenkaSourceIdentity {
         throw "Git source identity query failed for $repoPath."
     }
 
-    $relativePaths = @(
-        @($trackedRaw -split [char]0) +
-        @($untrackedRaw -split [char]0) |
-            Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
-            ForEach-Object { ([string]$_).Replace("\", "/") } |
-            Sort-Object -Unique
-    )
+    $relativePathList = New-Object 'System.Collections.Generic.List[string]'
+    $relativePathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+    foreach ($path in @($trackedPaths + $untrackedPaths)) {
+        if ([string]::IsNullOrWhiteSpace([string]$path)) {
+            continue
+        }
+        $normalizedPath = ([string]$path).Replace("\", "/")
+        if ($relativePathSet.Add($normalizedPath)) {
+            [void]$relativePathList.Add($normalizedPath)
+        }
+    }
+    $relativePathList.Sort([System.StringComparer]::Ordinal)
+    $relativePaths = @($relativePathList)
     $manifestBuilder = New-Object System.Text.StringBuilder
     [void]$manifestBuilder.Append("commit`0")
     [void]$manifestBuilder.Append(([string]$commitLines[0]).Trim())
