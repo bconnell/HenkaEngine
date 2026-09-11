@@ -18864,6 +18864,20 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
 
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONFIRM_TRANSFORM))
     {
+        const henka_entity committed_entity =
+            sandbox3d_authoring_object_get_entity(
+                state->modeling_operator.object);
+        const sandbox3d_modeling_operator_kind committed_kind =
+            state->modeling_operator.kind;
+        const sandbox3d_authoring_selection_mode committed_selection_mode =
+            sandbox3d_authoring_object_get_selection_mode(
+                state->modeling_operator.object);
+        const size_t committed_selected_count =
+            sandbox3d_authoring_object_get_selected_component_count(
+                state->modeling_operator.object);
+        const char* committed_name = state->scene == NULL
+            ? NULL
+            : henka_scene_get_entity_name(state->scene, committed_entity);
         if (henka_input_was_key_pressed(engine, HENKA_KEY_ENTER))
         {
             henka_input_consume_key_press(engine, HENKA_KEY_ENTER);
@@ -18879,7 +18893,16 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
         result = sandbox3d_modeling_operator_commit(&state->modeling_operator);
         if (result == HENKA_SUCCESS)
         {
+            sandbox3d_mark_generic_modeling_applied(state, committed_entity);
             printf("Modeling operator: mouse move committed.\n");
+            if (committed_kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+                committed_selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)
+            {
+                printf(
+                    "Native authoring face extrude request: name=%s result=success selected_components=%zu.\n",
+                    committed_name == NULL ? "(unnamed)" : committed_name,
+                    committed_selected_count);
+            }
             fflush(stdout);
             sandbox3d_set_status(state, false, "Model move confirmed.");
         }

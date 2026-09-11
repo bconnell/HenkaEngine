@@ -196,6 +196,40 @@ function Click-LoggedControl {
         -Y ([double]$match.Groups[$YGroup].Value + $YOffset)
 }
 
+function Invoke-VisibleFaceExtrude {
+    param(
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][string]$XGroup,
+        [Parameter(Mandatory = $true)][string]$YGroup,
+        [Parameter(Mandatory = $true)][string]$FailureMessage
+    )
+
+    $previewPattern = 'Native authoring face extrude preview:.*result=success\b'
+    $commitPattern = 'Native authoring face extrude request:.*result=success\b'
+    $previewCount = Get-LogMatchCount -Path $stdoutPath -Pattern $previewPattern
+    Click-LoggedControl `
+        -LogPath $stdoutPath `
+        -EventPath $automationInputPath `
+        -Pattern $Pattern `
+        -XGroup $XGroup -YGroup $YGroup
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $previewCount `
+            -Pattern $previewPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw $FailureMessage
+    }
+    $commitCount = Get-LogMatchCount -Path $stdoutPath -Pattern $commitPattern
+    Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "Enter"
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $commitCount `
+            -Pattern $commitPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw $FailureMessage
+    }
+}
+
 function Wait-AssetTransition {
     param(
         [Parameter(Mandatory = $true)][string]$LogPath,
@@ -509,14 +543,10 @@ try {
         throw "The visible numeric modeling move did not commit through the operator transaction."
     }
 
-    Click-LoggedControl `
-        -LogPath $stdoutPath `
-        -EventPath $automationInputPath `
+    Invoke-VisibleFaceExtrude `
         -Pattern ("Native authoring face edit tools: name=" + [Regex]::Escape($authoringName) + ' extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width=') `
-        -XGroup "x" -YGroup "y"
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring face extrude request:.*result=success" -TimeoutMilliseconds 5000)) {
-        throw "The visible face extrude did not commit successfully."
-    }
+        -XGroup "x" -YGroup "y" `
+        -FailureMessage "The visible face extrude did not commit successfully."
     Start-Sleep -Milliseconds 500
     # Component editing keeps the evaluated solid surface and clean object
     # highlight visible by default. Capture that ordinary presentation first.
@@ -640,14 +670,10 @@ try {
     if (-not $reopenedPicked) {
         throw "The visible reopened asset did not produce a fresh selected face before re-edit."
     }
-    Click-LoggedControl `
-        -LogPath $stdoutPath `
-        -EventPath $automationInputPath `
+    Invoke-VisibleFaceExtrude `
         -Pattern 'Native authoring face edit tools: name=(?<name>.+?) extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width=' `
-        -XGroup "x" -YGroup "y"
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring face extrude request:.*result=success" -TimeoutMilliseconds 5000)) {
-        throw "The post-reload visible edit did not commit successfully."
-    }
+        -XGroup "x" -YGroup "y" `
+        -FailureMessage "The post-reload visible edit did not commit successfully."
 
     $manifest = Join-Path $runtimeDirectory ("user\saves\$assetName.asset")
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
