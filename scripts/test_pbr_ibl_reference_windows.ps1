@@ -226,19 +226,21 @@ try {
                 }
             }
 
-            # Place the defect at a checker sample location on the first
-            # sphere. Its four-neighbour contrast is intentionally local, so
-            # this is not merely a broad roughness-ladder step.
+            # Place defects at checker sample locations on the first sphere.
+            # Their four-neighbour contrast is intentionally local, so this
+            # is not merely a broad roughness-ladder step.
             $knotBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(250, 250, 250))
             try {
                 $firstCenterX = [int][Math]::Round($bitmap.Width * $centers[0][0])
                 $firstCenterY = [int][Math]::Round($bitmap.Height * $centers[0][1])
-                $graphics.FillEllipse(
-                    $knotBrush,
-                    $firstCenterX - 7,
-                    $firstCenterY + 43,
-                    14,
-                    14)
+                foreach ($offsetY in @(-50, 50)) {
+                    $graphics.FillEllipse(
+                        $knotBrush,
+                        $firstCenterX - 7,
+                        $firstCenterY + $offsetY - 7,
+                        14,
+                        14)
+                }
             }
             finally {
                 $knotBrush.Dispose()
@@ -264,8 +266,9 @@ try {
     if ($null -eq $checkerFailure) {
         throw 'IBL checker synthetic localized-knot negative control unexpectedly passed.'
     }
-    if ($checkerFailure.Exception.Message -notmatch 'localized-bright-knots') {
-        throw "IBL checker synthetic localized-knot negative control failed for an unexpected reason: $($checkerFailure.Exception.Message)"
+    if ($checkerFailure.Exception.Message -notmatch 'upper-center-lobes' -or
+        $checkerFailure.Exception.Message -notmatch 'localized-bright-knots') {
+        throw "IBL checker synthetic two-sided localized-knot negative control failed for an unexpected reason: $($checkerFailure.Exception.Message)"
     }
     $negativeControlPassed = $true
 }
