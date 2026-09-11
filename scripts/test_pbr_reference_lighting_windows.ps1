@@ -25,4 +25,11 @@ Assert-Contract ($fillBlock -notmatch 'SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING
 Assert-Contract ($fillBlock -notmatch 'SANDBOX3D_REALISM_REFERENCE_KIND_SSS') `
     'The subsurface reference must retain its dedicated back-light contract.'
 
+$lightingCalibrationCondition = '(?s)henka_scene_set_ambient_color\(.*?state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING.*?if \(state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING\).*?henka_scene_set_light_color\(.*?henka_scene_set_light_intensity\('
+Assert-Contract ($sandbox -match $lightingCalibrationCondition) `
+    'The lighting reference must explicitly calibrate its scene-owned directional source instead of inheriting the default scene intensity.'
+$lightingEnvironmentCondition = '(?s)if \(state->capture_mode_requested && state->environment_texture != NULL.*?environment\.mode = HENKA_SCENE_ENVIRONMENT_HDRI.*?henka_scene_set_environment\(state->scene, environment\).*?if \(state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING &&\s*state->capture_mode_requested.*?environment\.mode = HENKA_SCENE_ENVIRONMENT_GRADIENT.*?henka_scene_set_environment\(state->scene, environment\)'
+Assert-Contract ($sandbox -match $lightingEnvironmentCondition) `
+    'The lighting reference must use the bounded gradient environment so direct key/fill/rim response is not washed out by the packaged HDRI.'
+
 Write-Output 'PBR reference lighting source contract test passed.'

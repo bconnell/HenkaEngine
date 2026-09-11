@@ -16118,6 +16118,21 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
             HENKA_LOG_WARN("Deterministic capture environment could not be installed; retaining the loaded environment.");
         }
     }
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING &&
+        state->capture_mode_requested &&
+        henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
+    {
+        /* The lighting reference measures the scene-owned directional key and
+         * local key/fill/rim sources. Keep the packaged studio HDRI available
+         * to other reference profiles, but use the bounded gradient for this
+         * direct-light fixture so environment radiance cannot wash out the
+         * spatial response being measured. */
+        environment.mode = HENKA_SCENE_ENVIRONMENT_GRADIENT;
+        if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_WARN("Lighting reference environment isolation could not be applied; retaining the loaded environment.");
+        }
+    }
     if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_IBL_ROTATION &&
         henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
     {
@@ -34300,6 +34315,17 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING
             ? (henka_vec3){0.06f, 0.08f, 0.12f}
             : (henka_vec3){0.18f, 0.20f, 0.25f});
+    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING)
+    {
+        /* The lighting reference owns three local sources in addition to the
+         * scene directional key. Keep that controlled fixture out of the
+         * default scene's stronger directional exposure so Rendered mode can
+         * show spatial separation without clipping the shared material. */
+        henka_scene_set_light_color(
+            state->scene,
+            (henka_vec3){1.0f, 0.86f, 0.72f});
+        henka_scene_set_light_intensity(state->scene, 1.25f);
+    }
     {
         uint32_t light_index;
         const bool isolated_ibl_reference = sandbox3d_is_ibl_reference_kind(
@@ -34320,7 +34346,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                     (henka_vec3){-3.5f, 5.5f, 3.5f},
                     henka_vec3_normalize((henka_vec3){0.45f, -0.72f, -0.52f}),
                     (henka_vec3){1.0f, 0.62f, 0.36f},
-                    34.0f,
+                    state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING
+                        ? 12.0f
+                        : 34.0f,
                     16.0f,
                     0.92f,
                     0.72f,
@@ -34341,7 +34369,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                     (henka_vec3){3.5f, 3.0f, 1.5f},
                     (henka_vec3){0.0f, -1.0f, 0.0f},
                     (henka_vec3){0.28f, 0.46f, 1.0f},
-                    15.0f,
+                    state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING
+                        ? 6.0f
+                        : 15.0f,
                     12.0f,
                     1.0f,
                     0.5f,
@@ -34395,9 +34425,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                     state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSS
                         ? (henka_vec3){1.0f, 0.24f, 0.08f}
                         : (henka_vec3){0.42f, 0.62f, 1.0f},
-                    state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSS
-                        ? 24.0f
-                        : 18.0f,
+                    state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_LIGHTING
+                        ? 4.0f
+                        : state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSS
+                            ? 24.0f
+                            : 18.0f,
                     14.0f,
                     1.0f,
                     0.5f,
