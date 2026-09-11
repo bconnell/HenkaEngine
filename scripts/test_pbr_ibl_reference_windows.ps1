@@ -169,4 +169,114 @@ if ($missing.Count -gt 0) {
     throw "PBR IBL reference contract is incomplete: $($missing -join ', ')"
 }
 
+# Exercise the checker with a deterministic close-layout image containing one
+# compact bright reflection knot. Production capture tests run the same
+# checker, but this keeps the visual regression executable in clean CI where
+# no prior evidence directory is present.
+Add-Type -AssemblyName System.Drawing
+$negativeControlRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-ibl-checker-negative-" + [Guid]::NewGuid().ToString('N'))
+$negativeControlPassed = $false
+try {
+    New-Item -ItemType Directory -Path $negativeControlRoot -Force | Out-Null
+    $negativeControlImage = Join-Path $negativeControlRoot 'ibl-reference-close-rendered.png'
+    $negativeControlIndex = Join-Path $negativeControlRoot 'INDEX.txt'
+    $bitmap = [System.Drawing.Bitmap]::new(1282, 752)
+    try {
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        try {
+            $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+            $graphics.Clear([System.Drawing.Color]::FromArgb(220, 214, 208))
+            $graphics.FillRectangle(
+                [System.Drawing.Brushes]::DarkSlateGray,
+                0,
+                528,
+                $bitmap.Width,
+                $bitmap.Height - 528)
+            $centers = @(
+                @(0.319, 0.225), @(0.506, 0.225), @(0.694, 0.225),
+                @(0.319, 0.520), @(0.506, 0.520), @(0.694, 0.520),
+                @(0.319, 0.815), @(0.506, 0.815), @(0.694, 0.815)
+            )
+            $sphereColors = @(
+                [System.Drawing.Color]::FromArgb(90, 90, 90),
+                [System.Drawing.Color]::FromArgb(112, 112, 112),
+                [System.Drawing.Color]::FromArgb(134, 134, 134),
+                [System.Drawing.Color]::FromArgb(148, 148, 148),
+                [System.Drawing.Color]::FromArgb(170, 170, 170),
+                [System.Drawing.Color]::FromArgb(192, 192, 192),
+                [System.Drawing.Color]::FromArgb(202, 202, 202),
+                [System.Drawing.Color]::FromArgb(180, 180, 180),
+                [System.Drawing.Color]::FromArgb(158, 158, 158)
+            )
+            $sphereRadius = 94
+            for ($index = 0; $index -lt $centers.Count; ++$index) {
+                $centerX = [int][Math]::Round($bitmap.Width * $centers[$index][0])
+                $centerY = [int][Math]::Round($bitmap.Height * $centers[$index][1])
+                $brush = [System.Drawing.SolidBrush]::new($sphereColors[$index])
+                try {
+                    $graphics.FillEllipse(
+                        $brush,
+                        $centerX - $sphereRadius,
+                        $centerY - $sphereRadius,
+                        $sphereRadius * 2,
+                        $sphereRadius * 2)
+                }
+                finally {
+                    $brush.Dispose()
+                }
+            }
+
+            # Place the defect at a checker sample location on the first
+            # sphere. Its four-neighbour contrast is intentionally local, so
+            # this is not merely a broad roughness-ladder step.
+            $knotBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(250, 250, 250))
+            try {
+                $firstCenterX = [int][Math]::Round($bitmap.Width * $centers[0][0])
+                $firstCenterY = [int][Math]::Round($bitmap.Height * $centers[0][1])
+                $graphics.FillEllipse(
+                    $knotBrush,
+                    $firstCenterX - 7,
+                    $firstCenterY + 43,
+                    14,
+                    14)
+            }
+            finally {
+                $knotBrush.Dispose()
+            }
+        }
+        finally {
+            $graphics.Dispose()
+        }
+        $bitmap.Save($negativeControlImage, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $bitmap.Dispose()
+    }
+    $metadata = 'CAPTURE_READY_IBL_REFERENCE mode=rendered view=close reference_layout=close_grid reference_texture_edge=128 reference_exposure_stops=0.0000 ibl_reference=1 ibl_diagnostic=none ibl_control=production_studio ibl_rotation_degrees=0.00 ibl_prefilter_lod_override=-1.00 ibl_direct_lighting=0 ibl_moon_lighting=0 ibl_roughness_ladder=1 ibl_roughness_samples=9 ibl_irradiance_resolution=32 ibl_prefilter_resolution=256 ibl_prefilter_levels=7 ibl_brdf_resolution=128 viewport=0,0,1280,720 aspect=1.777778 camera_position=0.0000,1.9000,0.7872 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 reference_bounds=0.0000,1.9000,-2.8000,1.8500,1.7500,0.5000 reference_midpoint=640.00,360.00 reference_count=9 settled_frames=3 draw_expected=1'
+    @('Same-camera viewport evidence', 'Evidence profile: PBR_IBL_REFERENCE', 'ibl_reference_rendered: ibl-reference-close-rendered.png', "ibl_reference_rendered metadata: $metadata") | Set-Content -LiteralPath $negativeControlIndex -Encoding UTF8
+    $checkerFailure = $null
+    try {
+        & $checkerPath -InputDirectory $negativeControlRoot
+    }
+    catch {
+        $checkerFailure = $_
+    }
+    if ($null -eq $checkerFailure) {
+        throw 'IBL checker synthetic localized-knot negative control unexpectedly passed.'
+    }
+    if ($checkerFailure.Exception.Message -notmatch 'localized-bright-knots') {
+        throw "IBL checker synthetic localized-knot negative control failed for an unexpected reason: $($checkerFailure.Exception.Message)"
+    }
+    $negativeControlPassed = $true
+}
+finally {
+    if (Test-Path -LiteralPath $negativeControlRoot -PathType Container) {
+        Remove-Item -LiteralPath $negativeControlRoot -Recurse -Force
+    }
+}
+if (-not $negativeControlPassed) {
+    throw 'IBL checker synthetic localized-knot negative control did not complete.'
+}
+
 Write-Output 'PBR IBL reference source contract test passed.'
+Write-Output 'PBR IBL checker localized-knot negative control passed.'
