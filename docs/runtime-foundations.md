@@ -828,8 +828,8 @@ Temporal AO history, multi-frame denoise, and production GTAO validation remain 
 
 The directional path uses two fitted orthographic cascades around the active camera:
 
-- near coverage: 24 units;
-- far coverage: 72 units.
+- near cascade half-extent: 12 units (24-unit square coverage), with a 24-unit target distance;
+- far cascade half-extent: 72 units (144-unit square coverage), with a 96-unit target distance.
 
 Each cascade uses:
 
