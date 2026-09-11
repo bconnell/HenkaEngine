@@ -67,6 +67,29 @@ try {
 
     & (Join-Path $PSScriptRoot "check_ssgi_motion_reference_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
 
+    $brightBitmap = [System.Drawing.Bitmap]::new(640, 360)
+    try {
+        for ($y = 0; $y -lt $brightBitmap.Height; ++$y) {
+            for ($x = 0; $x -lt $brightBitmap.Width; ++$x) {
+                $brightBitmap.SetPixel($x, $y, [System.Drawing.Color]::White)
+            }
+        }
+        $brightBitmap.Save((Join-Path $fixtureRoot "ssgi-motion-reference-close-before.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally { $brightBitmap.Dispose() }
+    $rejected = $false
+    $message = ""
+    try {
+        & (Join-Path $PSScriptRoot "check_ssgi_motion_reference_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
+    }
+    catch {
+        $rejected = $true
+        $message = $_.Exception.Message
+    }
+    if (-not $rejected -or $message -notmatch "flat, clipped, over-bright, or illegible") {
+        throw "The SSGI motion reference validator did not reject an over-bright evaluated subject phase."
+    }
+
     (Get-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt") -Raw) -replace "camera_position=0.3500,0.0000,4.8000", "camera_position=0.0000,0.0000,5.0000" |
         Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
     $rejected = $false

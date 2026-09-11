@@ -72,7 +72,12 @@ if ($cameraDeltaX -lt 0.30 -or $cameraDeltaX -gt 0.40 -or
 
 Add-Type -AssemblyName System.Drawing
 function Get-SsgiMotionImageStats {
-    param([Parameter(Mandatory = $true)][string]$Path)
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][double[]]$CenterXs,
+        [Parameter(Mandatory = $true)][double[]]$CenterYs,
+        [Parameter(Mandatory = $true)][double]$SubjectRadius
+    )
 
     $bitmap = [System.Drawing.Bitmap]::new($Path)
     try {
@@ -98,6 +103,50 @@ function Get-SsgiMotionImageStats {
         }
         $mean = $sum / $sampleCount
         $standardDeviation = [Math]::Sqrt([Math]::Max(0.0, ($sumSquares / $sampleCount) - ($mean * $mean)))
+        [double]$evaluatedSum = 0.0
+        [double]$evaluatedSumSquares = 0.0
+        [int]$evaluatedSampleCount = 0
+        [int]$evaluatedClipped = 0
+        [int]$evaluatedBright = 0
+        [int]$visibleSubjectCount = 0
+        foreach ($centerY in $CenterYs) {
+            foreach ($centerX in $CenterXs) {
+                $centerPixelX = $bitmap.Width * $centerX
+                $centerPixelY = $bitmap.Height * $centerY
+                $minimumX = [Math]::Max(0, [int][Math]::Floor($centerPixelX - $SubjectRadius))
+                $maximumX = [Math]::Min($bitmap.Width - 1, [int][Math]::Ceiling($centerPixelX + $SubjectRadius))
+                $minimumY = [Math]::Max(0, [int][Math]::Floor($centerPixelY - $SubjectRadius))
+                $maximumY = [Math]::Min($bitmap.Height - 1, [int][Math]::Ceiling($centerPixelY + $SubjectRadius))
+                [double]$subjectSum = 0.0
+                [int]$subjectCount = 0
+                for ($subjectY = $minimumY; $subjectY -le $maximumY; $subjectY += $step) {
+                    for ($subjectX = $minimumX; $subjectX -le $maximumX; $subjectX += $step) {
+                        $dx = $subjectX - $centerPixelX
+                        $dy = $subjectY - $centerPixelY
+                        if (($dx * $dx) + ($dy * $dy) -gt ($SubjectRadius * $SubjectRadius)) {
+                            continue
+                        }
+                        $subjectPixel = $bitmap.GetPixel($subjectX, $subjectY)
+                        [double]$subjectLuma = 0.2126 * $subjectPixel.R + 0.7152 * $subjectPixel.G + 0.0722 * $subjectPixel.B
+                        $evaluatedSum += $subjectLuma
+                        $evaluatedSumSquares += $subjectLuma * $subjectLuma
+                        ++$evaluatedSampleCount
+                        $subjectSum += $subjectLuma
+                        ++$subjectCount
+                        if ($subjectLuma -ge 250.0) { ++$evaluatedClipped }
+                        if ($subjectLuma -ge 240.0) { ++$evaluatedBright }
+                    }
+                }
+                if ($subjectCount -gt 0 -and ($subjectSum / $subjectCount) -ge 8.0) {
+                    ++$visibleSubjectCount
+                }
+            }
+        }
+        if ($evaluatedSampleCount -eq 0) {
+            throw "SSGI motion reference did not produce evaluated subject samples."
+        }
+        $evaluatedMean = $evaluatedSum / $evaluatedSampleCount
+        $evaluatedStandardDeviation = [Math]::Sqrt([Math]::Max(0.0, ($evaluatedSumSquares / $evaluatedSampleCount) - ($evaluatedMean * $evaluatedMean)))
         [pscustomobject]@{
             Width = $bitmap.Width
             Height = $bitmap.Height
@@ -105,6 +154,11 @@ function Get-SsgiMotionImageStats {
             StandardDeviation = $standardDeviation
             ClippedFraction = $clipped / [double]$sampleCount
             BrightFraction = $bright / [double]$sampleCount
+            EvaluatedMean = $evaluatedMean
+            EvaluatedStandardDeviation = $evaluatedStandardDeviation
+            EvaluatedClippedFraction = $evaluatedClipped / [double]$evaluatedSampleCount
+            EvaluatedBrightFraction = $evaluatedBright / [double]$evaluatedSampleCount
+            VisibleSubjectCount = $visibleSubjectCount
         }
     }
     finally {
@@ -154,16 +208,39 @@ function Get-SsgiMotionImageDifference {
 
 $beforePath = Join-Path $InputDirectory ("ssgi-motion-reference-" + $expectedView + "-before.png")
 $afterPath = Join-Path $InputDirectory ("ssgi-motion-reference-" + $expectedView + "-after.png")
-$beforeStats = Get-SsgiMotionImageStats -Path $beforePath
-$afterStats = Get-SsgiMotionImageStats -Path $afterPath
+$baseSubjectCentersX = if ($expectedView -eq "close") {
+    @(0.3125, 0.5, 0.6875)
+}
+else {
+    @(0.118, 0.229, 0.338, 0.445, 0.499, 0.555, 0.663, 0.771, 0.879)
+}
+$subjectCentersY = if ($expectedView -eq "close") {
+    @(0.194, 0.5, 0.806)
+}
+else {
+    @(0.5)
+}
+$midpointDeltaX = ([double]$after.Groups["mx"].Value - [double]$before.Groups["mx"].Value) / [double]$before.Groups["vw"].Value
+$beforeSubjectCentersX = [double[]]$baseSubjectCentersX
+$afterSubjectCentersX = [double[]]@($baseSubjectCentersX | ForEach-Object { $_ + $midpointDeltaX })
+$subjectRadius = if ($expectedView -eq "close") {
+    [double]$before.Groups["vw"].Value * 0.075
+}
+else {
+    [double]$before.Groups["vw"].Value * 0.035
+}
+$beforeStats = Get-SsgiMotionImageStats -Path $beforePath -CenterXs $beforeSubjectCentersX -CenterYs $subjectCentersY -SubjectRadius $subjectRadius
+$afterStats = Get-SsgiMotionImageStats -Path $afterPath -CenterXs $afterSubjectCentersX -CenterYs $subjectCentersY -SubjectRadius $subjectRadius
 if ($beforeStats.Width -ne $afterStats.Width -or $beforeStats.Height -ne $afterStats.Height) {
     throw "SSGI motion reference phases changed capture dimensions."
 }
 foreach ($stats in @($beforeStats, $afterStats)) {
     if ($stats.StandardDeviation -lt 2.0 -or
-        $stats.ClippedFraction -gt 0.20 -or
-        $stats.BrightFraction -gt 0.30) {
-        throw "SSGI motion reference contains a flat or grossly over-bright phase."
+        $stats.EvaluatedStandardDeviation -lt 2.0 -or
+        $stats.EvaluatedClippedFraction -gt 0.20 -or
+        $stats.EvaluatedBrightFraction -gt 0.30 -or
+        $stats.VisibleSubjectCount -ne 9) {
+        throw "SSGI motion reference contains a flat, clipped, over-bright, or illegible evaluated subject phase (global_std=$([Math]::Round($stats.StandardDeviation, 3)) evaluated_std=$([Math]::Round($stats.EvaluatedStandardDeviation, 3)) evaluated_clipped=$([Math]::Round($stats.EvaluatedClippedFraction, 3)) evaluated_bright=$([Math]::Round($stats.EvaluatedBrightFraction, 3)) visible=$($stats.VisibleSubjectCount)/9)."
     }
 }
 $meanDelta = [Math]::Abs($afterStats.Mean - $beforeStats.Mean)
@@ -181,6 +258,7 @@ $summary = @(
     "Reference view: $expectedView",
     "Camera motion: deterministic in-process translation dx=$([Math]::Round($cameraDeltaX, 4)) dz=$([Math]::Round($cameraDeltaZ, 4))",
     "Before/after luminance distribution deltas: mean=$([Math]::Round($meanDelta, 3)) stddev=$([Math]::Round($deviationDelta, 3))",
+    "Evaluated subjects: before=$($beforeStats.VisibleSubjectCount)/9 after=$($afterStats.VisibleSubjectCount)/9 subject_bright_fraction_before=$([Math]::Round($beforeStats.EvaluatedBrightFraction, 3)) subject_bright_fraction_after=$([Math]::Round($afterStats.EvaluatedBrightFraction, 3))",
     "Before/after sampled pixel difference: mean_absolute_luma=$([Math]::Round($difference.MeanAbsoluteLumaDifference, 3)) changed_fraction=$([Math]::Round($difference.ChangedFraction, 3))",
     "Temporal status: the static baseline may begin in fallback; settled and moved perspective phases report explicit history, motion-vector, jitter, and resolve state",
     "Status: automated SSGI camera-motion stability guard passed; human visual inspection remains required"
