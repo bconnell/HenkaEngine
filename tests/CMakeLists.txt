@@ -399,6 +399,26 @@ if(WIN32)
             ${CMAKE_SOURCE_DIR}/scripts/test_ssr_roughness_buffer_windows.ps1)
 
     add_test(
+        NAME henka_ssgi_reference_visual_evidence_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_ssgi_reference_visual_evidence_windows.ps1)
+
+    add_test(
+        NAME henka_ssgi_motion_reference_visual_evidence_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_ssgi_motion_reference_visual_evidence_windows.ps1)
+
+    add_test(
+        NAME henka_ssgi_performance_reference_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_ssgi_performance_reference_windows.ps1)
+
+    add_test(
+        NAME henka_ssgi_probe_readiness_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_ssgi_probe_readiness_windows.ps1)
+
+    add_test(
         NAME henka_ibl_prefilter_lod_authority_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_ibl_prefilter_lod_authority_windows.ps1
