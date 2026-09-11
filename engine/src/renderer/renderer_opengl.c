@@ -19,6 +19,7 @@
 #include "../core/checked.h"
 #include "../ui/ui_internal.h"
 #include "reflection_probe_policy.h"
+#include "opengl_capability_policy.h"
 #include "scene_target_policy.h"
 #include "temporal_camera_policy.h"
 
@@ -71,6 +72,24 @@
 #endif
 #ifndef GL_NUM_EXTENSIONS
 #define GL_NUM_EXTENSIONS 0x821D
+#endif
+#ifndef GL_MAX_TEXTURE_IMAGE_UNITS
+#define GL_MAX_TEXTURE_IMAGE_UNITS 0x8872
+#endif
+#ifndef GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
+#define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
+#endif
+#ifndef GL_MAX_DRAW_BUFFERS
+#define GL_MAX_DRAW_BUFFERS 0x8824
+#endif
+#ifndef GL_MAX_COLOR_ATTACHMENTS
+#define GL_MAX_COLOR_ATTACHMENTS 0x8CDF
+#endif
+#ifndef GL_MAX_TEXTURE_SIZE
+#define GL_MAX_TEXTURE_SIZE 0x0D33
+#endif
+#ifndef GL_MAX_CUBE_MAP_TEXTURE_SIZE
+#define GL_MAX_CUBE_MAP_TEXTURE_SIZE 0x851C
 #endif
 
 #define HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY 256U
@@ -1037,6 +1056,9 @@ static bool henka_opengl_log_capability_probe(void)
     int configured_minor;
     int configured_profile;
     int configured_accelerated;
+    henka_opengl_capability_limits limits;
+    bool context_capability_available;
+    bool resource_limits_available;
     bool baseline_available;
 
     get_string = NULL;
@@ -1055,17 +1077,39 @@ static bool henka_opengl_log_capability_probe(void)
     (void)SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &configured_minor);
     (void)SDL_GL_GetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, &configured_profile);
     (void)SDL_GL_GetAttribute(SDL_GL_ACCELERATED_VISUAL, &configured_accelerated);
-    baseline_available =
+    limits.max_fragment_texture_image_units = 0;
+    limits.max_combined_texture_image_units = 0;
+    limits.max_draw_buffers = 0;
+    limits.max_color_attachments = 0;
+    limits.max_texture_size = 0;
+    limits.max_cube_map_texture_size = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS,
+                  &limits.max_fragment_texture_image_units);
+    glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,
+                  &limits.max_combined_texture_image_units);
+    glGetIntegerv(GL_MAX_DRAW_BUFFERS, &limits.max_draw_buffers);
+    glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &limits.max_color_attachments);
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &limits.max_texture_size);
+    glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE,
+                  &limits.max_cube_map_texture_size);
+    context_capability_available =
         get_string != NULL &&
         henka_opengl_version_is_supported(version) &&
         create_shader_address != NULL;
+    resource_limits_available =
+        henka_opengl_capability_limits_are_sufficient(&limits);
+    baseline_available = context_capability_available && resource_limits_available;
 
     HENKA_LOG_INFO(
-        "HENKA_OPENGL_CAPABILITY status=%s stage=context-capability "
+        "HENKA_OPENGL_CAPABILITY status=%s stage=%s "
         "video_driver=%s context_requested=%d.%d profile_requested=%d "
         "accelerated=%d context_obtained=%s vendor=%s renderer=%s "
-        "glCreateShader=%s",
+        "glCreateShader=%s limits_frag=%d limits_combined=%d "
+        "limits_draw_buffers=%d limits_color_attachments=%d "
+        "limits_texture_size=%d limits_cube_size=%d",
         baseline_available ? "CONTEXT_READY" : "INFRASTRUCTURE_BLOCKED",
+        !context_capability_available ? "context-capability" :
+        !resource_limits_available ? "resource-limits" : "context-capability",
         video_driver == NULL ? "<unavailable>" : video_driver,
         configured_major,
         configured_minor,
@@ -1074,7 +1118,13 @@ static bool henka_opengl_log_capability_probe(void)
         version == NULL ? "<unavailable>" : version,
         vendor == NULL ? "<unavailable>" : vendor,
         renderer == NULL ? "<unavailable>" : renderer,
-        create_shader_address == NULL ? "missing" : "available");
+        create_shader_address == NULL ? "missing" : "available",
+        limits.max_fragment_texture_image_units,
+        limits.max_combined_texture_image_units,
+        limits.max_draw_buffers,
+        limits.max_color_attachments,
+        limits.max_texture_size,
+        limits.max_cube_map_texture_size);
 
     return baseline_available;
 }

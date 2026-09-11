@@ -927,6 +927,16 @@ target_link_libraries(henka_opengl_capability_probe
 )
 henka_enable_project_warnings(henka_opengl_capability_probe)
 
+add_executable(henka_opengl_capability_policy_tests
+    test_opengl_capability_policy.c
+)
+target_link_libraries(henka_opengl_capability_policy_tests
+    PRIVATE
+        henka
+)
+henka_enable_project_warnings(henka_opengl_capability_policy_tests)
+add_test(NAME henka_opengl_capability_policy_tests COMMAND henka_opengl_capability_policy_tests)
+
 add_executable(henka_terrain_render_tests
     test_terrain_render.c
 )

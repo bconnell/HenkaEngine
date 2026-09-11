@@ -23,6 +23,26 @@ Henka's realism work is a layered rasterized OpenGL rendering stack with physica
 - [Exposure and HDR-range reference](#exposure-and-hdr-range-reference)
 - [Direction](#direction)
 
+## Supported Windows OpenGL baseline
+
+The supported renderer boundary is the Windows OpenGL path. A context is
+accepted only when it provides OpenGL 3.3 or newer, the required shader entry
+point, and the resource limits used by the current renderer:
+
+| Capability | Required minimum | Why it is required |
+| --- | ---: | --- |
+| Fragment-shader texture image units | 29 | `basic_lit.frag` declares the current material, environment, probe, terrain, and shadow samplers. |
+| Combined texture image units | 27 | The renderer binds scene resources through texture unit 26. |
+| Draw buffers | 4 | The HDR scene target writes its current color, motion, reactive, and roughness attachments. |
+| Color attachments | 4 | The HDR scene target owns four color attachments. |
+| 2D texture size | 256 | The bounded IBL prefilter resources use 256x256 source dimensions. |
+| Cube-map texture size | 256 | The bounded IBL prefilter cube uses 256x256 faces. |
+
+The runtime probes these limits before accepting the context and reports an
+infrastructure block when the context cannot satisfy the supported boundary.
+This is a minimum resource contract for the current OpenGL implementation; it
+does not claim coverage for other graphics backends or all hardware.
+
 ## Current realism stack
 
 ### PBR material inputs
