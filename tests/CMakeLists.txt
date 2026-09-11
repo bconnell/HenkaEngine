@@ -419,6 +419,16 @@ if(WIN32)
             ${CMAKE_SOURCE_DIR}/scripts/test_ssgi_probe_readiness_windows.ps1)
 
     add_test(
+        NAME henka_subsurface_reference_visual_evidence_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_subsurface_reference_visual_evidence_windows.ps1)
+
+    add_test(
+        NAME henka_terrain_visual_evidence_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_terrain_visual_evidence_windows.ps1)
+
+    add_test(
         NAME henka_ibl_prefilter_lod_authority_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_ibl_prefilter_lod_authority_windows.ps1
