@@ -352,7 +352,7 @@ Interior bevel rejects:
 - neighboring shared boundaries;
 - ambiguous endpoint fans.
 
-Boundary batch bevel rejects shared faces and unsupported endpoint sharing. Mixed selections and broader interior edge-set bevel remain incomplete.
+Boundary batch bevel rejects shared faces and unsupported endpoint sharing. Mixed selections, connected interior edge sets, and broader interior edge-set bevel remain incomplete.
 
 ### Surface-connected Edge Extrude
 
@@ -554,7 +554,7 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - generalized surface-connected Vertex/Edge Extrude;
 - broader weld/split/bridge workflows;
 - multi-face and general loop-cut networks;
-- broader interior edge-set bevel;
+- connected and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;
 - automatic multi-island UV unwrap;
 - global UV packing;
