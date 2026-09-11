@@ -2,6 +2,14 @@
 
 #include "scene_target_policy.h"
 
+bool henka_opengl_scene_target_should_use_hdr(
+    bool hdr_requested,
+    const henka_opengl_scene_target_policy* policy)
+{
+    return hdr_requested && policy != NULL &&
+        policy->hdr_ready && policy->hdr_dimensions_match;
+}
+
 bool henka_opengl_scene_target_requires_sync(
     const henka_opengl_scene_target_policy* policy)
 {

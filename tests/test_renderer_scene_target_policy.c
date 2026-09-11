@@ -31,6 +31,13 @@ int main(void)
         return 1;
     }
 
+    if (!henka_opengl_scene_target_should_use_hdr(true, &policy) ||
+        henka_opengl_scene_target_should_use_hdr(false, &policy))
+    {
+        fprintf(stderr, "HDR presentation request did not follow the ready target policy\n");
+        return 1;
+    }
+
     if (henka_opengl_scene_target_requires_hdr_sync(&policy) ||
         henka_opengl_scene_target_requires_bloom_sync(&policy) ||
         henka_opengl_scene_target_requires_temporal_sync(&policy))
@@ -80,6 +87,25 @@ int main(void)
         henka_opengl_scene_target_requires_temporal_sync(&policy))
     {
         fprintf(stderr, "HDR retry did not stay isolated to the unavailable target\n");
+        return 1;
+    }
+    if (henka_opengl_scene_target_should_use_hdr(true, &policy))
+    {
+        fprintf(stderr, "unavailable HDR target did not select direct framebuffer fallback\n");
+        return 1;
+    }
+
+    policy = valid_policy();
+    policy.hdr_dimensions_match = false;
+    if (henka_opengl_scene_target_should_use_hdr(true, &policy))
+    {
+        fprintf(stderr, "stale HDR dimensions did not select direct framebuffer fallback\n");
+        return 1;
+    }
+
+    if (henka_opengl_scene_target_should_use_hdr(true, NULL))
+    {
+        fprintf(stderr, "null HDR target policy did not fail closed to direct framebuffer fallback\n");
         return 1;
     }
 

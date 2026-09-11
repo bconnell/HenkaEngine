@@ -77,6 +77,18 @@ function Test-RendererSceneTargetRetryContract {
     if ($draw -notmatch 'henka_opengl_scene_target_is_ready\s*\(\s*state\s*,\s*scene_viewport\s*\)\s*\)\s*\{\s*henka_opengl_renderer_sync_scene_target\s*\(\s*renderer\s*\)\s*;') {
         $missing.Add('draw path retries every incomplete scene target, not only HDR dimensions')
     }
+    if ($draw -notmatch 'henka_opengl_scene_target_get_policy\s*\(\s*state\s*,\s*scene_viewport\s*\)' -or
+        $draw -notmatch 'henka_opengl_scene_target_should_use_hdr\s*\(\s*policy\.use_hdr_presentation\s*,\s*&scene_target_policy\s*\)' -or
+        $draw -notmatch 'policy\.use_hdr_presentation\s*=\s*false\s*;' -or
+        $draw -notmatch 'Scene View HDR target unavailable; falling back to direct framebuffer rendering') {
+        $missing.Add('draw path demotes unavailable HDR presentation to the direct framebuffer path')
+    }
+    if ($draw -notmatch '(?s)policy\.use_hdr_presentation\s*=\s*false\s*;.*?henka_apply_scene_viewport\s*\(\s*renderer\s*\)\s*;') {
+        $missing.Add('HDR fallback applies the normal Scene View viewport after demotion')
+    }
+    if ($draw -notmatch '(?s)if\s*\(\s*policy\.use_hdr_presentation\s*&&\s*!state->reflection_probe_capture_active\s*\)\s*\{.*?henka_opengl_present_hdr\s*\(\s*renderer\s*,\s*state') {
+        $missing.Add('HDR presentation remains guarded by the post-synchronization policy')
+    }
     if ($draw -match 'state->hdr_width\s*!=\s*scene_viewport\.width') {
         $missing.Add('draw path retains the HDR-only synchronization guard')
     }
@@ -102,6 +114,18 @@ $negative = $renderer.Replace($drawBody, $negativeDrawBody)
 $negativeMissing = Test-RendererSceneTargetRetryContract -Source $negative
 if ($negativeMissing.Count -eq 0) {
     throw 'Renderer scene-target retry negative control unexpectedly passed.'
+}
+
+$negativeFallbackDrawBody = $drawBody.Replace(
+    '            policy.use_hdr_presentation = false;',
+    '            /* deliberate negative-control omission */')
+if ($negativeFallbackDrawBody -eq $drawBody) {
+    throw 'Renderer HDR fallback negative control could not remove policy demotion.'
+}
+$negativeFallbackRenderer = $renderer.Replace($drawBody, $negativeFallbackDrawBody)
+$negativeFallbackMissing = Test-RendererSceneTargetRetryContract -Source $negativeFallbackRenderer
+if ($negativeFallbackMissing.Count -eq 0) {
+    throw 'Renderer HDR fallback negative control unexpectedly passed.'
 }
 
 $syncBody = Get-FunctionBody -Source $renderer -FunctionName 'henka_opengl_renderer_sync_scene_target'
@@ -132,5 +156,6 @@ if ($negativeHdrReadyMissing.Count -eq 0) {
 
 Write-Output 'Renderer scene-target retry contract passed.'
 Write-Output 'Renderer scene-target retry negative control passed.'
+Write-Output 'Renderer HDR fallback negative control passed.'
 Write-Output 'Renderer scene-target per-target retry negative control passed.'
 Write-Output 'Renderer HDR readiness dimension negative control passed.'

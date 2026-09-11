@@ -13,6 +13,10 @@ typedef struct henka_opengl_scene_target_policy
     bool temporal_dimensions_match;
 } henka_opengl_scene_target_policy;
 
+bool henka_opengl_scene_target_should_use_hdr(
+    bool hdr_requested,
+    const henka_opengl_scene_target_policy* policy);
+
 bool henka_opengl_scene_target_requires_sync(
     const henka_opengl_scene_target_policy* policy);
 

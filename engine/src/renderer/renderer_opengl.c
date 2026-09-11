@@ -794,6 +794,9 @@ static bool henka_validate_shader_contract(
     henka_shader_contract_type contract_type,
     uint32_t contract_version,
     henka_opengl_shader_data* out_shader_data);
+static henka_opengl_scene_target_policy henka_opengl_scene_target_get_policy(
+    const henka_opengl_renderer_state* state,
+    henka_viewport viewport);
 
 static void henka_apply_full_framebuffer_viewport(const struct henka_renderer* renderer)
 {
@@ -5968,6 +5971,7 @@ henka_result henka_opengl_renderer_draw_scene(
     henka_mat4 local_shadow_matrix;
     henka_mat4 current_view_projection;
     henka_viewport_render_policy policy;
+    henka_opengl_scene_target_policy scene_target_policy;
     henka_opengl_renderer_state* state;
     henka_mat4 view;
     bool rendered;
@@ -6155,7 +6159,16 @@ henka_result henka_opengl_renderer_draw_scene(
         {
             henka_opengl_renderer_sync_scene_target(renderer);
         }
-        if (rendered)
+        scene_target_policy = henka_opengl_scene_target_get_policy(state, scene_viewport);
+        if (!henka_opengl_scene_target_should_use_hdr(
+                policy.use_hdr_presentation,
+                &scene_target_policy))
+        {
+            policy.use_hdr_presentation = false;
+            HENKA_LOG_WARN(
+                "Scene View HDR target unavailable; falling back to direct framebuffer rendering");
+        }
+        if (policy.use_hdr_presentation && rendered)
         {
             henka_opengl_draw_shadow_pass(
                 state, scene, light_matrix,
@@ -6187,20 +6200,23 @@ henka_result henka_opengl_renderer_draw_scene(
                 }
             }
         }
-        if (!henka_opengl_renderer_is_hdr_ready(renderer))
+        if (policy.use_hdr_presentation)
         {
-            return HENKA_ERROR_RENDERER;
+            g_gl.BindFramebuffer(GL_FRAMEBUFFER, state->hdr_framebuffer);
+            henka_apply_scene_target_viewport(renderer);
+            glClearColor(0.075f, 0.09f, 0.12f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            henka_opengl_sync_ibl_resources(state, scene);
+            if (policy.use_scene_environment)
+            {
+                henka_opengl_capture_next_reflection_probe(renderer, scene);
+            }
+            henka_opengl_draw_environment(state, renderer, scene);
         }
-        g_gl.BindFramebuffer(GL_FRAMEBUFFER, state->hdr_framebuffer);
-        henka_apply_scene_target_viewport(renderer);
-        glClearColor(0.075f, 0.09f, 0.12f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        henka_opengl_sync_ibl_resources(state, scene);
-        if (policy.use_scene_environment)
+        else
         {
-            henka_opengl_capture_next_reflection_probe(renderer, scene);
+            henka_apply_scene_viewport(renderer);
         }
-        henka_opengl_draw_environment(state, renderer, scene);
     }
     else if (!state->reflection_probe_capture_active)
     {
@@ -8046,7 +8062,9 @@ static henka_opengl_scene_target_policy henka_opengl_scene_target_get_policy(
         return (henka_opengl_scene_target_policy){0};
     }
     return (henka_opengl_scene_target_policy){
-        state->hdr_framebuffer != 0U && state->hdr_framebuffer_complete,
+        state->hdr_framebuffer != 0U &&
+            state->hdr_color_texture != 0U &&
+            state->hdr_framebuffer_complete,
         state->hdr_width == viewport.width && state->hdr_height == viewport.height,
         state->bloom_ready &&
             state->bloom_framebuffer != 0U &&
