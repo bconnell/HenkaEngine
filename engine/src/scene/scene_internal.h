@@ -36,6 +36,7 @@ typedef struct henka_scene_entity_record
     henka_bounds local_bounds;
     henka_interaction_desc interaction;
     char* interaction_prompt;
+    bool renderer_enabled;
 } henka_scene_entity_record;
 
 struct henka_scene

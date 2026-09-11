@@ -127,6 +127,7 @@ typedef struct henka_scene_object_info
     bool has_bounds;
     henka_bounds local_bounds;
     henka_transform transform;
+    bool renderer_enabled;
 } henka_scene_object_info;
 
 typedef struct henka_interaction_desc
@@ -140,7 +141,8 @@ typedef struct henka_interaction_desc
  * values are borrowed for the duration of the call. The scene validates and
  * prepares every fallible allocation before publishing any field or revision,
  * so callers do not need an allocating rollback path. Name changes are
- * included in the same atomic update but do not consume render revisions. */
+ * included in the same atomic update but do not consume render revisions.
+ * Renderer enablement is applied when apply_renderer_enabled is true. */
 typedef struct henka_scene_entity_presentation_update
 {
     const char* name;
@@ -149,6 +151,8 @@ typedef struct henka_scene_entity_presentation_update
     henka_interaction_desc interaction;
     bool apply_material;
     henka_material material;
+    bool apply_renderer_enabled;
+    bool renderer_enabled;
 } henka_scene_entity_presentation_update;
 
 typedef enum henka_scene_environment_mode
@@ -346,6 +350,9 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
 void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity);
 bool henka_scene_is_entity_valid(const henka_scene* scene, henka_entity entity);
 bool henka_scene_is_entity_visible(const henka_scene* scene, henka_entity entity);
+bool henka_scene_is_entity_renderer_enabled(
+    const henka_scene* scene,
+    henka_entity entity);
 size_t henka_scene_get_entity_count(const henka_scene* scene);
 henka_entity henka_scene_get_entity_at_index(const henka_scene* scene, size_t index);
 const char* henka_scene_get_entity_name(const henka_scene* scene, henka_entity entity);
@@ -421,8 +428,8 @@ henka_result henka_scene_set_entity_selection_owner(
     henka_entity entity,
     henka_entity owner);
 henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity entity, henka_transform transform);
-/* Applies name, transform, visibility, interaction, and optionally inline
- * material state as one preflighted scene transaction. */
+/* Applies name, transform, visibility, renderer enablement, interaction, and
+ * optionally inline material state as one preflighted scene transaction. */
 henka_result henka_scene_apply_entity_presentation(
     henka_scene* scene,
     henka_entity entity,
@@ -459,6 +466,10 @@ henka_result henka_scene_apply_material_asset_override(
 henka_result henka_scene_set_entity_name(henka_scene* scene, henka_entity entity, const char* name);
 henka_result henka_scene_set_entity_tag(henka_scene* scene, henka_entity entity, const char* tag);
 henka_result henka_scene_set_entity_visible(henka_scene* scene, henka_entity entity, bool visible);
+henka_result henka_scene_set_entity_renderer_enabled(
+    henka_scene* scene,
+    henka_entity entity,
+    bool enabled);
 henka_result henka_scene_set_entity_local_bounds(henka_scene* scene, henka_entity entity, henka_bounds bounds);
 henka_result henka_scene_clear_entity_local_bounds(henka_scene* scene, henka_entity entity);
 henka_result henka_scene_set_entity_interaction(henka_scene* scene, henka_entity entity, const henka_interaction_desc* interaction);

@@ -383,6 +383,7 @@ static void henka_test_prefab_snapshot_and_transaction(void)
         source, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_set_entity_tag(source, source_child, "prefab-part") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_set_entity_visible(source, source_child, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_renderer_enabled(source, source_child, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
         source, source_child, HENKA_SCENE_ENTITY_FLAG_HELPER) == HENKA_SUCCESS);
     bounds = (henka_bounds){{-1.0f, -2.0f, -3.0f}, {1.0f, 2.0f, 3.0f}};
@@ -432,6 +433,7 @@ static void henka_test_prefab_snapshot_and_transaction(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, 8.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, 11.0f, 0.0001f);
     HENKA_TEST_ASSERT(!henka_scene_is_entity_visible(target, instance_child));
+    HENKA_TEST_ASSERT(!henka_scene_is_entity_renderer_enabled(target, instance_child));
     HENKA_TEST_ASSERT(henka_scene_is_entity_helper(target, instance_child));
     HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(target, instance_child, &bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.x, 1.0f, 0.0001f);
@@ -510,6 +512,33 @@ static void henka_test_prefab_snapshot_and_transaction(void)
 
     henka_prefab_destroy(prefab);
     henka_scene_destroy(target);
+}
+
+static void henka_test_presentation_update_compatibility(void)
+{
+    henka_scene* scene = NULL;
+    henka_entity entity;
+    henka_scene_entity_presentation_update legacy_update;
+    henka_material material = henka_material_default();
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Presentation Compatibility");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_renderer_enabled(scene, entity, false) == HENKA_SUCCESS);
+    legacy_update = (henka_scene_entity_presentation_update){
+        "Presentation Compatibility Updated",
+        henka_transform_identity(),
+        true,
+        {false, 0.0f, NULL},
+        false,
+        material};
+    HENKA_TEST_ASSERT(henka_scene_apply_entity_presentation(
+        scene, entity, &legacy_update) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        henka_scene_get_entity_name(scene, entity),
+        "Presentation Compatibility Updated") == 0);
+    HENKA_TEST_ASSERT(!henka_scene_is_entity_renderer_enabled(scene, entity));
+    henka_scene_destroy(scene);
 }
 
 static void henka_test_prefab_instance_mapping(void)
@@ -1547,6 +1576,7 @@ void henka_test_scene(void)
     henka_test_scene_hierarchy();
     henka_test_scene_child_enumeration();
     henka_test_prefab_snapshot_and_transaction();
+    henka_test_presentation_update_compatibility();
     henka_test_prefab_instance_mapping();
     henka_test_prefab_instance_destroy_entities();
     henka_test_prefab_revision_refresh();

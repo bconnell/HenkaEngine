@@ -482,15 +482,17 @@ static henka_result sandbox3d_scene_document_bridge_build_object_update(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_update = (henka_scene_entity_presentation_update){
-        object->name,
-        object->transform,
-        object->visible,
-        {
+        .name = object->name,
+        .transform = object->transform,
+        .visible = object->visible,
+        .renderer_enabled = object->renderer.enabled,
+        .interaction = {
             object->interaction.enabled,
             object->interaction.max_distance,
             object->interaction.prompt},
-        false,
-        material};
+        .apply_material = false,
+        .material = material,
+        .apply_renderer_enabled = true};
     if (object->renderer.material_override)
     {
         material = previous_material;
@@ -806,6 +808,7 @@ henka_result sandbox3d_scene_document_bridge_sync_object(
     }
     candidate.transform = info.transform;
     candidate.visible = info.visible;
+    candidate.renderer.enabled = info.renderer_enabled;
     candidate.interaction.enabled = interaction.enabled;
     candidate.interaction.max_distance = interaction.max_distance;
     if (parent == HENKA_INVALID_ENTITY)

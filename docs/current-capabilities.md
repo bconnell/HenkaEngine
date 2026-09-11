@@ -148,6 +148,7 @@ The Sandbox has a bounded Game Authoring V1 path for its registered scene object
 
 - Persistent Scene Document IDs map to generation-checked runtime entities through a dedicated adapter.
 - Runtime handles are not serialized.
+- Authored renderer enablement is persisted and applied as a separate runtime state from scene visibility; disabling it leaves the entity's visibility state intact while excluding it from the renderer passes.
 - Object Details exposes authored Physics and Interaction values for bound objects.
 - Supported values include primitive body/shape and trigger choices, interaction enablement, and prompt inspection.
 - Edits validate before the working scene is updated.
@@ -282,8 +283,8 @@ history remain open.
   `henka_prefab_create_from_scene` captures a selected scene root and its active
   descendants in deterministic scene order; `henka_prefab_instantiate` creates
   independent production scene entities, preserves local transforms and
-  hierarchy, and applies names, tags, visibility, flags, bounds, interaction,
-  and material state through the normal scene APIs.
+  hierarchy, and applies names, tags, visibility, renderer enablement, flags,
+  bounds, interaction, and material state through the normal scene APIs.
 - `henka_prefab_instantiate_under_parent` composes the captured root beneath a
   live scene entity using a caller-supplied local transform. Stale or invalid
   parent handles fail before allocation, and later hierarchy failures roll back

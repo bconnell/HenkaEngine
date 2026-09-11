@@ -19,6 +19,7 @@ typedef struct sandbox3d_play_snapshot
     henka_entity entity;
     henka_transform transform;
     bool visible;
+    bool renderer_enabled;
     henka_physics_body_id body;
     henka_character_controller* character_controller;
     float character_controller_max_speed;
@@ -699,6 +700,7 @@ static void sandbox3d_play_session_clear_snapshot(
             HENKA_INVALID_ENTITY,
             henka_transform_identity(),
             false,
+            true,
             HENKA_INVALID_PHYSICS_BODY_ID,
             NULL,
             0.0f};
@@ -862,7 +864,9 @@ static henka_result sandbox3d_play_session_restore_scene(
         const sandbox3d_play_snapshot* snapshot = &session->snapshots[index];
         henka_scene* scene = sandbox3d_scene_document_bridge_get_scene(session->bridge);
         if (henka_scene_set_entity_transform(scene, snapshot->entity, snapshot->transform) != HENKA_SUCCESS ||
-            henka_scene_set_entity_visible(scene, snapshot->entity, snapshot->visible) != HENKA_SUCCESS)
+            henka_scene_set_entity_visible(scene, snapshot->entity, snapshot->visible) != HENKA_SUCCESS ||
+            henka_scene_set_entity_renderer_enabled(
+                scene, snapshot->entity, snapshot->renderer_enabled) != HENKA_SUCCESS)
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
@@ -1136,6 +1140,7 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
             entity,
             transform,
             henka_scene_is_entity_visible(scene, entity),
+            henka_scene_is_entity_renderer_enabled(scene, entity),
             HENKA_INVALID_PHYSICS_BODY_ID,
             NULL,
             0.0f};

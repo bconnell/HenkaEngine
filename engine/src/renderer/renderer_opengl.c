@@ -4065,7 +4065,7 @@ static void henka_opengl_draw_shadow_pass(
         const henka_scene_entity_record* entity = &scene->entities[index];
         uint32_t part_index;
 
-        if (!entity->active || !entity->visible || entity->mesh == NULL ||
+        if (!entity->active || !entity->visible || !entity->renderer_enabled || entity->mesh == NULL ||
             !entity->material.cast_shadows ||
             entity->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED ||
             ((entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U &&
@@ -4170,7 +4170,7 @@ static void henka_opengl_draw_point_shadow_pass(
         {
             const henka_scene_entity_record* entity = &scene->entities[index];
             uint32_t part_index;
-            if (!entity->active || !entity->visible || entity->mesh == NULL ||
+            if (!entity->active || !entity->visible || !entity->renderer_enabled || entity->mesh == NULL ||
                 !entity->material.cast_shadows ||
                 entity->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED ||
                 (entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U)
@@ -5091,7 +5091,7 @@ static void henka_opengl_prepare_transparent_sort(
     {
         const henka_scene_entity_record* entity = &scene->entities[index];
 
-        if (!entity->active || !entity->visible || entity->mesh == NULL ||
+        if (!entity->active || !entity->visible || !entity->renderer_enabled || entity->mesh == NULL ||
             entity->material.shader == NULL ||
             entity->material.alpha_mode != HENKA_MATERIAL_ALPHA_BLENDED)
         {
@@ -5923,6 +5923,7 @@ static bool henka_opengl_entity_can_join_instance_batch(
 {
     if (scene == NULL || current == NULL || candidate == NULL ||
         selected_mesh == NULL || !candidate->active || !candidate->visible ||
+        !candidate->renderer_enabled ||
         candidate->mesh != selected_mesh || candidate->lod.level_count != 0U ||
         (candidate->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U ||
         candidate->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED ||
@@ -6419,6 +6420,7 @@ henka_result henka_opengl_renderer_draw_scene(
         entity = &scene->entities[draw_index];
         if (!entity->active ||
             !entity->visible ||
+            !entity->renderer_enabled ||
             entity->mesh == NULL ||
             entity->material.shader == NULL)
         {

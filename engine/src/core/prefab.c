@@ -29,6 +29,7 @@ typedef struct henka_prefab_entry
     uint64_t material_asset_revision;
     bool material_asset_overridden;
     bool visible;
+    bool renderer_enabled;
     uint32_t flags;
     bool has_local_bounds;
     henka_bounds local_bounds;
@@ -299,6 +300,7 @@ henka_result henka_prefab_create_from_scene(
             prefab->root_index = count;
         }
         entry->visible = info.visible;
+        entry->renderer_enabled = info.renderer_enabled;
         entry->has_local_bounds = info.has_bounds;
         entry->local_bounds = info.local_bounds;
         entry->material = material;
@@ -655,6 +657,8 @@ static bool henka_prefab_get_transaction_mutation_count(
         if (!henka_prefab_add_mutation_count(&mutation_count, 5U) ||
             (!entry->visible &&
                 !henka_prefab_add_mutation_count(&mutation_count, 1U)) ||
+            (!entry->renderer_enabled &&
+                !henka_prefab_add_mutation_count(&mutation_count, 1U)) ||
             (entry->has_explicit_material &&
                 !henka_prefab_add_mutation_count(&mutation_count, 1U)) ||
             (entry->mesh != NULL &&
@@ -786,6 +790,13 @@ static henka_result henka_prefab_instantiate_internal(
         if (result == HENKA_SUCCESS)
         {
             result = henka_scene_set_entity_visible(target_scene, entities[index], entry->visible);
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_scene_set_entity_renderer_enabled(
+                target_scene,
+                entities[index],
+                entry->renderer_enabled);
         }
         if (result == HENKA_SUCCESS)
         {

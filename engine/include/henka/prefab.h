@@ -16,10 +16,11 @@ typedef struct henka_prefab_instance henka_prefab_instance;
 #define HENKA_MAX_PREFAB_ENTITIES ((size_t)4096U)
 
 /* Captures the selected entity and its active descendants in deterministic
- * scene order. Names, tags, transforms, materials, visibility, bounds,
- * interaction data, and hierarchy are copied. Meshes, textures, shaders, and
- * material definitions remain borrowed from their existing owners and must
- * outlive the prefab and any instances created from it. Logical selection
+ * scene order. Names, tags, transforms, materials, visibility, renderer
+ * enablement, bounds, interaction data, and hierarchy are copied. Meshes,
+ * textures, shaders, and material definitions remain borrowed from their
+ * existing owners and must outlive the prefab and any instances created from
+ * it. Logical selection
  * owners inside the captured subtree are remapped during instantiation;
  * external owners are not retained as cross-instance references. */
 henka_result henka_prefab_create_from_scene(

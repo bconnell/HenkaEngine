@@ -1132,6 +1132,7 @@ henka_result henka_scene_apply_entity_presentation(
     bool name_changed;
     bool transform_changed;
     bool visible_changed;
+    bool renderer_enabled_changed;
     bool interaction_changed;
     bool material_changed;
     uint64_t mutation_count;
@@ -1158,6 +1159,8 @@ henka_result henka_scene_apply_entity_presentation(
         record->transform,
         sanitized_transform);
     visible_changed = record->visible != update->visible;
+    renderer_enabled_changed = update->apply_renderer_enabled &&
+        record->renderer_enabled != update->renderer_enabled;
     interaction_changed = record->interaction.enabled != update->interaction.enabled ||
         record->interaction.max_distance != update->interaction.max_distance ||
         !henka_scene_presentation_text_equal(
@@ -1202,6 +1205,7 @@ henka_result henka_scene_apply_entity_presentation(
 
     mutation_count = (transform_changed ? UINT64_C(1) : UINT64_C(0)) +
         (visible_changed ? UINT64_C(1) : UINT64_C(0)) +
+        (renderer_enabled_changed ? UINT64_C(1) : UINT64_C(0)) +
         (interaction_changed ? UINT64_C(1) : UINT64_C(0)) +
         (material_changed ? UINT64_C(1) : UINT64_C(0));
     if (mutation_count != 0U &&
@@ -1266,6 +1270,11 @@ henka_result henka_scene_apply_entity_presentation(
         record->visible = update->visible;
         (void)henka_scene_bump_render_revision(scene);
     }
+    if (renderer_enabled_changed)
+    {
+        record->renderer_enabled = update->renderer_enabled;
+        (void)henka_scene_bump_render_revision(scene);
+    }
     if (interaction_changed)
     {
         henka_free(record->interaction_prompt);
@@ -1310,6 +1319,7 @@ typedef struct henka_prepared_entity_presentation
     bool name_changed;
     bool transform_changed;
     bool visible_changed;
+    bool renderer_enabled_changed;
     bool interaction_changed;
     bool material_changed;
 } henka_prepared_entity_presentation;
@@ -1402,6 +1412,9 @@ henka_result henka_scene_apply_entity_presentation_batch(
                 record->transform,
                 prepared[index].sanitized_transform);
         prepared[index].visible_changed = record->visible != updates[index].visible;
+        prepared[index].renderer_enabled_changed =
+            updates[index].apply_renderer_enabled &&
+            record->renderer_enabled != updates[index].renderer_enabled;
         prepared[index].interaction_changed =
             record->interaction.enabled != updates[index].interaction.enabled ||
             record->interaction.max_distance !=
@@ -1454,6 +1467,7 @@ henka_result henka_scene_apply_entity_presentation_batch(
         update_mutation_count =
             (prepared[index].transform_changed ? UINT64_C(1) : UINT64_C(0)) +
             (prepared[index].visible_changed ? UINT64_C(1) : UINT64_C(0)) +
+            (prepared[index].renderer_enabled_changed ? UINT64_C(1) : UINT64_C(0)) +
             (prepared[index].interaction_changed ? UINT64_C(1) : UINT64_C(0)) +
             (prepared[index].material_changed ? UINT64_C(1) : UINT64_C(0));
         if (update_mutation_count > UINT64_MAX - mutation_count)
@@ -1530,6 +1544,11 @@ henka_result henka_scene_apply_entity_presentation_batch(
         if (item->visible_changed)
         {
             record->visible = item->update.visible;
+            (void)henka_scene_bump_render_revision(scene);
+        }
+        if (item->renderer_enabled_changed)
+        {
+            record->renderer_enabled = item->update.renderer_enabled;
             (void)henka_scene_bump_render_revision(scene);
         }
         if (item->interaction_changed)
@@ -2059,6 +2078,7 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
         {
             scene->entities[index].active = true;
             scene->entities[index].visible = true;
+            scene->entities[index].renderer_enabled = true;
             scene->entities[index].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
             scene->entities[index].parent = HENKA_INVALID_ENTITY;
             scene->entities[index].transform = henka_transform_identity();
@@ -2107,6 +2127,7 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
 
     scene->entities[scene->entity_count].active = true;
     scene->entities[scene->entity_count].visible = true;
+    scene->entities[scene->entity_count].renderer_enabled = true;
     scene->entities[scene->entity_count].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
     scene->entities[scene->entity_count].parent = HENKA_INVALID_ENTITY;
     scene->entities[scene->entity_count].transform = henka_transform_identity();
@@ -2171,6 +2192,7 @@ void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
     record->active = false;
     henka_scene_advance_entity_generation(record);
     record->visible = true;
+    record->renderer_enabled = true;
     record->flags = HENKA_SCENE_ENTITY_FLAG_NONE;
     record->selection_owner = HENKA_INVALID_ENTITY;
     record->mesh = NULL;
@@ -2206,6 +2228,16 @@ bool henka_scene_is_entity_visible(const henka_scene* scene, henka_entity entity
 
     record = henka_scene_get_entity_record_const(scene, entity);
     return record != NULL ? record->visible : false;
+}
+
+bool henka_scene_is_entity_renderer_enabled(
+    const henka_scene* scene,
+    henka_entity entity)
+{
+    const henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record_const(scene, entity);
+    return record != NULL ? record->renderer_enabled : false;
 }
 
 size_t henka_scene_get_entity_count(const henka_scene* scene)
@@ -2365,6 +2397,7 @@ henka_result henka_scene_get_entity_info(const henka_scene* scene, henka_entity 
     out_info->name = record->name;
     out_info->tag = record->tag;
     out_info->visible = record->visible;
+    out_info->renderer_enabled = record->renderer_enabled;
     out_info->has_bounds = record->has_local_bounds;
     out_info->local_bounds = record->local_bounds;
     out_info->transform = record->transform;
@@ -3254,6 +3287,31 @@ henka_result henka_scene_set_entity_visible(henka_scene* scene, henka_entity ent
             return HENKA_ERROR_LIMIT;
         }
         record->visible = visible;
+        henka_scene_bump_render_revision(scene);
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_entity_renderer_enabled(
+    henka_scene* scene,
+    henka_entity entity,
+    bool enabled)
+{
+    henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (record->renderer_enabled != enabled)
+    {
+        if (!henka_scene_render_revision_available(scene))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        record->renderer_enabled = enabled;
         henka_scene_bump_render_revision(scene);
     }
     return HENKA_SUCCESS;

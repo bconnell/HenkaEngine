@@ -136,6 +136,104 @@ cleanup:
     return success;
 }
 
+static bool test_renderer_enabled_round_trip(void)
+{
+    henka_scene_document* document = NULL;
+    sandbox3d_scene_document_bridge* bridge = NULL;
+    henka_scene* scene = NULL;
+    henka_scene_document_object object =
+        henka_scene_document_object_default();
+    henka_scene_document_object synced_object;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_object_info info;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    uint64_t revision_before;
+    bool success = false;
+
+    (void)snprintf(object.name, sizeof(object.name), "%s", "Renderer Toggle");
+    object.renderer.enabled = false;
+    if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_document_add_object(document, &object, &object_id) !=
+            HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_create(document, scene, &bridge) !=
+            HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(scene, "Runtime Toggle")) ==
+            HENKA_INVALID_ENTITY ||
+        sandbox3d_scene_document_bridge_bind(bridge, object_id, entity) !=
+            HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_object(bridge, object_id) !=
+            HENKA_SUCCESS ||
+        henka_scene_get_entity_info(scene, entity, &info) != HENKA_SUCCESS ||
+        info.visible != true ||
+        info.renderer_enabled != false ||
+        henka_scene_is_entity_visible(scene, entity) != true ||
+        henka_scene_is_entity_renderer_enabled(scene, entity) != false)
+    {
+        goto cleanup;
+    }
+
+    revision_before = henka_scene_get_render_revision(scene);
+    if (sandbox3d_scene_document_bridge_apply_object(bridge, object_id) !=
+            HENKA_SUCCESS ||
+        henka_scene_get_render_revision(scene) != revision_before ||
+        sandbox3d_scene_document_bridge_sync_object(bridge, object_id) !=
+            HENKA_SUCCESS ||
+        henka_scene_document_get_object(document, object_id, &synced_object) !=
+            HENKA_SUCCESS ||
+        synced_object.renderer.enabled != false)
+    {
+        goto cleanup;
+    }
+
+    object.id = object_id;
+    object.renderer.enabled = true;
+    if (henka_scene_document_set_object(document, &object) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_object(bridge, object_id) !=
+            HENKA_SUCCESS ||
+        henka_scene_get_entity_info(scene, entity, &info) != HENKA_SUCCESS ||
+        info.visible != true ||
+        info.renderer_enabled != true ||
+        henka_scene_is_entity_renderer_enabled(scene, entity) != true)
+    {
+        goto cleanup;
+    }
+
+    revision_before = henka_scene_get_render_revision(scene);
+    if (henka_scene_set_entity_renderer_enabled(scene, entity, false) !=
+            HENKA_SUCCESS ||
+        henka_scene_get_render_revision(scene) != revision_before + 1U ||
+        henka_scene_is_entity_renderer_enabled(scene, entity) != false ||
+        henka_scene_is_entity_visible(scene, entity) != true ||
+        sandbox3d_scene_document_bridge_sync_object(bridge, object_id) !=
+            HENKA_SUCCESS ||
+        henka_scene_document_get_object(document, object_id, &synced_object) !=
+            HENKA_SUCCESS ||
+        synced_object.renderer.enabled != false)
+    {
+        goto cleanup;
+    }
+
+    scene->render_revision = UINT64_MAX;
+    scene->content_revision = UINT64_MAX;
+    if (henka_scene_set_entity_renderer_enabled(scene, entity, true) !=
+            HENKA_ERROR_LIMIT ||
+        henka_scene_is_entity_renderer_enabled(scene, entity) != false ||
+        henka_scene_is_entity_visible(scene, entity) != true ||
+        henka_scene_get_render_revision(scene) != UINT64_MAX)
+    {
+        goto cleanup;
+    }
+
+    success = true;
+
+cleanup:
+    sandbox3d_scene_document_bridge_destroy(bridge);
+    henka_scene_destroy(scene);
+    henka_scene_document_destroy(document);
+    return success;
+}
+
 int main(void)
 {
     henka_scene_document* document = NULL;
@@ -170,6 +268,11 @@ int main(void)
     if (!test_hierarchy_capacity_failure_is_transactional())
     {
         fprintf(stderr, "hierarchy capacity transaction test failed\n");
+        return 1;
+    }
+    if (!test_renderer_enabled_round_trip())
+    {
+        fprintf(stderr, "renderer enabled round-trip test failed\n");
         return 1;
     }
 
