@@ -360,19 +360,19 @@ broader interior edge-set bevel remain incomplete.
 
 ### Surface-connected Edge Extrude
 
-The core API supports bounded surface-connected extrusion for one open boundary edge.
+The core API supports bounded surface-connected extrusion for one open boundary edge or a pairwise vertex-disjoint batch on distinct faces.
 
 The operation:
 
 - offsets the edge along its incident face normal;
 - replaces that edge in the source face;
-- creates one connecting quad;
+- creates one connecting quad per selected edge;
 - preserves selected hard-edge intent;
 - publishes after topology and geometry validation.
 
-Interior/manifold edges and broader edge-set extrusion remain unsupported.
+Interior/manifold edges and mixed, shared-endpoint, same-face, or otherwise unsupported batches remain unsupported.
 
-The shared Sandbox modeling session exposes this path through Preview, Cancel, and Apply. The Authoring panel uses the shared amount control.
+The shared Sandbox modeling session exposes this path through Preview, Cancel, and Apply for one edge or a bounded batch. The Authoring panel uses the shared amount control.
 
 ## Loop Cut and Edge Slide
 
@@ -555,7 +555,8 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 
 - broader non-manifold vertex-fan handling;
 - incompatible-normal fan handling;
-- generalized surface-connected Vertex/Edge Extrude;
+- generalized surface-connected Vertex/Edge Extrude beyond the bounded supported
+  boundary-edge cases;
 - broader weld/split/bridge workflows;
 - multi-face and general loop-cut networks;
 - branching and broader interior edge-set bevel;

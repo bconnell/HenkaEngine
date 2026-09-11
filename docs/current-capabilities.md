@@ -433,11 +433,12 @@ Available edge authoring includes:
 - bounded same-face boundary bevel with shared-endpoint corner caps;
 - bounded compatible interior-edge bevel for isolated two-quad patches,
   pairwise vertex-disjoint selections, and covered connected quad strips;
-- bounded surface-connected extrusion for one open boundary edge.
+- bounded surface-connected extrusion for one open boundary edge or a
+  pairwise vertex-disjoint batch on distinct faces.
 
-Surface-connected boundary-edge extrusion offsets the edge along its incident face normal, preserves the source face and selected hard-edge intent, and creates one connecting quad transactionally.
+Surface-connected boundary-edge extrusion offsets each selected edge along its incident face normal, preserves the source face and selected hard-edge intent, and creates one connecting quad per edge transactionally.
 
-Interior/manifold edges and broader edge-set extrusion remain rejected.
+Interior/manifold edges and mixed, shared-endpoint, same-face, or otherwise unsupported batches remain rejected.
 
 Interior bevel rejects:
 
@@ -496,7 +497,7 @@ Both reject unsupported source topology and invalid direction/distance inputs.
 
 The topology overlay presents all authored source vertices and distinguishes loose vertices, boundary edges, and manifold edges with deterministic high-contrast markers.
 
-The shared Sandbox modeling-operator session and Authoring panel can preview, cancel, and apply explicit-axis extrusion for exactly one selected loose vertex or standalone edge through core transactional operations. The same control routes one selected open boundary edge through face-normal surface-connected extrusion.
+The shared Sandbox modeling-operator session and Authoring panel can preview, cancel, and apply explicit-axis extrusion for exactly one selected loose vertex or standalone edge through core transactional operations. The same control routes one or a bounded pairwise batch of selected open boundary edges through face-normal surface-connected extrusion.
 
 ### Renderer-backed loose geometry
 
@@ -504,7 +505,7 @@ The shared Sandbox modeling-operator session and Authoring panel can preview, ca
 - Mixed surface-plus-loose and no-face wire-plus-point sources use bounded renderer-backed multi-primitive ownership, preserving triangle, wire, and isolated-point parts instead of dropping or rejecting valid source geometry.
 - Vertex-mode controls can add a loose vertex from finite X/Y/Z coordinates or add a standalone edge from exactly two selected vertices through the same transactional source/render/history boundary.
 
-Broader loose-component editing and general surface-connected Vertex/Edge Extrude workflows remain unavailable. The bounded boundary-edge path is not a claim of complete editor-integrated Edge Extrude coverage.
+Broader loose-component editing and general surface-connected Vertex/Edge Extrude workflows remain unavailable. Branching, mixed, shared-endpoint, and broader connected edge domains remain outside the bounded boundary-edge path.
 
 ### Quad-strip traversal, Loop Cut, and Edge Slide
 

@@ -6200,6 +6200,138 @@ cleanup:
     return result;
 }
 
+henka_result henka_authoring_mesh_extrude_boundary_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    float distance,
+    henka_authoring_modeling_report* out_report)
+{
+    henka_authoring_edge_id* sorted_edges = NULL;
+    henka_authoring_vertex_id* edge_endpoints = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_desc desc;
+    henka_authoring_modeling_report last_report = {0};
+    size_t edge_bytes;
+    size_t endpoint_count;
+    size_t endpoint_bytes;
+    size_t required_vertices;
+    size_t required_edges;
+    size_t required_faces;
+    size_t index;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+
+    modeling_report_reset(out_report);
+    if (mesh == NULL || edge_ids == NULL || edge_count == 0U ||
+        !modeling_finite_scalar(distance) || fabsf(distance) <= 1.0e-7f ||
+        !henka_authoring_mesh_validate(mesh) || !modeling_face_geometry_is_valid(mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    desc = henka_authoring_mesh_get_desc(mesh);
+    if (edge_count > desc.max_edges ||
+        !henka_checked_size_multiply(edge_count, sizeof(*sorted_edges), &edge_bytes) ||
+        !henka_checked_size_multiply(edge_count, 2U, &endpoint_count) ||
+        !henka_checked_size_multiply(endpoint_count, sizeof(*edge_endpoints), &endpoint_bytes) ||
+        !henka_checked_size_multiply(edge_count, 2U, &required_vertices) ||
+        !henka_checked_size_multiply(edge_count, 3U, &required_edges) ||
+        !henka_checked_size_multiply(edge_count, 1U, &required_faces))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    sorted_edges = (henka_authoring_edge_id*)henka_malloc(edge_bytes);
+    edge_endpoints = (henka_authoring_vertex_id*)henka_malloc(endpoint_bytes);
+    if (sorted_edges == NULL || edge_endpoints == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    memcpy(sorted_edges, edge_ids, edge_bytes);
+    qsort(sorted_edges, edge_count, sizeof(*sorted_edges), modeling_vertex_id_compare);
+    for (index = 0U; index < edge_count; ++index)
+    {
+        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+            mesh, sorted_edges[index]);
+        const henka_authoring_vertex_id first_vertex = edge == NULL
+            ? HENKA_AUTHORING_INVALID_ID : edge->vertices[0];
+        const henka_authoring_vertex_id second_vertex = edge == NULL
+            ? HENKA_AUTHORING_INVALID_ID : edge->vertices[1];
+        size_t previous;
+        if (edge == NULL || edge->face_count != 1U || first_vertex == second_vertex ||
+            henka_authoring_mesh_get_vertex(mesh, first_vertex) == NULL ||
+            henka_authoring_mesh_get_vertex(mesh, second_vertex) == NULL)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        edge_endpoints[index * 2U] = first_vertex;
+        edge_endpoints[index * 2U + 1U] = second_vertex;
+        for (previous = 0U; previous < index; ++previous)
+        {
+            const henka_authoring_edge* other = henka_authoring_mesh_get_edge(
+                mesh, sorted_edges[previous]);
+            if (other == NULL || other->faces[0] == edge->faces[0] ||
+                other->vertices[0] == first_vertex || other->vertices[0] == second_vertex ||
+                other->vertices[1] == first_vertex || other->vertices[1] == second_vertex)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (before.vertices > desc.max_vertices || before.edges > desc.max_edges ||
+        before.faces > desc.max_faces || desc.max_vertices - before.vertices < required_vertices ||
+        desc.max_edges - before.edges < required_edges || desc.max_faces - before.faces < required_faces)
+    {
+        result = HENKA_ERROR_LIMIT;
+        goto cleanup;
+    }
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    for (index = 0U; result == HENKA_SUCCESS && index < edge_count; ++index)
+    {
+        const henka_authoring_edge_id current_edge_id = modeling_find_edge_between_vertices(
+            candidate, edge_endpoints[index * 2U], edge_endpoints[index * 2U + 1U]);
+        henka_authoring_edge_id new_edge_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+        if (current_edge_id == HENKA_AUTHORING_INVALID_ID)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            break;
+        }
+        result = henka_authoring_mesh_extrude_edge(
+            candidate, current_edge_id, distance, &new_edge_id, &new_face_id, &last_report);
+    }
+    if (result == HENKA_SUCCESS &&
+        (!henka_authoring_mesh_validate(candidate) || !modeling_face_geometry_is_valid(candidate)))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        after = henka_authoring_mesh_get_counts(candidate);
+        result = modeling_commit(mesh, candidate);
+        candidate = NULL;
+        if (result == HENKA_SUCCESS)
+        {
+            modeling_report_count_delta(&before, &after, out_report);
+            if (out_report != NULL)
+            {
+                out_report->primary_edge_id = last_report.primary_edge_id;
+                out_report->primary_face_id = last_report.primary_face_id;
+            }
+        }
+    }
+
+cleanup:
+    henka_authoring_mesh_destroy(candidate);
+    henka_free(edge_endpoints);
+    henka_free(sorted_edges);
+    return result;
+}
+
 static henka_result modeling_inset_candidate(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,

@@ -19,7 +19,8 @@ typedef enum sandbox3d_modeling_operator_kind
      * the explicit operator axis; connected boundary vertices use their
      * surface fan normal through the authoring-mesh extrusion contract. */
     SANDBOX3D_MODELING_OPERATOR_EXTRUDE,
-    /* Surface-connected extrusion of one selected open boundary edge. */
+    /* Surface-connected extrusion of one or a bounded batch of selected open
+     * boundary edges. */
     SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE
 } sandbox3d_modeling_operator_kind;
 

@@ -475,13 +475,14 @@ Integrated authoring is already underway as part of the current 3D completion pa
 - Edge mode provides signed-factor Edge Slide for one compatible open edge-loop
   or closed edge-cycle selection through the shared modeling operator session.
 - Branching or otherwise unsupported interior-edge cases, edge-loop domains,
-  generalized Edge Extrude, and general loop-cut networks remain in progress or
-  planned.
+  generalized Edge Extrude beyond the bounded boundary-edge cases, and general
+  loop-cut networks remain in progress or planned.
 
 #### Loose-component and surface-connected editing
 
-- Bounded surface-connected extrusion for one open boundary edge is available
-  through the shared modeling session and Authoring panel.
+- Bounded surface-connected extrusion for one open boundary edge or a pairwise
+  batch on distinct faces is available through the shared modeling session and
+  Authoring panel.
 - Homogeneous line/point evaluation and bounded triangle/wire/point renderer
   ownership are available.
 - Broader loose-component selection and editing workflows remain in progress.
@@ -500,9 +501,9 @@ Integrated authoring is already underway as part of the current 3D completion pa
 1. Generalized Vertex Extrude beyond connected open boundary fans, broader
    non-manifold or incompatible-normal fan handling, and broader vertex topology
    operations.
-2. Generalized surface-connected Edge Extrude, broader edge-set operations,
-   weld/split/bridge workflows, general loop-cut networks, and broader source
-   export.
+2. Generalized surface-connected Edge Extrude beyond the bounded boundary-edge
+   cases, broader edge-set operations, weld/split/bridge workflows, general
+   loop-cut networks, and broader source export.
 3. Automatic multi-island UV unwrap, texture painting, rigging, skinning, and
    animation authoring.
 4. Complete scene/project serialization and wider adapter-based interchange

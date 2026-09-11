@@ -229,6 +229,19 @@ henka_result henka_authoring_mesh_extrude_edge(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Extrudes a pairwise vertex-disjoint set of open boundary edges on distinct
+ * faces along each edge's incident face normal. Each selected edge creates
+ * two vertices, three edges, and one connecting quad in one transaction. The
+ * candidate is published only after validation; mixed, interior, duplicate,
+ * shared-endpoint, same-face, invalid-distance, and capacity-invalid
+ * selections are rejected without changing the source mesh. */
+henka_result henka_authoring_mesh_extrude_boundary_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    float distance,
+    henka_authoring_modeling_report* out_report);
+
 /* Dissolves one compatible interior edge into its two adjacent face loops.
  * Boundary, hard, UV-seamed, material-discontinuous, and capacity-invalid
  * requests are rejected without changing the source mesh. */
