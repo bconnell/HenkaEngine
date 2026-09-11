@@ -150,20 +150,13 @@ static henka_result sandbox3d_game_authoring_build_object(
     henka_interaction_desc interaction;
     henka_material material;
     const henka_material_asset* material_asset = NULL;
-    uint64_t material_asset_revision = 0U;
-    bool material_asset_overridden = false;
     int written;
     if (scene == NULL || out_object == NULL ||
         !henka_scene_is_entity_valid(scene, entity) ||
         henka_scene_get_entity_info(scene, entity, &info) != HENKA_SUCCESS ||
         henka_scene_get_entity_interaction(scene, entity, &interaction) != HENKA_SUCCESS ||
         henka_scene_get_entity_material(scene, entity, &material) != HENKA_SUCCESS ||
-        henka_scene_get_entity_material_asset(scene, entity, &material_asset) != HENKA_SUCCESS ||
-        henka_scene_get_entity_material_asset_state(
-            scene,
-            entity,
-            &material_asset_revision,
-            &material_asset_overridden) != HENKA_SUCCESS)
+        henka_scene_get_entity_material_asset(scene, entity, &material_asset) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -179,20 +172,55 @@ static henka_result sandbox3d_game_authoring_build_object(
     }
     out_object->visible = info.visible;
     out_object->transform = info.transform;
+    out_object->renderer.material_type = material.type;
+    out_object->renderer.base_color_uv_set = material.base_color_uv_set;
+    out_object->renderer.normal_uv_set = material.normal_uv_set;
+    out_object->renderer.metallic_roughness_uv_set = material.metallic_roughness_uv_set;
+    out_object->renderer.occlusion_uv_set = material.occlusion_uv_set;
+    out_object->renderer.emissive_uv_set = material.emissive_uv_set;
+    out_object->renderer.transmission_uv_set = material.transmission_uv_set;
+    out_object->renderer.thickness_uv_set = material.thickness_uv_set;
     out_object->renderer.base_color = material.base_color;
     out_object->renderer.metallic = material.metallic;
     out_object->renderer.roughness = material.roughness;
     out_object->renderer.emissive = material.emissive_color;
     out_object->renderer.emissive_strength = material.emissive_strength;
-    if (material_asset != NULL && material_asset_overridden)
+    out_object->renderer.specular_factor = material.specular_factor;
+    out_object->renderer.specular_color = material.specular_color;
+    out_object->renderer.ior = material.ior;
+    out_object->renderer.transmission = material.transmission;
+    out_object->renderer.thickness = material.thickness;
+    out_object->renderer.attenuation_distance = material.attenuation_distance;
+    out_object->renderer.attenuation_color = material.attenuation_color;
+    out_object->renderer.subsurface = material.subsurface;
+    out_object->renderer.subsurface_color = material.subsurface_color;
+    out_object->renderer.normal_scale = material.normal_scale;
+    out_object->renderer.occlusion_strength = material.occlusion_strength;
+    out_object->renderer.clearcoat = material.clearcoat;
+    out_object->renderer.clearcoat_roughness = material.clearcoat_roughness;
+    out_object->renderer.alpha_cutoff = material.alpha_cutoff;
+    out_object->renderer.alpha_mode = material.alpha_mode;
+    out_object->renderer.use_texture = material.use_texture;
+    out_object->renderer.use_lighting = material.use_lighting;
+    out_object->renderer.depth_test = material.depth_test;
+    out_object->renderer.double_sided = material.double_sided;
+    out_object->renderer.cast_shadows = material.cast_shadows;
+    out_object->renderer.receive_shadows = material.receive_shadows;
+    out_object->renderer.sheen_color = material.sheen_color;
+    out_object->renderer.sheen_roughness = material.sheen_roughness;
+    if (material_asset != NULL || material.base_color_texture != NULL ||
+        material.normal_texture != NULL || material.metallic_roughness_texture != NULL ||
+        material.occlusion_texture != NULL || material.emissive_texture != NULL ||
+        material.transmission_texture != NULL || material.thickness_texture != NULL ||
+        material.terrain_layers_enabled)
     {
-        /* This bridge has no material-asset path/authority with which to
-         * reconstruct an explicit override. Do not collapse that state into
-         * an apparently asset-owned document. */
+        /* This bridge has no material-resource path/authority with which to
+         * reconstruct borrowed asset or texture state. Do not collapse that
+         * state into an apparently complete inline document. */
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    /* Inline scalar state is document-owned only when no manager-owned
-     * material definition is attached. */
+    /* Pointer-free inline material state is document-owned only when no
+     * manager-owned definition or borrowed texture state is attached. */
     out_object->renderer.material_override =
         material_asset == NULL && material.shader != NULL;
     out_object->interaction.enabled = interaction.enabled;

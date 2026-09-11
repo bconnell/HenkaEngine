@@ -262,12 +262,14 @@ scale is not approximated. Destroying a parent promotes its direct children to
 roots while preserving their world transforms, and stale parent handles cannot
 be reused.
 
-HSCN v8 persists parent IDs, an optional authored scene camera, and the
-value-owned Character Controller component, and validates references, cycles,
-camera values, and controller values during load; v1-v6 documents migrate in
-memory without being rewritten, while v7 data defaults the new controller
-component to disabled. Legacy documents without an authored camera remain
-valid and expose no authored camera value.
+HSCN v9 persists parent IDs, an optional authored scene camera, the value-owned
+Character Controller component, and pointer-free inline renderer material
+state, and validates references, cycles, camera values, controller values, and
+renderer values during load. v1-v6 documents migrate in memory without being
+rewritten, v7 data defaults the new controller component to disabled, and v8
+data retains its controller payload while using defaults for the v9 renderer
+fields. Legacy documents without an authored camera remain valid and expose no
+authored camera value.
 The Sandbox Object Details > Hierarchy group provides an explicit parent
 picker and Unparent action for registered scene objects. It presents stable
 runtime entity identities beside display names and routes Keep Local and Keep

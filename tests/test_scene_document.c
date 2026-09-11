@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include <henka/core.h>
+#include <henka/scene.h>
 #include <henka/scene_document.h>
 
 #include "../engine/src/core/memory_internal.h"
@@ -457,7 +458,7 @@ static bool test_scene_document_write_v2_fixture(const char* path)
     return result;
 }
 
-static bool test_scene_document_write_v3_to_v7_fixture(
+static bool test_scene_document_write_v3_to_v8_fixture(
     const char* path,
     uint32_t version)
 {
@@ -471,7 +472,7 @@ static bool test_scene_document_write_v3_to_v7_fixture(
 
     if (path == NULL ||
         (version != 3U && version != 4U && version != 5U &&
-            version != 6U && version != 7U))
+            version != 6U && version != 7U && version != 8U))
     {
         return false;
     }
@@ -492,7 +493,8 @@ static bool test_scene_document_write_v3_to_v7_fixture(
         sizeof(payload),
         &position,
         version == 3U ? "v3" : (version == 4U ? "v4" :
-            (version == 5U ? "v5" : (version == 6U ? "v6" : "v7"))));
+            (version == 5U ? "v5" : (version == 6U ? "v6" :
+                (version == 7U ? "v7" : "v8")))));
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.x);
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.y);
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.transform.position.z);
@@ -547,6 +549,29 @@ static bool test_scene_document_write_v3_to_v7_fixture(
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.audio.min_distance);
     result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, object.audio.max_distance);
     result = result && test_scene_document_legacy_write_u32(payload, sizeof(payload), &position, 0U);
+    if (version >= 8U)
+    {
+        result = result && test_scene_document_legacy_write_float(
+            payload, sizeof(payload), &position, object.character_controller.radius);
+        result = result && test_scene_document_legacy_write_float(
+            payload, sizeof(payload), &position, object.character_controller.half_height);
+        result = result && test_scene_document_legacy_write_float(
+            payload, sizeof(payload), &position, object.character_controller.max_speed);
+        result = result && test_scene_document_legacy_write_float(
+            payload, sizeof(payload), &position, object.character_controller.jump_speed);
+        result = result && test_scene_document_legacy_write_float(
+            payload, sizeof(payload), &position, object.character_controller.acceleration);
+        result = result && test_scene_document_legacy_write_float(
+            payload, sizeof(payload), &position, object.character_controller.deceleration);
+        result = result && test_scene_document_legacy_write_float(
+            payload, sizeof(payload), &position, object.character_controller.air_control);
+        result = result && test_scene_document_legacy_write_float(
+            payload, sizeof(payload), &position, object.character_controller.slope_limit_degrees);
+        result = result && test_scene_document_legacy_write_u32(
+            payload, sizeof(payload), &position, object.character_controller.layer);
+        result = result && test_scene_document_legacy_write_u32(
+            payload, sizeof(payload), &position, object.character_controller.mask);
+    }
     if (version >= 4U)
     {
         result = result && test_scene_document_legacy_write_float(payload, sizeof(payload), &position, listener.position.x);
@@ -651,6 +676,7 @@ int main(void)
     const char* v5_path = "build/test_tmp/scene_document_legacy_v5.hscene";
     const char* v6_path = "build/test_tmp/scene_document_legacy_v6.hscene";
     const char* v7_path = "build/test_tmp/scene_document_legacy_v7.hscene";
+    const char* v8_path = "build/test_tmp/scene_document_legacy_v8.hscene";
     const char* camera_path = "build/test_tmp/scene_document_camera.hscene";
     const unsigned char malformed_data[] = {'H', 'S', 'C', 'N', 1U};
     henka_scene_document* document = NULL;
@@ -747,6 +773,38 @@ int main(void)
             object.character_controller.deceleration = 5.0f;
             object.character_controller.air_control = 0.75f;
             object.character_controller.slope_limit_degrees = 42.0f;
+            object.renderer.material_override = true;
+            object.renderer.material_type = HENKA_MATERIAL_TYPE_UNLIT;
+            object.renderer.base_color_uv_set = 1;
+            object.renderer.normal_uv_set = 1;
+            object.renderer.metallic_roughness_uv_set = 1;
+            object.renderer.occlusion_uv_set = 1;
+            object.renderer.emissive_uv_set = 1;
+            object.renderer.transmission_uv_set = 1;
+            object.renderer.thickness_uv_set = 1;
+            object.renderer.specular_factor = 0.72f;
+            object.renderer.specular_color = (henka_vec3){0.21f, 0.32f, 0.43f};
+            object.renderer.ior = 1.31f;
+            object.renderer.transmission = 0.24f;
+            object.renderer.thickness = 0.73f;
+            object.renderer.attenuation_distance = 12.5f;
+            object.renderer.attenuation_color = (henka_vec3){0.41f, 0.52f, 0.63f};
+            object.renderer.subsurface = 0.17f;
+            object.renderer.subsurface_color = (henka_vec3){0.64f, 0.35f, 0.26f};
+            object.renderer.normal_scale = 0.83f;
+            object.renderer.occlusion_strength = 0.74f;
+            object.renderer.clearcoat = 0.36f;
+            object.renderer.clearcoat_roughness = 0.29f;
+            object.renderer.alpha_cutoff = 0.41f;
+            object.renderer.alpha_mode = HENKA_MATERIAL_ALPHA_BLENDED;
+            object.renderer.use_texture = true;
+            object.renderer.use_lighting = false;
+            object.renderer.depth_test = false;
+            object.renderer.double_sided = true;
+            object.renderer.cast_shadows = false;
+            object.renderer.receive_shadows = false;
+            object.renderer.sheen_color = (henka_vec3){0.18f, 0.27f, 0.39f};
+            object.renderer.sheen_roughness = 0.48f;
         }
         if (henka_scene_document_add_object(document, &object, &added_id) != HENKA_SUCCESS)
         {
@@ -793,17 +851,17 @@ int main(void)
         henka_scene_document_validate(document) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", second_path) != HENKA_SUCCESS ||
-        !test_scene_document_write_v3_to_v7_fixture(v3_path, 3U) ||
+        !test_scene_document_write_v3_to_v8_fixture(v3_path, 3U) ||
         !test_scene_document_files_equal(first_path, second_path) ||
         !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)) ||
         henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=8 objects=257") == NULL)
+        inspection_size == 0U || strstr(inspection, "HSCN version=9 objects=257") == NULL)
     {
         fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v3_to_v7_fixture(v5_path, 5U) ||
+    if (!test_scene_document_write_v3_to_v8_fixture(v5_path, 5U) ||
         henka_scene_document_load_file(loaded, ".", v5_path) != HENKA_SUCCESS ||
         henka_scene_document_get_object_at(loaded, 0U, &loaded_object) != HENKA_SUCCESS ||
         loaded_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
@@ -835,6 +893,45 @@ int main(void)
         loaded_object.character_controller.deceleration != 5.0f ||
         loaded_object.character_controller.air_control != 0.75f ||
         loaded_object.character_controller.slope_limit_degrees != 42.0f ||
+        loaded_object.renderer.material_type != HENKA_MATERIAL_TYPE_UNLIT ||
+        loaded_object.renderer.base_color_uv_set != 1 ||
+        loaded_object.renderer.normal_uv_set != 1 ||
+        loaded_object.renderer.metallic_roughness_uv_set != 1 ||
+        loaded_object.renderer.occlusion_uv_set != 1 ||
+        loaded_object.renderer.emissive_uv_set != 1 ||
+        loaded_object.renderer.transmission_uv_set != 1 ||
+        loaded_object.renderer.thickness_uv_set != 1 ||
+        loaded_object.renderer.specular_factor != 0.72f ||
+        loaded_object.renderer.specular_color.x != 0.21f ||
+        loaded_object.renderer.specular_color.y != 0.32f ||
+        loaded_object.renderer.specular_color.z != 0.43f ||
+        loaded_object.renderer.ior != 1.31f ||
+        loaded_object.renderer.transmission != 0.24f ||
+        loaded_object.renderer.thickness != 0.73f ||
+        loaded_object.renderer.attenuation_distance != 12.5f ||
+        loaded_object.renderer.attenuation_color.x != 0.41f ||
+        loaded_object.renderer.attenuation_color.y != 0.52f ||
+        loaded_object.renderer.attenuation_color.z != 0.63f ||
+        loaded_object.renderer.subsurface != 0.17f ||
+        loaded_object.renderer.subsurface_color.x != 0.64f ||
+        loaded_object.renderer.subsurface_color.y != 0.35f ||
+        loaded_object.renderer.subsurface_color.z != 0.26f ||
+        loaded_object.renderer.normal_scale != 0.83f ||
+        loaded_object.renderer.occlusion_strength != 0.74f ||
+        loaded_object.renderer.clearcoat != 0.36f ||
+        loaded_object.renderer.clearcoat_roughness != 0.29f ||
+        loaded_object.renderer.alpha_cutoff != 0.41f ||
+        loaded_object.renderer.alpha_mode != HENKA_MATERIAL_ALPHA_BLENDED ||
+        !loaded_object.renderer.use_texture ||
+        loaded_object.renderer.use_lighting ||
+        loaded_object.renderer.depth_test ||
+        !loaded_object.renderer.double_sided ||
+        loaded_object.renderer.cast_shadows ||
+        loaded_object.renderer.receive_shadows ||
+        loaded_object.renderer.sheen_color.x != 0.18f ||
+        loaded_object.renderer.sheen_color.y != 0.27f ||
+        loaded_object.renderer.sheen_color.z != 0.39f ||
+        loaded_object.renderer.sheen_roughness != 0.48f ||
         henka_scene_document_get_audio_listener(loaded, &loaded_listener) != HENKA_SUCCESS ||
         loaded_listener.position.x != authored_listener.position.x ||
         loaded_listener.position.y != authored_listener.position.y ||
@@ -935,7 +1032,7 @@ int main(void)
         fprintf(stderr, "scene document test failed during v1 migration\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v3_to_v7_fixture(v4_path, 4U) ||
+    if (!test_scene_document_write_v3_to_v8_fixture(v4_path, 4U) ||
         henka_scene_document_load_file(loaded, ".", v4_path) != HENKA_SUCCESS ||
         henka_scene_document_get_object(loaded, first_id, &loaded_object) != HENKA_SUCCESS ||
         loaded_object.audio.streaming)
@@ -943,7 +1040,7 @@ int main(void)
         fprintf(stderr, "scene document test failed during v4 migration\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v3_to_v7_fixture(v6_path, 6U) ||
+    if (!test_scene_document_write_v3_to_v8_fixture(v6_path, 6U) ||
         henka_scene_document_load_file(loaded, ".", v6_path) != HENKA_SUCCESS ||
         henka_scene_document_has_camera(loaded) ||
         henka_scene_document_get_camera(loaded, &(henka_camera){0}) == HENKA_SUCCESS)
@@ -951,7 +1048,7 @@ int main(void)
         fprintf(stderr, "scene document test failed during v6 compatibility load\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v3_to_v7_fixture(v7_path, 7U) ||
+    if (!test_scene_document_write_v3_to_v8_fixture(v7_path, 7U) ||
         henka_scene_document_load_file(loaded, ".", v7_path) != HENKA_SUCCESS ||
         henka_scene_document_get_object_at(loaded, 0U, &loaded_object) != HENKA_SUCCESS ||
         loaded_object.character_controller.enabled ||
@@ -959,6 +1056,31 @@ int main(void)
     {
         fprintf(stderr, "scene document test failed during v7 compatibility load\n");
         goto cleanup;
+    }
+    {
+        const henka_scene_document_object default_object =
+            henka_scene_document_object_default();
+        henka_result v8_result;
+        henka_result v8_object_result;
+        bool v8_fixture_result = test_scene_document_write_v3_to_v8_fixture(v8_path, 8U);
+        loaded_object = default_object;
+        v8_result = v8_fixture_result
+            ? henka_scene_document_load_file(loaded, ".", v8_path)
+            : HENKA_ERROR_INVALID_ARGUMENT;
+        v8_object_result = v8_result == HENKA_SUCCESS
+            ? henka_scene_document_get_object_at(loaded, 0U, &loaded_object)
+            : HENKA_ERROR_INVALID_ARGUMENT;
+        if (!v8_fixture_result || v8_result != HENKA_SUCCESS ||
+            v8_object_result != HENKA_SUCCESS ||
+            loaded_object.character_controller.enabled ||
+            loaded_object.character_controller.radius != default_object.character_controller.radius ||
+            loaded_object.renderer.material_type != HENKA_MATERIAL_TYPE_LIT ||
+            loaded_object.renderer.specular_factor != 1.0f ||
+            !loaded_object.renderer.use_lighting)
+        {
+            fprintf(stderr, "scene document test failed during v8 compatibility load\n");
+            goto cleanup;
+        }
     }
     authored_camera = henka_camera_create_perspective(
         55.0f * HENKA_DEG_TO_RAD,
@@ -1054,7 +1176,7 @@ int main(void)
         !loaded_object.audio.streaming ||
         henka_scene_document_format_inspection(
             loaded, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        strstr(inspection, "HSCN version=8") == NULL)
+        strstr(inspection, "HSCN version=9") == NULL)
     {
         fprintf(stderr, "scene document test failed during streamed audio v7 round-trip\n");
         goto cleanup;

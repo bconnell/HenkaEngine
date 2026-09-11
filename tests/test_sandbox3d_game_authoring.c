@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <math.h>
 
@@ -68,6 +69,119 @@ static bool test_write_audio_fixture(const char* path)
         success = false;
     }
     free(bytes);
+    return success;
+}
+
+static bool test_inline_material_capture_is_complete(void)
+{
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_material material = henka_material_default();
+    henka_scene_document_object object;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id captured_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    bool success = false;
+
+    material.shader = (henka_shader*)(uintptr_t)1U;
+    material.type = HENKA_MATERIAL_TYPE_UNLIT;
+    material.base_color_uv_set = 1;
+    material.normal_uv_set = 1;
+    material.metallic_roughness_uv_set = 1;
+    material.occlusion_uv_set = 1;
+    material.emissive_uv_set = 1;
+    material.transmission_uv_set = 1;
+    material.thickness_uv_set = 1;
+    material.base_color = (henka_vec4){0.12f, 0.23f, 0.34f, 0.45f};
+    material.metallic = 0.56f;
+    material.roughness = 0.67f;
+    material.specular_factor = 0.78f;
+    material.specular_color = (henka_vec3){0.21f, 0.32f, 0.43f};
+    material.ior = 1.31f;
+    material.transmission = 0.24f;
+    material.thickness = 0.73f;
+    material.attenuation_distance = 12.5f;
+    material.attenuation_color = (henka_vec3){0.41f, 0.52f, 0.63f};
+    material.subsurface = 0.17f;
+    material.subsurface_color = (henka_vec3){0.64f, 0.35f, 0.26f};
+    material.normal_scale = 0.83f;
+    material.occlusion_strength = 0.74f;
+    material.emissive_color = (henka_vec3){0.11f, 0.22f, 0.33f};
+    material.emissive_strength = 1.25f;
+    material.clearcoat = 0.36f;
+    material.clearcoat_roughness = 0.29f;
+    material.alpha_cutoff = 0.41f;
+    material.alpha_mode = HENKA_MATERIAL_ALPHA_BLENDED;
+    material.use_texture = false;
+    material.use_lighting = false;
+    material.depth_test = false;
+    material.double_sided = true;
+    material.cast_shadows = false;
+    material.receive_shadows = false;
+    material.sheen_color = (henka_vec3){0.18f, 0.27f, 0.39f};
+    material.sheen_roughness = 0.48f;
+
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(scene, "Inline Material")) ==
+            HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_material(scene, entity, material) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create(
+            scene,
+            "build/test_tmp/inline_material_capture.hscene",
+            &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, entity, &object_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, entity, &captured_id, &object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    success = captured_id == object_id && object.renderer.material_override &&
+        object.renderer.material_type == material.type &&
+        object.renderer.base_color_uv_set == material.base_color_uv_set &&
+        object.renderer.normal_uv_set == material.normal_uv_set &&
+        object.renderer.metallic_roughness_uv_set == material.metallic_roughness_uv_set &&
+        object.renderer.occlusion_uv_set == material.occlusion_uv_set &&
+        object.renderer.emissive_uv_set == material.emissive_uv_set &&
+        object.renderer.transmission_uv_set == material.transmission_uv_set &&
+        object.renderer.thickness_uv_set == material.thickness_uv_set &&
+        object.renderer.specular_factor == material.specular_factor &&
+        object.renderer.specular_color.x == material.specular_color.x &&
+        object.renderer.specular_color.y == material.specular_color.y &&
+        object.renderer.specular_color.z == material.specular_color.z &&
+        object.renderer.ior == material.ior &&
+        object.renderer.transmission == material.transmission &&
+        object.renderer.thickness == material.thickness &&
+        object.renderer.attenuation_distance == material.attenuation_distance &&
+        object.renderer.attenuation_color.x == material.attenuation_color.x &&
+        object.renderer.attenuation_color.y == material.attenuation_color.y &&
+        object.renderer.attenuation_color.z == material.attenuation_color.z &&
+        object.renderer.subsurface == material.subsurface &&
+        object.renderer.subsurface_color.x == material.subsurface_color.x &&
+        object.renderer.subsurface_color.y == material.subsurface_color.y &&
+        object.renderer.subsurface_color.z == material.subsurface_color.z &&
+        object.renderer.normal_scale == material.normal_scale &&
+        object.renderer.occlusion_strength == material.occlusion_strength &&
+        object.renderer.clearcoat == material.clearcoat &&
+        object.renderer.clearcoat_roughness == material.clearcoat_roughness &&
+        object.renderer.alpha_cutoff == material.alpha_cutoff &&
+        object.renderer.alpha_mode == material.alpha_mode &&
+        object.renderer.use_texture == material.use_texture &&
+        object.renderer.use_lighting == material.use_lighting &&
+        object.renderer.depth_test == material.depth_test &&
+        object.renderer.double_sided == material.double_sided &&
+        object.renderer.cast_shadows == material.cast_shadows &&
+        object.renderer.receive_shadows == material.receive_shadows &&
+        object.renderer.sheen_color.x == material.sheen_color.x &&
+        object.renderer.sheen_color.y == material.sheen_color.y &&
+        object.renderer.sheen_color.z == material.sheen_color.z &&
+        object.renderer.sheen_roughness == material.sheen_roughness;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove("build/test_tmp/inline_material_capture.hscene");
     return success;
 }
 
@@ -568,6 +682,11 @@ int main(void)
     if (!test_load_allocation_failure_is_transactional())
     {
         fprintf(stderr, "game authoring allocation-failure load transaction test failed\n");
+        return 1;
+    }
+    if (!test_inline_material_capture_is_complete())
+    {
+        fprintf(stderr, "inline material capture test failed\n");
         return 1;
     }
 

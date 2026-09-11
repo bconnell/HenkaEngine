@@ -252,10 +252,12 @@ The public runtime scene now provides a bounded generation-checked parent/child
 transform foundation with cycle rejection, keep-local/keep-world reparenting,
 deterministic direct-child enumeration, subtree propagation, and parent-
 destruction promotion. Passing `HENKA_INVALID_ENTITY` enumerates root entities.
-HSCN v8 persists parent IDs, an optional authored scene camera, and the
-value-owned Character Controller component; v1-v6 documents migrate objects to
-roots in memory without rewriting the source file, while v7 data defaults the
-new controller component to disabled.
+HSCN v9 persists parent IDs, an optional authored scene camera, the value-owned
+Character Controller component, and pointer-free inline renderer material
+state. v1-v6 documents migrate objects to roots in memory without rewriting
+the source file, v7 data defaults the new controller component to disabled, and
+v8 data retains its controller payload while using defaults for the v9 renderer
+fields.
 The Sandbox Scene Document bridge applies persisted hierarchy and synchronizes
 runtime reparenting back to bound document IDs; unbound runtime parents are
 rejected without changing authored hierarchy state. The Game Authoring

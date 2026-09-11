@@ -10,9 +10,11 @@
 #include <henka/camera.h>
 #include <henka/physics.h>
 #include <henka/result.h>
+#include <henka/scene.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(8)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(9)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V8 UINT32_C(8)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V7 UINT32_C(7)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V6 UINT32_C(6)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 UINT32_C(5)
@@ -65,16 +67,50 @@ typedef struct henka_scene_document_source
     char path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
 } henka_scene_document_source;
 
+/* Renderer values that do not contain borrowed runtime resources. Texture
+ * pointers, shaders, manager-owned material definitions, and terrain-layer
+ * resources remain outside Scene Document authority. */
 typedef struct henka_scene_document_renderer
 {
     bool enabled;
     char material_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
     bool material_override;
+    henka_material_type material_type;
+    int base_color_uv_set;
+    int normal_uv_set;
+    int metallic_roughness_uv_set;
+    int occlusion_uv_set;
+    int emissive_uv_set;
+    int transmission_uv_set;
+    int thickness_uv_set;
     henka_vec4 base_color;
     float metallic;
     float roughness;
     henka_vec3 emissive;
     float emissive_strength;
+    float specular_factor;
+    henka_vec3 specular_color;
+    float ior;
+    float transmission;
+    float thickness;
+    float attenuation_distance;
+    henka_vec3 attenuation_color;
+    float subsurface;
+    henka_vec3 subsurface_color;
+    float normal_scale;
+    float occlusion_strength;
+    float clearcoat;
+    float clearcoat_roughness;
+    float alpha_cutoff;
+    henka_material_alpha_mode alpha_mode;
+    bool use_texture;
+    bool use_lighting;
+    bool depth_test;
+    bool double_sided;
+    bool cast_shadows;
+    bool receive_shadows;
+    henka_vec3 sheen_color;
+    float sheen_roughness;
 } henka_scene_document_renderer;
 
 typedef struct henka_scene_document_interaction

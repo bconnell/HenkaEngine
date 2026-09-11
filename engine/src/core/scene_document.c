@@ -345,13 +345,63 @@ static henka_result henka_scene_document_validate_object(
 
     renderer = &object->renderer;
     if (henka_scene_document_validate_path(renderer->material_path, true) != HENKA_SUCCESS ||
+        renderer->material_type < HENKA_MATERIAL_TYPE_LIT ||
+        renderer->material_type > HENKA_MATERIAL_TYPE_VERTEX_COLOR ||
+        renderer->base_color_uv_set < 0 || renderer->base_color_uv_set > 1 ||
+        renderer->normal_uv_set < 0 || renderer->normal_uv_set > 1 ||
+        renderer->metallic_roughness_uv_set < 0 ||
+            renderer->metallic_roughness_uv_set > 1 ||
+        renderer->occlusion_uv_set < 0 || renderer->occlusion_uv_set > 1 ||
+        renderer->emissive_uv_set < 0 || renderer->emissive_uv_set > 1 ||
+        renderer->transmission_uv_set < 0 || renderer->transmission_uv_set > 1 ||
+        renderer->thickness_uv_set < 0 || renderer->thickness_uv_set > 1 ||
         !henka_scene_document_finite_vec4(renderer->base_color) ||
         !henka_scene_document_finite_vec3(renderer->emissive) ||
+        !henka_scene_document_finite_vec3(renderer->specular_color) ||
+        !henka_scene_document_finite_vec3(renderer->attenuation_color) ||
+        !henka_scene_document_finite_vec3(renderer->subsurface_color) ||
+        !henka_scene_document_finite_vec3(renderer->sheen_color) ||
         !isfinite(renderer->metallic) || !isfinite(renderer->roughness) ||
         !isfinite(renderer->emissive_strength) ||
+        !isfinite(renderer->specular_factor) || !isfinite(renderer->ior) ||
+        !isfinite(renderer->transmission) || !isfinite(renderer->thickness) ||
+        !isfinite(renderer->attenuation_distance) ||
+        !isfinite(renderer->subsurface) || !isfinite(renderer->normal_scale) ||
+        !isfinite(renderer->occlusion_strength) ||
+        !isfinite(renderer->clearcoat) ||
+        !isfinite(renderer->clearcoat_roughness) ||
+        !isfinite(renderer->alpha_cutoff) ||
+        !isfinite(renderer->sheen_roughness) ||
         renderer->metallic < 0.0f || renderer->metallic > 1.0f ||
         renderer->roughness < 0.0f || renderer->roughness > 1.0f ||
-        renderer->emissive_strength < 0.0f)
+        renderer->emissive_strength < 0.0f ||
+        renderer->specular_factor < 0.0f || renderer->specular_factor > 1.0f ||
+        renderer->specular_color.x < 0.0f || renderer->specular_color.x > 1.0f ||
+        renderer->specular_color.y < 0.0f || renderer->specular_color.y > 1.0f ||
+        renderer->specular_color.z < 0.0f || renderer->specular_color.z > 1.0f ||
+        renderer->ior < 1.0f || renderer->ior > 3.0f ||
+        renderer->transmission < 0.0f || renderer->transmission > 1.0f ||
+        renderer->thickness < 0.0f || renderer->thickness > 1.0f ||
+        renderer->attenuation_distance <= 0.0f ||
+            renderer->attenuation_distance > 1000000.0f ||
+        renderer->attenuation_color.x < 0.0f || renderer->attenuation_color.x > 1.0f ||
+        renderer->attenuation_color.y < 0.0f || renderer->attenuation_color.y > 1.0f ||
+        renderer->attenuation_color.z < 0.0f || renderer->attenuation_color.z > 1.0f ||
+        renderer->subsurface < 0.0f || renderer->subsurface > 1.0f ||
+        renderer->subsurface_color.x < 0.0f || renderer->subsurface_color.x > 1.0f ||
+        renderer->subsurface_color.y < 0.0f || renderer->subsurface_color.y > 1.0f ||
+        renderer->subsurface_color.z < 0.0f || renderer->subsurface_color.z > 1.0f ||
+        renderer->normal_scale < 0.0f || renderer->normal_scale > 4.0f ||
+        renderer->occlusion_strength < 0.0f || renderer->occlusion_strength > 1.0f ||
+        renderer->clearcoat < 0.0f || renderer->clearcoat > 1.0f ||
+        renderer->clearcoat_roughness < 0.045f ||
+            renderer->clearcoat_roughness > 1.0f ||
+        renderer->alpha_cutoff < 0.0f || renderer->alpha_cutoff > 1.0f ||
+        renderer->alpha_mode > HENKA_MATERIAL_ALPHA_BLENDED ||
+        renderer->sheen_color.x < 0.0f || renderer->sheen_color.x > 1.0f ||
+        renderer->sheen_color.y < 0.0f || renderer->sheen_color.y > 1.0f ||
+        renderer->sheen_color.z < 0.0f || renderer->sheen_color.z > 1.0f ||
+        renderer->sheen_roughness < 0.045f || renderer->sheen_roughness > 1.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -563,8 +613,25 @@ henka_scene_document_object henka_scene_document_object_default(void)
     object.source.primitive = HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX;
     object.source.primitive_dimensions = (henka_vec3){1.0f, 1.0f, 1.0f};
     object.renderer.enabled = true;
+    object.renderer.material_type = HENKA_MATERIAL_TYPE_LIT;
     object.renderer.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
     object.renderer.roughness = 0.5f;
+    object.renderer.specular_factor = 1.0f;
+    object.renderer.specular_color = (henka_vec3){1.0f, 1.0f, 1.0f};
+    object.renderer.ior = 1.5f;
+    object.renderer.attenuation_distance = 10000.0f;
+    object.renderer.attenuation_color = (henka_vec3){1.0f, 1.0f, 1.0f};
+    object.renderer.subsurface_color = (henka_vec3){1.0f, 1.0f, 1.0f};
+    object.renderer.normal_scale = 1.0f;
+    object.renderer.occlusion_strength = 1.0f;
+    object.renderer.clearcoat_roughness = 0.2f;
+    object.renderer.alpha_cutoff = 0.5f;
+    object.renderer.alpha_mode = HENKA_MATERIAL_ALPHA_OPAQUE;
+    object.renderer.use_lighting = true;
+    object.renderer.depth_test = true;
+    object.renderer.cast_shadows = true;
+    object.renderer.receive_shadows = true;
+    object.renderer.sheen_roughness = 0.5f;
     object.interaction.max_distance = 0.0f;
     object.physics.body_type = HENKA_PHYSICS_BODY_STATIC;
     object.physics.shape = HENKA_PHYSICS_SHAPE_BOX;
@@ -1346,6 +1413,8 @@ static bool henka_scene_document_payload_size(
 {
     size_t size = 0U;
     size_t index;
+    const size_t inline_renderer_bytes =
+        9U * sizeof(uint32_t) + 24U * sizeof(uint32_t) + sizeof(uint32_t);
     if (storage == NULL || out_size == NULL)
     {
         return false;
@@ -1363,7 +1432,8 @@ static bool henka_scene_document_payload_size(
             audio_path_length > UINT16_MAX ||
             !henka_scene_document_size_add(&size, 8U + 8U + 4U + 2U + name_length + 40U +
                 4U + 4U + 12U + 2U + source_path_length + 4U +
-                2U + material_path_length + 40U + 4U + 2U + prompt_length +
+                2U + material_path_length + 40U + inline_renderer_bytes +
+                4U + 2U + prompt_length +
                 4U + 4U + 12U + 4U + 12U + 4U + 20U + 4U + 4U +
                 2U + audio_path_length + 4U + 16U + 4U + 40U))
         {
@@ -1503,6 +1573,51 @@ static void henka_scene_document_encode_object(
     henka_scene_document_writer_float(writer, object->renderer.emissive.y);
     henka_scene_document_writer_float(writer, object->renderer.emissive.z);
     henka_scene_document_writer_float(writer, object->renderer.emissive_strength);
+    henka_scene_document_writer_u32(writer, (uint32_t)object->renderer.material_type);
+    henka_scene_document_writer_u32(writer, (uint32_t)object->renderer.alpha_mode);
+    henka_scene_document_writer_u32(writer, (uint32_t)object->renderer.base_color_uv_set);
+    henka_scene_document_writer_u32(writer, (uint32_t)object->renderer.normal_uv_set);
+    henka_scene_document_writer_u32(
+        writer, (uint32_t)object->renderer.metallic_roughness_uv_set);
+    henka_scene_document_writer_u32(writer, (uint32_t)object->renderer.occlusion_uv_set);
+    henka_scene_document_writer_u32(writer, (uint32_t)object->renderer.emissive_uv_set);
+    henka_scene_document_writer_u32(
+        writer, (uint32_t)object->renderer.transmission_uv_set);
+    henka_scene_document_writer_u32(writer, (uint32_t)object->renderer.thickness_uv_set);
+    henka_scene_document_writer_float(writer, object->renderer.specular_factor);
+    henka_scene_document_writer_float(writer, object->renderer.specular_color.x);
+    henka_scene_document_writer_float(writer, object->renderer.specular_color.y);
+    henka_scene_document_writer_float(writer, object->renderer.specular_color.z);
+    henka_scene_document_writer_float(writer, object->renderer.ior);
+    henka_scene_document_writer_float(writer, object->renderer.transmission);
+    henka_scene_document_writer_float(writer, object->renderer.thickness);
+    henka_scene_document_writer_float(writer, object->renderer.attenuation_distance);
+    henka_scene_document_writer_float(writer, object->renderer.attenuation_color.x);
+    henka_scene_document_writer_float(writer, object->renderer.attenuation_color.y);
+    henka_scene_document_writer_float(writer, object->renderer.attenuation_color.z);
+    henka_scene_document_writer_float(writer, object->renderer.subsurface);
+    henka_scene_document_writer_float(writer, object->renderer.subsurface_color.x);
+    henka_scene_document_writer_float(writer, object->renderer.subsurface_color.y);
+    henka_scene_document_writer_float(writer, object->renderer.subsurface_color.z);
+    henka_scene_document_writer_float(writer, object->renderer.normal_scale);
+    henka_scene_document_writer_float(writer, object->renderer.occlusion_strength);
+    henka_scene_document_writer_float(writer, object->renderer.clearcoat);
+    henka_scene_document_writer_float(writer, object->renderer.clearcoat_roughness);
+    henka_scene_document_writer_float(writer, object->renderer.alpha_cutoff);
+    henka_scene_document_writer_float(writer, object->renderer.sheen_color.x);
+    henka_scene_document_writer_float(writer, object->renderer.sheen_color.y);
+    henka_scene_document_writer_float(writer, object->renderer.sheen_color.z);
+    henka_scene_document_writer_float(writer, object->renderer.sheen_roughness);
+    {
+        uint32_t material_flags = 0U;
+        if (object->renderer.use_lighting) material_flags |= UINT32_C(1) << 0U;
+        if (object->renderer.depth_test) material_flags |= UINT32_C(1) << 1U;
+        if (object->renderer.double_sided) material_flags |= UINT32_C(1) << 2U;
+        if (object->renderer.cast_shadows) material_flags |= UINT32_C(1) << 3U;
+        if (object->renderer.receive_shadows) material_flags |= UINT32_C(1) << 4U;
+        if (object->renderer.use_texture) material_flags |= UINT32_C(1) << 5U;
+        henka_scene_document_writer_u32(writer, material_flags);
+    }
     henka_scene_document_writer_float(writer, object->interaction.max_distance);
     henka_scene_document_writer_string(writer, object->interaction.prompt);
     henka_scene_document_writer_u32(writer, (uint32_t)object->physics.body_type);
@@ -1679,8 +1794,68 @@ static bool henka_scene_document_decode_object(
         !henka_scene_document_reader_float(reader, &object->renderer.emissive.x) ||
         !henka_scene_document_reader_float(reader, &object->renderer.emissive.y) ||
         !henka_scene_document_reader_float(reader, &object->renderer.emissive.z) ||
-        !henka_scene_document_reader_float(reader, &object->renderer.emissive_strength) ||
-        !henka_scene_document_reader_float(reader, &object->interaction.max_distance) ||
+        !henka_scene_document_reader_float(reader, &object->renderer.emissive_strength))
+    {
+        return false;
+    }
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    {
+        uint32_t material_flags;
+        if (!henka_scene_document_reader_u32(reader, &value)) return false;
+        object->renderer.material_type = (henka_material_type)value;
+        if (!henka_scene_document_reader_u32(reader, &value)) return false;
+        object->renderer.alpha_mode = (henka_material_alpha_mode)value;
+        if (!henka_scene_document_reader_u32(reader, &value)) return false;
+        object->renderer.base_color_uv_set = (int)value;
+        if (!henka_scene_document_reader_u32(reader, &value)) return false;
+        object->renderer.normal_uv_set = (int)value;
+        if (!henka_scene_document_reader_u32(reader, &value)) return false;
+        object->renderer.metallic_roughness_uv_set = (int)value;
+        if (!henka_scene_document_reader_u32(reader, &value)) return false;
+        object->renderer.occlusion_uv_set = (int)value;
+        if (!henka_scene_document_reader_u32(reader, &value)) return false;
+        object->renderer.emissive_uv_set = (int)value;
+        if (!henka_scene_document_reader_u32(reader, &value)) return false;
+        object->renderer.transmission_uv_set = (int)value;
+        if (!henka_scene_document_reader_u32(reader, &value)) return false;
+        object->renderer.thickness_uv_set = (int)value;
+        if (!henka_scene_document_reader_float(reader, &object->renderer.specular_factor) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.specular_color.x) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.specular_color.y) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.specular_color.z) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.ior) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.transmission) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.thickness) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.attenuation_distance) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.attenuation_color.x) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.attenuation_color.y) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.attenuation_color.z) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.subsurface) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.subsurface_color.x) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.subsurface_color.y) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.subsurface_color.z) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.normal_scale) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.occlusion_strength) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.clearcoat) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.clearcoat_roughness) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.alpha_cutoff) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.sheen_color.x) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.sheen_color.y) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.sheen_color.z) ||
+            !henka_scene_document_reader_float(reader, &object->renderer.sheen_roughness) ||
+            !henka_scene_document_reader_u32(reader, &material_flags) ||
+            (material_flags & ~UINT32_C(0x3F)) != 0U)
+        {
+            return false;
+        }
+        object->renderer.use_lighting = (material_flags & (UINT32_C(1) << 0U)) != 0U;
+        object->renderer.depth_test = (material_flags & (UINT32_C(1) << 1U)) != 0U;
+        object->renderer.double_sided = (material_flags & (UINT32_C(1) << 2U)) != 0U;
+        object->renderer.cast_shadows = (material_flags & (UINT32_C(1) << 3U)) != 0U;
+        object->renderer.receive_shadows = (material_flags & (UINT32_C(1) << 4U)) != 0U;
+        object->renderer.use_texture = (material_flags & (UINT32_C(1) << 5U)) != 0U;
+    }
+    if (!henka_scene_document_reader_float(reader, &object->interaction.max_distance) ||
         !henka_scene_document_reader_string(reader, object->interaction.prompt, sizeof(object->interaction.prompt)) ||
         !henka_scene_document_reader_u32(reader, &value)) return false;
     object->physics.body_type = (henka_physics_body_type)value;
@@ -1761,7 +1936,7 @@ static bool henka_scene_document_decode_object(
             behavior->language = (henka_script_language)language;
         }
     }
-    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V8 &&
         (!henka_scene_document_reader_float(
             reader, &object->character_controller.radius) ||
             !henka_scene_document_reader_float(
@@ -2070,6 +2245,7 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V6 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V7 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V8 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
