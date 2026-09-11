@@ -54,6 +54,48 @@ if ($seamless.Groups["status"].Value -ne "PASS") {
 $capability = $capabilityMatches[$capabilityMatches.Count - 1]
 $status = $capability.Groups["status"].Value
 $stage = $capability.Groups["stage"].Value
+$baselineCapabilityMatches = @(
+    $capabilityMatches | Where-Object {
+        $_.Groups["status"].Value -eq "CONTEXT_READY" -and
+        $_.Groups["stage"].Value -eq "context-capability"
+    })
+if ($baselineCapabilityMatches.Count -eq 0) {
+    throw "OpenGL capability probe did not emit a CONTEXT_READY baseline record."
+}
+$baselineCapability = $baselineCapabilityMatches[$baselineCapabilityMatches.Count - 1]
+$policyPath = Join-Path $repoRoot "engine/src/renderer/opengl_capability_policy.h"
+if (-not (Test-Path -LiteralPath $policyPath -PathType Leaf)) {
+    throw "OpenGL capability policy header was not found: $policyPath"
+}
+$policySource = [System.IO.File]::ReadAllText($policyPath)
+$requiredLimits = @(
+    @{ Field = "limits_frag"; Macro = "HENKA_OPENGL_REQUIRED_FRAGMENT_TEXTURE_IMAGE_UNITS" },
+    @{ Field = "limits_combined"; Macro = "HENKA_OPENGL_REQUIRED_COMBINED_TEXTURE_IMAGE_UNITS" },
+    @{ Field = "limits_draw_buffers"; Macro = "HENKA_OPENGL_REQUIRED_DRAW_BUFFERS" },
+    @{ Field = "limits_color_attachments"; Macro = "HENKA_OPENGL_REQUIRED_COLOR_ATTACHMENTS" },
+    @{ Field = "limits_texture_size"; Macro = "HENKA_OPENGL_REQUIRED_TEXTURE_SIZE" },
+    @{ Field = "limits_cube_size"; Macro = "HENKA_OPENGL_REQUIRED_CUBE_MAP_TEXTURE_SIZE" }
+)
+foreach ($limit in $requiredLimits) {
+    $requiredMatch = [regex]::Match(
+        $policySource,
+        "(?m)^\s*#define\s+$([regex]::Escape($limit.Macro))\s+(?<value>\d+)\b")
+    if (-not $requiredMatch.Success) {
+        throw "OpenGL capability policy did not define $($limit.Macro)."
+    }
+    $actualMatch = [regex]::Match(
+        $baselineCapability.Value,
+        "\b$([regex]::Escape($limit.Field))=(?<value>\d+)\b")
+    if (-not $actualMatch.Success) {
+        throw "OpenGL capability probe did not report $($limit.Field)."
+    }
+    $requiredValue = [int]$requiredMatch.Groups["value"].Value
+    $actualValue = [int]$actualMatch.Groups["value"].Value
+    if ($actualValue -lt $requiredValue) {
+        throw "OpenGL capability probe reported $($limit.Field)=$actualValue, below the declared minimum $requiredValue."
+    }
+}
+Write-Host "[pass] OpenGL capability probe reported all declared resource limits at or above the supported baseline."
 switch ($status) {
     "PASS" {
         if ($probeExitCode -ne 0) {
