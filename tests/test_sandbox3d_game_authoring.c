@@ -185,6 +185,119 @@ cleanup:
     return success;
 }
 
+static bool test_material_asset_capture_authority_boundary(void)
+{
+    const henka_material_asset* asset =
+        (const henka_material_asset*)(uintptr_t)1U;
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_scene_document_object object;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_material material = henka_material_default();
+    bool success = false;
+
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+             scene, "Manager Material")) == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_material_asset(scene, entity, asset) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create(
+            scene,
+            "build/test_tmp/asset_material_capture.hscene",
+            &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, entity, &object_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, entity, &object_id, &object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    success = object_id != HENKA_INVALID_SCENE_DOCUMENT_ID &&
+        !object.renderer.material_override;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove("build/test_tmp/asset_material_capture.hscene");
+    if (!success)
+    {
+        return false;
+    }
+
+    scene = NULL;
+    authoring = NULL;
+    entity = HENKA_INVALID_ENTITY;
+    object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    material.shader = (henka_shader*)(uintptr_t)1U;
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+             scene, "Overridden Material")) == HENKA_INVALID_ENTITY ||
+        henka_scene_apply_material_asset_override(
+            scene, entity, asset, material) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create(
+            scene,
+            "build/test_tmp/asset_material_override_capture.hscene",
+            &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, entity, &object_id) != HENKA_ERROR_INVALID_ARGUMENT ||
+        object_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, entity, &object_id, &object) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        object_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        success = false;
+    }
+    else
+    {
+        success = true;
+    }
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove("build/test_tmp/asset_material_override_capture.hscene");
+    if (!success)
+    {
+        return false;
+    }
+
+    scene = NULL;
+    authoring = NULL;
+    entity = HENKA_INVALID_ENTITY;
+    object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    material = henka_material_default();
+    material.shader = (henka_shader*)(uintptr_t)1U;
+    material.terrain_layers_enabled = true;
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+             scene, "Standalone Texture")) == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_material(scene, entity, material) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create(
+            scene,
+            "build/test_tmp/standalone_texture_capture.hscene",
+            &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, entity, &object_id) != HENKA_ERROR_INVALID_ARGUMENT ||
+        object_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, entity, &object_id, &object) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        object_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        success = false;
+    }
+    else
+    {
+        success = true;
+    }
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove("build/test_tmp/standalone_texture_capture.hscene");
+    return success;
+}
+
 static bool test_update_object_failure_is_transactional(void)
 {
     henka_scene* scene = NULL;
@@ -687,6 +800,11 @@ int main(void)
     if (!test_inline_material_capture_is_complete())
     {
         fprintf(stderr, "inline material capture test failed\n");
+        return 1;
+    }
+    if (!test_material_asset_capture_authority_boundary())
+    {
+        fprintf(stderr, "material asset capture authority boundary test failed\n");
         return 1;
     }
 

@@ -150,16 +150,24 @@ static henka_result sandbox3d_game_authoring_build_object(
     henka_interaction_desc interaction;
     henka_material material;
     const henka_material_asset* material_asset = NULL;
+    bool material_asset_overridden = false;
+    uint64_t material_asset_revision = 0U;
     int written;
     if (scene == NULL || out_object == NULL ||
         !henka_scene_is_entity_valid(scene, entity) ||
         henka_scene_get_entity_info(scene, entity, &info) != HENKA_SUCCESS ||
         henka_scene_get_entity_interaction(scene, entity, &interaction) != HENKA_SUCCESS ||
         henka_scene_get_entity_material(scene, entity, &material) != HENKA_SUCCESS ||
-        henka_scene_get_entity_material_asset(scene, entity, &material_asset) != HENKA_SUCCESS)
+        henka_scene_get_entity_material_asset(scene, entity, &material_asset) != HENKA_SUCCESS ||
+        henka_scene_get_entity_material_asset_state(
+            scene,
+            entity,
+            &material_asset_revision,
+            &material_asset_overridden) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    (void)material_asset_revision;
     *out_object = henka_scene_document_object_default();
     written = snprintf(
         out_object->name,
@@ -208,15 +216,21 @@ static henka_result sandbox3d_game_authoring_build_object(
     out_object->renderer.receive_shadows = material.receive_shadows;
     out_object->renderer.sheen_color = material.sheen_color;
     out_object->renderer.sheen_roughness = material.sheen_roughness;
-    if (material_asset != NULL || material.base_color_texture != NULL ||
-        material.normal_texture != NULL || material.metallic_roughness_texture != NULL ||
-        material.occlusion_texture != NULL || material.emissive_texture != NULL ||
-        material.transmission_texture != NULL || material.thickness_texture != NULL ||
-        material.terrain_layers_enabled)
+    if ((material_asset != NULL && material_asset_overridden) ||
+        (material_asset == NULL &&
+            (material.base_color_texture != NULL ||
+             material.normal_texture != NULL ||
+             material.metallic_roughness_texture != NULL ||
+             material.occlusion_texture != NULL ||
+             material.emissive_texture != NULL ||
+             material.transmission_texture != NULL ||
+             material.thickness_texture != NULL ||
+             material.terrain_layers_enabled)))
     {
-        /* This bridge has no material-resource path/authority with which to
-         * reconstruct borrowed asset or texture state. Do not collapse that
-         * state into an apparently complete inline document. */
+        /* Manager-owned definitions remain asset authority and are captured
+         * without being collapsed into inline document state. An explicit
+         * instance override, or standalone borrowed texture/terrain state,
+         * has no reconstructible bridge authority and therefore fails closed. */
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     /* Pointer-free inline material state is document-owned only when no

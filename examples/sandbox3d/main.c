@@ -10849,12 +10849,16 @@ static henka_result sandbox3d_initialize_game_authoring(
     {
         return result;
     }
-    /* Every logical scene object is a Game Authoring subject.  The descriptor
-     * array contains only the original physics fixtures; imported showcase
-     * objects and later scene-owned authoring sources live outside it. */
+    /* Every logical scene object with reconstructible presentation state is a
+     * Game Authoring subject. The descriptor array contains only the original
+     * physics fixtures; imported showcase objects and later scene-owned
+     * authoring sources live outside it. Source-owned material state that the
+     * current Scene Document cannot reconstruct remains live and is skipped
+     * from the authored binding rather than being silently flattened. */
     for (index = 0U; index < entity_count; ++index)
     {
         const henka_entity entity = henka_scene_get_entity_at_index(state->scene, index);
+        henka_material material;
         henka_scene_document_id document_id;
         const henka_material_asset* material_asset = NULL;
         uint64_t material_asset_revision = 0U;
@@ -10864,19 +10868,31 @@ static henka_result sandbox3d_initialize_game_authoring(
         {
             continue;
         }
-        /* Scene Document does not yet carry a material-asset path/authority
-         * for an explicit inline override. Keep that source-owned state in the
-         * live scene instead of collapsing it into misleading inline truth. */
-        if (henka_scene_get_entity_material_asset(state->scene, entity, &material_asset) == HENKA_SUCCESS &&
+        /* Scene Document does not yet carry material-resource paths/authority
+         * for an explicit inline asset override or for standalone borrowed
+         * texture/terrain state. Keep those source-owned values in the live
+         * scene instead of collapsing them into misleading inline truth. */
+        if (henka_scene_get_entity_material(
+                state->scene, entity, &material) == HENKA_SUCCESS &&
+            henka_scene_get_entity_material_asset(state->scene, entity, &material_asset) == HENKA_SUCCESS &&
             henka_scene_get_entity_material_asset_state(
                 state->scene,
                 entity,
                 &material_asset_revision,
                 &material_asset_overridden) == HENKA_SUCCESS &&
-            material_asset != NULL && material_asset_overridden)
+            ((material_asset != NULL && material_asset_overridden) ||
+             (material_asset == NULL &&
+                 (material.base_color_texture != NULL ||
+                  material.normal_texture != NULL ||
+                  material.metallic_roughness_texture != NULL ||
+                  material.occlusion_texture != NULL ||
+                  material.emissive_texture != NULL ||
+                  material.transmission_texture != NULL ||
+                  material.thickness_texture != NULL ||
+                  material.terrain_layers_enabled))))
         {
             HENKA_LOG_ERROR(
-                "Skipping unsupported asset-backed material override for Game Authoring entity %llu (material revision %llu).",
+                "Skipping non-reconstructible material state for Game Authoring entity %llu (material revision %llu).",
                 (unsigned long long)entity,
                 (unsigned long long)material_asset_revision);
             continue;
@@ -33419,6 +33435,19 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     ground_material.use_lighting = true;
     ground_material.roughness = 0.76f;
     ground_material.receive_shadows = true;
+    if (sandbox3d_default_scene_requested(state))
+    {
+        /* The ordinary product-native starter scene must remain a complete
+         * authoring subject. Its floor therefore uses pointer-free inline
+         * material state that Scene Document can capture and restore. The
+         * textured ground remains available to the explicit validation and
+         * showcase paths, where borrowed resource ownership is deliberate. */
+        ground_material.base_color_texture = NULL;
+        ground_material.normal_texture = NULL;
+        ground_material.metallic_roughness_texture = NULL;
+        ground_material.use_texture = false;
+        ground_material.normal_scale = 0.0f;
+    }
 
     cube_material = henka_material_default();
     cube_material.name = "Cube Albedo";
