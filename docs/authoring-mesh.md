@@ -129,6 +129,10 @@ The operation reverses only the ordered winding.
 - finite-value validation;
 - seam detection from shared topology.
 
+The shared Sandbox modeling session routes one selected face through
+transactional UV projection and padded unit-square packing. Each operation
+supports preview, Apply, Cancel, and the existing authoring undo/redo history.
+
 Automatic multi-island unwrap, seam-editing UI, and global packing remain unfinished.
 
 ## Connected Sandbox workflow

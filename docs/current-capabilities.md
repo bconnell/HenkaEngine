@@ -400,7 +400,9 @@ Available operations also include:
 - packing;
 - seam detection.
 
-The integrated Sandbox panel routes the bounded multi-cut through preview, Apply/Cancel, and undo.
+The integrated Sandbox panel routes bounded multi-cut and single-face UV
+projection/packing through the modeling transaction path. These operations
+provide preview, Apply/Cancel, and undo/redo history where supported.
 
 ### HAMS persistence
 

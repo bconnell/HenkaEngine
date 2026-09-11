@@ -990,6 +990,56 @@ static henka_result sandbox3d_preview_authoring_extrude(
     return result;
 }
 
+static bool sandbox3d_modeling_operator_is_uv(
+    sandbox3d_modeling_operator_kind kind)
+{
+    return kind == SANDBOX3D_MODELING_OPERATOR_UV_PROJECT ||
+        kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK;
+}
+
+static henka_result sandbox3d_preview_authoring_uv(
+    sandbox3d_state* state,
+    sandbox3d_modeling_operator_kind kind,
+    sandbox3d_modeling_operator_axis axis,
+    float padding)
+{
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        !sandbox3d_modeling_operator_is_uv(kind) ||
+        sandbox3d_authoring_object_get_selection_mode(state->authoring_object) !=
+            SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object) != 1U || !isfinite(padding))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        kind);
+    if (result == HENKA_SUCCESS && kind == SANDBOX3D_MODELING_OPERATOR_UV_PROJECT)
+    {
+        result = sandbox3d_modeling_operator_set_axis(
+            &state->modeling_operator,
+            axis);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator,
+            kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK ? padding : 0.0f,
+            false,
+            false);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static bool sandbox3d_apply_authoring_face_delete(
     sandbox3d_state* state,
     henka_entity entity,
@@ -18659,6 +18709,21 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
         return true;
     }
 
+    if (sandbox3d_modeling_operator_is_uv(state->modeling_operator.kind))
+    {
+        if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CANCEL_TRANSFORM))
+        {
+            result = sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+            sandbox3d_set_status(
+                state,
+                result != HENKA_SUCCESS,
+                result == HENKA_SUCCESS
+                    ? "UV operation canceled. Original UVs restored."
+                    : "UV operation cancellation failed; inspect the authoring state.");
+        }
+        return true;
+    }
+
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CANCEL_TRANSFORM))
     {
         result = sandbox3d_modeling_operator_cancel(&state->modeling_operator);
@@ -29292,16 +29357,66 @@ details_group_authoring:
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
-                if (henka_ui_button(state->ui, "authoring_project_uv", (henka_ui_rect){row.x, row.y, 116.0f, 24.0f}, "Project UV") &&
-                    sandbox3d_authoring_object_project_selected_face_uv(
-                        state->authoring_object, HENKA_AUTHORING_UV_PROJECT_Z) == HENKA_SUCCESS)
+                const bool uv_preview_active =
+                    sandbox3d_modeling_operator_is_uv(state->modeling_operator.kind) &&
+                    state->modeling_operator.active &&
+                    sandbox3d_authoring_object_has_preview(state->authoring_object);
+                if (henka_ui_button(state->ui, "authoring_project_uv", (henka_ui_rect){row.x, row.y, 116.0f, 24.0f}, "Preview UV") &&
+                    sandbox3d_preview_authoring_uv(
+                        state,
+                        SANDBOX3D_MODELING_OPERATOR_UV_PROJECT,
+                        SANDBOX3D_MODELING_OPERATOR_AXIS_Z,
+                        0.0f) == HENKA_SUCCESS)
                 {
-                    sandbox3d_set_status(state, false, "Selected face UVs projected and evaluated into the scene.");
+                    sandbox3d_set_status(state, false, "Face UV projection preview ready; Apply or Cancel.");
                 }
-                if (henka_ui_button(state->ui, "authoring_pack_uv", (henka_ui_rect){row.x + 122.0f, row.y, 94.0f, 24.0f}, "Pack UV") &&
-                    sandbox3d_authoring_object_pack_selected_face_uv(state->authoring_object, 0.02f) == HENKA_SUCCESS)
+                if (henka_ui_button(state->ui, "authoring_pack_uv", (henka_ui_rect){row.x + 122.0f, row.y, 94.0f, 24.0f}, "Preview Pack") &&
+                    sandbox3d_preview_authoring_uv(
+                        state,
+                        SANDBOX3D_MODELING_OPERATOR_UV_PACK,
+                        SANDBOX3D_MODELING_OPERATOR_AXIS_NONE,
+                        0.02f) == HENKA_SUCCESS)
                 {
-                    sandbox3d_set_status(state, false, "Selected face UVs packed and evaluated into the scene.");
+                    sandbox3d_set_status(state, false, "Face UV packing preview ready; Apply or Cancel.");
+                }
+                if (uv_preview_active &&
+                    sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                    row.width >= 260.0f)
+                {
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_uv_apply",
+                            (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                            "Apply"))
+                    {
+                        const henka_result apply_result =
+                            sandbox3d_modeling_operator_commit(&state->modeling_operator);
+                        sandbox3d_set_status(
+                            state,
+                            apply_result != HENKA_SUCCESS,
+                            apply_result == HENKA_SUCCESS
+                                ? "Face UV operation applied transactionally."
+                                : "Face UV operation could not be applied; source retained.");
+                        if (apply_result == HENKA_SUCCESS)
+                        {
+                            sandbox3d_mark_generic_modeling_applied(state, entity);
+                        }
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_uv_cancel",
+                            (henka_ui_rect){row.x + 128.0f, row.y, 126.0f, 24.0f},
+                            "Cancel"))
+                    {
+                        const henka_result cancel_result =
+                            sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+                        sandbox3d_set_status(
+                            state,
+                            cancel_result != HENKA_SUCCESS,
+                            cancel_result == HENKA_SUCCESS
+                                ? "Face UV operation canceled; source retained."
+                                : "Face UV cancellation failed; inspect the authoring state.");
+                    }
                 }
             }
         }
