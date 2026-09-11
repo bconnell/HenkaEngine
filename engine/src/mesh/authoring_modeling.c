@@ -2665,10 +2665,60 @@ cleanup:
     return result;
 }
 
+static bool modeling_bevel_selected_edge_contains(
+    const henka_authoring_vertex_id* selected_edge_endpoints,
+    size_t selected_edge_count,
+    henka_authoring_vertex_id first_vertex_id,
+    henka_authoring_vertex_id second_vertex_id)
+{
+    size_t index;
+    if (selected_edge_endpoints == NULL || selected_edge_count == 0U)
+    {
+        return false;
+    }
+    for (index = 0U; index < selected_edge_count; ++index)
+    {
+        const henka_authoring_vertex_id selected_first =
+            selected_edge_endpoints[index * 2U];
+        const henka_authoring_vertex_id selected_second =
+            selected_edge_endpoints[index * 2U + 1U];
+        if ((selected_first == first_vertex_id && selected_second == second_vertex_id) ||
+            (selected_first == second_vertex_id && selected_second == first_vertex_id))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool modeling_bevel_processed_face_contains(
+    const henka_authoring_face_id* processed_face_ids,
+    size_t processed_face_count,
+    henka_authoring_face_id face_id)
+{
+    size_t index;
+    if (processed_face_ids == NULL || processed_face_count == 0U)
+    {
+        return false;
+    }
+    for (index = 0U; index < processed_face_count; ++index)
+    {
+        if (processed_face_ids[index] == face_id)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static henka_result modeling_bevel_interior_edge(
     henka_authoring_mesh* mesh,
     henka_authoring_edge_id edge_id,
     float width,
+    const henka_authoring_vertex_id* selected_edge_endpoints,
+    size_t selected_edge_count,
+    const henka_authoring_face_id* processed_face_ids,
+    size_t processed_face_count,
     henka_authoring_modeling_report* out_report)
 {
     henka_authoring_mesh* candidate = NULL;
@@ -2738,8 +2788,18 @@ static henka_result modeling_bevel_interior_edge(
         {
             const henka_authoring_edge* adjacent = henka_authoring_mesh_get_edge(
                 mesh, faces[face_index]->edges[corner]);
+            const bool adjacent_is_selected = adjacent != NULL &&
+                modeling_bevel_selected_edge_contains(
+                    selected_edge_endpoints, selected_edge_count,
+                    adjacent->vertices[0], adjacent->vertices[1]);
+            const bool adjacent_is_processed = adjacent != NULL &&
+                ((adjacent->face_count > 0U && modeling_bevel_processed_face_contains(
+                    processed_face_ids, processed_face_count, adjacent->faces[0])) ||
+                 (adjacent->face_count > 1U && modeling_bevel_processed_face_contains(
+                    processed_face_ids, processed_face_count, adjacent->faces[1])));
             if (adjacent == NULL || (corner != edge_corners[face_index] &&
-                (adjacent->face_count != 1U || adjacent->faces[0] != faces[face_index]->id)))
+                (adjacent->face_count != 1U || adjacent->faces[0] != faces[face_index]->id) &&
+                !adjacent_is_selected && !adjacent_is_processed))
             {
                 return HENKA_ERROR_INVALID_ARGUMENT;
             }
@@ -3200,6 +3260,7 @@ henka_result henka_authoring_mesh_bevel_edges(
 {
     henka_authoring_edge_id* sorted_edges = NULL;
     henka_authoring_vertex_id* edge_endpoints = NULL;
+    henka_authoring_face_id* processed_face_ids = NULL;
     henka_authoring_mesh* candidate = NULL;
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
@@ -3207,6 +3268,7 @@ henka_result henka_authoring_mesh_bevel_edges(
     henka_authoring_modeling_report first_report = {0};
     size_t edge_bytes;
     size_t endpoint_bytes;
+    size_t processed_face_bytes;
     size_t required_vertices;
     size_t required_edges;
     size_t index;
@@ -3224,23 +3286,15 @@ henka_result henka_authoring_mesh_bevel_edges(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (edge_count == 1U)
-    {
-        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
-            mesh, edge_ids[0]);
-        if (edge != NULL && edge->face_count == 2U)
-        {
-            return modeling_bevel_interior_edge(
-                mesh, edge_ids[0], width, out_report);
-        }
-    }
     desc = henka_authoring_mesh_get_desc(mesh);
     if (edge_count > desc.max_edges ||
         !henka_checked_size_multiply(edge_count, sizeof(*sorted_edges), &edge_bytes) ||
         !henka_checked_size_multiply(edge_count, 2U, &required_vertices) ||
         !henka_checked_size_multiply(edge_count, 3U, &required_edges) ||
         !henka_checked_size_multiply(
-            required_vertices, sizeof(*edge_endpoints), &endpoint_bytes))
+            required_vertices, sizeof(*edge_endpoints), &endpoint_bytes) ||
+        !henka_checked_size_multiply(
+            edge_count, sizeof(*processed_face_ids), &processed_face_bytes))
     {
         return HENKA_ERROR_LIMIT;
     }
@@ -3255,7 +3309,8 @@ henka_result henka_authoring_mesh_bevel_edges(
     }
     sorted_edges = (henka_authoring_edge_id*)henka_malloc(edge_bytes);
     edge_endpoints = (henka_authoring_vertex_id*)henka_malloc(endpoint_bytes);
-    if (sorted_edges == NULL || edge_endpoints == NULL)
+    processed_face_ids = (henka_authoring_face_id*)henka_malloc(processed_face_bytes);
+    if (sorted_edges == NULL || edge_endpoints == NULL || processed_face_ids == NULL)
     {
         result = HENKA_ERROR_OUT_OF_MEMORY;
         goto cleanup;
@@ -3320,11 +3375,13 @@ henka_result henka_authoring_mesh_bevel_edges(
             {
                 const henka_authoring_edge* other = henka_authoring_mesh_get_edge(
                     mesh, sorted_edges[other_index]);
-                if (edge == NULL || other == NULL ||
-                    edge->faces[0] == other->faces[0] ||
-                    edge->faces[0] == other->faces[1] ||
-                    edge->faces[1] == other->faces[0] ||
-                    edge->faces[1] == other->faces[1] ||
+                const size_t shared_face_count = edge != NULL && other != NULL
+                    ? (size_t)(edge->faces[0] == other->faces[0]) +
+                        (size_t)(edge->faces[0] == other->faces[1]) +
+                        (size_t)(edge->faces[1] == other->faces[0]) +
+                        (size_t)(edge->faces[1] == other->faces[1])
+                    : SIZE_MAX;
+                if (edge == NULL || other == NULL || shared_face_count > 1U ||
                     edge->vertices[0] == other->vertices[0] ||
                     edge->vertices[0] == other->vertices[1] ||
                     edge->vertices[1] == other->vertices[0] ||
@@ -3381,11 +3438,22 @@ henka_result henka_authoring_mesh_bevel_edges(
     }
     if (all_interior)
     {
+        size_t processed_face_count = 0U;
         for (index = 0U; index < edge_count; ++index)
         {
             henka_authoring_modeling_report step_report = {0};
+            const henka_authoring_edge_id current_edge_id =
+                modeling_find_edge_between_vertices(
+                    candidate, edge_endpoints[index * 2U], edge_endpoints[index * 2U + 1U]);
+            if (current_edge_id == HENKA_AUTHORING_INVALID_ID)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
             result = modeling_bevel_interior_edge(
-                candidate, sorted_edges[index], width, &step_report);
+                candidate, current_edge_id, width,
+                edge_endpoints, edge_count, processed_face_ids,
+                processed_face_count, &step_report);
             if (result != HENKA_SUCCESS)
             {
                 goto cleanup;
@@ -3393,6 +3461,11 @@ henka_result henka_authoring_mesh_bevel_edges(
             if (index == 0U)
             {
                 first_report = step_report;
+            }
+            if (step_report.primary_face_id != HENKA_AUTHORING_INVALID_ID &&
+                processed_face_count < edge_count)
+            {
+                processed_face_ids[processed_face_count++] = step_report.primary_face_id;
             }
         }
     }
@@ -3466,6 +3539,7 @@ henka_result henka_authoring_mesh_bevel_edges(
 
 cleanup:
     henka_authoring_mesh_destroy(candidate);
+    henka_free(processed_face_ids);
     henka_free(edge_endpoints);
     henka_free(sorted_edges);
     return result;

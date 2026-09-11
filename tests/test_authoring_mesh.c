@@ -2056,6 +2056,111 @@ cleanup:
     return result ? 1 : fail("multiple interior edge bevel operation");
 }
 
+static int test_connected_interior_edge_bevel_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 32U, 8U};
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {3.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f},
+        {2.0f, 1.0f, 0.0f}, {3.0f, 1.0f, 0.0f}};
+    const henka_authoring_vertex_id faces[3][4] = {
+        {1U, 2U, 6U, 5U}, {2U, 3U, 7U, 6U}, {3U, 4U, 8U, 7U}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_edge_id selected_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id edge_id;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_modeling_report report = {0};
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){0.0f, 0.0f}, 0U,
+                &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 3U; ++index)
+    {
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        if (henka_authoring_mesh_add_face(
+                mesh, faces[index], 4U, 0U, true, &face_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < desc.max_edges; ++index)
+    {
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, index, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge == NULL || edge->face_count != 2U)
+        {
+            continue;
+        }
+        if ((edge->vertices[0] == 2U && edge->vertices[1] == 6U) ||
+            (edge->vertices[0] == 6U && edge->vertices[1] == 2U))
+        {
+            selected_edges[0] = edge_id;
+        }
+        else if ((edge->vertices[0] == 3U && edge->vertices[1] == 7U) ||
+            (edge->vertices[0] == 7U && edge->vertices[1] == 3U))
+        {
+            selected_edges[1] = edge_id;
+        }
+    }
+    if (selected_edges[0] == HENKA_AUTHORING_INVALID_ID ||
+        selected_edges[1] == HENKA_AUTHORING_INVALID_ID ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_bevel_edges(
+            mesh, selected_edges, 2U, 0.9f, &report) != HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (memcmp(&before, &after, sizeof(before)) != 0 ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_bevel_edges(
+            mesh, selected_edges, 2U, 0.1f, &report) != HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 4U ||
+        report.created_edges != 6U || report.created_faces != 2U)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices + 4U ||
+        after.edges != before.edges + 6U || after.faces != before.faces + 2U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("connected interior edge bevel operation");
+}
+
 static int test_quad_strip_loop_cut_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -4033,6 +4138,7 @@ int main(void)
         test_single_quad_face_cut_operation() &&
         test_multi_cut_single_quad_operation() &&
         test_interior_edge_bevel_operation() && test_multi_interior_edge_bevel_operation() &&
+        test_connected_interior_edge_bevel_operation() &&
         test_quad_strip_loop_cut_operation() &&
         test_closed_quad_ring_loop_cut_operation() &&
         test_edge_loop_slide_operation() &&

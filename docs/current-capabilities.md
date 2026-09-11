@@ -431,8 +431,8 @@ Available edge authoring includes:
 - bounded standalone boundary-edge bevel;
 - bounded multi-edge boundary bevel across distinct faces;
 - bounded same-face boundary bevel with shared-endpoint corner caps;
-- bounded compatible interior-edge bevel for isolated two-quad patches, including
-  pairwise vertex- and face-disjoint selections;
+- bounded compatible interior-edge bevel for isolated two-quad patches,
+  pairwise vertex-disjoint selections, and covered connected quad strips;
 - bounded surface-connected extrusion for one open boundary edge.
 
 Surface-connected boundary-edge extrusion offsets the edge along its incident face normal, preserves the source face and selected hard-edge intent, and creates one connecting quad transactionally.
@@ -447,7 +447,8 @@ Interior bevel rejects:
 - neighboring shared boundaries;
 - ambiguous endpoint fans.
 
-Connected or mixed interior edge-set bevel and broader edge topology operations remain in progress.
+Mixed interior/boundary bevel, branching or otherwise unsupported connected
+interior domains, and broader edge topology operations remain in progress.
 
 The shared Sandbox modeling session and Authoring panel expose the bounded preview/cancel/apply path for boundary-edge extrusion.
 

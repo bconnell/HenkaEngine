@@ -468,14 +468,15 @@ Integrated authoring is already underway as part of the current 3D completion pa
   are available within their supported domains.
 - Standalone boundary-edge bevel, bounded multi-edge boundary bevel,
   same-face boundary bevel with shared-endpoint corner caps, and compatible
-  compatible interior-edge bevel for isolated two-quad patches, including
-  pairwise independent selections, are available.
+  interior-edge bevel for isolated two-quad patches, pairwise independent
+  selections, and covered connected quad strips are available.
 - One Loop Cut accepts a validated factor across a compatible open quad strip or
   closed ring with Preview/Refresh and explicit Apply/Cancel publication.
 - Edge mode provides signed-factor Edge Slide for one compatible open edge-loop
   or closed edge-cycle selection through the shared modeling operator session.
-- Broader interior-edge cases, edge-loop domains, generalized Edge Extrude, and
-  general loop-cut networks remain in progress or planned.
+- Branching or otherwise unsupported interior-edge cases, edge-loop domains,
+  generalized Edge Extrude, and general loop-cut networks remain in progress or
+  planned.
 
 #### Loose-component and surface-connected editing
 
