@@ -872,18 +872,23 @@ static sandbox3d_modeling_operator_kind sandbox3d_authoring_extrude_operator_kin
             : sandbox3d_authoring_object_get_selection_mode(
                 state->authoring_object);
     const henka_authoring_mesh* mesh;
+    const size_t selected_count = state == NULL || state->authoring_object == NULL
+        ? 0U
+        : sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object);
     uint32_t component_id = HENKA_AUTHORING_INVALID_ID;
     const henka_authoring_edge* edge;
 
     if (state == NULL || state->authoring_object == NULL ||
-        sandbox3d_authoring_object_get_selected_component_count(
-            state->authoring_object) != 1U)
+        selected_count == 0U)
     {
         return SANDBOX3D_MODELING_OPERATOR_NONE;
     }
     if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
     {
-        return SANDBOX3D_MODELING_OPERATOR_EXTRUDE;
+        return selected_count == 1U
+            ? SANDBOX3D_MODELING_OPERATOR_EXTRUDE
+            : SANDBOX3D_MODELING_OPERATOR_NONE;
     }
     if (selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE ||
         sandbox3d_authoring_object_get_selected_component_at(
@@ -902,7 +907,9 @@ static sandbox3d_modeling_operator_kind sandbox3d_authoring_extrude_operator_kin
     }
     if (edge->face_count == 0U)
     {
-        return SANDBOX3D_MODELING_OPERATOR_EXTRUDE;
+        return selected_count == 1U
+            ? SANDBOX3D_MODELING_OPERATOR_EXTRUDE
+            : SANDBOX3D_MODELING_OPERATOR_NONE;
     }
     if (edge->face_count == 1U)
     {
@@ -26444,7 +26451,7 @@ details_group_authoring:
                     }
                     if ((selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
                          selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE) &&
-                        selected_component_count == 1U &&
+                        selected_component_count > 0U &&
                         sandbox3d_details_flow_next_row(
                             state, flow_desc.bounds, 28.0f, 1U, &row) &&
                         row.width >= 290.0f)
