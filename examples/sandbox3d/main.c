@@ -36498,6 +36498,16 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         if (ui_visible)
         {
             henka_engine_set_mouse_capture(engine, false);
+            if (state->showcase_capture_view_requested ||
+                state->realism_reference_capture_requested)
+            {
+                /* A dedicated capture owns the full framebuffer while it is
+                 * active. Once the user explicitly opens the editor, return
+                 * to the normal docked viewport so panel input cannot be
+                 * mistaken for Scene View navigation. */
+                state->showcase_capture_view_requested = false;
+                state->realism_reference_capture_requested = false;
+            }
             state->ui_visibility_report_pending = true;
         }
         sandbox3d_set_statusf(

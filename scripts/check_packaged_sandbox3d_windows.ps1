@@ -2150,19 +2150,26 @@ try {
 
             throw "The native material editor controls did not become visible in the resolved ownership state."
         }
-        for ($opticalScrollAttempt = 0; $opticalScrollAttempt -lt 8; ++$opticalScrollAttempt) {
-            if (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring optical material controls:" -TimeoutMilliseconds 300) {
-                break
-            }
+        $opticalGeometryStartingOffset = Get-FileLengthSafe -Path $stdoutPath
+        $opticalGeometryObserved = $false
+        for ($opticalScrollAttempt = 0;
+             $opticalScrollAttempt -lt 8 -and
+             -not $opticalGeometryObserved;
+             ++$opticalScrollAttempt) {
             Scroll-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
                 -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                -WheelDelta -120
+                -WheelDelta -1
+            $opticalGeometryObserved = Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native authoring optical material controls:" `
+                -StartingOffset $opticalGeometryStartingOffset `
+                -TimeoutMilliseconds 1500
         }
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring optical material controls:" -TimeoutMilliseconds 3000)) {
+        if (-not $opticalGeometryObserved) {
             throw "The native optical material controls did not become visible after ownership promotion."
         }
         $nativeOpticalMaterialMatch = Get-LastLogRegexMatch `
@@ -2284,6 +2291,16 @@ try {
             throw "The user-facing native subsurface tint edit did not complete."
         }
         Write-Output "[pass] User-facing native subsurface tint edit completed"
+        # The optical controls are below the general material controls. Return
+        # to the top of the details flow before using the earlier material
+        # geometry record; otherwise the click lands in the scrolled layout.
+        Scroll-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
+            -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+            -WheelDelta 1
         $nativeMaterialControlsMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
