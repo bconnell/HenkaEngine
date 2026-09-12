@@ -51,6 +51,7 @@ static void henka_test_material_load_does_not_populate_mesh_cache(void)
     henka_engine engine;
     henka_material_asset* asset = NULL;
     henka_material_asset* reloaded_asset = NULL;
+    const henka_material_asset* path_asset = NULL;
     henka_shader shader;
     henka_asset_metadata metadata;
     henka_result result;
@@ -92,6 +93,20 @@ static void henka_test_material_load_does_not_populate_mesh_cache(void)
         "build/test_tmp/missing-material.gltf",
         &metadata) == HENKA_ERROR_UNKNOWN);
     HENKA_TEST_ASSERT(metadata.source_path == NULL);
+
+    path_asset = (const henka_material_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_for_path(
+        &manager,
+        "BUILD\\TEST_TMP\\MATERIAL-ONLY.GLTF",
+        &path_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(path_asset == asset);
+
+    path_asset = (const henka_material_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_for_path(
+        &manager,
+        "build/test_tmp/missing-material.gltf",
+        &path_asset) == HENKA_ERROR_UNKNOWN);
+    HENKA_TEST_ASSERT(path_asset == NULL);
 
     result = henka_assets_reload_gltf_material_asset(
         &manager,

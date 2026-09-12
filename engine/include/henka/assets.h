@@ -384,6 +384,13 @@ henka_result henka_assets_load_gltf_material_asset(
     const char* path,
     henka_shader* shader,
     henka_material_asset** out_asset);
+/* Resolves a previously loaded standalone material definition by its
+ * canonical source identity. The returned definition is borrowed from the
+ * manager and remains valid until that manager is destroyed. */
+henka_result henka_assets_get_material_asset_for_path(
+    const henka_asset_manager* manager,
+    const char* path,
+    const henka_material_asset** out_asset);
 /* Adopts a validated runtime material definition under a stable confined
  * identity. The manager owns the definition and its identity; textures and
  * shader pointers remain borrowed manager-owned dependencies. Runtime

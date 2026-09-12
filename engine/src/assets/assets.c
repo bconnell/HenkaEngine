@@ -6269,6 +6269,42 @@ henka_result henka_assets_get_audio_metadata_for_path(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_get_material_asset_for_path(
+    const henka_asset_manager* manager,
+    const char* path,
+    const henka_material_asset** out_asset)
+{
+    char* key;
+    const henka_material_asset* entry;
+    henka_result result;
+
+    if (out_asset != NULL)
+    {
+        *out_asset = NULL;
+    }
+    if (manager == NULL || path == NULL || out_asset == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    key = NULL;
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    entry = henka_asset_manager_find_material_entry_const(manager, key);
+    henka_free(key);
+    if (entry == NULL)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    *out_asset = entry;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_assets_get_material_metadata_for_path(
     const henka_asset_manager* manager,
     const char* path,
