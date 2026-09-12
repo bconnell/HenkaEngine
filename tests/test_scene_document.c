@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include <henka/core.h>
 #include <henka/scene.h>
@@ -279,6 +280,7 @@ static bool test_scene_document_patch_v10_environment_mode(
 {
     const size_t environment_bytes = 49U * sizeof(uint32_t);
     const size_t render_settings_bytes = 18U * sizeof(uint32_t);
+    const size_t render_resources_bytes = 144U * sizeof(uint32_t);
     FILE* file = NULL;
     long length;
     bool result;
@@ -290,7 +292,8 @@ static bool test_scene_document_patch_v10_environment_mode(
         (file = fopen(path, "rb")) == NULL ||
 #endif
         fseek(file, 0L, SEEK_END) != 0 ||
-        (length = ftell(file)) < (long)(40U + environment_bytes + render_settings_bytes))
+        (length = ftell(file)) <
+            (long)(40U + environment_bytes + render_settings_bytes + render_resources_bytes))
     {
         if (file != NULL) fclose(file);
         return false;
@@ -298,7 +301,8 @@ static bool test_scene_document_patch_v10_environment_mode(
     result = fclose(file) == 0 &&
         test_scene_document_patch_u32_and_checksum(
             path,
-            length - (long)environment_bytes - (long)render_settings_bytes +
+            length - (long)environment_bytes - (long)render_settings_bytes -
+                (long)render_resources_bytes +
                 (long)(11U * sizeof(uint32_t)),
             mode);
     return result;
@@ -657,6 +661,7 @@ static bool test_scene_document_write_v9_fixture(
 {
     const size_t environment_bytes = 49U * sizeof(uint32_t);
     const size_t render_settings_bytes = 18U * sizeof(uint32_t);
+    const size_t render_resources_bytes = 144U * sizeof(uint32_t);
     FILE* source = NULL;
     unsigned char* data = NULL;
     long length;
@@ -678,7 +683,8 @@ static bool test_scene_document_write_v9_fixture(
         return false;
     }
     source_size = (size_t)length;
-    if (source_size < 40U + environment_bytes + render_settings_bytes ||
+    if (source_size < 40U + environment_bytes + render_settings_bytes +
+            render_resources_bytes ||
         (data = (unsigned char*)malloc(source_size)) == NULL ||
         fread(data, 1U, source_size, source) != source_size)
     {
@@ -687,7 +693,8 @@ static bool test_scene_document_write_v9_fixture(
         return false;
     }
     fclose(source);
-    destination_size = source_size - environment_bytes - render_settings_bytes;
+    destination_size = source_size - environment_bytes - render_settings_bytes -
+        render_resources_bytes;
     (void)test_scene_document_legacy_write_u32(
         data, source_size, &(size_t){4U}, 9U);
     (void)test_scene_document_legacy_write_u64(
@@ -708,6 +715,7 @@ static bool test_scene_document_write_v10_fixture(
     const char* destination_path)
 {
     const size_t render_settings_bytes = 18U * sizeof(uint32_t);
+    const size_t render_resources_bytes = 144U * sizeof(uint32_t);
     FILE* source = NULL;
     unsigned char* data = NULL;
     long length;
@@ -729,7 +737,7 @@ static bool test_scene_document_write_v10_fixture(
         return false;
     }
     source_size = (size_t)length;
-    if (source_size < 40U + render_settings_bytes ||
+    if (source_size < 40U + render_settings_bytes + render_resources_bytes ||
         (data = (unsigned char*)malloc(source_size)) == NULL ||
         fread(data, 1U, source_size, source) != source_size)
     {
@@ -738,7 +746,7 @@ static bool test_scene_document_write_v10_fixture(
         return false;
     }
     fclose(source);
-    destination_size = source_size - render_settings_bytes;
+    destination_size = source_size - render_settings_bytes - render_resources_bytes;
     (void)test_scene_document_legacy_write_u32(
         data, source_size, &(size_t){4U}, 10U);
     (void)test_scene_document_legacy_write_u64(
@@ -752,6 +760,88 @@ static bool test_scene_document_write_v10_fixture(
         destination_path, data, destination_size);
     free(data);
     return result;
+}
+
+static bool test_scene_document_write_v11_fixture(
+    const char* source_path,
+    const char* destination_path)
+{
+    const size_t render_resources_bytes = 144U * sizeof(uint32_t);
+    FILE* source = NULL;
+    unsigned char* data = NULL;
+    long length;
+    size_t source_size;
+    size_t destination_size;
+    bool result = false;
+
+    if (source_path == NULL || destination_path == NULL ||
+#if defined(_WIN32)
+        (fopen_s(&source, source_path, "rb") != 0) ||
+#else
+        (source = fopen(source_path, "rb")) == NULL ||
+#endif
+        fseek(source, 0L, SEEK_END) != 0 ||
+        (length = ftell(source)) < 40L ||
+        fseek(source, 0L, SEEK_SET) != 0)
+    {
+        if (source != NULL) fclose(source);
+        return false;
+    }
+    source_size = (size_t)length;
+    if (source_size < 40U + render_resources_bytes ||
+        (data = (unsigned char*)malloc(source_size)) == NULL ||
+        fread(data, 1U, source_size, source) != source_size)
+    {
+        free(data);
+        fclose(source);
+        return false;
+    }
+    fclose(source);
+    destination_size = source_size - render_resources_bytes;
+    (void)test_scene_document_legacy_write_u32(
+        data, source_size, &(size_t){4U}, 11U);
+    (void)test_scene_document_legacy_write_u64(
+        data, source_size, &(size_t){12U}, (uint64_t)(destination_size - 40U));
+    (void)test_scene_document_legacy_write_u32(
+        data,
+        source_size,
+        &(size_t){32U},
+        test_scene_document_legacy_checksum(data + 40U, destination_size - 40U));
+    result = test_scene_document_write_bytes(
+        destination_path, data, destination_size);
+    free(data);
+    return result;
+}
+
+static bool test_scene_document_patch_render_resource_u32(
+    const char* path,
+    size_t resource_u32_index,
+    uint32_t value)
+{
+    FILE* file = NULL;
+    long length;
+    const size_t render_resources_bytes = 144U * sizeof(uint32_t);
+    const size_t header_bytes = 40U;
+    size_t resource_start;
+
+    if (path == NULL ||
+#if defined(_WIN32)
+        fopen_s(&file, path, "rb") != 0 ||
+#else
+        (file = fopen(path, "rb")) == NULL ||
+#endif
+        fseek(file, 0L, SEEK_END) != 0 ||
+        (length = ftell(file)) < (long)(header_bytes + render_resources_bytes))
+    {
+        if (file != NULL) fclose(file);
+        return false;
+    }
+    resource_start = (size_t)length - render_resources_bytes;
+    fclose(file);
+    return test_scene_document_patch_u32_and_checksum(
+        path,
+        (long)(resource_start + resource_u32_index * sizeof(uint32_t)),
+        value);
 }
 
 static void test_scene_document_save_propagates_path_errors(void)
@@ -813,6 +903,9 @@ int main(void)
     const char* v8_path = "build/test_tmp/scene_document_legacy_v8.hscene";
     const char* v9_path = "build/test_tmp/scene_document_legacy_v9.hscene";
     const char* v10_path = "build/test_tmp/scene_document_legacy_v10.hscene";
+    const char* v11_path = "build/test_tmp/scene_document_legacy_v11.hscene";
+    const char* malformed_resources_path =
+        "build/test_tmp/scene_document_malformed_resources.hscene";
     const char* camera_path = "build/test_tmp/scene_document_camera.hscene";
     const unsigned char malformed_data[] = {'H', 'S', 'C', 'N', 1U};
     henka_scene_document* document = NULL;
@@ -830,6 +923,8 @@ int main(void)
     henka_audio_listener loaded_listener;
     henka_scene_environment_desc loaded_environment;
     henka_scene_render_settings loaded_render_settings;
+    henka_scene_render_resources authored_render_resources;
+    henka_scene_render_resources loaded_render_resources;
     henka_camera authored_camera;
     henka_camera loaded_camera;
     henka_scene_document_id first_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
@@ -858,6 +953,30 @@ int main(void)
         loaded_listener.position.x != authored_listener.position.x ||
         loaded_listener.forward.y != authored_listener.forward.y ||
         loaded_listener.up.z != authored_listener.up.z)
+    {
+        goto cleanup;
+    }
+    authored_render_resources = henka_scene_render_resources_default();
+    authored_render_resources.local_light_active[1] = true;
+    authored_render_resources.local_lights[1] = (henka_scene_light_desc){
+        HENKA_SCENE_LIGHT_POINT,
+        {1.0f, 2.0f, 3.0f},
+        {0.0f, -1.0f, -1.0f},
+        {0.8f, 0.7f, 0.6f},
+        12.0f,
+        10.0f,
+        0.0f,
+        0.0f,
+        true};
+    authored_render_resources.reflection_probe_active[3] = true;
+    authored_render_resources.reflection_probes[3] = (henka_scene_reflection_probe_desc){
+        {-2.0f, 1.0f, 4.0f},
+        {3.0f, 4.0f, 5.0f},
+        0.65f,
+        true,
+        true};
+    if (henka_scene_document_set_render_resources(
+            document, authored_render_resources) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -994,9 +1113,40 @@ int main(void)
         !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)) ||
         henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=11 objects=257") == NULL)
+        inspection_size == 0U || strstr(inspection, "HSCN version=12 objects=257") == NULL ||
+        henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
+        !loaded_render_resources.local_light_active[1] ||
+        loaded_render_resources.local_lights[1].position.x != 1.0f ||
+        loaded_render_resources.local_lights[1].direction.y != -1.0f / sqrtf(2.0f) ||
+        !loaded_render_resources.reflection_probe_active[3] ||
+        loaded_render_resources.reflection_probes[3].influence != 0.65f)
     {
         fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_write_v11_fixture(first_path, v11_path) ||
+        henka_scene_document_load_file(loaded, ".", v11_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
+        loaded_render_resources.local_light_active[0] ||
+        loaded_render_resources.local_light_active[1] ||
+        loaded_render_resources.reflection_probe_active[3])
+    {
+        fprintf(stderr, "scene document test failed during v11 resource compatibility load\n");
+        goto cleanup;
+    }
+    if (henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
+        henka_scene_document_save_file(document, ".", malformed_resources_path) != HENKA_SUCCESS ||
+        !test_scene_document_patch_render_resource_u32(
+            malformed_resources_path,
+            28U,
+            0U) ||
+        henka_scene_document_load_file(loaded, ".", malformed_resources_path) == HENKA_SUCCESS ||
+        henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
+        !loaded_render_resources.local_light_active[1] ||
+        loaded_render_resources.local_lights[1].range != 10.0f)
+    {
+        fprintf(stderr, "scene document test failed during malformed resource retention\n");
         goto cleanup;
     }
     if (!test_scene_document_write_v10_fixture(first_path, v10_path) ||
@@ -1347,7 +1497,7 @@ int main(void)
         !loaded_object.audio.streaming ||
         henka_scene_document_format_inspection(
             loaded, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        strstr(inspection, "HSCN version=11") == NULL)
+        strstr(inspection, "HSCN version=12") == NULL)
     {
         fprintf(stderr, "scene document test failed during streamed audio v7 round-trip\n");
         goto cleanup;
@@ -1364,6 +1514,8 @@ int main(void)
 
 cleanup:
     remove(camera_path);
+    remove(v11_path);
+    remove(malformed_resources_path);
     henka_scene_document_destroy(exhausted);
     henka_scene_document_destroy(camera_document);
     henka_scene_document_destroy(loaded);

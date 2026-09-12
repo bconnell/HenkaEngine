@@ -1146,6 +1146,77 @@ static void henka_test_scene_render_settings(void)
     henka_scene_destroy(scene);
 }
 
+static void henka_test_scene_render_resources(void)
+{
+    henka_scene* scene;
+    henka_scene_render_resources resources;
+    henka_scene_render_resources read_back;
+    henka_scene_render_resources invalid;
+    uint64_t revision;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    resources = henka_scene_render_resources_default();
+    resources.local_light_active[1] = true;
+    resources.local_lights[1] = (henka_scene_light_desc){
+        HENKA_SCENE_LIGHT_SPOT,
+        {1.0f, 2.0f, 3.0f},
+        {0.0f, -1.0f, -1.0f},
+        {1.0f, 0.8f, 0.6f},
+        20.0f,
+        12.0f,
+        0.9f,
+        0.65f,
+        true};
+    resources.reflection_probe_active[2] = true;
+    resources.reflection_probes[2] = (henka_scene_reflection_probe_desc){
+        {0.0f, 1.0f, -2.0f},
+        {4.0f, 2.0f, 5.0f},
+        1.0f,
+        true,
+        true};
+    HENKA_TEST_ASSERT(
+        henka_scene_render_resources_validate(&resources) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_scene_set_render_resources(scene, resources) == HENKA_SUCCESS);
+    revision = henka_scene_get_render_revision(scene);
+    HENKA_TEST_ASSERT(
+        henka_scene_get_render_resources(scene, &read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(read_back.local_light_active[1]);
+    HENKA_TEST_ASSERT(!read_back.local_light_active[0]);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        read_back.local_lights[1].direction.y,
+        -1.0f / sqrtf(2.0f),
+        0.0001f);
+    HENKA_TEST_ASSERT(read_back.reflection_probe_active[2]);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        read_back.reflection_probes[2].extents.z,
+        5.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT(
+        henka_scene_set_render_resources(scene, read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == revision);
+
+    invalid = read_back;
+    invalid.local_lights[1].range = 0.0f;
+    HENKA_TEST_ASSERT(
+        henka_scene_set_render_resources(scene, invalid) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(
+        henka_scene_get_render_resources(scene, &read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        read_back.local_lights[1].range,
+        12.0f,
+        0.0001f);
+
+    scene->render_revision = UINT64_MAX;
+    scene->content_revision = UINT64_MAX;
+    HENKA_TEST_ASSERT(
+        henka_scene_set_render_resources(scene, resources) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(
+        henka_scene_get_render_resources(scene, &read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(read_back.local_light_active[1]);
+    henka_scene_destroy(scene);
+}
+
 void henka_test_scene(void)
 {
     henka_bounds bounds;
@@ -1191,6 +1262,7 @@ void henka_test_scene(void)
     uint32_t light_index;
 
     henka_test_scene_render_settings();
+    henka_test_scene_render_resources();
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene != NULL);
     HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);

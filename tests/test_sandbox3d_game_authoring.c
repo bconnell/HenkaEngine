@@ -464,6 +464,109 @@ cleanup:
     return success;
 }
 
+static bool test_scene_render_resources_save_load_is_complete(void)
+{
+    const char* project_root = "build/test_tmp";
+    const char* relative_path = "renderer_resources_persistence.hscene";
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_camera camera;
+    henka_scene_render_resources expected = henka_scene_render_resources_default();
+    henka_scene_render_resources changed = henka_scene_render_resources_default();
+    henka_scene_render_resources actual;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    bool success = false;
+
+    expected.local_light_active[1] = true;
+    expected.local_lights[1] = (henka_scene_light_desc){
+        HENKA_SCENE_LIGHT_POINT,
+        {2.0f, 3.0f, 4.0f},
+        {0.0f, -1.0f, 0.0f},
+        {0.7f, 0.8f, 1.0f},
+        18.0f,
+        16.0f,
+        0.0f,
+        0.0f,
+        true};
+    expected.reflection_probe_active[3] = true;
+    expected.reflection_probes[3] = (henka_scene_reflection_probe_desc){
+        {-1.0f, 2.0f, -3.0f},
+        {5.0f, 4.0f, 6.0f},
+        0.75f,
+        true,
+        false};
+    if (henka_scene_render_resources_validate(&expected) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        16.0f / 9.0f,
+        0.1f,
+        100.0f);
+    if (henka_scene_create(&scene) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_set_render_resources(scene, expected) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    entity = henka_scene_create_entity_named(scene, "Renderer Resources");
+    if (entity == HENKA_INVALID_ENTITY)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_create(scene, relative_path, &authoring) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_register_entity(authoring, entity, &object_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        const henka_result save_result = sandbox3d_game_authoring_save(authoring, project_root);
+        if (save_result != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_scene_set_render_resources(scene, changed) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_load(authoring, project_root) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_get_render_resources(scene, &actual) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    success = actual.local_light_active[1] &&
+        actual.local_lights[1].type == HENKA_SCENE_LIGHT_POINT &&
+        actual.local_lights[1].position.x == expected.local_lights[1].position.x &&
+        actual.local_lights[1].intensity == expected.local_lights[1].intensity &&
+        !actual.local_light_active[0] &&
+        actual.reflection_probe_active[3] &&
+        actual.reflection_probes[3].position.z == expected.reflection_probes[3].position.z &&
+        actual.reflection_probes[3].influence == expected.reflection_probes[3].influence &&
+        !actual.reflection_probes[3].box_projection;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove("build/test_tmp/henka.project");
+    (void)remove("build/test_tmp/renderer_resources_persistence.hscene");
+    return success;
+}
+
 static bool test_material_asset_capture_authority_boundary(void)
 {
     const henka_material_asset* asset =
@@ -1094,6 +1197,11 @@ int main(void)
     if (!test_scene_render_settings_save_load_is_complete())
     {
         fprintf(stderr, "scene render settings save/load test failed\n");
+        return 1;
+    }
+    if (!test_scene_render_resources_save_load_is_complete())
+    {
+        fprintf(stderr, "scene render resources save/load test failed\n");
         return 1;
     }
     if (!test_material_asset_capture_authority_boundary())

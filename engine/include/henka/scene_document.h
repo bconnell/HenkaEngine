@@ -13,7 +13,8 @@
 #include <henka/scene.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(11)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(12)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V11 UINT32_C(11)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V10 UINT32_C(10)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V9 UINT32_C(9)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V8 UINT32_C(8)
@@ -251,15 +252,25 @@ henka_result henka_scene_document_set_environment(
 henka_result henka_scene_document_get_environment(
     const henka_scene_document* document,
     henka_scene_environment_desc* out_environment);
-/* The authored render settings contain only direct lighting and fog values.
- * They do not capture renderer-owned textures, shaders, probes, or local
- * light resources. Legacy documents load the default render settings. */
+/* The authored render settings contain direct lighting and fog values.
+ * Value-owned local lights and probe volumes are stored separately; renderer
+ * owned textures, shaders, and captured probe resources are not serialized.
+ * Legacy documents load default local-light and probe configuration. */
 henka_result henka_scene_document_set_render_settings(
     henka_scene_document* document,
     henka_scene_render_settings settings);
 henka_result henka_scene_document_get_render_settings(
     const henka_scene_document* document,
     henka_scene_render_settings* out_settings);
+/* Local lights and reflection-probe volumes are value-owned authored scene
+ * configuration. Renderer-owned captured textures are derived after load and
+ * are not serialized as document state. */
+henka_result henka_scene_document_set_render_resources(
+    henka_scene_document* document,
+    henka_scene_render_resources resources);
+henka_result henka_scene_document_get_render_resources(
+    const henka_scene_document* document,
+    henka_scene_render_resources* out_resources);
 /* An authored scene camera is optional. Legacy documents have no authored
  * camera; callers can choose whether to retain or replace their runtime
  * camera when applying a document. */

@@ -1866,6 +1866,8 @@ henka_result sandbox3d_game_authoring_save(
     henka_scene_environment_desc current_environment;
     henka_scene_render_settings previous_render_settings;
     henka_scene_render_settings current_render_settings;
+    henka_scene_render_resources previous_render_resources;
+    henka_scene_render_resources current_render_resources;
     const bool had_authored_camera =
         authoring != NULL && authoring->document != NULL &&
         henka_scene_document_has_camera(authoring->document);
@@ -1893,7 +1895,13 @@ henka_result sandbox3d_game_authoring_save(
             &previous_render_settings) != HENKA_SUCCESS ||
         henka_scene_get_render_settings(
             authoring->scene,
-            &current_render_settings) != HENKA_SUCCESS)
+            &current_render_settings) != HENKA_SUCCESS ||
+        henka_scene_document_get_render_resources(
+            authoring->document,
+            &previous_render_resources) != HENKA_SUCCESS ||
+        henka_scene_get_render_resources(
+            authoring->scene,
+            &current_render_resources) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1914,12 +1922,28 @@ henka_result sandbox3d_game_authoring_save(
             previous_environment);
         return result;
     }
+    result = henka_scene_document_set_render_resources(
+        authoring->document,
+        current_render_resources);
+    if (result != HENKA_SUCCESS)
+    {
+        (void)henka_scene_document_set_render_settings(
+            authoring->document,
+            previous_render_settings);
+        (void)henka_scene_document_set_environment(
+            authoring->document,
+            previous_environment);
+        return result;
+    }
     result = sandbox3d_scene_document_bridge_sync_camera(authoring->bridge);
     if (result != HENKA_SUCCESS)
     {
         (void)henka_scene_document_set_render_settings(
             authoring->document,
             previous_render_settings);
+        (void)henka_scene_document_set_render_resources(
+            authoring->document,
+            previous_render_resources);
         (void)henka_scene_document_set_environment(
             authoring->document,
             previous_environment);
@@ -1941,6 +1965,9 @@ henka_result sandbox3d_game_authoring_save(
         (void)henka_scene_document_set_render_settings(
             authoring->document,
             previous_render_settings);
+        (void)henka_scene_document_set_render_resources(
+            authoring->document,
+            previous_render_resources);
         (void)henka_scene_document_set_environment(
             authoring->document,
             previous_environment);
@@ -1964,6 +1991,9 @@ henka_result sandbox3d_game_authoring_save(
         (void)henka_scene_document_set_render_settings(
             authoring->document,
             previous_render_settings);
+        (void)henka_scene_document_set_render_resources(
+            authoring->document,
+            previous_render_resources);
         (void)henka_scene_document_set_environment(
             authoring->document,
             previous_environment);
@@ -1988,6 +2018,8 @@ henka_result sandbox3d_game_authoring_load(
     henka_scene_environment_desc candidate_environment;
     henka_scene_render_settings candidate_render_settings =
         henka_scene_render_settings_default();
+    henka_scene_render_resources candidate_render_resources =
+        henka_scene_render_resources_default();
     sandbox3d_scene_document_bridge* candidate_bridge = NULL;
     char selected_relative_path[
         SANDBOX3D_GAME_AUTHORING_MAX_RELATIVE_PATH_BYTES];
@@ -2067,6 +2099,18 @@ henka_result sandbox3d_game_authoring_load(
         result = henka_scene_set_render_settings(
             candidate_scene,
             candidate_render_settings);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_document_get_render_resources(
+            candidate,
+            &candidate_render_resources);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_render_resources(
+            candidate_scene,
+            candidate_render_resources);
     }
     if (result != HENKA_SUCCESS)
     {

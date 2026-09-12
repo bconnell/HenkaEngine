@@ -255,6 +255,14 @@ henka_scene_render_settings henka_scene_render_settings_default(void)
         {false, HENKA_SCENE_FOG_LINEAR, {0.16f, 0.19f, 0.24f}, 8.0f, 80.0f, 0.0f}};
 }
 
+henka_scene_render_resources henka_scene_render_resources_default(void)
+{
+    henka_scene_render_resources resources;
+
+    memset(&resources, 0, sizeof(resources));
+    return resources;
+}
+
 const char* henka_scene_environment_preset_get_label(
     henka_scene_environment_preset preset)
 {
@@ -4232,7 +4240,8 @@ static henka_result henka_scene_validate_light(henka_scene_light_desc* light)
 {
     henka_vec3 direction;
 
-    if (light == NULL || light->type > HENKA_SCENE_LIGHT_SPOT ||
+    if (light == NULL || light->type < HENKA_SCENE_LIGHT_POINT ||
+        light->type > HENKA_SCENE_LIGHT_SPOT ||
         !henka_scene_vec3_is_finite(light->position) ||
         !henka_scene_vec3_is_finite(light->direction) ||
         !henka_scene_vec3_is_finite(light->color) ||
@@ -4348,6 +4357,170 @@ henka_result henka_scene_get_light(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_light = scene->local_lights[light_index];
+    return HENKA_SUCCESS;
+}
+
+static bool henka_scene_light_equal(
+    const henka_scene_light_desc* left,
+    const henka_scene_light_desc* right)
+{
+    return left != NULL && right != NULL &&
+        left->type == right->type &&
+        left->position.x == right->position.x &&
+        left->position.y == right->position.y &&
+        left->position.z == right->position.z &&
+        left->direction.x == right->direction.x &&
+        left->direction.y == right->direction.y &&
+        left->direction.z == right->direction.z &&
+        left->color.x == right->color.x &&
+        left->color.y == right->color.y &&
+        left->color.z == right->color.z &&
+        left->intensity == right->intensity &&
+        left->range == right->range &&
+        left->inner_cone_cosine == right->inner_cone_cosine &&
+        left->outer_cone_cosine == right->outer_cone_cosine &&
+        left->enabled == right->enabled;
+}
+
+static bool henka_scene_reflection_probe_equal(
+    const henka_scene_reflection_probe_desc* left,
+    const henka_scene_reflection_probe_desc* right)
+{
+    return left != NULL && right != NULL &&
+        left->position.x == right->position.x &&
+        left->position.y == right->position.y &&
+        left->position.z == right->position.z &&
+        left->extents.x == right->extents.x &&
+        left->extents.y == right->extents.y &&
+        left->extents.z == right->extents.z &&
+        left->influence == right->influence &&
+        left->enabled == right->enabled &&
+        left->box_projection == right->box_projection;
+}
+
+henka_result henka_scene_render_resources_validate(
+    const henka_scene_render_resources* resources)
+{
+    uint32_t index;
+
+    if (resources == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
+    {
+        henka_scene_light_desc light = resources->local_lights[index];
+        if (resources->local_light_active[index] &&
+            henka_scene_validate_light(&light) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++index)
+    {
+        if (resources->reflection_probe_active[index] &&
+            henka_scene_validate_reflection_probe(&resources->reflection_probes[index]) !=
+                HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_render_resources(
+    henka_scene* scene,
+    henka_scene_render_resources resources)
+{
+    henka_scene_render_resources normalized = henka_scene_render_resources_default();
+    uint32_t index;
+
+    if (henka_scene_render_resources_validate(&resources) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
+    {
+        if (resources.local_light_active[index])
+        {
+            normalized.local_light_active[index] = true;
+            normalized.local_lights[index] = resources.local_lights[index];
+            if (henka_scene_validate_light(&normalized.local_lights[index]) != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++index)
+    {
+        if (resources.reflection_probe_active[index])
+        {
+            normalized.reflection_probe_active[index] = true;
+            normalized.reflection_probes[index] = resources.reflection_probes[index];
+        }
+    }
+    if (scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_scene_render_revision_available(scene))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
+    {
+        if (scene->local_light_active[index] != normalized.local_light_active[index] ||
+            (normalized.local_light_active[index] &&
+                !henka_scene_light_equal(
+                    &scene->local_lights[index], &normalized.local_lights[index])))
+        {
+            goto changed;
+        }
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++index)
+    {
+        if (scene->reflection_probe_active[index] != normalized.reflection_probe_active[index] ||
+            (normalized.reflection_probe_active[index] &&
+                !henka_scene_reflection_probe_equal(
+                    &scene->reflection_probes[index], &normalized.reflection_probes[index])))
+        {
+            goto changed;
+        }
+    }
+    return HENKA_SUCCESS;
+
+changed:
+    memcpy(scene->local_lights, normalized.local_lights, sizeof(scene->local_lights));
+    memcpy(scene->local_light_active, normalized.local_light_active,
+        sizeof(scene->local_light_active));
+    memcpy(scene->reflection_probes, normalized.reflection_probes,
+        sizeof(scene->reflection_probes));
+    memcpy(scene->reflection_probe_active, normalized.reflection_probe_active,
+        sizeof(scene->reflection_probe_active));
+    henka_scene_bump_render_revision(scene);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_render_resources(
+    const henka_scene* scene,
+    henka_scene_render_resources* out_resources)
+{
+    if (out_resources != NULL)
+    {
+        memset(out_resources, 0, sizeof(*out_resources));
+    }
+    if (scene == NULL || scene->destroyed || out_resources == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memcpy(out_resources->local_lights, scene->local_lights,
+        sizeof(out_resources->local_lights));
+    memcpy(out_resources->local_light_active, scene->local_light_active,
+        sizeof(out_resources->local_light_active));
+    memcpy(out_resources->reflection_probes, scene->reflection_probes,
+        sizeof(out_resources->reflection_probes));
+    memcpy(out_resources->reflection_probe_active, scene->reflection_probe_active,
+        sizeof(out_resources->reflection_probe_active));
     return HENKA_SUCCESS;
 }
 

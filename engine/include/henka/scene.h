@@ -290,6 +290,16 @@ typedef struct henka_scene_fog_desc
     float density;
 } henka_scene_fog_desc;
 
+/* Value-owned local lighting and reflection-probe configuration. Renderer
+ * capture textures remain derived runtime resources and are not serialized. */
+typedef struct henka_scene_render_resources
+{
+    henka_scene_light_desc local_lights[HENKA_SCENE_MAX_LOCAL_LIGHTS];
+    bool local_light_active[HENKA_SCENE_MAX_LOCAL_LIGHTS];
+    henka_scene_reflection_probe_desc reflection_probes[HENKA_SCENE_MAX_REFLECTION_PROBES];
+    bool reflection_probe_active[HENKA_SCENE_MAX_REFLECTION_PROBES];
+} henka_scene_render_resources;
+
 /* Value-owned scene lighting and fog settings. Runtime resources are not
  * referenced, so the descriptor is safe to copy into authored documents. */
 typedef struct henka_scene_render_settings
@@ -327,6 +337,9 @@ henka_scene_environment_desc henka_scene_environment_default(void);
 henka_scene_render_settings henka_scene_render_settings_default(void);
 henka_result henka_scene_render_settings_validate(
     const henka_scene_render_settings* settings);
+henka_scene_render_resources henka_scene_render_resources_default(void);
+henka_result henka_scene_render_resources_validate(
+    const henka_scene_render_resources* resources);
 const char* henka_scene_environment_preset_get_label(
     henka_scene_environment_preset preset);
 henka_result henka_scene_create(henka_scene** out_scene);
@@ -504,6 +517,14 @@ henka_result henka_scene_set_render_settings(
 henka_result henka_scene_get_render_settings(
     const henka_scene* scene,
     henka_scene_render_settings* out_settings);
+/* Applies value-owned local lights and probe volumes as one visible scene
+ * mutation. Captured GPU resources are rebuilt by the renderer as needed. */
+henka_result henka_scene_set_render_resources(
+    henka_scene* scene,
+    henka_scene_render_resources resources);
+henka_result henka_scene_get_render_resources(
+    const henka_scene* scene,
+    henka_scene_render_resources* out_resources);
 void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direction);
 void henka_scene_set_light_color(henka_scene* scene, henka_vec3 light_color);
 void henka_scene_set_light_intensity(henka_scene* scene, float light_intensity);
