@@ -554,6 +554,10 @@ henka_result henka_assets_get_audio_metadata_for_path(
     const henka_asset_manager* manager,
     const char* path,
     henka_asset_metadata* out_metadata);
+henka_result henka_assets_get_material_metadata_for_path(
+    const henka_asset_manager* manager,
+    const char* path,
+    henka_asset_metadata* out_metadata);
 /* Borrowed manager-owned fallback assets. */
 henka_texture* henka_assets_get_white_texture(henka_asset_manager* manager);
 henka_texture* henka_assets_get_error_texture(henka_asset_manager* manager);

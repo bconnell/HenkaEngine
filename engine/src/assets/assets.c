@@ -1009,8 +1009,8 @@ henka_asset_manager_find_audio_entry(
         henka_asset_manager_find_audio_entry_const(manager, key);
 }
 
-static henka_material_asset* henka_asset_manager_find_material_entry(
-    henka_asset_manager* manager,
+static const henka_material_asset* henka_asset_manager_find_material_entry_const(
+    const henka_asset_manager* manager,
     const char* key)
 {
     size_t index;
@@ -1021,6 +1021,15 @@ static henka_material_asset* henka_asset_manager_find_material_entry(
             return manager->material_entries[index];
     }
     return NULL;
+}
+
+static henka_material_asset* henka_asset_manager_find_material_entry(
+    henka_asset_manager* manager,
+    const char* key)
+{
+    return (henka_material_asset*)henka_asset_manager_find_material_entry_const(
+        manager,
+        key);
 }
 
 static bool henka_asset_manager_owns_shader_pointer(
@@ -6250,6 +6259,43 @@ henka_result henka_assets_get_audio_metadata_for_path(
     }
 
     entry = henka_asset_manager_find_audio_entry_const(manager, key);
+    henka_free(key);
+    if (entry == NULL)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    *out_metadata = entry->metadata;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_get_material_metadata_for_path(
+    const henka_asset_manager* manager,
+    const char* path,
+    henka_asset_metadata* out_metadata)
+{
+    char* key;
+    const henka_material_asset* entry;
+    henka_result result;
+
+    if (out_metadata != NULL)
+    {
+        memset(out_metadata, 0, sizeof(*out_metadata));
+    }
+
+    if (manager == NULL || path == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    key = NULL;
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    entry = henka_asset_manager_find_material_entry_const(manager, key);
     henka_free(key);
     if (entry == NULL)
     {

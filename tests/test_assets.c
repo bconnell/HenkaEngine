@@ -52,6 +52,7 @@ static void henka_test_material_load_does_not_populate_mesh_cache(void)
     henka_material_asset* asset = NULL;
     henka_material_asset* reloaded_asset = NULL;
     henka_shader shader;
+    henka_asset_metadata metadata;
     henka_result result;
 
     memset(&manager, 0, sizeof(manager));
@@ -73,6 +74,24 @@ static void henka_test_material_load_does_not_populate_mesh_cache(void)
     HENKA_TEST_ASSERT(asset != NULL);
     HENKA_TEST_ASSERT(manager.mesh_count == 0U);
     HENKA_TEST_ASSERT(manager.material_count == 1U);
+
+    memset(&metadata, 0x5a, sizeof(metadata));
+    HENKA_TEST_ASSERT(henka_assets_get_material_metadata_for_path(
+        &manager,
+        "BUILD\\TEST_TMP\\MATERIAL-ONLY.GLTF",
+        &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.type == HENKA_ASSET_TYPE_MATERIAL);
+    HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback && metadata.reload_supported);
+    HENKA_TEST_ASSERT(strcmp(
+        metadata.source_path,
+        "build/test_tmp/material-only.gltf") == 0);
+
+    memset(&metadata, 0x5a, sizeof(metadata));
+    HENKA_TEST_ASSERT(henka_assets_get_material_metadata_for_path(
+        &manager,
+        "build/test_tmp/missing-material.gltf",
+        &metadata) == HENKA_ERROR_UNKNOWN);
+    HENKA_TEST_ASSERT(metadata.source_path == NULL);
 
     result = henka_assets_reload_gltf_material_asset(
         &manager,
