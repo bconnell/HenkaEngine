@@ -1570,19 +1570,6 @@ static const char* sandbox3d_material_editor_alpha_label(henka_material_alpha_mo
     }
 }
 
-static const char* sandbox3d_material_editor_usage_label(henka_texture_usage usage)
-{
-    switch (usage)
-    {
-        case HENKA_TEXTURE_USAGE_COLOR: return "Color/sRGB";
-        case HENKA_TEXTURE_USAGE_NORMAL: return "Normal/linear";
-        case HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS: return "Metal-rough/linear";
-        case HENKA_TEXTURE_USAGE_OCCLUSION: return "Occlusion/linear";
-        case HENKA_TEXTURE_USAGE_EMISSIVE: return "Emissive/sRGB";
-        default: return "Other";
-    }
-}
-
 static bool sandbox3d_material_editor_is_float(henka_material_instance_parameter parameter)
 {
     return parameter == HENKA_MATERIAL_INSTANCE_METALLIC ||
@@ -3209,7 +3196,7 @@ static void sandbox3d_draw_material_instance_editor(
             value_text,
             sizeof(value_text),
             "First dependency: %s",
-            sandbox3d_material_editor_usage_label(
+            sandbox3d_texture_usage_label(
                 dependencies.dependencies[0].usage));
         henka_ui_label_colored(
             state->ui,

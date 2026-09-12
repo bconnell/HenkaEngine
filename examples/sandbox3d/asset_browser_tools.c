@@ -26,6 +26,29 @@ static const char* sandbox3d_asset_browser_usage_label(henka_texture_usage usage
     }
 }
 
+const char* sandbox3d_texture_usage_label(henka_texture_usage usage)
+{
+    switch (usage)
+    {
+        case HENKA_TEXTURE_USAGE_COLOR:
+            return "Color/sRGB";
+        case HENKA_TEXTURE_USAGE_NORMAL:
+            return "Normal/linear";
+        case HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS:
+            return "Metal-rough/linear";
+        case HENKA_TEXTURE_USAGE_OCCLUSION:
+            return "Occlusion/linear";
+        case HENKA_TEXTURE_USAGE_EMISSIVE:
+            return "Emissive/sRGB";
+        case HENKA_TEXTURE_USAGE_GENERIC_DATA:
+            return "Generic data/linear";
+        case HENKA_TEXTURE_USAGE_UI:
+            return "UI/sRGB";
+        default:
+            return "Unknown";
+    }
+}
+
 static const char* sandbox3d_asset_browser_format_label(henka_texture_gpu_format format)
 {
     switch (format)

@@ -44,6 +44,8 @@ typedef struct sandbox3d_texture_slot_display
     char state[32];
 } sandbox3d_texture_slot_display;
 
+const char* sandbox3d_texture_usage_label(henka_texture_usage usage);
+
 const char* sandbox3d_terrain_layer_label(uint32_t layer_index);
 
 henka_result sandbox3d_format_terrain_layer_display(

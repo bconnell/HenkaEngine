@@ -90,6 +90,31 @@ static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
     henka_material before;
     sandbox3d_texture_slot_display display;
 
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_texture_usage_label(HENKA_TEXTURE_USAGE_COLOR),
+        "Color/sRGB") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_texture_usage_label(HENKA_TEXTURE_USAGE_NORMAL),
+        "Normal/linear") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_texture_usage_label(HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS),
+        "Metal-rough/linear") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_texture_usage_label(HENKA_TEXTURE_USAGE_OCCLUSION),
+        "Occlusion/linear") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_texture_usage_label(HENKA_TEXTURE_USAGE_EMISSIVE),
+        "Emissive/sRGB") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_texture_usage_label(HENKA_TEXTURE_USAGE_GENERIC_DATA),
+        "Generic data/linear") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_texture_usage_label(HENKA_TEXTURE_USAGE_UI),
+        "UI/sRGB") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_texture_usage_label((henka_texture_usage)99),
+        "Unknown") == 0);
+
     memset(&manager, 0, sizeof(manager));
     memset(texture_entries, 0, sizeof(texture_entries));
     memset(&texture, 0, sizeof(texture));
