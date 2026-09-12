@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 
 #include <henka/core.h>
@@ -250,6 +251,7 @@ int main(void)
     henka_interaction_desc previous_interaction;
     henka_material material;
     henka_material previous_material;
+    henka_material valid_runtime_material;
     char previous_name[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
     char previous_prompt[HENKA_SCENE_DOCUMENT_MAX_PROMPT_BYTES];
     henka_entity entity = HENKA_INVALID_ENTITY;
@@ -446,6 +448,15 @@ int main(void)
         sandbox3d_scene_document_bridge_bind(bridge, object_id, entity) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_apply_hierarchy(bridge) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_unbind(bridge, child_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    valid_runtime_material = henka_material_default();
+    valid_runtime_material.shader = (henka_shader*)(uintptr_t)1U;
+    if (henka_scene_set_entity_material(
+            scene,
+            entity,
+            valid_runtime_material) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
