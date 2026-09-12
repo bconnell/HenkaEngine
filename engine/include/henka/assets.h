@@ -523,15 +523,22 @@ henka_result henka_assets_instantiate_gltf_scene(
     size_t* out_entity_count);
 
 /*
- * Retries only a cached texture fallback from a previous failed load.
- * The fallback entry and borrowed texture pointer remain intact when the
- * replacement load fails. Failure leaves out_texture null. Success updates the
- * existing borrowed texture object in place, so materials do not retain a
- * permanently stale fallback pointer.
+ * Retries only a cached texture fallback from a previous failed load. The
+ * descriptor-aware form selects the exact cache entry when one source path
+ * has multiple semantic descriptors; the convenience form selects the
+ * default color descriptor. The fallback entry and borrowed texture pointer
+ * remain intact when the replacement load fails. Failure leaves out_texture
+ * null. Success updates the existing borrowed texture object in place, so
+ * materials do not retain a permanently stale fallback pointer.
  */
 henka_result henka_assets_retry_failed_texture(
     henka_asset_manager* manager,
     const char* path,
+    henka_texture** out_texture);
+henka_result henka_assets_retry_failed_texture_with_descriptor(
+    henka_asset_manager* manager,
+    const char* path,
+    const henka_texture_descriptor* descriptor,
     henka_texture** out_texture);
 
 /*

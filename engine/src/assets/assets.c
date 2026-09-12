@@ -5715,7 +5715,22 @@ henka_result henka_assets_retry_failed_texture(
     const char* path,
     henka_texture** out_texture)
 {
+    henka_texture_descriptor descriptor = henka_texture_descriptor_default_color();
+    return henka_assets_retry_failed_texture_with_descriptor(
+        manager,
+        path,
+        &descriptor,
+        out_texture);
+}
+
+henka_result henka_assets_retry_failed_texture_with_descriptor(
+    henka_asset_manager* manager,
+    const char* path,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture)
+{
     henka_asset_texture_entry* entry;
+    henka_texture_descriptor canonical_descriptor;
     char* key;
     char* resolved_path;
     henka_texture* replacement;
@@ -5729,14 +5744,23 @@ henka_result henka_assets_retry_failed_texture(
 
     if (manager == NULL ||
         path == NULL ||
+        descriptor == NULL ||
         out_texture == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    if (henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    canonical_descriptor = *descriptor;
+    henka_texture_descriptor_canonicalize(&canonical_descriptor);
     key = NULL;
-    result = henka_assets_make_canonical_key(
+    result = henka_assets_make_texture_cache_key(
         path,
+        &canonical_descriptor,
         &key);
     if (result != HENKA_SUCCESS)
     {
@@ -5770,9 +5794,10 @@ henka_result henka_assets_retry_failed_texture(
     }
 
     replacement = NULL;
-    result = henka_texture_create_from_file(
+    result = henka_texture_create_from_file_with_descriptor(
         manager->engine,
         resolved_path,
+        &entry->descriptor,
         &replacement);
     henka_free(resolved_path);
     if (result != HENKA_SUCCESS)
