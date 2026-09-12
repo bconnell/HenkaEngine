@@ -1082,6 +1082,187 @@ static void henka_test_texture_reimport_preserves_identity_and_transactionality(
     henka_engine_destroy(engine);
 }
 
+static void henka_test_material_dependency_reimport_refreshes_real_scene_bindings(void)
+{
+    static const unsigned char bmp_a[] =
+    {
+        0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00,
+        0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+        0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0xff, 0x00, 0x00
+    };
+    static const unsigned char bmp_b[] =
+    {
+        0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00,
+        0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+        0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xff, 0x00, 0x00, 0x00
+    };
+    static const char* gltf_a =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"images\":[{\"uri\":\"material-a.bmp\"}],"
+        "\"textures\":[{\"source\":0}],"
+        "\"materials\":[{\"name\":\"Material A\",\"pbrMetallicRoughness\":{"
+        "\"baseColorFactor\":[0.9,0.2,0.1,1.0],\"baseColorTexture\":{\"index\":0},"
+        "\"metallicFactor\":0.2,\"roughnessFactor\":0.4}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    static const char* gltf_b =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"images\":[{\"uri\":\"material-b.bmp\"}],"
+        "\"textures\":[{\"source\":0}],"
+        "\"materials\":[{\"name\":\"Material B\",\"pbrMetallicRoughness\":{"
+        "\"baseColorFactor\":[0.1,0.8,0.25,1.0],\"baseColorTexture\":{\"index\":0},"
+        "\"metallicFactor\":0.75,\"roughnessFactor\":0.65}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    static const char* gltf_invalid_dependency =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"images\":[{\"uri\":\"../outside-material.bmp\"}],"
+        "\"textures\":[{\"source\":0}],"
+        "\"materials\":[{\"name\":\"Missing Material\",\"pbrMetallicRoughness\":{"
+        "\"baseColorTexture\":{\"index\":0}}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    const char* gltf_path = "build/test_tmp/material-dependency-reimport.gltf";
+    const char* image_a_path = "build/test_tmp/material-a.bmp";
+    const char* image_b_path = "build/test_tmp/material-b.bmp";
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_asset_manager* manager;
+    henka_shader* shader = NULL;
+    henka_material_asset* asset = NULL;
+    henka_material_asset* reloaded_asset = NULL;
+    henka_material material_a;
+    henka_material material_b;
+    henka_material material_after_failure;
+    henka_material_dependency_info dependencies;
+    henka_asset_metadata texture_metadata;
+    henka_scene* scene = NULL;
+    henka_entity entity;
+    henka_material scene_material_before_failure;
+    henka_material scene_material_after_failure;
+    henka_texture* texture_a;
+    henka_texture* texture_b;
+    uint64_t revision_before_failure;
+    uint64_t scene_material_revision;
+    size_t refreshed_count;
+    size_t texture_count_before_failure;
+    bool scene_material_overridden;
+
+    config.application_name = "Henka Material Dependency Reimport Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    manager = henka_engine_get_asset_manager(engine);
+    HENKA_TEST_ASSERT(manager != NULL);
+    HENKA_TEST_ASSERT(henka_assets_load_shader(
+        manager,
+        "assets/shaders/basic_lit.vert",
+        "assets/shaders/basic_lit.frag",
+        &shader) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_write_file(image_a_path, bmp_a, sizeof(bmp_a)));
+    HENKA_TEST_ASSERT(henka_test_write_file(image_b_path, bmp_b, sizeof(bmp_b)));
+    HENKA_TEST_ASSERT(henka_test_write_file(gltf_path, gltf_a, strlen(gltf_a)));
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_material_asset(
+        manager, gltf_path, shader, &asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(asset != NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_material(
+        asset, &material_a) == HENKA_SUCCESS);
+    texture_a = material_a.base_color_texture;
+    HENKA_TEST_ASSERT(texture_a != NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_metadata(
+        manager, texture_a, &texture_metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        texture_metadata.source_path,
+        "build/test_tmp/material-a.bmp") == 0);
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_dependencies(
+        asset, &dependencies) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(dependencies.dependency_count == 1U);
+    HENKA_TEST_ASSERT(dependencies.dependencies[0].texture == texture_a);
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Material Dependency Target");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_apply_material_asset(
+        scene, entity, asset, material_a, asset->revision) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_test_write_file(gltf_path, gltf_b, strlen(gltf_b)));
+    HENKA_TEST_ASSERT(henka_assets_reload_material_asset(
+        manager, asset, &reloaded_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_asset == asset);
+    HENKA_TEST_ASSERT(asset->revision == 2U);
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_material(
+        asset, &material_b) == HENKA_SUCCESS);
+    texture_b = material_b.base_color_texture;
+    HENKA_TEST_ASSERT(texture_b != NULL && texture_b != texture_a);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(material_b.base_color.x, 0.1f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(material_b.metallic, 0.75f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_metadata(
+        manager, texture_b, &texture_metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        texture_metadata.source_path,
+        "build/test_tmp/material-b.bmp") == 0);
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_dependencies(
+        asset, &dependencies) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(dependencies.dependency_count == 1U);
+    HENKA_TEST_ASSERT(dependencies.dependencies[0].texture == texture_b);
+
+    refreshed_count = 0U;
+    HENKA_TEST_ASSERT(henka_assets_refresh_scene_material_bindings(
+        manager, scene, &refreshed_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(refreshed_count == 1U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        scene, entity, &scene_material_before_failure) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_material_before_failure.base_color_texture == texture_b);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset_state(
+        scene, entity, &scene_material_revision, &scene_material_overridden) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_material_revision == asset->revision);
+    HENKA_TEST_ASSERT(!scene_material_overridden);
+
+    revision_before_failure = asset->revision;
+    texture_count_before_failure = manager->texture_count;
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_material(
+        asset, &material_after_failure) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        scene, entity, &scene_material_before_failure) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        gltf_path, gltf_invalid_dependency, strlen(gltf_invalid_dependency)));
+    reloaded_asset = (henka_material_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_reload_material_asset(
+        manager, asset, &reloaded_asset) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_asset == NULL);
+    HENKA_TEST_ASSERT(asset->revision == revision_before_failure);
+    HENKA_TEST_ASSERT(manager->texture_count == texture_count_before_failure);
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_material(
+        asset, &material_b) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_b.base_color_texture == material_after_failure.base_color_texture);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(material_b.base_color.x, material_after_failure.base_color.x, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        scene, entity, &scene_material_after_failure) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_material_after_failure.base_color_texture ==
+        scene_material_before_failure.base_color_texture);
+
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+    (void)remove(gltf_path);
+    (void)remove(image_a_path);
+    (void)remove(image_b_path);
+}
+
 static void henka_test_texture_loader_preserves_nonempty_output(void)
 {
     henka_texture_descriptor descriptor = henka_texture_descriptor_default_color();
@@ -1154,6 +1335,7 @@ void henka_test_assets(void)
     henka_test_mesh_source_failure_requires_fallback();
     henka_test_mesh_reimport_preserves_identity_and_transactionality();
     henka_test_texture_reimport_preserves_identity_and_transactionality();
+    henka_test_material_dependency_reimport_refreshes_real_scene_bindings();
     henka_test_texture_loader_preserves_nonempty_output();
     henka_test_shader_and_audio_loaders_preserve_nonempty_output();
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
