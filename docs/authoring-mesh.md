@@ -2,7 +2,7 @@
 
 Henka exposes a bounded polygonal authoring mesh through `<henka/authoring_mesh.h>`. This is the editor topology layer. The renderer consumes evaluated mesh data produced from this source.
 
-> **Status:** Integrated authoring foundation. The mesh, topology, modeling, UV, history, persistence, evaluation, scene, renderer, bounds, and bounded collider paths share one transactional source workflow.
+> **Status:** Available within the bounded foundational Modeling scope. The mesh, topology, modeling, UV, history, persistence, evaluation, scene, renderer, bounds, and bounded collider paths share one transactional source workflow.
 
 Stable logical component identity and reusable physical-slot storage are documented in [Stable authoring component identities](authoring-component-identities.md).
 

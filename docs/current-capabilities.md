@@ -319,7 +319,7 @@ history remain open.
 
 ## Modeling / Content Authoring
 
-> **Status:** In Progress
+> **Status:** Available within the bounded foundational Modeling scope.
 
 ### Integrated workflow
 
@@ -463,16 +463,17 @@ Interior bevel rejects:
 - ambiguous endpoint fans.
 
 Mixed interior/boundary bevel, branching or otherwise unsupported connected
-interior domains, and broader edge topology operations remain in progress.
+interior domains, and broader edge topology operations remain outside the
+bounded foundational scope.
 
 The shared Sandbox modeling session and Authoring panel expose the bounded
 preview/cancel/apply path for face and boundary-edge extrusion.
 
-### Current limitations
+### Scope boundary and later work
 
-This is an integrated authoring foundation, not a production modeling suite.
-
-Still incomplete:
+The bounded foundational Modeling scope is complete for the production paths
+listed above. The following later capabilities remain outside this campaign
+boundary:
 
 - broader non-manifold or incompatible-normal fan handling;
 - broader topology tooling;

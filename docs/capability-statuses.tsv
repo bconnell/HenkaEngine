@@ -3,7 +3,7 @@ Core runtime|Available|## Core / Platform
 Renderer|Available (Unhardened)|## Renderer
 Scene and camera|Available (Unhardened)|## Scene / Camera
 Editor workspace|In Progress|## Editor Workspace
-Modeling and authoring|In Progress|## Modeling / Content Authoring
+Modeling and authoring|Available|## Modeling / Content Authoring
 Assets and materials|In Progress|## Assets / Materials
 Terrain and world|Foundation|## Terrain / World
 Physics|Foundation|## Physics

@@ -28,18 +28,23 @@ Henka Engine is an early-stage open source C17 game engine and integrated develo
 
 ## Current focus
 
-Current work is closing the current general 3D engine boundary through explicit subsystem campaigns rather than treating partially implemented foundations as complete. Renderer completion is the active lead campaign. Later 3D campaigns retain the same canonical scene, identity, authoring, asset, persistence, physics, scripting, Audio, networking, editor, and packaging authorities.
+Current work is closing the general 3D engine boundary through explicit
+subsystem campaigns rather than treating partially implemented foundations as
+complete. The supported Renderer and bounded native Modeling boundaries are
+published foundations. The next queued campaign is 3D Assets & Materials;
+later 3D campaigns retain the same canonical scene, identity, authoring,
+asset, persistence, physics, scripting, Audio, networking, editor, and
+packaging authorities.
 
 Current priorities include:
 
-1. Complete and harden the supported Windows/OpenGL renderer path with real visual, package, resource-lifetime, and hardware-portability evidence.
-2. Complete integrated 3D modeling/content authoring and assets/materials on the existing source/runtime ownership boundaries.
-3. Mature physics, Game Authoring/Scene Document/project workflows, Prefabs, camera/viewport, Terrain/world, and lighting/environment without parallel sources of truth.
-4. Complete scripting/behaviors, Character Controller, Audio, and networking/dedicated-server integration through real runtime and package paths.
-5. Complete the editor workspace, packaging/distribution/external-project path, and animation/character-production boundary.
-6. Run a final overall 3D integration, documentation, regression, and release-readiness audit before starting 2D.
-7. Keep local and hosted validation deterministic across builds, tests, package provenance, startup, external projects, repository integrity, and visual evidence.
-8. Keep README, architecture, roadmap, runtime help, capability status, and the completion matrix aligned with live product behavior.
+1. Advance 3D Assets & Materials on the existing source/runtime ownership boundaries.
+2. Mature physics, Game Authoring/Scene Document/project workflows, Prefabs, camera/viewport, Terrain/world, and lighting/environment without parallel sources of truth.
+3. Complete scripting/behaviors, Character Controller, Audio, and networking/dedicated-server integration through real runtime and package paths.
+4. Complete the editor workspace, packaging/distribution/external-project path, and animation/character-production boundary.
+5. Run a final overall 3D integration, documentation, regression, and release-readiness audit before starting 2D.
+6. Keep local and hosted validation deterministic across builds, tests, package provenance, startup, external projects, repository integrity, and visual evidence.
+7. Keep README, architecture, roadmap, runtime help, capability status, and the completion matrix aligned with live product behavior.
 
 ## Active major-system sequence
 

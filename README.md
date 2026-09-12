@@ -59,7 +59,7 @@ runtime, packaging, and external-project validation.
 | Renderer | Available (Unhardened) | Current OpenGL path, Solid/Material Preview/Rendered policies, and PBR foundations |
 | Scene and camera | Available (Unhardened) | Current 3D entities, input actions, framing, gizmos, Compass, and 2.5D camera presets |
 | Editor workspace | In Progress | Current native docking, detached panels, tabs, layout persistence, and early authoring UI |
-| Modeling and authoring | In Progress | Current direct Object/Vertex/Edge/Face modes, bounded topology operations, UV, and HAMS foundations |
+| Modeling and authoring | Available | Bounded product-native Object/Vertex/Edge/Face modeling, topology operations, UV, persistence, and HAMS workflows |
 | Assets and materials | In Progress | Current glTF/GLB and OBJ loading, manager-owned dependencies, and validated instances |
 | Terrain and world | Foundation | Current bounded four-layer terrain, streaming, edits, LOD, persistence, and collision paths |
 | Physics | Foundation | Current fixed-step rigid bodies, primitive colliders, contacts, events, and raycasts |
@@ -107,7 +107,7 @@ persistence, and supported scripting controls.
 
 ## Modeling and content authoring
 
-The current integrated authoring foundation includes:
+The completed bounded Modeling scope includes:
 
 - Object, Vertex, Edge, and Face workflows
 - Component selection, connected selection, bounded edge-loop selection, and soft movement
@@ -117,8 +117,13 @@ The current integrated authoring foundation includes:
 - Native editable source persistence and imported-object Make Editable
 - Validated material-region and supported PBR material-instance editing
 
-Broader topology, automatic UV unwrap, texture painting, rigging, animation
-authoring, and production-quality showcase asset creation remain in progress.
+The following later capabilities remain outside this bounded Modeling scope:
+
+- broader topology and automatic UV unwrap beyond the documented supported cases;
+- texture painting, rigging, and animation authoring;
+- production-quality showcase asset creation;
+- broader scene/project serialization and source export.
+
 See [docs/authoring-mesh.md](docs/authoring-mesh.md) and
 [docs/showcase-assets.md](docs/showcase-assets.md).
 
