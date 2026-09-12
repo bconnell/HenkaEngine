@@ -596,6 +596,48 @@ static henka_result henka_scene_document_validate_object(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    {
+        const uint32_t texture_override_bits[] = {
+            HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_BASE_COLOR,
+            HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_NORMAL,
+            HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_METALLIC_ROUGHNESS,
+            HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_OCCLUSION,
+            HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_EMISSIVE,
+            HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_TRANSMISSION,
+            HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_THICKNESS};
+        const char* texture_paths[] = {
+            renderer->base_color_texture_path,
+            renderer->normal_texture_path,
+            renderer->metallic_roughness_texture_path,
+            renderer->occlusion_texture_path,
+            renderer->emissive_texture_path,
+            renderer->transmission_texture_path,
+            renderer->thickness_texture_path};
+        size_t texture_index;
+
+        if ((renderer->texture_override_mask &
+                ~HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_KNOWN_MASK) != 0U ||
+            (renderer->texture_override_mask != 0U &&
+                (!renderer->material_override || renderer->material_path[0] == '\0')))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        for (texture_index = 0U;
+             texture_index < sizeof(texture_paths) / sizeof(texture_paths[0]);
+             ++texture_index)
+        {
+            if (henka_scene_document_validate_path(
+                    texture_paths[texture_index],
+                    true) != HENKA_SUCCESS ||
+                (texture_paths[texture_index][0] != '\0' &&
+                    (renderer->texture_override_mask &
+                        texture_override_bits[texture_index]) == 0U))
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+    }
+
     if (henka_audio_emitter_config_validate(&object->audio) != HENKA_SUCCESS ||
         henka_scene_document_validate_path(
             object->audio.clip_path,
@@ -1747,12 +1789,39 @@ static bool henka_scene_document_payload_size(
         const size_t material_path_length = strlen(object->renderer.material_path);
         const size_t prompt_length = strlen(object->interaction.prompt);
         const size_t audio_path_length = strlen(object->audio.clip_path);
+        const char* texture_paths[] = {
+            object->renderer.base_color_texture_path,
+            object->renderer.normal_texture_path,
+            object->renderer.metallic_roughness_texture_path,
+            object->renderer.occlusion_texture_path,
+            object->renderer.emissive_texture_path,
+            object->renderer.transmission_texture_path,
+            object->renderer.thickness_texture_path};
+        size_t texture_identity_bytes = sizeof(uint32_t);
         if (name_length > UINT16_MAX || source_path_length > UINT16_MAX ||
             material_path_length > UINT16_MAX || prompt_length > UINT16_MAX ||
-            audio_path_length > UINT16_MAX ||
-            !henka_scene_document_size_add(&size, 8U + 8U + 4U + 2U + name_length + 40U +
+            audio_path_length > UINT16_MAX)
+        {
+            return false;
+        }
+        for (size_t texture_index = 0U;
+             texture_index < sizeof(texture_paths) / sizeof(texture_paths[0]);
+             ++texture_index)
+        {
+            const size_t texture_path_length = strlen(texture_paths[texture_index]);
+            if (texture_path_length > UINT16_MAX ||
+                !henka_scene_document_size_add(
+                    &texture_identity_bytes,
+                    2U + texture_path_length))
+            {
+                return false;
+            }
+        }
+        if (!henka_scene_document_size_add(&size,
+                8U + 8U + 4U + 2U + name_length + 40U +
                 4U + 4U + 12U + 2U + source_path_length + 4U +
                 2U + material_path_length + 40U + inline_renderer_bytes +
+                texture_identity_bytes +
                 4U + 2U + prompt_length +
                 4U + 4U + 12U + 4U + 12U + 4U + 20U + 4U + 4U +
                 2U + audio_path_length + 4U + 16U + 4U + 40U))
@@ -1956,6 +2025,30 @@ static void henka_scene_document_encode_object(
         if (object->renderer.use_texture) material_flags |= UINT32_C(1) << 5U;
         henka_scene_document_writer_u32(writer, material_flags);
     }
+    henka_scene_document_writer_u32(
+        writer,
+        object->renderer.texture_override_mask);
+    henka_scene_document_writer_string(
+        writer,
+        object->renderer.base_color_texture_path);
+    henka_scene_document_writer_string(
+        writer,
+        object->renderer.normal_texture_path);
+    henka_scene_document_writer_string(
+        writer,
+        object->renderer.metallic_roughness_texture_path);
+    henka_scene_document_writer_string(
+        writer,
+        object->renderer.occlusion_texture_path);
+    henka_scene_document_writer_string(
+        writer,
+        object->renderer.emissive_texture_path);
+    henka_scene_document_writer_string(
+        writer,
+        object->renderer.transmission_texture_path);
+    henka_scene_document_writer_string(
+        writer,
+        object->renderer.thickness_texture_path);
     henka_scene_document_writer_float(writer, object->interaction.max_distance);
     henka_scene_document_writer_string(writer, object->interaction.prompt);
     henka_scene_document_writer_u32(writer, (uint32_t)object->physics.body_type);
@@ -2556,6 +2649,45 @@ static bool henka_scene_document_decode_object(
         object->renderer.receive_shadows = (material_flags & (UINT32_C(1) << 4U)) != 0U;
         object->renderer.use_texture = (material_flags & (UINT32_C(1) << 5U)) != 0U;
     }
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    {
+        if (!henka_scene_document_reader_u32(
+                reader,
+                &object->renderer.texture_override_mask) ||
+            (object->renderer.texture_override_mask &
+                ~HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_KNOWN_MASK) != 0U ||
+            !henka_scene_document_reader_string(
+                reader,
+                object->renderer.base_color_texture_path,
+                sizeof(object->renderer.base_color_texture_path)) ||
+            !henka_scene_document_reader_string(
+                reader,
+                object->renderer.normal_texture_path,
+                sizeof(object->renderer.normal_texture_path)) ||
+            !henka_scene_document_reader_string(
+                reader,
+                object->renderer.metallic_roughness_texture_path,
+                sizeof(object->renderer.metallic_roughness_texture_path)) ||
+            !henka_scene_document_reader_string(
+                reader,
+                object->renderer.occlusion_texture_path,
+                sizeof(object->renderer.occlusion_texture_path)) ||
+            !henka_scene_document_reader_string(
+                reader,
+                object->renderer.emissive_texture_path,
+                sizeof(object->renderer.emissive_texture_path)) ||
+            !henka_scene_document_reader_string(
+                reader,
+                object->renderer.transmission_texture_path,
+                sizeof(object->renderer.transmission_texture_path)) ||
+            !henka_scene_document_reader_string(
+                reader,
+                object->renderer.thickness_texture_path,
+                sizeof(object->renderer.thickness_texture_path)))
+        {
+            return false;
+        }
+    }
     if (!henka_scene_document_reader_float(reader, &object->interaction.max_distance) ||
         !henka_scene_document_reader_string(reader, object->interaction.prompt, sizeof(object->interaction.prompt)) ||
         !henka_scene_document_reader_u32(reader, &value)) return false;
@@ -2953,6 +3085,7 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V9 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V10 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V11 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V12 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
@@ -3070,7 +3203,7 @@ henka_result henka_scene_document_load_file(
         result = HENKA_ERROR_INVALID_ARGUMENT;
         goto load_cleanup;
     }
-    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V12 &&
         !henka_scene_document_decode_render_resources(
             &reader,
             &candidate->render_resources))

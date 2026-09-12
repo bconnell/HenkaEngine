@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include <henka/physics.h>
+#include <henka/assets.h>
 #include <henka/scene_document.h>
 
 typedef struct sandbox3d_scene_document_bridge sandbox3d_scene_document_bridge;
@@ -14,6 +15,11 @@ henka_result sandbox3d_scene_document_bridge_create(
     henka_scene_document* document,
     henka_scene* scene,
     sandbox3d_scene_document_bridge** out_bridge);
+/* Attaches the borrowed project asset authority used to reconstruct persisted
+ * manager-owned texture overrides. The bridge does not retain or destroy it. */
+henka_result sandbox3d_scene_document_bridge_set_asset_manager(
+    sandbox3d_scene_document_bridge* bridge,
+    henka_asset_manager* assets);
 void sandbox3d_scene_document_bridge_destroy(
     sandbox3d_scene_document_bridge* bridge);
 size_t sandbox3d_scene_document_bridge_get_binding_count(

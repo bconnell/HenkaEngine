@@ -197,6 +197,7 @@ static bool test_manager_material_instance_persists_by_identity(void)
     henka_engine* engine = NULL;
     henka_asset_manager* assets = NULL;
     henka_shader* shader = NULL;
+    henka_texture* override_texture = NULL;
     henka_scene* scene = NULL;
     sandbox3d_game_authoring* authoring = NULL;
     henka_material_asset* asset = NULL;
@@ -206,6 +207,7 @@ static bool test_manager_material_instance_persists_by_identity(void)
     henka_material loaded_material = henka_material_default();
     henka_material_instance instance;
     henka_asset_metadata metadata;
+    henka_asset_metadata texture_metadata;
     henka_scene_document_object object;
     henka_camera camera = henka_camera_create_perspective(
         60.0f * HENKA_DEG_TO_RAD,
@@ -236,7 +238,16 @@ static bool test_manager_material_instance_persists_by_identity(void)
             assets,
             "assets/shaders/basic_lit.vert",
             "assets/shaders/basic_lit.frag",
-            &shader) != HENKA_SUCCESS)
+            &shader) != HENKA_SUCCESS ||
+        henka_assets_load_texture(
+            assets,
+            "assets/textures/cube_albedo.png",
+            &override_texture) != HENKA_SUCCESS ||
+        henka_assets_get_texture_metadata(
+            assets,
+            override_texture,
+            &texture_metadata) != HENKA_SUCCESS ||
+        texture_metadata.source_path == NULL)
     {
         goto cleanup;
     }
@@ -279,6 +290,10 @@ static bool test_manager_material_instance_persists_by_identity(void)
             &instance,
             HENKA_MATERIAL_INSTANCE_ROUGHNESS,
             0.21f) != HENKA_SUCCESS ||
+        henka_assets_material_instance_set_texture(
+            &instance,
+            HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR,
+            override_texture) != HENKA_SUCCESS ||
         henka_assets_get_material_instance_material(
             &instance,
             &instance_material) != HENKA_SUCCESS ||
@@ -309,6 +324,11 @@ static bool test_manager_material_instance_persists_by_identity(void)
         object.renderer.base_color.y != instance_material.base_color.y ||
         object.renderer.base_color.z != instance_material.base_color.z ||
         object.renderer.roughness != instance_material.roughness ||
+        (object.renderer.texture_override_mask &
+            HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_BASE_COLOR) == 0U ||
+        strcmp(
+            object.renderer.base_color_texture_path,
+            texture_metadata.source_path) != 0 ||
         sandbox3d_game_authoring_save(authoring, project_root) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_load(authoring, project_root) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_get_entity_for_document_id(
@@ -344,7 +364,7 @@ static bool test_manager_material_instance_persists_by_identity(void)
         loaded_material.base_color.y == instance_material.base_color.y &&
         loaded_material.base_color.z == instance_material.base_color.z &&
         loaded_material.roughness == instance_material.roughness &&
-        loaded_material.base_color_texture == material.base_color_texture &&
+        loaded_material.base_color_texture == override_texture &&
         loaded_material.use_texture == material.use_texture &&
         strcmp(object.renderer.material_path, material_identity) == 0 &&
         object.renderer.material_override;

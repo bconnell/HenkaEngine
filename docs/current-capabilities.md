@@ -253,9 +253,10 @@ The public runtime scene now provides a bounded generation-checked parent/child
 transform foundation with cycle rejection, keep-local/keep-world reparenting,
 deterministic direct-child enumeration, subtree propagation, and parent-
 destruction promotion. Passing `HENKA_INVALID_ENTITY` enumerates root entities.
-HSCN v12 persists parent IDs, an optional authored scene camera, the value-owned
+HSCN v13 persists parent IDs, an optional authored scene camera, the value-owned
 Character Controller component, pointer-free inline renderer material state,
-value-owned scene environment settings, direct lighting, fog, local-light
+supported non-terrain material-instance texture overrides by confined source
+path, value-owned scene environment settings, direct lighting, fog, local-light
 descriptors, and reflection-probe volume descriptors. v1-v9
 documents migrate objects to roots in memory without rewriting the source file;
 v7 data defaults the new controller component to disabled, v8 data retains its

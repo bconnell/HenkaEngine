@@ -13,7 +13,8 @@
 #include <henka/scene.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(12)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(13)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V12 UINT32_C(12)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V11 UINT32_C(11)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V10 UINT32_C(10)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V9 UINT32_C(9)
@@ -70,9 +71,20 @@ typedef struct henka_scene_document_source
     char path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
 } henka_scene_document_source;
 
-/* Renderer values that do not contain borrowed runtime resources. Texture
- * pointers, shaders, manager-owned material definitions, and terrain-layer
- * resources remain outside Scene Document authority. */
+/* Supported non-terrain texture dependency identities may be persisted by
+ * confined source path when a manager-owned material instance explicitly
+ * overrides them. Texture pointers, shaders, manager-owned material
+ * definitions, and terrain-layer resources remain outside Scene Document
+ * authority. */
+#define HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_BASE_COLOR (UINT32_C(1) << 0U)
+#define HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_NORMAL (UINT32_C(1) << 1U)
+#define HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_METALLIC_ROUGHNESS (UINT32_C(1) << 2U)
+#define HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_OCCLUSION (UINT32_C(1) << 3U)
+#define HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_EMISSIVE (UINT32_C(1) << 4U)
+#define HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_TRANSMISSION (UINT32_C(1) << 5U)
+#define HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_THICKNESS (UINT32_C(1) << 6U)
+#define HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_KNOWN_MASK UINT32_C(0x7F)
+
 typedef struct henka_scene_document_renderer
 {
     bool enabled;
@@ -112,6 +124,14 @@ typedef struct henka_scene_document_renderer
     bool double_sided;
     bool cast_shadows;
     bool receive_shadows;
+    uint32_t texture_override_mask;
+    char base_color_texture_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
+    char normal_texture_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
+    char metallic_roughness_texture_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
+    char occlusion_texture_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
+    char emissive_texture_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
+    char transmission_texture_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
+    char thickness_texture_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
     henka_vec3 sheen_color;
     float sheen_roughness;
 } henka_scene_document_renderer;

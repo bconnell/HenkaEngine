@@ -141,45 +141,118 @@ static size_t sandbox3d_game_authoring_find_binding(
     return SIZE_MAX;
 }
 
-static bool sandbox3d_game_authoring_material_dependencies_match(
+static bool sandbox3d_game_authoring_material_definition_resources_match(
     const henka_material* effective,
     const henka_material* definition)
 {
-    size_t layer_index;
-
     if (effective == NULL || definition == NULL ||
         effective->shader != definition->shader ||
-        effective->base_color_texture != definition->base_color_texture ||
-        effective->normal_texture != definition->normal_texture ||
-        effective->metallic_roughness_texture != definition->metallic_roughness_texture ||
-        effective->occlusion_texture != definition->occlusion_texture ||
-        effective->emissive_texture != definition->emissive_texture ||
-        effective->transmission_texture != definition->transmission_texture ||
-        effective->thickness_texture != definition->thickness_texture ||
-        effective->use_texture != definition->use_texture ||
         effective->terrain_layers_enabled != definition->terrain_layers_enabled)
     {
         return false;
     }
-    for (layer_index = 0U;
-        layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
-        ++layer_index)
+    if (effective->terrain_layers_enabled)
     {
-        const henka_material_layer* effective_layer =
-            &effective->terrain_layers[layer_index];
-        const henka_material_layer* definition_layer =
-            &definition->terrain_layers[layer_index];
-        if (effective_layer->base_color_texture !=
-                definition_layer->base_color_texture ||
-            effective_layer->normal_texture !=
-                definition_layer->normal_texture ||
-            effective_layer->metallic_roughness_texture !=
-                definition_layer->metallic_roughness_texture)
+        size_t layer_index;
+        for (layer_index = 0U;
+             layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
+             ++layer_index)
         {
-            return false;
+            const henka_material_layer* effective_layer =
+                &effective->terrain_layers[layer_index];
+            const henka_material_layer* definition_layer =
+                &definition->terrain_layers[layer_index];
+            if (effective_layer->base_color_texture !=
+                    definition_layer->base_color_texture ||
+                effective_layer->normal_texture !=
+                    definition_layer->normal_texture ||
+                effective_layer->metallic_roughness_texture !=
+                    definition_layer->metallic_roughness_texture)
+            {
+                return false;
+            }
         }
     }
     return true;
+}
+
+static henka_result sandbox3d_game_authoring_capture_texture_overrides(
+    const sandbox3d_game_authoring* authoring,
+    const henka_material* effective,
+    const henka_material* definition,
+    henka_scene_document_renderer* renderer)
+{
+    const henka_texture* effective_textures[] = {
+        effective->base_color_texture,
+        effective->normal_texture,
+        effective->metallic_roughness_texture,
+        effective->occlusion_texture,
+        effective->emissive_texture,
+        effective->transmission_texture,
+        effective->thickness_texture};
+    const henka_texture* definition_textures[] = {
+        definition->base_color_texture,
+        definition->normal_texture,
+        definition->metallic_roughness_texture,
+        definition->occlusion_texture,
+        definition->emissive_texture,
+        definition->transmission_texture,
+        definition->thickness_texture};
+    const uint32_t texture_override_bits[] = {
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_BASE_COLOR,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_NORMAL,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_METALLIC_ROUGHNESS,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_OCCLUSION,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_EMISSIVE,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_TRANSMISSION,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_THICKNESS};
+    char* texture_paths[] = {
+        renderer->base_color_texture_path,
+        renderer->normal_texture_path,
+        renderer->metallic_roughness_texture_path,
+        renderer->occlusion_texture_path,
+        renderer->emissive_texture_path,
+        renderer->transmission_texture_path,
+        renderer->thickness_texture_path};
+    size_t texture_index;
+
+    if (authoring == NULL || effective == NULL || definition == NULL ||
+        renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    renderer->texture_override_mask = 0U;
+    for (texture_index = 0U;
+         texture_index < sizeof(effective_textures) / sizeof(effective_textures[0]);
+         ++texture_index)
+    {
+        henka_asset_metadata metadata;
+        if (effective_textures[texture_index] == definition_textures[texture_index])
+        {
+            continue;
+        }
+        renderer->texture_override_mask |= texture_override_bits[texture_index];
+        if (effective_textures[texture_index] == NULL)
+        {
+            continue;
+        }
+        if (authoring->project_assets == NULL ||
+            henka_assets_get_texture_metadata(
+                authoring->project_assets,
+                effective_textures[texture_index],
+                &metadata) != HENKA_SUCCESS ||
+            metadata.source_path == NULL ||
+            strlen(metadata.source_path) >= HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES ||
+            snprintf(
+                texture_paths[texture_index],
+                HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES,
+                "%s",
+                metadata.source_path) < 0)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    return HENKA_SUCCESS;
 }
 
 static henka_result sandbox3d_game_authoring_build_object(
@@ -262,15 +335,27 @@ static henka_result sandbox3d_game_authoring_build_object(
     out_object->renderer.receive_shadows = material.receive_shadows;
     out_object->renderer.sheen_color = material.sheen_color;
     out_object->renderer.sheen_roughness = material.sheen_roughness;
-    if ((material_asset != NULL && material_asset_overridden &&
-            (authoring->project_assets == NULL ||
-                henka_assets_get_material_asset_material(
-                    material_asset,
-                    &definition_material) != HENKA_SUCCESS ||
-                !sandbox3d_game_authoring_material_dependencies_match(
+    if (material_asset != NULL &&
+        (authoring->project_assets == NULL ||
+            henka_assets_get_material_asset_material(
+                material_asset,
+                &definition_material) != HENKA_SUCCESS ||
+            !sandbox3d_game_authoring_material_definition_resources_match(
+                &material,
+                &definition_material) ||
+            (material_asset_overridden &&
+                sandbox3d_game_authoring_capture_texture_overrides(
+                    authoring,
                     &material,
-                    &definition_material))) ||
-        (material_asset == NULL &&
+                    &definition_material,
+                    &out_object->renderer) != HENKA_SUCCESS)))
+    {
+        /* Manager-owned definitions remain asset authority. Resource
+         * dependencies are captured only as stable paths for explicit
+         * supported instance overrides; terrain resources remain external. */
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (material_asset == NULL &&
             (material.base_color_texture != NULL ||
              material.normal_texture != NULL ||
              material.metallic_roughness_texture != NULL ||
@@ -278,14 +363,10 @@ static henka_result sandbox3d_game_authoring_build_object(
              material.emissive_texture != NULL ||
              material.transmission_texture != NULL ||
              material.thickness_texture != NULL ||
-             material.terrain_layers_enabled)))
+             material.terrain_layers_enabled))
     {
-        /* Manager-owned definitions remain asset authority and are captured
-         * without being collapsed into inline document state. Texture or
-         * terrain dependency overrides have no reconstructible bridge
-         * authority and therefore fail closed. Scalar instance overrides
-         * remain pointer-compatible with the manager definition and can be
-         * reconstructed from its canonical identity. */
+        /* An inline document cannot reconstruct borrowed resource pointers.
+         * Reject instead of silently retaining a second authority. */
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (material_asset != NULL)
@@ -317,6 +398,7 @@ static henka_result sandbox3d_game_authoring_build_object(
      * manager-owned definition or borrowed texture state is attached. */
     out_object->renderer.material_override =
         material_asset_overridden ||
+        out_object->renderer.texture_override_mask != 0U ||
         (material_asset == NULL && material.shader != NULL);
     out_object->interaction.enabled = interaction.enabled;
     out_object->interaction.max_distance = interaction.max_distance;
@@ -652,6 +734,9 @@ henka_result sandbox3d_game_authoring_create_with_engine(
     {
         (*out_authoring)->project_engine = engine;
         (*out_authoring)->project_assets = assets;
+        result = sandbox3d_scene_document_bridge_set_asset_manager(
+            (*out_authoring)->bridge,
+            assets);
     }
     return result;
 }
@@ -684,6 +769,75 @@ static bool sandbox3d_game_authoring_path_has_suffix(
         }
     }
     return true;
+}
+
+static henka_result sandbox3d_game_authoring_materialize_texture_overrides(
+    henka_asset_manager* assets,
+    const henka_scene_document_renderer* renderer,
+    henka_material* in_out_material)
+{
+    const uint32_t texture_override_bits[] = {
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_BASE_COLOR,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_NORMAL,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_METALLIC_ROUGHNESS,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_OCCLUSION,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_EMISSIVE,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_TRANSMISSION,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_THICKNESS};
+    const char* texture_paths[] = {
+        renderer->base_color_texture_path,
+        renderer->normal_texture_path,
+        renderer->metallic_roughness_texture_path,
+        renderer->occlusion_texture_path,
+        renderer->emissive_texture_path,
+        renderer->transmission_texture_path,
+        renderer->thickness_texture_path};
+    henka_texture** texture_slots[] = {
+        &in_out_material->base_color_texture,
+        &in_out_material->normal_texture,
+        &in_out_material->metallic_roughness_texture,
+        &in_out_material->occlusion_texture,
+        &in_out_material->emissive_texture,
+        &in_out_material->transmission_texture,
+        &in_out_material->thickness_texture};
+    size_t texture_index;
+
+    if (assets == NULL || renderer == NULL || in_out_material == NULL ||
+        (renderer->texture_override_mask &
+            ~HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_KNOWN_MASK) != 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (texture_index = 0U;
+         texture_index < sizeof(texture_override_bits) /
+             sizeof(texture_override_bits[0]);
+         ++texture_index)
+    {
+        henka_texture* texture = NULL;
+        henka_result result;
+        if ((renderer->texture_override_mask &
+                texture_override_bits[texture_index]) == 0U)
+        {
+            continue;
+        }
+        if (texture_paths[texture_index][0] != '\0')
+        {
+            result = henka_assets_load_texture(
+                assets,
+                texture_paths[texture_index],
+                &texture);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+        }
+        *texture_slots[texture_index] = texture;
+        if (texture_index == 0U)
+        {
+            in_out_material->use_texture = texture != NULL;
+        }
+    }
+    return HENKA_SUCCESS;
 }
 
 static henka_result sandbox3d_game_authoring_materialize_material(
@@ -728,6 +882,14 @@ static henka_result sandbox3d_game_authoring_materialize_material(
                 &material) != HENKA_SUCCESS)
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = sandbox3d_game_authoring_materialize_texture_overrides(
+            assets,
+            &object->renderer,
+            &material);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
         }
         return henka_scene_apply_material_asset_override(
             scene,
@@ -1070,6 +1232,9 @@ static henka_result sandbox3d_game_authoring_open_project_internal(
     {
         candidate_authoring->project_engine = engine;
         candidate_authoring->project_assets = assets;
+        result = sandbox3d_scene_document_bridge_set_asset_manager(
+            candidate_authoring->bridge,
+            assets);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -1572,6 +1737,12 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
         authoring->document,
         candidate_scene,
         &candidate_bridge);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_set_asset_manager(
+            candidate_bridge,
+            authoring->project_assets);
+    }
     if (result == HENKA_SUCCESS)
     {
         binding_count = sandbox3d_scene_document_bridge_get_binding_count(
@@ -2334,6 +2505,12 @@ henka_result sandbox3d_game_authoring_load(
         candidate,
         candidate_scene,
         &candidate_bridge);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_scene_document_bridge_set_asset_manager(
+            candidate_bridge,
+            authoring->project_assets);
+    }
     for (index = 0U;
         index < authoring->binding_count && result == HENKA_SUCCESS;
         ++index)
@@ -2603,6 +2780,12 @@ henka_result sandbox3d_game_authoring_start_play(
             authoring->document,
             authoring->play_scene,
             &authoring->play_bridge);
+        if (result == HENKA_SUCCESS)
+        {
+            result = sandbox3d_scene_document_bridge_set_asset_manager(
+                authoring->play_bridge,
+                authoring->project_assets);
+        }
     }
     for (index = 0U; result == HENKA_SUCCESS && index < authoring->binding_count; ++index)
     {

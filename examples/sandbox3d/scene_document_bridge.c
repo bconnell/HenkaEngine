@@ -18,6 +18,7 @@ struct sandbox3d_scene_document_bridge
 {
     henka_scene_document* document;
     henka_scene* scene;
+    henka_asset_manager* assets;
     bool play_locked;
     size_t binding_count;
     sandbox3d_scene_document_binding bindings[
@@ -176,6 +177,18 @@ henka_result sandbox3d_scene_document_bridge_create(
     bridge->document = document;
     bridge->scene = scene;
     *out_bridge = bridge;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_scene_document_bridge_set_asset_manager(
+    sandbox3d_scene_document_bridge* bridge,
+    henka_asset_manager* assets)
+{
+    if (bridge == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    bridge->assets = assets;
     return HENKA_SUCCESS;
 }
 
@@ -517,6 +530,74 @@ henka_result sandbox3d_scene_document_bridge_overlay_material(
     return HENKA_SUCCESS;
 }
 
+static henka_result sandbox3d_scene_document_bridge_apply_texture_overrides(
+    const sandbox3d_scene_document_bridge* bridge,
+    const henka_scene_document_renderer* renderer,
+    henka_material* in_out_material)
+{
+    const uint32_t texture_override_bits[] = {
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_BASE_COLOR,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_NORMAL,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_METALLIC_ROUGHNESS,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_OCCLUSION,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_EMISSIVE,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_TRANSMISSION,
+        HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_THICKNESS};
+    const char* texture_paths[] = {
+        renderer->base_color_texture_path,
+        renderer->normal_texture_path,
+        renderer->metallic_roughness_texture_path,
+        renderer->occlusion_texture_path,
+        renderer->emissive_texture_path,
+        renderer->transmission_texture_path,
+        renderer->thickness_texture_path};
+    henka_texture** texture_slots[] = {
+        &in_out_material->base_color_texture,
+        &in_out_material->normal_texture,
+        &in_out_material->metallic_roughness_texture,
+        &in_out_material->occlusion_texture,
+        &in_out_material->emissive_texture,
+        &in_out_material->transmission_texture,
+        &in_out_material->thickness_texture};
+    size_t texture_index;
+
+    if (bridge == NULL || renderer == NULL || in_out_material == NULL ||
+        (renderer->texture_override_mask &
+            ~HENKA_SCENE_DOCUMENT_TEXTURE_OVERRIDE_KNOWN_MASK) != 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (texture_index = 0U;
+         texture_index < sizeof(texture_override_bits) /
+             sizeof(texture_override_bits[0]);
+         ++texture_index)
+    {
+        henka_texture* texture = NULL;
+        if ((renderer->texture_override_mask &
+                texture_override_bits[texture_index]) == 0U)
+        {
+            continue;
+        }
+        if (texture_paths[texture_index][0] != '\0')
+        {
+            if (bridge->assets == NULL ||
+                henka_assets_load_texture(
+                    bridge->assets,
+                    texture_paths[texture_index],
+                    &texture) != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+        *texture_slots[texture_index] = texture;
+        if (texture_index == 0U)
+        {
+            in_out_material->use_texture = texture != NULL;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_scene_document_bridge_build_object_update(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id,
@@ -586,6 +667,13 @@ static henka_result sandbox3d_scene_document_bridge_build_object_update(
     {
         material = previous_material;
         if (sandbox3d_scene_document_bridge_overlay_material(
+                &object->renderer,
+                &material) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (sandbox3d_scene_document_bridge_apply_texture_overrides(
+                bridge,
                 &object->renderer,
                 &material) != HENKA_SUCCESS)
         {

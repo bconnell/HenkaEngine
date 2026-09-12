@@ -179,6 +179,214 @@ static uint32_t test_scene_document_legacy_checksum(
     return ~checksum;
 }
 
+static bool test_scene_document_legacy_read_u16(
+    const unsigned char* buffer,
+    size_t capacity,
+    size_t* position,
+    uint16_t* out_value)
+{
+    if (buffer == NULL || position == NULL || out_value == NULL ||
+        *position > capacity || sizeof(uint16_t) > capacity - *position)
+    {
+        return false;
+    }
+    *out_value = (uint16_t)buffer[*position] |
+        (uint16_t)((uint16_t)buffer[*position + 1U] << 8U);
+    *position += sizeof(uint16_t);
+    return true;
+}
+
+static bool test_scene_document_legacy_read_u32(
+    const unsigned char* buffer,
+    size_t capacity,
+    size_t* position,
+    uint32_t* out_value)
+{
+    uint32_t value = 0U;
+    size_t index;
+
+    if (buffer == NULL || position == NULL || out_value == NULL ||
+        *position > capacity || sizeof(uint32_t) > capacity - *position)
+    {
+        return false;
+    }
+    for (index = 0U; index < sizeof(uint32_t); ++index)
+    {
+        value |= (uint32_t)buffer[*position + index] << (index * 8U);
+    }
+    *position += sizeof(uint32_t);
+    *out_value = value;
+    return true;
+}
+
+static bool test_scene_document_legacy_skip_bytes(
+    const unsigned char* buffer,
+    size_t capacity,
+    size_t* position,
+    size_t bytes)
+{
+    if (buffer == NULL || position == NULL || *position > capacity ||
+        bytes > capacity - *position)
+    {
+        return false;
+    }
+    *position += bytes;
+    return true;
+}
+
+static bool test_scene_document_legacy_skip_string(
+    const unsigned char* buffer,
+    size_t capacity,
+    size_t* position)
+{
+    uint16_t length;
+
+    return test_scene_document_legacy_read_u16(
+               buffer, capacity, position, &length) &&
+        test_scene_document_legacy_skip_bytes(
+            buffer, capacity, position, (size_t)length);
+}
+
+static bool test_scene_document_legacy_compact_v13_texture_extensions(
+    unsigned char* data,
+    size_t source_size,
+    size_t object_count,
+    size_t* out_size)
+{
+    const size_t header_bytes = 40U;
+    const size_t material_prefix_bytes =
+        10U * sizeof(uint32_t) +
+        9U * sizeof(uint32_t) +
+        24U * sizeof(uint32_t) +
+        sizeof(uint32_t);
+    const size_t material_texture_count = 7U;
+    size_t read_position = header_bytes;
+    size_t write_position = header_bytes;
+    size_t object_index;
+
+    if (data == NULL || out_size == NULL || source_size < header_bytes ||
+        object_count > (source_size - header_bytes) /
+            (2U * sizeof(uint64_t) + sizeof(uint32_t)))
+    {
+        return false;
+    }
+
+    for (object_index = 0U; object_index < object_count; ++object_index)
+    {
+        const size_t object_start = read_position;
+        size_t texture_extension_start;
+        size_t texture_extension_end;
+        size_t object_end;
+        uint32_t behavior_count;
+        size_t texture_index;
+        size_t behavior_index;
+
+        if (!test_scene_document_legacy_skip_bytes(
+                data, source_size, &read_position,
+                2U * sizeof(uint64_t) + sizeof(uint32_t)) ||
+            !test_scene_document_legacy_skip_string(
+                data, source_size, &read_position) ||
+            !test_scene_document_legacy_skip_bytes(
+                data, source_size, &read_position,
+                10U * sizeof(uint32_t) + 2U * sizeof(uint32_t) +
+                    3U * sizeof(uint32_t)) ||
+            !test_scene_document_legacy_skip_string(
+                data, source_size, &read_position) ||
+            !test_scene_document_legacy_skip_bytes(
+                data, source_size, &read_position, sizeof(uint32_t)) ||
+            !test_scene_document_legacy_skip_string(
+                data, source_size, &read_position) ||
+            !test_scene_document_legacy_skip_bytes(
+                data, source_size, &read_position, material_prefix_bytes))
+        {
+            return false;
+        }
+        texture_extension_start = read_position;
+        if (!test_scene_document_legacy_skip_bytes(
+                data, source_size, &read_position, sizeof(uint32_t)))
+        {
+            return false;
+        }
+        for (texture_index = 0U;
+             texture_index < material_texture_count;
+             ++texture_index)
+        {
+            if (!test_scene_document_legacy_skip_string(
+                    data, source_size, &read_position))
+            {
+                return false;
+            }
+        }
+        texture_extension_end = read_position;
+        if (!test_scene_document_legacy_skip_bytes(
+                data, source_size, &read_position, sizeof(uint32_t)) ||
+            !test_scene_document_legacy_skip_string(
+                data, source_size, &read_position) ||
+            !test_scene_document_legacy_skip_bytes(
+                data, source_size, &read_position, 68U) ||
+            !test_scene_document_legacy_skip_string(
+                data, source_size, &read_position) ||
+            !test_scene_document_legacy_skip_bytes(
+                data, source_size, &read_position, 5U * sizeof(uint32_t)) ||
+            !test_scene_document_legacy_read_u32(
+                data, source_size, &read_position, &behavior_count))
+        {
+            return false;
+        }
+        for (behavior_index = 0U;
+             behavior_index < (size_t)behavior_count;
+             ++behavior_index)
+        {
+            if (!test_scene_document_legacy_skip_bytes(
+                    data, source_size, &read_position,
+                    sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint32_t)) ||
+                !test_scene_document_legacy_skip_string(
+                    data, source_size, &read_position))
+            {
+                return false;
+            }
+        }
+        if (!test_scene_document_legacy_skip_bytes(
+                data, source_size, &read_position,
+                8U * sizeof(uint32_t) + 2U * sizeof(uint32_t)))
+        {
+            return false;
+        }
+        object_end = read_position;
+        if (object_end < texture_extension_end ||
+            texture_extension_start < object_start ||
+            texture_extension_end < texture_extension_start ||
+            write_position > source_size -
+                (texture_extension_start - object_start) -
+                (object_end - texture_extension_end))
+        {
+            return false;
+        }
+        memmove(
+            data + write_position,
+            data + object_start,
+            texture_extension_start - object_start);
+        write_position += texture_extension_start - object_start;
+        memmove(
+            data + write_position,
+            data + texture_extension_end,
+            object_end - texture_extension_end);
+        write_position += object_end - texture_extension_end;
+    }
+
+    if (write_position > read_position)
+    {
+        return false;
+    }
+    memmove(
+        data + write_position,
+        data + read_position,
+        source_size - read_position);
+    write_position += source_size - read_position;
+    *out_size = write_position;
+    return true;
+}
+
 static bool test_scene_document_patch_u64_and_checksum(
     const char* path,
     long payload_offset,
@@ -667,6 +875,8 @@ static bool test_scene_document_write_v9_fixture(
     long length;
     size_t source_size;
     size_t destination_size;
+    size_t compacted_size;
+    uint32_t object_count;
     bool result = false;
 
     if (source_path == NULL || destination_path == NULL ||
@@ -693,7 +903,17 @@ static bool test_scene_document_write_v9_fixture(
         return false;
     }
     fclose(source);
-    destination_size = source_size - environment_bytes - render_settings_bytes -
+    if (!test_scene_document_legacy_read_u32(
+            data, source_size, &(size_t){20U}, &object_count) ||
+        !test_scene_document_legacy_compact_v13_texture_extensions(
+            data, source_size, (size_t)object_count, &compacted_size) ||
+        compacted_size < environment_bytes + render_settings_bytes +
+            render_resources_bytes)
+    {
+        free(data);
+        return false;
+    }
+    destination_size = compacted_size - environment_bytes - render_settings_bytes -
         render_resources_bytes;
     (void)test_scene_document_legacy_write_u32(
         data, source_size, &(size_t){4U}, 9U);
@@ -721,6 +941,8 @@ static bool test_scene_document_write_v10_fixture(
     long length;
     size_t source_size;
     size_t destination_size;
+    size_t compacted_size;
+    uint32_t object_count;
     bool result = false;
 
     if (source_path == NULL || destination_path == NULL ||
@@ -746,7 +968,16 @@ static bool test_scene_document_write_v10_fixture(
         return false;
     }
     fclose(source);
-    destination_size = source_size - render_settings_bytes - render_resources_bytes;
+    if (!test_scene_document_legacy_read_u32(
+            data, source_size, &(size_t){20U}, &object_count) ||
+        !test_scene_document_legacy_compact_v13_texture_extensions(
+            data, source_size, (size_t)object_count, &compacted_size) ||
+        compacted_size < render_settings_bytes + render_resources_bytes)
+    {
+        free(data);
+        return false;
+    }
+    destination_size = compacted_size - render_settings_bytes - render_resources_bytes;
     (void)test_scene_document_legacy_write_u32(
         data, source_size, &(size_t){4U}, 10U);
     (void)test_scene_document_legacy_write_u64(
@@ -772,6 +1003,8 @@ static bool test_scene_document_write_v11_fixture(
     long length;
     size_t source_size;
     size_t destination_size;
+    size_t compacted_size;
+    uint32_t object_count;
     bool result = false;
 
     if (source_path == NULL || destination_path == NULL ||
@@ -797,9 +1030,78 @@ static bool test_scene_document_write_v11_fixture(
         return false;
     }
     fclose(source);
-    destination_size = source_size - render_resources_bytes;
+    if (!test_scene_document_legacy_read_u32(
+            data, source_size, &(size_t){20U}, &object_count) ||
+        !test_scene_document_legacy_compact_v13_texture_extensions(
+            data,
+            source_size,
+            (size_t)object_count,
+            &compacted_size) ||
+        compacted_size < render_resources_bytes)
+    {
+        free(data);
+        return false;
+    }
+    destination_size = compacted_size - render_resources_bytes;
     (void)test_scene_document_legacy_write_u32(
         data, source_size, &(size_t){4U}, 11U);
+    (void)test_scene_document_legacy_write_u64(
+        data, source_size, &(size_t){12U}, (uint64_t)(destination_size - 40U));
+    (void)test_scene_document_legacy_write_u32(
+        data,
+        source_size,
+        &(size_t){32U},
+        test_scene_document_legacy_checksum(data + 40U, destination_size - 40U));
+    result = test_scene_document_write_bytes(
+        destination_path, data, destination_size);
+    free(data);
+    return result;
+}
+
+static bool test_scene_document_write_v12_fixture(
+    const char* source_path,
+    const char* destination_path)
+{
+    FILE* source = NULL;
+    unsigned char* data = NULL;
+    long length;
+    size_t source_size;
+    size_t destination_size;
+    uint32_t object_count;
+    bool result = false;
+
+    if (source_path == NULL || destination_path == NULL ||
+#if defined(_WIN32)
+        (fopen_s(&source, source_path, "rb") != 0) ||
+#else
+        (source = fopen(source_path, "rb")) == NULL ||
+#endif
+        fseek(source, 0L, SEEK_END) != 0 ||
+        (length = ftell(source)) < 40L ||
+        fseek(source, 0L, SEEK_SET) != 0)
+    {
+        if (source != NULL) fclose(source);
+        return false;
+    }
+    source_size = (size_t)length;
+    if ((data = (unsigned char*)malloc(source_size)) == NULL ||
+        fread(data, 1U, source_size, source) != source_size)
+    {
+        free(data);
+        fclose(source);
+        return false;
+    }
+    fclose(source);
+    if (!test_scene_document_legacy_read_u32(
+            data, source_size, &(size_t){20U}, &object_count) ||
+        !test_scene_document_legacy_compact_v13_texture_extensions(
+            data, source_size, (size_t)object_count, &destination_size))
+    {
+        free(data);
+        return false;
+    }
+    (void)test_scene_document_legacy_write_u32(
+        data, source_size, &(size_t){4U}, 12U);
     (void)test_scene_document_legacy_write_u64(
         data, source_size, &(size_t){12U}, (uint64_t)(destination_size - 40U));
     (void)test_scene_document_legacy_write_u32(
@@ -904,6 +1206,7 @@ int main(void)
     const char* v9_path = "build/test_tmp/scene_document_legacy_v9.hscene";
     const char* v10_path = "build/test_tmp/scene_document_legacy_v10.hscene";
     const char* v11_path = "build/test_tmp/scene_document_legacy_v11.hscene";
+    const char* v12_path = "build/test_tmp/scene_document_legacy_v12.hscene";
     const char* malformed_resources_path =
         "build/test_tmp/scene_document_malformed_resources.hscene";
     const char* camera_path = "build/test_tmp/scene_document_camera.hscene";
@@ -1113,7 +1416,7 @@ int main(void)
         !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)) ||
         henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=12 objects=257") == NULL ||
+        inspection_size == 0U || strstr(inspection, "HSCN version=13 objects=257") == NULL ||
         henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
         !loaded_render_resources.local_light_active[1] ||
@@ -1125,7 +1428,12 @@ int main(void)
         fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v11_fixture(first_path, v11_path) ||
+    if (!test_scene_document_write_v12_fixture(first_path, v12_path) ||
+        henka_scene_document_load_file(loaded, ".", v12_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
+        !loaded_render_resources.local_light_active[1] ||
+        !loaded_render_resources.reflection_probe_active[3] ||
+        !test_scene_document_write_v11_fixture(first_path, v11_path) ||
         henka_scene_document_load_file(loaded, ".", v11_path) != HENKA_SUCCESS ||
         henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
         loaded_render_resources.local_light_active[0] ||
@@ -1497,7 +1805,7 @@ int main(void)
         !loaded_object.audio.streaming ||
         henka_scene_document_format_inspection(
             loaded, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        strstr(inspection, "HSCN version=12") == NULL)
+        strstr(inspection, "HSCN version=13") == NULL)
     {
         fprintf(stderr, "scene document test failed during streamed audio v7 round-trip\n");
         goto cleanup;
