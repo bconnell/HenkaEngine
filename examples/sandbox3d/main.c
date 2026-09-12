@@ -995,7 +995,9 @@ static bool sandbox3d_modeling_operator_is_uv(
 {
     return kind == SANDBOX3D_MODELING_OPERATOR_UV_PROJECT ||
         kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK ||
-        kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM;
+        kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ||
+        kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM ||
+        kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK;
 }
 
 static henka_result sandbox3d_preview_authoring_uv(
@@ -1030,8 +1032,10 @@ static henka_result sandbox3d_preview_authoring_uv(
     {
         result = sandbox3d_modeling_operator_preview(
             &state->modeling_operator,
-            kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK ? padding :
-                kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ? 0.5f : 0.0f,
+            (kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK ||
+             kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK) ? padding :
+                (kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ||
+                 kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM) ? 0.5f : 0.0f,
             false,
             false);
     }
@@ -29418,6 +29422,36 @@ details_group_authoring:
                         0.0f) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Face UV scale preview ready; Apply or Cancel.");
+                }
+                if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                    row.width >= 176.0f &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_transform_uv_island",
+                        (henka_ui_rect){row.x, row.y, 176.0f, 24.0f},
+                        "Preview Island Scale") &&
+                    sandbox3d_preview_authoring_uv(
+                        state,
+                        SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM,
+                        SANDBOX3D_MODELING_OPERATOR_AXIS_NONE,
+                        0.0f) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "UV island scale preview ready; Apply or Cancel.");
+                }
+                if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                    row.width >= 176.0f &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_pack_uv_island",
+                        (henka_ui_rect){row.x, row.y, 176.0f, 24.0f},
+                        "Preview Island Pack") &&
+                    sandbox3d_preview_authoring_uv(
+                        state,
+                        SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK,
+                        SANDBOX3D_MODELING_OPERATOR_AXIS_NONE,
+                        0.02f) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "UV island packing preview ready; Apply or Cancel.");
                 }
                 if (uv_preview_active &&
                     sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&

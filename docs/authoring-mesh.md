@@ -126,13 +126,16 @@ The operation reverses only the ordered winding.
 - per-face planar projection on each principal axis;
 - bounded per-face UV transforms;
 - single-face packing helpers;
+- bounded scaling and packing of the complete UV island containing a selected face;
 - finite-value validation;
 - seam detection from shared topology.
 
 The shared Sandbox modeling session routes one selected face through
-transactional UV projection, uniform scaling, and padded unit-square packing of
-one selected face. Each operation supports preview, Apply, Cancel, and the
-existing authoring undo/redo history.
+transactional UV projection, uniform scaling, and padded unit-square packing.
+The island operations affect faces connected through non-seam edges while
+preserving existing UV seams as boundaries. Each operation supports preview,
+Apply, Cancel, and the existing authoring undo/redo history; UV state persists
+through the HAMS source path.
 
 Automatic multi-island unwrap, seam-editing UI, and global packing remain unfinished.
 

@@ -20,7 +20,8 @@ either final showcase model.
 UVs, and mesh history. `sandbox3d_authoring_object` already publishes edits to
 the scene, renderer, bounds, physics, and undo/redo transaction. It supports
 component selection, transforms, extrusion, bevels, insets, subdivision, vertex
-operations, UV projection, per-face UV scaling/packing, and source save/reload.
+operations, UV projection, per-face UV scaling, selected-island UV
+scaling/packing, and source save/reload.
 
 The current gap is final showcase integration and lifecycle truth:
 

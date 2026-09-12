@@ -8,8 +8,10 @@
 #include <henka/authoring_modeling.h>
 #include <henka/authoring_topology.h>
 #include <henka/authoring_uv.h>
+#include <henka/memory.h>
 
 #include "../engine/src/core/memory_internal.h"
+
 
 /* Red-test seam for the next bounded modeling operation.  The public
  * declaration is added only after this test proves the current API is
@@ -684,6 +686,7 @@ static int test_history_and_persistence(void)
     unsigned char header[8];
     FILE* corrupt;
     int corrupt_ok;
+    size_t allocations_before_redo;
     int result = 0;
 
     if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS ||
@@ -701,13 +704,23 @@ static int test_history_and_persistence(void)
         henka_authoring_mesh_history_checkpoint(history, mesh) != HENKA_SUCCESS ||
         !henka_authoring_mesh_history_can_undo(history) ||
         henka_authoring_mesh_history_undo(history, mesh) != HENKA_SUCCESS ||
-        henka_authoring_mesh_history_can_undo(history) ||
-        henka_authoring_mesh_history_redo(history, mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_history_can_undo(history))
+    {
+        goto cleanup;
+    }
+    allocations_before_redo = henka_memory_get_allocation_count();
+    if (henka_authoring_mesh_history_redo(history, mesh) != HENKA_SUCCESS ||
+        henka_memory_get_allocation_count() != allocations_before_redo ||
         !henka_authoring_mesh_history_can_undo(history) ||
         henka_authoring_mesh_get_vertex(mesh, ids[0])->position.x != 2.0f ||
         henka_authoring_mesh_history_undo(history, mesh) != HENKA_SUCCESS ||
-        henka_authoring_mesh_get_vertex(mesh, ids[0])->position.x != 0.0f ||
-        henka_authoring_mesh_history_redo(history, mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_vertex(mesh, ids[0])->position.x != 0.0f)
+    {
+        goto cleanup;
+    }
+    allocations_before_redo = henka_memory_get_allocation_count();
+    if (henka_authoring_mesh_history_redo(history, mesh) != HENKA_SUCCESS ||
+        henka_memory_get_allocation_count() != allocations_before_redo ||
         henka_authoring_mesh_get_vertex(mesh, ids[0])->position.x != 2.0f)
     {
         goto cleanup;
@@ -2587,6 +2600,7 @@ cleanup:
 static int test_uv_authoring(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    const char* island_path = "authoring_uv_island.hams";
     henka_authoring_mesh* mesh = NULL;
     henka_vec2 uv;
     int result = 0;
@@ -2611,9 +2625,95 @@ static int test_uv_authoring(void)
     {
         goto cleanup;
     }
+
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    {
+        const henka_vec3 positions[6] = {
+            {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+            {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {2.0f, 1.0f, 0.0f}};
+        const henka_authoring_vertex_id first_vertices[4] = {1U, 2U, 5U, 4U};
+        const henka_authoring_vertex_id second_vertices[4] = {2U, 3U, 6U, 5U};
+        const henka_vec2 first_uvs[4] = {
+            {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}};
+        const henka_vec2 second_uvs[4] = {
+            {1.0f, 0.0f}, {2.0f, 0.0f}, {2.0f, 1.0f}, {1.0f, 1.0f}};
+        henka_authoring_face_id first_face = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_face_id second_face = HENKA_AUTHORING_INVALID_ID;
+        size_t index;
+
+        if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (index = 0U; index < 6U; ++index)
+        {
+            if (henka_authoring_mesh_add_vertex(
+                    mesh, positions[index],
+                    (henka_vec2){positions[index].x, positions[index].y},
+                    0U, &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+        if (henka_authoring_mesh_add_face(
+                mesh, first_vertices, 4U, 0U, true, &first_face) != HENKA_SUCCESS ||
+            henka_authoring_mesh_add_face(
+                mesh, second_vertices, 4U, 0U, true, &second_face) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (index = 0U; index < 4U; ++index)
+        {
+            if (henka_authoring_mesh_set_face_corner_uv(
+                    mesh, first_face, index, first_uvs[index]) != HENKA_SUCCESS ||
+                henka_authoring_mesh_set_face_corner_uv(
+                    mesh, second_face, index, second_uvs[index]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+        if (henka_authoring_mesh_faces_share_uv_seam(mesh, first_face, second_face) ||
+            henka_authoring_mesh_transform_uv_island(
+                mesh, first_face, (henka_vec2){0.5f, 0.5f}, (henka_vec2){0.1f, 0.2f}) != HENKA_SUCCESS ||
+            henka_authoring_mesh_get_face_corner_uv(mesh, second_face, 1U, &uv) != HENKA_SUCCESS ||
+            fabsf(uv.x - 1.1f) > 0.0001f || fabsf(uv.y - 0.2f) > 0.0001f ||
+            henka_authoring_mesh_pack_uv_island(mesh, first_face, 0.1f) != HENKA_SUCCESS ||
+            !henka_authoring_mesh_face_uvs_are_finite(mesh, first_face) ||
+            !henka_authoring_mesh_face_uvs_are_finite(mesh, second_face) ||
+            henka_authoring_mesh_save_file(mesh, island_path) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        if (henka_authoring_mesh_set_face_corner_uv(
+                mesh, first_face, 0U, (henka_vec2){9.0f, 9.0f}) != HENKA_SUCCESS ||
+            henka_authoring_mesh_load_file(mesh, island_path) != HENKA_SUCCESS ||
+            henka_authoring_mesh_get_face_corner_uv(mesh, first_face, 0U, &uv) != HENKA_SUCCESS ||
+            fabsf(uv.x - 0.1f) > 0.0001f || fabsf(uv.y - 0.1f) > 0.0001f ||
+            henka_authoring_mesh_set_face_corner_uv(
+                mesh, second_face, 0U, (henka_vec2){1.25f, 0.1f}) != HENKA_SUCCESS ||
+            !henka_authoring_mesh_faces_share_uv_seam(mesh, first_face, second_face))
+        {
+            goto cleanup;
+        }
+        {
+            henka_vec2 unchanged_uv;
+            if (henka_authoring_mesh_get_face_corner_uv(
+                    mesh, second_face, 1U, &unchanged_uv) != HENKA_SUCCESS ||
+                henka_authoring_mesh_transform_uv_island(
+                    mesh, first_face, (henka_vec2){2.0f, 2.0f}, (henka_vec2){0.0f, 0.0f}) != HENKA_SUCCESS ||
+                henka_authoring_mesh_get_face_corner_uv(mesh, second_face, 1U, &uv) != HENKA_SUCCESS ||
+                fabsf(uv.x - unchanged_uv.x) > 0.0001f ||
+                fabsf(uv.y - unchanged_uv.y) > 0.0001f)
+            {
+                goto cleanup;
+            }
+        }
+    }
     result = 1;
 
 cleanup:
+    remove(island_path);
     henka_authoring_mesh_destroy(mesh);
     return result ? 1 : fail("UV authoring");
 }

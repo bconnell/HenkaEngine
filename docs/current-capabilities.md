@@ -397,13 +397,14 @@ Available operations also include:
 - bounded uniformly spaced multi-cut for one isolated boundary-only quad;
 - planar UV projection;
 - bounded single-face UV transforms;
+- bounded UV-island scaling and packing from a selected seed face;
 - packing;
 - seam detection.
 
-The integrated Sandbox panel routes bounded multi-cut and single-face UV
-projection, scaling, and packing through the modeling transaction path. These
-operations provide preview, Apply/Cancel, and undo/redo history where
-supported.
+The integrated Sandbox panel routes bounded multi-cut and UV projection,
+single-face transforms, and selected-island scaling/packing through the
+modeling transaction path. These operations provide preview, Apply/Cancel, and
+undo/redo history where supported.
 
 ### HAMS persistence
 

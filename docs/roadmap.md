@@ -443,8 +443,9 @@ Integrated authoring is already underway as part of the current 3D completion pa
    metadata-preserving duplicate faces, and degenerate faces. Unsafe winding,
    UV, material, smoothing, and non-manifold changes are rejected.
 7. Face winding flip, face extrude, inset, planar bevel rings, face subdivision,
-   selected-face deletion, planar UV projection, bounded per-face transforms, packing,
-   seam detection, Make Editable, HAMS persistence, material promotion, and
+   selected-face deletion, planar UV projection, bounded per-face transforms,
+   selected-island UV scaling/packing, seam detection, Make Editable, HAMS
+   persistence, material promotion, and
    supported PBR material-instance editing are available in the bounded
    workflow.
 8. HAMS preserves explicit loose vertices and standalone wire edges with stable

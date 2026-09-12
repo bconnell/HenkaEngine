@@ -3258,6 +3258,10 @@ static henka_result authoring_history_restore(
     {
         henka_authoring_mesh_destroy(target[*target_count - 1U]);
     }
+    else
+    {
+        henka_authoring_mesh_destroy(current);
+    }
     --*target_count;
     return authoring_history_append(
         opposite, opposite_count, history->max_steps, opposite_snapshot);

@@ -1,6 +1,9 @@
 #include <henka/authoring_uv.h>
 
 #include <math.h>
+#include <stdint.h>
+
+#include <henka/memory.h>
 
 static bool uv_finite_vec2(henka_vec2 value)
 {
@@ -30,6 +33,223 @@ static bool uv_face_valid(const henka_authoring_mesh* mesh, henka_authoring_face
         }
     }
     return true;
+}
+
+static size_t uv_face_id_hash(
+    henka_authoring_face_id face_id,
+    size_t capacity)
+{
+    uint64_t key = (uint64_t)face_id * UINT64_C(0x9e3779b97f4a7c15);
+    key ^= key >> 30U;
+    key *= UINT64_C(0xbf58476d1ce4e5b9);
+    key ^= key >> 27U;
+    return (size_t)(key & (uint64_t)(capacity - 1U));
+}
+
+static bool uv_face_id_set_contains(
+    const henka_authoring_face_id* seen_ids,
+    size_t capacity,
+    henka_authoring_face_id face_id)
+{
+    size_t probe;
+    size_t attempt;
+
+    if (seen_ids == NULL || capacity == 0U || face_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return false;
+    }
+    probe = uv_face_id_hash(face_id, capacity);
+    for (attempt = 0U; attempt < capacity; ++attempt)
+    {
+        if (seen_ids[probe] == 0U)
+        {
+            return false;
+        }
+        if (seen_ids[probe] == face_id)
+        {
+            return true;
+        }
+        probe = (probe + 1U) & (capacity - 1U);
+    }
+    return false;
+}
+
+static bool uv_face_id_set_insert(
+    henka_authoring_face_id* seen_ids,
+    size_t capacity,
+    henka_authoring_face_id face_id)
+{
+    size_t probe;
+    size_t attempt;
+
+    if (seen_ids == NULL || capacity == 0U || face_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return false;
+    }
+    probe = uv_face_id_hash(face_id, capacity);
+    for (attempt = 0U; attempt < capacity; ++attempt)
+    {
+        if (seen_ids[probe] == 0U || seen_ids[probe] == face_id)
+        {
+            seen_ids[probe] = face_id;
+            return true;
+        }
+        probe = (probe + 1U) & (capacity - 1U);
+    }
+    return false;
+}
+
+static henka_result uv_collect_island(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_face_id seed_face_id,
+    henka_authoring_face_id** out_face_ids,
+    size_t* out_face_count)
+{
+    const henka_authoring_mesh_counts counts = mesh == NULL
+        ? (henka_authoring_mesh_counts){0U, 0U, 0U}
+        : henka_authoring_mesh_get_counts(mesh);
+    henka_authoring_face_id* face_ids = NULL;
+    henka_authoring_face_id* seen_ids = NULL;
+    size_t face_count = 0U;
+    size_t set_capacity = 1U;
+    size_t queue_index;
+
+    if (mesh == NULL || out_face_ids == NULL || out_face_count == NULL ||
+        seed_face_id == HENKA_AUTHORING_INVALID_ID || counts.faces == 0U ||
+        counts.faces > SIZE_MAX / sizeof(*face_ids) ||
+        counts.faces > SIZE_MAX / (2U * sizeof(*seen_ids)) ||
+        !henka_authoring_mesh_validate(mesh) || !uv_face_valid(mesh, seed_face_id))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    while (set_capacity < counts.faces * 2U)
+    {
+        if (set_capacity > SIZE_MAX / 2U)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        set_capacity *= 2U;
+    }
+    face_ids = henka_calloc(counts.faces, sizeof(*face_ids));
+    seen_ids = henka_calloc(set_capacity, sizeof(*seen_ids));
+    if (face_ids == NULL || seen_ids == NULL)
+    {
+        henka_free(face_ids);
+        henka_free(seen_ids);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    face_ids[face_count++] = seed_face_id;
+    if (!uv_face_id_set_insert(seen_ids, set_capacity, seed_face_id))
+    {
+        henka_free(face_ids);
+        henka_free(seen_ids);
+        return HENKA_ERROR_LIMIT;
+    }
+    for (queue_index = 0U; queue_index < face_count; ++queue_index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            mesh, face_ids[queue_index]);
+        size_t corner;
+        if (face == NULL || face->edges == NULL || !uv_face_valid(mesh, face->id))
+        {
+            henka_free(face_ids);
+            henka_free(seen_ids);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+                mesh, face->edges[corner]);
+            size_t incident;
+            if (edge == NULL || edge->face_count == 0U || edge->face_count > 2U)
+            {
+                henka_free(face_ids);
+                henka_free(seen_ids);
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            for (incident = 0U; incident < edge->face_count; ++incident)
+            {
+                henka_authoring_face_id neighbor_id = HENKA_AUTHORING_INVALID_ID;
+                const henka_authoring_face* neighbor;
+                if (henka_authoring_mesh_get_edge_face_at(
+                        mesh, edge->id, incident, &neighbor_id) != HENKA_SUCCESS ||
+                    neighbor_id == face->id)
+                {
+                    continue;
+                }
+                neighbor = henka_authoring_mesh_get_face(mesh, neighbor_id);
+                if (neighbor == NULL || !uv_face_valid(mesh, neighbor_id))
+                {
+                    henka_free(face_ids);
+                    henka_free(seen_ids);
+                    return HENKA_ERROR_INVALID_ARGUMENT;
+                }
+                if (!henka_authoring_mesh_faces_share_uv_seam(
+                        mesh, face->id, neighbor_id) &&
+                    !uv_face_id_set_contains(seen_ids, set_capacity, neighbor_id))
+                {
+                    if (face_count >= counts.faces)
+                    {
+                        henka_free(face_ids);
+                        henka_free(seen_ids);
+                        return HENKA_ERROR_LIMIT;
+                    }
+                    if (!uv_face_id_set_insert(seen_ids, set_capacity, neighbor_id))
+                    {
+                        henka_free(face_ids);
+                        henka_free(seen_ids);
+                        return HENKA_ERROR_LIMIT;
+                    }
+                    face_ids[face_count++] = neighbor_id;
+                }
+            }
+        }
+    }
+    *out_face_ids = face_ids;
+    *out_face_count = face_count;
+    henka_free(seen_ids);
+    return HENKA_SUCCESS;
+}
+
+static henka_result uv_apply_island_transform(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_face_id* face_ids,
+    size_t face_count,
+    henka_vec2 scale,
+    henka_vec2 offset)
+{
+    size_t face_index;
+
+    for (face_index = 0U; face_index < face_count; ++face_index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            mesh, face_ids[face_index]);
+        size_t corner;
+        if (face == NULL || face->uvs == NULL)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            const henka_vec2 source = face->uvs[corner];
+            const henka_vec2 value = {
+                source.x * scale.x + offset.x,
+                source.y * scale.y + offset.y};
+            if (!uv_finite_vec2(value))
+            {
+                return HENKA_ERROR_NUMERIC_RANGE;
+            }
+            {
+                const henka_result result = henka_authoring_mesh_set_face_corner_uv(
+                    mesh, face_ids[face_index], corner, value);
+                if (result != HENKA_SUCCESS)
+                {
+                    return result;
+                }
+            }
+        }
+    }
+    return HENKA_SUCCESS;
 }
 
 bool henka_authoring_mesh_face_uvs_are_finite(const henka_authoring_mesh* mesh, henka_authoring_face_id face_id)
@@ -145,6 +365,41 @@ henka_result henka_authoring_mesh_transform_face_uv(
     return result;
 }
 
+henka_result henka_authoring_mesh_transform_uv_island(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id seed_face_id,
+    henka_vec2 scale,
+    henka_vec2 offset)
+{
+    henka_authoring_face_id* face_ids = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    size_t face_count = 0U;
+    henka_result result;
+
+    if (mesh == NULL || !uv_finite_vec2(scale) || !uv_finite_vec2(offset))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = uv_collect_island(mesh, seed_face_id, &face_ids, &face_count);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_clone(mesh, &candidate);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = uv_apply_island_transform(
+            candidate, face_ids, face_count, scale, offset);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = uv_commit(mesh, candidate);
+        candidate = NULL;
+    }
+    henka_authoring_mesh_destroy(candidate);
+    henka_free(face_ids);
+    return result;
+}
+
 henka_result henka_authoring_mesh_pack_face_uv(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,
@@ -195,6 +450,81 @@ henka_result henka_authoring_mesh_pack_face_uv(
         candidate = NULL;
     }
     henka_authoring_mesh_destroy(candidate);
+    return result;
+}
+
+henka_result henka_authoring_mesh_pack_uv_island(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id seed_face_id,
+    float padding)
+{
+    henka_authoring_face_id* face_ids = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    henka_vec2 minimum = {0.0f, 0.0f};
+    henka_vec2 maximum = {0.0f, 0.0f};
+    size_t face_count = 0U;
+    size_t face_index;
+    float scale;
+    henka_result result;
+
+    if (mesh == NULL || !isfinite(padding) || padding < 0.0f || padding >= 0.5f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = uv_collect_island(mesh, seed_face_id, &face_ids, &face_count);
+    for (face_index = 0U; result == HENKA_SUCCESS && face_index < face_count; ++face_index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            mesh, face_ids[face_index]);
+        size_t corner;
+        if (face == NULL || face->uvs == NULL)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            break;
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            const henka_vec2 uv = face->uvs[corner];
+            if (face_index == 0U && corner == 0U)
+            {
+                minimum = uv;
+                maximum = uv;
+            }
+            else
+            {
+                if (uv.x < minimum.x) minimum.x = uv.x;
+                if (uv.y < minimum.y) minimum.y = uv.y;
+                if (uv.x > maximum.x) maximum.x = uv.x;
+                if (uv.y > maximum.y) maximum.y = uv.y;
+            }
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        const float width = maximum.x - minimum.x;
+        const float height = maximum.y - minimum.y;
+        const float extent = width > height ? width : height;
+        scale = extent > 0.000001f ? (1.0f - 2.0f * padding) / extent : 1.0f;
+        result = henka_authoring_mesh_clone(mesh, &candidate);
+        if (result == HENKA_SUCCESS)
+        {
+            result = uv_apply_island_transform(
+                candidate,
+                face_ids,
+                face_count,
+                (henka_vec2){scale, scale},
+                (henka_vec2){
+                    padding - minimum.x * scale,
+                    padding - minimum.y * scale});
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = uv_commit(mesh, candidate);
+        candidate = NULL;
+    }
+    henka_authoring_mesh_destroy(candidate);
+    henka_free(face_ids);
     return result;
 }
 
