@@ -288,10 +288,69 @@ static void henka_test_sandbox3d_terrain_layer_display(void)
             8U) == HENKA_ERROR_INVALID_ARGUMENT);
 }
 
+static void henka_test_sandbox3d_material_asset_application(void)
+{
+    henka_material_asset definition;
+    henka_material material;
+    henka_material applied;
+    henka_scene* scene = NULL;
+    henka_entity entity;
+    const henka_material_asset* applied_asset = NULL;
+    uint64_t definition_revision = 0U;
+    bool overridden = false;
+    uint64_t revision_before;
+
+    memset(&definition, 0, sizeof(definition));
+    material = henka_material_default();
+    material.shader = (henka_shader*)(uintptr_t)1U;
+    material.base_color.x = 0.25f;
+    material.base_color.y = 0.50f;
+    material.base_color.z = 0.75f;
+    definition.material = material;
+    definition.revision = 4U;
+
+    HENKA_TEST_ASSERT(sandbox3d_apply_material_asset_instance(
+        NULL,
+        NULL,
+        HENKA_INVALID_ENTITY) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Material Browser Target");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    revision_before = henka_scene_get_render_revision(scene);
+
+    HENKA_TEST_ASSERT(sandbox3d_apply_material_asset_instance(
+        &definition,
+        scene,
+        entity) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == revision_before + 1U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        scene,
+        entity,
+        &applied) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(applied.base_color.x, 0.25f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(applied.base_color.y, 0.50f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(applied.base_color.z, 0.75f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset(
+        scene,
+        entity,
+        &applied_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(applied_asset == &definition);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset_state(
+        scene,
+        entity,
+        &definition_revision,
+        &overridden) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(definition_revision == 0U);
+    HENKA_TEST_ASSERT(overridden);
+
+    henka_scene_destroy(scene);
+}
+
 void henka_test_sandbox3d_asset_browser(void)
 {
     henka_test_sandbox3d_asset_browser_collection();
     henka_test_sandbox3d_asset_browser_paging();
     henka_test_sandbox3d_asset_browser_texture_and_assignment();
     henka_test_sandbox3d_terrain_layer_display();
+    henka_test_sandbox3d_material_asset_application();
 }

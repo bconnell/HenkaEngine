@@ -663,3 +663,29 @@ henka_result sandbox3d_restore_material_instance_texture(
     *instance = candidate;
     return HENKA_SUCCESS;
 }
+
+henka_result sandbox3d_apply_material_asset_instance(
+    const henka_material_asset* asset,
+    henka_scene* scene,
+    henka_entity entity)
+{
+    henka_material_instance instance;
+    henka_result result;
+
+    if (asset == NULL || scene == NULL ||
+        !henka_scene_is_entity_valid(scene, entity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_assets_create_material_instance(asset, &instance);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    return henka_assets_apply_material_instance_to_entity(
+        &instance,
+        scene,
+        entity);
+}
