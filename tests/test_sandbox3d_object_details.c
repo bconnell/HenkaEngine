@@ -1,13 +1,175 @@
 #include "test_suite.h"
 
+#include <math.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <henka/assets.h>
+#include <henka/engine.h>
+#include <henka/mesh.h>
 #include <henka/scene.h>
 
 #include "../engine/src/henka_internal.h"
 #include "../examples/sandbox3d/object_details_tools.h"
+
+static bool sandbox3d_object_details_write_file(
+    const char* path,
+    const void* data,
+    size_t size)
+{
+    FILE* file;
+    size_t written;
+
+    if (path == NULL || data == NULL || size == 0U) return false;
+    if (fopen_s(&file, path, "wb") != 0 || file == NULL) return false;
+    written = fwrite(data, 1U, size, file);
+    if (fclose(file) != 0) return false;
+    return written == size;
+}
+
+static void henka_test_sandbox3d_object_details_file_backed_refresh(void)
+{
+    static const unsigned char bmp_a[] =
+    {
+        0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00,
+        0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+        0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0xff, 0x00, 0x00
+    };
+    static const unsigned char bmp_b[] =
+    {
+        0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00,
+        0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+        0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xff, 0x00, 0x00, 0x00
+    };
+    static const char* gltf_a =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"images\":[{\"uri\":\"editor-material-a.bmp\"}],"
+        "\"textures\":[{\"source\":0}],"
+        "\"materials\":[{\"pbrMetallicRoughness\":{"
+        "\"baseColorFactor\":[0.8,0.2,0.1,1.0],\"baseColorTexture\":{\"index\":0},"
+        "\"roughnessFactor\":0.25}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    static const char* gltf_b =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"images\":[{\"uri\":\"editor-material-b.bmp\"}],"
+        "\"textures\":[{\"source\":0}],"
+        "\"materials\":[{\"pbrMetallicRoughness\":{"
+        "\"baseColorFactor\":[0.1,0.7,0.9,1.0],\"baseColorTexture\":{\"index\":0},"
+        "\"roughnessFactor\":0.65}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    const char* gltf_path = "build/test_tmp/editor-material-instance-refresh.gltf";
+    const char* image_a_path = "build/test_tmp/editor-material-a.bmp";
+    const char* image_b_path = "build/test_tmp/editor-material-b.bmp";
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_asset_manager* manager = NULL;
+    henka_shader* shader = NULL;
+    henka_material_asset* asset = NULL;
+    henka_material_asset* reloaded_asset = NULL;
+    henka_material material = henka_material_default();
+    henka_material scene_material = henka_material_default();
+    henka_mesh* mesh = NULL;
+    henka_scene* scene = NULL;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    sandbox3d_material_editor_binding binding = {0};
+    sandbox3d_selected_material_view view = {0};
+    uint64_t scene_material_revision = 0U;
+    bool scene_material_overridden = false;
+
+#define HENKA_OBJECT_DETAILS_REQUIRE(condition) \
+    do \
+    { \
+        if (!(condition)) \
+        { \
+            fprintf(stderr, "assertion failed at %s:%d: %s\n", __FILE__, __LINE__, #condition); \
+            ++g_henka_test_failures; \
+            goto cleanup; \
+        } \
+    } while (0)
+
+    config.application_name = "Henka File Material Editor Refresh Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    manager = henka_engine_get_asset_manager(engine);
+    HENKA_OBJECT_DETAILS_REQUIRE(manager != NULL);
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_assets_load_shader(
+        manager,
+        "assets/shaders/basic_lit.vert",
+        "assets/shaders/basic_lit.frag",
+        &shader) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(sandbox3d_object_details_write_file(
+        image_a_path, bmp_a, sizeof(bmp_a)));
+    HENKA_OBJECT_DETAILS_REQUIRE(sandbox3d_object_details_write_file(
+        image_b_path, bmp_b, sizeof(bmp_b)));
+    HENKA_OBJECT_DETAILS_REQUIRE(sandbox3d_object_details_write_file(
+        gltf_path, gltf_a, strlen(gltf_a)));
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_assets_load_gltf_material_asset(
+        manager, gltf_path, shader, &asset) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_assets_get_material_asset_material(
+        asset, &material) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(material.base_color_texture != NULL);
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "File Material Editor Target");
+    HENKA_OBJECT_DETAILS_REQUIRE(entity != HENKA_INVALID_ENTITY);
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_mesh_create_cube(engine, &mesh) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_scene_set_entity_mesh(scene, entity, mesh) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_scene_apply_material_asset(
+        scene, entity, asset, material, asset->revision) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(sandbox3d_prepare_material_editor_binding(
+        scene, entity, &binding, 1U) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(binding.valid && binding.asset == asset);
+    HENKA_OBJECT_DETAILS_REQUIRE(binding.instance == &binding.owned_instance);
+    HENKA_OBJECT_DETAILS_REQUIRE(sandbox3d_resolve_selected_material(
+        scene, entity, &binding, 1U, &view) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(
+        view.access == SANDBOX3D_MATERIAL_ACCESS_EDITABLE_INSTANCE);
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_assets_material_instance_set_float(
+        binding.instance, HENKA_MATERIAL_INSTANCE_ROUGHNESS, 0.91f) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(sandbox3d_object_details_write_file(
+        gltf_path, gltf_b, strlen(gltf_b)));
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_assets_reload_material_asset(
+        manager, asset, &reloaded_asset) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(reloaded_asset == asset && asset->revision == 2U);
+    HENKA_OBJECT_DETAILS_REQUIRE(sandbox3d_prepare_material_editor_binding(
+        scene, entity, &binding, 1U) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(binding.instance->definition_revision == asset->revision);
+    HENKA_OBJECT_DETAILS_REQUIRE(fabsf(binding.instance->material.base_color.z - 0.9f) <= 0.0001f);
+    HENKA_OBJECT_DETAILS_REQUIRE(fabsf(binding.instance->material.roughness - 0.91f) <= 0.0001f);
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_scene_get_entity_material(
+        scene, entity, &scene_material) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(fabsf(scene_material.base_color.y - 0.7f) <= 0.0001f);
+    HENKA_OBJECT_DETAILS_REQUIRE(fabsf(scene_material.roughness - 0.91f) <= 0.0001f);
+    HENKA_OBJECT_DETAILS_REQUIRE(henka_scene_get_entity_material_asset_state(
+        scene, entity, &scene_material_revision, &scene_material_overridden) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(scene_material_revision == 0U);
+    HENKA_OBJECT_DETAILS_REQUIRE(scene_material_overridden);
+
+cleanup:
+    sandbox3d_destroy_material_editor_bindings(&binding, 1U);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+    (void)remove(gltf_path);
+    (void)remove(image_a_path);
+    (void)remove(image_b_path);
+#undef HENKA_OBJECT_DETAILS_REQUIRE
+}
 
 void henka_test_sandbox3d_object_details(void)
 {
@@ -23,6 +185,8 @@ void henka_test_sandbox3d_object_details(void)
     sandbox3d_material_editor_binding duplicate_bindings[2];
     sandbox3d_material_editor_binding scene_bindings[2];
     sandbox3d_selected_material_view view;
+
+    henka_test_sandbox3d_object_details_file_backed_refresh();
 
     scene = NULL;
     HENKA_TEST_ASSERT(
