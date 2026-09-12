@@ -142,17 +142,20 @@ static size_t sandbox3d_game_authoring_find_binding(
 }
 
 static henka_result sandbox3d_game_authoring_build_object(
-    const henka_scene* scene,
+    const sandbox3d_game_authoring* authoring,
     henka_entity entity,
     henka_scene_document_object* out_object)
 {
+    const henka_scene* scene;
     henka_scene_object_info info;
     henka_interaction_desc interaction;
     henka_material material;
+    henka_asset_metadata material_metadata;
     const henka_material_asset* material_asset = NULL;
     bool material_asset_overridden = false;
     uint64_t material_asset_revision = 0U;
     int written;
+    scene = authoring == NULL ? NULL : authoring->scene;
     if (scene == NULL || out_object == NULL ||
         !henka_scene_is_entity_valid(scene, entity) ||
         henka_scene_get_entity_info(scene, entity, &info) != HENKA_SUCCESS ||
@@ -233,6 +236,31 @@ static henka_result sandbox3d_game_authoring_build_object(
          * instance override, or standalone borrowed texture/terrain state,
          * has no reconstructible bridge authority and therefore fails closed. */
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (material_asset != NULL)
+    {
+        if (authoring->project_assets == NULL ||
+            henka_assets_get_material_metadata(
+                authoring->project_assets,
+                material_asset,
+                &material_metadata) != HENKA_SUCCESS ||
+            material_metadata.source_path == NULL ||
+            strlen(material_metadata.source_path) >=
+                sizeof(out_object->renderer.material_path))
+        {
+            /* A manager-owned definition is persisted by source identity. If
+             * that identity is unavailable, reject capture instead of
+             * discarding the asset authority or inventing inline truth. */
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (snprintf(
+                out_object->renderer.material_path,
+                sizeof(out_object->renderer.material_path),
+                "%s",
+                material_metadata.source_path) < 0)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
     }
     /* Pointer-free inline material state is document-owned only when no
      * manager-owned definition or borrowed texture state is attached. */
@@ -606,6 +634,54 @@ static bool sandbox3d_game_authoring_path_has_suffix(
     return true;
 }
 
+static henka_result sandbox3d_game_authoring_materialize_material(
+    henka_asset_manager* assets,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_scene_document_object* object)
+{
+    const henka_material_asset* material_asset = NULL;
+    size_t refreshed_count = 0U;
+    henka_result result;
+
+    if (scene == NULL || object == NULL ||
+        !henka_scene_is_entity_valid(scene, entity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (object->renderer.material_path[0] == '\0')
+    {
+        return HENKA_SUCCESS;
+    }
+    if (object->renderer.material_override || assets == NULL)
+    {
+        /* A path identifies manager-owned definition authority. Do not mix it
+         * with an inline override until the document has an explicit,
+         * reconstructible material-instance contract. */
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_assets_get_material_asset_for_path(
+        assets,
+        object->renderer.material_path,
+        &material_asset);
+    if (result != HENKA_SUCCESS || material_asset == NULL)
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    }
+    result = henka_scene_set_entity_material_asset(
+        scene,
+        entity,
+        material_asset);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_refresh_scene_material_bindings(
+            assets,
+            scene,
+            &refreshed_count);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_game_authoring_materialize_source(
     const char* project_root,
     henka_engine* engine,
@@ -631,7 +707,11 @@ static henka_result sandbox3d_game_authoring_materialize_source(
     }
     if (object->source.kind == HENKA_SCENE_DOCUMENT_SOURCE_NONE)
     {
-        return HENKA_SUCCESS;
+        return sandbox3d_game_authoring_materialize_material(
+            assets,
+            scene,
+            entity,
+            object);
     }
     if (object->source.kind == HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE)
     {
@@ -695,6 +775,16 @@ static henka_result sandbox3d_game_authoring_materialize_source(
             henka_mesh_destroy(mesh);
             return result;
         }
+        result = sandbox3d_game_authoring_materialize_material(
+            assets,
+            scene,
+            entity,
+            object);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_mesh_destroy(mesh);
+            return result;
+        }
         if (out_owned_mesh != NULL)
         {
             *out_owned_mesh = mesh;
@@ -739,6 +829,16 @@ static henka_result sandbox3d_game_authoring_materialize_source(
             henka_mesh_destroy(mesh);
             return result;
         }
+        result = sandbox3d_game_authoring_materialize_material(
+            assets,
+            scene,
+            entity,
+            object);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_mesh_destroy(mesh);
+            return result;
+        }
         if (out_owned_mesh != NULL)
         {
             *out_owned_mesh = mesh;
@@ -769,6 +869,14 @@ static henka_result sandbox3d_game_authoring_materialize_source(
     if (result == HENKA_SUCCESS)
     {
         result = henka_scene_set_entity_mesh(scene, entity, mesh);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_game_authoring_materialize_material(
+            assets,
+            scene,
+            entity,
+            object);
     }
     return result;
 }
@@ -1133,7 +1241,7 @@ static henka_result sandbox3d_game_authoring_register_entity_once(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     result = sandbox3d_game_authoring_build_object(
-        authoring->scene, entity, &object);
+        authoring, entity, &object);
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -1197,7 +1305,7 @@ henka_result sandbox3d_game_authoring_register_entity(
     /* Validate the target before honoring an existing binding so stale scene
      * entities cannot be mistaken for an idempotent registration. */
     result = sandbox3d_game_authoring_build_object(
-        authoring->scene, entity, &target_object);
+        authoring, entity, &target_object);
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -1231,7 +1339,7 @@ henka_result sandbox3d_game_authoring_register_entity(
             }
         }
         result = sandbox3d_game_authoring_build_object(
-            authoring->scene, current_entity, &preflight_object);
+            authoring, current_entity, &preflight_object);
         if (result != HENKA_SUCCESS)
         {
             return result;

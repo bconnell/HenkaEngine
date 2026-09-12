@@ -391,6 +391,13 @@ henka_result henka_assets_get_material_asset_for_path(
     const henka_asset_manager* manager,
     const char* path,
     const henka_material_asset** out_asset);
+/* Returns metadata for a borrowed manager-owned material definition. The
+ * source path is the stable identity that persistence may record without
+ * copying the runtime definition into inline document state. */
+henka_result henka_assets_get_material_metadata(
+    const henka_asset_manager* manager,
+    const henka_material_asset* asset,
+    henka_asset_metadata* out_metadata);
 /* Adopts a validated runtime material definition under a stable confined
  * identity. The manager owns the definition and its identity; textures and
  * shader pointers remain borrowed manager-owned dependencies. Runtime

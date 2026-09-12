@@ -6305,6 +6305,36 @@ henka_result henka_assets_get_material_asset_for_path(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_get_material_metadata(
+    const henka_asset_manager* manager,
+    const henka_material_asset* asset,
+    henka_asset_metadata* out_metadata)
+{
+    size_t index;
+
+    if (out_metadata != NULL)
+    {
+        memset(out_metadata, 0, sizeof(*out_metadata));
+    }
+    if (manager == NULL || asset == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < manager->material_count; ++index)
+    {
+        const henka_material_asset* entry = manager->material_entries[index];
+        if (entry == asset)
+        {
+            *out_metadata = entry->metadata;
+            return HENKA_SUCCESS;
+        }
+    }
+    /* Embedded glTF-scene material slots do not have an independently
+     * resolvable material identity. Callers must not persist a path that
+     * cannot be reconstructed by the standalone material lookup. */
+    return HENKA_ERROR_UNKNOWN;
+}
+
 henka_result henka_assets_get_material_metadata_for_path(
     const henka_asset_manager* manager,
     const char* path,

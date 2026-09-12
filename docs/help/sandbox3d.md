@@ -539,6 +539,13 @@ Current fields include:
 
 The Actions group provides Save Scene and Reload Scene for the confined `sandbox3d_scene.hscene` file.
 
+Standalone manager-owned material definitions assigned to scene objects are
+saved by canonical material identity and rebound on reload when the project
+asset manager has that definition available. Unsupported or unresolved
+material identities fail closed; the definition is not silently copied into
+inline document state. Material-instance override persistence remains outside
+this bounded path.
+
 While Play is running or paused, scene authoring edits, scene save/reload, and other scene mutations are rejected.
 
 ### Play lifecycle

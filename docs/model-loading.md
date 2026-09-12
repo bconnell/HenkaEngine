@@ -215,6 +215,13 @@ Reload follows a candidate-first transaction:
 
 A failed parse, path, dependency, or semantic validation leaves the previous manager-owned material and stable identity intact.
 
+Game Authoring can persist a standalone manager-owned material definition by its
+canonical `material_path`. Capture requires the definition to belong to the
+project asset manager and expose a source identity that the manager can resolve
+again. Reload resolves that identity through the manager and rebinds the live
+scene entity transactionally. Unknown or embedded material slots fail closed
+instead of being copied into inline document state.
+
 ### Material instances
 
 A manager-owned definition can create a stack-owned `henka_material_instance`. Instances retain definition shader and semantic texture dependencies while supporting validated local overrides for scalar, color, alpha, and render-state values.
@@ -222,6 +229,9 @@ A manager-owned definition can create a stack-owned `henka_material_instance`. I
 `henka_assets_refresh_material_instance` pulls the latest definition revision transactionally and preserves explicit overrides.
 
 `henka_assets_get_material_asset_dependencies` exposes borrowed semantic texture edges. Callers can inspect each texture's source metadata through the asset manager.
+
+Persisted material-instance overrides are a separate contract and are not
+reconstructed by the current Scene Document material identity path.
 
 ## KTX2 and Basis texture dependencies
 
