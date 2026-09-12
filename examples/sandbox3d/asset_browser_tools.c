@@ -152,6 +152,8 @@ static henka_texture* sandbox3d_material_texture_for_slot(
             return material->occlusion_texture;
         case HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE:
             return material->emissive_texture;
+        case HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS:
+            return material->thickness_texture;
         case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
             return material->transmission_texture;
         default:
@@ -169,6 +171,7 @@ static bool sandbox3d_material_texture_slot_is_instance_slot(
         case HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS:
         case HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION:
         case HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE:
+        case HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS:
         case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
             return true;
         default:
@@ -193,6 +196,21 @@ static henka_texture_usage sandbox3d_material_texture_slot_usage(
             return HENKA_TEXTURE_USAGE_EMISSIVE;
         default:
             return HENKA_TEXTURE_USAGE_GENERIC_DATA;
+    }
+}
+
+static const char* sandbox3d_material_texture_slot_label(
+    henka_material_texture_slot slot)
+{
+    switch (slot)
+    {
+        case HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS:
+            return "Thickness";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
+            return "Transmission";
+        default:
+            return sandbox3d_asset_browser_usage_label(
+                sandbox3d_material_texture_slot_usage(slot));
     }
 }
 
@@ -387,7 +405,6 @@ henka_result sandbox3d_format_material_texture_slot(
     henka_texture_info info;
     henka_texture* texture;
     henka_result metadata_result;
-    henka_texture_usage usage;
 
     if (out_display != NULL)
     {
@@ -399,8 +416,11 @@ henka_result sandbox3d_format_material_texture_slot(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    usage = sandbox3d_material_texture_slot_usage(slot);
-    snprintf(out_display->usage, sizeof(out_display->usage), "%s", sandbox3d_asset_browser_usage_label(usage));
+    snprintf(
+        out_display->usage,
+        sizeof(out_display->usage),
+        "%s",
+        sandbox3d_material_texture_slot_label(slot));
     texture = sandbox3d_material_texture_for_slot(material, slot);
     if (texture == NULL)
     {
@@ -500,10 +520,32 @@ henka_result sandbox3d_restore_material_instance_texture(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    parameter = slot == HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION
-        ? HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE
-        : (henka_material_instance_parameter)(
-            HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE + slot);
+    switch (slot)
+    {
+        case HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR:
+            parameter = HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_NORMAL:
+            parameter = HENKA_MATERIAL_INSTANCE_NORMAL_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS:
+            parameter = HENKA_MATERIAL_INSTANCE_METALLIC_ROUGHNESS_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION:
+            parameter = HENKA_MATERIAL_INSTANCE_OCCLUSION_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE:
+            parameter = HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS:
+            parameter = HENKA_MATERIAL_INSTANCE_THICKNESS_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
+            parameter = HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE;
+            break;
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     candidate = *instance;
     result = henka_assets_material_instance_reset_override(&candidate, parameter);
     if (result != HENKA_SUCCESS)

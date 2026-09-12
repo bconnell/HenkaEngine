@@ -80,17 +80,20 @@ static void henka_test_sandbox3d_asset_browser_paging(void)
 static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
 {
     henka_asset_manager manager;
-    henka_asset_texture_entry texture_entry;
+    henka_asset_texture_entry texture_entries[2];
     henka_texture texture;
+    henka_texture data_texture;
     henka_material material;
+    henka_material thickness_material;
     henka_material_asset definition;
     henka_material_instance instance;
     henka_material before;
     sandbox3d_texture_slot_display display;
 
     memset(&manager, 0, sizeof(manager));
-    memset(&texture_entry, 0, sizeof(texture_entry));
+    memset(texture_entries, 0, sizeof(texture_entries));
     memset(&texture, 0, sizeof(texture));
+    memset(&data_texture, 0, sizeof(data_texture));
     texture.width = 256;
     texture.height = 128;
     texture.backend_data = (void*)(uintptr_t)1U;
@@ -98,18 +101,33 @@ static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
     texture.resident_gpu_bytes = 65536U;
     texture.resident_mip_count = 4U;
     texture.mip_count = 6U;
-    texture_entry.texture = &texture;
-    texture_entry.metadata.type = HENKA_ASSET_TYPE_TEXTURE;
-    texture_entry.metadata.source_path = "assets/textures/authoring.png";
-    texture_entry.metadata.display_name = "authoring.png";
-    texture_entry.metadata.loaded = true;
-    manager.texture_entries = &texture_entry;
-    manager.texture_count = 1U;
+    texture_entries[0].texture = &texture;
+    texture_entries[0].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    texture_entries[0].metadata.source_path = "assets/textures/authoring.png";
+    texture_entries[0].metadata.display_name = "authoring.png";
+    texture_entries[0].metadata.loaded = true;
+    data_texture.width = 128;
+    data_texture.height = 64;
+    data_texture.backend_data = (void*)(uintptr_t)2U;
+    data_texture.descriptor = henka_texture_descriptor_default_data();
+    data_texture.resident_gpu_bytes = 32768U;
+    data_texture.resident_mip_count = 3U;
+    data_texture.mip_count = 5U;
+    texture_entries[1].texture = &data_texture;
+    texture_entries[1].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    texture_entries[1].metadata.source_path = "assets/textures/authoring-thickness.png";
+    texture_entries[1].metadata.display_name = "authoring-thickness.png";
+    texture_entries[1].metadata.loaded = true;
+    manager.texture_entries = texture_entries;
+    manager.texture_count = 2U;
 
     material = henka_material_default();
     material.shader = (henka_shader*)(uintptr_t)1U;
     material.base_color_texture = &texture;
     material.use_texture = true;
+    thickness_material = material;
+    thickness_material.thickness_texture = &data_texture;
+    thickness_material.use_texture = true;
     memset(&definition, 0, sizeof(definition));
     definition.material = material;
     definition.revision = 1U;
@@ -122,6 +140,16 @@ static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
     HENKA_TEST_ASSERT(strcmp(display.asset_identity, "assets/textures/authoring.png") == 0);
     HENKA_TEST_ASSERT(strcmp(display.dimensions, "256 x 128") == 0);
     HENKA_TEST_ASSERT(strcmp(display.mip_state, "4/6 resident") == 0);
+    HENKA_TEST_ASSERT(sandbox3d_format_material_texture_slot(
+        &manager,
+        &thickness_material,
+        HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS,
+        &display) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(display.assigned);
+    HENKA_TEST_ASSERT(strcmp(display.usage, "Thickness") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        display.asset_identity,
+        "assets/textures/authoring-thickness.png") == 0);
 
     memset(&instance, 0, sizeof(instance));
     instance.definition = &definition;
@@ -149,6 +177,21 @@ static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
     HENKA_TEST_ASSERT(instance.material.base_color_texture == &texture);
     HENKA_TEST_ASSERT(instance.material.use_texture);
     HENKA_TEST_ASSERT(instance.override_mask == 0U);
+    definition.material = thickness_material;
+    instance.material = thickness_material;
+    instance.override_mask = 0U;
+    instance.texture_override_mask = 0U;
+    HENKA_TEST_ASSERT(sandbox3d_assign_material_instance_texture(
+        &manager,
+        &instance,
+        HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS,
+        NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance.material.thickness_texture == NULL);
+    HENKA_TEST_ASSERT(sandbox3d_restore_material_instance_texture(
+        &manager,
+        &instance,
+        HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance.material.thickness_texture == &data_texture);
 }
 
 static void henka_test_sandbox3d_terrain_layer_display(void)
