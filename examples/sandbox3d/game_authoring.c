@@ -180,6 +180,7 @@ static henka_result sandbox3d_game_authoring_build_object(
     }
     out_object->visible = info.visible;
     out_object->transform = info.transform;
+    out_object->renderer.enabled = info.renderer_enabled;
     out_object->renderer.material_type = material.type;
     out_object->renderer.base_color_uv_set = material.base_color_uv_set;
     out_object->renderer.normal_uv_set = material.normal_uv_set;

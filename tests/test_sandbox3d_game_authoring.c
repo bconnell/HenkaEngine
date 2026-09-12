@@ -185,6 +185,59 @@ cleanup:
     return success;
 }
 
+static bool test_renderer_enablement_capture_is_complete(void)
+{
+    const char* relative_path =
+        "build/test_tmp/renderer_enablement_capture.hscene";
+    henka_camera camera;
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_scene_document_object object;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_object_info info;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    bool success = false;
+
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        16.0f / 9.0f,
+        0.1f,
+        100.0f);
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+             scene,
+             "Renderer Enablement")) == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_renderer_enabled(scene, entity, false) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create(
+            scene,
+            relative_path,
+            &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring,
+            entity,
+            &object_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring,
+            entity,
+            &object_id,
+            &object) != HENKA_SUCCESS ||
+        henka_scene_get_entity_info(scene, entity, &info) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    success = object.renderer.enabled == info.renderer_enabled &&
+        !object.renderer.enabled;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove(relative_path);
+    return success;
+}
+
 static bool test_material_asset_capture_authority_boundary(void)
 {
     const henka_material_asset* asset =
@@ -800,6 +853,11 @@ int main(void)
     if (!test_inline_material_capture_is_complete())
     {
         fprintf(stderr, "inline material capture test failed\n");
+        return 1;
+    }
+    if (!test_renderer_enablement_capture_is_complete())
+    {
+        fprintf(stderr, "renderer enablement capture test failed\n");
         return 1;
     }
     if (!test_material_asset_capture_authority_boundary())
