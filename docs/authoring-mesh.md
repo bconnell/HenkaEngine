@@ -124,14 +124,15 @@ The operation reverses only the ordered winding.
 `<henka/authoring_uv.h>` currently provides:
 
 - per-face planar projection on each principal axis;
-- bounded island transforms;
+- bounded per-face UV transforms;
 - single-face packing helpers;
 - finite-value validation;
 - seam detection from shared topology.
 
 The shared Sandbox modeling session routes one selected face through
-transactional UV projection and padded unit-square packing. Each operation
-supports preview, Apply, Cancel, and the existing authoring undo/redo history.
+transactional UV projection, uniform scaling, and padded unit-square packing of
+one selected face. Each operation supports preview, Apply, Cancel, and the
+existing authoring undo/redo history.
 
 Automatic multi-island unwrap, seam-editing UI, and global packing remain unfinished.
 

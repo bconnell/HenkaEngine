@@ -3226,6 +3226,8 @@ static henka_result authoring_history_restore(
 {
     henka_authoring_mesh* current = NULL;
     henka_authoring_mesh* replacement = NULL;
+    henka_authoring_mesh* opposite_snapshot;
+    const bool restoring_redo = target == history->redo;
     henka_result result;
     result = authoring_mesh_clone_internal(mesh, &current);
     if (result != HENKA_SUCCESS)
@@ -3247,11 +3249,18 @@ static henka_result authoring_history_restore(
     replacement->next_face_id = authoring_max_watermark(
         mesh->next_face_id,
         replacement->next_face_id);
+    opposite_snapshot = restoring_redo
+        ? target[*target_count - 1U]
+        : current;
     authoring_mesh_swap(mesh, replacement);
     henka_authoring_mesh_destroy(replacement);
-    henka_authoring_mesh_destroy(target[*target_count - 1U]);
+    if (!restoring_redo)
+    {
+        henka_authoring_mesh_destroy(target[*target_count - 1U]);
+    }
     --*target_count;
-    return authoring_history_append(opposite, opposite_count, history->max_steps, current);
+    return authoring_history_append(
+        opposite, opposite_count, history->max_steps, opposite_snapshot);
 }
 
 henka_result henka_authoring_mesh_history_undo(henka_authoring_mesh_history* history, henka_authoring_mesh* mesh)

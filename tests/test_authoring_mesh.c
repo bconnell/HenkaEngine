@@ -703,7 +703,12 @@ static int test_history_and_persistence(void)
         henka_authoring_mesh_history_undo(history, mesh) != HENKA_SUCCESS ||
         henka_authoring_mesh_history_can_undo(history) ||
         henka_authoring_mesh_history_redo(history, mesh) != HENKA_SUCCESS ||
-        !henka_authoring_mesh_history_can_undo(history))
+        !henka_authoring_mesh_history_can_undo(history) ||
+        henka_authoring_mesh_get_vertex(mesh, ids[0])->position.x != 2.0f ||
+        henka_authoring_mesh_history_undo(history, mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_vertex(mesh, ids[0])->position.x != 0.0f ||
+        henka_authoring_mesh_history_redo(history, mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_vertex(mesh, ids[0])->position.x != 2.0f)
     {
         goto cleanup;
     }

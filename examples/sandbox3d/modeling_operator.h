@@ -25,7 +25,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactional projection of one selected face onto a principal plane. */
     SANDBOX3D_MODELING_OPERATOR_UV_PROJECT,
     /* Transactional packing of one selected face into the padded unit square. */
-    SANDBOX3D_MODELING_OPERATOR_UV_PACK
+    SANDBOX3D_MODELING_OPERATOR_UV_PACK,
+    /* Transactional uniform scale of one selected face's UVs about the origin. */
+    SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM
 } sandbox3d_modeling_operator_kind;
 
 typedef enum sandbox3d_modeling_operator_state

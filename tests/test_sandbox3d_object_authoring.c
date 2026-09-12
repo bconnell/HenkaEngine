@@ -993,6 +993,8 @@ static void henka_test_sandbox3d_modeling_operator_uv_face_workflow(void)
     henka_vec2 before_uv;
     henka_vec2 projected_uv;
     henka_vec2 packed_uv;
+    henka_vec2 transformed_uv;
+    henka_vec2 restored_uv;
     henka_vec2 undone_uv;
     henka_entity entity;
 
@@ -1056,6 +1058,30 @@ static void henka_test_sandbox3d_modeling_operator_uv_face_workflow(void)
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_corner_uv(
         sandbox3d_authoring_object_get_mesh(object), face_id, 0U, &undone_uv) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(undone_uv.x == projected_uv.x && undone_uv.y == projected_uv.y);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.5f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_corner_uv(
+        sandbox3d_authoring_object_get_mesh(object), face_id, 0U, &restored_uv) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(restored_uv.x == packed_uv.x && restored_uv.y == packed_uv.y);
+
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.5f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_corner_uv(
+        sandbox3d_authoring_object_get_mesh(object), face_id, 0U, &transformed_uv) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(transformed_uv.x != packed_uv.x || transformed_uv.y != packed_uv.y);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_corner_uv(
+        sandbox3d_authoring_object_get_mesh(object), face_id, 0U, &restored_uv) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(restored_uv.x == packed_uv.x && restored_uv.y == packed_uv.y);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
 
     sandbox3d_authoring_object_destroy(object);
