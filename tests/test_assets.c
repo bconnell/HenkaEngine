@@ -10,6 +10,7 @@
 #include "../engine/src/core/checked.h"
 #include "../engine/src/core/memory_internal.h"
 #include "../engine/src/henka_internal.h"
+#include "../examples/sandbox3d/asset_browser_tools.h"
 
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
 #include <ktx.h>
@@ -1040,6 +1041,36 @@ static void henka_test_texture_reimport_preserves_identity_and_transactionality(
     HENKA_TEST_ASSERT(henka_assets_load_texture_with_descriptor(
         manager, path, &normal_descriptor, &normal_texture) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(normal_texture != NULL && normal_texture != texture);
+    {
+        henka_texture* resolved_texture = NULL;
+        henka_texture_info resolved_info;
+
+        HENKA_TEST_ASSERT(sandbox3d_resolve_material_texture_for_slot(
+            manager,
+            texture,
+            HENKA_MATERIAL_TEXTURE_SLOT_NORMAL,
+            &resolved_texture) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(resolved_texture == normal_texture);
+        HENKA_TEST_ASSERT(henka_texture_get_info(
+            resolved_texture, &resolved_info) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(resolved_info.usage == HENKA_TEXTURE_USAGE_NORMAL);
+        HENKA_TEST_ASSERT(sandbox3d_resolve_material_texture_for_slot(
+            manager,
+            texture,
+            HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS,
+            &resolved_texture) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(resolved_texture != NULL);
+        HENKA_TEST_ASSERT(henka_texture_get_info(
+            resolved_texture, &resolved_info) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(resolved_info.usage == HENKA_TEXTURE_USAGE_GENERIC_DATA);
+        resolved_texture = (henka_texture*)1;
+        HENKA_TEST_ASSERT(sandbox3d_resolve_material_texture_for_slot(
+            manager,
+            texture,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR,
+            &resolved_texture) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(resolved_texture == NULL);
+    }
     HENKA_TEST_ASSERT(henka_assets_reload_texture_with_descriptor(
         manager, path, &normal_descriptor, &reloaded_normal_texture) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(reloaded_normal_texture == normal_texture);

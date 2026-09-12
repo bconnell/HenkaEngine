@@ -471,6 +471,91 @@ henka_result sandbox3d_format_material_texture_slot(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_material_texture_slot_descriptor(
+    henka_material_texture_slot slot,
+    henka_texture_descriptor* out_descriptor)
+{
+    henka_texture_descriptor descriptor;
+
+    if (out_descriptor == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_descriptor = henka_texture_descriptor_default_data();
+    switch (slot)
+    {
+        case HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR:
+            descriptor = henka_texture_descriptor_default_color();
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_NORMAL:
+            descriptor = henka_texture_descriptor_default_normal();
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS:
+            descriptor = henka_texture_descriptor_default_data();
+            descriptor.usage = HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION:
+            descriptor = henka_texture_descriptor_default_data();
+            descriptor.usage = HENKA_TEXTURE_USAGE_OCCLUSION;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE:
+            descriptor = henka_texture_descriptor_default_color();
+            descriptor.usage = HENKA_TEXTURE_USAGE_EMISSIVE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS:
+        case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
+            descriptor = henka_texture_descriptor_default_data();
+            descriptor.usage = HENKA_TEXTURE_USAGE_GENERIC_DATA;
+            break;
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_descriptor = descriptor;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_resolve_material_texture_for_slot(
+    henka_asset_manager* manager,
+    henka_texture* selected_texture,
+    henka_material_texture_slot slot,
+    henka_texture** out_texture)
+{
+    henka_texture_descriptor descriptor;
+    henka_texture_info info;
+    henka_asset_metadata metadata;
+    henka_result result;
+
+    if (out_texture != NULL)
+    {
+        *out_texture = NULL;
+    }
+    if (manager == NULL || selected_texture == NULL || out_texture == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_material_texture_slot_descriptor(slot, &descriptor);
+    if (result != HENKA_SUCCESS ||
+        henka_texture_get_info(selected_texture, &info) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (info.usage == descriptor.usage &&
+        (slot == HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR ||
+            info.color_space == descriptor.color_space))
+    {
+        *out_texture = selected_texture;
+        return HENKA_SUCCESS;
+    }
+    if (henka_assets_get_texture_metadata(
+            manager, selected_texture, &metadata) != HENKA_SUCCESS ||
+        metadata.source_path == NULL || metadata.source_path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_assets_load_texture_with_descriptor(
+        manager, metadata.source_path, &descriptor, out_texture);
+}
+
 henka_result sandbox3d_assign_material_instance_texture(
     const henka_asset_manager* manager,
     henka_material_instance* instance,

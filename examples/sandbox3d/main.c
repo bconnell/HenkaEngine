@@ -2184,6 +2184,7 @@ static henka_result sandbox3d_apply_texture_to_material_binding(
 {
     henka_material_instance previous;
     henka_material_instance candidate;
+    henka_texture* resolved_texture = texture;
     henka_result result;
 
     if (engine == NULL || state == NULL || binding == NULL || !binding->valid ||
@@ -2196,8 +2197,20 @@ static henka_result sandbox3d_apply_texture_to_material_binding(
 
     previous = *binding->instance;
     candidate = previous;
+    if (texture != NULL)
+    {
+        result = sandbox3d_resolve_material_texture_for_slot(
+            henka_engine_get_asset_manager(engine),
+            texture,
+            slot,
+            &resolved_texture);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
     result = sandbox3d_assign_material_instance_texture(
-        henka_engine_get_asset_manager(engine), &candidate, slot, texture);
+        henka_engine_get_asset_manager(engine), &candidate, slot, resolved_texture);
     if (result != HENKA_SUCCESS)
     {
         return result;

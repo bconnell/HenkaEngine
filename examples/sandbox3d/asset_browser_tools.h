@@ -60,6 +60,16 @@ henka_result sandbox3d_format_material_texture_slot(
     henka_material_texture_slot slot,
     sandbox3d_texture_slot_display* out_display);
 
+henka_result sandbox3d_material_texture_slot_descriptor(
+    henka_material_texture_slot slot,
+    henka_texture_descriptor* out_descriptor);
+
+henka_result sandbox3d_resolve_material_texture_for_slot(
+    henka_asset_manager* manager,
+    henka_texture* selected_texture,
+    henka_material_texture_slot slot,
+    henka_texture** out_texture);
+
 henka_result sandbox3d_assign_material_instance_texture(
     const henka_asset_manager* manager,
     henka_material_instance* instance,
