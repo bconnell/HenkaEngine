@@ -1000,6 +1000,44 @@ static bool sandbox3d_modeling_operator_is_uv(
         kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK;
 }
 
+static henka_result sandbox3d_apply_authoring_seam_toggle(
+    sandbox3d_state* state)
+{
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        sandbox3d_authoring_object_get_selection_mode(state->authoring_object) !=
+            SANDBOX3D_AUTHORING_SELECTION_EDGE ||
+        sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object) == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator,
+            0.0f,
+            false,
+            false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_commit(
+            &state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_preview_authoring_uv(
     sandbox3d_state* state,
     sandbox3d_modeling_operator_kind kind,
@@ -26772,6 +26810,8 @@ details_group_authoring:
                     fflush(stdout);
                     sandbox3d_set_status(state, false, "Authoring Face selection mode active; Ctrl-click adds components.");
                 }
+                henka_ui_rect edge_seam_row;
+
                 if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
                 {
                     henka_ui_rect edge_topology_row;
@@ -26929,6 +26969,44 @@ details_group_authoring:
                                     "Edge delete rejected; source and selection retained.");
                             }
                         }
+                    }
+                }
+                if (sandbox3d_authoring_object_get_selected_component_count(
+                        state->authoring_object) > 0U &&
+                    sandbox3d_details_flow_next_row(
+                        state,
+                        flow_desc.bounds,
+                        28.0f,
+                        1U,
+                        &edge_seam_row) &&
+                    edge_seam_row.width >= 290.0f &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_edge_seam_toggle_top",
+                        (henka_ui_rect){edge_seam_row.x, edge_seam_row.y, 168.0f, 24.0f},
+                        "Toggle UV Seam"))
+                {
+                    const henka_result seam_result =
+                        sandbox3d_apply_authoring_seam_toggle(state);
+                    if (seam_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Toggled UV seam state on %zu selected edge(s).",
+                            sandbox3d_authoring_object_get_selected_component_count(
+                                state->authoring_object));
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "UV seam toggle rejected; source and selection retained (%s).",
+                            henka_result_to_string(seam_result));
                     }
                 }
                 topology_controls_prioritized = true;

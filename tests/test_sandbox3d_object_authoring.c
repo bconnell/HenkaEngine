@@ -540,6 +540,43 @@ static void henka_test_sandbox3d_modeling_operator_session(void)
         &session, 0.1f, false, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
 
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!henka_authoring_mesh_edge_is_seam(
+        sandbox3d_authoring_object_get_mesh(object), 1U));
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.0f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!henka_authoring_mesh_edge_is_seam(
+        sandbox3d_authoring_object_get_mesh(object), 1U));
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!henka_authoring_mesh_edge_is_seam(
+        sandbox3d_authoring_object_get_mesh(object), 1U));
+
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.0f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_edge_is_seam(
+        sandbox3d_authoring_object_get_mesh(object), 1U));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!henka_authoring_mesh_edge_is_seam(
+        sandbox3d_authoring_object_get_mesh(object), 1U));
+
     sandbox3d_authoring_object_destroy(object);
     henka_mesh_destroy(previous_mesh);
     henka_scene_destroy(scene);

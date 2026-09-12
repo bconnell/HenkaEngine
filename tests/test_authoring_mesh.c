@@ -156,6 +156,95 @@ static int test_write_legacy_fixture(const char* path, uint32_t version)
     return ok;
 }
 
+static int test_write_hams_v4_surface_fixture(const char* path)
+{
+    FILE* file = test_open_file(path, "wb");
+    const uint32_t invalid_id = HENKA_AUTHORING_INVALID_ID;
+    const henka_vec3 positions[4] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+        {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}};
+    const henka_vec2 uvs[4] = {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}};
+    const uint32_t edge_vertices[4][2] = {{1U, 2U}, {2U, 3U}, {3U, 4U}, {1U, 4U}};
+    const uint32_t face_edges[4] = {1U, 2U, 3U, 4U};
+    size_t index;
+    int ok = file != NULL;
+
+    if (!ok) return 0;
+    ok = fwrite("HAMS", 4U, 1U, file) == 1U &&
+        test_write_u32(file, 4U) &&
+        test_write_u32(file, 4U) && test_write_u32(file, 4U) &&
+        test_write_u32(file, 1U) && test_write_u32(file, 4U) &&
+        test_write_u32(file, 4U) && test_write_u32(file, 4U) &&
+        test_write_u32(file, 1U) && test_write_u32(file, 5U) &&
+        test_write_u32(file, 5U) && test_write_u32(file, 2U);
+    for (index = 0U; ok && index < 4U; ++index)
+    {
+        ok = test_write_u32(file, (uint32_t)(index + 1U)) &&
+            test_write_vec3(file, positions[index]) &&
+            test_write_vec2(file, uvs[index]) && test_write_u32(file, 0U);
+    }
+    for (index = 0U; ok && index < 4U; ++index)
+    {
+        ok = test_write_u32(file, (uint32_t)(index + 1U)) &&
+            test_write_u32(file, edge_vertices[index][0]) &&
+            test_write_u32(file, edge_vertices[index][1]) &&
+            test_write_u32(file, 1U) && test_write_u32(file, invalid_id) &&
+            test_write_u32(file, 1U) && fputc(0, file) != EOF;
+    }
+    ok = ok && test_write_u32(file, 1U) && test_write_u32(file, 4U) &&
+        test_write_u32(file, 0U) && fputc(1, file) != EOF;
+    for (index = 0U; ok && index < 4U; ++index)
+    {
+        ok = test_write_u32(file, (uint32_t)(index + 1U));
+    }
+    for (index = 0U; ok && index < 4U; ++index)
+    {
+        ok = test_write_vec2(file, uvs[index]);
+    }
+    for (index = 0U; ok && index < 4U; ++index)
+    {
+        ok = test_write_u32(file, face_edges[index]);
+    }
+    if (fclose(file) != 0) ok = 0;
+    return ok;
+}
+
+static int test_write_hams_v5_loose_fixture(const char* path)
+{
+    FILE* file = test_open_file(path, "wb");
+    const uint32_t invalid_id = HENKA_AUTHORING_INVALID_ID;
+    const henka_vec3 positions[3] = {
+        {2.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}, {8.0f, 0.0f, 0.0f}};
+    const henka_vec2 uvs[3] = {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {0.5f, 0.5f}};
+    const uint32_t material_regions[3] = {7U, 7U, 9U};
+    size_t index;
+    int ok = file != NULL;
+
+    if (!ok) return 0;
+    ok = fwrite("HAMS", 4U, 1U, file) == 1U &&
+        test_write_u32(file, 5U) &&
+        test_write_u32(file, 4U) && test_write_u32(file, 4U) &&
+        test_write_u32(file, 1U) && test_write_u32(file, 4U) &&
+        test_write_u32(file, 3U) && test_write_u32(file, 1U) &&
+        test_write_u32(file, 0U) && test_write_u32(file, 4U) &&
+        test_write_u32(file, 2U) && test_write_u32(file, 1U);
+    for (index = 0U; ok && index < 3U; ++index)
+    {
+        ok = test_write_u32(file, (uint32_t)(index + 1U)) &&
+            test_write_vec3(file, positions[index]) &&
+            test_write_vec2(file, uvs[index]) &&
+            test_write_u32(file, material_regions[index]);
+    }
+    ok = ok && test_write_u32(file, 1U) && test_write_u32(file, 1U) &&
+        test_write_u32(file, 2U) && test_write_u32(file, invalid_id) &&
+        test_write_u32(file, invalid_id) && test_write_u32(file, 0U) &&
+        fputc(1, file) != EOF;
+    if (fclose(file) != 0) ok = 0;
+    return ok;
+}
+
 static int test_append_byte(const char* path, unsigned char value)
 {
     FILE* file = test_open_file(path, "ab");
@@ -749,7 +838,7 @@ static int test_history_and_persistence(void)
         goto cleanup;
     }
     saved = NULL;
-    if (memcmp(header, "HAMS\x05\0\0\0", sizeof(header)) != 0)
+    if (memcmp(header, "HAMS\x06\0\0\0", sizeof(header)) != 0)
     {
         goto cleanup;
     }
@@ -2640,6 +2729,7 @@ static int test_uv_authoring(void)
             {1.0f, 0.0f}, {2.0f, 0.0f}, {2.0f, 1.0f}, {1.0f, 1.0f}};
         henka_authoring_face_id first_face = HENKA_AUTHORING_INVALID_ID;
         henka_authoring_face_id second_face = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_edge_id shared_edge = HENKA_AUTHORING_INVALID_ID;
         size_t index;
 
         if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
@@ -2673,11 +2763,15 @@ static int test_uv_authoring(void)
                 goto cleanup;
             }
         }
-        if (henka_authoring_mesh_faces_share_uv_seam(mesh, first_face, second_face) ||
+        if (test_find_edge_between_vertices(mesh, 2U, 5U, &shared_edge) != HENKA_SUCCESS ||
+            henka_authoring_mesh_faces_share_uv_seam(mesh, first_face, second_face) ||
+            henka_authoring_mesh_set_edge_seam(mesh, shared_edge, true) != HENKA_SUCCESS ||
+            !henka_authoring_mesh_edge_is_seam(mesh, shared_edge) ||
+            !henka_authoring_mesh_faces_share_uv_seam(mesh, first_face, second_face) ||
             henka_authoring_mesh_transform_uv_island(
                 mesh, first_face, (henka_vec2){0.5f, 0.5f}, (henka_vec2){0.1f, 0.2f}) != HENKA_SUCCESS ||
             henka_authoring_mesh_get_face_corner_uv(mesh, second_face, 1U, &uv) != HENKA_SUCCESS ||
-            fabsf(uv.x - 1.1f) > 0.0001f || fabsf(uv.y - 0.2f) > 0.0001f ||
+            fabsf(uv.x - 2.0f) > 0.0001f || fabsf(uv.y) > 0.0001f ||
             henka_authoring_mesh_pack_uv_island(mesh, first_face, 0.1f) != HENKA_SUCCESS ||
             !henka_authoring_mesh_face_uvs_are_finite(mesh, first_face) ||
             !henka_authoring_mesh_face_uvs_are_finite(mesh, second_face) ||
@@ -2685,9 +2779,20 @@ static int test_uv_authoring(void)
         {
             goto cleanup;
         }
+        {
+            const henka_authoring_topology_options options =
+                henka_authoring_topology_options_default();
+            henka_authoring_topology_report report = {0};
+            if (henka_authoring_topology_analyze(mesh, &options, &report) != HENKA_SUCCESS ||
+                report.uv_seam_edge_count != 1U)
+            {
+                goto cleanup;
+            }
+        }
         if (henka_authoring_mesh_set_face_corner_uv(
                 mesh, first_face, 0U, (henka_vec2){9.0f, 9.0f}) != HENKA_SUCCESS ||
             henka_authoring_mesh_load_file(mesh, island_path) != HENKA_SUCCESS ||
+            !henka_authoring_mesh_edge_is_seam(mesh, shared_edge) ||
             henka_authoring_mesh_get_face_corner_uv(mesh, first_face, 0U, &uv) != HENKA_SUCCESS ||
             fabsf(uv.x - 0.1f) > 0.0001f || fabsf(uv.y - 0.1f) > 0.0001f ||
             henka_authoring_mesh_set_face_corner_uv(
@@ -4138,14 +4243,9 @@ static int test_hams_loose_topology_versioning(void)
         stage = "surface face";
         goto cleanup;
     }
-    if (henka_authoring_mesh_save_file(surface, path) != HENKA_SUCCESS)
+    if (!test_write_hams_v4_surface_fixture(path))
     {
         stage = "surface save";
-        goto cleanup;
-    }
-    if (!test_patch_hams_version(path, 4U))
-    {
-        stage = "surface v4 patch";
         goto cleanup;
     }
     if (henka_authoring_mesh_load_file(destination, path) != HENKA_SUCCESS)
@@ -4159,6 +4259,21 @@ static int test_hams_loose_topology_versioning(void)
         stage = "surface v4 load state";
         goto cleanup;
     }
+
+    stage = "v5 loose fixture";
+    if (!test_write_hams_v5_loose_fixture(path) ||
+        henka_authoring_mesh_load_file_new(path, &loaded) != HENKA_SUCCESS ||
+        loaded == NULL ||
+        henka_authoring_mesh_get_edge_face_count(loaded, 1U) != 0U ||
+        henka_authoring_mesh_edge_is_seam(loaded, 1U) ||
+        henka_authoring_mesh_get_vertex(loaded, 3U) == NULL ||
+        fabsf(henka_authoring_mesh_get_vertex(loaded, 3U)->position.x - 8.0f) > 0.0001f ||
+        !henka_authoring_mesh_validate(loaded))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(loaded);
+    loaded = NULL;
 
     stage = "loose construction";
     if (henka_authoring_mesh_create(&desc, &loose) != HENKA_SUCCESS ||
@@ -4182,14 +4297,15 @@ static int test_hams_loose_topology_versioning(void)
             &loose_isolated) != HENKA_SUCCESS ||
         henka_authoring_mesh_add_edge(
             loose, loose_first, loose_second, true, &loose_edge) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_seam(loose, loose_edge, true) != HENKA_SUCCESS ||
         henka_authoring_mesh_save_file(loose, path) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
-    stage = "v5 header";
+    stage = "v6 header";
     file = test_open_file(path, "rb");
     if (file == NULL || fread(header, sizeof(header), 1U, file) != 1U ||
-        memcmp(header, "HAMS\x05\0\0\0", sizeof(header)) != 0)
+        memcmp(header, "HAMS\x06\0\0\0", sizeof(header)) != 0)
     {
         if (file != NULL) fclose(file);
         file = NULL;
@@ -4201,10 +4317,11 @@ static int test_hams_loose_topology_versioning(void)
         goto cleanup;
     }
     file = NULL;
-    stage = "v5 loose load";
+    stage = "v6 loose load";
     if (henka_authoring_mesh_load_file_new(path, &loaded) != HENKA_SUCCESS ||
         loaded == NULL ||
         henka_authoring_mesh_get_edge_face_count(loaded, loose_edge) != 0U ||
+        !henka_authoring_mesh_edge_is_seam(loaded, loose_edge) ||
         henka_authoring_mesh_get_vertex(loaded, loose_first) == NULL ||
         henka_authoring_mesh_get_vertex(loaded, loose_isolated) == NULL ||
         fabsf(henka_authoring_mesh_get_vertex(loaded, loose_isolated)->position.x - 8.0f) > 0.0001f ||
@@ -4231,9 +4348,11 @@ static int test_hams_loose_topology_versioning(void)
         goto cleanup;
     }
 
+    henka_authoring_mesh_destroy(loaded);
+    loaded = NULL;
+
     stage = "malformed v5 construction";
-    if (henka_authoring_mesh_save_file(loose, path) != HENKA_SUCCESS ||
-        !test_patch_hams_version(path, 5U) ||
+    if (!test_write_hams_v5_loose_fixture(path) ||
         !test_patch_hams_u32_at(path, 48L + (3L * 28L) + 20L, 1U))
     {
         goto cleanup;

@@ -128,7 +128,7 @@ The operation reverses only the ordered winding.
 - single-face packing helpers;
 - bounded scaling and packing of the complete UV island containing a selected face;
 - finite-value validation;
-- seam detection from shared topology.
+- seam detection from shared topology and explicit edge seam metadata.
 
 The shared Sandbox modeling session routes one selected face through
 transactional UV projection, uniform scaling, and padded unit-square packing.
@@ -137,7 +137,10 @@ preserving existing UV seams as boundaries. Each operation supports preview,
 Apply, Cancel, and the existing authoring undo/redo history; UV state persists
 through the HAMS source path.
 
-Automatic multi-island unwrap, seam-editing UI, and global packing remain unfinished.
+In Edge mode, the Sandbox exposes a transactional Toggle UV Seam operation for
+the selected edges. It supports preview, Cancel, Apply, and authoring undo/redo;
+the explicit seam state is persisted through HAMS v6. Automatic multi-island
+unwrap and global packing remain unfinished.
 
 ## Connected Sandbox workflow
 
@@ -450,7 +453,7 @@ The authoring representation supports explicit loose vertices and standalone wir
 - stable logical IDs;
 - bounded physical storage;
 - deterministic endpoint ordering;
-- HAMS v5 transactional persistence.
+- HAMS v6 transactional persistence with explicit seam metadata.
 
 A standalone edge connects two distinct active vertices. It has zero incident faces until a face consumes that endpoint pair. It can be removed explicitly while face-less.
 
@@ -526,7 +529,7 @@ This keeps shading basis generation in the shared renderer path while preserving
 
 ## HAMS file format
 
-`henka_authoring_mesh_save_file` writes HAMS v5 using explicit little-endian 32-bit integers and IEEE-754 float bit patterns.
+`henka_authoring_mesh_save_file` writes HAMS v6 using explicit little-endian 32-bit integers and IEEE-754 float bit patterns.
 
 Each save:
 
@@ -538,9 +541,14 @@ A failed or concurrent save preserves the prior valid source.
 
 HAMS v5 is the first version whose validity contract includes loose vertices and zero-face wire edges.
 
+HAMS v6 retains that loose-topology contract and adds one explicit seam byte to
+each modern active-edge record. The seam state is independent of hard-edge
+intent and is used as an island boundary by UV authoring and topology analysis.
+
 The loader accepts:
 
-- current HAMS v5;
+- current HAMS v6;
+- loose-topology HAMS v5, with explicit seam state defaulting to false;
 - repository-supported surface-only HAMS v2;
 - surface-only HAMS v3;
 - surface-only HAMS v4.
@@ -578,7 +586,6 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - broader hard-surface modeling profiles;
 - automatic multi-island UV unwrap;
 - global UV packing;
-- seam-editing UI;
 - texture painting;
 - broader material authoring beyond current bounded material-instance editing;
 - full editor workflows for arbitrary authoring-file selection;

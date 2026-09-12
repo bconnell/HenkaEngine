@@ -212,7 +212,8 @@ if (-not $hamsVersionMatch.Success) {
             "(?i)\bwrites\s+HAMS\s+v(?!$currentHamsVersion\b)\d+",
             "(?i)\bcurrent\s+v(?!$currentHamsVersion\b)\d+\s+format",
             "(?i)\bcurrent\s+HAMS\s+v(?!$currentHamsVersion\b)\d+",
-            "(?i)\bcurrent\s+writer\b.{0,40}\bHAMS\s+v(?!$currentHamsVersion\b)\d+"
+            "(?i)\bcurrent\s+writer\s+(?:emits|is)\s+HAMS\s+v(?!$currentHamsVersion\b)\d+",
+            "(?i)\bHAMS\s+v(?!$currentHamsVersion\b)\d+\s+is\s+the\s+current\s+writer"
         )) {
             if ($document.Text -match $staleCurrentClaim) {
                 Add-Finding "$($document.Path): stale current HAMS claim matches '$staleCurrentClaim'"

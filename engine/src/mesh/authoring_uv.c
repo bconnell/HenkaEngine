@@ -552,6 +552,11 @@ bool henka_authoring_mesh_faces_share_uv_seam(
             if ((first_vertex == second_vertex && first_next == second_next) ||
                 (first_vertex == second_next && first_next == second_vertex))
             {
+                const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(mesh, first->edges[first_corner]);
+                if (edge != NULL && edge->seam)
+                {
+                    return true;
+                }
                 const henka_vec2 first_uv = first->uvs[first_corner];
                 const henka_vec2 first_next_uv = first->uvs[(first_corner + 1U) % first->corner_count];
                 const bool reversed = first_vertex == second_next && first_next == second_vertex;

@@ -76,7 +76,8 @@ henka_result sandbox3d_modeling_operator_begin(
          kind != SANDBOX3D_MODELING_OPERATOR_UV_PACK &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM &&
-         kind != SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK))
+         kind != SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK &&
+         kind != SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -118,6 +119,11 @@ henka_result sandbox3d_modeling_operator_begin(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (kind == SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE &&
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE || selected_count == 0U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (kind == SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE &&
         (selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE || selected_count == 0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -402,7 +408,8 @@ henka_result sandbox3d_modeling_operator_preview(
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_PACK &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM &&
-         session->kind != SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK) ||
+         session->kind != SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK &&
+         session->kind != SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE) ||
         session->source_snapshot == NULL || session->object == NULL ||
         session->selection_ids == NULL || session->selection_count == 0U ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_MOVE &&
@@ -422,6 +429,9 @@ henka_result sandbox3d_modeling_operator_preview(
             session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE &&
             session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_NONE) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE &&
+            (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE ||
+             session->selection_count == 0U)) ||
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE ||
              session->selection_count == 0U)) ||
         ((session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PROJECT ||
@@ -639,6 +649,17 @@ henka_result sandbox3d_modeling_operator_preview(
             candidate,
             (henka_authoring_face_id)session->selection_ids[0U],
             applied_amount);
+    }
+    if (result == HENKA_SUCCESS &&
+        session->kind == SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE)
+    {
+        for (index = 0U; index < session->selection_count && result == HENKA_SUCCESS; ++index)
+        {
+            const henka_authoring_edge_id edge_id =
+                (henka_authoring_edge_id)session->selection_ids[index];
+            const bool seam = henka_authoring_mesh_edge_is_seam(candidate, edge_id);
+            result = henka_authoring_mesh_set_edge_seam(candidate, edge_id, !seam);
+        }
     }
     if (result == HENKA_SUCCESS && session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE)
     {

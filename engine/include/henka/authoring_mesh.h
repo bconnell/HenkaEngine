@@ -54,6 +54,7 @@ typedef struct henka_authoring_edge
     henka_authoring_face_id faces[2];
     size_t face_count;
     bool hard;
+    bool seam;
     bool active;
 } henka_authoring_edge;
 
@@ -161,6 +162,8 @@ henka_result henka_authoring_mesh_set_face_smoothing(henka_authoring_mesh* mesh,
 henka_result henka_authoring_mesh_set_face_corner_uv(henka_authoring_mesh* mesh, henka_authoring_face_id id, size_t corner, henka_vec2 uv);
 henka_result henka_authoring_mesh_get_face_corner_uv(const henka_authoring_mesh* mesh, henka_authoring_face_id id, size_t corner, henka_vec2* out_uv);
 henka_result henka_authoring_mesh_set_edge_hard(henka_authoring_mesh* mesh, henka_authoring_edge_id id, bool hard);
+henka_result henka_authoring_mesh_set_edge_seam(henka_authoring_mesh* mesh, henka_authoring_edge_id id, bool seam);
+bool henka_authoring_mesh_edge_is_seam(const henka_authoring_mesh* mesh, henka_authoring_edge_id id);
 
 size_t henka_authoring_mesh_get_vertex_edge_count(const henka_authoring_mesh* mesh, henka_authoring_vertex_id vertex_id);
 henka_result henka_authoring_mesh_get_vertex_edge_at(const henka_authoring_mesh* mesh, henka_authoring_vertex_id vertex_id, size_t ordinal, henka_authoring_edge_id* out_edge_id);

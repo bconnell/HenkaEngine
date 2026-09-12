@@ -611,6 +611,10 @@ static bool henka_topology_edge_is_uv_seam(
     {
         return false;
     }
+    if (edge->seam)
+    {
+        return true;
+    }
 
     first_face =
         henka_authoring_mesh_get_face(

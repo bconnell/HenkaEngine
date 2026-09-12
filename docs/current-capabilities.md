@@ -399,18 +399,21 @@ Available operations also include:
 - bounded single-face UV transforms;
 - bounded UV-island scaling and packing from a selected seed face;
 - packing;
-- seam detection.
+- seam detection;
+- transactional Toggle UV Seam for selected Edge-mode components.
 
 The integrated Sandbox panel routes bounded multi-cut and UV projection,
 single-face transforms, and selected-island scaling/packing through the
-modeling transaction path. These operations provide preview, Apply/Cancel, and
-undo/redo history where supported.
+modeling transaction path. The Edge-mode seam control also uses this path and
+provides preview, Apply/Cancel, and undo/redo history.
 
 ### HAMS persistence
 
-HAMS v5 writes portable little-endian data through unique same-directory temporary files and retains reads for checked-in v2/v3/v4 surface-only legacy sources.
+HAMS v6 writes portable little-endian data through unique same-directory temporary files and retains reads for checked-in v2/v3/v4 surface-only and v5 loose-topology sources.
 
-HAMS v5 is required for persisted loose vertices and zero-face wire edges. Legacy files are migrated in memory only and are not silently rewritten.
+HAMS v5 introduced persisted loose vertices and zero-face wire edges. HAMS v6
+extends that record format with explicit UV seam state. Legacy files are
+migrated in memory only and are not silently rewritten.
 
 ### Imported-object authoring
 
@@ -491,7 +494,7 @@ Broader runtime/resource mapping, complete Inspector authoring, and debugger too
 
 ### Loose-component and wire/point authoring support
 
-The core authoring representation preserves explicit loose vertices and standalone wire edges with stable logical IDs, bounded reusable storage, and HAMS v5 save/reload support.
+The core authoring representation preserves explicit loose vertices and standalone wire edges with stable logical IDs, bounded reusable storage, explicit UV seam metadata, and HAMS v6 save/reload support.
 
 The core modeling API also provides:
 

@@ -62,17 +62,22 @@ edit after undo cannot resurrect or alias an abandoned redo branch.
 
 ## HAMS persistence
 
-HAMS v5 is the format boundary for decoupled identity, physical storage, and
-loose-component semantics. The v5 header stores the four configured
+HAMS v5 established the format boundary for decoupled identity, physical
+storage, and loose-component semantics. Its header stores the four configured
 capacities, active vertex/edge/face counts, and the three allocator watermarks.
-Active records store their logical
-IDs and all current vertex, edge, face, UV, material, smoothing, hard-edge, and
-topology metadata. Records are serialized in deterministic physical-slot
-order.
+Active records store their logical IDs and current vertex, edge, face, UV,
+material, smoothing, hard-edge, and topology metadata. Records are serialized
+in deterministic physical-slot order.
+
+HAMS v6 is the current writer format. It retains the v5 loose-component
+validity contract and adds an explicit seam byte to each modern active-edge
+record. Seam intent is independent of hard-edge intent. A v5 file loads with
+explicit seam state false; per-corner UV discontinuities remain valid seam
+boundaries after migration.
 
 HAMS v4 remains loadable as a surface-only compatibility format. It has the
 same record layout and identity watermarks, but its validity contract requires
-every active edge to have at least one incident face. HAMS v5 is therefore
+every active edge to have at least one incident face. HAMS v5 or v6 is therefore
 required for standalone zero-face wire edges and loose vertices; the loader
 does not guess which semantic contract a v4 file intended.
 
@@ -85,7 +90,7 @@ HAMS v2 and v3 remain loadable. Their slot-derived IDs become the logical IDs
 of the loaded mesh, storage is initialized independently, and each next-ID
 watermark is placed above the IDs represented by the file. HAMS v2, v3, and v4
 are migrated in memory only; legacy files are not automatically rewritten as
-v5. A loose component encoded under v2, v3, or v4 is rejected as malformed.
+v6. A loose component encoded under v2, v3, or v4 is rejected as malformed.
 
 Malformed input is rejected for unknown versions, duplicate/zero/invalid IDs,
 nonexistent references, invalid watermarks, active counts above capacity,
@@ -96,8 +101,8 @@ non-manifold edge relations.
 
 The public contract is demonstrated by reuse of vertex, edge, and face slots;
 stale-ID rejection; active-capacity overflow; history undo/redo and branch
-semantics; repeated public modeling churn; deterministic evaluation; HAMS v5
-round trips; v2/v3/v4 compatibility; loose-component persistence;
+semantics; repeated public modeling churn; deterministic evaluation; HAMS v6
+round trips; v2/v3/v4/v5 compatibility; loose-component persistence;
 malformed-load retention; native reopen and
 re-edit behavior; sanitizer coverage; and packaged editor/runtime use.
 
