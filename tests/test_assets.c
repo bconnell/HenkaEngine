@@ -976,6 +976,112 @@ static void henka_test_mesh_reimport_preserves_identity_and_transactionality(voi
     henka_engine_destroy(engine);
 }
 
+static void henka_test_texture_reimport_preserves_identity_and_transactionality(void)
+{
+    static const unsigned char bmp_initial[] =
+    {
+        0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00,
+        0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+        0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0xff, 0x00
+    };
+    static const unsigned char bmp_updated[] =
+    {
+        0x42, 0x4d, 0x3e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00,
+        0x28, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+        0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00
+    };
+    static const char malformed[] = "not an image";
+    const char* path = "build/test_tmp/reimport-texture.bmp";
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_asset_manager* manager;
+    henka_texture_descriptor descriptor;
+    henka_texture_descriptor normal_descriptor;
+    henka_texture* texture = NULL;
+    henka_texture* normal_texture = NULL;
+    henka_texture* reloaded_texture = NULL;
+    henka_texture* reloaded_normal_texture = NULL;
+    henka_texture_info before_info;
+    henka_texture_info after_info;
+    henka_texture_info before_failure_info;
+    henka_texture_info failed_info;
+    henka_asset_metadata metadata;
+    henka_texture_residency_diagnostics before_diagnostics;
+    henka_texture_residency_diagnostics before_failure_diagnostics;
+    henka_texture_residency_diagnostics failed_diagnostics;
+
+    config.application_name = "Henka Texture Reimport Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    manager = henka_engine_get_asset_manager(engine);
+    HENKA_TEST_ASSERT(manager != NULL);
+    descriptor = henka_texture_descriptor_default_color();
+
+    HENKA_TEST_ASSERT(henka_test_write_file(path, bmp_initial, sizeof(bmp_initial)));
+    HENKA_TEST_ASSERT(henka_assets_load_texture_with_descriptor(
+        manager, path, &descriptor, &texture) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(texture != NULL);
+    HENKA_TEST_ASSERT(henka_texture_get_info(texture, &before_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(before_info.width == 1 && before_info.height == 1);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_metadata(
+        manager, texture, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback && metadata.reload_supported);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+        manager, &before_diagnostics) == HENKA_SUCCESS);
+
+    normal_descriptor = henka_texture_descriptor_default_normal();
+    HENKA_TEST_ASSERT(henka_assets_load_texture_with_descriptor(
+        manager, path, &normal_descriptor, &normal_texture) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(normal_texture != NULL && normal_texture != texture);
+    HENKA_TEST_ASSERT(henka_assets_reload_texture_with_descriptor(
+        manager, path, &normal_descriptor, &reloaded_normal_texture) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_normal_texture == normal_texture);
+
+    HENKA_TEST_ASSERT(henka_test_write_file(path, bmp_updated, sizeof(bmp_updated)));
+    HENKA_TEST_ASSERT(henka_assets_reload_texture_with_descriptor(
+        manager, path, &descriptor, &reloaded_texture) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_texture == texture);
+    HENKA_TEST_ASSERT(henka_texture_get_info(texture, &after_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(after_info.width == 2 && after_info.height == 1);
+    HENKA_TEST_ASSERT(after_info.source_byte_size == sizeof(bmp_updated));
+    HENKA_TEST_ASSERT(after_info.content_revision > before_info.content_revision);
+    HENKA_TEST_ASSERT(henka_assets_reload_texture(
+        manager, path, &reloaded_texture) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_texture == texture);
+    HENKA_TEST_ASSERT(henka_texture_get_info(
+        texture, &before_failure_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+        manager, &before_failure_diagnostics) == HENKA_SUCCESS);
+
+    reloaded_texture = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_test_write_file(path, malformed, sizeof(malformed) - 1U));
+    HENKA_TEST_ASSERT(henka_assets_reload_texture_with_descriptor(
+        manager, path, &descriptor, &reloaded_texture) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_texture == NULL);
+    HENKA_TEST_ASSERT(henka_texture_get_info(texture, &failed_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(failed_info.width == before_failure_info.width);
+    HENKA_TEST_ASSERT(failed_info.height == before_failure_info.height);
+    HENKA_TEST_ASSERT(failed_info.source_byte_size == before_failure_info.source_byte_size);
+    HENKA_TEST_ASSERT(failed_info.content_revision == before_failure_info.content_revision);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_metadata(
+        manager, texture, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback && metadata.reload_supported);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+        manager, &failed_diagnostics) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(failed_diagnostics.resident_bytes ==
+        before_failure_diagnostics.resident_bytes);
+
+    (void)remove(path);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_texture_loader_preserves_nonempty_output(void)
 {
     henka_texture_descriptor descriptor = henka_texture_descriptor_default_color();
@@ -1047,6 +1153,7 @@ void henka_test_assets(void)
     henka_test_mesh_loader_preserves_nonempty_output();
     henka_test_mesh_source_failure_requires_fallback();
     henka_test_mesh_reimport_preserves_identity_and_transactionality();
+    henka_test_texture_reimport_preserves_identity_and_transactionality();
     henka_test_texture_loader_preserves_nonempty_output();
     henka_test_shader_and_audio_loaders_preserve_nonempty_output();
 #if defined(HENKA_WITH_KTX2_TRANSCODER)

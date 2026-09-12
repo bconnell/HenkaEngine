@@ -215,6 +215,20 @@ henka_result henka_assets_load_texture_with_descriptor(
     const char* path,
     const henka_texture_descriptor* descriptor,
     henka_texture** out_texture);
+/* Reloads an existing manager-owned file-backed texture in place. The
+ * descriptor-aware form selects the exact cache entry when one source path
+ * has multiple semantic descriptors; the convenience form selects the
+ * default color descriptor. A failed source, decode, upload, budget, or
+ * revision-capacity check preserves the prior payload and metadata. */
+henka_result henka_assets_reload_texture(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_texture** out_texture);
+henka_result henka_assets_reload_texture_with_descriptor(
+    henka_asset_manager* manager,
+    const char* path,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture);
 /* Audio clips returned by the manager are borrowed and remain manager-owned.
  * Loads require an initialized empty output slot and preserve a non-empty
  * caller slot when rejected or failed. The cache identity is the same

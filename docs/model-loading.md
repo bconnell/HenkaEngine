@@ -58,6 +58,23 @@ entries continue through `henka_assets_retry_failed_obj_mesh` or
 manager-owned mesh, the same explicit reimport APIs apply. File watching and
 automatic dependency-driven reimport remain outside this contract.
 
+### Explicit texture reimport
+
+`henka_assets_reload_texture` and
+`henka_assets_reload_texture_with_descriptor` refresh an existing manager-owned
+file-backed texture through the same candidate-first boundary. The
+descriptor-aware form selects the exact texture cache entry when one source
+path is loaded for more than one semantic usage; the convenience form selects
+the default color descriptor. The borrowed texture identity remains stable so
+materials and scene entities continue to reference the refreshed payload.
+
+The replacement is decoded, uploaded, checked against the configured texture
+residency budget, and then committed in place. A source, decode, upload,
+budget, or texture-revision failure leaves the previous payload, metadata,
+revision, and residency accounting unchanged. Runtime-adopted and embedded
+textures do not have a source-file reimport path. Automatic file watching and
+dependency-driven reimport remain outside this contract.
+
 ## OBJ support
 
 The OBJ loader accepts:
