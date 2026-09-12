@@ -444,7 +444,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
    UV, material, smoothing, and non-manifold changes are rejected.
 7. Face winding flip, face extrude, inset, planar bevel rings, face subdivision,
    selected-face deletion, planar UV projection, bounded per-face transforms,
-   selected-island UV scaling/packing, deterministic all-island UV packing, seam detection, Make Editable, HAMS
+   selected-island UV scaling/packing, deterministic all-island UV packing,
+   planar-chart UV unwrap, seam detection, Make Editable, HAMS
    persistence, material promotion, and
    supported PBR material-instance editing are available in the bounded
    workflow.
@@ -505,8 +506,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
 2. Generalized surface-connected Edge Extrude beyond the bounded boundary-edge
    cases, broader edge-set operations, weld/split/bridge workflows, general
    loop-cut networks, and broader source export.
-3. Automatic multi-island UV unwrap, texture painting, rigging, skinning, and
-   animation authoring.
+3. Broader automatic UV unwrap beyond planar charts, texture painting, rigging,
+   skinning, and animation authoring.
 4. Complete scene/project serialization and wider adapter-based interchange
    beyond the current bounded paths.
 

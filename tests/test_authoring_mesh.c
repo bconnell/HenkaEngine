@@ -2953,6 +2953,153 @@ cleanup:
     return result ? 1 : fail("global UV island packing");
 }
 
+static int test_uv_planar_unwrap(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 8U};
+    const char* path = "authoring_uv_planar_unwrap.hams";
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+        {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+        {3.0f, 0.0f, 0.0f}, {5.0f, 0.0f, 0.0f},
+        {5.0f, 1.0f, 0.0f}, {3.0f, 1.0f, 0.0f}};
+    const henka_authoring_vertex_id first_vertices[4] = {1U, 2U, 3U, 4U};
+    const henka_authoring_vertex_id second_vertices[4] = {5U, 6U, 7U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* repeat = NULL;
+    henka_authoring_mesh* non_planar = NULL;
+    henka_authoring_face_id first_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id second_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id preserved_seam = HENKA_AUTHORING_INVALID_ID;
+    henka_vec2 first_minimum;
+    henka_vec2 first_maximum;
+    henka_vec2 second_minimum;
+    henka_vec2 second_maximum;
+    henka_vec2 before_invalid;
+    henka_vec2 after_invalid;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){7.0f, -3.0f}, 0U,
+                &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, first_vertices, 4U, 0U, true, &first_face) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            mesh, second_vertices, 4U, 0U, true, &second_face) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_get_face(mesh, first_face) == NULL ||
+        (preserved_seam = henka_authoring_mesh_get_face(mesh, first_face)->edges[0U]) ==
+            HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_set_edge_seam(mesh, preserved_seam, true) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_clone(mesh, &repeat) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_unwrap_planar_faces(mesh, 0.05f) != HENKA_SUCCESS ||
+        henka_authoring_mesh_unwrap_planar_faces(repeat, 0.05f) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (
+        !test_uv_face_bounds(mesh, first_face, &first_minimum, &first_maximum) ||
+        !test_uv_face_bounds(mesh, second_face, &second_minimum, &second_maximum) ||
+        first_minimum.x < 0.049f || first_minimum.y < 0.049f ||
+        first_maximum.x > 0.951f || first_maximum.y > 0.951f ||
+        second_minimum.x < 0.049f || second_minimum.y < 0.049f ||
+        second_maximum.x > 0.951f || second_maximum.y > 0.951f ||
+        second_minimum.x - first_maximum.x < 0.099f ||
+        fabsf((second_maximum.x - second_minimum.x) /
+              (second_maximum.y - second_minimum.y) - 2.0f) > 0.01f)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        henka_vec2 actual;
+        henka_vec2 expected;
+        if (henka_authoring_mesh_get_face_corner_uv(
+                mesh, first_face, index, &actual) != HENKA_SUCCESS ||
+            henka_authoring_mesh_get_face_corner_uv(
+                repeat, first_face, index, &expected) != HENKA_SUCCESS ||
+            fabsf(actual.x - expected.x) > 0.0001f ||
+            fabsf(actual.y - expected.y) > 0.0001f ||
+            henka_authoring_mesh_get_face_corner_uv(
+                mesh, second_face, index, &actual) != HENKA_SUCCESS ||
+            henka_authoring_mesh_get_face_corner_uv(
+                repeat, second_face, index, &expected) != HENKA_SUCCESS ||
+            fabsf(actual.x - expected.x) > 0.0001f ||
+            fabsf(actual.y - expected.y) > 0.0001f)
+        {
+            goto cleanup;
+        }
+    }
+    if (!henka_authoring_mesh_edge_is_seam(mesh, preserved_seam) ||
+        !henka_authoring_mesh_edge_is_seam(repeat, preserved_seam) ||
+        henka_authoring_mesh_save_file(mesh, path) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_corner_uv(
+            mesh, first_face, 0U, (henka_vec2){9.0f, 9.0f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_load_file(mesh, path) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        henka_vec2 restored;
+        henka_vec2 expected;
+        if (henka_authoring_mesh_get_face_corner_uv(mesh, first_face, 0U, &restored) !=
+                HENKA_SUCCESS ||
+            henka_authoring_mesh_get_face_corner_uv(repeat, first_face, 0U, &expected) !=
+                HENKA_SUCCESS ||
+            fabsf(restored.x - expected.x) > 0.0001f ||
+            fabsf(restored.y - expected.y) > 0.0001f ||
+            !henka_authoring_mesh_edge_is_seam(mesh, preserved_seam) ||
+            !henka_authoring_mesh_validate(mesh))
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_clone(mesh, &non_planar) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_set_vertex_position(
+            non_planar, 3U, (henka_vec3){1.0f, 1.0f, 0.25f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_corner_uv(
+            non_planar, first_face, 0U, &before_invalid) != HENKA_SUCCESS ||
+        henka_authoring_mesh_unwrap_planar_faces(
+            non_planar, 0.05f) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_authoring_mesh_get_face_corner_uv(
+            non_planar, first_face, 0U, &after_invalid) != HENKA_SUCCESS ||
+        fabsf(before_invalid.x - after_invalid.x) > 0.0001f ||
+        fabsf(before_invalid.y - after_invalid.y) > 0.0001f ||
+        !henka_authoring_mesh_validate(non_planar))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    remove(path);
+    henka_authoring_mesh_destroy(non_planar);
+    henka_authoring_mesh_destroy(repeat);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("planar UV unwrap");
+}
+
 static int test_modeling_material_region_and_uv_continuity(void)
 {
     const char* path = "authoring_material_regions.hams";
@@ -4588,6 +4735,7 @@ int main(void)
         test_edge_loop_slide_operation() &&
         test_uv_authoring() &&
         test_uv_global_packing() &&
+        test_uv_planar_unwrap() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&

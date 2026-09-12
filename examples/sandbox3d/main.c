@@ -998,7 +998,8 @@ static bool sandbox3d_modeling_operator_is_uv(
         kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ||
         kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM ||
         kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK ||
-        kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL;
+        kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL ||
+        kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR;
 }
 
 static henka_result sandbox3d_apply_authoring_seam_toggle(
@@ -1073,7 +1074,8 @@ static henka_result sandbox3d_preview_authoring_uv(
             &state->modeling_operator,
             (kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK ||
              kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK ||
-             kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL) ? padding :
+             kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL ||
+             kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR) ? padding :
                 (kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ||
                  kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM) ? 0.5f : 0.0f,
             false,
@@ -29547,6 +29549,21 @@ details_group_authoring:
                         0.02f) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "All UV island packing preview ready; Apply or Cancel.");
+                }
+                if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                    row.width >= 176.0f &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_unwrap_uv_planar",
+                        (henka_ui_rect){row.x, row.y, 176.0f, 24.0f},
+                        "Preview Planar Unwrap") &&
+                    sandbox3d_preview_authoring_uv(
+                        state,
+                        SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR,
+                        SANDBOX3D_MODELING_OPERATOR_AXIS_NONE,
+                        0.02f) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Planar UV unwrap preview ready; Apply or Cancel.");
                 }
                 if (uv_preview_active &&
                     sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&

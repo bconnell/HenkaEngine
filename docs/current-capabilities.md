@@ -399,16 +399,20 @@ Available operations also include:
 - bounded single-face UV transforms;
 - bounded UV-island scaling and packing from a selected seed face;
 - deterministic bounded packing of all UV islands into the unit square;
+- deterministic planar-chart unwrap for connected planar UV islands;
 - seam detection;
 - transactional Toggle UV Seam for selected Edge-mode components.
 
 The integrated Sandbox panel routes bounded multi-cut and UV projection,
-single-face transforms, selected-island scaling/packing, and all-island packing
-through the modeling transaction path. All-island packing uses the selected
-Face as its authoring context and lays out every seam-delimited island in a
-deterministic padded grid while preserving each island's relative proportions.
-The Edge-mode seam control also uses this path and provides preview,
-Apply/Cancel, and undo/redo history.
+single-face transforms, selected-island scaling/packing, all-island packing,
+and planar-chart unwrap through the modeling transaction path. All-island
+packing uses the selected Face as its authoring context and lays out every
+seam-delimited island in a deterministic padded grid while preserving each
+island's relative proportions. Planar-chart unwrap projects each
+seam-delimited planar island on its dominant geometric axis before packing it;
+degenerate or non-planar islands fail closed without source mutation. The
+Edge-mode seam control also uses this path and provides preview, Apply/Cancel,
+and undo/redo history.
 
 ### HAMS persistence
 
@@ -472,7 +476,7 @@ Still incomplete:
 
 - broader non-manifold or incompatible-normal fan handling;
 - broader topology tooling;
-- automatic UV unwrap;
+- broader automatic UV unwrap beyond planar charts;
 - texture painting;
 - rigging;
 - skinning;
@@ -809,7 +813,7 @@ Major open areas include:
 - hierarchy and prefab authoring;
 - animation and rigging;
 - texture painting;
-- automatic UV unwrap;
+- broader automatic UV unwrap beyond planar charts;
 - complete scene serialization;
 - remaining renderer and Terrain visual validation.
 

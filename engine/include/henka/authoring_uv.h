@@ -46,6 +46,13 @@ henka_result henka_authoring_mesh_pack_uv_island(
 henka_result henka_authoring_mesh_pack_uv_islands(
     henka_authoring_mesh* mesh,
     float padding);
+/* Projects each connected planar UV island on a deterministic dominant-axis
+ * chart, then packs the charts into the unit square.  Explicit seam
+ * boundaries remain intact; non-planar or degenerate input is rejected
+ * without changing the source mesh. */
+henka_result henka_authoring_mesh_unwrap_planar_faces(
+    henka_authoring_mesh* mesh,
+    float padding);
 bool henka_authoring_mesh_face_uvs_are_finite(
     const henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id);

@@ -128,6 +128,7 @@ The operation reverses only the ordered winding.
 - single-face packing helpers;
 - bounded scaling and packing of the complete UV island containing a selected face;
 - deterministic bounded packing of every UV island into the unit square;
+- deterministic planar-chart unwrap for connected planar UV islands;
 - finite-value validation;
 - seam detection from shared topology and explicit edge seam metadata.
 
@@ -141,8 +142,12 @@ undo/redo history; UV state persists through the HAMS source path.
 
 In Edge mode, the Sandbox exposes a transactional Toggle UV Seam operation for
 the selected edges. It supports preview, Cancel, Apply, and authoring undo/redo;
-the explicit seam state is persisted through HAMS v6. Automatic multi-island
-unwrap remains unfinished.
+the explicit seam state is persisted through HAMS v6. The Sandbox Face-mode
+panel also provides transactional planar-chart unwrap. It projects each
+seam-delimited planar island on its dominant geometric axis and packs the charts
+into a padded unit-square grid. Degenerate or non-planar islands are rejected
+without changing the source; broader automatic unwrap strategies remain
+outside this bounded scope.
 
 ## Connected Sandbox workflow
 
@@ -586,7 +591,7 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - multi-face and general loop-cut networks;
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;
-- automatic multi-island UV unwrap;
+- broader automatic UV unwrap beyond the bounded planar-chart scope;
 - texture painting;
 - broader material authoring beyond current bounded material-instance editing;
 - full editor workflows for arbitrary authoring-file selection;
