@@ -1089,6 +1089,63 @@ static void henka_test_prefab_allocation_failure_transaction(void)
     henka_scene_destroy(source);
 }
 
+static void henka_test_scene_render_settings(void)
+{
+    henka_scene* scene;
+    henka_scene_render_settings settings;
+    henka_scene_render_settings read_back;
+    henka_scene_render_settings invalid;
+    uint64_t revision;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    settings = henka_scene_render_settings_default();
+    HENKA_TEST_ASSERT(henka_scene_get_render_settings(scene, &read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_vec3_length(read_back.light_direction),
+        1.0f,
+        0.0001f);
+    settings.light_direction = (henka_vec3){-0.62f, -1.24f, -0.31f};
+    settings.light_color = (henka_vec3){0.82f, 0.71f, 0.63f};
+    settings.light_intensity = 4.0f;
+    settings.ambient_color = (henka_vec3){0.21f, 0.25f, 0.31f};
+    settings.fog = (henka_scene_fog_desc){
+        true,
+        HENKA_SCENE_FOG_EXPONENTIAL,
+        (henka_vec3){0.08f, 0.12f, 0.18f},
+        5.0f,
+        70.0f,
+        0.025f};
+    HENKA_TEST_ASSERT(henka_scene_render_settings_validate(&settings) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_render_settings(scene, settings) == HENKA_SUCCESS);
+    revision = henka_scene_get_render_revision(scene);
+    HENKA_TEST_ASSERT(henka_scene_get_render_settings(scene, &read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_vec3_length(read_back.light_direction),
+        1.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.light_intensity, 4.0f, 0.0001f);
+    HENKA_TEST_ASSERT(read_back.fog.enabled);
+    HENKA_TEST_ASSERT(read_back.fog.mode == HENKA_SCENE_FOG_EXPONENTIAL);
+    HENKA_TEST_ASSERT(henka_scene_set_render_settings(scene, read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == revision);
+
+    invalid = read_back;
+    invalid.light_direction = (henka_vec3){0.0f, 0.0f, 0.0f};
+    HENKA_TEST_ASSERT(
+        henka_scene_set_render_settings(scene, invalid) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_get_render_settings(scene, &invalid) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(invalid.light_intensity, 4.0f, 0.0001f);
+    HENKA_TEST_ASSERT(invalid.fog.enabled);
+
+    scene->render_revision = UINT64_MAX;
+    scene->content_revision = UINT64_MAX;
+    settings.light_intensity = 5.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_render_settings(scene, settings) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(henka_scene_get_render_settings(scene, &read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.light_intensity, 4.0f, 0.0001f);
+    henka_scene_destroy(scene);
+}
+
 void henka_test_scene(void)
 {
     henka_bounds bounds;
@@ -1133,6 +1190,7 @@ void henka_test_scene(void)
     uint32_t light_indices[HENKA_SCENE_MAX_LOCAL_LIGHTS];
     uint32_t light_index;
 
+    henka_test_scene_render_settings();
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene != NULL);
     HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
@@ -1284,6 +1342,8 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_set_fog(scene, fog) == HENKA_ERROR_INVALID_ARGUMENT);
     fog.end_distance = 64.0f;
     fog.mode = (henka_scene_fog_mode)99;
+    HENKA_TEST_ASSERT(henka_scene_set_fog(scene, fog) == HENKA_ERROR_INVALID_ARGUMENT);
+    fog.mode = (henka_scene_fog_mode)-1;
     HENKA_TEST_ASSERT(henka_scene_set_fog(scene, fog) == HENKA_ERROR_INVALID_ARGUMENT);
     camera = henka_camera_create_perspective(
         60.0f * HENKA_DEG_TO_RAD,

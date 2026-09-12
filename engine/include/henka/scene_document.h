@@ -13,7 +13,8 @@
 #include <henka/scene.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(10)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(11)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V10 UINT32_C(10)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V9 UINT32_C(9)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V8 UINT32_C(8)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V7 UINT32_C(7)
@@ -250,6 +251,15 @@ henka_result henka_scene_document_set_environment(
 henka_result henka_scene_document_get_environment(
     const henka_scene_document* document,
     henka_scene_environment_desc* out_environment);
+/* The authored render settings contain only direct lighting and fog values.
+ * They do not capture renderer-owned textures, shaders, probes, or local
+ * light resources. Legacy documents load the default render settings. */
+henka_result henka_scene_document_set_render_settings(
+    henka_scene_document* document,
+    henka_scene_render_settings settings);
+henka_result henka_scene_document_get_render_settings(
+    const henka_scene_document* document,
+    henka_scene_render_settings* out_settings);
 /* An authored scene camera is optional. Legacy documents have no authored
  * camera; callers can choose whether to retain or replace their runtime
  * camera when applying a document. */

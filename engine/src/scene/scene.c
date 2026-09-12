@@ -245,6 +245,16 @@ henka_scene_environment_desc henka_scene_environment_default(void)
     return environment;
 }
 
+henka_scene_render_settings henka_scene_render_settings_default(void)
+{
+    return (henka_scene_render_settings){
+        henka_vec3_normalize((henka_vec3){-0.4f, -1.0f, -0.2f}),
+        {1.0f, 0.96f, 0.90f},
+        3.0f,
+        {0.16f, 0.18f, 0.22f},
+        {false, HENKA_SCENE_FOG_LINEAR, {0.16f, 0.19f, 0.24f}, 8.0f, 80.0f, 0.0f}};
+}
+
 const char* henka_scene_environment_preset_get_label(
     henka_scene_environment_preset preset)
 {
@@ -767,6 +777,42 @@ static bool henka_scene_vec3_is_finite(henka_vec3 value)
     return henka_is_finite_float(value.x) &&
         henka_is_finite_float(value.y) &&
         henka_is_finite_float(value.z);
+}
+
+henka_result henka_scene_render_settings_validate(
+    const henka_scene_render_settings* settings)
+{
+    float direction_length;
+    if (settings == NULL ||
+        !henka_scene_vec3_is_finite(settings->light_direction) ||
+        !henka_scene_vec3_is_finite(settings->light_color) ||
+        !henka_scene_vec3_is_finite(settings->ambient_color) ||
+        !henka_is_finite_float(settings->light_intensity) ||
+        settings->light_color.x < 0.0f || settings->light_color.x > 1.0f ||
+        settings->light_color.y < 0.0f || settings->light_color.y > 1.0f ||
+        settings->light_color.z < 0.0f || settings->light_color.z > 1.0f ||
+        settings->light_intensity < 0.0f || settings->light_intensity > 10000.0f ||
+        settings->ambient_color.x < 0.0f || settings->ambient_color.x > 16.0f ||
+        settings->ambient_color.y < 0.0f || settings->ambient_color.y > 16.0f ||
+        settings->ambient_color.z < 0.0f || settings->ambient_color.z > 16.0f ||
+        settings->fog.mode < HENKA_SCENE_FOG_LINEAR ||
+        settings->fog.mode > HENKA_SCENE_FOG_EXPONENTIAL_SQUARED ||
+        !henka_scene_vec3_is_finite(settings->fog.color) ||
+        !henka_is_finite_float(settings->fog.start_distance) ||
+        !henka_is_finite_float(settings->fog.end_distance) ||
+        !henka_is_finite_float(settings->fog.density) ||
+        settings->fog.color.x < 0.0f || settings->fog.color.x > 16.0f ||
+        settings->fog.color.y < 0.0f || settings->fog.color.y > 16.0f ||
+        settings->fog.color.z < 0.0f || settings->fog.color.z > 16.0f ||
+        settings->fog.start_distance < 0.0f || settings->fog.start_distance > 65536.0f ||
+        settings->fog.end_distance <= settings->fog.start_distance ||
+        settings->fog.end_distance > 65536.0f ||
+        settings->fog.density < 0.0f || settings->fog.density > 1.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    direction_length = henka_vec3_length(settings->light_direction);
+    return direction_length > 0.000001f ? HENKA_SUCCESS : HENKA_ERROR_INVALID_ARGUMENT;
 }
 
 static bool henka_scene_bounds_are_valid(henka_bounds bounds)
@@ -1825,6 +1871,7 @@ static henka_result henka_scene_grow(henka_scene* scene)
 henka_result henka_scene_create(henka_scene** out_scene)
 {
     henka_scene* scene;
+    henka_scene_render_settings render_settings;
 
     if (out_scene == NULL)
     {
@@ -1839,22 +1886,13 @@ henka_result henka_scene_create(henka_scene** out_scene)
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
-    scene->light_direction.x = -0.4f;
-    scene->light_direction.y = -1.0f;
-    scene->light_direction.z = -0.2f;
-    scene->light_color = (henka_vec3){1.0f, 0.96f, 0.90f};
-    scene->light_intensity = 3.0f;
-    scene->ambient_color.x = 0.16f;
-    scene->ambient_color.y = 0.18f;
-    scene->ambient_color.z = 0.22f;
+    render_settings = henka_scene_render_settings_default();
+    scene->light_direction = render_settings.light_direction;
+    scene->light_color = render_settings.light_color;
+    scene->light_intensity = render_settings.light_intensity;
+    scene->ambient_color = render_settings.ambient_color;
     scene->environment = henka_scene_environment_default();
-    scene->fog = (henka_scene_fog_desc){
-        false,
-        HENKA_SCENE_FOG_LINEAR,
-        (henka_vec3){0.16f, 0.19f, 0.24f},
-        8.0f,
-        80.0f,
-        0.0f};
+    scene->fog = render_settings.fog;
     scene->render_revision = 1U;
     scene->content_revision = 1U;
 
@@ -3571,6 +3609,70 @@ henka_result henka_scene_get_camera(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_set_render_settings(
+    henka_scene* scene,
+    henka_scene_render_settings settings)
+{
+    henka_scene_render_settings normalized = settings;
+    if (henka_scene_render_settings_validate(&settings) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    normalized.light_direction = henka_vec3_normalize(settings.light_direction);
+    if (scene == NULL || !henka_scene_render_revision_available(scene))
+    {
+        return scene == NULL ? HENKA_ERROR_INVALID_ARGUMENT : HENKA_ERROR_LIMIT;
+    }
+    if (scene->light_direction.x == normalized.light_direction.x &&
+        scene->light_direction.y == normalized.light_direction.y &&
+        scene->light_direction.z == normalized.light_direction.z &&
+        scene->light_color.x == normalized.light_color.x &&
+        scene->light_color.y == normalized.light_color.y &&
+        scene->light_color.z == normalized.light_color.z &&
+        scene->light_intensity == normalized.light_intensity &&
+        scene->ambient_color.x == normalized.ambient_color.x &&
+        scene->ambient_color.y == normalized.ambient_color.y &&
+        scene->ambient_color.z == normalized.ambient_color.z &&
+        scene->fog.enabled == normalized.fog.enabled &&
+        scene->fog.mode == normalized.fog.mode &&
+        scene->fog.color.x == normalized.fog.color.x &&
+        scene->fog.color.y == normalized.fog.color.y &&
+        scene->fog.color.z == normalized.fog.color.z &&
+        scene->fog.start_distance == normalized.fog.start_distance &&
+        scene->fog.end_distance == normalized.fog.end_distance &&
+        scene->fog.density == normalized.fog.density)
+    {
+        return HENKA_SUCCESS;
+    }
+    scene->light_direction = normalized.light_direction;
+    scene->light_color = normalized.light_color;
+    scene->light_intensity = normalized.light_intensity;
+    scene->ambient_color = normalized.ambient_color;
+    scene->fog = normalized.fog;
+    henka_scene_bump_render_revision(scene);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_render_settings(
+    const henka_scene* scene,
+    henka_scene_render_settings* out_settings)
+{
+    if (out_settings != NULL)
+    {
+        memset(out_settings, 0, sizeof(*out_settings));
+    }
+    if (scene == NULL || out_settings == NULL || scene->destroyed)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_settings->light_direction = scene->light_direction;
+    out_settings->light_color = scene->light_color;
+    out_settings->light_intensity = scene->light_intensity;
+    out_settings->ambient_color = scene->ambient_color;
+    out_settings->fog = scene->fog;
+    return HENKA_SUCCESS;
+}
+
 void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direction)
 {
     henka_vec3 normalized_direction;
@@ -4252,6 +4354,7 @@ henka_result henka_scene_get_light(
 henka_result henka_scene_set_fog(henka_scene* scene, henka_scene_fog_desc fog)
 {
     if (scene == NULL ||
+        fog.mode < HENKA_SCENE_FOG_LINEAR ||
         fog.mode > HENKA_SCENE_FOG_EXPONENTIAL_SQUARED ||
         !henka_is_finite_float(fog.color.x) ||
         !henka_is_finite_float(fog.color.y) ||

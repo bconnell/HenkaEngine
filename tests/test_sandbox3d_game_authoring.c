@@ -379,6 +379,91 @@ cleanup:
     return success;
 }
 
+static bool test_scene_render_settings_save_load_is_complete(void)
+{
+    const char* project_root = "build/test_tmp";
+    const char* relative_path = "renderer_settings_persistence.hscene";
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_camera camera;
+    henka_scene_render_settings expected = henka_scene_render_settings_default();
+    henka_scene_render_settings changed = henka_scene_render_settings_default();
+    henka_scene_render_settings actual;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    bool success = false;
+
+    expected.light_direction = (henka_vec3){-0.31f, -0.88f, -0.21f};
+    expected.light_color = (henka_vec3){0.83f, 0.67f, 0.51f};
+    expected.light_intensity = 4.25f;
+    expected.ambient_color = (henka_vec3){0.24f, 0.29f, 0.37f};
+    expected.fog = (henka_scene_fog_desc){
+        true,
+        HENKA_SCENE_FOG_EXPONENTIAL_SQUARED,
+        (henka_vec3){0.09f, 0.14f, 0.21f},
+        6.0f,
+        96.0f,
+        0.035f};
+    if (henka_scene_render_settings_validate(&expected) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+    expected.light_direction = henka_vec3_normalize(expected.light_direction);
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        16.0f / 9.0f,
+        0.1f,
+        100.0f);
+
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_set_render_settings(scene, expected) != HENKA_SUCCESS ||
+        henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+             scene,
+             "Renderer Settings")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create(
+            scene,
+            relative_path,
+            &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring,
+            entity,
+            &object_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_save(authoring, project_root) != HENKA_SUCCESS ||
+        henka_scene_set_render_settings(scene, changed) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, project_root) != HENKA_SUCCESS ||
+        henka_scene_get_render_settings(scene, &actual) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    success = actual.light_direction.x == expected.light_direction.x &&
+        actual.light_direction.y == expected.light_direction.y &&
+        actual.light_direction.z == expected.light_direction.z &&
+        actual.light_color.x == expected.light_color.x &&
+        actual.light_color.y == expected.light_color.y &&
+        actual.light_color.z == expected.light_color.z &&
+        actual.light_intensity == expected.light_intensity &&
+        actual.ambient_color.x == expected.ambient_color.x &&
+        actual.ambient_color.y == expected.ambient_color.y &&
+        actual.ambient_color.z == expected.ambient_color.z &&
+        actual.fog.enabled == expected.fog.enabled &&
+        actual.fog.mode == expected.fog.mode &&
+        actual.fog.color.x == expected.fog.color.x &&
+        actual.fog.color.y == expected.fog.color.y &&
+        actual.fog.color.z == expected.fog.color.z &&
+        actual.fog.start_distance == expected.fog.start_distance &&
+        actual.fog.end_distance == expected.fog.end_distance &&
+        actual.fog.density == expected.fog.density;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove("build/test_tmp/henka.project");
+    (void)remove("build/test_tmp/renderer_settings_persistence.hscene");
+    return success;
+}
+
 static bool test_material_asset_capture_authority_boundary(void)
 {
     const henka_material_asset* asset =
@@ -1004,6 +1089,11 @@ int main(void)
     if (!test_scene_environment_save_load_is_complete())
     {
         fprintf(stderr, "scene environment save/load test failed\n");
+        return 1;
+    }
+    if (!test_scene_render_settings_save_load_is_complete())
+    {
+        fprintf(stderr, "scene render settings save/load test failed\n");
         return 1;
     }
     if (!test_material_asset_capture_authority_boundary())

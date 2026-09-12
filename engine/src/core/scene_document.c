@@ -32,6 +32,7 @@
 #define HENKA_SCENE_DOCUMENT_FLAG_CHARACTER_CONTROLLER_ENABLED UINT32_C(1024)
 #define HENKA_SCENE_DOCUMENT_CAMERA_VALUE_COUNT 14U
 #define HENKA_SCENE_DOCUMENT_ENVIRONMENT_VALUE_COUNT 49U
+#define HENKA_SCENE_DOCUMENT_RENDER_SETTINGS_VALUE_COUNT 18U
 #define HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED UINT32_C(1)
 #define HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_MANUAL_DIRECTION UINT32_C(2)
 #define HENKA_SCENE_DOCUMENT_KNOWN_FLAGS ( \
@@ -74,6 +75,7 @@ typedef struct henka_scene_document_storage
     uint64_t next_id;
     henka_audio_listener audio_listener;
     henka_scene_document_environment_value environment;
+    henka_scene_render_settings render_settings;
     bool has_camera;
     henka_camera camera;
     henka_scene_document_object objects[HENKA_SCENE_DOCUMENT_MAX_OBJECTS];
@@ -703,6 +705,7 @@ static henka_result henka_scene_document_validate_storage(
         (storage->next_id == 0U && storage->object_count == 0U) ||
         !henka_scene_document_valid_audio_listener(storage->audio_listener) ||
         !henka_scene_document_validate_environment_value(&storage->environment) ||
+        henka_scene_render_settings_validate(&storage->render_settings) != HENKA_SUCCESS ||
         (storage->has_camera && !henka_camera_is_valid(&storage->camera)))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -955,6 +958,7 @@ henka_result henka_scene_document_create(henka_scene_document** out_document)
     document->storage->next_id = 1U;
     document->storage->audio_listener = henka_audio_listener_default();
     document->storage->environment = henka_scene_document_environment_default();
+    document->storage->render_settings = henka_scene_render_settings_default();
     *out_document = document;
     return HENKA_SUCCESS;
 }
@@ -979,6 +983,7 @@ henka_result henka_scene_document_clear(henka_scene_document* document)
     document->storage->next_id = 1U;
     document->storage->audio_listener = henka_audio_listener_default();
     document->storage->environment = henka_scene_document_environment_default();
+    document->storage->render_settings = henka_scene_render_settings_default();
     return HENKA_SUCCESS;
 }
 
@@ -1506,6 +1511,38 @@ henka_result henka_scene_document_get_environment(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_document_set_render_settings(
+    henka_scene_document* document,
+    henka_scene_render_settings settings)
+{
+    if (document == NULL || document->storage == NULL ||
+        henka_scene_render_settings_validate(&settings) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    settings.light_direction = henka_vec3_normalize(settings.light_direction);
+    document->storage->render_settings = settings;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_document_get_render_settings(
+    const henka_scene_document* document,
+    henka_scene_render_settings* out_settings)
+{
+    if (out_settings != NULL)
+    {
+        memset(out_settings, 0, sizeof(*out_settings));
+    }
+    if (document == NULL || document->storage == NULL || out_settings == NULL ||
+        henka_scene_render_settings_validate(&document->storage->render_settings) !=
+            HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_settings = document->storage->render_settings;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_document_set_camera(
     henka_scene_document* document,
     const henka_camera* camera)
@@ -1688,6 +1725,12 @@ static bool henka_scene_document_payload_size(
     if (!henka_scene_document_size_add(
             &size,
             HENKA_SCENE_DOCUMENT_ENVIRONMENT_VALUE_COUNT * sizeof(uint32_t)))
+    {
+        return false;
+    }
+    if (!henka_scene_document_size_add(
+            &size,
+            HENKA_SCENE_DOCUMENT_RENDER_SETTINGS_VALUE_COUNT * sizeof(uint32_t)))
     {
         return false;
     }
@@ -1976,6 +2019,30 @@ static void henka_scene_document_encode_environment(
             : 0U);
 }
 
+static void henka_scene_document_encode_render_settings(
+    henka_scene_document_writer* writer,
+    const henka_scene_render_settings* settings)
+{
+    henka_scene_document_writer_float(writer, settings->light_direction.x);
+    henka_scene_document_writer_float(writer, settings->light_direction.y);
+    henka_scene_document_writer_float(writer, settings->light_direction.z);
+    henka_scene_document_writer_float(writer, settings->light_color.x);
+    henka_scene_document_writer_float(writer, settings->light_color.y);
+    henka_scene_document_writer_float(writer, settings->light_color.z);
+    henka_scene_document_writer_float(writer, settings->light_intensity);
+    henka_scene_document_writer_float(writer, settings->ambient_color.x);
+    henka_scene_document_writer_float(writer, settings->ambient_color.y);
+    henka_scene_document_writer_float(writer, settings->ambient_color.z);
+    henka_scene_document_writer_u32(writer, settings->fog.enabled ? 1U : 0U);
+    henka_scene_document_writer_u32(writer, (uint32_t)settings->fog.mode);
+    henka_scene_document_writer_float(writer, settings->fog.color.x);
+    henka_scene_document_writer_float(writer, settings->fog.color.y);
+    henka_scene_document_writer_float(writer, settings->fog.color.z);
+    henka_scene_document_writer_float(writer, settings->fog.start_distance);
+    henka_scene_document_writer_float(writer, settings->fog.end_distance);
+    henka_scene_document_writer_float(writer, settings->fog.density);
+}
+
 static bool henka_scene_document_reader_bytes(
     henka_scene_document_reader* reader,
     void* destination,
@@ -2142,6 +2209,41 @@ static bool henka_scene_document_decode_environment(
     environment->time_of_day_enabled =
         (time_flags & HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED) != 0U;
     return henka_scene_document_validate_environment_value(environment);
+}
+
+static bool henka_scene_document_decode_render_settings(
+    henka_scene_document_reader* reader,
+    henka_scene_render_settings* settings)
+{
+    uint32_t enabled;
+    uint32_t mode;
+    if (reader == NULL || settings == NULL ||
+        !henka_scene_document_reader_float(reader, &settings->light_direction.x) ||
+        !henka_scene_document_reader_float(reader, &settings->light_direction.y) ||
+        !henka_scene_document_reader_float(reader, &settings->light_direction.z) ||
+        !henka_scene_document_reader_float(reader, &settings->light_color.x) ||
+        !henka_scene_document_reader_float(reader, &settings->light_color.y) ||
+        !henka_scene_document_reader_float(reader, &settings->light_color.z) ||
+        !henka_scene_document_reader_float(reader, &settings->light_intensity) ||
+        !henka_scene_document_reader_float(reader, &settings->ambient_color.x) ||
+        !henka_scene_document_reader_float(reader, &settings->ambient_color.y) ||
+        !henka_scene_document_reader_float(reader, &settings->ambient_color.z) ||
+        !henka_scene_document_reader_u32(reader, &enabled) || enabled > 1U ||
+        !henka_scene_document_reader_u32(reader, &mode) ||
+        mode > HENKA_SCENE_FOG_EXPONENTIAL_SQUARED ||
+        !henka_scene_document_reader_float(reader, &settings->fog.color.x) ||
+        !henka_scene_document_reader_float(reader, &settings->fog.color.y) ||
+        !henka_scene_document_reader_float(reader, &settings->fog.color.z) ||
+        !henka_scene_document_reader_float(reader, &settings->fog.start_distance) ||
+        !henka_scene_document_reader_float(reader, &settings->fog.end_distance) ||
+        !henka_scene_document_reader_float(reader, &settings->fog.density))
+    {
+        return false;
+    }
+    settings->fog.enabled = enabled != 0U;
+    settings->fog.mode = (henka_scene_fog_mode)mode;
+    settings->light_direction = henka_vec3_normalize(settings->light_direction);
+    return henka_scene_render_settings_validate(settings) == HENKA_SUCCESS;
 }
 
 static bool henka_scene_document_decode_object(
@@ -2429,6 +2531,7 @@ static bool henka_scene_document_make_payload(
         henka_scene_document_writer_float(&writer, storage->camera.fast_movement_multiplier);
     }
     henka_scene_document_encode_environment(&writer, &storage->environment);
+    henka_scene_document_encode_render_settings(&writer, &storage->render_settings);
     if (writer.failed || writer.position != payload_size)
     {
         henka_free(payload);
@@ -2653,9 +2756,10 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V6 &&
              format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V7 &&
-             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V8 &&
-             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V9 &&
-             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V8 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V9 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V10 &&
+            format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
     {
@@ -2683,6 +2787,7 @@ henka_result henka_scene_document_load_file(
     candidate->next_id = next_id;
     candidate->audio_listener = henka_audio_listener_default();
     candidate->environment = henka_scene_document_environment_default();
+    candidate->render_settings = henka_scene_render_settings_default();
     reader = (henka_scene_document_reader){
         data + HENKA_SCENE_DOCUMENT_HEADER_BYTES,
         (size_t)payload_size,
@@ -2756,8 +2861,16 @@ henka_result henka_scene_document_load_file(
             candidate->camera.projection_mode = (henka_camera_projection_mode)projection_mode;
         }
     }
-    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V10 &&
         !henka_scene_document_decode_environment(&reader, &candidate->environment))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto load_cleanup;
+    }
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        !henka_scene_document_decode_render_settings(
+            &reader,
+            &candidate->render_settings))
     {
         result = HENKA_ERROR_INVALID_ARGUMENT;
         goto load_cleanup;
