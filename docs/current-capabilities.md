@@ -49,6 +49,7 @@ See [architecture.md](architecture.md), [runtime-foundations.md](runtime-foundat
 
 - The Sandbox exposes Wireframe, Solid, Material Preview, and Rendered Scene View policies through the OpenGL renderer path.
 - Rendered mode consumes imported PBR materials, scene lighting, HDR targets, bounded environment/IBL fallbacks, directional and bounded local-light shadows, fog, bloom, tone mapping, AO, and a temporal reconstruction foundation.
+- Scene-owned render settings, environment, value-owned local lights, and reflection probes persist through the supported Scene Document v12 path and are consumed by Play and packaged Rendered startup within the bounded renderer scope.
 - The renderer boundary is isolated from renderer-independent runtime and authoring data.
 
 ### Remaining hardening
