@@ -543,8 +543,11 @@ Standalone manager-owned material definitions assigned to scene objects are
 saved by canonical material identity and rebound on reload when the project
 asset manager has that definition available. Unsupported or unresolved
 material identities fail closed; the definition is not silently copied into
-inline document state. Material-instance override persistence remains outside
-this bounded path.
+inline document state. Scalar and render-state overrides on a manager-owned
+material instance are saved with that identity and overlaid after the
+definition is rebound. Texture or terrain dependency overrides remain
+unsupported by this document path and fail closed rather than losing their
+asset authority.
 
 While Play is running or paused, scene authoring edits, scene save/reload, and other scene mutations are rejected.
 

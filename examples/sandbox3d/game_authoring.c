@@ -141,6 +141,47 @@ static size_t sandbox3d_game_authoring_find_binding(
     return SIZE_MAX;
 }
 
+static bool sandbox3d_game_authoring_material_dependencies_match(
+    const henka_material* effective,
+    const henka_material* definition)
+{
+    size_t layer_index;
+
+    if (effective == NULL || definition == NULL ||
+        effective->shader != definition->shader ||
+        effective->base_color_texture != definition->base_color_texture ||
+        effective->normal_texture != definition->normal_texture ||
+        effective->metallic_roughness_texture != definition->metallic_roughness_texture ||
+        effective->occlusion_texture != definition->occlusion_texture ||
+        effective->emissive_texture != definition->emissive_texture ||
+        effective->transmission_texture != definition->transmission_texture ||
+        effective->thickness_texture != definition->thickness_texture ||
+        effective->use_texture != definition->use_texture ||
+        effective->terrain_layers_enabled != definition->terrain_layers_enabled)
+    {
+        return false;
+    }
+    for (layer_index = 0U;
+        layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
+        ++layer_index)
+    {
+        const henka_material_layer* effective_layer =
+            &effective->terrain_layers[layer_index];
+        const henka_material_layer* definition_layer =
+            &definition->terrain_layers[layer_index];
+        if (effective_layer->base_color_texture !=
+                definition_layer->base_color_texture ||
+            effective_layer->normal_texture !=
+                definition_layer->normal_texture ||
+            effective_layer->metallic_roughness_texture !=
+                definition_layer->metallic_roughness_texture)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 static henka_result sandbox3d_game_authoring_build_object(
     const sandbox3d_game_authoring* authoring,
     henka_entity entity,
@@ -150,6 +191,7 @@ static henka_result sandbox3d_game_authoring_build_object(
     henka_scene_object_info info;
     henka_interaction_desc interaction;
     henka_material material;
+    henka_material definition_material;
     henka_asset_metadata material_metadata;
     const henka_material_asset* material_asset = NULL;
     bool material_asset_overridden = false;
@@ -220,7 +262,14 @@ static henka_result sandbox3d_game_authoring_build_object(
     out_object->renderer.receive_shadows = material.receive_shadows;
     out_object->renderer.sheen_color = material.sheen_color;
     out_object->renderer.sheen_roughness = material.sheen_roughness;
-    if ((material_asset != NULL && material_asset_overridden) ||
+    if ((material_asset != NULL && material_asset_overridden &&
+            (authoring->project_assets == NULL ||
+                henka_assets_get_material_asset_material(
+                    material_asset,
+                    &definition_material) != HENKA_SUCCESS ||
+                !sandbox3d_game_authoring_material_dependencies_match(
+                    &material,
+                    &definition_material))) ||
         (material_asset == NULL &&
             (material.base_color_texture != NULL ||
              material.normal_texture != NULL ||
@@ -232,9 +281,11 @@ static henka_result sandbox3d_game_authoring_build_object(
              material.terrain_layers_enabled)))
     {
         /* Manager-owned definitions remain asset authority and are captured
-         * without being collapsed into inline document state. An explicit
-         * instance override, or standalone borrowed texture/terrain state,
-         * has no reconstructible bridge authority and therefore fails closed. */
+         * without being collapsed into inline document state. Texture or
+         * terrain dependency overrides have no reconstructible bridge
+         * authority and therefore fail closed. Scalar instance overrides
+         * remain pointer-compatible with the manager definition and can be
+         * reconstructed from its canonical identity. */
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (material_asset != NULL)
@@ -265,7 +316,8 @@ static henka_result sandbox3d_game_authoring_build_object(
     /* Pointer-free inline material state is document-owned only when no
      * manager-owned definition or borrowed texture state is attached. */
     out_object->renderer.material_override =
-        material_asset == NULL && material.shader != NULL;
+        material_asset_overridden ||
+        (material_asset == NULL && material.shader != NULL);
     out_object->interaction.enabled = interaction.enabled;
     out_object->interaction.max_distance = interaction.max_distance;
     written = snprintf(
@@ -641,6 +693,7 @@ static henka_result sandbox3d_game_authoring_materialize_material(
     const henka_scene_document_object* object)
 {
     const henka_material_asset* material_asset = NULL;
+    henka_material material;
     size_t refreshed_count = 0U;
     henka_result result;
 
@@ -653,11 +706,8 @@ static henka_result sandbox3d_game_authoring_materialize_material(
     {
         return HENKA_SUCCESS;
     }
-    if (object->renderer.material_override || assets == NULL)
+    if (assets == NULL)
     {
-        /* A path identifies manager-owned definition authority. Do not mix it
-         * with an inline override until the document has an explicit,
-         * reconstructible material-instance contract. */
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     result = henka_assets_get_material_asset_for_path(
@@ -667,6 +717,23 @@ static henka_result sandbox3d_game_authoring_materialize_material(
     if (result != HENKA_SUCCESS || material_asset == NULL)
     {
         return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    }
+    if (object->renderer.material_override)
+    {
+        if (henka_assets_get_material_asset_material(
+                material_asset,
+                &material) != HENKA_SUCCESS ||
+            sandbox3d_scene_document_bridge_overlay_material(
+                &object->renderer,
+                &material) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        return henka_scene_apply_material_asset_override(
+            scene,
+            entity,
+            material_asset,
+            material);
     }
     result = henka_scene_set_entity_material_asset(
         scene,

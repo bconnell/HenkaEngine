@@ -10934,10 +10934,16 @@ static henka_result sandbox3d_initialize_game_authoring(
     const size_t entity_count = state == NULL || state->scene == NULL
         ? 0U
         : henka_scene_get_entity_count(state->scene);
+    henka_asset_manager* assets;
     henka_result result;
     const char* project_root;
 
     if (engine == NULL || state == NULL || state->scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -10962,6 +10968,7 @@ static henka_result sandbox3d_initialize_game_authoring(
         henka_material material;
         henka_scene_document_id document_id;
         const henka_material_asset* material_asset = NULL;
+        henka_asset_metadata material_metadata;
         uint64_t material_asset_revision = 0U;
         bool material_asset_overridden = false;
         if (entity == HENKA_INVALID_ENTITY ||
@@ -10969,10 +10976,11 @@ static henka_result sandbox3d_initialize_game_authoring(
         {
             continue;
         }
-        /* Scene Document does not yet carry material-resource paths/authority
-         * for an explicit inline asset override or for standalone borrowed
-         * texture/terrain state. Keep those source-owned values in the live
-         * scene instead of collapsing them into misleading inline truth. */
+        /* Manager-owned material identity and scalar instance overrides are
+         * reconstructible through Game Authoring. Only standalone inline
+         * borrowed texture/terrain state remains outside the document
+         * authority, so keep that source-owned state live instead of
+         * collapsing it into misleading inline truth. */
         if (henka_scene_get_entity_material(
                 state->scene, entity, &material) == HENKA_SUCCESS &&
             henka_scene_get_entity_material_asset(state->scene, entity, &material_asset) == HENKA_SUCCESS &&
@@ -10981,16 +10989,22 @@ static henka_result sandbox3d_initialize_game_authoring(
                 entity,
                 &material_asset_revision,
                 &material_asset_overridden) == HENKA_SUCCESS &&
-            ((material_asset != NULL && material_asset_overridden) ||
-             (material_asset == NULL &&
-                 (material.base_color_texture != NULL ||
-                  material.normal_texture != NULL ||
-                  material.metallic_roughness_texture != NULL ||
-                  material.occlusion_texture != NULL ||
-                  material.emissive_texture != NULL ||
-                  material.transmission_texture != NULL ||
-                  material.thickness_texture != NULL ||
-                  material.terrain_layers_enabled))))
+             ((material_asset != NULL &&
+                   (henka_assets_get_material_metadata(
+                        assets,
+                        material_asset,
+                        &material_metadata) != HENKA_SUCCESS ||
+                    material_metadata.source_path == NULL ||
+                    material_metadata.source_path[0] == '\0')) ||
+              (material_asset == NULL &&
+                  (material.base_color_texture != NULL ||
+                   material.normal_texture != NULL ||
+                   material.metallic_roughness_texture != NULL ||
+                   material.occlusion_texture != NULL ||
+                   material.emissive_texture != NULL ||
+                   material.transmission_texture != NULL ||
+                   material.thickness_texture != NULL ||
+                   material.terrain_layers_enabled))))
         {
             HENKA_LOG_ERROR(
                 "Skipping non-reconstructible material state for Game Authoring entity %llu (material revision %llu).",

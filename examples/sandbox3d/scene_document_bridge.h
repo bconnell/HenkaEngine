@@ -42,6 +42,14 @@ henka_result sandbox3d_scene_document_bridge_get_object(
     henka_scene_document_id document_id,
     henka_scene_document_object* out_object);
 
+/* Overlays the pointer-free authored renderer fields on a borrowed runtime
+ * material. Texture, shader, and terrain dependency pointers remain owned by
+ * the supplied material so manager-backed instances can be reconstructed by
+ * identity without copying asset authority into the document. */
+henka_result sandbox3d_scene_document_bridge_overlay_material(
+    const henka_scene_document_renderer* renderer,
+    henka_material* in_out_material);
+
 henka_result sandbox3d_scene_document_bridge_bind(
     sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id,

@@ -230,8 +230,13 @@ A manager-owned definition can create a stack-owned `henka_material_instance`. I
 
 `henka_assets_get_material_asset_dependencies` exposes borrowed semantic texture edges. Callers can inspect each texture's source metadata through the asset manager.
 
-Persisted material-instance overrides are a separate contract and are not
-reconstructed by the current Scene Document material identity path.
+Game Authoring persists scalar and render-state overrides for a manager-owned
+material instance together with the definition's canonical `material_path`.
+Reload resolves the manager definition first, then overlays the pointer-free
+authored values while retaining the definition's shader and texture
+dependencies. Texture or terrain dependency overrides are rejected until the
+document has an explicit dependency-identity representation; they are never
+silently converted into inline material state.
 
 ## KTX2 and Basis texture dependencies
 

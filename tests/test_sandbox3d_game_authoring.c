@@ -188,6 +188,176 @@ cleanup:
     return success;
 }
 
+static bool test_manager_material_instance_persists_by_identity(void)
+{
+    const char* project_root = "build/test_tmp";
+    const char* relative_path = "manager_material_instance_persistence.hscene";
+    const char* material_identity = "materials/runtime-instance-persistence";
+    henka_engine_config config;
+    henka_engine* engine = NULL;
+    henka_asset_manager* assets = NULL;
+    henka_shader* shader = NULL;
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_material_asset* asset = NULL;
+    const henka_material_asset* loaded_asset = NULL;
+    henka_material material = henka_material_default();
+    henka_material instance_material = henka_material_default();
+    henka_material loaded_material = henka_material_default();
+    henka_material_instance instance;
+    henka_asset_metadata metadata;
+    henka_scene_document_object object;
+    henka_camera camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        4.0f / 3.0f,
+        0.1f,
+        100.0f);
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_entity loaded_entity = HENKA_INVALID_ENTITY;
+    uint64_t material_revision = 0U;
+    bool material_overridden = false;
+    size_t refreshed_count = 0U;
+    bool success = false;
+
+    memset(&config, 0, sizeof(config));
+    config.application_name = "Henka Manager Material Instance Persistence Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL ||
+        henka_assets_load_shader(
+            assets,
+            "assets/shaders/basic_lit.vert",
+            "assets/shaders/basic_lit.frag",
+            &shader) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    material.shader = shader;
+    material.base_color = (henka_vec4){0.12f, 0.24f, 0.36f, 1.0f};
+    material.roughness = 0.78f;
+    material.base_color_texture = henka_assets_get_white_texture(assets);
+    material.use_texture = true;
+    if (henka_assets_adopt_runtime_material(
+            assets,
+            material_identity,
+            &material,
+            &asset) != HENKA_SUCCESS ||
+        asset == NULL ||
+        henka_assets_get_material_metadata(assets, asset, &metadata) != HENKA_SUCCESS ||
+        metadata.source_path == NULL ||
+        strcmp(metadata.source_path, material_identity) != 0)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    entity = henka_scene_create_entity_named(scene, "Material Instance Identity");
+    if (entity == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_material_asset(scene, entity, asset) != HENKA_SUCCESS ||
+        henka_assets_refresh_scene_material_bindings(
+            assets,
+            scene,
+            &refreshed_count) != HENKA_SUCCESS ||
+        refreshed_count != 1U ||
+        henka_assets_create_material_instance(asset, &instance) != HENKA_SUCCESS ||
+        henka_assets_material_instance_set_vec4(
+            &instance,
+            HENKA_MATERIAL_INSTANCE_BASE_COLOR,
+            (henka_vec4){0.81f, 0.23f, 0.17f, 1.0f}) != HENKA_SUCCESS ||
+        henka_assets_material_instance_set_float(
+            &instance,
+            HENKA_MATERIAL_INSTANCE_ROUGHNESS,
+            0.21f) != HENKA_SUCCESS ||
+        henka_assets_get_material_instance_material(
+            &instance,
+            &instance_material) != HENKA_SUCCESS ||
+        henka_assets_apply_material_instance_to_entity(
+            &instance,
+            scene,
+            entity) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_create_with_engine(
+            scene,
+            relative_path,
+            engine,
+            &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring,
+            entity,
+            &object_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring,
+            entity,
+            &object_id,
+            &object) != HENKA_SUCCESS ||
+        strcmp(object.renderer.material_path, material_identity) != 0 ||
+        !object.renderer.material_override ||
+        object.renderer.base_color.x != instance_material.base_color.x ||
+        object.renderer.base_color.y != instance_material.base_color.y ||
+        object.renderer.base_color.z != instance_material.base_color.z ||
+        object.renderer.roughness != instance_material.roughness ||
+        sandbox3d_game_authoring_save(authoring, project_root) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, project_root) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            authoring,
+            object_id,
+            &loaded_entity) != HENKA_SUCCESS ||
+        henka_scene_get_entity_material_asset(
+            scene,
+            loaded_entity,
+            &loaded_asset) != HENKA_SUCCESS ||
+        henka_scene_get_entity_material_asset_state(
+            scene,
+            loaded_entity,
+            &material_revision,
+            &material_overridden) != HENKA_SUCCESS ||
+        henka_scene_get_entity_material(
+            scene,
+            loaded_entity,
+            &loaded_material) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring,
+            loaded_entity,
+            &object_id,
+            &object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    success = loaded_asset == asset &&
+        material_revision == 0U &&
+        material_overridden &&
+        loaded_material.base_color.x == instance_material.base_color.x &&
+        loaded_material.base_color.y == instance_material.base_color.y &&
+        loaded_material.base_color.z == instance_material.base_color.z &&
+        loaded_material.roughness == instance_material.roughness &&
+        loaded_material.base_color_texture == material.base_color_texture &&
+        loaded_material.use_texture == material.use_texture &&
+        strcmp(object.renderer.material_path, material_identity) == 0 &&
+        object.renderer.material_override;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+    (void)remove("build/test_tmp/henka.project");
+    (void)remove("build/test_tmp/manager_material_instance_persistence.hscene");
+    return success;
+}
+
 static void test_write_u16(unsigned char* bytes, size_t offset, uint16_t value)
 {
     bytes[offset] = (unsigned char)(value & 0xffU);
@@ -1388,6 +1558,11 @@ int main(void)
     if (!test_manager_material_asset_persists_by_identity())
     {
         fprintf(stderr, "manager material identity persistence test failed\n");
+        return 1;
+    }
+    if (!test_manager_material_instance_persists_by_identity())
+    {
+        fprintf(stderr, "manager material instance persistence test failed\n");
         return 1;
     }
 

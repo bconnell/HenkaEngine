@@ -470,6 +470,53 @@ static bool sandbox3d_scene_document_bridge_material_scalars_equal(
         left->sheen_roughness == right->sheen_roughness;
 }
 
+henka_result sandbox3d_scene_document_bridge_overlay_material(
+    const henka_scene_document_renderer* renderer,
+    henka_material* in_out_material)
+{
+    if (renderer == NULL || in_out_material == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    in_out_material->type = renderer->material_type;
+    in_out_material->base_color_uv_set = renderer->base_color_uv_set;
+    in_out_material->normal_uv_set = renderer->normal_uv_set;
+    in_out_material->metallic_roughness_uv_set = renderer->metallic_roughness_uv_set;
+    in_out_material->occlusion_uv_set = renderer->occlusion_uv_set;
+    in_out_material->emissive_uv_set = renderer->emissive_uv_set;
+    in_out_material->transmission_uv_set = renderer->transmission_uv_set;
+    in_out_material->thickness_uv_set = renderer->thickness_uv_set;
+    in_out_material->base_color = renderer->base_color;
+    in_out_material->metallic = renderer->metallic;
+    in_out_material->roughness = renderer->roughness;
+    in_out_material->emissive_color = renderer->emissive;
+    in_out_material->emissive_strength = renderer->emissive_strength;
+    in_out_material->specular_factor = renderer->specular_factor;
+    in_out_material->specular_color = renderer->specular_color;
+    in_out_material->ior = renderer->ior;
+    in_out_material->transmission = renderer->transmission;
+    in_out_material->thickness = renderer->thickness;
+    in_out_material->attenuation_distance = renderer->attenuation_distance;
+    in_out_material->attenuation_color = renderer->attenuation_color;
+    in_out_material->subsurface = renderer->subsurface;
+    in_out_material->subsurface_color = renderer->subsurface_color;
+    in_out_material->normal_scale = renderer->normal_scale;
+    in_out_material->occlusion_strength = renderer->occlusion_strength;
+    in_out_material->clearcoat = renderer->clearcoat;
+    in_out_material->clearcoat_roughness = renderer->clearcoat_roughness;
+    in_out_material->alpha_cutoff = renderer->alpha_cutoff;
+    in_out_material->alpha_mode = renderer->alpha_mode;
+    in_out_material->use_texture = renderer->use_texture;
+    in_out_material->use_lighting = renderer->use_lighting;
+    in_out_material->depth_test = renderer->depth_test;
+    in_out_material->double_sided = renderer->double_sided;
+    in_out_material->cast_shadows = renderer->cast_shadows;
+    in_out_material->receive_shadows = renderer->receive_shadows;
+    in_out_material->sheen_color = renderer->sheen_color;
+    in_out_material->sheen_roughness = renderer->sheen_roughness;
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_scene_document_bridge_build_object_update(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id,
@@ -508,11 +555,7 @@ static henka_result sandbox3d_scene_document_bridge_build_object_update(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (object->renderer.material_override && material_asset != NULL)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    if (object->renderer.material_override &&
+    if (object->renderer.material_override && material_asset == NULL &&
         (previous_material.base_color_texture != NULL ||
             previous_material.normal_texture != NULL ||
             previous_material.metallic_roughness_texture != NULL ||
@@ -542,42 +585,12 @@ static henka_result sandbox3d_scene_document_bridge_build_object_update(
     if (object->renderer.material_override)
     {
         material = previous_material;
-        material.type = object->renderer.material_type;
-        material.base_color_uv_set = object->renderer.base_color_uv_set;
-        material.normal_uv_set = object->renderer.normal_uv_set;
-        material.metallic_roughness_uv_set = object->renderer.metallic_roughness_uv_set;
-        material.occlusion_uv_set = object->renderer.occlusion_uv_set;
-        material.emissive_uv_set = object->renderer.emissive_uv_set;
-        material.transmission_uv_set = object->renderer.transmission_uv_set;
-        material.thickness_uv_set = object->renderer.thickness_uv_set;
-        material.base_color = object->renderer.base_color;
-        material.metallic = object->renderer.metallic;
-        material.roughness = object->renderer.roughness;
-        material.emissive_color = object->renderer.emissive;
-        material.emissive_strength = object->renderer.emissive_strength;
-        material.specular_factor = object->renderer.specular_factor;
-        material.specular_color = object->renderer.specular_color;
-        material.ior = object->renderer.ior;
-        material.transmission = object->renderer.transmission;
-        material.thickness = object->renderer.thickness;
-        material.attenuation_distance = object->renderer.attenuation_distance;
-        material.attenuation_color = object->renderer.attenuation_color;
-        material.subsurface = object->renderer.subsurface;
-        material.subsurface_color = object->renderer.subsurface_color;
-        material.normal_scale = object->renderer.normal_scale;
-        material.occlusion_strength = object->renderer.occlusion_strength;
-        material.clearcoat = object->renderer.clearcoat;
-        material.clearcoat_roughness = object->renderer.clearcoat_roughness;
-        material.alpha_cutoff = object->renderer.alpha_cutoff;
-        material.alpha_mode = object->renderer.alpha_mode;
-        material.use_texture = object->renderer.use_texture;
-        material.use_lighting = object->renderer.use_lighting;
-        material.depth_test = object->renderer.depth_test;
-        material.double_sided = object->renderer.double_sided;
-        material.cast_shadows = object->renderer.cast_shadows;
-        material.receive_shadows = object->renderer.receive_shadows;
-        material.sheen_color = object->renderer.sheen_color;
-        material.sheen_roughness = object->renderer.sheen_roughness;
+        if (sandbox3d_scene_document_bridge_overlay_material(
+                &object->renderer,
+                &material) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
         out_update->material = material;
         material_changed = !sandbox3d_scene_document_bridge_material_scalars_equal(
             &previous_material,
