@@ -41,6 +41,23 @@ Imported geometry can carry:
 
 Generated triangle normals are used when supported geometry omits normals. UV1 is preserved through model data and the renderer vertex stream. The built-in material shader selects UV0 or UV1 per mapped texture semantic.
 
+### Explicit mesh reimport
+
+`henka_assets_reload_obj_mesh` and `henka_assets_reload_gltf_mesh` refresh a
+previously loaded manager-owned mesh through an explicit candidate-first
+operation. The complete replacement source is parsed and uploaded before the
+existing mesh payload is replaced. The borrowed `henka_mesh` identity remains
+stable, so scene entities that already reference that mesh continue to point
+at the refreshed payload. Mesh reimport does not mutate Scene Document state or
+consume a scene render revision.
+
+If source parsing, path resolution, upload, or another candidate step fails,
+the existing mesh payload and asset metadata remain unchanged. Cached fallback
+entries continue through `henka_assets_retry_failed_obj_mesh` or
+`henka_assets_retry_failed_gltf_mesh`; once a retry produces a real
+manager-owned mesh, the same explicit reimport APIs apply. File watching and
+automatic dependency-driven reimport remain outside this contract.
+
 ## OBJ support
 
 The OBJ loader accepts:
@@ -281,7 +298,6 @@ Current model/import gaps include:
 - morph targets;
 - editor hierarchy authoring;
 - complete editor import workflows;
-- live replacement of a loaded mesh while active scenes still reference it;
 - compressed glTF buffer extensions outside the supported boundary;
 - production refraction and layered-volume rendering for imported materials;
 - broader cross-backend compressed-texture validation.

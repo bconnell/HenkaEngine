@@ -340,6 +340,19 @@ henka_result henka_assets_enforce_texture_residency_budget(
  * caller slot and leave an empty slot empty. */
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
+/* Reimports a previously loaded manager-owned mesh transactionally. The
+ * borrowed mesh identity remains stable, so live scene references continue to
+ * point at the refreshed payload. A source or upload failure leaves the prior
+ * mesh and metadata unchanged; cached fallback entries use the explicit retry
+ * APIs below instead. */
+henka_result henka_assets_reload_obj_mesh(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_mesh** out_mesh);
+henka_result henka_assets_reload_gltf_mesh(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_mesh** out_mesh);
 /* Composite glTF loads require an initialized empty mesh output slot. The
  * material value and mesh pointer are committed only after the complete load
  * succeeds; rejected or failed loads preserve both caller outputs. */

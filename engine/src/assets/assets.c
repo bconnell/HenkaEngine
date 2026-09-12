@@ -3153,6 +3153,106 @@ henka_result henka_assets_enforce_texture_residency_budget(
         out_evicted_textures);
 }
 
+static henka_result henka_assets_build_mesh_candidate(
+    henka_asset_manager* manager,
+    const char* source_path,
+    bool gltf,
+    henka_mesh** out_mesh)
+{
+    char* resolved_path = NULL;
+    henka_result result;
+
+    if (manager == NULL || source_path == NULL || out_mesh == NULL || *out_mesh != NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+
+    result = henka_assets_resolve_path(
+        henka_engine_get_asset_base_path(manager->engine),
+        source_path,
+        &resolved_path);
+    if (result != HENKA_SUCCESS)
+        return result;
+
+    result = gltf ?
+        henka_mesh_create_from_gltf(manager->engine, resolved_path, out_mesh) :
+        henka_mesh_create_from_obj(manager->engine, resolved_path, out_mesh);
+    henka_free(resolved_path);
+    return result;
+}
+
+static void henka_assets_replace_mesh_payload(
+    henka_mesh* target,
+    henka_mesh* replacement)
+{
+    henka_mesh previous;
+
+    previous = *target;
+    *target = *replacement;
+    target->asset_manager_owned = true;
+    *replacement = previous;
+    replacement->asset_manager_owned = false;
+    henka_mesh_destroy_owned(replacement);
+}
+
+static henka_result henka_assets_reload_mesh(
+    henka_asset_manager* manager,
+    const char* path,
+    bool gltf,
+    henka_mesh** out_mesh)
+{
+    char* key = NULL;
+    henka_asset_mesh_entry* entry;
+    henka_mesh* replacement = NULL;
+    henka_result result;
+
+    if (out_mesh != NULL)
+        *out_mesh = NULL;
+    if (manager == NULL || path == NULL || out_mesh == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+        return result;
+    entry = henka_asset_manager_find_mesh_entry(manager, key);
+    henka_free(key);
+    if (entry == NULL || entry->mesh == NULL || entry->metadata.fallback ||
+        !entry->owns_mesh || entry->source_path == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+
+    result = henka_assets_build_mesh_candidate(
+        manager, entry->source_path, gltf, &replacement);
+    if (result != HENKA_SUCCESS)
+        return result;
+
+    henka_assets_replace_mesh_payload(entry->mesh, replacement);
+    entry->metadata.loaded = true;
+    entry->metadata.fallback = false;
+    entry->metadata.reload_supported = true;
+    henka_asset_set_summary(
+        &entry->metadata,
+        gltf ?
+            "glTF mesh reloaded transactionally while preserving the borrowed mesh identity." :
+            "OBJ mesh reloaded transactionally while preserving the borrowed mesh identity.",
+        "");
+    *out_mesh = entry->mesh;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_reload_obj_mesh(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_mesh** out_mesh)
+{
+    return henka_assets_reload_mesh(manager, path, false, out_mesh);
+}
+
+henka_result henka_assets_reload_gltf_mesh(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_mesh** out_mesh)
+{
+    return henka_assets_reload_mesh(manager, path, true, out_mesh);
+}
+
 henka_result henka_assets_load_obj_mesh(
     henka_asset_manager* manager,
     const char* path,
@@ -3286,8 +3386,7 @@ henka_result henka_assets_load_obj_mesh(
         mesh != manager->fallback_mesh;
     manager->mesh_entries[manager->mesh_count].metadata.fallback =
         mesh == manager->fallback_mesh;
-    manager->mesh_entries[manager->mesh_count].metadata.reload_supported =
-        mesh == manager->fallback_mesh;
+    manager->mesh_entries[manager->mesh_count].metadata.reload_supported = true;
     henka_asset_set_summary(
         &manager->mesh_entries[manager->mesh_count].metadata,
         mesh == manager->fallback_mesh ?
@@ -3374,7 +3473,7 @@ henka_result henka_assets_load_gltf_mesh(
     manager->mesh_entries[manager->mesh_count].metadata.display_name = display_name;
     manager->mesh_entries[manager->mesh_count].metadata.loaded = mesh != manager->fallback_mesh;
     manager->mesh_entries[manager->mesh_count].metadata.fallback = mesh == manager->fallback_mesh;
-    manager->mesh_entries[manager->mesh_count].metadata.reload_supported = mesh == manager->fallback_mesh;
+    manager->mesh_entries[manager->mesh_count].metadata.reload_supported = true;
     henka_asset_set_summary(&manager->mesh_entries[manager->mesh_count].metadata,
         mesh == manager->fallback_mesh ? "glTF mesh fallback is active and can be retried." : "glTF mesh loaded from the canonical asset path.",
         mesh == manager->fallback_mesh ? "glTF mesh load failed and the fallback mesh was used. Retry after fixing the source asset." : "");
@@ -5621,7 +5720,7 @@ henka_result henka_assets_retry_failed_obj_mesh(
     entry->owns_mesh = true;
     entry->metadata.loaded = true;
     entry->metadata.fallback = false;
-    entry->metadata.reload_supported = false;
+    entry->metadata.reload_supported = true;
     henka_asset_set_summary(
         &entry->metadata,
         "Mesh loaded after a transactional fallback retry.",
@@ -5659,7 +5758,7 @@ henka_result henka_assets_retry_failed_gltf_mesh(
     entry->owns_mesh = true;
     entry->metadata.loaded = true;
     entry->metadata.fallback = false;
-    entry->metadata.reload_supported = false;
+    entry->metadata.reload_supported = true;
     henka_asset_set_summary(&entry->metadata, "glTF mesh loaded after a transactional fallback retry.", "");
     *out_mesh = replacement;
     return HENKA_SUCCESS;
