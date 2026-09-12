@@ -272,6 +272,12 @@ try {
     if ($sandboxSourceText -notmatch '&state->authoring_topology_overlay_enabled') {
         throw "The topology overlay control is not bound to editor session state."
     }
+    if ($sandboxSourceText -notmatch '(?s)if\s*\(\s*state->authoring_topology_overlay_enabled\s*&&\s*sandbox3d_build_authoring_cage') {
+        throw "The full authored cage must be gated by the explicit topology overlay."
+    }
+    if ($sandboxSourceText -match 'selection_mode\s*==\s*SANDBOX3D_AUTHORING_SELECTION_VERTEX\s*\|\|\s*point->loose\s*\|\|\s*state->authoring_topology_overlay_enabled') {
+        throw "Default Edit mode must not expose every vertex marker."
+    }
     if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
         throw "The Sandbox3D executable was not found: $executable"
     }
@@ -379,9 +385,9 @@ try {
         -XGroup "x" -YGroup "y"
     if (-not (Wait-FileContains `
             -Path $stdoutPath `
-            -Pattern 'Native authoring base edit cage: entity=\d+ mode=2 overlay=0 edges=[1-9]\d*\.' `
+            -Pattern 'Native authoring edit presentation: entity=\d+ mode=2 overlay=0 cage=hidden markers=selected\.' `
             -TimeoutMilliseconds 5000)) {
-        throw "The visible Face edit mode did not expose the authored base cage with diagnostics disabled."
+            throw "The visible Face edit mode did not report clean selected-component presentation with diagnostics disabled."
     }
 
     $viewport = Get-LastMatch `
@@ -442,9 +448,9 @@ try {
         }
         if (-not (Wait-FileContains `
                 -Path $stdoutPath `
-                -Pattern ("Native authoring base edit cage: entity=\d+ mode=" + $mode.Code + ' overlay=0 edges=[1-9]\d*\.') `
+                -Pattern ("Native authoring edit presentation: entity=\d+ mode=" + $mode.Code + ' overlay=0 cage=hidden markers=selected\.') `
                 -TimeoutMilliseconds 5000)) {
-            throw ("The visible " + $mode.Label + " edit mode did not report its authored base cage.")
+                throw ("The visible " + $mode.Label + " edit mode did not report clean selected-component presentation.")
         }
         Start-Sleep -Milliseconds 300
         Save-ProbeWindowScreenshot `

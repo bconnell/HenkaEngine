@@ -6832,42 +6832,35 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
             size_t authoring_cage_edge_count = 0U;
             size_t authoring_cage_edge_index;
 
-            /* Edit Mode keeps the evaluated surface and authored cage visible
-             * by default so the mesh remains readable. The filled diagnostic
-             * overlay and complete marker field are explicit topology
-             * diagnostics; keeping those behind the toggle prevents ordinary
-             * component editing from becoming a dense all-topology view and
-             * keeps renderer tessellation out of this screen-space pass. */
-            if (state->authoring_topology_overlay_enabled)
+            if (!state->native_authoring_base_cage_reported ||
+                state->native_authoring_base_cage_reported_mode !=
+                    (int)selection_mode)
             {
-                sandbox3d_draw_authoring_surface_overlay(
-                    state,
-                    viewport,
-                    transform,
-                    state->authoring_object);
+                printf(
+                    "Native authoring edit presentation: entity=%u mode=%d overlay=%d cage=%s markers=%s.\n",
+                    (unsigned int)authoring_entity,
+                    (int)selection_mode,
+                    state->authoring_topology_overlay_enabled ? 1 : 0,
+                    state->authoring_topology_overlay_enabled ? "visible" : "hidden",
+                    state->authoring_topology_overlay_enabled ? "all" : "selected");
+                fflush(stdout);
+                state->native_authoring_base_cage_reported = true;
+                state->native_authoring_base_cage_reported_mode =
+                    (int)selection_mode;
             }
-            if (sandbox3d_build_authoring_cage(
+
+            /* The complete authored cage, filled face diagnostic, and full
+             * marker field are explicit topology diagnostics. Ordinary Edit
+             * mode keeps only the selected-component cues over the evaluated
+             * surface so selection cannot obscure the modeled asset. */
+            if (state->authoring_topology_overlay_enabled &&
+                sandbox3d_build_authoring_cage(
                     mesh,
                     authoring_cage_edges,
                     sizeof(authoring_cage_edges) /
                         sizeof(authoring_cage_edges[0]),
                     &authoring_cage_edge_count) == HENKA_SUCCESS)
             {
-                if (!state->native_authoring_base_cage_reported ||
-                    state->native_authoring_base_cage_reported_mode !=
-                        (int)selection_mode)
-                {
-                    printf(
-                        "Native authoring base edit cage: entity=%u mode=%d overlay=%d edges=%zu.\n",
-                        (unsigned int)authoring_entity,
-                        (int)selection_mode,
-                        state->authoring_topology_overlay_enabled ? 1 : 0,
-                        authoring_cage_edge_count);
-                    fflush(stdout);
-                    state->native_authoring_base_cage_reported = true;
-                    state->native_authoring_base_cage_reported_mode =
-                        (int)selection_mode;
-                }
                 for (authoring_cage_edge_index = 0U;
                      authoring_cage_edge_index <
                          authoring_cage_edge_count;
@@ -6966,23 +6959,11 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                                 continue;
                             }
 
-                            /* Vertex mode exposes every authored position;
-                             * Edge/Face modes keep the cage readable without
-                             * turning every intersection into a selection-like
-                             * glyph. Loose vertices remain visible because
-                             * they have no boundary edge to locate them. An
-                             * explicit topology diagnostic can restore the
-                             * complete marker field when it is useful. */
-                            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
-                                point->loose ||
-                                state->authoring_topology_overlay_enabled)
-                            {
-                                sandbox3d_draw_authoring_vertex_marker(
-                                    state,
-                                    viewport,
-                                    center,
-                                    point->loose);
-                            }
+                            sandbox3d_draw_authoring_vertex_marker(
+                                state,
+                                viewport,
+                                center,
+                                point->loose);
                         }
                     }
                 }
