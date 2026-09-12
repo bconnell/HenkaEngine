@@ -31,6 +31,9 @@
 #define HENKA_SCENE_DOCUMENT_FLAG_AUDIO_STREAMING UINT32_C(512)
 #define HENKA_SCENE_DOCUMENT_FLAG_CHARACTER_CONTROLLER_ENABLED UINT32_C(1024)
 #define HENKA_SCENE_DOCUMENT_CAMERA_VALUE_COUNT 14U
+#define HENKA_SCENE_DOCUMENT_ENVIRONMENT_VALUE_COUNT 49U
+#define HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED UINT32_C(1)
+#define HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_MANUAL_DIRECTION UINT32_C(2)
 #define HENKA_SCENE_DOCUMENT_KNOWN_FLAGS ( \
     HENKA_SCENE_DOCUMENT_FLAG_VISIBLE | \
     HENKA_SCENE_DOCUMENT_FLAG_RENDERER_ENABLED | \
@@ -47,11 +50,30 @@
 #define HENKA_SCENE_DOCUMENT_BEHAVIOR_KNOWN_FLAGS \
     HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED
 
+typedef struct henka_scene_document_environment_value
+{
+    henka_vec3 ground_color;
+    henka_vec3 horizon_color;
+    henka_vec3 zenith_color;
+    float intensity;
+    float hdr_rotation;
+    henka_scene_environment_mode mode;
+    henka_scene_atmosphere_desc atmosphere;
+    henka_scene_sun_desc sun;
+    henka_scene_moon_desc moon;
+    henka_scene_stars_desc stars;
+    float time_of_day_hours;
+    float day_length_seconds;
+    float time_scale;
+    bool time_of_day_enabled;
+} henka_scene_document_environment_value;
+
 typedef struct henka_scene_document_storage
 {
     size_t object_count;
     uint64_t next_id;
     henka_audio_listener audio_listener;
+    henka_scene_document_environment_value environment;
     bool has_camera;
     henka_camera camera;
     henka_scene_document_object objects[HENKA_SCENE_DOCUMENT_MAX_OBJECTS];
@@ -247,6 +269,166 @@ static bool henka_scene_document_finite_vec4(henka_vec4 value)
 {
     return isfinite(value.x) && isfinite(value.y) &&
         isfinite(value.z) && isfinite(value.w);
+}
+
+static bool henka_scene_document_validate_environment_value(
+    const henka_scene_document_environment_value* environment)
+{
+    float direction_length;
+
+    if (environment == NULL ||
+        !henka_scene_document_finite_vec3(environment->ground_color) ||
+        !henka_scene_document_finite_vec3(environment->horizon_color) ||
+        !henka_scene_document_finite_vec3(environment->zenith_color) ||
+        !isfinite(environment->intensity) ||
+        !isfinite(environment->hdr_rotation) ||
+        environment->ground_color.x < 0.0f || environment->ground_color.x > 16.0f ||
+        environment->ground_color.y < 0.0f || environment->ground_color.y > 16.0f ||
+        environment->ground_color.z < 0.0f || environment->ground_color.z > 16.0f ||
+        environment->horizon_color.x < 0.0f || environment->horizon_color.x > 16.0f ||
+        environment->horizon_color.y < 0.0f || environment->horizon_color.y > 16.0f ||
+        environment->horizon_color.z < 0.0f || environment->horizon_color.z > 16.0f ||
+        environment->zenith_color.x < 0.0f || environment->zenith_color.x > 16.0f ||
+        environment->zenith_color.y < 0.0f || environment->zenith_color.y > 16.0f ||
+        environment->zenith_color.z < 0.0f || environment->zenith_color.z > 16.0f ||
+        environment->intensity < 0.0f || environment->intensity > 16.0f ||
+        environment->hdr_rotation < -1000000.0f || environment->hdr_rotation > 1000000.0f ||
+        environment->mode < HENKA_SCENE_ENVIRONMENT_GRADIENT ||
+        environment->mode > HENKA_SCENE_ENVIRONMENT_PROCEDURAL ||
+        !isfinite(environment->atmosphere.rayleigh_scattering) ||
+        !isfinite(environment->atmosphere.mie_scattering) ||
+        !isfinite(environment->atmosphere.mie_anisotropy) ||
+        !isfinite(environment->atmosphere.density) ||
+        !isfinite(environment->atmosphere.turbidity) ||
+        !isfinite(environment->atmosphere.ozone_absorption) ||
+        !isfinite(environment->atmosphere.atmosphere_height) ||
+        !isfinite(environment->atmosphere.planet_radius) ||
+        !henka_scene_document_finite_vec3(environment->atmosphere.ground_albedo) ||
+        !isfinite(environment->atmosphere.horizon_intensity) ||
+        environment->atmosphere.rayleigh_scattering < 0.0f ||
+            environment->atmosphere.rayleigh_scattering > 8.0f ||
+        environment->atmosphere.mie_scattering < 0.0f ||
+            environment->atmosphere.mie_scattering > 8.0f ||
+        environment->atmosphere.mie_anisotropy < -0.99f ||
+            environment->atmosphere.mie_anisotropy > 0.99f ||
+        environment->atmosphere.density < 0.0f || environment->atmosphere.density > 8.0f ||
+        environment->atmosphere.turbidity < 0.0f || environment->atmosphere.turbidity > 32.0f ||
+        environment->atmosphere.ozone_absorption < 0.0f ||
+            environment->atmosphere.ozone_absorption > 8.0f ||
+        environment->atmosphere.atmosphere_height <= 0.0f ||
+            environment->atmosphere.atmosphere_height > 100000.0f ||
+        environment->atmosphere.planet_radius <= 0.0f ||
+            environment->atmosphere.planet_radius > 1000000000.0f ||
+        environment->atmosphere.ground_albedo.x < 0.0f ||
+            environment->atmosphere.ground_albedo.x > 16.0f ||
+        environment->atmosphere.ground_albedo.y < 0.0f ||
+            environment->atmosphere.ground_albedo.y > 16.0f ||
+        environment->atmosphere.ground_albedo.z < 0.0f ||
+            environment->atmosphere.ground_albedo.z > 16.0f ||
+        environment->atmosphere.horizon_intensity < 0.0f ||
+            environment->atmosphere.horizon_intensity > 16.0f ||
+        !isfinite(environment->time_of_day_hours) ||
+        !isfinite(environment->day_length_seconds) ||
+        !isfinite(environment->time_scale) ||
+        environment->time_of_day_hours < 0.0f ||
+        environment->time_of_day_hours >= 24.0f ||
+        environment->day_length_seconds <= 0.0f ||
+        environment->day_length_seconds > 604800.0f ||
+        environment->time_scale < -64.0f || environment->time_scale > 64.0f ||
+        !isfinite(environment->stars.intensity) ||
+        !isfinite(environment->stars.rotation) ||
+        environment->stars.intensity < 0.0f || environment->stars.intensity > 16.0f ||
+        environment->stars.rotation < -1000000.0f || environment->stars.rotation > 1000000.0f)
+    {
+        return false;
+    }
+
+    if (environment->sun.enabled)
+    {
+        direction_length = henka_vec3_length(environment->sun.direction);
+        if (!henka_scene_document_finite_vec3(environment->sun.direction) ||
+            !henka_scene_document_finite_vec3(environment->sun.color) ||
+            !isfinite(environment->sun.intensity) ||
+            !isfinite(environment->sun.angular_radius) ||
+            direction_length <= 0.000001f ||
+            environment->sun.color.x < 0.0f || environment->sun.color.x > 16.0f ||
+            environment->sun.color.y < 0.0f || environment->sun.color.y > 16.0f ||
+            environment->sun.color.z < 0.0f || environment->sun.color.z > 16.0f ||
+            environment->sun.intensity < 0.0f || environment->sun.intensity > 64.0f ||
+            environment->sun.angular_radius < 0.0001f || environment->sun.angular_radius > 0.5f)
+        {
+            return false;
+        }
+    }
+    if (environment->moon.enabled)
+    {
+        direction_length = henka_vec3_length(environment->moon.direction);
+        if (!henka_scene_document_finite_vec3(environment->moon.direction) ||
+            !henka_scene_document_finite_vec3(environment->moon.color) ||
+            !isfinite(environment->moon.intensity) ||
+            !isfinite(environment->moon.angular_radius) ||
+            direction_length <= 0.000001f ||
+            environment->moon.color.x < 0.0f || environment->moon.color.x > 16.0f ||
+            environment->moon.color.y < 0.0f || environment->moon.color.y > 16.0f ||
+            environment->moon.color.z < 0.0f || environment->moon.color.z > 16.0f ||
+            environment->moon.intensity < 0.0f || environment->moon.intensity > 16.0f ||
+            environment->moon.angular_radius < 0.0001f || environment->moon.angular_radius > 0.5f)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static henka_scene_document_environment_value
+henka_scene_document_environment_from_runtime(
+    henka_scene_environment_desc environment)
+{
+    return (henka_scene_document_environment_value){
+        environment.ground_color,
+        environment.horizon_color,
+        environment.zenith_color,
+        environment.intensity,
+        environment.hdr_rotation,
+        environment.mode,
+        environment.atmosphere,
+        environment.sun,
+        environment.moon,
+        environment.stars,
+        environment.time_of_day_hours,
+        environment.day_length_seconds,
+        environment.time_scale,
+        environment.time_of_day_enabled};
+}
+
+static henka_scene_environment_desc
+henka_scene_document_environment_to_runtime(
+    const henka_scene_document_environment_value* environment)
+{
+    henka_scene_environment_desc runtime = henka_scene_environment_default();
+    runtime.ground_color = environment->ground_color;
+    runtime.horizon_color = environment->horizon_color;
+    runtime.zenith_color = environment->zenith_color;
+    runtime.intensity = environment->intensity;
+    runtime.hdr_texture = NULL;
+    runtime.hdr_rotation = environment->hdr_rotation;
+    runtime.mode = environment->mode;
+    runtime.atmosphere = environment->atmosphere;
+    runtime.sun = environment->sun;
+    runtime.moon = environment->moon;
+    runtime.stars = environment->stars;
+    runtime.time_of_day_hours = environment->time_of_day_hours;
+    runtime.day_length_seconds = environment->day_length_seconds;
+    runtime.time_scale = environment->time_scale;
+    runtime.time_of_day_enabled = environment->time_of_day_enabled;
+    return runtime;
+}
+
+static henka_scene_document_environment_value
+henka_scene_document_environment_default(void)
+{
+    return henka_scene_document_environment_from_runtime(
+        henka_scene_environment_default());
 }
 
 static bool henka_scene_document_finite_quat(henka_quat value)
@@ -520,6 +702,7 @@ static henka_result henka_scene_document_validate_storage(
     if (storage == NULL || storage->object_count > HENKA_SCENE_DOCUMENT_MAX_OBJECTS ||
         (storage->next_id == 0U && storage->object_count == 0U) ||
         !henka_scene_document_valid_audio_listener(storage->audio_listener) ||
+        !henka_scene_document_validate_environment_value(&storage->environment) ||
         (storage->has_camera && !henka_camera_is_valid(&storage->camera)))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -771,6 +954,7 @@ henka_result henka_scene_document_create(henka_scene_document** out_document)
     }
     document->storage->next_id = 1U;
     document->storage->audio_listener = henka_audio_listener_default();
+    document->storage->environment = henka_scene_document_environment_default();
     *out_document = document;
     return HENKA_SUCCESS;
 }
@@ -794,6 +978,7 @@ henka_result henka_scene_document_clear(henka_scene_document* document)
     memset(document->storage, 0, sizeof(*document->storage));
     document->storage->next_id = 1U;
     document->storage->audio_listener = henka_audio_listener_default();
+    document->storage->environment = henka_scene_document_environment_default();
     return HENKA_SUCCESS;
 }
 
@@ -1284,6 +1469,43 @@ henka_result henka_scene_document_get_audio_listener(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_document_set_environment(
+    henka_scene_document* document,
+    henka_scene_environment_desc environment)
+{
+    henka_scene_document_environment_value value;
+
+    if (document == NULL || document->storage == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (environment.hdr_texture != NULL)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    value = henka_scene_document_environment_from_runtime(environment);
+    if (!henka_scene_document_validate_environment_value(&value))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    document->storage->environment = value;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_document_get_environment(
+    const henka_scene_document* document,
+    henka_scene_environment_desc* out_environment)
+{
+    if (document == NULL || document->storage == NULL || out_environment == NULL ||
+        !henka_scene_document_validate_environment_value(&document->storage->environment))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_environment = henka_scene_document_environment_to_runtime(
+        &document->storage->environment);
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_document_set_camera(
     henka_scene_document* document,
     const henka_camera* camera)
@@ -1460,6 +1682,12 @@ static bool henka_scene_document_payload_size(
             !henka_scene_document_size_add(
                 &size,
                 HENKA_SCENE_DOCUMENT_CAMERA_VALUE_COUNT * sizeof(uint32_t))))
+    {
+        return false;
+    }
+    if (!henka_scene_document_size_add(
+            &size,
+            HENKA_SCENE_DOCUMENT_ENVIRONMENT_VALUE_COUNT * sizeof(uint32_t)))
     {
         return false;
     }
@@ -1668,6 +1896,86 @@ static void henka_scene_document_encode_object(
     henka_scene_document_writer_u32(writer, object->character_controller.mask);
 }
 
+static void henka_scene_document_encode_environment(
+    henka_scene_document_writer* writer,
+    const henka_scene_document_environment_value* environment)
+{
+    uint32_t sun_flags = 0U;
+    uint32_t moon_flags = 0U;
+
+    henka_scene_document_writer_float(writer, environment->ground_color.x);
+    henka_scene_document_writer_float(writer, environment->ground_color.y);
+    henka_scene_document_writer_float(writer, environment->ground_color.z);
+    henka_scene_document_writer_float(writer, environment->horizon_color.x);
+    henka_scene_document_writer_float(writer, environment->horizon_color.y);
+    henka_scene_document_writer_float(writer, environment->horizon_color.z);
+    henka_scene_document_writer_float(writer, environment->zenith_color.x);
+    henka_scene_document_writer_float(writer, environment->zenith_color.y);
+    henka_scene_document_writer_float(writer, environment->zenith_color.z);
+    henka_scene_document_writer_float(writer, environment->intensity);
+    henka_scene_document_writer_float(writer, environment->hdr_rotation);
+    henka_scene_document_writer_u32(writer, (uint32_t)environment->mode);
+    henka_scene_document_writer_float(
+        writer, environment->atmosphere.rayleigh_scattering);
+    henka_scene_document_writer_float(
+        writer, environment->atmosphere.mie_scattering);
+    henka_scene_document_writer_float(
+        writer, environment->atmosphere.mie_anisotropy);
+    henka_scene_document_writer_float(writer, environment->atmosphere.density);
+    henka_scene_document_writer_float(writer, environment->atmosphere.turbidity);
+    henka_scene_document_writer_float(
+        writer, environment->atmosphere.ozone_absorption);
+    henka_scene_document_writer_float(
+        writer, environment->atmosphere.atmosphere_height);
+    henka_scene_document_writer_float(
+        writer, environment->atmosphere.planet_radius);
+    henka_scene_document_writer_float(
+        writer, environment->atmosphere.ground_albedo.x);
+    henka_scene_document_writer_float(
+        writer, environment->atmosphere.ground_albedo.y);
+    henka_scene_document_writer_float(
+        writer, environment->atmosphere.ground_albedo.z);
+    henka_scene_document_writer_float(
+        writer, environment->atmosphere.horizon_intensity);
+    if (environment->sun.enabled) sun_flags |= HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED;
+    if (environment->sun.manual_direction)
+        sun_flags |= HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_MANUAL_DIRECTION;
+    henka_scene_document_writer_u32(writer, sun_flags);
+    henka_scene_document_writer_float(writer, environment->sun.direction.x);
+    henka_scene_document_writer_float(writer, environment->sun.direction.y);
+    henka_scene_document_writer_float(writer, environment->sun.direction.z);
+    henka_scene_document_writer_float(writer, environment->sun.color.x);
+    henka_scene_document_writer_float(writer, environment->sun.color.y);
+    henka_scene_document_writer_float(writer, environment->sun.color.z);
+    henka_scene_document_writer_float(writer, environment->sun.intensity);
+    henka_scene_document_writer_float(writer, environment->sun.angular_radius);
+    if (environment->moon.enabled) moon_flags |= HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED;
+    if (environment->moon.manual_direction)
+        moon_flags |= HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_MANUAL_DIRECTION;
+    henka_scene_document_writer_u32(writer, moon_flags);
+    henka_scene_document_writer_float(writer, environment->moon.direction.x);
+    henka_scene_document_writer_float(writer, environment->moon.direction.y);
+    henka_scene_document_writer_float(writer, environment->moon.direction.z);
+    henka_scene_document_writer_float(writer, environment->moon.color.x);
+    henka_scene_document_writer_float(writer, environment->moon.color.y);
+    henka_scene_document_writer_float(writer, environment->moon.color.z);
+    henka_scene_document_writer_float(writer, environment->moon.intensity);
+    henka_scene_document_writer_float(writer, environment->moon.angular_radius);
+    henka_scene_document_writer_u32(
+        writer,
+        environment->stars.enabled ? HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED : 0U);
+    henka_scene_document_writer_float(writer, environment->stars.intensity);
+    henka_scene_document_writer_float(writer, environment->stars.rotation);
+    henka_scene_document_writer_float(writer, environment->time_of_day_hours);
+    henka_scene_document_writer_float(writer, environment->day_length_seconds);
+    henka_scene_document_writer_float(writer, environment->time_scale);
+    henka_scene_document_writer_u32(
+        writer,
+        environment->time_of_day_enabled
+            ? HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED
+            : 0U);
+}
+
 static bool henka_scene_document_reader_bytes(
     henka_scene_document_reader* reader,
     void* destination,
@@ -1737,6 +2045,105 @@ static bool henka_scene_document_reader_string(
     return true;
 }
 
+static bool henka_scene_document_decode_environment(
+    henka_scene_document_reader* reader,
+    henka_scene_document_environment_value* environment)
+{
+    uint32_t value;
+    uint32_t sun_flags;
+    uint32_t moon_flags;
+    uint32_t stars_flags;
+    uint32_t time_flags;
+
+    if (reader == NULL || environment == NULL ||
+        !henka_scene_document_reader_float(reader, &environment->ground_color.x) ||
+        !henka_scene_document_reader_float(reader, &environment->ground_color.y) ||
+        !henka_scene_document_reader_float(reader, &environment->ground_color.z) ||
+        !henka_scene_document_reader_float(reader, &environment->horizon_color.x) ||
+        !henka_scene_document_reader_float(reader, &environment->horizon_color.y) ||
+        !henka_scene_document_reader_float(reader, &environment->horizon_color.z) ||
+        !henka_scene_document_reader_float(reader, &environment->zenith_color.x) ||
+        !henka_scene_document_reader_float(reader, &environment->zenith_color.y) ||
+        !henka_scene_document_reader_float(reader, &environment->zenith_color.z) ||
+        !henka_scene_document_reader_float(reader, &environment->intensity) ||
+        !henka_scene_document_reader_float(reader, &environment->hdr_rotation) ||
+        !henka_scene_document_reader_u32(reader, &value))
+    {
+        return false;
+    }
+    environment->mode = (henka_scene_environment_mode)value;
+    if (!henka_scene_document_reader_float(
+            reader, &environment->atmosphere.rayleigh_scattering) ||
+        !henka_scene_document_reader_float(
+            reader, &environment->atmosphere.mie_scattering) ||
+        !henka_scene_document_reader_float(
+            reader, &environment->atmosphere.mie_anisotropy) ||
+        !henka_scene_document_reader_float(reader, &environment->atmosphere.density) ||
+        !henka_scene_document_reader_float(
+            reader, &environment->atmosphere.turbidity) ||
+        !henka_scene_document_reader_float(
+            reader, &environment->atmosphere.ozone_absorption) ||
+        !henka_scene_document_reader_float(
+            reader, &environment->atmosphere.atmosphere_height) ||
+        !henka_scene_document_reader_float(
+            reader, &environment->atmosphere.planet_radius) ||
+        !henka_scene_document_reader_float(
+            reader, &environment->atmosphere.ground_albedo.x) ||
+        !henka_scene_document_reader_float(
+            reader, &environment->atmosphere.ground_albedo.y) ||
+        !henka_scene_document_reader_float(
+            reader, &environment->atmosphere.ground_albedo.z) ||
+        !henka_scene_document_reader_float(
+            reader, &environment->atmosphere.horizon_intensity) ||
+        !henka_scene_document_reader_u32(reader, &sun_flags) ||
+        !henka_scene_document_reader_float(reader, &environment->sun.direction.x) ||
+        !henka_scene_document_reader_float(reader, &environment->sun.direction.y) ||
+        !henka_scene_document_reader_float(reader, &environment->sun.direction.z) ||
+        !henka_scene_document_reader_float(reader, &environment->sun.color.x) ||
+        !henka_scene_document_reader_float(reader, &environment->sun.color.y) ||
+        !henka_scene_document_reader_float(reader, &environment->sun.color.z) ||
+        !henka_scene_document_reader_float(reader, &environment->sun.intensity) ||
+        !henka_scene_document_reader_float(reader, &environment->sun.angular_radius) ||
+        !henka_scene_document_reader_u32(reader, &moon_flags) ||
+        !henka_scene_document_reader_float(reader, &environment->moon.direction.x) ||
+        !henka_scene_document_reader_float(reader, &environment->moon.direction.y) ||
+        !henka_scene_document_reader_float(reader, &environment->moon.direction.z) ||
+        !henka_scene_document_reader_float(reader, &environment->moon.color.x) ||
+        !henka_scene_document_reader_float(reader, &environment->moon.color.y) ||
+        !henka_scene_document_reader_float(reader, &environment->moon.color.z) ||
+        !henka_scene_document_reader_float(reader, &environment->moon.intensity) ||
+        !henka_scene_document_reader_float(reader, &environment->moon.angular_radius) ||
+        !henka_scene_document_reader_u32(reader, &stars_flags) ||
+        !henka_scene_document_reader_float(reader, &environment->stars.intensity) ||
+        !henka_scene_document_reader_float(reader, &environment->stars.rotation) ||
+        !henka_scene_document_reader_float(reader, &environment->time_of_day_hours) ||
+        !henka_scene_document_reader_float(reader, &environment->day_length_seconds) ||
+        !henka_scene_document_reader_float(reader, &environment->time_scale) ||
+        !henka_scene_document_reader_u32(reader, &time_flags) ||
+        (sun_flags & ~(HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED |
+            HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_MANUAL_DIRECTION)) != 0U ||
+        (moon_flags & ~(HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED |
+            HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_MANUAL_DIRECTION)) != 0U ||
+        (stars_flags & ~HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED) != 0U ||
+        (time_flags & ~HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED) != 0U)
+    {
+        return false;
+    }
+    environment->sun.enabled =
+        (sun_flags & HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED) != 0U;
+    environment->sun.manual_direction =
+        (sun_flags & HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_MANUAL_DIRECTION) != 0U;
+    environment->moon.enabled =
+        (moon_flags & HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED) != 0U;
+    environment->moon.manual_direction =
+        (moon_flags & HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_MANUAL_DIRECTION) != 0U;
+    environment->stars.enabled =
+        (stars_flags & HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED) != 0U;
+    environment->time_of_day_enabled =
+        (time_flags & HENKA_SCENE_DOCUMENT_ENVIRONMENT_FLAG_ENABLED) != 0U;
+    return henka_scene_document_validate_environment_value(environment);
+}
+
 static bool henka_scene_document_decode_object(
     henka_scene_document_reader* reader,
     henka_scene_document_object* object,
@@ -1798,7 +2205,7 @@ static bool henka_scene_document_decode_object(
     {
         return false;
     }
-    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V9)
     {
         uint32_t material_flags;
         if (!henka_scene_document_reader_u32(reader, &value)) return false;
@@ -2021,6 +2428,7 @@ static bool henka_scene_document_make_payload(
         henka_scene_document_writer_float(&writer, storage->camera.movement_speed);
         henka_scene_document_writer_float(&writer, storage->camera.fast_movement_multiplier);
     }
+    henka_scene_document_encode_environment(&writer, &storage->environment);
     if (writer.failed || writer.position != payload_size)
     {
         henka_free(payload);
@@ -2244,9 +2652,10 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V4 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V5 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V6 &&
-            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V7 &&
-            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V8 &&
-            format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
+             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V7 &&
+             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V8 &&
+             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V9 &&
+             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
     {
@@ -2273,6 +2682,7 @@ henka_result henka_scene_document_load_file(
     }
     candidate->next_id = next_id;
     candidate->audio_listener = henka_audio_listener_default();
+    candidate->environment = henka_scene_document_environment_default();
     reader = (henka_scene_document_reader){
         data + HENKA_SCENE_DOCUMENT_HEADER_BYTES,
         (size_t)payload_size,
@@ -2345,6 +2755,12 @@ henka_result henka_scene_document_load_file(
             }
             candidate->camera.projection_mode = (henka_camera_projection_mode)projection_mode;
         }
+    }
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        !henka_scene_document_decode_environment(&reader, &candidate->environment))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto load_cleanup;
     }
     if (reader.failed || reader.position != reader.size ||
         henka_scene_document_validate_storage(candidate) != HENKA_SUCCESS)

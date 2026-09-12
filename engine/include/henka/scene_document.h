@@ -13,7 +13,8 @@
 #include <henka/scene.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(9)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(10)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V9 UINT32_C(9)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V8 UINT32_C(8)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V7 UINT32_C(7)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V6 UINT32_C(6)
@@ -238,6 +239,17 @@ henka_result henka_scene_document_set_audio_listener(
 henka_result henka_scene_document_get_audio_listener(
     const henka_scene_document* document,
     henka_audio_listener* out_listener);
+/* The authored environment stores only value-owned scene settings. HDR
+ * textures remain borrowed runtime resources and are rejected by the setter
+ * until a supported asset-path authority can reconstruct them. The getter
+ * returns a runtime-compatible descriptor with hdr_texture set to NULL. Legacy
+ * documents load with the default environment. */
+henka_result henka_scene_document_set_environment(
+    henka_scene_document* document,
+    henka_scene_environment_desc environment);
+henka_result henka_scene_document_get_environment(
+    const henka_scene_document* document,
+    henka_scene_environment_desc* out_environment);
 /* An authored scene camera is optional. Legacy documents have no authored
  * camera; callers can choose whether to retain or replace their runtime
  * camera when applying a document. */

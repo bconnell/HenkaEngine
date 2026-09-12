@@ -238,6 +238,147 @@ cleanup:
     return success;
 }
 
+static bool test_scene_environment_save_load_is_complete(void)
+{
+    const char* project_root = "build/test_tmp";
+    const char* relative_path = "renderer_environment_persistence.hscene";
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_camera camera;
+    henka_scene_environment_desc expected = henka_scene_environment_default();
+    henka_scene_environment_desc changed = henka_scene_environment_default();
+    henka_scene_environment_desc actual;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    bool success = false;
+
+    expected.ground_color = (henka_vec3){0.07f, 0.11f, 0.16f};
+    expected.horizon_color = (henka_vec3){0.31f, 0.24f, 0.19f};
+    expected.zenith_color = (henka_vec3){0.02f, 0.04f, 0.09f};
+    expected.intensity = 2.35f;
+    expected.hdr_rotation = 0.63f;
+    expected.mode = HENKA_SCENE_ENVIRONMENT_PROCEDURAL;
+    expected.atmosphere.rayleigh_scattering = 1.4f;
+    expected.atmosphere.mie_scattering = 0.12f;
+    expected.atmosphere.mie_anisotropy = 0.35f;
+    expected.atmosphere.density = 1.3f;
+    expected.atmosphere.turbidity = 3.4f;
+    expected.atmosphere.ozone_absorption = 0.7f;
+    expected.atmosphere.atmosphere_height = 83000.0f;
+    expected.atmosphere.planet_radius = 6380000.0f;
+    expected.atmosphere.ground_albedo = (henka_vec3){0.22f, 0.27f, 0.19f};
+    expected.atmosphere.horizon_intensity = 1.7f;
+    expected.sun.enabled = true;
+    expected.sun.manual_direction = true;
+    expected.sun.direction = (henka_vec3){-0.35f, -0.91f, -0.22f};
+    expected.sun.color = (henka_vec3){1.0f, 0.77f, 0.55f};
+    expected.sun.intensity = 3.6f;
+    expected.sun.angular_radius = 0.012f;
+    expected.moon.enabled = true;
+    expected.moon.manual_direction = true;
+    expected.moon.direction = (henka_vec3){0.21f, -0.74f, 0.42f};
+    expected.moon.color = (henka_vec3){0.42f, 0.55f, 0.86f};
+    expected.moon.intensity = 0.28f;
+    expected.moon.angular_radius = 0.008f;
+    expected.stars.enabled = true;
+    expected.stars.intensity = 0.19f;
+    expected.stars.rotation = 1.2f;
+    expected.time_of_day_hours = 19.5f;
+    expected.day_length_seconds = 420.0f;
+    expected.time_scale = 1.75f;
+    expected.time_of_day_enabled = true;
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        16.0f / 9.0f,
+        0.1f,
+        100.0f);
+
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_set_environment(scene, expected) != HENKA_SUCCESS ||
+        henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+             scene,
+             "Renderer Environment")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create(
+            scene,
+            relative_path,
+            &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring,
+            entity,
+            &object_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_save(authoring, project_root) != HENKA_SUCCESS ||
+        henka_scene_set_environment(scene, changed) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, project_root) != HENKA_SUCCESS ||
+        henka_scene_get_environment(scene, &actual) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    success = actual.hdr_texture == NULL &&
+        actual.ground_color.x == expected.ground_color.x &&
+        actual.ground_color.y == expected.ground_color.y &&
+        actual.ground_color.z == expected.ground_color.z &&
+        actual.horizon_color.x == expected.horizon_color.x &&
+        actual.horizon_color.y == expected.horizon_color.y &&
+        actual.horizon_color.z == expected.horizon_color.z &&
+        actual.zenith_color.x == expected.zenith_color.x &&
+        actual.zenith_color.y == expected.zenith_color.y &&
+        actual.zenith_color.z == expected.zenith_color.z &&
+        actual.intensity == expected.intensity &&
+        actual.hdr_rotation == expected.hdr_rotation &&
+        actual.mode == expected.mode &&
+        actual.atmosphere.rayleigh_scattering == expected.atmosphere.rayleigh_scattering &&
+        actual.atmosphere.mie_scattering == expected.atmosphere.mie_scattering &&
+        actual.atmosphere.mie_anisotropy == expected.atmosphere.mie_anisotropy &&
+        actual.atmosphere.density == expected.atmosphere.density &&
+        actual.atmosphere.turbidity == expected.atmosphere.turbidity &&
+        actual.atmosphere.ozone_absorption == expected.atmosphere.ozone_absorption &&
+        actual.atmosphere.atmosphere_height == expected.atmosphere.atmosphere_height &&
+        actual.atmosphere.planet_radius == expected.atmosphere.planet_radius &&
+        actual.atmosphere.ground_albedo.x == expected.atmosphere.ground_albedo.x &&
+        actual.atmosphere.ground_albedo.y == expected.atmosphere.ground_albedo.y &&
+        actual.atmosphere.ground_albedo.z == expected.atmosphere.ground_albedo.z &&
+        actual.atmosphere.horizon_intensity == expected.atmosphere.horizon_intensity &&
+        actual.sun.enabled == expected.sun.enabled &&
+        actual.sun.manual_direction == expected.sun.manual_direction &&
+        actual.sun.direction.x == expected.sun.direction.x &&
+        actual.sun.direction.y == expected.sun.direction.y &&
+        actual.sun.direction.z == expected.sun.direction.z &&
+        actual.sun.color.x == expected.sun.color.x &&
+        actual.sun.color.y == expected.sun.color.y &&
+        actual.sun.color.z == expected.sun.color.z &&
+        actual.sun.intensity == expected.sun.intensity &&
+        actual.sun.angular_radius == expected.sun.angular_radius &&
+        actual.moon.enabled == expected.moon.enabled &&
+        actual.moon.manual_direction == expected.moon.manual_direction &&
+        actual.moon.direction.x == expected.moon.direction.x &&
+        actual.moon.direction.y == expected.moon.direction.y &&
+        actual.moon.direction.z == expected.moon.direction.z &&
+        actual.moon.color.x == expected.moon.color.x &&
+        actual.moon.color.y == expected.moon.color.y &&
+        actual.moon.color.z == expected.moon.color.z &&
+        actual.moon.intensity == expected.moon.intensity &&
+        actual.moon.angular_radius == expected.moon.angular_radius &&
+        actual.stars.enabled == expected.stars.enabled &&
+        actual.stars.intensity == expected.stars.intensity &&
+        actual.stars.rotation == expected.stars.rotation &&
+        actual.time_of_day_hours == expected.time_of_day_hours &&
+        actual.day_length_seconds == expected.day_length_seconds &&
+        actual.time_scale == expected.time_scale &&
+        actual.time_of_day_enabled == expected.time_of_day_enabled;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove("build/test_tmp/henka.project");
+    (void)remove("build/test_tmp/renderer_environment_persistence.hscene");
+    return success;
+}
+
 static bool test_material_asset_capture_authority_boundary(void)
 {
     const henka_material_asset* asset =
@@ -858,6 +999,11 @@ int main(void)
     if (!test_renderer_enablement_capture_is_complete())
     {
         fprintf(stderr, "renderer enablement capture test failed\n");
+        return 1;
+    }
+    if (!test_scene_environment_save_load_is_complete())
+    {
+        fprintf(stderr, "scene environment save/load test failed\n");
         return 1;
     }
     if (!test_material_asset_capture_authority_boundary())
