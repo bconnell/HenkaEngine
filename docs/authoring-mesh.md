@@ -587,7 +587,6 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;
 - automatic multi-island UV unwrap;
-- global UV packing;
 - texture painting;
 - broader material authoring beyond current bounded material-instance editing;
 - full editor workflows for arbitrary authoring-file selection;
