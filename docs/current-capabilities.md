@@ -398,14 +398,17 @@ Available operations also include:
 - planar UV projection;
 - bounded single-face UV transforms;
 - bounded UV-island scaling and packing from a selected seed face;
-- packing;
+- deterministic bounded packing of all UV islands into the unit square;
 - seam detection;
 - transactional Toggle UV Seam for selected Edge-mode components.
 
 The integrated Sandbox panel routes bounded multi-cut and UV projection,
-single-face transforms, and selected-island scaling/packing through the
-modeling transaction path. The Edge-mode seam control also uses this path and
-provides preview, Apply/Cancel, and undo/redo history.
+single-face transforms, selected-island scaling/packing, and all-island packing
+through the modeling transaction path. All-island packing uses the selected
+Face as its authoring context and lays out every seam-delimited island in a
+deterministic padded grid while preserving each island's relative proportions.
+The Edge-mode seam control also uses this path and provides preview,
+Apply/Cancel, and undo/redo history.
 
 ### HAMS persistence
 

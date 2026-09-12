@@ -40,6 +40,12 @@ henka_result henka_authoring_mesh_pack_uv_island(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id seed_face_id,
     float padding);
+/* Packs every topological UV island into a deterministic bounded grid inside
+ * the unit square.  Existing per-island UV proportions and explicit seam
+ * boundaries are preserved, and the candidate is published atomically. */
+henka_result henka_authoring_mesh_pack_uv_islands(
+    henka_authoring_mesh* mesh,
+    float padding);
 bool henka_authoring_mesh_face_uvs_are_finite(
     const henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id);

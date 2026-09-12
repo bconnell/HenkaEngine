@@ -528,6 +528,260 @@ henka_result henka_authoring_mesh_pack_uv_island(
     return result;
 }
 
+typedef struct uv_island_layout
+{
+    henka_authoring_face_id* face_ids;
+    size_t face_count;
+    henka_vec2 minimum;
+    henka_vec2 maximum;
+} uv_island_layout;
+
+static void uv_destroy_island_layouts(
+    uv_island_layout* layouts,
+    size_t layout_count)
+{
+    size_t index;
+    if (layouts == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < layout_count; ++index)
+    {
+        henka_free(layouts[index].face_ids);
+    }
+    henka_free(layouts);
+}
+
+henka_result henka_authoring_mesh_pack_uv_islands(
+    henka_authoring_mesh* mesh,
+    float padding)
+{
+    const henka_authoring_mesh_counts counts = henka_authoring_mesh_get_counts(mesh);
+    const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
+    uv_island_layout* layouts = NULL;
+    henka_authoring_face_id* seen_ids = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    size_t set_capacity = 1U;
+    size_t island_count = 0U;
+    size_t face_slot;
+    size_t column_count;
+    size_t row_count;
+    size_t island_index;
+    float interior_width = 0.0f;
+    float interior_height = 0.0f;
+    float cell_width = 0.0f;
+    float cell_height = 0.0f;
+    float available_width = 0.0f;
+    float available_height = 0.0f;
+    henka_result result = HENKA_SUCCESS;
+
+    if (mesh == NULL || !isfinite(padding) || padding < 0.0f || padding >= 0.5f ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (counts.faces == 0U)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (counts.faces > SIZE_MAX / 2U)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    while (set_capacity < counts.faces * 2U)
+    {
+        if (set_capacity > SIZE_MAX / 2U)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        set_capacity *= 2U;
+    }
+    if (counts.faces > SIZE_MAX / sizeof(*layouts) ||
+        set_capacity > SIZE_MAX / sizeof(*seen_ids))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    layouts = henka_calloc(counts.faces, sizeof(*layouts));
+    seen_ids = henka_calloc(set_capacity, sizeof(*seen_ids));
+    if (layouts == NULL || seen_ids == NULL)
+    {
+        uv_destroy_island_layouts(layouts, island_count);
+        henka_free(seen_ids);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
+    {
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_face_id* island_face_ids = NULL;
+        size_t island_face_count = 0U;
+        size_t face_index;
+
+        if (henka_authoring_mesh_get_face_id_at(mesh, face_slot, &face_id) != HENKA_SUCCESS ||
+            uv_face_id_set_contains(seen_ids, set_capacity, face_id))
+        {
+            continue;
+        }
+        if (island_count >= counts.faces)
+        {
+            result = HENKA_ERROR_LIMIT;
+            break;
+        }
+        result = uv_collect_island(mesh, face_id, &island_face_ids, &island_face_count);
+        if (result != HENKA_SUCCESS)
+        {
+            break;
+        }
+        for (face_index = 0U; face_index < island_face_count; ++face_index)
+        {
+            const henka_authoring_face* face = henka_authoring_mesh_get_face(
+                mesh, island_face_ids[face_index]);
+            size_t corner;
+            if (face == NULL || face->uvs == NULL || face->corner_count == 0U)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                break;
+            }
+            if (!uv_face_id_set_insert(
+                    seen_ids, set_capacity, island_face_ids[face_index]))
+            {
+                result = HENKA_ERROR_LIMIT;
+                break;
+            }
+            for (corner = 0U; corner < face->corner_count; ++corner)
+            {
+                const henka_vec2 uv = face->uvs[corner];
+                if (!uv_finite_vec2(uv))
+                {
+                    result = HENKA_ERROR_NUMERIC_RANGE;
+                    break;
+                }
+                if (face_index == 0U && corner == 0U)
+                {
+                    layouts[island_count].minimum = uv;
+                    layouts[island_count].maximum = uv;
+                }
+                else
+                {
+                    if (uv.x < layouts[island_count].minimum.x)
+                        layouts[island_count].minimum.x = uv.x;
+                    if (uv.y < layouts[island_count].minimum.y)
+                        layouts[island_count].minimum.y = uv.y;
+                    if (uv.x > layouts[island_count].maximum.x)
+                        layouts[island_count].maximum.x = uv.x;
+                    if (uv.y > layouts[island_count].maximum.y)
+                        layouts[island_count].maximum.y = uv.y;
+                }
+            }
+            if (result != HENKA_SUCCESS)
+            {
+                break;
+            }
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(island_face_ids);
+            break;
+        }
+        layouts[island_count].face_ids = island_face_ids;
+        layouts[island_count].face_count = island_face_count;
+        ++island_count;
+    }
+    if (result == HENKA_SUCCESS && island_count == 0U)
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    column_count = 1U;
+    while (result == HENKA_SUCCESS &&
+           column_count <= island_count / column_count &&
+           column_count * column_count < island_count)
+    {
+        if (column_count == SIZE_MAX)
+        {
+            result = HENKA_ERROR_LIMIT;
+            break;
+        }
+        ++column_count;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        row_count = (island_count + column_count - 1U) / column_count;
+        interior_width = 1.0f - 2.0f * padding * (float)column_count;
+        interior_height = 1.0f - 2.0f * padding * (float)row_count;
+        cell_width = interior_width / (float)column_count;
+        cell_height = interior_height / (float)row_count;
+        available_width = cell_width;
+        available_height = cell_height;
+        if (!isfinite(cell_width) || !isfinite(cell_height) ||
+            available_width <= 0.0f || available_height <= 0.0f)
+        {
+            result = HENKA_ERROR_LIMIT;
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_clone(mesh, &candidate);
+    }
+    for (island_index = 0U; result == HENKA_SUCCESS && island_index < island_count;
+         ++island_index)
+    {
+        const uv_island_layout* layout = &layouts[island_index];
+        const float width = layout->maximum.x - layout->minimum.x;
+        const float height = layout->maximum.y - layout->minimum.y;
+        float scale = 1.0f;
+        const size_t column = island_index % column_count;
+        const size_t row = island_index / column_count;
+        const float cell_origin_x = padding + (float)column * (cell_width + 2.0f * padding);
+        const float cell_origin_y = padding + (float)row * (cell_height + 2.0f * padding);
+        float packed_width;
+        float packed_height;
+        henka_vec2 offset;
+
+        if (!isfinite(width) || !isfinite(height) || width < 0.0f || height < 0.0f)
+        {
+            result = HENKA_ERROR_NUMERIC_RANGE;
+            break;
+        }
+        if (width > 0.000001f)
+        {
+            scale = available_width / width;
+        }
+        if (height > 0.000001f && available_height / height < scale)
+        {
+            scale = available_height / height;
+        }
+        if (!isfinite(scale) || scale <= 0.0f)
+        {
+            result = HENKA_ERROR_NUMERIC_RANGE;
+            break;
+        }
+        packed_width = width * scale;
+        packed_height = height * scale;
+        offset = (henka_vec2){
+            cell_origin_x + (available_width - packed_width) * 0.5f -
+                layout->minimum.x * scale,
+            cell_origin_y + (available_height - packed_height) * 0.5f -
+                layout->minimum.y * scale};
+        if (!uv_finite_vec2(offset) ||
+            !uv_finite_vec2((henka_vec2){scale, scale}))
+        {
+            result = HENKA_ERROR_NUMERIC_RANGE;
+            break;
+        }
+        result = uv_apply_island_transform(
+            candidate, layout->face_ids, layout->face_count,
+            (henka_vec2){scale, scale}, offset);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = uv_commit(mesh, candidate);
+        candidate = NULL;
+    }
+    henka_authoring_mesh_destroy(candidate);
+    uv_destroy_island_layouts(layouts, island_count);
+    henka_free(seen_ids);
+    return result;
+}
+
 bool henka_authoring_mesh_faces_share_uv_seam(
     const henka_authoring_mesh* mesh,
     henka_authoring_face_id first_face_id,

@@ -32,6 +32,8 @@ typedef enum sandbox3d_modeling_operator_kind
     SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM,
     /* Transactional packing of the UV island containing one selected face. */
     SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK,
+    /* Transactional packing of every UV island in the authoring mesh. */
+    SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL,
     /* Transactionally toggles the explicit seam state of selected edges. */
     SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE
 } sandbox3d_modeling_operator_kind;

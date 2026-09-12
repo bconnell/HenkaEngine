@@ -127,20 +127,22 @@ The operation reverses only the ordered winding.
 - bounded per-face UV transforms;
 - single-face packing helpers;
 - bounded scaling and packing of the complete UV island containing a selected face;
+- deterministic bounded packing of every UV island into the unit square;
 - finite-value validation;
 - seam detection from shared topology and explicit edge seam metadata.
 
 The shared Sandbox modeling session routes one selected face through
 transactional UV projection, uniform scaling, and padded unit-square packing.
 The island operations affect faces connected through non-seam edges while
-preserving existing UV seams as boundaries. Each operation supports preview,
-Apply, Cancel, and the existing authoring undo/redo history; UV state persists
-through the HAMS source path.
+preserving existing UV seams as boundaries. The all-islands operation uses a
+deterministic bounded grid and preserves each island's relative UV proportions.
+Each operation supports preview, Apply, Cancel, and the existing authoring
+undo/redo history; UV state persists through the HAMS source path.
 
 In Edge mode, the Sandbox exposes a transactional Toggle UV Seam operation for
 the selected edges. It supports preview, Cancel, Apply, and authoring undo/redo;
 the explicit seam state is persisted through HAMS v6. Automatic multi-island
-unwrap and global packing remain unfinished.
+unwrap remains unfinished.
 
 ## Connected Sandbox workflow
 

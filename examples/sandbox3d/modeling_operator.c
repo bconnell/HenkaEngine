@@ -77,6 +77,7 @@ henka_result sandbox3d_modeling_operator_begin(
          kind != SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK &&
+         kind != SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -131,8 +132,9 @@ henka_result sandbox3d_modeling_operator_begin(
     if ((kind == SANDBOX3D_MODELING_OPERATOR_UV_PROJECT ||
          kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK ||
          kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ||
-         kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM ||
-         kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK) &&
+          kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM ||
+          kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK ||
+          kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL) &&
         (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count != 1U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -409,6 +411,7 @@ henka_result sandbox3d_modeling_operator_preview(
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK &&
+         session->kind != SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE) ||
         session->source_snapshot == NULL || session->object == NULL ||
         session->selection_ids == NULL || session->selection_count == 0U ||
@@ -438,7 +441,8 @@ henka_result sandbox3d_modeling_operator_preview(
           session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK ||
           session->kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ||
           session->kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM ||
-          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK) &&
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK ||
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL) &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
              session->selection_count != 1U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PROJECT &&
@@ -469,7 +473,8 @@ henka_result sandbox3d_modeling_operator_preview(
           session->kind == SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE) &&
             fabsf(applied_amount) <= 1.0e-7f) ||
         ((session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK ||
-          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK) &&
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK ||
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL) &&
             (applied_amount < 0.0f || applied_amount >= 0.5f)) ||
         ((session->kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ||
           session->kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM) &&
@@ -649,6 +654,11 @@ henka_result sandbox3d_modeling_operator_preview(
             candidate,
             (henka_authoring_face_id)session->selection_ids[0U],
             applied_amount);
+    }
+    if (result == HENKA_SUCCESS &&
+        session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL)
+    {
+        result = henka_authoring_mesh_pack_uv_islands(candidate, applied_amount);
     }
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE)

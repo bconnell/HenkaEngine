@@ -2823,6 +2823,136 @@ cleanup:
     return result ? 1 : fail("UV authoring");
 }
 
+static bool test_uv_face_bounds(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id,
+    henka_vec2* out_minimum,
+    henka_vec2* out_maximum)
+{
+    const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, face_id);
+    henka_vec2 minimum = {0.0f, 0.0f};
+    henka_vec2 maximum = {0.0f, 0.0f};
+    size_t corner;
+
+    if (face == NULL || face->uvs == NULL || face->corner_count == 0U ||
+        out_minimum == NULL || out_maximum == NULL)
+    {
+        return false;
+    }
+    for (corner = 0U; corner < face->corner_count; ++corner)
+    {
+        const henka_vec2 uv = face->uvs[corner];
+        if (!isfinite(uv.x) || !isfinite(uv.y))
+        {
+            return false;
+        }
+        if (corner == 0U || uv.x < minimum.x) minimum.x = uv.x;
+        if (corner == 0U || uv.y < minimum.y) minimum.y = uv.y;
+        if (corner == 0U || uv.x > maximum.x) maximum.x = uv.x;
+        if (corner == 0U || uv.y > maximum.y) maximum.y = uv.y;
+    }
+    *out_minimum = minimum;
+    *out_maximum = maximum;
+    return true;
+}
+
+static int test_uv_global_packing(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 32U, 16U, 8U};
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+        {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+        {3.0f, 0.0f, 0.0f}, {5.0f, 0.0f, 0.0f},
+        {5.0f, 1.0f, 0.0f}, {3.0f, 1.0f, 0.0f}};
+    const henka_vec2 uvs[8] = {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f},
+        {3.0f, 0.0f}, {5.0f, 0.0f}, {5.0f, 1.0f}, {3.0f, 1.0f}};
+    const henka_authoring_vertex_id first_face_vertices[4] = {1U, 2U, 3U, 4U};
+    const henka_authoring_vertex_id second_face_vertices[4] = {5U, 6U, 7U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* repeat = NULL;
+    henka_authoring_face_id first_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id second_face = HENKA_AUTHORING_INVALID_ID;
+    henka_vec2 first_minimum;
+    henka_vec2 first_maximum;
+    henka_vec2 second_minimum;
+    henka_vec2 second_maximum;
+    henka_vec2 before_invalid;
+    henka_vec2 after_invalid;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], uvs[index], 0U,
+                &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, first_face_vertices, 4U, 0U, true, &first_face) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            mesh, second_face_vertices, 4U, 0U, true, &second_face) != HENKA_SUCCESS ||
+        henka_authoring_mesh_clone(mesh, &repeat) != HENKA_SUCCESS ||
+        henka_authoring_mesh_pack_uv_islands(mesh, 0.05f) != HENKA_SUCCESS ||
+        henka_authoring_mesh_pack_uv_islands(repeat, 0.05f) != HENKA_SUCCESS ||
+        !test_uv_face_bounds(mesh, first_face, &first_minimum, &first_maximum) ||
+        !test_uv_face_bounds(mesh, second_face, &second_minimum, &second_maximum) ||
+        first_minimum.x < 0.049f || first_minimum.y < 0.049f ||
+        first_maximum.x > 0.951f || first_maximum.y > 0.951f ||
+        second_minimum.x < 0.049f || second_minimum.y < 0.049f ||
+        second_maximum.x > 0.951f || second_maximum.y > 0.951f ||
+        second_minimum.x - first_maximum.x < 0.099f ||
+        fabsf((second_maximum.x - second_minimum.x) /
+              (second_maximum.y - second_minimum.y) - 2.0f) > 0.01f)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        henka_vec2 actual;
+        henka_vec2 expected;
+        if (henka_authoring_mesh_get_face_corner_uv(
+                mesh, first_face, index, &actual) != HENKA_SUCCESS ||
+            henka_authoring_mesh_get_face_corner_uv(
+                repeat, first_face, index, &expected) != HENKA_SUCCESS ||
+            fabsf(actual.x - expected.x) > 0.0001f ||
+            fabsf(actual.y - expected.y) > 0.0001f ||
+            henka_authoring_mesh_get_face_corner_uv(
+                mesh, second_face, index, &actual) != HENKA_SUCCESS ||
+            henka_authoring_mesh_get_face_corner_uv(
+                repeat, second_face, index, &expected) != HENKA_SUCCESS ||
+            fabsf(actual.x - expected.x) > 0.0001f ||
+            fabsf(actual.y - expected.y) > 0.0001f)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_get_face_corner_uv(
+            mesh, first_face, 0U, &before_invalid) != HENKA_SUCCESS ||
+        henka_authoring_mesh_pack_uv_islands(mesh, 0.5f) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_authoring_mesh_get_face_corner_uv(
+            mesh, first_face, 0U, &after_invalid) != HENKA_SUCCESS ||
+        fabsf(before_invalid.x - after_invalid.x) > 0.0001f ||
+        fabsf(before_invalid.y - after_invalid.y) > 0.0001f ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(repeat);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("global UV island packing");
+}
+
 static int test_modeling_material_region_and_uv_continuity(void)
 {
     const char* path = "authoring_material_regions.hams";
@@ -4457,6 +4587,7 @@ int main(void)
         test_closed_quad_ring_loop_cut_operation() &&
         test_edge_loop_slide_operation() &&
         test_uv_authoring() &&
+        test_uv_global_packing() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&
