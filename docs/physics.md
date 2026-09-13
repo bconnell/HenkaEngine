@@ -4,6 +4,24 @@ Henka Engine includes a scoped rigid-body physics v1 layer for small runtime sce
 
 ## Supported Behavior
 
+### Supported shape pairs
+
+The bounded v1 collision dispatcher supports the following pairings. Planes
+and heightfields are static-only; a pair containing two static-only shapes is
+not evaluated as a runtime contact pair.
+
+| First shape | Sphere | Upright capsule | Axis-aligned box | Plane | Bounded static heightfield |
+| --- | --- | --- | --- | --- | --- |
+| Sphere | Supported | Supported | Supported | Supported | Supported |
+| Upright capsule | Supported | Supported | Supported | Supported | Supported |
+| Axis-aligned box | Supported | Supported | Supported | Supported | Supported |
+| Plane | Supported | Supported | Supported | Static-only pair not evaluated | Static-only pair not evaluated |
+| Bounded static heightfield | Supported | Supported | Supported | Static-only pair not evaluated | Static-only pair not evaluated |
+
+Runtime creation and body-type changes reject non-static plane and heightfield
+colliders without changing the existing world. This keeps the static-only
+matrix explicit rather than routing those cases through an approximation.
+
 The public physics API provides:
 
 - physics worlds with gravity and deterministic fixed-timestep stepping
@@ -45,9 +63,10 @@ Heightfields are created with `henka_physics_collider_heightfield`. The source
 array is borrowed only for the create or replacement call; the body copies and
 owns the signed millimeter samples. Version 1 accepts static, identity-oriented
 heightfields with at least a 2 by 2 grid and a bounded 4096 by 4096 dimension.
-Sphere and axis-aligned box contacts use deterministic bounded corner/support
-queries, derive terrain normals from neighboring samples, and honor the normal
-layer/mask filters. Raycasts use a bounded cell-sized march and fail closed when
+Sphere, upright capsule, and axis-aligned box contacts use deterministic
+bounded corner/support queries, derive terrain normals from neighboring
+samples, and honor the normal layer/mask filters. Raycasts use a bounded
+cell-sized march and fail closed when
 the requested range cannot be covered by the traversal budget. Replacement
 copies the candidate before releasing the prior field, so invalid input or
 allocation failure preserves the last valid collision representation.

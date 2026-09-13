@@ -590,13 +590,16 @@ See [terrain.md](terrain.md) for the authoritative terrain contract.
 
 ## Physics
 
-### Available foundation
+### Available
 
-Physics v1 provides fixed-step static, dynamic, and kinematic bodies with:
+Physics v1 provides a bounded rigid-body scope with fixed-step static, dynamic,
+and kinematic bodies with:
 
 - sphere colliders;
+- upright capsule colliders;
 - axis-aligned box colliders;
 - plane colliders;
+- bounded static heightfield colliders;
 - contacts;
 - impulses;
 - friction;
@@ -610,11 +613,13 @@ static, dynamic, and kinematic modes, fixed-step motion, collision/trigger
 events, raycast, and reset. Numeric, allocation, and body-replacement failures
 preserve prior simulation state where the contract requires retry safety.
 
-### Remaining work
+### Outside this declared scope
 
-- Mesh collision
+- Arbitrary mesh or concave collision
 - Constraints
 - Advanced simulation
+
+## Character Controller
 
 The public Character Controller foundation is available for a real dynamic
 upright capsule body. It validates bounded planar input, supports optional

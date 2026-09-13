@@ -676,6 +676,78 @@ static void henka_test_physics_shape_pairs_and_raycast(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_physics_static_only_shape_boundaries(void)
+{
+    henka_physics_world* world;
+    henka_physics_body_desc desc;
+    henka_physics_body_id body = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id plane = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id heightfield = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_state state;
+    size_t count;
+    int32_t heights[4] = {0, 0, 0, 0};
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_plane((henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(body == HENKA_INVALID_PHYSICS_BODY_ID);
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == 0U);
+
+    desc.type = HENKA_PHYSICS_BODY_KINEMATIC;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(body == HENKA_INVALID_PHYSICS_BODY_ID);
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == 0U);
+
+    desc.type = HENKA_PHYSICS_BODY_STATIC;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &plane) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_set_type(
+        world,
+        plane,
+        HENKA_PHYSICS_BODY_DYNAMIC) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, plane, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.type == HENKA_PHYSICS_BODY_STATIC);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_heightfield(
+            2U,
+            2U,
+            1.0f,
+            heights,
+            (henka_vec3){0.0f, 0.0f, 0.0f}),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(body == HENKA_INVALID_PHYSICS_BODY_ID);
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == 1U);
+
+    desc.type = HENKA_PHYSICS_BODY_KINEMATIC;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(body == HENKA_INVALID_PHYSICS_BODY_ID);
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == 1U);
+
+    desc.type = HENKA_PHYSICS_BODY_STATIC;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &heightfield) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_set_type(
+        world,
+        heightfield,
+        HENKA_PHYSICS_BODY_KINEMATIC) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, heightfield, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.type == HENKA_PHYSICS_BODY_STATIC);
+
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    (void)henka_physics_world_get_contacts(world, &count);
+    HENKA_TEST_ASSERT(count == 0U);
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == 2U);
+    henka_physics_world_destroy(world);
+}
+
 static void henka_test_physics_shape_pair(
     henka_physics_collider_desc first_collider,
     henka_vec3 first_position,
@@ -2115,6 +2187,7 @@ void henka_test_physics(void)
     henka_test_physics_capsule_box_separation();
     henka_test_physics_axis_aligned_box_rotation_boundary();
     henka_test_physics_shape_pairs_and_raycast();
+    henka_test_physics_static_only_shape_boundaries();
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();
     henka_test_physics_scene_link_hierarchy();

@@ -41,7 +41,7 @@ runtime, packaging, and external-project validation.
 - Integrated Object/Vertex/Edge/Face authoring with stable mesh-element identities
 - Transactional topology operations, UV foundations, and bounded undo/redo
 - Terrain streaming, editing, persistence, material layers, and collision ownership
-- Rigid-body physics foundation with Sandbox inspection
+- Bounded rigid-body physics with Sandbox inspection
 - Bounded game-audio foundation with buses, spatial emitters, scene/Play integration, SDL3 output, and external public-API validation
 - Perspective, side, top-down, and isometric 2.5D camera foundations
 - Headless/dedicated-server and external-project template foundations
@@ -62,7 +62,7 @@ runtime, packaging, and external-project validation.
 | Modeling and authoring | Available | Bounded product-native Object/Vertex/Edge/Face modeling, topology operations, UV, persistence, and HAMS workflows |
 | Assets and materials | In Progress | Current glTF/GLB and OBJ loading, manager-owned dependencies, and validated instances |
 | Terrain and world | Foundation | Current bounded four-layer terrain, streaming, edits, LOD, persistence, and collision paths |
-| Physics | Foundation | Current fixed-step rigid bodies, primitive colliders, contacts, events, and raycasts |
+| Physics | Available | Bounded current rigid-body v1: fixed-step static, dynamic, and kinematic bodies; sphere, upright capsule, axis-aligned box, plane, and bounded heightfield colliders; contacts, events, raycasts, failure-safe replacement, and authored configuration |
 | 2.5D | Foundation | Camera-side foundation: perspective/side/top/isometric workflows and orthographic zoom |
 | Networking/server | Foundation | Current renderer-free runtime, dedicated host, and bounded Terrain authority paths |
 | External projects | Foundation | Current separate game/server templates with Windows validation |
@@ -258,7 +258,7 @@ continues to affect status.
 
 - Henka and its editor are early-stage; the native workspace is not a complete production editor.
 - First-class 2D and first-class 2.5D, broader scripting/behavior authoring, full character-controller movement,
-  advanced physics, broader renderer backends, mature Game/Play workflows, and
+  advanced physics outside the bounded rigid-body v1 scope, broader renderer backends, mature Game/Play workflows, and
   advanced audio effects/occlusion remain unfinished. A bounded dynamic-body
   character-controller foundation is available, including contact-aware planar
   sliding, supported walkable-plane traversal, and bounded kinematic-platform
