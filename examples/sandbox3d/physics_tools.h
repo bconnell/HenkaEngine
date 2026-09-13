@@ -21,6 +21,7 @@ typedef enum sandbox3d_physics_sample_slot
 henka_physics_body_type sandbox3d_physics_initial_body_type(sandbox3d_physics_sample_slot slot);
 henka_physics_body_type sandbox3d_physics_demo_body_type(sandbox3d_physics_sample_slot slot);
 henka_physics_body_type sandbox3d_physics_next_body_type(henka_physics_body_type type);
+henka_physics_shape_type sandbox3d_physics_next_shape_type(henka_physics_shape_type type);
 
 henka_result sandbox3d_physics_activate_only_body(
     henka_physics_world* world,

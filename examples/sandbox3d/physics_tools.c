@@ -39,6 +39,24 @@ henka_physics_body_type sandbox3d_physics_next_body_type(henka_physics_body_type
     }
 }
 
+henka_physics_shape_type sandbox3d_physics_next_shape_type(
+    henka_physics_shape_type type)
+{
+    switch (type)
+    {
+        case HENKA_PHYSICS_SHAPE_SPHERE:
+            return HENKA_PHYSICS_SHAPE_BOX;
+        case HENKA_PHYSICS_SHAPE_BOX:
+            return HENKA_PHYSICS_SHAPE_CAPSULE;
+        case HENKA_PHYSICS_SHAPE_CAPSULE:
+            return HENKA_PHYSICS_SHAPE_SPHERE;
+        case HENKA_PHYSICS_SHAPE_PLANE:
+        case HENKA_PHYSICS_SHAPE_HEIGHTFIELD:
+        default:
+            return HENKA_PHYSICS_SHAPE_SPHERE;
+    }
+}
+
 henka_result sandbox3d_physics_activate_only_body(
     henka_physics_world* world,
     const henka_physics_body_id* bodies,

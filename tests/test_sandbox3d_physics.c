@@ -76,6 +76,18 @@ void henka_test_sandbox3d_physics(void)
     HENKA_TEST_ASSERT(
         sandbox3d_physics_next_body_type((henka_physics_body_type)99) ==
         HENKA_PHYSICS_BODY_STATIC);
+    HENKA_TEST_ASSERT(
+        sandbox3d_physics_next_shape_type(HENKA_PHYSICS_SHAPE_SPHERE) ==
+        HENKA_PHYSICS_SHAPE_BOX);
+    HENKA_TEST_ASSERT(
+        sandbox3d_physics_next_shape_type(HENKA_PHYSICS_SHAPE_BOX) ==
+        HENKA_PHYSICS_SHAPE_CAPSULE);
+    HENKA_TEST_ASSERT(
+        sandbox3d_physics_next_shape_type(HENKA_PHYSICS_SHAPE_CAPSULE) ==
+        HENKA_PHYSICS_SHAPE_SPHERE);
+    HENKA_TEST_ASSERT(
+        sandbox3d_physics_next_shape_type(HENKA_PHYSICS_SHAPE_HEIGHTFIELD) ==
+        HENKA_PHYSICS_SHAPE_SPHERE);
 
     world = NULL;
     scene = NULL;

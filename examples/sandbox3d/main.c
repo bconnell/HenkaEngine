@@ -10561,7 +10561,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  OBJ material libraries, negative indices, animation, broader project serialization, and broader 2D or 2.5D workflows are not available yet.\n");
     printf("  The UI overlay is intentionally small and is not a full editor.\n");
     printf("  Detached production panels show matching controls with Dock L, Dock R, and Home return actions; moving a focused detached title bar into the main-window envelope redocks it. Scene View does not detach yet.\n");
-    printf("  Rigid-body physics v1 uses sphere, axis-aligned box, and plane colliders; advanced physics features remain future work.\n");
+    printf("  Rigid-body physics v1 uses sphere, upright capsule, axis-aligned box, and plane colliders; advanced physics features remain future work.\n");
     printf("  Sandbox settings are saved locally beside the executable in the user folder.\n");
     fflush(stdout);
 }
@@ -30086,17 +30086,13 @@ details_group_physics:
                         state->ui,
                         "game_authoring_physics_shape",
                         (henka_ui_rect){row.x + (button_width + gap) * 2.0f, row.y, button_width, row.height},
-                        authored_object.physics.shape == HENKA_PHYSICS_SHAPE_SPHERE ? "Box" : "Sphere") &&
+                        henka_physics_shape_type_get_label(
+                            sandbox3d_physics_next_shape_type(
+                                authored_object.physics.shape))) &&
                     !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
                 {
-                    if (authored_object.physics.shape == HENKA_PHYSICS_SHAPE_SPHERE)
-                    {
-                        authored_object.physics.shape = HENKA_PHYSICS_SHAPE_BOX;
-                    }
-                    else
-                    {
-                        authored_object.physics.shape = HENKA_PHYSICS_SHAPE_SPHERE;
-                    }
+                    authored_object.physics.shape = sandbox3d_physics_next_shape_type(
+                        authored_object.physics.shape);
                     (void)sandbox3d_commit_game_authoring_object(
                         state,
                         entity,

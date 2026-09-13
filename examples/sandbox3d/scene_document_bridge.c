@@ -1025,9 +1025,26 @@ henka_result sandbox3d_scene_document_bridge_make_physics_body_desc(
     out_desc->transform = object.transform;
     out_desc->mass = object.physics.mass;
     out_desc->material = object.physics.material;
-    out_desc->collider = object.physics.shape == HENKA_PHYSICS_SHAPE_SPHERE
-        ? henka_physics_collider_sphere(object.physics.sphere_radius)
-        : henka_physics_collider_box(object.physics.box_half_extents);
+    switch (object.physics.shape)
+    {
+        case HENKA_PHYSICS_SHAPE_SPHERE:
+            out_desc->collider = henka_physics_collider_sphere(
+                object.physics.sphere_radius);
+            break;
+        case HENKA_PHYSICS_SHAPE_BOX:
+            out_desc->collider = henka_physics_collider_box(
+                object.physics.box_half_extents);
+            break;
+        case HENKA_PHYSICS_SHAPE_CAPSULE:
+            out_desc->collider = henka_physics_collider_capsule(
+                object.physics.capsule_radius,
+                object.physics.capsule_half_height);
+            break;
+        case HENKA_PHYSICS_SHAPE_PLANE:
+        case HENKA_PHYSICS_SHAPE_HEIGHTFIELD:
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     out_desc->collider.offset = object.physics.collider_offset;
     out_desc->collider.is_trigger = object.physics.is_trigger;
     out_desc->collider.layer = object.physics.layer;

@@ -161,6 +161,91 @@ cleanup:
     return success;
 }
 
+static bool test_authored_capsule_persistence_and_play(void)
+{
+    const char* path = "build/test_tmp/play_session_authored_capsule.hscene";
+    henka_scene_document* document = NULL;
+    henka_scene_document* loaded_document = NULL;
+    sandbox3d_scene_document_bridge* bridge = NULL;
+    sandbox3d_play_session* session = NULL;
+    henka_scene* scene = NULL;
+    henka_physics_world* physics_world = NULL;
+    henka_scene_document_object object = henka_scene_document_object_default();
+    henka_scene_document_object loaded_object;
+    henka_scene_document_object invalid_object;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_physics_body_desc body_desc;
+    henka_physics_debug_shape debug_shape;
+    size_t debug_shape_count;
+    bool success = false;
+
+    (void)snprintf(object.name, sizeof(object.name), "%s", "Authored Capsule");
+    object.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE;
+    object.source.primitive = HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX;
+    object.source.primitive_dimensions = (henka_vec3){1.0f, 2.0f, 1.0f};
+    object.transform.position = (henka_vec3){0.0f, 1.8f, 0.0f};
+    object.physics.enabled = true;
+    object.physics.body_type = HENKA_PHYSICS_BODY_DYNAMIC;
+    object.physics.shape = HENKA_PHYSICS_SHAPE_CAPSULE;
+    object.physics.capsule_radius = 0.45f;
+    object.physics.capsule_half_height = 0.8f;
+    object.physics.mass = 1.0f;
+
+    if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
+        henka_scene_document_create(&loaded_document) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_physics_world_create(&physics_world) != HENKA_SUCCESS ||
+        henka_scene_document_add_object(document, &object, &object_id) != HENKA_SUCCESS ||
+        henka_scene_document_save_file(document, ".", path) != HENKA_SUCCESS ||
+        henka_scene_document_load_file(loaded_document, ".", path) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(loaded_document, object_id, &loaded_object) != HENKA_SUCCESS ||
+        loaded_object.physics.shape != HENKA_PHYSICS_SHAPE_CAPSULE ||
+        loaded_object.physics.capsule_radius != object.physics.capsule_radius ||
+        loaded_object.physics.capsule_half_height != object.physics.capsule_half_height ||
+        (invalid_object = loaded_object,
+            invalid_object.physics.capsule_radius = 0.0f,
+            henka_scene_document_set_object(
+                loaded_document, &invalid_object) != HENKA_ERROR_INVALID_ARGUMENT) ||
+        henka_scene_document_get_object(loaded_document, object_id, &invalid_object) != HENKA_SUCCESS ||
+        invalid_object.physics.shape != HENKA_PHYSICS_SHAPE_CAPSULE ||
+        invalid_object.physics.capsule_radius != object.physics.capsule_radius ||
+        invalid_object.physics.capsule_half_height != object.physics.capsule_half_height ||
+        (entity = henka_scene_create_entity_named(scene, loaded_object.name)) == HENKA_INVALID_ENTITY ||
+        sandbox3d_scene_document_bridge_create(loaded_document, scene, &bridge) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_bind(bridge, object_id, entity) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_make_physics_body_desc(bridge, object_id, &body_desc) != HENKA_SUCCESS ||
+        body_desc.collider.shape != HENKA_PHYSICS_SHAPE_CAPSULE ||
+        body_desc.collider.data.capsule.radius != object.physics.capsule_radius ||
+        body_desc.collider.data.capsule.half_height != object.physics.capsule_half_height ||
+        body_desc.linked_scene != scene || body_desc.linked_entity != entity ||
+        sandbox3d_play_session_create(bridge, physics_world, &session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_start(session) != HENKA_SUCCESS ||
+        henka_physics_world_get_body_count(physics_world) != 1U ||
+        (debug_shape_count = henka_physics_world_get_debug_shape_count(physics_world)) != 1U ||
+        henka_physics_world_get_debug_shape(physics_world, 0U, &debug_shape) != HENKA_SUCCESS ||
+        debug_shape.collider.shape != HENKA_PHYSICS_SHAPE_CAPSULE ||
+        debug_shape.collider.data.capsule.radius != object.physics.capsule_radius ||
+        debug_shape.collider.data.capsule.half_height != object.physics.capsule_half_height ||
+        debug_shape.body == HENKA_INVALID_PHYSICS_BODY_ID ||
+        sandbox3d_play_session_stop(session) != HENKA_SUCCESS ||
+        henka_physics_world_get_body_count(physics_world) != 0U)
+    {
+        goto cleanup;
+    }
+    success = true;
+
+cleanup:
+    sandbox3d_play_session_destroy(session);
+    sandbox3d_scene_document_bridge_destroy(bridge);
+    henka_physics_world_destroy(physics_world);
+    henka_scene_destroy(scene);
+    henka_scene_document_destroy(loaded_document);
+    henka_scene_document_destroy(document);
+    return success;
+}
+
 static bool test_play_session_stop_retry_after_body_failure(void)
 {
     enum { TEST_OBJECT_COUNT = 9 };
@@ -368,6 +453,11 @@ int main(void)
     size_t tick_count;
     int exit_code = 1;
 
+    if (!test_authored_capsule_persistence_and_play())
+    {
+        fprintf(stderr, "authored capsule persistence and Play integration test failed\n");
+        return 1;
+    }
     if (!test_character_controller_play_integration())
     {
         fprintf(stderr, "character controller Play integration test failed\n");

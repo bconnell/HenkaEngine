@@ -13,7 +13,8 @@
 #include <henka/scene.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(13)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(14)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V13 UINT32_C(13)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V12 UINT32_C(12)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V11 UINT32_C(11)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V10 UINT32_C(10)
@@ -150,6 +151,8 @@ typedef struct henka_scene_document_physics
     henka_physics_shape_type shape;
     henka_vec3 collider_offset;
     float sphere_radius;
+    float capsule_radius;
+    float capsule_half_height;
     henka_vec3 box_half_extents;
     bool is_trigger;
     float mass;

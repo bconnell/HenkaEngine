@@ -660,10 +660,13 @@ static henka_result henka_scene_document_validate_object(
     if (physics->body_type < HENKA_PHYSICS_BODY_STATIC ||
         physics->body_type > HENKA_PHYSICS_BODY_KINEMATIC ||
         physics->shape < HENKA_PHYSICS_SHAPE_SPHERE ||
-        physics->shape > HENKA_PHYSICS_SHAPE_HEIGHTFIELD ||
+        physics->shape > HENKA_PHYSICS_SHAPE_CAPSULE ||
         !henka_scene_document_finite_vec3(physics->collider_offset) ||
         !henka_scene_document_finite_vec3(physics->box_half_extents) ||
-        !isfinite(physics->sphere_radius) || !isfinite(physics->mass) ||
+        !isfinite(physics->sphere_radius) ||
+        !isfinite(physics->capsule_radius) ||
+        !isfinite(physics->capsule_half_height) ||
+        !isfinite(physics->mass) ||
         !isfinite(physics->material.restitution) ||
         !isfinite(physics->material.static_friction) ||
         !isfinite(physics->material.dynamic_friction) ||
@@ -675,7 +678,8 @@ static henka_result henka_scene_document_validate_object(
     if (physics->enabled)
     {
         if (physics->shape != HENKA_PHYSICS_SHAPE_SPHERE &&
-            physics->shape != HENKA_PHYSICS_SHAPE_BOX)
+            physics->shape != HENKA_PHYSICS_SHAPE_BOX &&
+            physics->shape != HENKA_PHYSICS_SHAPE_CAPSULE)
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
@@ -684,6 +688,9 @@ static henka_result henka_scene_document_validate_object(
                 (physics->box_half_extents.x <= 0.0f ||
                     physics->box_half_extents.y <= 0.0f ||
                     physics->box_half_extents.z <= 0.0f)) ||
+            (physics->shape == HENKA_PHYSICS_SHAPE_CAPSULE &&
+                (physics->capsule_radius <= 0.0f ||
+                    physics->capsule_half_height < 0.0f)) ||
             physics->mass < 0.0f ||
             (physics->body_type == HENKA_PHYSICS_BODY_DYNAMIC && physics->mass <= 0.0f) ||
             physics->material.restitution < 0.0f || physics->material.restitution > 1.0f ||
@@ -871,6 +878,8 @@ henka_scene_document_object henka_scene_document_object_default(void)
     object.physics.body_type = HENKA_PHYSICS_BODY_STATIC;
     object.physics.shape = HENKA_PHYSICS_SHAPE_BOX;
     object.physics.sphere_radius = 0.5f;
+    object.physics.capsule_radius = 0.5f;
+    object.physics.capsule_half_height = 0.75f;
     object.physics.box_half_extents = (henka_vec3){0.5f, 0.5f, 0.5f};
     object.physics.material = (henka_physics_material){0.0f, 0.5f, 0.5f, 0.0f, 0.0f};
     object.physics.layer = 1U;
@@ -1823,7 +1832,7 @@ static bool henka_scene_document_payload_size(
                 2U + material_path_length + 40U + inline_renderer_bytes +
                 texture_identity_bytes +
                 4U + 2U + prompt_length +
-                4U + 4U + 12U + 4U + 12U + 4U + 20U + 4U + 4U +
+                4U + 4U + 12U + 4U + 8U + 12U + 4U + 20U + 4U + 4U +
                 2U + audio_path_length + 4U + 16U + 4U + 40U))
         {
             return false;
@@ -2057,6 +2066,8 @@ static void henka_scene_document_encode_object(
     henka_scene_document_writer_float(writer, object->physics.collider_offset.y);
     henka_scene_document_writer_float(writer, object->physics.collider_offset.z);
     henka_scene_document_writer_float(writer, object->physics.sphere_radius);
+    henka_scene_document_writer_float(writer, object->physics.capsule_radius);
+    henka_scene_document_writer_float(writer, object->physics.capsule_half_height);
     henka_scene_document_writer_float(writer, object->physics.box_half_extents.x);
     henka_scene_document_writer_float(writer, object->physics.box_half_extents.y);
     henka_scene_document_writer_float(writer, object->physics.box_half_extents.z);
@@ -2649,7 +2660,7 @@ static bool henka_scene_document_decode_object(
         object->renderer.receive_shadows = (material_flags & (UINT32_C(1) << 4U)) != 0U;
         object->renderer.use_texture = (material_flags & (UINT32_C(1) << 5U)) != 0U;
     }
-    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V13)
     {
         if (!henka_scene_document_reader_u32(
                 reader,
@@ -2698,6 +2709,11 @@ static bool henka_scene_document_decode_object(
         !henka_scene_document_reader_float(reader, &object->physics.collider_offset.y) ||
         !henka_scene_document_reader_float(reader, &object->physics.collider_offset.z) ||
         !henka_scene_document_reader_float(reader, &object->physics.sphere_radius) ||
+        (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+            (!henka_scene_document_reader_float(
+                reader, &object->physics.capsule_radius) ||
+             !henka_scene_document_reader_float(
+                reader, &object->physics.capsule_half_height))) ||
         !henka_scene_document_reader_float(reader, &object->physics.box_half_extents.x) ||
         !henka_scene_document_reader_float(reader, &object->physics.box_half_extents.y) ||
         !henka_scene_document_reader_float(reader, &object->physics.box_half_extents.z) ||
@@ -2708,7 +2724,9 @@ static bool henka_scene_document_decode_object(
         !henka_scene_document_reader_float(reader, &object->physics.material.linear_damping) ||
         !henka_scene_document_reader_float(reader, &object->physics.material.angular_damping) ||
         !henka_scene_document_reader_u32(reader, &object->physics.layer) ||
-        !henka_scene_document_reader_u32(reader, &object->physics.mask)) return false;
+        !henka_scene_document_reader_u32(reader, &object->physics.mask) ||
+        (format_version < HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+            object->physics.shape == HENKA_PHYSICS_SHAPE_CAPSULE)) return false;
     if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3)
     {
         uint32_t audio_bus;
@@ -3086,6 +3104,7 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V10 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V11 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V12 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V13 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
