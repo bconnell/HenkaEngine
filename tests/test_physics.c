@@ -452,6 +452,46 @@ static void henka_test_physics_capsule_box_separation(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_physics_axis_aligned_box_rotation_boundary(void)
+{
+    henka_physics_world* world = NULL;
+    henka_physics_body_desc desc;
+    henka_physics_body_id body = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_state before;
+    henka_physics_body_state after;
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_box((henka_vec3){1.0f, 0.5f, 0.75f}),
+        (henka_vec3){0.0f, 1.0f, 0.0f});
+    desc.transform.rotation = henka_quat_from_axis_angle(
+        (henka_vec3){0.0f, 1.0f, 0.0f},
+        45.0f * HENKA_DEG_TO_RAD);
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world,
+        &desc,
+        &body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(body == HENKA_INVALID_PHYSICS_BODY_ID);
+
+    desc.transform.rotation = henka_quat_identity();
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &body) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, body, &before) == HENKA_SUCCESS);
+    desc.transform = before.transform;
+    desc.transform.rotation = henka_quat_from_axis_angle(
+        (henka_vec3){0.0f, 1.0f, 0.0f},
+        30.0f * HENKA_DEG_TO_RAD);
+    HENKA_TEST_ASSERT(henka_physics_body_set_transform(
+        world,
+        body,
+        desc.transform,
+        false) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, body, &after) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(memcmp(&before, &after, sizeof(before)) == 0);
+
+    henka_physics_world_destroy(world);
+}
+
 static void henka_test_physics_shape_pairs_and_raycast(void)
 {
     henka_physics_world* world;
@@ -1910,6 +1950,7 @@ void henka_test_physics(void)
     henka_test_physics_contacts_and_events();
     henka_test_physics_capsule_contacts_and_raycast();
     henka_test_physics_capsule_box_separation();
+    henka_test_physics_axis_aligned_box_rotation_boundary();
     henka_test_physics_shape_pairs_and_raycast();
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();

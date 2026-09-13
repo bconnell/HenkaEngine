@@ -243,6 +243,14 @@ static bool henka_physics_capsule_transform_is_upright(henka_transform transform
         henka_physics_abs(henka_physics_abs(axis.y) - 1.0f) <= 0.0001f;
 }
 
+static bool henka_physics_transform_is_unrotated(henka_transform transform)
+{
+    return henka_physics_abs(transform.rotation.x) <= 0.0001f &&
+        henka_physics_abs(transform.rotation.y) <= 0.0001f &&
+        henka_physics_abs(transform.rotation.z) <= 0.0001f &&
+        henka_physics_abs(henka_physics_abs(transform.rotation.w) - 1.0f) <= 0.0001f;
+}
+
 static float henka_physics_capsule_radius(const henka_physics_body_state* body)
 {
     henka_vec3 scale = henka_physics_abs_vec3(body->transform.scale);
@@ -425,6 +433,10 @@ static bool henka_physics_geometry_valid(
         }
 
         case HENKA_PHYSICS_SHAPE_BOX:
+            if (!henka_physics_transform_is_unrotated(transform))
+            {
+                return false;
+            }
             extent_x = (double)collider.data.box.half_extents.x *
                 fabs((double)transform.scale.x);
             extent_y = (double)collider.data.box.half_extents.y *
