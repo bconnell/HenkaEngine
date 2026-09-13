@@ -111,6 +111,16 @@ consumed before physics advances while the controller's reset transform stays
 unchanged. Editor-style transforms continue to use the Action API and
 synchronize their linked body so gizmos and Transform QA remain usable.
 
+Scene Documents persist the supported authored Physics configuration for
+enabled sphere and axis-aligned box bodies: body type, collider offset, shape
+dimensions, trigger state, mass, material values, and layer/mask filters. Load
+applies those values transactionally to the authored scene, and Play
+materializes them into a fresh transient physics world linked to the real
+scene entities. Runtime body state such as transforms, velocities, contacts,
+and events is not saved. Runtime capsule and heightfield bodies remain
+explicit runtime/Terrain paths and are not implicitly serialized by the Scene
+Document bridge.
+
 ## Current Limits
 
 - Box collision is axis-aligned; rotated boxes are not oriented colliders.
@@ -125,6 +135,9 @@ synchronize their linked body so gizmos and Transform QA remain usable.
   kinematic-platform motion inheritance, configurable slope-aware grounding
   classification, and the accepted ground normal.
 - Continuous collision detection is not implemented; the demo and tests use normal fixed-step conditions.
-- Physics state is runtime state, not scene-authoring or save-data support.
+- Runtime body state such as transforms, velocities, contacts, and events is
+  transient and is not saved. Supported authored sphere and box Physics
+  configuration is persisted through the Scene Document and materialized for
+  Play as described above.
 
 Manual desktop QA remains necessary for judging collision feel, debug overlay clarity, and how physics interaction feels beside viewport tools.

@@ -1663,9 +1663,19 @@ int main(void)
 
     object.physics.enabled = true;
     object.physics.body_type = HENKA_PHYSICS_BODY_DYNAMIC;
-    object.physics.shape = HENKA_PHYSICS_SHAPE_SPHERE;
+    object.physics.shape = HENKA_PHYSICS_SHAPE_BOX;
+    object.physics.collider_offset = (henka_vec3){0.125f, -0.25f, 0.375f};
     object.physics.sphere_radius = 0.5f;
-    object.physics.mass = 1.0f;
+    object.physics.box_half_extents = (henka_vec3){0.75f, 1.25f, 0.5f};
+    object.physics.is_trigger = true;
+    object.physics.mass = 2.5f;
+    object.physics.material.restitution = 0.7f;
+    object.physics.material.static_friction = 0.8f;
+    object.physics.material.dynamic_friction = 0.6f;
+    object.physics.material.linear_damping = 0.15f;
+    object.physics.material.angular_damping = 0.2f;
+    object.physics.layer = 4U;
+    object.physics.mask = UINT32_C(0x12);
     object.audio.enabled = true;
     object.audio.looping = true;
     object.audio.spatial = true;
@@ -1734,6 +1744,22 @@ int main(void)
             authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
         restored_id != object_id || !restored.physics.enabled ||
         restored.physics.body_type != HENKA_PHYSICS_BODY_DYNAMIC ||
+        restored.physics.shape != HENKA_PHYSICS_SHAPE_BOX ||
+        fabsf(restored.physics.collider_offset.x - 0.125f) > 0.0001f ||
+        fabsf(restored.physics.collider_offset.y + 0.25f) > 0.0001f ||
+        fabsf(restored.physics.collider_offset.z - 0.375f) > 0.0001f ||
+        fabsf(restored.physics.box_half_extents.x - 0.75f) > 0.0001f ||
+        fabsf(restored.physics.box_half_extents.y - 1.25f) > 0.0001f ||
+        fabsf(restored.physics.box_half_extents.z - 0.5f) > 0.0001f ||
+        !restored.physics.is_trigger ||
+        fabsf(restored.physics.mass - 2.5f) > 0.0001f ||
+        fabsf(restored.physics.material.restitution - 0.7f) > 0.0001f ||
+        fabsf(restored.physics.material.static_friction - 0.8f) > 0.0001f ||
+        fabsf(restored.physics.material.dynamic_friction - 0.6f) > 0.0001f ||
+        fabsf(restored.physics.material.linear_damping - 0.15f) > 0.0001f ||
+        fabsf(restored.physics.material.angular_damping - 0.2f) > 0.0001f ||
+        restored.physics.layer != 4U ||
+        restored.physics.mask != UINT32_C(0x12) ||
         !restored.interaction.enabled)
     {
         fprintf(stderr, "game authoring test failed during authored-object verification\n");
