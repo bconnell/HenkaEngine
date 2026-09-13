@@ -6346,6 +6346,72 @@ static void sandbox3d_draw_physics_overlay(sandbox3d_state* state, henka_viewpor
                 }
             }
         }
+        else if (shape.collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE)
+        {
+            const int segments = 24;
+            const int meridians = 8;
+            const int arc_segments = 6;
+            const float horizontal_scale = fmaxf(
+                fabsf(shape.transform.scale.x),
+                fabsf(shape.transform.scale.z));
+            const float radius = shape.collider.data.capsule.radius * horizontal_scale;
+            const float half_height = shape.collider.data.capsule.half_height * fabsf(shape.transform.scale.y);
+            int segment;
+            int meridian;
+            int arc;
+
+            for (segment = 0; segment < segments; ++segment)
+            {
+                const float first = HENKA_PI * 2.0f * (float)segment / (float)segments;
+                const float second = HENKA_PI * 2.0f * (float)(segment + 1) / (float)segments;
+                henka_vec3 top_a = {
+                    center.x + cosf(first) * radius,
+                    center.y + half_height,
+                    center.z + sinf(first) * radius};
+                henka_vec3 top_b = {
+                    center.x + cosf(second) * radius,
+                    center.y + half_height,
+                    center.z + sinf(second) * radius};
+                henka_vec3 bottom_a = {
+                    center.x + cosf(first) * radius,
+                    center.y - half_height,
+                    center.z + sinf(first) * radius};
+                henka_vec3 bottom_b = {
+                    center.x + cosf(second) * radius,
+                    center.y - half_height,
+                    center.z + sinf(second) * radius};
+                sandbox3d_physics_overlay_line(state, viewport, top_a, top_b, 2.0f, color);
+                sandbox3d_physics_overlay_line(state, viewport, bottom_a, bottom_b, 2.0f, color);
+                sandbox3d_physics_overlay_line(state, viewport, bottom_a, top_a, 2.0f, color);
+            }
+            for (meridian = 0; meridian < meridians; ++meridian)
+            {
+                const float azimuth = HENKA_PI * 2.0f * (float)meridian / (float)meridians;
+                for (arc = 0; arc < arc_segments; ++arc)
+                {
+                    const float first = HENKA_PI * 0.5f * (float)arc / (float)arc_segments;
+                    const float second = HENKA_PI * 0.5f * (float)(arc + 1) / (float)arc_segments;
+                    henka_vec3 top_a = {
+                        center.x + cosf(azimuth) * cosf(first) * radius,
+                        center.y + half_height + sinf(first) * radius,
+                        center.z + sinf(azimuth) * cosf(first) * radius};
+                    henka_vec3 top_b = {
+                        center.x + cosf(azimuth) * cosf(second) * radius,
+                        center.y + half_height + sinf(second) * radius,
+                        center.z + sinf(azimuth) * cosf(second) * radius};
+                    henka_vec3 bottom_a = {
+                        center.x + cosf(azimuth) * cosf(first) * radius,
+                        center.y - half_height - sinf(first) * radius,
+                        center.z + sinf(azimuth) * cosf(first) * radius};
+                    henka_vec3 bottom_b = {
+                        center.x + cosf(azimuth) * cosf(second) * radius,
+                        center.y - half_height - sinf(second) * radius,
+                        center.z + sinf(azimuth) * cosf(second) * radius};
+                    sandbox3d_physics_overlay_line(state, viewport, top_a, top_b, 2.0f, color);
+                    sandbox3d_physics_overlay_line(state, viewport, bottom_a, bottom_b, 2.0f, color);
+                }
+            }
+        }
         else if (shape.collider.shape == HENKA_PHYSICS_SHAPE_PLANE)
         {
             henka_vec3 local_normal = henka_vec3_normalize(shape.collider.data.plane.normal);
@@ -10911,7 +10977,7 @@ static henka_result sandbox3d_initialize_physics(sandbox3d_state* state)
             state,
             SANDBOX3D_OBJECT_OBJ_MARKER,
             sandbox3d_physics_initial_body_type(SANDBOX3D_PHYSICS_SAMPLE_OBJ_MARKER),
-            henka_physics_collider_sphere(0.65f)) != HENKA_SUCCESS ||
+            henka_physics_collider_capsule(0.65f, 0.75f)) != HENKA_SUCCESS ||
         sandbox3d_add_physics_body(
             state,
             SANDBOX3D_OBJECT_MISSING_TEXTURE,
@@ -11233,6 +11299,7 @@ static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
     henka_physics_body_state ground_before;
     henka_physics_body_state ground_after_reset;
     henka_physics_body_state textured_before;
+    henka_physics_body_state capsule_before;
     henka_physics_body_state textured_after;
     henka_physics_body_state kinematic_after;
     henka_physics_body_state trigger_state = {0};
@@ -11280,7 +11347,14 @@ static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
         henka_physics_body_get_state(
             state->physics.world,
             state->physics.bodies[SANDBOX3D_OBJECT_TEXTURED_CUBE],
-            &textured_before) != HENKA_SUCCESS)
+            &textured_before) != HENKA_SUCCESS ||
+        henka_physics_body_get_state(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_OBJ_MARKER],
+            &capsule_before) != HENKA_SUCCESS ||
+        capsule_before.collider.shape != HENKA_PHYSICS_SHAPE_CAPSULE ||
+        fabsf(capsule_before.collider.data.capsule.radius - 0.65f) > 0.0001f ||
+        fabsf(capsule_before.collider.data.capsule.half_height - 0.75f) > 0.0001f)
     {
         goto fail;
     }
@@ -11499,7 +11573,7 @@ static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
     }
 
     printf(
-        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; fixed-step contact/events, trigger state, raycast, and reset passed.\n");
+        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 
