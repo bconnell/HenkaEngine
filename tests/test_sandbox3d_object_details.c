@@ -164,6 +164,7 @@ static void henka_test_sandbox3d_object_details_file_backed_refresh(void)
 cleanup:
     sandbox3d_destroy_material_editor_bindings(&binding, 1U);
     henka_scene_destroy(scene);
+    henka_mesh_destroy(mesh);
     henka_engine_destroy(engine);
     (void)remove(gltf_path);
     (void)remove(image_a_path);

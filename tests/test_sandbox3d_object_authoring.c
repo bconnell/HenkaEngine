@@ -2180,9 +2180,9 @@ static void henka_test_sandbox3d_object_authoring_real_gltf_import_bridge(void)
     scene = NULL;
     henka_mesh_destroy(previous_mesh);
     previous_mesh = NULL;
+    henka_model_scene_data_destroy(&imported_scene);
     henka_engine_destroy(engine);
     engine = NULL;
-    henka_model_scene_data_destroy(&imported_scene);
 }
 
 static void henka_test_sandbox3d_object_authoring_real_obj_import_bridge(void)
