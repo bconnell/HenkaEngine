@@ -11440,6 +11440,87 @@ cleanup:
     return result;
 }
 
+static henka_result sandbox3d_run_heightfield_physics_smoke(void)
+{
+    const int32_t heights[9] = {
+        0, 0, 0,
+        0, 0, 0,
+        0, 0, 0};
+    henka_physics_world* world = NULL;
+    henka_physics_body_id terrain = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id sphere = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_desc terrain_desc = {0};
+    henka_physics_body_desc sphere_desc = {0};
+    henka_physics_body_state sphere_state = {0};
+    henka_physics_raycast_hit raycast_hit = {0};
+    const henka_physics_contact* contacts = NULL;
+    size_t contact_count = 0U;
+    bool terrain_contact = false;
+    henka_result result = HENKA_ERROR_UNKNOWN;
+    size_t index;
+
+    terrain_desc.type = HENKA_PHYSICS_BODY_STATIC;
+    terrain_desc.transform = henka_transform_identity();
+    terrain_desc.material = henka_physics_material_default();
+    terrain_desc.collider = henka_physics_collider_heightfield(
+        3U,
+        3U,
+        1.0f,
+        (int32_t*)heights,
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    sphere_desc.type = HENKA_PHYSICS_BODY_DYNAMIC;
+    sphere_desc.transform = henka_transform_identity();
+    sphere_desc.transform.position = (henka_vec3){1.0f, 0.4f, 1.0f};
+    sphere_desc.mass = 1.0f;
+    sphere_desc.material = henka_physics_material_default();
+    sphere_desc.collider = henka_physics_collider_sphere(0.5f);
+
+    if (henka_physics_world_create(&world) != HENKA_SUCCESS ||
+        henka_physics_body_create(world, &terrain_desc, &terrain) != HENKA_SUCCESS ||
+        henka_physics_body_create(world, &sphere_desc, &sphere) != HENKA_SUCCESS ||
+        henka_physics_world_step_fixed(world) != HENKA_SUCCESS ||
+        henka_physics_body_get_state(world, sphere, &sphere_state) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    contacts = henka_physics_world_get_contacts(world, &contact_count);
+    for (index = 0U; contacts != NULL && index < contact_count; ++index)
+    {
+        if ((contacts[index].body_a == terrain && contacts[index].body_b == sphere) ||
+            (contacts[index].body_a == sphere && contacts[index].body_b == terrain))
+        {
+            terrain_contact = true;
+            break;
+        }
+    }
+    if (!sphere_state.grounded || !terrain_contact ||
+        henka_physics_world_raycast(
+            world,
+            (henka_ray){
+                (henka_vec3){0.0f, 3.0f, 0.0f},
+                (henka_vec3){0.0f, -1.0f, 0.0f}},
+            10.0f,
+            HENKA_PHYSICS_ALL_LAYERS,
+            &raycast_hit) != HENKA_SUCCESS ||
+        !raycast_hit.hit ||
+        raycast_hit.body != terrain ||
+        !isfinite(raycast_hit.distance) ||
+        raycast_hit.distance < 2.9f ||
+        raycast_hit.distance > 3.1f ||
+        !isfinite(raycast_hit.normal.y) ||
+        raycast_hit.normal.y < 0.9f)
+    {
+        goto cleanup;
+    }
+
+    result = HENKA_SUCCESS;
+
+cleanup:
+    henka_physics_world_destroy(world);
+    return result;
+}
+
 static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
 {
     henka_physics_body_state ground_before;
@@ -11718,6 +11799,13 @@ static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
         goto fail;
     }
 
+    stage = "heightfield contact/raycast";
+    result = sandbox3d_run_heightfield_physics_smoke();
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
     stage = "character-controller Play path";
     result = sandbox3d_run_character_controller_smoke();
     if (result != HENKA_SUCCESS)
@@ -11726,7 +11814,7 @@ static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
     }
 
     printf(
-        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
+        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, heightfield contact/raycast, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 

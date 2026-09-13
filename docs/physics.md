@@ -110,10 +110,12 @@ The packaged Sandbox also provides an opt-in `--physics-smoke-test` command. It
 uses the production scene initialization path and six real scene-linked bodies
 to exercise static, dynamic, and kinematic body types, including an upright
 capsule collider, fixed-step motion, collision and trigger events, a
-camera-style raycast, and world reset. It also creates a bounded real
-Scene Document and Play session to exercise character-controller movement,
-jump, scene-link synchronization, and stop-time restoration. The command exits
-after reporting the complete scenario and does not restore
+camera-style raycast, and world reset. It also creates a bounded heightfield
+physics world to exercise heightfield contact and raycast traversal, then
+creates a bounded real Scene Document and Play session to exercise
+character-controller movement, jump, scene-link synchronization, and stop-time
+restoration. The command exits after reporting the complete scenario and does
+not restore
 unrelated showcase authoring sources or save local Sandbox settings.
 
 Physics simulation writes linked-body transforms to the real scene entities.
