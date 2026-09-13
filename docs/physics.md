@@ -101,6 +101,13 @@ Body-type behavior is intentionally explicit in the UI:
 
 The demo links existing generic sample objects to bodies: the ground is a plane, the cubes use AABB colliders, the marker uses a sphere collider, one sample is a static obstacle, and one sample is a trigger volume. Collider debug lines come from the same collider data the solver tests, are clipped to the Scene View, and are not selectable scene objects. The visible ground uses a finite floor surface and grid; selecting it shows one bounded floor indicator. Infinite plane bounds are not shown.
 
+The packaged Sandbox also provides an opt-in `--physics-smoke-test` command. It
+uses the production scene initialization path and six real scene-linked bodies
+to exercise static, dynamic, and kinematic body types, fixed-step motion,
+collision and trigger events, a camera-style raycast, and world reset. The
+command exits after reporting the complete scenario and does not restore
+unrelated showcase authoring sources or save local Sandbox settings.
+
 Physics simulation writes linked-body transforms to the real scene entities.
 The character controller's optional live scene/entity link uses this same
 production path after creation, teleport, and successful fixed steps. A

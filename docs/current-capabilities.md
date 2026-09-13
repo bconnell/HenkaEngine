@@ -604,7 +604,11 @@ Physics v1 provides fixed-step static, dynamic, and kinematic bodies with:
 - trigger events;
 - raycasts.
 
-Sandbox Physics QA and selected-body activation are available. Numeric, allocation, and body-replacement failures preserve prior simulation state where the contract requires retry safety.
+Sandbox Physics QA and selected-body activation are available. The packaged
+`--physics-smoke-test` path exercises six real scene-linked bodies through
+static, dynamic, and kinematic modes, fixed-step motion, collision/trigger
+events, raycast, and reset. Numeric, allocation, and body-replacement failures
+preserve prior simulation state where the contract requires retry safety.
 
 ### Remaining work
 

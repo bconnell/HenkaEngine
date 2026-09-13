@@ -1083,6 +1083,22 @@ if ($NonInteractive) {
 
     Write-Output "[pass] Deterministic packaged startup smoke test completed."
 
+    Write-Step "Running packaged Physics QA smoke"
+    $physicsSmoke = Invoke-HenkaNativeCapture `
+        -FilePath $packagedExe `
+        -Arguments @("--physics-smoke-test") `
+        -WorkingDirectory $packageRoot `
+        -Label "Run packaged Physics QA smoke"
+
+    if ($physicsSmoke.Stdout -notmatch "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; fixed-step contact/events, trigger state, raycast, and reset passed\.") {
+        throw "The packaged Physics smoke test did not report its complete production scenario."
+    }
+    if ($physicsSmoke.Stderr -notmatch "leaving engine run loop") {
+        throw "The packaged Physics smoke test did not leave the engine run loop cleanly."
+    }
+
+    Write-Output "[pass] Packaged Physics QA smoke completed."
+
     Write-Step "Running packaged Audio fixture smoke"
     $audioSmoke = Invoke-HenkaNativeCapture -FilePath $packagedExe -Arguments @("--audio-smoke-test") -WorkingDirectory $packageRoot -Label "Run packaged Audio fixture smoke"
 

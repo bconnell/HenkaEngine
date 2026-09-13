@@ -640,6 +640,8 @@ typedef struct sandbox3d_state
     sandbox3d_modeling_toolbar_state modeling_toolbar;
     bool editor_controls_loaded_safely;
     bool smoke_test;
+    bool physics_smoke_test;
+    bool physics_smoke_ran;
     bool primitive_gallery;
     bool residency_stress;
     bool residency_stress_ran;
@@ -3763,6 +3765,7 @@ static void sandbox3d_draw_detached_workspace_panel_content(
 static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sandbox3d_state* state);
 static henka_result sandbox3d_initialize_physics(sandbox3d_state* state);
 static void sandbox3d_update_physics(sandbox3d_state* state, double delta_seconds);
+static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state);
 static henka_result sandbox3d_initialize_game_authoring(
     henka_engine* engine,
     sandbox3d_state* state);
@@ -7964,6 +7967,7 @@ static bool sandbox3d_default_scene_requested(const sandbox3d_state* state)
      * checked-in showcase pair.  Ordinary startup and --capture-startup are
      * the product-native scene and must not acquire reference fixtures. */
     return !state->smoke_test &&
+        !state->physics_smoke_test &&
         !state->primitive_gallery &&
         !state->capture_mode_requested &&
         !state->terrain_capture_mode_requested &&
@@ -11190,6 +11194,322 @@ static void sandbox3d_update_physics(sandbox3d_state* state, double delta_second
             (unsigned int)events[event_count - 1U].contact.body_a,
             (unsigned int)events[event_count - 1U].contact.body_b);
     }
+}
+
+static bool sandbox3d_physics_smoke_has_event(
+    const henka_physics_world* world,
+    henka_physics_event_type type)
+{
+    const henka_physics_event* events;
+    size_t event_count;
+    size_t index;
+
+    if (world == NULL)
+    {
+        return false;
+    }
+    events = henka_physics_world_get_events(world, &event_count);
+    for (index = 0U; events != NULL && index < event_count; ++index)
+    {
+        if (events[index].type == type)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool sandbox3d_physics_smoke_position_matches(
+    henka_vec3 left,
+    henka_vec3 right)
+{
+    return fabsf(left.x - right.x) <= 0.0001f &&
+        fabsf(left.y - right.y) <= 0.0001f &&
+        fabsf(left.z - right.z) <= 0.0001f;
+}
+
+static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
+{
+    henka_physics_body_state ground_before;
+    henka_physics_body_state ground_after_reset;
+    henka_physics_body_state textured_before;
+    henka_physics_body_state textured_after;
+    henka_physics_body_state kinematic_after;
+    henka_physics_body_state trigger_state = {0};
+    henka_physics_body_state reset_state = {0};
+    henka_physics_raycast_hit raycast_hit;
+    henka_transform transform;
+    henka_result result;
+    const char* stage = "initialization";
+    size_t index;
+
+    if (state == NULL || state->scene == NULL || state->physics.world == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    stage = "body inventory";
+    if (henka_physics_world_get_body_count(state->physics.world) != 6U)
+    {
+        result = HENKA_ERROR_UNKNOWN;
+        goto fail;
+    }
+    for (index = 0U; index <= SANDBOX3D_OBJECT_MISSING_MODEL; ++index)
+    {
+        henka_physics_body_state body_state = {0};
+        const henka_physics_body_id body = state->physics.bodies[index];
+        const henka_result body_result = body == HENKA_INVALID_PHYSICS_BODY_ID
+            ? HENKA_ERROR_INVALID_ARGUMENT
+            : henka_physics_body_get_state(state->physics.world, body, &body_state);
+        if (body_result != HENKA_SUCCESS ||
+            body_state.linked_scene != state->scene ||
+            body_state.linked_entity != state->descriptors[index].entity)
+        {
+            result = HENKA_ERROR_UNKNOWN;
+            goto fail;
+        }
+    }
+
+    stage = "reset baseline";
+    result = henka_physics_world_reset(state->physics.world);
+    if (result != HENKA_SUCCESS ||
+        henka_physics_body_get_state(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_GROUND],
+            &ground_before) != HENKA_SUCCESS ||
+        henka_physics_body_get_state(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_TEXTURED_CUBE],
+            &textured_before) != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
+    stage = "body types";
+    result = henka_physics_body_set_type(
+        state->physics.world,
+        state->physics.bodies[SANDBOX3D_OBJECT_GROUND],
+        HENKA_PHYSICS_BODY_STATIC);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_set_type(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_TEXTURED_CUBE],
+            HENKA_PHYSICS_BODY_DYNAMIC);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_set_type(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_COLORED_CUBE],
+            HENKA_PHYSICS_BODY_KINEMATIC);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_set_type(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_OBJ_MARKER],
+            HENKA_PHYSICS_BODY_DYNAMIC);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_set_type(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_MISSING_TEXTURE],
+            HENKA_PHYSICS_BODY_STATIC);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_set_type(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_MISSING_MODEL],
+            HENKA_PHYSICS_BODY_STATIC);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
+    stage = "fixed-step motion";
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){0.0f, 4.0f, 0.0f};
+    result = henka_physics_body_set_transform(
+        state->physics.world,
+        state->physics.bodies[SANDBOX3D_OBJECT_TEXTURED_CUBE],
+        transform,
+        true);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_set_linear_velocity(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_TEXTURED_CUBE],
+            (henka_vec3){0.0f, -1.0f, 0.0f});
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        transform.position = (henka_vec3){-2.0f, 1.0f, 0.0f};
+        result = henka_physics_body_set_transform(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_COLORED_CUBE],
+            transform,
+            true);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_set_linear_velocity(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_COLORED_CUBE],
+            (henka_vec3){2.0f, 0.0f, 0.0f});
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_world_step_fixed(state->physics.world);
+    }
+    if (result != HENKA_SUCCESS ||
+        henka_physics_body_get_state(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_TEXTURED_CUBE],
+            &textured_after) != HENKA_SUCCESS ||
+        henka_physics_body_get_state(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_COLORED_CUBE],
+            &kinematic_after) != HENKA_SUCCESS ||
+        textured_after.transform.position.y >= 4.0f ||
+        kinematic_after.transform.position.x <= -2.0f)
+    {
+        if (result == HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_UNKNOWN;
+        }
+        goto fail;
+    }
+
+    stage = "contact and trigger events";
+    transform.position = (henka_vec3){0.0f, 0.4f, 0.0f};
+    result = henka_physics_body_set_transform(
+        state->physics.world,
+        state->physics.bodies[SANDBOX3D_OBJECT_TEXTURED_CUBE],
+        transform,
+        true);
+    if (result == HENKA_SUCCESS)
+    {
+        transform.position = (henka_vec3){2.4f, 1.2f, 0.0f};
+        result = henka_physics_body_set_transform(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_OBJ_MARKER],
+            transform,
+            true);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_set_transform(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_MISSING_MODEL],
+            transform,
+            true);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_clear_velocity(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_TEXTURED_CUBE]);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_clear_velocity(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_OBJ_MARKER]);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_get_state(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_MISSING_MODEL],
+            &trigger_state);
+    }
+    if (result != HENKA_SUCCESS || !trigger_state.collider.is_trigger)
+    {
+        if (result == HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_UNKNOWN;
+        }
+        goto fail;
+    }
+    result = henka_physics_world_step_fixed(state->physics.world);
+    if (result != HENKA_SUCCESS ||
+        !sandbox3d_physics_smoke_has_event(
+            state->physics.world,
+            HENKA_PHYSICS_EVENT_COLLISION_ENTER) ||
+        !sandbox3d_physics_smoke_has_event(
+            state->physics.world,
+            HENKA_PHYSICS_EVENT_TRIGGER_ENTER))
+    {
+        if (result == HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_UNKNOWN;
+        }
+        goto fail;
+    }
+
+    stage = "raycast and reset";
+    result = henka_physics_world_reset(state->physics.world);
+    if (result == HENKA_SUCCESS)
+    {
+        raycast_hit = (henka_physics_raycast_hit){0};
+        result = henka_physics_world_raycast(
+            state->physics.world,
+            (henka_ray){
+                (henka_vec3){6.0f, 10.0f, 0.0f},
+                (henka_vec3){0.0f, -1.0f, 0.0f}},
+            20.0f,
+            HENKA_PHYSICS_ALL_LAYERS,
+            &raycast_hit);
+        if (result == HENKA_SUCCESS &&
+            (!raycast_hit.hit ||
+             raycast_hit.body != state->physics.bodies[SANDBOX3D_OBJECT_GROUND] ||
+             !isfinite(raycast_hit.distance)))
+        {
+            result = HENKA_ERROR_UNKNOWN;
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_physics_body_get_state(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_TEXTURED_CUBE],
+            &reset_state);
+    }
+    if (result != HENKA_SUCCESS ||
+        !sandbox3d_physics_smoke_position_matches(
+            reset_state.transform.position,
+            textured_before.transform.position) ||
+        henka_physics_body_get_state(
+            state->physics.world,
+            state->physics.bodies[SANDBOX3D_OBJECT_GROUND],
+            &ground_after_reset) != HENKA_SUCCESS ||
+        !sandbox3d_physics_smoke_position_matches(
+            ground_after_reset.transform.position,
+            ground_before.transform.position))
+    {
+        if (result == HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_UNKNOWN;
+        }
+        goto fail;
+    }
+
+    printf(
+        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; fixed-step contact/events, trigger state, raycast, and reset passed.\n");
+    fflush(stdout);
+    return HENKA_SUCCESS;
+
+fail:
+    printf(
+        "Physics smoke failure at %s: %s.\n",
+        stage,
+        henka_result_to_string(result));
+    fflush(stdout);
+    return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
 }
 
 static henka_result sandbox3d_initialize_gizmo_rendering(henka_engine* engine, sandbox3d_state* state)
@@ -34706,7 +35026,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             goto fail;
         }
     }
-    if (!state->smoke_test)
+    if (!state->smoke_test && !state->physics_smoke_test)
     {
         result = sandbox3d_restore_persisted_native_showcase_sources(engine, state);
         if (result != HENKA_SUCCESS)
@@ -37658,6 +37978,24 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_camera_move_fly(&state->camera, engine, delta_seconds);
     }
 
+    if (state->physics_smoke_test && !state->physics_smoke_ran)
+    {
+        const henka_result physics_smoke_result = sandbox3d_run_physics_smoke(state);
+        if (physics_smoke_result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "Physics smoke scenario failed (%s).",
+                henka_result_to_string(physics_smoke_result));
+            sandbox3d_mark_smoke_validation_failed(state, __FILE__, __LINE__);
+        }
+        else
+        {
+            state->physics.enabled = false;
+            state->physics.paused = true;
+        }
+        state->physics_smoke_ran = true;
+        henka_engine_request_exit(engine);
+    }
     sandbox3d_update_physics(state, delta_seconds);
     henka_scene_set_camera(state->scene, &state->camera);
     sandbox3d_report_capture_ready(engine, state);
@@ -37939,7 +38277,7 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
-    if (!state->smoke_test && !state->capture_mode_requested)
+    if (!state->smoke_test && !state->physics_smoke_test && !state->capture_mode_requested)
     {
         sandbox3d_save_settings(engine, state);
     }
@@ -37970,6 +38308,7 @@ int main(int argc, char** argv)
     sandbox3d_state state;
     size_t index;
     bool smoke_test;
+    bool physics_smoke_test;
     bool audio_smoke_test;
     bool primitive_gallery;
     bool residency_stress;
@@ -37997,6 +38336,7 @@ int main(int argc, char** argv)
     char capture_output_directory[SANDBOX3D_CAPTURE_OUTPUT_PATH_BYTES];
 
     smoke_test = false;
+    physics_smoke_test = false;
     audio_smoke_test = false;
     primitive_gallery = false;
     residency_stress = false;
@@ -38026,6 +38366,10 @@ int main(int argc, char** argv)
     {
         smoke_test = true;
         audio_smoke_test = true;
+    }
+    else if (argc == 2 && strcmp(argv[1], "--physics-smoke-test") == 0)
+    {
+        physics_smoke_test = true;
     }
     else if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
     {
@@ -38298,7 +38642,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --mcp-stdio | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference ibl_normal|ibl_diffuse|ibl_specular|ibl_simple|ibl_empty wide|close rendered | --capture-realism-reference ibl_rotation -360..360 wide|close rendered | --capture-realism-reference ibl_mip 0..6 wide|close rendered | --capture-realism-reference ibl_ordinary_mip 0..6 wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --physics-smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --mcp-stdio | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference ibl_normal|ibl_diffuse|ibl_specular|ibl_simple|ibl_empty wide|close rendered | --capture-realism-reference ibl_rotation -360..360 wide|close rendered | --capture-realism-reference ibl_mip 0..6 wide|close rendered | --capture-realism-reference ibl_ordinary_mip 0..6 wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -38359,6 +38703,7 @@ int main(int argc, char** argv)
         "%s",
         "0.0");
     state.smoke_test = smoke_test;
+    state.physics_smoke_test = physics_smoke_test;
     state.audio_smoke_test = audio_smoke_test;
     state.primitive_gallery = primitive_gallery;
     state.residency_stress = residency_stress;
@@ -38419,7 +38764,7 @@ int main(int argc, char** argv)
     config.application_name = "Henka Engine Sandbox 3D";
     config.window_width = 1280;
     config.window_height = 720;
-    config.enable_vsync = !smoke_test;
+    config.enable_vsync = !smoke_test && !physics_smoke_test;
     config.asset_base_path = NULL;
     config.user_data_base_path = NULL;
     config.package_mode = HENKA_PACKAGE_MODE_AUTO;

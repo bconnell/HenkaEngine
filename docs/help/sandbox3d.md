@@ -918,6 +918,20 @@ The active camera region receives priority for bounded collision coverage.
 
 This is a runtime foundation check. Residency-wide collision coverage, broad-world streaming, and human visual approval remain outside its current scope.
 
+### Physics smoke
+
+Run:
+
+```text
+henka_sandbox3d.exe --physics-smoke-test
+```
+
+This opt-in command initializes the production scene and validates six real
+scene-linked bodies. It covers static, dynamic, and kinematic body modes,
+fixed-step motion, collision and trigger events, raycast, and world reset. It
+exits after the deterministic scenario completes and does not save local
+Sandbox settings.
+
 ### Authoring checks
 
 Useful manual authoring checks include:
