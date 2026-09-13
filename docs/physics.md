@@ -93,6 +93,10 @@ The QA view provides real controls for:
 - clearing selected-body velocity
 - raycasting from the camera
 
+The selected authored object's Physics control cycles through Static, Dynamic,
+and Kinematic. The change is committed through the Game Authoring and Scene
+Document path; Dynamic bodies receive a default mass when needed.
+
 Body-type behavior is intentionally explicit in the UI:
 
 - Static bodies do not move from gravity, forces, or impulses.

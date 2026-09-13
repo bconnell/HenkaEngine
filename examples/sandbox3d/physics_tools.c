@@ -24,6 +24,21 @@ henka_physics_body_type sandbox3d_physics_demo_body_type(sandbox3d_physics_sampl
     }
 }
 
+henka_physics_body_type sandbox3d_physics_next_body_type(henka_physics_body_type type)
+{
+    switch (type)
+    {
+        case HENKA_PHYSICS_BODY_STATIC:
+            return HENKA_PHYSICS_BODY_DYNAMIC;
+        case HENKA_PHYSICS_BODY_DYNAMIC:
+            return HENKA_PHYSICS_BODY_KINEMATIC;
+        case HENKA_PHYSICS_BODY_KINEMATIC:
+            return HENKA_PHYSICS_BODY_STATIC;
+        default:
+            return HENKA_PHYSICS_BODY_STATIC;
+    }
+}
+
 henka_result sandbox3d_physics_activate_only_body(
     henka_physics_world* world,
     const henka_physics_body_id* bodies,

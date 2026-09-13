@@ -30049,6 +30049,8 @@ details_group_physics:
             {
                 const float gap = 6.0f;
                 const float button_width = (row.width - gap * 2.0f) / 3.0f;
+                const henka_physics_body_type next_body_type =
+                    sandbox3d_physics_next_body_type(authored_object.physics.body_type);
                 if (henka_ui_button(
                         state->ui,
                         "game_authoring_physics_enabled",
@@ -30066,14 +30068,11 @@ details_group_physics:
                         state->ui,
                         "game_authoring_physics_body",
                         (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
-                        authored_object.physics.body_type == HENKA_PHYSICS_BODY_DYNAMIC ? "Static" : "Dynamic") &&
+                        henka_physics_body_type_get_label(next_body_type)) &&
                     !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
                 {
-                    authored_object.physics.body_type =
-                        authored_object.physics.body_type == HENKA_PHYSICS_BODY_DYNAMIC
-                            ? HENKA_PHYSICS_BODY_STATIC
-                            : HENKA_PHYSICS_BODY_DYNAMIC;
-                    if (authored_object.physics.body_type == HENKA_PHYSICS_BODY_DYNAMIC &&
+                    authored_object.physics.body_type = next_body_type;
+                    if (next_body_type == HENKA_PHYSICS_BODY_DYNAMIC &&
                         authored_object.physics.mass <= 0.0f)
                     {
                         authored_object.physics.mass = 1.0f;

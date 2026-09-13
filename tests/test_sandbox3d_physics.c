@@ -64,6 +64,18 @@ void henka_test_sandbox3d_physics(void)
     HENKA_TEST_ASSERT(
         sandbox3d_physics_demo_body_type(SANDBOX3D_PHYSICS_SAMPLE_MISSING_TEXTURE) ==
         HENKA_PHYSICS_BODY_STATIC);
+    HENKA_TEST_ASSERT(
+        sandbox3d_physics_next_body_type(HENKA_PHYSICS_BODY_STATIC) ==
+        HENKA_PHYSICS_BODY_DYNAMIC);
+    HENKA_TEST_ASSERT(
+        sandbox3d_physics_next_body_type(HENKA_PHYSICS_BODY_DYNAMIC) ==
+        HENKA_PHYSICS_BODY_KINEMATIC);
+    HENKA_TEST_ASSERT(
+        sandbox3d_physics_next_body_type(HENKA_PHYSICS_BODY_KINEMATIC) ==
+        HENKA_PHYSICS_BODY_STATIC);
+    HENKA_TEST_ASSERT(
+        sandbox3d_physics_next_body_type((henka_physics_body_type)99) ==
+        HENKA_PHYSICS_BODY_STATIC);
 
     world = NULL;
     scene = NULL;
