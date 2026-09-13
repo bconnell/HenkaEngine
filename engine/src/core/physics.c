@@ -1724,7 +1724,648 @@ static bool henka_physics_closest_point_triangle(
     }
 }
 
-static henka_physics_contact_status henka_physics_shape_triangle_mesh(
+static bool henka_physics_triangle_mesh_world_triangle(
+    const henka_physics_body_state* mesh,
+    uint32_t index,
+    double triangle[3][3])
+{
+    const uint32_t* indices = mesh->collider.data.triangle_mesh.indices;
+    const henka_vec3* vertices = mesh->collider.data.triangle_mesh.vertices;
+    double world_x;
+    double world_y;
+    double world_z;
+    uint32_t vertex;
+
+    for (vertex = 0U; vertex < 3U; ++vertex)
+    {
+        if (!henka_physics_triangle_mesh_world_vertex(
+                mesh->transform,
+                mesh->collider.offset,
+                vertices[indices[index + vertex]],
+                &world_x,
+                &world_y,
+                &world_z))
+        {
+            return false;
+        }
+        triangle[vertex][0] = world_x;
+        triangle[vertex][1] = world_y;
+        triangle[vertex][2] = world_z;
+    }
+    return true;
+}
+
+static bool henka_physics_triangle_overlap_axis(
+    const double triangle[3][3],
+    henka_vec3 center,
+    henka_vec3 extents,
+    double axis_x,
+    double axis_y,
+    double axis_z,
+    double* out_overlap)
+{
+    const double length = hypot(hypot(axis_x, axis_y), axis_z);
+    double minimum;
+    double maximum;
+    double radius;
+    double projection;
+
+    if (out_overlap == NULL || !isfinite(length) || length <= 0.0000000001)
+    {
+        return length <= 0.0000000001 && out_overlap != NULL;
+    }
+    axis_x /= length;
+    axis_y /= length;
+    axis_z /= length;
+    projection = axis_x * (triangle[0][0] - (double)center.x) +
+        axis_y * (triangle[0][1] - (double)center.y) +
+        axis_z * (triangle[0][2] - (double)center.z);
+    minimum = projection;
+    maximum = projection;
+    projection = axis_x * (triangle[1][0] - (double)center.x) +
+        axis_y * (triangle[1][1] - (double)center.y) +
+        axis_z * (triangle[1][2] - (double)center.z);
+    minimum = fmin(minimum, projection);
+    maximum = fmax(maximum, projection);
+    projection = axis_x * (triangle[2][0] - (double)center.x) +
+        axis_y * (triangle[2][1] - (double)center.y) +
+        axis_z * (triangle[2][2] - (double)center.z);
+    minimum = fmin(minimum, projection);
+    maximum = fmax(maximum, projection);
+    radius = fabs(axis_x) * (double)extents.x +
+        fabs(axis_y) * (double)extents.y +
+        fabs(axis_z) * (double)extents.z;
+    if (!isfinite(minimum) || !isfinite(maximum) || !isfinite(radius) ||
+        maximum < -radius || minimum > radius)
+    {
+        return false;
+    }
+    *out_overlap = fmin(maximum + radius, radius - minimum);
+    return isfinite(*out_overlap) && *out_overlap >= 0.0;
+}
+
+static henka_physics_contact_status henka_physics_box_triangle(
+    henka_vec3 center,
+    henka_vec3 extents,
+    const double triangle[3][3],
+    henka_physics_contact* contact)
+{
+    const double edge0_x = triangle[1][0] - triangle[0][0];
+    const double edge0_y = triangle[1][1] - triangle[0][1];
+    const double edge0_z = triangle[1][2] - triangle[0][2];
+    const double edge1_x = triangle[2][0] - triangle[1][0];
+    const double edge1_y = triangle[2][1] - triangle[1][1];
+    const double edge1_z = triangle[2][2] - triangle[1][2];
+    const double edge2_x = triangle[0][0] - triangle[2][0];
+    const double edge2_y = triangle[0][1] - triangle[2][1];
+    const double edge2_z = triangle[0][2] - triangle[2][2];
+    const double normal_x = edge0_y * edge1_z - edge0_z * edge1_y;
+    const double normal_y = edge0_z * edge1_x - edge0_x * edge1_z;
+    const double normal_z = edge0_x * edge1_y - edge0_y * edge1_x;
+    const double normal_length = hypot(hypot(normal_x, normal_y), normal_z);
+    double axes[13][3] = {
+        {normal_x, normal_y, normal_z},
+        {1.0, 0.0, 0.0},
+        {0.0, 1.0, 0.0},
+        {0.0, 0.0, 1.0}};
+    const double edges[3][3] = {
+        {edge0_x, edge0_y, edge0_z},
+        {edge1_x, edge1_y, edge1_z},
+        {edge2_x, edge2_y, edge2_z}};
+    const double box_axes[3][3] = {
+        {1.0, 0.0, 0.0},
+        {0.0, 1.0, 0.0},
+        {0.0, 0.0, 1.0}};
+    double best_overlap = DBL_MAX;
+    double best_axis_x = 0.0;
+    double best_axis_y = 1.0;
+    double best_axis_z = 0.0;
+    double closest_x;
+    double closest_y;
+    double closest_z;
+    size_t axis_index;
+    size_t edge_index;
+    size_t box_axis_index;
+
+    if (contact == NULL || !isfinite(normal_length) || normal_length <= 0.0000000001)
+    {
+        return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+    }
+    axis_index = 4U;
+    for (edge_index = 0U; edge_index < 3U; ++edge_index)
+    {
+        for (box_axis_index = 0U; box_axis_index < 3U; ++box_axis_index)
+        {
+            axes[axis_index][0] = edges[edge_index][1] * box_axes[box_axis_index][2] -
+                edges[edge_index][2] * box_axes[box_axis_index][1];
+            axes[axis_index][1] = edges[edge_index][2] * box_axes[box_axis_index][0] -
+                edges[edge_index][0] * box_axes[box_axis_index][2];
+            axes[axis_index][2] = edges[edge_index][0] * box_axes[box_axis_index][1] -
+                edges[edge_index][1] * box_axes[box_axis_index][0];
+            ++axis_index;
+        }
+    }
+    for (axis_index = 0U; axis_index < 13U; ++axis_index)
+    {
+        double overlap;
+        const double axis_length = hypot(
+            hypot(axes[axis_index][0], axes[axis_index][1]),
+            axes[axis_index][2]);
+
+        if (!isfinite(axis_length))
+        {
+            return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+        }
+        if (axis_length <= 0.0000000001)
+        {
+            continue;
+        }
+        if (!henka_physics_triangle_overlap_axis(
+                triangle,
+                center,
+                extents,
+                axes[axis_index][0],
+                axes[axis_index][1],
+                axes[axis_index][2],
+                &overlap))
+        {
+            return HENKA_PHYSICS_CONTACT_NONE;
+        }
+        if (overlap < best_overlap)
+        {
+            best_overlap = overlap;
+            best_axis_x = axes[axis_index][0] / axis_length;
+            best_axis_y = axes[axis_index][1] / axis_length;
+            best_axis_z = axes[axis_index][2] / axis_length;
+        }
+    }
+    if (!isfinite(best_overlap) || best_overlap < 0.0 ||
+        !henka_physics_closest_point_triangle(
+            (double)center.x,
+            (double)center.y,
+            (double)center.z,
+            triangle[0][0], triangle[0][1], triangle[0][2],
+            triangle[1][0], triangle[1][1], triangle[1][2],
+            triangle[2][0], triangle[2][1], triangle[2][2],
+            &closest_x,
+            &closest_y,
+            &closest_z))
+    {
+        return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+    }
+    if (best_axis_x * ((double)center.x - (triangle[0][0] + triangle[1][0] + triangle[2][0]) / 3.0) +
+            best_axis_y * ((double)center.y - (triangle[0][1] + triangle[1][1] + triangle[2][1]) / 3.0) +
+            best_axis_z * ((double)center.z - (triangle[0][2] + triangle[1][2] + triangle[2][2]) / 3.0) > 0.0)
+    {
+        best_axis_x = -best_axis_x;
+        best_axis_y = -best_axis_y;
+        best_axis_z = -best_axis_z;
+    }
+    contact->normal = (henka_vec3){
+        (float)best_axis_x,
+        (float)best_axis_y,
+        (float)best_axis_z};
+    if (!henka_physics_try_float(best_overlap, &contact->penetration) ||
+        !henka_physics_try_vec3(closest_x, closest_y, closest_z, &contact->point))
+    {
+        return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+    }
+    return HENKA_PHYSICS_CONTACT_FOUND;
+}
+
+static henka_physics_contact_status henka_physics_box_triangle_mesh(
+    const henka_physics_body_state* box,
+    const henka_physics_body_state* mesh,
+    henka_physics_contact* contact)
+{
+    const henka_vec3 center = henka_physics_collider_center(box);
+    const henka_vec3 extents = henka_physics_box_extents(box);
+    henka_physics_contact best = {0};
+    double best_penetration = -1.0;
+    uint32_t index;
+
+    if (box == NULL || mesh == NULL || contact == NULL ||
+        box->collider.shape != HENKA_PHYSICS_SHAPE_BOX ||
+        mesh->collider.shape != HENKA_PHYSICS_SHAPE_TRIANGLE_MESH)
+    {
+        return HENKA_PHYSICS_CONTACT_NONE;
+    }
+    for (index = 0U; index < mesh->collider.data.triangle_mesh.index_count; index += 3U)
+    {
+        double triangle[3][3];
+        henka_physics_contact candidate = {0};
+        henka_physics_contact_status status;
+
+        if (!henka_physics_triangle_mesh_world_triangle(mesh, index, triangle))
+        {
+            return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+        }
+        status = henka_physics_box_triangle(center, extents, triangle, &candidate);
+        if (status == HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE)
+        {
+            return status;
+        }
+        if (status == HENKA_PHYSICS_CONTACT_FOUND &&
+            (best_penetration < 0.0 ||
+                (double)candidate.penetration < best_penetration))
+        {
+            best = candidate;
+            best_penetration = (double)candidate.penetration;
+        }
+    }
+    if (best_penetration < 0.0)
+    {
+        return HENKA_PHYSICS_CONTACT_NONE;
+    }
+    best.body_a = contact->body_a;
+    best.body_b = contact->body_b;
+    best.is_trigger = contact->is_trigger;
+    *contact = best;
+    return HENKA_PHYSICS_CONTACT_FOUND;
+}
+
+static bool henka_physics_closest_segment_segment(
+    const double a[3],
+    const double b[3],
+    const double c[3],
+    const double d[3],
+    double* out_a,
+    double* out_b)
+{
+    const double ux = b[0] - a[0];
+    const double uy = b[1] - a[1];
+    const double uz = b[2] - a[2];
+    const double vx = d[0] - c[0];
+    const double vy = d[1] - c[1];
+    const double vz = d[2] - c[2];
+    const double wx = a[0] - c[0];
+    const double wy = a[1] - c[1];
+    const double wz = a[2] - c[2];
+    const double aa = ux * ux + uy * uy + uz * uz;
+    const double bb = ux * vx + uy * vy + uz * vz;
+    const double cc = vx * vx + vy * vy + vz * vz;
+    const double dd = ux * wx + uy * wy + uz * wz;
+    const double ee = vx * wx + vy * wy + vz * wz;
+    const double denominator = aa * cc - bb * bb;
+    double s;
+    double t;
+
+    if (out_a == NULL || out_b == NULL || !isfinite(aa) || !isfinite(bb) ||
+        !isfinite(cc) || !isfinite(dd) || !isfinite(ee) || aa <= 0.0000000001 ||
+        cc <= 0.0000000001)
+    {
+        return false;
+    }
+    if (denominator > 0.0000000001)
+    {
+        s = (bb * ee - cc * dd) / denominator;
+        s = fmax(0.0, fmin(1.0, s));
+    }
+    else
+    {
+        s = 0.0;
+    }
+    t = (bb * s + ee) / cc;
+    if (t < 0.0)
+    {
+        t = 0.0;
+        s = fmax(0.0, fmin(1.0, -dd / aa));
+    }
+    else if (t > 1.0)
+    {
+        t = 1.0;
+        s = fmax(0.0, fmin(1.0, (bb - dd) / aa));
+    }
+    if (!isfinite(s) || !isfinite(t))
+    {
+        return false;
+    }
+    *out_a = s;
+    *out_b = t;
+    return true;
+}
+
+static bool henka_physics_closest_segment_triangle(
+    const double segment_start[3],
+    const double segment_end[3],
+    const double triangle[3][3],
+    double* out_segment_x,
+    double* out_segment_y,
+    double* out_segment_z,
+    double* out_triangle_x,
+    double* out_triangle_y,
+    double* out_triangle_z,
+    double* out_normal_x,
+    double* out_normal_y,
+    double* out_normal_z,
+    double* out_distance)
+{
+    const double edge0_x = triangle[1][0] - triangle[0][0];
+    const double edge0_y = triangle[1][1] - triangle[0][1];
+    const double edge0_z = triangle[1][2] - triangle[0][2];
+    const double edge1_x = triangle[2][0] - triangle[0][0];
+    const double edge1_y = triangle[2][1] - triangle[0][1];
+    const double edge1_z = triangle[2][2] - triangle[0][2];
+    const double normal_x = edge0_y * edge1_z - edge0_z * edge1_y;
+    const double normal_y = edge0_z * edge1_x - edge0_x * edge1_z;
+    const double normal_z = edge0_x * edge1_y - edge0_y * edge1_x;
+    const double normal_length = hypot(hypot(normal_x, normal_y), normal_z);
+    const double segment_delta_x = segment_end[0] - segment_start[0];
+    const double segment_delta_y = segment_end[1] - segment_start[1];
+    const double segment_delta_z = segment_end[2] - segment_start[2];
+    const double segment_length_squared =
+        segment_delta_x * segment_delta_x +
+        segment_delta_y * segment_delta_y +
+        segment_delta_z * segment_delta_z;
+    double best_distance = DBL_MAX;
+    double best_segment[3] = {0.0, 0.0, 0.0};
+    double best_triangle[3] = {0.0, 0.0, 0.0};
+    bool found = false;
+    size_t endpoint_index;
+    size_t edge_index;
+
+    if (out_segment_x == NULL || out_segment_y == NULL || out_segment_z == NULL ||
+        out_triangle_x == NULL || out_triangle_y == NULL || out_triangle_z == NULL ||
+        out_normal_x == NULL || out_normal_y == NULL || out_normal_z == NULL ||
+        out_distance == NULL || !isfinite(normal_length) || normal_length <= 0.0000000001)
+    {
+        return false;
+    }
+    *out_normal_x = normal_x / normal_length;
+    *out_normal_y = normal_y / normal_length;
+    *out_normal_z = normal_z / normal_length;
+
+    {
+        const double start_distance =
+            (segment_start[0] - triangle[0][0]) * *out_normal_x +
+            (segment_start[1] - triangle[0][1]) * *out_normal_y +
+            (segment_start[2] - triangle[0][2]) * *out_normal_z;
+        const double end_distance =
+            (segment_end[0] - triangle[0][0]) * *out_normal_x +
+            (segment_end[1] - triangle[0][1]) * *out_normal_y +
+            (segment_end[2] - triangle[0][2]) * *out_normal_z;
+        const double denominator = start_distance - end_distance;
+
+        if (isfinite(start_distance) && isfinite(end_distance) &&
+            isfinite(denominator) && fabs(denominator) > 0.0000000001)
+        {
+            const double parameter = start_distance / denominator;
+            double intersection[3];
+            double closest_x;
+            double closest_y;
+            double closest_z;
+
+            if (parameter >= 0.0 && parameter <= 1.0)
+            {
+                intersection[0] = segment_start[0] +
+                    (segment_end[0] - segment_start[0]) * parameter;
+                intersection[1] = segment_start[1] +
+                    (segment_end[1] - segment_start[1]) * parameter;
+                intersection[2] = segment_start[2] +
+                    (segment_end[2] - segment_start[2]) * parameter;
+                if (!henka_physics_closest_point_triangle(
+                        intersection[0], intersection[1], intersection[2],
+                        triangle[0][0], triangle[0][1], triangle[0][2],
+                        triangle[1][0], triangle[1][1], triangle[1][2],
+                        triangle[2][0], triangle[2][1], triangle[2][2],
+                        &closest_x, &closest_y, &closest_z))
+                {
+                    return false;
+                }
+                if (hypot(hypot(
+                        closest_x - intersection[0],
+                        closest_y - intersection[1]),
+                        closest_z - intersection[2]) <= 0.000001)
+                {
+                    memcpy(best_segment, intersection, sizeof(best_segment));
+                    memcpy(best_triangle, intersection, sizeof(best_triangle));
+                    best_distance = 0.0;
+                    found = true;
+                }
+            }
+        }
+    }
+    for (endpoint_index = 0U; endpoint_index < 2U && best_distance > 0.0; ++endpoint_index)
+    {
+        const double* endpoint = endpoint_index == 0U ? segment_start : segment_end;
+        double closest_x;
+        double closest_y;
+        double closest_z;
+        double distance;
+
+        if (!henka_physics_closest_point_triangle(
+                endpoint[0], endpoint[1], endpoint[2],
+                triangle[0][0], triangle[0][1], triangle[0][2],
+                triangle[1][0], triangle[1][1], triangle[1][2],
+                triangle[2][0], triangle[2][1], triangle[2][2],
+                &closest_x, &closest_y, &closest_z))
+        {
+            return false;
+        }
+        distance = hypot(hypot(
+            closest_x - endpoint[0], closest_y - endpoint[1]),
+            closest_z - endpoint[2]);
+        if (!isfinite(distance))
+        {
+            return false;
+        }
+        if (distance < best_distance)
+        {
+            best_distance = distance;
+            best_segment[0] = endpoint[0];
+            best_segment[1] = endpoint[1];
+            best_segment[2] = endpoint[2];
+            best_triangle[0] = closest_x;
+            best_triangle[1] = closest_y;
+            best_triangle[2] = closest_z;
+            found = true;
+        }
+    }
+    for (edge_index = 0U;
+         edge_index < 3U && best_distance > 0.0 && segment_length_squared > 0.0000000001;
+         ++edge_index)
+    {
+        const size_t next_index = (edge_index + 1U) % 3U;
+        const double edge_start[3] = {
+            triangle[edge_index][0], triangle[edge_index][1], triangle[edge_index][2]};
+        const double edge_end[3] = {
+            triangle[next_index][0], triangle[next_index][1], triangle[next_index][2]};
+        double segment_parameter;
+        double edge_parameter;
+        double segment_point[3];
+        double edge_point[3];
+        double distance;
+
+        if (!henka_physics_closest_segment_segment(
+                segment_start,
+                segment_end,
+                edge_start,
+                edge_end,
+                &segment_parameter,
+                &edge_parameter))
+        {
+            return false;
+        }
+        segment_point[0] = segment_start[0] +
+            (segment_end[0] - segment_start[0]) * segment_parameter;
+        segment_point[1] = segment_start[1] +
+            (segment_end[1] - segment_start[1]) * segment_parameter;
+        segment_point[2] = segment_start[2] +
+            (segment_end[2] - segment_start[2]) * segment_parameter;
+        edge_point[0] = edge_start[0] +
+            (edge_end[0] - edge_start[0]) * edge_parameter;
+        edge_point[1] = edge_start[1] +
+            (edge_end[1] - edge_start[1]) * edge_parameter;
+        edge_point[2] = edge_start[2] +
+            (edge_end[2] - edge_start[2]) * edge_parameter;
+        distance = hypot(hypot(
+            edge_point[0] - segment_point[0],
+            edge_point[1] - segment_point[1]),
+            edge_point[2] - segment_point[2]);
+        if (!isfinite(distance))
+        {
+            return false;
+        }
+        if (distance < best_distance)
+        {
+            best_distance = distance;
+            memcpy(best_segment, segment_point, sizeof(best_segment));
+            memcpy(best_triangle, edge_point, sizeof(best_triangle));
+            found = true;
+        }
+    }
+    if (!found || !isfinite(best_distance))
+    {
+        return false;
+    }
+    *out_segment_x = best_segment[0];
+    *out_segment_y = best_segment[1];
+    *out_segment_z = best_segment[2];
+    *out_triangle_x = best_triangle[0];
+    *out_triangle_y = best_triangle[1];
+    *out_triangle_z = best_triangle[2];
+    *out_distance = best_distance;
+    return true;
+}
+
+static henka_physics_contact_status henka_physics_capsule_triangle_mesh(
+    const henka_physics_body_state* capsule,
+    const henka_physics_body_state* mesh,
+    henka_physics_contact* contact)
+{
+    const henka_vec3 center = henka_physics_collider_center(capsule);
+    const double segment_start[3] = {
+        (double)center.x,
+        (double)center.y - (double)henka_physics_capsule_half_height(capsule),
+        (double)center.z};
+    const double segment_end[3] = {
+        (double)center.x,
+        (double)center.y + (double)henka_physics_capsule_half_height(capsule),
+        (double)center.z};
+    const double radius = (double)henka_physics_capsule_radius(capsule);
+    double best_distance = DBL_MAX;
+    double best_segment_x = 0.0;
+    double best_segment_y = 0.0;
+    double best_segment_z = 0.0;
+    double best_triangle_x = 0.0;
+    double best_triangle_y = 0.0;
+    double best_triangle_z = 0.0;
+    double best_normal_x = 0.0;
+    double best_normal_y = 1.0;
+    double best_normal_z = 0.0;
+    uint32_t index;
+
+    if (capsule == NULL || mesh == NULL || contact == NULL ||
+        capsule->collider.shape != HENKA_PHYSICS_SHAPE_CAPSULE ||
+        mesh->collider.shape != HENKA_PHYSICS_SHAPE_TRIANGLE_MESH)
+    {
+        return HENKA_PHYSICS_CONTACT_NONE;
+    }
+    for (index = 0U; index < mesh->collider.data.triangle_mesh.index_count; index += 3U)
+    {
+        double triangle[3][3];
+        double segment_x;
+        double segment_y;
+        double segment_z;
+        double triangle_x;
+        double triangle_y;
+        double triangle_z;
+        double normal_x;
+        double normal_y;
+        double normal_z;
+        double distance;
+
+        if (!henka_physics_triangle_mesh_world_triangle(mesh, index, triangle) ||
+            !henka_physics_closest_segment_triangle(
+                segment_start,
+                segment_end,
+                triangle,
+                &segment_x,
+                &segment_y,
+                &segment_z,
+                &triangle_x,
+                &triangle_y,
+                &triangle_z,
+                &normal_x,
+                &normal_y,
+                &normal_z,
+                &distance))
+        {
+            return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+        }
+        if (distance < best_distance)
+        {
+            best_distance = distance;
+            best_segment_x = segment_x;
+            best_segment_y = segment_y;
+            best_segment_z = segment_z;
+            best_triangle_x = triangle_x;
+            best_triangle_y = triangle_y;
+            best_triangle_z = triangle_z;
+            best_normal_x = normal_x;
+            best_normal_y = normal_y;
+            best_normal_z = normal_z;
+        }
+    }
+    if (!isfinite(best_distance) || best_distance >= radius)
+    {
+        return HENKA_PHYSICS_CONTACT_NONE;
+    }
+    if (best_distance > 0.0001)
+    {
+        contact->normal = (henka_vec3){
+            (float)((best_triangle_x - best_segment_x) / best_distance),
+            (float)((best_triangle_y - best_segment_y) / best_distance),
+            (float)((best_triangle_z - best_segment_z) / best_distance)};
+    }
+    else
+    {
+        if (best_normal_x * ((double)center.x - best_triangle_x) +
+                best_normal_y * ((double)center.y - best_triangle_y) +
+                best_normal_z * ((double)center.z - best_triangle_z) > 0.0)
+        {
+            best_normal_x = -best_normal_x;
+            best_normal_y = -best_normal_y;
+            best_normal_z = -best_normal_z;
+        }
+        contact->normal = (henka_vec3){
+            (float)best_normal_x,
+            (float)best_normal_y,
+            (float)best_normal_z};
+    }
+    if (!henka_physics_try_float(radius - best_distance, &contact->penetration) ||
+        !henka_physics_try_vec3(
+            best_triangle_x,
+            best_triangle_y,
+            best_triangle_z,
+            &contact->point))
+    {
+        return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+    }
+    return HENKA_PHYSICS_CONTACT_FOUND;
+}
+
+static henka_physics_contact_status henka_physics_sphere_triangle_mesh(
     const henka_physics_body_state* shape,
     const henka_physics_body_state* mesh,
     henka_physics_contact* contact)
@@ -1857,6 +2498,30 @@ static henka_physics_contact_status henka_physics_shape_triangle_mesh(
     return HENKA_PHYSICS_CONTACT_FOUND;
 }
 
+static henka_physics_contact_status henka_physics_shape_triangle_mesh(
+    const henka_physics_body_state* shape,
+    const henka_physics_body_state* mesh,
+    henka_physics_contact* contact)
+{
+    if (shape == NULL || mesh == NULL || contact == NULL)
+    {
+        return HENKA_PHYSICS_CONTACT_NONE;
+    }
+    if (shape->collider.shape == HENKA_PHYSICS_SHAPE_BOX)
+    {
+        return henka_physics_box_triangle_mesh(shape, mesh, contact);
+    }
+    if (shape->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE)
+    {
+        return henka_physics_capsule_triangle_mesh(shape, mesh, contact);
+    }
+    if (shape->collider.shape == HENKA_PHYSICS_SHAPE_SPHERE)
+    {
+        return henka_physics_sphere_triangle_mesh(shape, mesh, contact);
+    }
+    return HENKA_PHYSICS_CONTACT_NONE;
+}
+
 static henka_physics_contact_status henka_physics_detect_contact(
     const henka_physics_body_state* a,
     const henka_physics_body_state* b,
@@ -1957,6 +2622,27 @@ static henka_physics_contact_status henka_physics_detect_contact(
     }
     else if (a->collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH &&
              b->collider.shape == HENKA_PHYSICS_SHAPE_SPHERE)
+    {
+        swapped = *contact;
+        swapped.body_a = b->id;
+        swapped.body_b = a->id;
+        status = henka_physics_shape_triangle_mesh(b, a, &swapped);
+        if (status == HENKA_PHYSICS_CONTACT_FOUND)
+        {
+            contact->normal = henka_vec3_scale(swapped.normal, -1.0f);
+            contact->penetration = swapped.penetration;
+            contact->point = swapped.point;
+        }
+    }
+    else if ((a->collider.shape == HENKA_PHYSICS_SHAPE_BOX ||
+              a->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE) &&
+             b->collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH)
+    {
+        status = henka_physics_shape_triangle_mesh(a, b, contact);
+    }
+    else if (a->collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH &&
+             (b->collider.shape == HENKA_PHYSICS_SHAPE_BOX ||
+              b->collider.shape == HENKA_PHYSICS_SHAPE_CAPSULE))
     {
         swapped = *contact;
         swapped.body_a = b->id;

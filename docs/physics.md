@@ -13,11 +13,11 @@ static-only shapes is not evaluated as a runtime contact pair.
 | First shape | Sphere | Upright capsule | Axis-aligned box | Plane | Bounded static heightfield | Bounded static triangle mesh |
 | --- | --- | --- | --- | --- | --- | --- |
 | Sphere | Supported | Supported | Supported | Supported | Supported | Supported |
-| Upright capsule | Supported | Supported | Supported | Supported | Supported | Not supported |
-| Axis-aligned box | Supported | Supported | Supported | Supported | Supported | Not supported |
+| Upright capsule | Supported | Supported | Supported | Supported | Supported | Supported |
+| Axis-aligned box | Supported | Supported | Supported | Supported | Supported | Supported |
 | Plane | Supported | Supported | Supported | Static-only pair not evaluated | Static-only pair not evaluated | Static-only pair not evaluated |
 | Bounded static heightfield | Supported | Supported | Supported | Static-only pair not evaluated | Static-only pair not evaluated | Static-only pair not evaluated |
-| Bounded static triangle mesh | Supported | Not supported | Not supported | Static-only pair not evaluated | Static-only pair not evaluated | Static-only pair not evaluated |
+| Bounded static triangle mesh | Supported | Supported | Supported | Static-only pair not evaluated | Static-only pair not evaluated | Static-only pair not evaluated |
 
 Runtime creation and body-type changes reject non-static plane, heightfield,
 and triangle-mesh colliders without changing the existing world. This keeps
@@ -79,21 +79,22 @@ source vertex and index arrays are borrowed for the create or replacement call;
 the body copies and owns them after bounded validation. Version 1 limits meshes
 to `HENKA_PHYSICS_MAX_TRIANGLE_MESH_VERTICES` vertices and
 `HENKA_PHYSICS_MAX_TRIANGLE_MESH_INDICES` indices. Static triangle meshes
-support contacts with dynamic or kinematic spheres and raycasts. Capsule/mesh,
-box/mesh, mesh/mesh, and dynamic or kinematic mesh bodies are outside this
-boundary. Runtime triangle-mesh authoring is an explicit Physics API path and
-is not implicitly serialized by the Scene Document bridge.
+support contacts with dynamic or kinematic spheres, upright capsules, and
+axis-aligned boxes, plus raycasts. Mesh/mesh and dynamic or kinematic mesh
+bodies are outside this boundary. Runtime triangle-mesh authoring is an
+explicit Physics API path and is not implicitly serialized by the Scene
+Document bridge.
 
 Capsules are created with `henka_physics_collider_capsule`. The supported v1
 capsule is upright on the world Y axis, uses a radius and cylindrical
-half-height, and supports sphere/capsule, capsule/box, capsule/plane, and
-capsule/heightfield contacts plus raycasts. An upright rotation around the Y
-axis is accepted; tilted capsule transforms are rejected rather than treated
-as a different shape. Nonuniform horizontal scale uses the larger X/Z scale
-for a conservative bounded radius. Scene Document physics authoring supports
-sphere, axis-aligned box, and capsule shapes. Runtime heightfield authoring
-remains an explicit Terrain path and is not implicitly serialized by the Scene
-Document bridge.
+half-height, and supports sphere/capsule, capsule/box, capsule/plane,
+capsule/heightfield, and capsule/static-triangle-mesh contacts plus raycasts.
+An upright rotation around the Y axis is accepted; tilted capsule transforms
+are rejected rather than treated as a different shape. Nonuniform horizontal
+scale uses the larger X/Z scale for a conservative bounded radius. Scene
+Document physics authoring supports sphere, axis-aligned box, and capsule
+shapes. Runtime heightfield authoring remains an explicit Terrain path and is
+not implicitly serialized by the Scene Document bridge.
 
 The broadphase currently iterates body pairs directly, which is appropriate for the small sandbox scene and deterministic tests.
 
@@ -178,10 +179,10 @@ path and are not implicitly serialized by the Scene Document bridge.
 
 - Box collision is axis-aligned; rotated boxes are not oriented colliders.
 - Integration validates acceleration, damping, velocity, position, angular delta, and quaternion state before commit. Collision geometry, contact normals, penetration, contact points, impulses, friction, and positional correction are likewise required to remain finite and representable.
-- Triangle meshes are bounded static colliders. They support sphere contacts
-  and raycasts; capsule/mesh, box/mesh, mesh/mesh, dynamic or kinematic mesh
-  bodies, and arbitrary concave Scene Document authoring remain outside the
-  supported boundary.
+- Triangle meshes are bounded static colliders. They support sphere, upright
+  capsule, and axis-aligned box contacts plus raycasts. Mesh/mesh,
+  dynamic or kinematic mesh bodies, and arbitrary concave Scene Document
+  authoring remain outside the supported boundary.
 - The character-controller foundation provides an upright capsule body, but it
   does not yet provide swept movement, advanced slope traversal or response,
   advanced moving-platform behavior, step offsets, vehicles, cloth, soft
