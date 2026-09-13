@@ -11294,6 +11294,152 @@ static bool sandbox3d_physics_smoke_position_matches(
         fabsf(left.z - right.z) <= 0.0001f;
 }
 
+typedef struct sandbox3d_physics_smoke_input
+{
+    bool forward;
+    bool jump;
+    size_t query_count;
+} sandbox3d_physics_smoke_input;
+
+static bool sandbox3d_physics_smoke_input_query(
+    void* user_data,
+    uint32_t action_id)
+{
+    sandbox3d_physics_smoke_input* input =
+        (sandbox3d_physics_smoke_input*)user_data;
+    if (input == NULL)
+    {
+        return false;
+    }
+    ++input->query_count;
+    if (action_id == HENKA_INPUT_ACTION_MOVE_FORWARD)
+    {
+        return input->forward;
+    }
+    if (action_id == HENKA_INPUT_ACTION_MOVE_UP)
+    {
+        return input->jump;
+    }
+    return false;
+}
+
+static henka_result sandbox3d_run_character_controller_smoke(void)
+{
+    henka_scene_document* document = NULL;
+    sandbox3d_scene_document_bridge* bridge = NULL;
+    sandbox3d_play_session* session = NULL;
+    henka_scene* scene = NULL;
+    henka_physics_world* world = NULL;
+    henka_scene_document_object ground = henka_scene_document_object_default();
+    henka_scene_document_object player = henka_scene_document_object_default();
+    henka_scene_document_id ground_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id player_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_entity ground_entity = HENKA_INVALID_ENTITY;
+    henka_entity player_entity = HENKA_INVALID_ENTITY;
+    henka_transform initial_transform;
+    henka_transform moved_transform;
+    henka_transform jump_transform;
+    henka_transform restored_transform;
+    sandbox3d_physics_smoke_input input = {false, false, 0U};
+    henka_result result = HENKA_ERROR_UNKNOWN;
+    size_t tick_index;
+
+    ground.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE;
+    ground.source.primitive = HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX;
+    ground.source.primitive_dimensions = (henka_vec3){40.0f, 1.0f, 40.0f};
+    ground.transform.position = (henka_vec3){0.0f, -0.5f, 0.0f};
+    ground.physics.enabled = true;
+    ground.physics.body_type = HENKA_PHYSICS_BODY_STATIC;
+    ground.physics.shape = HENKA_PHYSICS_SHAPE_BOX;
+    ground.physics.box_half_extents = (henka_vec3){20.0f, 0.5f, 20.0f};
+    ground.physics.mass = 0.0f;
+    (void)snprintf(ground.name, sizeof(ground.name), "%s", "Physics Smoke Ground");
+
+    player.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE;
+    player.source.primitive = HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX;
+    player.source.primitive_dimensions = (henka_vec3){1.0f, 2.0f, 1.0f};
+    player.transform.position = (henka_vec3){0.0f, 2.0f, 0.0f};
+    player.character_controller.enabled = true;
+    player.character_controller.radius = 0.45f;
+    player.character_controller.half_height = 0.5f;
+    player.character_controller.max_speed = 2.0f;
+    player.character_controller.jump_speed = 4.0f;
+    player.character_controller.acceleration = 12.0f;
+    player.character_controller.deceleration = 12.0f;
+    player.character_controller.air_control = 0.5f;
+    player.character_controller.slope_limit_degrees = 45.0f;
+    (void)snprintf(player.name, sizeof(player.name), "%s", "Physics Smoke Controller");
+
+    if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_physics_world_create(&world) != HENKA_SUCCESS ||
+        henka_scene_document_add_object(document, &ground, &ground_id) != HENKA_SUCCESS ||
+        henka_scene_document_add_object(document, &player, &player_id) != HENKA_SUCCESS ||
+        (ground_entity = henka_scene_create_entity_named(scene, ground.name)) == HENKA_INVALID_ENTITY ||
+        (player_entity = henka_scene_create_entity_named(scene, player.name)) == HENKA_INVALID_ENTITY ||
+        sandbox3d_scene_document_bridge_create(document, scene, &bridge) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_bind(bridge, ground_id, ground_entity) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_bind(bridge, player_id, player_entity) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_object(bridge, ground_id) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_apply_object(bridge, player_id) != HENKA_SUCCESS ||
+        sandbox3d_play_session_create(bridge, world, &session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_set_input_context(
+            session,
+            sandbox3d_physics_smoke_input_query,
+            &input,
+            (henka_vec3){0.0f, 1.0f, 4.0f}) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(scene, player_entity, &initial_transform) != HENKA_SUCCESS ||
+        sandbox3d_play_session_start(session) != HENKA_SUCCESS ||
+        henka_physics_world_get_body_count(world) != 2U)
+    {
+        goto cleanup;
+    }
+
+    input.forward = true;
+    for (tick_index = 0U; tick_index < 180U; ++tick_index)
+    {
+        if (sandbox3d_play_session_tick(session) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    input.forward = false;
+    if (henka_scene_get_entity_transform(scene, player_entity, &moved_transform) != HENKA_SUCCESS ||
+        moved_transform.position.z >= initial_transform.position.z - 0.5f ||
+        moved_transform.position.y < 0.8f ||
+        input.query_count == 0U)
+    {
+        goto cleanup;
+    }
+
+    input.jump = true;
+    if (sandbox3d_play_session_tick(session) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(scene, player_entity, &jump_transform) != HENKA_SUCCESS ||
+        jump_transform.position.y <= moved_transform.position.y + 0.01f)
+    {
+        goto cleanup;
+    }
+    input.jump = false;
+    if (sandbox3d_play_session_stop(session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_STOPPED ||
+        henka_physics_world_get_body_count(world) != 0U ||
+        sandbox3d_scene_document_bridge_is_play_locked(bridge) ||
+        henka_scene_get_entity_transform(scene, player_entity, &restored_transform) != HENKA_SUCCESS ||
+        memcmp(&restored_transform, &initial_transform, sizeof(initial_transform)) != 0)
+    {
+        goto cleanup;
+    }
+    result = HENKA_SUCCESS;
+
+cleanup:
+    sandbox3d_play_session_destroy(session);
+    sandbox3d_scene_document_bridge_destroy(bridge);
+    henka_physics_world_destroy(world);
+    henka_scene_destroy(scene);
+    henka_scene_document_destroy(document);
+    return result;
+}
+
 static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
 {
     henka_physics_body_state ground_before;
@@ -11572,8 +11718,15 @@ static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
         goto fail;
     }
 
+    stage = "character-controller Play path";
+    result = sandbox3d_run_character_controller_smoke();
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
     printf(
-        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
+        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 
