@@ -770,6 +770,162 @@ static void henka_test_physics_shape_pair(
     henka_physics_world_destroy(world);
 }
 
+static henka_physics_collider_desc henka_test_triangle_mesh_collider(
+    const henka_vec3* vertices,
+    uint32_t vertex_count,
+    const uint32_t* indices,
+    uint32_t index_count)
+{
+    henka_physics_collider_desc collider = {0};
+    collider.shape = HENKA_PHYSICS_SHAPE_TRIANGLE_MESH;
+    collider.data.triangle_mesh.vertices = vertices;
+    collider.data.triangle_mesh.vertex_count = vertex_count;
+    collider.data.triangle_mesh.indices = indices;
+    collider.data.triangle_mesh.index_count = index_count;
+    collider.layer = 1U;
+    collider.mask = HENKA_PHYSICS_ALL_LAYERS;
+    return collider;
+}
+
+static void henka_test_physics_triangle_mesh_contract(void)
+{
+    const henka_vec3 vertices[4] = {
+        {-2.0f, 0.0f, -2.0f},
+        {2.0f, 0.0f, -2.0f},
+        {2.0f, 0.0f, 2.0f},
+        {-2.0f, 0.0f, 2.0f}};
+    const uint32_t indices[6] = {0U, 1U, 2U, 0U, 2U, 3U};
+    const uint32_t out_of_range_indices[6] = {0U, 1U, 4U, 0U, 2U, 3U};
+    const uint32_t degenerate_indices[6] = {0U, 1U, 1U, 0U, 2U, 3U};
+    const henka_vec3 replacement_vertices[3] = {
+        {-3.0f, 0.25f, -3.0f},
+        {3.0f, 0.25f, -3.0f},
+        {0.0f, 0.25f, 3.0f}};
+    const uint32_t replacement_indices[3] = {0U, 1U, 2U};
+    henka_physics_collider_desc collider;
+    henka_physics_body_desc desc;
+    henka_physics_body_state state;
+    henka_physics_body_state before_failed_replace;
+    henka_physics_body_id mesh_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id sphere_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_world* world;
+    henka_physics_raycast_hit hit;
+    const henka_physics_contact* contacts;
+    size_t contact_count;
+
+    collider = henka_test_triangle_mesh_collider(
+        vertices,
+        4U,
+        indices,
+        6U);
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        collider,
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &mesh_body) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(mesh_body != HENKA_INVALID_PHYSICS_BODY_ID);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, mesh_body, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH);
+    HENKA_TEST_ASSERT(state.collider.data.triangle_mesh.vertex_count == 4U);
+    HENKA_TEST_ASSERT(state.collider.data.triangle_mesh.index_count == 6U);
+    HENKA_TEST_ASSERT(state.collider.data.triangle_mesh.vertices != vertices);
+    HENKA_TEST_ASSERT(state.collider.data.triangle_mesh.indices != indices);
+    HENKA_TEST_ASSERT(strcmp(
+        henka_physics_shape_type_get_label(HENKA_PHYSICS_SHAPE_TRIANGLE_MESH),
+        "Triangle Mesh") == 0);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_sphere(0.5f),
+        (henka_vec3){0.0f, 0.4f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &sphere_body) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    contacts = henka_physics_world_get_contacts(world, &contact_count);
+    HENKA_TEST_ASSERT(contacts != NULL && contact_count == 1U);
+    HENKA_TEST_ASSERT(contacts[0].body_a == mesh_body && contacts[0].body_b == sphere_body);
+    HENKA_TEST_ASSERT(contacts[0].normal.y > 0.9f);
+    HENKA_TEST_ASSERT(contacts[0].penetration > 0.09f);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, sphere_body, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.grounded);
+
+    HENKA_TEST_ASSERT(henka_physics_world_raycast(
+        world,
+        (henka_ray){{1.5f, 2.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
+        10.0f,
+        HENKA_PHYSICS_ALL_LAYERS,
+        &hit) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(hit.hit && hit.body == mesh_body);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.distance, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT(hit.normal.y > 0.9f);
+
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(
+        world,
+        mesh_body,
+        &before_failed_replace) == HENKA_SUCCESS);
+    collider = henka_test_triangle_mesh_collider(
+        vertices,
+        4U,
+        out_of_range_indices,
+        6U);
+    HENKA_TEST_ASSERT(henka_physics_body_set_collider(
+        world,
+        mesh_body,
+        collider) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, mesh_body, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.collider.shape == before_failed_replace.collider.shape);
+    HENKA_TEST_ASSERT(state.collider.data.triangle_mesh.vertices ==
+        before_failed_replace.collider.data.triangle_mesh.vertices);
+    HENKA_TEST_ASSERT(state.collider.data.triangle_mesh.indices ==
+        before_failed_replace.collider.data.triangle_mesh.indices);
+
+    collider = henka_test_triangle_mesh_collider(
+        replacement_vertices,
+        3U,
+        replacement_indices,
+        3U);
+    HENKA_TEST_ASSERT(henka_physics_body_set_collider(
+        world,
+        mesh_body,
+        collider) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, mesh_body, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.collider.data.triangle_mesh.vertex_count == 3U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.collider.data.triangle_mesh.vertices[0].y,
+        0.25f,
+        0.0001f);
+    HENKA_TEST_ASSERT(henka_physics_body_set_type(
+        world,
+        mesh_body,
+        HENKA_PHYSICS_BODY_DYNAMIC) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, mesh_body, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.type == HENKA_PHYSICS_BODY_STATIC);
+    henka_physics_world_destroy(world);
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    collider = henka_test_triangle_mesh_collider(NULL, 4U, indices, 6U);
+    desc = henka_test_physics_body(HENKA_PHYSICS_BODY_STATIC, collider, (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &mesh_body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == 0U);
+
+    collider = henka_test_triangle_mesh_collider(vertices, 4U, out_of_range_indices, 6U);
+    desc.collider = collider;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &mesh_body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == 0U);
+
+    collider = henka_test_triangle_mesh_collider(vertices, 4U, degenerate_indices, 6U);
+    desc.collider = collider;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &mesh_body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == 0U);
+
+    desc.type = HENKA_PHYSICS_BODY_DYNAMIC;
+    collider = henka_test_triangle_mesh_collider(vertices, 4U, indices, 6U);
+    desc.collider = collider;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &mesh_body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == 0U);
+    henka_physics_world_destroy(world);
+}
+
 static void henka_test_physics_pair_filters_and_response(void)
 {
     henka_physics_world* world;
@@ -2188,6 +2344,7 @@ void henka_test_physics(void)
     henka_test_physics_axis_aligned_box_rotation_boundary();
     henka_test_physics_shape_pairs_and_raycast();
     henka_test_physics_static_only_shape_boundaries();
+    henka_test_physics_triangle_mesh_contract();
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();
     henka_test_physics_scene_link_hierarchy();

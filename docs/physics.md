@@ -6,21 +6,23 @@ Henka Engine includes a scoped rigid-body physics v1 layer for small runtime sce
 
 ### Supported shape pairs
 
-The bounded v1 collision dispatcher supports the following pairings. Planes
-and heightfields are static-only; a pair containing two static-only shapes is
-not evaluated as a runtime contact pair.
+The bounded v1 collision dispatcher supports the following pairings. Planes,
+heightfields, and triangle meshes are static-only; a pair containing two
+static-only shapes is not evaluated as a runtime contact pair.
 
-| First shape | Sphere | Upright capsule | Axis-aligned box | Plane | Bounded static heightfield |
-| --- | --- | --- | --- | --- | --- |
-| Sphere | Supported | Supported | Supported | Supported | Supported |
-| Upright capsule | Supported | Supported | Supported | Supported | Supported |
-| Axis-aligned box | Supported | Supported | Supported | Supported | Supported |
-| Plane | Supported | Supported | Supported | Static-only pair not evaluated | Static-only pair not evaluated |
-| Bounded static heightfield | Supported | Supported | Supported | Static-only pair not evaluated | Static-only pair not evaluated |
+| First shape | Sphere | Upright capsule | Axis-aligned box | Plane | Bounded static heightfield | Bounded static triangle mesh |
+| --- | --- | --- | --- | --- | --- | --- |
+| Sphere | Supported | Supported | Supported | Supported | Supported | Supported |
+| Upright capsule | Supported | Supported | Supported | Supported | Supported | Not supported |
+| Axis-aligned box | Supported | Supported | Supported | Supported | Supported | Not supported |
+| Plane | Supported | Supported | Supported | Static-only pair not evaluated | Static-only pair not evaluated | Static-only pair not evaluated |
+| Bounded static heightfield | Supported | Supported | Supported | Static-only pair not evaluated | Static-only pair not evaluated | Static-only pair not evaluated |
+| Bounded static triangle mesh | Supported | Not supported | Not supported | Static-only pair not evaluated | Static-only pair not evaluated | Static-only pair not evaluated |
 
-Runtime creation and body-type changes reject non-static plane and heightfield
-colliders without changing the existing world. This keeps the static-only
-matrix explicit rather than routing those cases through an approximation.
+Runtime creation and body-type changes reject non-static plane, heightfield,
+and triangle-mesh colliders without changing the existing world. This keeps
+the static-only matrix explicit rather than routing those cases through an
+approximation.
 
 The public physics API provides:
 
@@ -30,12 +32,13 @@ The public physics API provides:
 - kinematic bodies driven by assigned velocity; gravity and forces do not drive them
 - angular velocity and torque integration
 - material restitution, static friction, dynamic friction, linear damping, and angular damping
-- sphere, upright capsule, axis-aligned box, plane, and bounded static
-  heightfield colliders
+- sphere, upright capsule, axis-aligned box, plane, bounded static heightfield,
+  and bounded static triangle-mesh colliders
 - layer and mask filtering
 - trigger overlap reporting without physical response
 - collision and trigger enter, stay, and exit events
-- raycasts against every supported collider shape, including bounded heightfield traversal
+- raycasts against every supported collider shape, including bounded heightfield
+  traversal and bounded triangle-mesh traversal
 - optional links from physics bodies to real scene entities. The link is
   borrowed, but the body keeps the scene storage valid until the body or its
   world is destroyed. Destroying the scene first retires its entity data
@@ -70,6 +73,16 @@ cell-sized march and fail closed when
 the requested range cannot be covered by the traversal budget. Replacement
 copies the candidate before releasing the prior field, so invalid input or
 allocation failure preserves the last valid collision representation.
+
+Triangle meshes are created with `henka_physics_collider_triangle_mesh`. The
+source vertex and index arrays are borrowed for the create or replacement call;
+the body copies and owns them after bounded validation. Version 1 limits meshes
+to `HENKA_PHYSICS_MAX_TRIANGLE_MESH_VERTICES` vertices and
+`HENKA_PHYSICS_MAX_TRIANGLE_MESH_INDICES` indices. Static triangle meshes
+support contacts with dynamic or kinematic spheres and raycasts. Capsule/mesh,
+box/mesh, mesh/mesh, and dynamic or kinematic mesh bodies are outside this
+boundary. Runtime triangle-mesh authoring is an explicit Physics API path and
+is not implicitly serialized by the Scene Document bridge.
 
 Capsules are created with `henka_physics_collider_capsule`. The supported v1
 capsule is upright on the world Y axis, uses a radius and cylindrical
@@ -164,8 +177,10 @@ path and are not implicitly serialized by the Scene Document bridge.
 
 - Box collision is axis-aligned; rotated boxes are not oriented colliders.
 - Integration validates acceleration, damping, velocity, position, angular delta, and quaternion state before commit. Collision geometry, contact normals, penetration, contact points, impulses, friction, and positional correction are likewise required to remain finite and representable.
-- There are no arbitrary mesh or concave colliders; heightfields are the only
-  supported terrain-shaped collider.
+- Triangle meshes are bounded static colliders. They support sphere contacts
+  and raycasts; capsule/mesh, box/mesh, mesh/mesh, dynamic or kinematic mesh
+  bodies, and arbitrary concave Scene Document authoring remain outside the
+  supported boundary.
 - The character-controller foundation provides an upright capsule body, but it
   does not yet provide swept movement, advanced slope traversal or response,
   advanced moving-platform behavior, step offsets, vehicles, cloth, soft

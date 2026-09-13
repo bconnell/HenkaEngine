@@ -600,6 +600,7 @@ and kinematic bodies with:
 - axis-aligned box colliders;
 - plane colliders;
 - bounded static heightfield colliders;
+- bounded static triangle-mesh colliders for sphere contacts and raycasts;
 - contacts;
 - impulses;
 - friction;
@@ -615,7 +616,9 @@ preserve prior simulation state where the contract requires retry safety.
 
 ### Outside this declared scope
 
-- Arbitrary mesh or concave collision
+- Capsule/mesh, box/mesh, and mesh/mesh collision
+- Dynamic or kinematic triangle-mesh bodies
+- Arbitrary concave Scene Document authoring
 - Constraints
 - Advanced simulation
 

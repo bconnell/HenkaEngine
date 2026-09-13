@@ -19,6 +19,10 @@ typedef struct henka_physics_body_record
     henka_vec3 torque;
     int32_t* owned_heightfield_heights_millimeters;
     size_t owned_heightfield_sample_count;
+    henka_vec3* owned_triangle_mesh_vertices;
+    uint32_t* owned_triangle_mesh_indices;
+    size_t owned_triangle_mesh_vertex_count;
+    size_t owned_triangle_mesh_index_count;
     bool scene_link_registered;
 } henka_physics_body_record;
 
@@ -49,6 +53,24 @@ struct henka_physics_world
     size_t event_count;
     size_t event_capacity;
 };
+
+static void henka_physics_release_body_owned_data(
+    henka_physics_body_record* body)
+{
+    if (body == NULL)
+    {
+        return;
+    }
+    henka_free(body->owned_heightfield_heights_millimeters);
+    henka_free(body->owned_triangle_mesh_vertices);
+    henka_free(body->owned_triangle_mesh_indices);
+    body->owned_heightfield_heights_millimeters = NULL;
+    body->owned_heightfield_sample_count = 0U;
+    body->owned_triangle_mesh_vertices = NULL;
+    body->owned_triangle_mesh_indices = NULL;
+    body->owned_triangle_mesh_vertex_count = 0U;
+    body->owned_triangle_mesh_index_count = 0U;
+}
 
 static bool henka_physics_double_fits_float(double value);
 
@@ -293,6 +315,124 @@ static bool henka_physics_heightfield_dimensions_valid(
     return true;
 }
 
+static bool henka_physics_triangle_mesh_data_valid(
+    const henka_physics_collider_desc* collider,
+    size_t* out_vertex_bytes,
+    size_t* out_index_bytes)
+{
+    size_t vertex_bytes;
+    size_t index_bytes;
+    uint32_t vertex_index;
+    uint32_t index_index;
+
+    if (collider == NULL || out_vertex_bytes == NULL || out_index_bytes == NULL ||
+        collider->data.triangle_mesh.vertices == NULL ||
+        collider->data.triangle_mesh.indices == NULL ||
+        collider->data.triangle_mesh.vertex_count < 3U ||
+        collider->data.triangle_mesh.vertex_count > HENKA_PHYSICS_MAX_TRIANGLE_MESH_VERTICES ||
+        collider->data.triangle_mesh.index_count < 3U ||
+        collider->data.triangle_mesh.index_count > HENKA_PHYSICS_MAX_TRIANGLE_MESH_INDICES ||
+        collider->data.triangle_mesh.index_count % 3U != 0U ||
+        !henka_checked_size_multiply(
+            (size_t)collider->data.triangle_mesh.vertex_count,
+            sizeof(*collider->data.triangle_mesh.vertices),
+            &vertex_bytes) ||
+        !henka_checked_size_multiply(
+            (size_t)collider->data.triangle_mesh.index_count,
+            sizeof(*collider->data.triangle_mesh.indices),
+            &index_bytes))
+    {
+        return false;
+    }
+
+    for (vertex_index = 0U;
+        vertex_index < collider->data.triangle_mesh.vertex_count;
+        ++vertex_index)
+    {
+        if (!henka_physics_is_finite_vec3(
+                collider->data.triangle_mesh.vertices[vertex_index]))
+        {
+            return false;
+        }
+    }
+    for (index_index = 0U;
+        index_index < collider->data.triangle_mesh.index_count;
+        index_index += 3U)
+    {
+        if (collider->data.triangle_mesh.indices[index_index] >=
+                collider->data.triangle_mesh.vertex_count ||
+            collider->data.triangle_mesh.indices[index_index + 1U] >=
+                collider->data.triangle_mesh.vertex_count ||
+            collider->data.triangle_mesh.indices[index_index + 2U] >=
+                collider->data.triangle_mesh.vertex_count)
+        {
+            return false;
+        }
+        {
+            const henka_vec3 a = collider->data.triangle_mesh.vertices[
+                collider->data.triangle_mesh.indices[index_index]];
+            const henka_vec3 b = collider->data.triangle_mesh.vertices[
+                collider->data.triangle_mesh.indices[index_index + 1U]];
+            const henka_vec3 c = collider->data.triangle_mesh.vertices[
+                collider->data.triangle_mesh.indices[index_index + 2U]];
+            const double abx = (double)b.x - (double)a.x;
+            const double aby = (double)b.y - (double)a.y;
+            const double abz = (double)b.z - (double)a.z;
+            const double acx = (double)c.x - (double)a.x;
+            const double acy = (double)c.y - (double)a.y;
+            const double acz = (double)c.z - (double)a.z;
+            const double nx = aby * acz - abz * acy;
+            const double ny = abz * acx - abx * acz;
+            const double nz = abx * acy - aby * acx;
+            const double area = hypot(hypot(nx, ny), nz);
+
+            if (!isfinite(area) || area <= 0.00000001)
+            {
+                return false;
+            }
+        }
+    }
+
+    *out_vertex_bytes = vertex_bytes;
+    *out_index_bytes = index_bytes;
+    return true;
+}
+
+static bool henka_physics_triangle_mesh_world_vertex(
+    henka_transform transform,
+    henka_vec3 collider_offset,
+    henka_vec3 local_vertex,
+    double* out_x,
+    double* out_y,
+    double* out_z)
+{
+    const double qx = (double)transform.rotation.x;
+    const double qy = (double)transform.rotation.y;
+    const double qz = (double)transform.rotation.z;
+    const double qw = (double)transform.rotation.w;
+    const double vx = (double)local_vertex.x * (double)transform.scale.x;
+    const double vy = (double)local_vertex.y * (double)transform.scale.y;
+    const double vz = (double)local_vertex.z * (double)transform.scale.z;
+    const double tx = 2.0 * (qy * vz - qz * vy);
+    const double ty = 2.0 * (qz * vx - qx * vz);
+    const double tz = 2.0 * (qx * vy - qy * vx);
+    const double rx = vx + qw * tx + qy * tz - qz * ty;
+    const double ry = vy + qw * ty + qz * tx - qx * tz;
+    const double rz = vz + qw * tz + qx * ty - qy * tx;
+
+    if (out_x == NULL || out_y == NULL || out_z == NULL ||
+        !isfinite(rx) || !isfinite(ry) || !isfinite(rz))
+    {
+        return false;
+    }
+    *out_x = (double)transform.position.x + (double)collider_offset.x + rx;
+    *out_y = (double)transform.position.y + (double)collider_offset.y + ry;
+    *out_z = (double)transform.position.z + (double)collider_offset.z + rz;
+    return henka_physics_double_fits_float(*out_x) &&
+        henka_physics_double_fits_float(*out_y) &&
+        henka_physics_double_fits_float(*out_z);
+}
+
 static bool henka_physics_transform_supports_heightfield(henka_transform transform)
 {
     return fabsf(transform.scale.x - 1.0f) <= 0.0001f &&
@@ -347,6 +487,11 @@ static bool henka_physics_collider_valid(henka_physics_collider_desc collider)
                 henka_vec3_length(collider.data.plane.normal) > 0.0001f && isfinite(collider.data.plane.offset);
         case HENKA_PHYSICS_SHAPE_HEIGHTFIELD:
             return henka_physics_heightfield_dimensions_valid(&collider, &(size_t){0});
+        case HENKA_PHYSICS_SHAPE_TRIANGLE_MESH:
+            return henka_physics_triangle_mesh_data_valid(
+                &collider,
+                &(size_t){0U},
+                &(size_t){0U});
         default:
             return false;
     }
@@ -493,6 +638,39 @@ static bool henka_physics_geometry_valid(
                     center_y + (double)collider.data.heightfield.origin.y);
         }
 
+        case HENKA_PHYSICS_SHAPE_TRIANGLE_MESH:
+        {
+            uint32_t vertex_index;
+
+            if (!henka_physics_triangle_mesh_data_valid(
+                    &collider,
+                    &(size_t){0U},
+                    &(size_t){0U}))
+            {
+                return false;
+            }
+            for (vertex_index = 0U;
+                vertex_index < collider.data.triangle_mesh.vertex_count;
+                ++vertex_index)
+            {
+                double world_x;
+                double world_y;
+                double world_z;
+
+                if (!henka_physics_triangle_mesh_world_vertex(
+                        transform,
+                        collider.offset,
+                        collider.data.triangle_mesh.vertices[vertex_index],
+                        &world_x,
+                        &world_y,
+                        &world_z))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         default:
             return false;
     }
@@ -509,6 +687,55 @@ static bool henka_physics_geometry_valid(
         henka_physics_double_fits_float(center_y + extent_y) &&
         henka_physics_double_fits_float(center_z - extent_z) &&
         henka_physics_double_fits_float(center_z + extent_z);
+}
+
+static henka_result henka_physics_copy_triangle_mesh(
+    const henka_physics_collider_desc* collider,
+    henka_vec3** out_vertices,
+    uint32_t** out_indices,
+    size_t* out_vertex_count,
+    size_t* out_index_count)
+{
+    size_t vertex_bytes;
+    size_t index_bytes;
+    henka_vec3* vertices;
+    uint32_t* indices;
+
+    if (out_vertices == NULL || out_indices == NULL ||
+        out_vertex_count == NULL || out_index_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_vertices = NULL;
+    *out_indices = NULL;
+    *out_vertex_count = 0U;
+    *out_index_count = 0U;
+    if (!henka_physics_triangle_mesh_data_valid(
+            collider,
+            &vertex_bytes,
+            &index_bytes))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    vertices = henka_malloc(vertex_bytes);
+    if (vertices == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    indices = henka_malloc(index_bytes);
+    if (indices == NULL)
+    {
+        henka_free(vertices);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(vertices, collider->data.triangle_mesh.vertices, vertex_bytes);
+    memcpy(indices, collider->data.triangle_mesh.indices, index_bytes);
+    *out_vertices = vertices;
+    *out_indices = indices;
+    *out_vertex_count = collider->data.triangle_mesh.vertex_count;
+    *out_index_count = collider->data.triangle_mesh.index_count;
+    return HENKA_SUCCESS;
 }
 
 static bool henka_physics_body_candidate_valid(
@@ -539,7 +766,20 @@ static bool henka_physics_body_candidate_valid(
             (body->owned_heightfield_heights_millimeters != NULL &&
                 body->owned_heightfield_sample_count > 0U &&
                 body->state.collider.data.heightfield.heights_millimeters ==
-                    body->owned_heightfield_heights_millimeters));
+                    body->owned_heightfield_heights_millimeters)) &&
+        (body->state.collider.shape != HENKA_PHYSICS_SHAPE_TRIANGLE_MESH ||
+            (body->owned_triangle_mesh_vertices != NULL &&
+                body->owned_triangle_mesh_indices != NULL &&
+                body->owned_triangle_mesh_vertex_count > 0U &&
+                body->owned_triangle_mesh_index_count > 0U &&
+                body->state.collider.data.triangle_mesh.vertices ==
+                    body->owned_triangle_mesh_vertices &&
+                body->state.collider.data.triangle_mesh.indices ==
+                    body->owned_triangle_mesh_indices &&
+                body->state.collider.data.triangle_mesh.vertex_count ==
+                    body->owned_triangle_mesh_vertex_count &&
+                body->state.collider.data.triangle_mesh.index_count ==
+                    body->owned_triangle_mesh_index_count));
 }
 
 static henka_physics_body_record* henka_physics_find_body(henka_physics_world* world, henka_physics_body_id id)
@@ -1338,6 +1578,285 @@ static henka_physics_contact_status henka_physics_shape_heightfield(
     return HENKA_PHYSICS_CONTACT_FOUND;
 }
 
+static bool henka_physics_closest_point_triangle(
+    double px,
+    double py,
+    double pz,
+    double ax,
+    double ay,
+    double az,
+    double bx,
+    double by,
+    double bz,
+    double cx,
+    double cy,
+    double cz,
+    double* out_x,
+    double* out_y,
+    double* out_z)
+{
+    const double abx = bx - ax;
+    const double aby = by - ay;
+    const double abz = bz - az;
+    const double acx = cx - ax;
+    const double acy = cy - ay;
+    const double acz = cz - az;
+    const double apx = px - ax;
+    const double apy = py - ay;
+    const double apz = pz - az;
+    const double d1 = abx * apx + aby * apy + abz * apz;
+    const double d2 = acx * apx + acy * apy + acz * apz;
+    double d3;
+    double d4;
+
+    if (out_x == NULL || out_y == NULL || out_z == NULL ||
+        !isfinite(d1) || !isfinite(d2))
+    {
+        return false;
+    }
+    if (d1 <= 0.0 && d2 <= 0.0)
+    {
+        *out_x = ax;
+        *out_y = ay;
+        *out_z = az;
+        return true;
+    }
+
+    {
+        const double bpx = px - bx;
+        const double bpy = py - by;
+        const double bpz = pz - bz;
+        d3 = abx * bpx + aby * bpy + abz * bpz;
+        d4 = acx * bpx + acy * bpy + acz * bpz;
+        if (!isfinite(d3) || !isfinite(d4))
+        {
+            return false;
+        }
+        if (d3 >= 0.0 && d4 <= d3)
+        {
+            *out_x = bx;
+            *out_y = by;
+            *out_z = bz;
+            return true;
+        }
+
+        {
+            const double vc = d1 * d4 - d3 * d2;
+            if (!isfinite(vc))
+            {
+                return false;
+            }
+            if (vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0)
+            {
+                const double denominator = d1 - d3;
+                const double v = denominator != 0.0 ? d1 / denominator : 0.0;
+                if (!isfinite(v))
+                {
+                    return false;
+                }
+                *out_x = ax + v * abx;
+                *out_y = ay + v * aby;
+                *out_z = az + v * abz;
+                return isfinite(*out_x) && isfinite(*out_y) && isfinite(*out_z);
+            }
+        }
+    }
+
+    {
+        const double cpx = px - cx;
+        const double cpy = py - cy;
+        const double cpz = pz - cz;
+        const double d5 = abx * cpx + aby * cpy + abz * cpz;
+        const double d6 = acx * cpx + acy * cpy + acz * cpz;
+        if (!isfinite(d5) || !isfinite(d6))
+        {
+            return false;
+        }
+        if (d6 >= 0.0 && d5 <= d6)
+        {
+            *out_x = cx;
+            *out_y = cy;
+            *out_z = cz;
+            return true;
+        }
+
+        {
+            const double vb = d5 * d2 - d1 * d6;
+            if (!isfinite(vb))
+            {
+                return false;
+            }
+            if (vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0)
+            {
+                const double denominator = d2 - d6;
+                const double w = denominator != 0.0 ? d2 / denominator : 0.0;
+                if (!isfinite(w))
+                {
+                    return false;
+                }
+                *out_x = ax + w * acx;
+                *out_y = ay + w * acy;
+                *out_z = az + w * acz;
+                return isfinite(*out_x) && isfinite(*out_y) && isfinite(*out_z);
+            }
+        }
+
+        {
+            const double vc = d1 * d4 - d3 * d2;
+            const double va = d3 * d6 - d5 * d4;
+            const double vb = d5 * d2 - d1 * d6;
+            const double denominator = va + vb + vc;
+            if (!isfinite(va) || !isfinite(vb) || !isfinite(vc) ||
+                !isfinite(denominator) || fabs(denominator) <= 0.000000000001)
+            {
+                return false;
+            }
+            {
+                const double v = vb / denominator;
+                const double w = vc / denominator;
+                const double u = 1.0 - v - w;
+                *out_x = u * ax + v * bx + w * cx;
+                *out_y = u * ay + v * by + w * cy;
+                *out_z = u * az + v * bz + w * cz;
+                return isfinite(*out_x) && isfinite(*out_y) && isfinite(*out_z);
+            }
+        }
+    }
+}
+
+static henka_physics_contact_status henka_physics_shape_triangle_mesh(
+    const henka_physics_body_state* shape,
+    const henka_physics_body_state* mesh,
+    henka_physics_contact* contact)
+{
+    henka_vec3 center;
+    double radius;
+    double best_distance = DBL_MAX;
+    double best_x = 0.0;
+    double best_y = 0.0;
+    double best_z = 0.0;
+    double best_nx = 0.0;
+    double best_ny = 1.0;
+    double best_nz = 0.0;
+    uint32_t index;
+    bool found = false;
+
+    if (shape == NULL || mesh == NULL || contact == NULL ||
+        shape->collider.shape != HENKA_PHYSICS_SHAPE_SPHERE ||
+        mesh->collider.shape != HENKA_PHYSICS_SHAPE_TRIANGLE_MESH)
+    {
+        return HENKA_PHYSICS_CONTACT_NONE;
+    }
+    center = henka_physics_collider_center(shape);
+    radius = (double)henka_physics_sphere_radius(shape);
+    for (index = 0U; index < mesh->collider.data.triangle_mesh.index_count; index += 3U)
+    {
+        double ax;
+        double ay;
+        double az;
+        double bx;
+        double by;
+        double bz;
+        double cx;
+        double cy;
+        double cz;
+        double closest_x;
+        double closest_y;
+        double closest_z;
+        double dx;
+        double dy;
+        double dz;
+        double distance;
+        double nx;
+        double ny;
+        double nz;
+        double normal_length;
+
+        if (!henka_physics_triangle_mesh_world_vertex(
+                mesh->transform,
+                mesh->collider.offset,
+                mesh->collider.data.triangle_mesh.vertices[
+                    mesh->collider.data.triangle_mesh.indices[index]],
+                &ax, &ay, &az) ||
+            !henka_physics_triangle_mesh_world_vertex(
+                mesh->transform,
+                mesh->collider.offset,
+                mesh->collider.data.triangle_mesh.vertices[
+                    mesh->collider.data.triangle_mesh.indices[index + 1U]],
+                &bx, &by, &bz) ||
+            !henka_physics_triangle_mesh_world_vertex(
+                mesh->transform,
+                mesh->collider.offset,
+                mesh->collider.data.triangle_mesh.vertices[
+                    mesh->collider.data.triangle_mesh.indices[index + 2U]],
+                &cx, &cy, &cz) ||
+            !henka_physics_closest_point_triangle(
+                (double)center.x,
+                (double)center.y,
+                (double)center.z,
+                ax, ay, az,
+                bx, by, bz,
+                cx, cy, cz,
+                &closest_x,
+                &closest_y,
+                &closest_z))
+        {
+            return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+        }
+        dx = closest_x - (double)center.x;
+        dy = closest_y - (double)center.y;
+        dz = closest_z - (double)center.z;
+        distance = hypot(hypot(dx, dy), dz);
+        if (!isfinite(distance))
+        {
+            return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+        }
+        if (distance < best_distance)
+        {
+            nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+            ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+            nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+            normal_length = hypot(hypot(nx, ny), nz);
+            if (!isfinite(normal_length) || normal_length <= 0.00000001)
+            {
+                return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+            }
+            best_distance = distance;
+            best_x = closest_x;
+            best_y = closest_y;
+            best_z = closest_z;
+            best_nx = nx / normal_length;
+            best_ny = ny / normal_length;
+            best_nz = nz / normal_length;
+            found = true;
+        }
+    }
+    if (!found || best_distance >= radius)
+    {
+        return HENKA_PHYSICS_CONTACT_NONE;
+    }
+    if (best_distance > 0.0001)
+    {
+        contact->normal = (henka_vec3){
+            (float)((best_x - (double)center.x) / best_distance),
+            (float)((best_y - (double)center.y) / best_distance),
+            (float)((best_z - (double)center.z) / best_distance)};
+    }
+    else
+    {
+        contact->normal = (henka_vec3){
+            (float)-best_nx,
+            (float)-best_ny,
+            (float)-best_nz};
+    }
+    if (!henka_physics_try_float(radius - best_distance, &contact->penetration) ||
+        !henka_physics_try_vec3(best_x, best_y, best_z, &contact->point))
+    {
+        return HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE;
+    }
+    return HENKA_PHYSICS_CONTACT_FOUND;
+}
+
 static henka_physics_contact_status henka_physics_detect_contact(
     const henka_physics_body_state* a,
     const henka_physics_body_state* b,
@@ -1424,6 +1943,25 @@ static henka_physics_contact_status henka_physics_detect_contact(
         swapped.body_a = b->id;
         swapped.body_b = a->id;
         status = henka_physics_shape_heightfield(b, a, &swapped);
+        if (status == HENKA_PHYSICS_CONTACT_FOUND)
+        {
+            contact->normal = henka_vec3_scale(swapped.normal, -1.0f);
+            contact->penetration = swapped.penetration;
+            contact->point = swapped.point;
+        }
+    }
+    else if (a->collider.shape == HENKA_PHYSICS_SHAPE_SPHERE &&
+             b->collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH)
+    {
+        status = henka_physics_shape_triangle_mesh(a, b, contact);
+    }
+    else if (a->collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH &&
+             b->collider.shape == HENKA_PHYSICS_SHAPE_SPHERE)
+    {
+        swapped = *contact;
+        swapped.body_a = b->id;
+        swapped.body_b = a->id;
+        status = henka_physics_shape_triangle_mesh(b, a, &swapped);
         if (status == HENKA_PHYSICS_CONTACT_FOUND)
         {
             contact->normal = henka_vec3_scale(swapped.normal, -1.0f);
@@ -1664,8 +2202,7 @@ static void henka_physics_release_candidate(henka_physics_world* candidate)
     }
     for (index = 0U; index < candidate->body_capacity; ++index)
     {
-        henka_free(candidate->bodies[index].owned_heightfield_heights_millimeters);
-        candidate->bodies[index].owned_heightfield_heights_millimeters = NULL;
+        henka_physics_release_body_owned_data(&candidate->bodies[index]);
     }
     henka_free(candidate->bodies);
     henka_free(candidate->contacts);
@@ -1725,30 +2262,54 @@ static henka_result henka_physics_prepare_candidate(
         {
             henka_physics_body_record* body = &candidate->bodies[index];
             size_t bytes;
-            if (!body->active || body->state.collider.shape != HENKA_PHYSICS_SHAPE_HEIGHTFIELD)
+            henka_result copy_result;
+            if (!body->active)
             {
                 continue;
             }
-            if (!henka_checked_size_multiply(
-                    body->owned_heightfield_sample_count,
-                    sizeof(int32_t),
-                    &bytes))
+            if (body->state.collider.shape == HENKA_PHYSICS_SHAPE_HEIGHTFIELD)
+            {
+                if (!henka_checked_size_multiply(
+                        body->owned_heightfield_sample_count,
+                        sizeof(int32_t),
+                        &bytes))
+                {
+                    henka_physics_release_candidate(candidate);
+                    return HENKA_ERROR_OUT_OF_MEMORY;
+                }
+                body->owned_heightfield_heights_millimeters = henka_malloc(bytes);
+                if (body->owned_heightfield_heights_millimeters == NULL)
+                {
+                    henka_physics_release_candidate(candidate);
+                    return HENKA_ERROR_OUT_OF_MEMORY;
+                }
+                memcpy(
+                    body->owned_heightfield_heights_millimeters,
+                    world->bodies[index].owned_heightfield_heights_millimeters,
+                    bytes);
+                body->state.collider.data.heightfield.heights_millimeters =
+                    body->owned_heightfield_heights_millimeters;
+                continue;
+            }
+            if (body->state.collider.shape != HENKA_PHYSICS_SHAPE_TRIANGLE_MESH)
+            {
+                continue;
+            }
+            copy_result = henka_physics_copy_triangle_mesh(
+                &body->state.collider,
+                &body->owned_triangle_mesh_vertices,
+                &body->owned_triangle_mesh_indices,
+                &body->owned_triangle_mesh_vertex_count,
+                &body->owned_triangle_mesh_index_count);
+            if (copy_result != HENKA_SUCCESS)
             {
                 henka_physics_release_candidate(candidate);
-                return HENKA_ERROR_OUT_OF_MEMORY;
+                return copy_result;
             }
-            body->owned_heightfield_heights_millimeters = henka_malloc(bytes);
-            if (body->owned_heightfield_heights_millimeters == NULL)
-            {
-                henka_physics_release_candidate(candidate);
-                return HENKA_ERROR_OUT_OF_MEMORY;
-            }
-            memcpy(
-                body->owned_heightfield_heights_millimeters,
-                world->bodies[index].owned_heightfield_heights_millimeters,
-                bytes);
-            body->state.collider.data.heightfield.heights_millimeters =
-                body->owned_heightfield_heights_millimeters;
+            body->state.collider.data.triangle_mesh.vertices =
+                body->owned_triangle_mesh_vertices;
+            body->state.collider.data.triangle_mesh.indices =
+                body->owned_triangle_mesh_indices;
         }
     }
 
@@ -2015,7 +2576,7 @@ static void henka_physics_commit_candidate(
 
     for (index = 0U; index < old_body_capacity; ++index)
     {
-        henka_free(old_bodies[index].owned_heightfield_heights_millimeters);
+        henka_physics_release_body_owned_data(&old_bodies[index]);
     }
     henka_free(old_bodies);
     henka_free(old_contacts);
@@ -2130,6 +2691,23 @@ henka_physics_collider_desc henka_physics_collider_heightfield(
     return collider;
 }
 
+henka_physics_collider_desc henka_physics_collider_triangle_mesh(
+    const henka_vec3* vertices,
+    uint32_t vertex_count,
+    const uint32_t* indices,
+    uint32_t index_count)
+{
+    henka_physics_collider_desc collider = {0};
+    collider.shape = HENKA_PHYSICS_SHAPE_TRIANGLE_MESH;
+    collider.data.triangle_mesh.vertices = vertices;
+    collider.data.triangle_mesh.vertex_count = vertex_count;
+    collider.data.triangle_mesh.indices = indices;
+    collider.data.triangle_mesh.index_count = index_count;
+    collider.layer = 1U;
+    collider.mask = HENKA_PHYSICS_ALL_LAYERS;
+    return collider;
+}
+
 henka_result henka_physics_world_create(henka_physics_world** out_world)
 {
     henka_physics_world* world;
@@ -2168,7 +2746,7 @@ void henka_physics_world_destroy(henka_physics_world* world)
             world->bodies[index].scene_link_registered = false;
             henka_scene_release_physics_link(linked_scene);
         }
-        henka_free(world->bodies[index].owned_heightfield_heights_millimeters);
+        henka_physics_release_body_owned_data(&world->bodies[index]);
     }
     henka_free(world->bodies);
     henka_free(world->contacts);
@@ -2224,6 +2802,10 @@ henka_result henka_physics_body_create(
     int32_t* heightfield_copy = NULL;
     size_t heightfield_sample_count = 0U;
     size_t heightfield_bytes = 0U;
+    henka_vec3* triangle_mesh_vertices = NULL;
+    uint32_t* triangle_mesh_indices = NULL;
+    size_t triangle_mesh_vertex_count = 0U;
+    size_t triangle_mesh_index_count = 0U;
     size_t index;
     size_t old_capacity;
     size_t required;
@@ -2249,7 +2831,8 @@ henka_result henka_physics_body_create(
         !henka_physics_collider_valid(desc->collider) ||
         !henka_physics_geometry_valid(normalized_transform, desc->collider) ||
         ((desc->collider.shape == HENKA_PHYSICS_SHAPE_PLANE ||
-            desc->collider.shape == HENKA_PHYSICS_SHAPE_HEIGHTFIELD) &&
+            desc->collider.shape == HENKA_PHYSICS_SHAPE_HEIGHTFIELD ||
+            desc->collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH) &&
             desc->type != HENKA_PHYSICS_BODY_STATIC) ||
         (desc->type == HENKA_PHYSICS_BODY_DYNAMIC &&
             (!isfinite(desc->mass) || desc->mass <= 0.0f || !isfinite(1.0f / desc->mass))) ||
@@ -2317,6 +2900,19 @@ henka_result henka_physics_body_create(
             desc->collider.data.heightfield.heights_millimeters,
             heightfield_bytes);
     }
+    else if (desc->collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH)
+    {
+        scene_link_result = henka_physics_copy_triangle_mesh(
+            &desc->collider,
+            &triangle_mesh_vertices,
+            &triangle_mesh_indices,
+            &triangle_mesh_vertex_count,
+            &triangle_mesh_index_count);
+        if (scene_link_result != HENKA_SUCCESS)
+        {
+            return scene_link_result;
+        }
+    }
     scene_link_result = HENKA_SUCCESS;
     if (desc->linked_scene != NULL)
     {
@@ -2324,6 +2920,8 @@ henka_result henka_physics_body_create(
         if (scene_link_result != HENKA_SUCCESS)
         {
             henka_free(heightfield_copy);
+            henka_free(triangle_mesh_vertices);
+            henka_free(triangle_mesh_indices);
             return scene_link_result;
         }
     }
@@ -2335,6 +2933,8 @@ henka_result henka_physics_body_create(
     {
         henka_scene_release_physics_link(desc->linked_scene);
         henka_free(heightfield_copy);
+        henka_free(triangle_mesh_vertices);
+        henka_free(triangle_mesh_indices);
         return scene_link_result;
     }
 
@@ -2352,9 +2952,18 @@ henka_result henka_physics_body_create(
     body->state.collider = desc->collider;
     body->owned_heightfield_heights_millimeters = heightfield_copy;
     body->owned_heightfield_sample_count = heightfield_sample_count;
+    body->owned_triangle_mesh_vertices = triangle_mesh_vertices;
+    body->owned_triangle_mesh_indices = triangle_mesh_indices;
+    body->owned_triangle_mesh_vertex_count = triangle_mesh_vertex_count;
+    body->owned_triangle_mesh_index_count = triangle_mesh_index_count;
     if (heightfield_copy != NULL)
     {
         body->state.collider.data.heightfield.heights_millimeters = heightfield_copy;
+    }
+    if (triangle_mesh_vertices != NULL)
+    {
+        body->state.collider.data.triangle_mesh.vertices = triangle_mesh_vertices;
+        body->state.collider.data.triangle_mesh.indices = triangle_mesh_indices;
     }
     body->scene_link_registered = desc->linked_scene != NULL;
     body->state.linked_scene = desc->linked_scene;
@@ -2529,7 +3138,7 @@ henka_result henka_physics_body_destroy(henka_physics_world* world, henka_physic
         record->scene_link_registered = false;
         henka_scene_release_physics_link(linked_scene);
     }
-    henka_free(record->owned_heightfield_heights_millimeters);
+    henka_physics_release_body_owned_data(record);
     memset(record, 0, sizeof(*record));
     --world->body_count;
     return HENKA_SUCCESS;
@@ -2631,7 +3240,8 @@ henka_result henka_physics_body_set_type(henka_physics_world* world, henka_physi
     henka_physics_body_record* record = henka_physics_find_body(world, body);
     if (record == NULL || type < HENKA_PHYSICS_BODY_STATIC || type > HENKA_PHYSICS_BODY_KINEMATIC ||
         ((record->state.collider.shape == HENKA_PHYSICS_SHAPE_PLANE ||
-            record->state.collider.shape == HENKA_PHYSICS_SHAPE_HEIGHTFIELD) &&
+            record->state.collider.shape == HENKA_PHYSICS_SHAPE_HEIGHTFIELD ||
+            record->state.collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH) &&
             type != HENKA_PHYSICS_BODY_STATIC))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -2652,14 +3262,20 @@ henka_result henka_physics_body_set_collider(henka_physics_world* world, henka_p
 {
     henka_physics_body_record* record = henka_physics_find_body(world, body);
     int32_t* heightfield_copy = NULL;
+    henka_vec3* triangle_mesh_vertices = NULL;
+    uint32_t* triangle_mesh_indices = NULL;
     size_t sample_count = 0U;
     size_t bytes = 0U;
+    size_t triangle_mesh_vertex_count = 0U;
+    size_t triangle_mesh_index_count = 0U;
+    henka_result copy_result;
     if (record == NULL ||
         !henka_physics_collider_valid(collider) ||
         !henka_physics_geometry_valid(record->state.transform, collider) ||
         !henka_physics_geometry_valid(record->state.initial_transform, collider) ||
         ((collider.shape == HENKA_PHYSICS_SHAPE_PLANE ||
-            collider.shape == HENKA_PHYSICS_SHAPE_HEIGHTFIELD) &&
+            collider.shape == HENKA_PHYSICS_SHAPE_HEIGHTFIELD ||
+            collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH) &&
             record->state.type != HENKA_PHYSICS_BODY_STATIC))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -2679,13 +3295,35 @@ henka_result henka_physics_body_set_collider(henka_physics_world* world, henka_p
         }
         memcpy(heightfield_copy, collider.data.heightfield.heights_millimeters, bytes);
     }
-    henka_free(record->owned_heightfield_heights_millimeters);
+    else if (collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH)
+    {
+        copy_result = henka_physics_copy_triangle_mesh(
+            &collider,
+            &triangle_mesh_vertices,
+            &triangle_mesh_indices,
+            &triangle_mesh_vertex_count,
+            &triangle_mesh_index_count);
+        if (copy_result != HENKA_SUCCESS)
+        {
+            return copy_result;
+        }
+    }
+    henka_physics_release_body_owned_data(record);
     record->state.collider = collider;
     record->owned_heightfield_heights_millimeters = heightfield_copy;
     record->owned_heightfield_sample_count = sample_count;
+    record->owned_triangle_mesh_vertices = triangle_mesh_vertices;
+    record->owned_triangle_mesh_indices = triangle_mesh_indices;
+    record->owned_triangle_mesh_vertex_count = triangle_mesh_vertex_count;
+    record->owned_triangle_mesh_index_count = triangle_mesh_index_count;
     if (heightfield_copy != NULL)
     {
         record->state.collider.data.heightfield.heights_millimeters = heightfield_copy;
+    }
+    if (triangle_mesh_vertices != NULL)
+    {
+        record->state.collider.data.triangle_mesh.vertices = triangle_mesh_vertices;
+        record->state.collider.data.triangle_mesh.indices = triangle_mesh_indices;
     }
     return HENKA_SUCCESS;
 }
@@ -3310,6 +3948,147 @@ static bool henka_physics_raycast_heightfield(
     return false;
 }
 
+static bool henka_physics_raycast_triangle_mesh(
+    const henka_physics_body_state* body,
+    henka_ray ray,
+    float maximum,
+    float* distance,
+    henka_vec3* normal)
+{
+    double closest = (double)maximum;
+    henka_vec3 closest_normal = {0.0f, 0.0f, 0.0f};
+    bool found = false;
+    uint32_t index;
+
+    if (body == NULL || distance == NULL || normal == NULL ||
+        body->collider.shape != HENKA_PHYSICS_SHAPE_TRIANGLE_MESH)
+    {
+        return false;
+    }
+    for (index = 0U; index < body->collider.data.triangle_mesh.index_count; index += 3U)
+    {
+        double ax;
+        double ay;
+        double az;
+        double bx;
+        double by;
+        double bz;
+        double cx;
+        double cy;
+        double cz;
+        double e1x;
+        double e1y;
+        double e1z;
+        double e2x;
+        double e2y;
+        double e2z;
+        double hx;
+        double hy;
+        double hz;
+        double determinant;
+        double sx;
+        double sy;
+        double sz;
+        double u;
+        double qx;
+        double qy;
+        double qz;
+        double v;
+        double t;
+        double nx;
+        double ny;
+        double nz;
+        double normal_length;
+
+        if (!henka_physics_triangle_mesh_world_vertex(
+                body->transform,
+                body->collider.offset,
+                body->collider.data.triangle_mesh.vertices[
+                    body->collider.data.triangle_mesh.indices[index]],
+                &ax, &ay, &az) ||
+            !henka_physics_triangle_mesh_world_vertex(
+                body->transform,
+                body->collider.offset,
+                body->collider.data.triangle_mesh.vertices[
+                    body->collider.data.triangle_mesh.indices[index + 1U]],
+                &bx, &by, &bz) ||
+            !henka_physics_triangle_mesh_world_vertex(
+                body->transform,
+                body->collider.offset,
+                body->collider.data.triangle_mesh.vertices[
+                    body->collider.data.triangle_mesh.indices[index + 2U]],
+                &cx, &cy, &cz))
+        {
+            return false;
+        }
+        e1x = bx - ax;
+        e1y = by - ay;
+        e1z = bz - az;
+        e2x = cx - ax;
+        e2y = cy - ay;
+        e2z = cz - az;
+        hx = (double)ray.direction.y * e2z - (double)ray.direction.z * e2y;
+        hy = (double)ray.direction.z * e2x - (double)ray.direction.x * e2z;
+        hz = (double)ray.direction.x * e2y - (double)ray.direction.y * e2x;
+        determinant = e1x * hx + e1y * hy + e1z * hz;
+        if (!isfinite(determinant) || fabs(determinant) <= 0.00000001)
+        {
+            continue;
+        }
+        sx = (double)ray.origin.x - ax;
+        sy = (double)ray.origin.y - ay;
+        sz = (double)ray.origin.z - az;
+        u = (sx * hx + sy * hy + sz * hz) / determinant;
+        if (!isfinite(u) || u < 0.0 || u > 1.0)
+        {
+            continue;
+        }
+        qx = sy * e1z - sz * e1y;
+        qy = sz * e1x - sx * e1z;
+        qz = sx * e1y - sy * e1x;
+        v = ((double)ray.direction.x * qx +
+            (double)ray.direction.y * qy +
+            (double)ray.direction.z * qz) / determinant;
+        if (!isfinite(v) || v < 0.0 || u + v > 1.0)
+        {
+            continue;
+        }
+        t = (e2x * qx + e2y * qy + e2z * qz) / determinant;
+        if (!isfinite(t) || t < 0.0 || t > closest)
+        {
+            continue;
+        }
+        nx = e1y * e2z - e1z * e2y;
+        ny = e1z * e2x - e1x * e2z;
+        nz = e1x * e2y - e1y * e2x;
+        normal_length = hypot(hypot(nx, ny), nz);
+        if (!isfinite(normal_length) || normal_length <= 0.00000001)
+        {
+            continue;
+        }
+        if (nx * (double)ray.direction.x +
+                ny * (double)ray.direction.y +
+                nz * (double)ray.direction.z > 0.0)
+        {
+            nx = -nx;
+            ny = -ny;
+            nz = -nz;
+        }
+        closest = t;
+        closest_normal = (henka_vec3){
+            (float)(nx / normal_length),
+            (float)(ny / normal_length),
+            (float)(nz / normal_length)};
+        found = true;
+    }
+    if (!found || !henka_physics_try_float(closest, distance))
+    {
+        return false;
+    }
+    *normal = closest_normal;
+    return true;
+}
+
 henka_result henka_physics_world_raycast(const henka_physics_world* world, henka_ray ray, float max_distance, uint32_t layer_mask, henka_physics_raycast_hit* out_hit)
 {
     size_t index;
@@ -3373,6 +4152,10 @@ henka_result henka_physics_world_raycast(const henka_physics_world* world, henka
         else if (body->collider.shape == HENKA_PHYSICS_SHAPE_HEIGHTFIELD)
         {
             hit = henka_physics_raycast_heightfield(body, ray, max_distance, &distance, &normal);
+        }
+        else if (body->collider.shape == HENKA_PHYSICS_SHAPE_TRIANGLE_MESH)
+        {
+            hit = henka_physics_raycast_triangle_mesh(body, ray, max_distance, &distance, &normal);
         }
         if (hit && distance < closest)
         {
@@ -3447,6 +4230,7 @@ const char* henka_physics_shape_type_get_label(henka_physics_shape_type type)
         case HENKA_PHYSICS_SHAPE_BOX: return "AABB";
         case HENKA_PHYSICS_SHAPE_PLANE: return "Plane";
         case HENKA_PHYSICS_SHAPE_HEIGHTFIELD: return "Heightfield";
+        case HENKA_PHYSICS_SHAPE_TRIANGLE_MESH: return "Triangle Mesh";
         default: return "Unknown";
     }
 }

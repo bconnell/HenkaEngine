@@ -15,6 +15,8 @@ typedef uint32_t henka_physics_body_id;
 
 #define HENKA_INVALID_PHYSICS_BODY_ID ((henka_physics_body_id)0)
 #define HENKA_PHYSICS_ALL_LAYERS UINT32_MAX
+#define HENKA_PHYSICS_MAX_TRIANGLE_MESH_VERTICES 65536U
+#define HENKA_PHYSICS_MAX_TRIANGLE_MESH_INDICES 196608U
 
 typedef enum henka_physics_body_type
 {
@@ -29,7 +31,8 @@ typedef enum henka_physics_shape_type
     HENKA_PHYSICS_SHAPE_BOX,
     HENKA_PHYSICS_SHAPE_PLANE,
     HENKA_PHYSICS_SHAPE_HEIGHTFIELD,
-    HENKA_PHYSICS_SHAPE_CAPSULE
+    HENKA_PHYSICS_SHAPE_CAPSULE,
+    HENKA_PHYSICS_SHAPE_TRIANGLE_MESH
 } henka_physics_shape_type;
 
 typedef enum henka_physics_event_type
@@ -83,6 +86,13 @@ typedef struct henka_physics_collider_desc
             int32_t* heights_millimeters;
             henka_vec3 origin;
         } heightfield;
+        struct
+        {
+            const henka_vec3* vertices;
+            uint32_t vertex_count;
+            const uint32_t* indices;
+            uint32_t index_count;
+        } triangle_mesh;
     } data;
     bool is_trigger;
     uint32_t layer;
@@ -177,6 +187,17 @@ henka_physics_collider_desc henka_physics_collider_heightfield(
     float cell_spacing,
     int32_t* heights_millimeters,
     henka_vec3 origin);
+/*
+ * Creates a bounded static triangle mesh collider. Input vertex and index
+ * arrays are borrowed for this call only. A body created or updated with this
+ * collider owns checked copies for its lifetime. The supported v1 narrowphase
+ * pairs are dynamic/kinematic spheres and raycasts; mesh bodies are static.
+ */
+henka_physics_collider_desc henka_physics_collider_triangle_mesh(
+    const henka_vec3* vertices,
+    uint32_t vertex_count,
+    const uint32_t* indices,
+    uint32_t index_count);
 
 henka_result henka_physics_world_create(henka_physics_world** out_world);
 void henka_physics_world_destroy(henka_physics_world* world);

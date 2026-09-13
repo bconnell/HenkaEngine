@@ -62,7 +62,7 @@ runtime, packaging, and external-project validation.
 | Modeling and authoring | Available | Bounded product-native Object/Vertex/Edge/Face modeling, topology operations, UV, persistence, and HAMS workflows |
 | Assets and materials | In Progress | Current glTF/GLB and OBJ loading, manager-owned dependencies, and validated instances |
 | Terrain and world | Foundation | Current bounded four-layer terrain, streaming, edits, LOD, persistence, and collision paths |
-| Physics | Available | Bounded current rigid-body v1: fixed-step static, dynamic, and kinematic bodies; sphere, upright capsule, axis-aligned box, plane, and bounded heightfield colliders; contacts, events, raycasts, failure-safe replacement, and authored configuration |
+| Physics | Available | Bounded current rigid-body v1: fixed-step static, dynamic, and kinematic bodies; sphere, upright capsule, axis-aligned box, plane, bounded heightfield, and bounded static triangle-mesh colliders; contacts, events, raycasts, failure-safe replacement, and authored configuration |
 | 2.5D | Foundation | Camera-side foundation: perspective/side/top/isometric workflows and orthographic zoom |
 | Networking/server | Foundation | Current renderer-free runtime, dedicated host, and bounded Terrain authority paths |
 | External projects | Foundation | Current separate game/server templates with Windows validation |
