@@ -881,6 +881,7 @@ $persistenceStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_persistence
 $persistenceStderrPath = Join-Path $logDir "check_packaged_sandbox3d_persistence_stderr.log"
 $startupRestoreStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_startup_restore_stdout.log"
 $startupRestoreStderrPath = Join-Path $logDir "check_packaged_sandbox3d_startup_restore_stderr.log"
+$physicsCapturePath = Join-Path $logDir "physics-reference-wide.bmp"
 $automationInputPath = Join-Path $logDir "check_packaged_sandbox3d_automation.events"
 
 if (-not $NonInteractive) {
@@ -1099,6 +1100,25 @@ if ($NonInteractive) {
 
     Write-Output "[pass] Packaged Physics QA smoke completed."
 
+    Write-Step "Running packaged Physics rendered capture"
+    $physicsCapture = Invoke-HenkaNativeCapture `
+        -FilePath $packagedExe `
+        -Arguments @("--capture-physics-view", "wide", "rendered", $logDir) `
+        -WorkingDirectory $packageRoot `
+        -Label "Run packaged Physics rendered capture"
+
+    if ($physicsCapture.Stdout -notmatch "PHYSICS_CAPTURE_READY mode=rendered view=wide .*body_count=[1-9][0-9]* .*showcase_visible=0 .*debug_colliders=1 debug_contacts=1 .*draw_expected=1") {
+        throw "The packaged Physics capture did not report a real-body rendered readiness marker."
+    }
+    if (-not (Test-Path -LiteralPath $physicsCapturePath -PathType Leaf)) {
+        throw "The packaged Physics capture did not create its application-owned framebuffer image."
+    }
+    if ((Get-Item -LiteralPath $physicsCapturePath).Length -le 0) {
+        throw "The packaged Physics capture image is empty."
+    }
+
+    Write-Output "[pass] Packaged Physics rendered capture completed."
+
     Write-Step "Running packaged Audio fixture smoke"
     $audioSmoke = Invoke-HenkaNativeCapture -FilePath $packagedExe -Arguments @("--audio-smoke-test") -WorkingDirectory $packageRoot -Label "Run packaged Audio fixture smoke"
 
@@ -1179,7 +1199,8 @@ Remove-Item `
         $persistenceStdoutPath,
         $persistenceStderrPath,
         $startupRestoreStdoutPath,
-        $startupRestoreStderrPath) `
+        $startupRestoreStderrPath,
+        $physicsCapturePath) `
     -ErrorAction SilentlyContinue
 
 $capturedProcess = $null

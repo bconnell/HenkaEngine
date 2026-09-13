@@ -124,6 +124,12 @@ typedef enum sandbox3d_terrain_capture_view
     SANDBOX3D_TERRAIN_CAPTURE_VIEW_CLOSE
 } sandbox3d_terrain_capture_view;
 
+typedef enum sandbox3d_physics_capture_view
+{
+    SANDBOX3D_PHYSICS_CAPTURE_VIEW_WIDE = 0,
+    SANDBOX3D_PHYSICS_CAPTURE_VIEW_CLOSE
+} sandbox3d_physics_capture_view;
+
 typedef enum sandbox3d_showcase_capture_view
 {
     SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE = 0,
@@ -662,6 +668,7 @@ typedef struct sandbox3d_state
     bool capture_mode_requested;
     bool startup_capture_requested;
     bool terrain_capture_mode_requested;
+    bool physics_capture_view_requested;
     bool showcase_capture_view_requested;
     bool showcase_capture_rocket_requested;
     bool realism_reference_capture_requested;
@@ -669,6 +676,7 @@ typedef struct sandbox3d_state
     uint32_t capture_settled_frames;
     uint32_t capture_motion_phase;
     bool capture_metadata_reported;
+    bool physics_capture_exit_pending;
     uint32_t capture_performance_samples;
     uint32_t capture_performance_gpu_samples;
     double capture_performance_frame_sum_milliseconds;
@@ -678,6 +686,7 @@ typedef struct sandbox3d_state
     double capture_performance_gpu_sum_milliseconds;
     double capture_performance_gpu_max_milliseconds;
     sandbox3d_terrain_capture_view terrain_capture_view;
+    sandbox3d_physics_capture_view physics_capture_view;
     sandbox3d_showcase_capture_view showcase_capture_view;
     sandbox3d_realism_reference_capture_view realism_reference_capture_view;
     sandbox3d_realism_reference_kind realism_reference_kind;
@@ -4250,6 +4259,27 @@ static bool sandbox3d_parse_terrain_capture_view(
     return false;
 }
 
+static bool sandbox3d_parse_physics_capture_view(
+    const char* value,
+    sandbox3d_physics_capture_view* out_view)
+{
+    if (value == NULL || out_view == NULL)
+    {
+        return false;
+    }
+    if (strcmp(value, "wide") == 0)
+    {
+        *out_view = SANDBOX3D_PHYSICS_CAPTURE_VIEW_WIDE;
+        return true;
+    }
+    if (strcmp(value, "close") == 0)
+    {
+        *out_view = SANDBOX3D_PHYSICS_CAPTURE_VIEW_CLOSE;
+        return true;
+    }
+    return false;
+}
+
 static bool sandbox3d_parse_showcase_capture_view(
     const char* value,
     sandbox3d_showcase_capture_view* out_view)
@@ -7815,6 +7845,67 @@ static bool sandbox3d_collect_named_showcase_capture_bounds(
         out_bounds->extents.z >= 0.0f;
 }
 
+static henka_result sandbox3d_hide_showcase_entities_for_physics_capture(
+    sandbox3d_state* state)
+{
+    size_t entity_index;
+
+    if (state == NULL || state->scene == NULL ||
+        !state->physics_capture_view_requested)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (entity_index = 0U;
+         entity_index < henka_scene_get_entity_count(state->scene);
+         ++entity_index)
+    {
+        const henka_entity entity = henka_scene_get_entity_at_index(
+            state->scene,
+            entity_index);
+        if (entity == HENKA_INVALID_ENTITY ||
+            (!sandbox3d_is_showcase_giraffe_entity(state, entity) &&
+             !sandbox3d_is_showcase_rocket_entity(state, entity)))
+        {
+            continue;
+        }
+        if (henka_scene_set_entity_visible(state->scene, entity, false) !=
+            HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+static size_t sandbox3d_count_visible_showcase_entities(
+    const sandbox3d_state* state)
+{
+    size_t entity_index;
+    size_t visible_count = 0U;
+
+    if (state == NULL || state->scene == NULL)
+    {
+        return 0U;
+    }
+    for (entity_index = 0U;
+         entity_index < henka_scene_get_entity_count(state->scene);
+         ++entity_index)
+    {
+        const henka_entity entity = henka_scene_get_entity_at_index(
+            state->scene,
+            entity_index);
+        if (entity != HENKA_INVALID_ENTITY &&
+            henka_scene_is_entity_visible(state->scene, entity) &&
+            (sandbox3d_is_showcase_giraffe_entity(state, entity) ||
+             sandbox3d_is_showcase_rocket_entity(state, entity)))
+        {
+            ++visible_count;
+        }
+    }
+    return visible_count;
+}
+
 static bool sandbox3d_collect_realism_reference_bounds(
     const sandbox3d_state* state,
     henka_bounds* out_bounds,
@@ -8037,6 +8128,7 @@ static bool sandbox3d_default_scene_requested(const sandbox3d_state* state)
         !state->primitive_gallery &&
         !state->capture_mode_requested &&
         !state->terrain_capture_mode_requested &&
+        !state->physics_capture_view_requested &&
         !state->showcase_capture_view_requested &&
         !state->realism_reference_capture_requested;
 }
@@ -8104,26 +8196,38 @@ static bool sandbox3d_request_capture_frame(
     {
         return true;
     }
-    view = state->realism_reference_capture_view ==
-        SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE ? "close" : "wide";
-    if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI)
+    if (state->physics_capture_view_requested)
     {
         written = snprintf(
             path,
             sizeof(path),
-            "%s/ssgi-reference-%s.bmp",
+            "%s/physics-reference-%s.bmp",
             state->capture_output_directory,
-            view);
+            state->physics_capture_view == SANDBOX3D_PHYSICS_CAPTURE_VIEW_CLOSE ? "close" : "wide");
     }
     else
     {
-        written = snprintf(
-            path,
-            sizeof(path),
-            "%s/ssgi-motion-reference-%s-%s.bmp",
-            state->capture_output_directory,
-            view,
-            phase);
+        view = state->realism_reference_capture_view ==
+            SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE ? "close" : "wide";
+        if (state->realism_reference_kind == SANDBOX3D_REALISM_REFERENCE_KIND_SSGI)
+        {
+            written = snprintf(
+                path,
+                sizeof(path),
+                "%s/ssgi-reference-%s.bmp",
+                state->capture_output_directory,
+                view);
+        }
+        else
+        {
+            written = snprintf(
+                path,
+                sizeof(path),
+                "%s/ssgi-motion-reference-%s-%s.bmp",
+                state->capture_output_directory,
+                view,
+                phase);
+        }
     }
     if (written < 0 || (size_t)written >= sizeof(path))
     {
@@ -8788,7 +8892,17 @@ static void sandbox3d_report_capture_ready(
     henka_entity rocket_entity;
     bool subject_capture;
 
-    if (engine == NULL || state == NULL ||
+    if (engine == NULL || state == NULL)
+    {
+        return;
+    }
+    if (state->physics_capture_exit_pending)
+    {
+        state->physics_capture_exit_pending = false;
+        henka_engine_request_exit(engine);
+        return;
+    }
+    if (
         (!state->capture_mode_requested && !state->startup_capture_requested &&
             !sandbox3d_default_scene_requested(state)) ||
         state->capture_metadata_reported)
@@ -8804,6 +8918,73 @@ static void sandbox3d_report_capture_ready(
             return;
         }
         sandbox3d_report_realism_reference_capture_ready(engine, state);
+        return;
+    }
+    if (state->physics_capture_view_requested)
+    {
+        viewport = state->frame_layout.scene_viewport;
+        henka_bounds reference_bounds;
+        size_t contact_count = 0U;
+        size_t event_count = 0U;
+        size_t visible_showcase_count;
+        visible_showcase_count = sandbox3d_count_visible_showcase_entities(state);
+        if (viewport.width <= 0 || viewport.height <= 0 ||
+            !state->capture_camera_aspect_applied ||
+            state->physics.world == NULL ||
+            henka_physics_world_get_body_count(state->physics.world) < 6U ||
+            visible_showcase_count != 0U ||
+            !sandbox3d_get_scene_framing_bounds(state, &reference_bounds) ||
+            !henka_camera_is_valid(&state->camera))
+        {
+            state->capture_settled_frames = 0U;
+            return;
+        }
+        (void)henka_physics_world_get_contacts(state->physics.world, &contact_count);
+        (void)henka_physics_world_get_events(state->physics.world, &event_count);
+        if (state->capture_settled_frames < 8U)
+        {
+            ++state->capture_settled_frames;
+            return;
+        }
+        printf(
+            "PHYSICS_CAPTURE_READY mode=rendered view=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f body_count=%zu contact_count=%zu event_count=%zu showcase_visible=%zu debug_colliders=%d debug_contacts=%d fixed_timestep=%.6f draw_expected=1\n",
+            state->physics_capture_view == SANDBOX3D_PHYSICS_CAPTURE_VIEW_CLOSE ? "close" : "wide",
+            viewport.x,
+            viewport.y,
+            viewport.width,
+            viewport.height,
+            henka_viewport_get_aspect_ratio(viewport),
+            state->camera.position.x,
+            state->camera.position.y,
+            state->camera.position.z,
+            state->camera.yaw_radians,
+            state->camera.pitch_radians,
+            state->camera.roll_radians,
+            state->camera.field_of_view_radians,
+            reference_bounds.center.x,
+            reference_bounds.center.y,
+            reference_bounds.center.z,
+            reference_bounds.extents.x,
+            reference_bounds.extents.y,
+            reference_bounds.extents.z,
+            henka_physics_world_get_body_count(state->physics.world),
+            contact_count,
+            event_count,
+            visible_showcase_count,
+            state->physics.debug_colliders ? 1 : 0,
+            state->physics.debug_contacts ? 1 : 0,
+            henka_physics_world_get_fixed_timestep(state->physics.world));
+        fflush(stdout);
+        if (state->capture_output_directory[0] != '\0' &&
+            !sandbox3d_request_capture_frame(engine, state, "reference"))
+        {
+            HENKA_LOG_ERROR("Physics reference could not request its application-owned framebuffer capture");
+            state->capture_metadata_reported = true;
+            henka_engine_request_exit(engine);
+            return;
+        }
+        state->capture_metadata_reported = true;
+        state->physics_capture_exit_pending = true;
         return;
     }
     if (sandbox3d_default_scene_requested(state) && !state->capture_mode_requested)
@@ -13877,6 +14058,36 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
                 state->camera.position = henka_vec3_add(
                     reference_bounds.center,
                     henka_vec3_scale(offset, 0.90f));
+            }
+        }
+        state->camera.far_plane = 100.0f;
+        state->camera_preset = HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
+        return;
+    }
+
+    if (state->physics_capture_view_requested)
+    {
+        if (!sandbox3d_get_scene_framing_bounds(state, &reference_bounds) ||
+            !henka_camera_frame_bounds(
+                &state->camera,
+                reference_bounds,
+                -HENKA_PI * 0.5f,
+                -0.12f))
+        {
+            HENKA_LOG_ERROR("Physics reference capture could not frame its real scene bodies.");
+            return;
+        }
+        if (state->physics_capture_view == SANDBOX3D_PHYSICS_CAPTURE_VIEW_CLOSE)
+        {
+            const henka_vec3 offset = henka_vec3_subtract(
+                state->camera.position,
+                reference_bounds.center);
+            const float distance = sqrtf(henka_vec3_dot(offset, offset));
+            if (isfinite(distance) && distance > 0.001f)
+            {
+                state->camera.position = henka_vec3_add(
+                    reference_bounds.center,
+                    henka_vec3_scale(offset, 0.82f));
             }
         }
         state->camera.far_plane = 100.0f;
@@ -35153,7 +35364,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         true,
         transform);
 
-    if (!state->primitive_gallery && !sandbox3d_default_scene_requested(state))
+    if (!state->primitive_gallery && !sandbox3d_default_scene_requested(state) &&
+        !state->physics_capture_view_requested)
     {
         const henka_entity diagnostic_entities[] =
         {
@@ -35201,6 +35413,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     if (result != HENKA_SUCCESS)
     {
         goto fail;
+    }
+    if (state->physics_capture_view_requested)
+    {
+        sandbox3d_prepare_physics_demo(state);
+        state->physics.enabled = true;
+        state->physics.paused = false;
+        state->physics.debug_colliders = true;
+        state->physics.debug_contacts = true;
     }
     result = sandbox3d_initialize_game_authoring(engine, state);
     if (result != HENKA_SUCCESS)
@@ -35336,7 +35556,15 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             goto fail;
         }
     }
-    if (!state->smoke_test && !state->physics_smoke_test)
+    if (state->physics_capture_view_requested &&
+        sandbox3d_hide_showcase_entities_for_physics_capture(state) != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR("Physics capture could not hide showcase reference entities.");
+        result = HENKA_ERROR_UNKNOWN;
+        goto fail;
+    }
+    if (!state->smoke_test && !state->physics_smoke_test &&
+        !state->physics_capture_view_requested)
     {
         result = sandbox3d_restore_persisted_native_showcase_sources(engine, state);
         if (result != HENKA_SUCCESS)
@@ -35648,7 +35876,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         state->workspace.active_utility = SANDBOX3D_UTILITY_PHYSICS_QA;
     }
     henka_ui_set_visible(state->ui, state->startup_panels_auto_opened);
-    if (state->showcase_capture_view_requested ||
+    if (state->physics_capture_view_requested ||
+        state->showcase_capture_view_requested ||
         state->realism_reference_capture_requested)
     {
         /* Dedicated mascot inspection is application-only evidence. Keep the
@@ -38630,10 +38859,12 @@ int main(int argc, char** argv)
     bool startup_capture_requested;
     bool mcp_stdio;
     bool terrain_capture_mode_requested;
+    bool physics_capture_view_requested;
     bool showcase_capture_view_requested;
     bool showcase_capture_rocket_requested;
     bool realism_reference_capture_requested;
     sandbox3d_terrain_capture_view terrain_capture_view;
+    sandbox3d_physics_capture_view physics_capture_view;
     sandbox3d_showcase_capture_view showcase_capture_view;
     sandbox3d_realism_reference_capture_view realism_reference_capture_view;
     sandbox3d_realism_reference_kind realism_reference_kind;
@@ -38658,10 +38889,12 @@ int main(int argc, char** argv)
     startup_capture_requested = false;
     mcp_stdio = false;
     terrain_capture_mode_requested = false;
+    physics_capture_view_requested = false;
     showcase_capture_view_requested = false;
     showcase_capture_rocket_requested = false;
     realism_reference_capture_requested = false;
     terrain_capture_view = SANDBOX3D_TERRAIN_CAPTURE_VIEW_WIDE;
+    physics_capture_view = SANDBOX3D_PHYSICS_CAPTURE_VIEW_WIDE;
     showcase_capture_view = SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE;
     realism_reference_capture_view = SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_WIDE;
     realism_reference_kind = SANDBOX3D_REALISM_REFERENCE_KIND_PBR;
@@ -38733,6 +38966,21 @@ int main(int argc, char** argv)
     {
         capture_mode_requested = true;
         showcase_capture_view_requested = true;
+    }
+    else if (argc == 5 && strcmp(argv[1], "--capture-physics-view") == 0 &&
+        sandbox3d_parse_physics_capture_view(argv[2], &physics_capture_view) &&
+        henka_viewport_shading_mode_parse(argv[3], &capture_mode) == HENKA_SUCCESS &&
+        capture_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
+        argv[4] != NULL && argv[4][0] != '\0' &&
+        strlen(argv[4]) < sizeof(capture_output_directory))
+    {
+        capture_mode_requested = true;
+        physics_capture_view_requested = true;
+        (void)snprintf(
+            capture_output_directory,
+            sizeof(capture_output_directory),
+            "%s",
+            argv[4]);
     }
     else if (argc == 4 && strcmp(argv[1], "--capture-rocket-view") == 0 &&
         sandbox3d_parse_showcase_capture_view(argv[2], &showcase_capture_view) &&
@@ -38952,7 +39200,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --physics-smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --mcp-stdio | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference ibl_normal|ibl_diffuse|ibl_specular|ibl_simple|ibl_empty wide|close rendered | --capture-realism-reference ibl_rotation -360..360 wide|close rendered | --capture-realism-reference ibl_mip 0..6 wide|close rendered | --capture-realism-reference ibl_ordinary_mip 0..6 wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --physics-smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --mcp-stdio | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-physics-view wide|close rendered output_directory | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference ibl_normal|ibl_diffuse|ibl_specular|ibl_simple|ibl_empty wide|close rendered | --capture-realism-reference ibl_rotation -360..360 wide|close rendered | --capture-realism-reference ibl_mip 0..6 wide|close rendered | --capture-realism-reference ibl_ordinary_mip 0..6 wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -39023,12 +39271,15 @@ int main(int argc, char** argv)
     state.terrain_stream_stress = terrain_stream_stress;
     state.capture_mode_requested = capture_mode_requested;
     state.startup_capture_requested = startup_capture_requested;
+    state.physics_capture_exit_pending = false;
     state.mcp_stdio = mcp_stdio;
     state.terrain_capture_mode_requested = terrain_capture_mode_requested;
+    state.physics_capture_view_requested = physics_capture_view_requested;
     state.showcase_capture_view_requested = showcase_capture_view_requested;
     state.showcase_capture_rocket_requested = showcase_capture_rocket_requested;
     state.realism_reference_capture_requested = realism_reference_capture_requested;
     state.terrain_capture_view = terrain_capture_view;
+    state.physics_capture_view = physics_capture_view;
     state.showcase_capture_view = showcase_capture_view;
     state.realism_reference_capture_view = realism_reference_capture_view;
     state.realism_reference_kind = realism_reference_kind;

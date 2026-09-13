@@ -115,8 +115,11 @@ physics world to exercise heightfield contact and raycast traversal, then
 creates a bounded real Scene Document and Play session to exercise
 character-controller movement, jump, scene-link synchronization, and stop-time
 restoration. The command exits after reporting the complete scenario and does
-not restore
-unrelated showcase authoring sources or save local Sandbox settings.
+not restore unrelated showcase authoring sources or save local Sandbox settings.
+Packaged validation also runs `--capture-physics-view wide rendered
+<output-directory>`. That opt-in command uses the same real scene objects and
+Physics world to produce a filled rendered frame with the bounded
+collider/contact overlay and a `PHYSICS_CAPTURE_READY` body-state marker.
 
 Physics simulation writes linked-body transforms to the real scene entities.
 The character controller's optional live scene/entity link uses this same
