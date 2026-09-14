@@ -41,6 +41,8 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     henka_scene_document_object child_object;
     henka_scene_document_id root_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id second_root_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id second_child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_prefab_source_id root_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
     henka_prefab_source_id child_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
     henka_entity source_root = HENKA_INVALID_ENTITY;
@@ -48,6 +50,9 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     henka_entity loaded_root = HENKA_INVALID_ENTITY;
     henka_entity loaded_child = HENKA_INVALID_ENTITY;
     henka_entity loaded_parent = HENKA_INVALID_ENTITY;
+    henka_entity loaded_second_root = HENKA_INVALID_ENTITY;
+    henka_entity loaded_second_child = HENKA_INVALID_ENTITY;
+    henka_entity loaded_second_parent = HENKA_INVALID_ENTITY;
     henka_scene_object_info root_info;
     henka_scene_object_info child_info;
     henka_transform transform;
@@ -162,6 +167,41 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     child_object.source.prefab_source_revision =
         henka_prefab_get_revision(prefab);
     if (henka_scene_document_set_object(document, &child_object) !=
+            HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_document_duplicate_object(
+            document, root_id, &second_root_id) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(
+            document, second_root_id, &root_object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    (void)snprintf(
+        root_object.name,
+        sizeof(root_object.name),
+        "%s",
+        "Second Placed Prefab Root");
+    root_object.transform.position = (henka_vec3){40.0f, 0.0f, 50.0f};
+    root_object.source.prefab_instance_root_id = second_root_id;
+    if (henka_scene_document_set_object(document, &root_object) !=
+        HENKA_SUCCESS ||
+        henka_scene_document_duplicate_object(
+            document, child_id, &second_child_id) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(
+            document, second_child_id, &child_object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    (void)snprintf(
+        child_object.name,
+        sizeof(child_object.name),
+        "%s",
+        "Second Placed Prefab Child");
+    child_object.parent_id = second_root_id;
+    child_object.source.prefab_instance_root_id = second_root_id;
+    if (henka_scene_document_set_object(document, &child_object) !=
             HENKA_SUCCESS ||
         henka_scene_document_save_file(
             document, project_root, scene_path) != HENKA_SUCCESS ||
@@ -193,6 +233,17 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     {
         goto cleanup;
     }
+    if (sandbox3d_game_authoring_get_entity_for_document_id(
+            loaded_authoring, second_root_id, &loaded_second_root) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            loaded_authoring, second_child_id, &loaded_second_child) !=
+            HENKA_SUCCESS ||
+        loaded_second_root == loaded_root ||
+        loaded_second_child == loaded_child)
+    {
+        goto cleanup;
+    }
     if (henka_scene_get_entity_parent(
             loaded_scene, loaded_child, &loaded_parent) != HENKA_SUCCESS ||
         loaded_parent != loaded_root)
@@ -208,6 +259,22 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     }
     if (strcmp(root_info.name, "Placed Prefab Root") != 0 ||
         strcmp(child_info.name, "Placed Prefab Child") != 0)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_get_entity_parent(
+            loaded_scene, loaded_second_child, &loaded_second_parent) !=
+            HENKA_SUCCESS ||
+        loaded_second_parent != loaded_second_root ||
+        henka_scene_get_entity_info(
+            loaded_scene, loaded_second_root, &root_info) != HENKA_SUCCESS ||
+        henka_scene_get_entity_info(
+            loaded_scene, loaded_second_child, &child_info) != HENKA_SUCCESS ||
+        strcmp(root_info.name, "Second Placed Prefab Root") != 0 ||
+        strcmp(child_info.name, "Second Placed Prefab Child") != 0 ||
+        henka_scene_get_entity_transform(
+            loaded_scene, loaded_second_root, &transform) != HENKA_SUCCESS ||
+        transform.position.x != 40.0f || transform.position.z != 50.0f)
     {
         goto cleanup;
     }
@@ -227,6 +294,17 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
             loaded_scene,
             loaded_child,
             HENKA_INVALID_ENTITY,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS ||
+        henka_scene_set_entity_transform(
+            loaded_scene,
+            loaded_second_root,
+            (henka_transform){{-99.0f, -98.0f, -97.0f},
+                {0.0f, 0.0f, 0.0f, 1.0f},
+                {1.0f, 1.0f, 1.0f}}) != HENKA_SUCCESS ||
+        henka_scene_set_entity_parent(
+            loaded_scene,
+            loaded_second_child,
+            HENKA_INVALID_ENTITY,
             HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -242,7 +320,14 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
         loaded_parent != loaded_root ||
         henka_scene_get_entity_transform(
             loaded_scene, loaded_root, &transform) != HENKA_SUCCESS ||
-        transform.position.x != 10.0f || transform.position.z != 20.0f)
+        transform.position.x != 10.0f || transform.position.z != 20.0f ||
+        henka_scene_get_entity_parent(
+            loaded_scene, loaded_second_child, &loaded_second_parent) !=
+            HENKA_SUCCESS ||
+        loaded_second_parent != loaded_second_root ||
+        henka_scene_get_entity_transform(
+            loaded_scene, loaded_second_root, &transform) != HENKA_SUCCESS ||
+        transform.position.x != 40.0f || transform.position.z != 50.0f)
     {
         goto cleanup;
     }
@@ -255,6 +340,17 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
         henka_scene_set_entity_parent(
             loaded_scene,
             loaded_child,
+            HENKA_INVALID_ENTITY,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS ||
+        henka_scene_set_entity_transform(
+            loaded_scene,
+            loaded_second_root,
+            (henka_transform){{-99.0f, -98.0f, -97.0f},
+                {0.0f, 0.0f, 0.0f, 1.0f},
+                {1.0f, 1.0f, 1.0f}}) != HENKA_SUCCESS ||
+        henka_scene_set_entity_parent(
+            loaded_scene,
+            loaded_second_child,
             HENKA_INVALID_ENTITY,
             HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS ||
         henka_scene_document_get_object(
@@ -273,6 +369,31 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     document_set_result = henka_scene_document_set_object(document, &root_object);
     if (document_set_result == HENKA_SUCCESS)
     {
+        document_set_result = henka_scene_document_set_object(
+            document, &child_object);
+    }
+    if (document_set_result == HENKA_SUCCESS &&
+        henka_scene_document_get_object(
+            document, second_root_id, &root_object) != HENKA_SUCCESS)
+    {
+        document_set_result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (document_set_result == HENKA_SUCCESS)
+    {
+        root_object.source.prefab_source_revision += 1U;
+        document_set_result = henka_scene_document_set_object(
+            document, &root_object);
+    }
+    if (document_set_result == HENKA_SUCCESS &&
+        henka_scene_document_get_object(
+            document, second_child_id, &child_object) != HENKA_SUCCESS)
+    {
+        document_set_result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (document_set_result == HENKA_SUCCESS)
+    {
+        child_object.source.prefab_source_revision =
+            root_object.source.prefab_source_revision;
         document_set_result = henka_scene_document_set_object(
             document, &child_object);
     }
@@ -295,6 +416,15 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
         loaded_parent != HENKA_INVALID_ENTITY ||
         transform.position.x != 30.0f || transform.position.z != 32.0f ||
         root_object.source.prefab_source_revision != 1U)
+    {
+        goto cleanup;
+    }
+    (void)henka_scene_get_entity_parent(
+        loaded_scene, loaded_second_child, &loaded_second_parent);
+    (void)henka_scene_get_entity_transform(
+        loaded_scene, loaded_second_root, &transform);
+    if (loaded_second_parent != HENKA_INVALID_ENTITY ||
+        transform.position.x != -99.0f || transform.position.z != -97.0f)
     {
         goto cleanup;
     }
