@@ -52,6 +52,9 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     henka_scene_object_info child_info;
     henka_transform transform;
     henka_result result;
+    henka_result reload_result;
+    henka_result document_set_result;
+    henka_result document_save_result;
     bool success = false;
 
     config.application_name = "Henka Persisted Prefab Authoring Test";
@@ -211,6 +214,87 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     if (henka_scene_get_entity_transform(
             loaded_scene, loaded_root, &transform) != HENKA_SUCCESS ||
         transform.position.x != 10.0f || transform.position.z != 20.0f)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_set_entity_transform(
+            loaded_scene,
+            loaded_root,
+            (henka_transform){{99.0f, 98.0f, 97.0f},
+                {0.0f, 0.0f, 0.0f, 1.0f},
+                {1.0f, 1.0f, 1.0f}}) != HENKA_SUCCESS ||
+        henka_scene_set_entity_parent(
+            loaded_scene,
+            loaded_child,
+            HENKA_INVALID_ENTITY,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    reload_result = sandbox3d_game_authoring_load(loaded_authoring, project_root);
+    if (reload_result != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            loaded_authoring, root_id, &loaded_root) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            loaded_authoring, child_id, &loaded_child) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(
+            loaded_scene, loaded_child, &loaded_parent) != HENKA_SUCCESS ||
+        loaded_parent != loaded_root ||
+        henka_scene_get_entity_transform(
+            loaded_scene, loaded_root, &transform) != HENKA_SUCCESS ||
+        transform.position.x != 10.0f || transform.position.z != 20.0f)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_set_entity_transform(
+            loaded_scene,
+            loaded_root,
+            (henka_transform){{30.0f, 31.0f, 32.0f},
+                {0.0f, 0.0f, 0.0f, 1.0f},
+                {1.0f, 1.0f, 1.0f}}) != HENKA_SUCCESS ||
+        henka_scene_set_entity_parent(
+            loaded_scene,
+            loaded_child,
+            HENKA_INVALID_ENTITY,
+            HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(
+            document, root_id, &root_object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    root_object.source.prefab_source_revision += 1U;
+    if (henka_scene_document_get_object(
+            document, child_id, &child_object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    child_object.source.prefab_source_revision =
+        root_object.source.prefab_source_revision;
+    document_set_result = henka_scene_document_set_object(document, &root_object);
+    if (document_set_result == HENKA_SUCCESS)
+    {
+        document_set_result = henka_scene_document_set_object(
+            document, &child_object);
+    }
+    document_save_result = document_set_result == HENKA_SUCCESS
+        ? henka_scene_document_save_file(document, project_root, scene_path)
+        : HENKA_ERROR_INVALID_ARGUMENT;
+    if (document_set_result != HENKA_SUCCESS ||
+        document_save_result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    reload_result = sandbox3d_game_authoring_load(loaded_authoring, project_root);
+    (void)henka_scene_get_entity_parent(
+        loaded_scene, loaded_child, &loaded_parent);
+    (void)henka_scene_get_entity_transform(
+        loaded_scene, loaded_root, &transform);
+    (void)sandbox3d_game_authoring_get_object_for_entity(
+        loaded_authoring, loaded_root, &root_id, &root_object);
+    if (reload_result == HENKA_SUCCESS ||
+        loaded_parent != HENKA_INVALID_ENTITY ||
+        transform.position.x != 30.0f || transform.position.z != 32.0f ||
+        root_object.source.prefab_source_revision != 1U)
     {
         goto cleanup;
     }

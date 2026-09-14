@@ -364,6 +364,11 @@ history remain open.
   resolves the saved prefab path and revision, maps each durable source ID to
   the corresponding live entity, and rejects incomplete or mismatched groups
   before publishing a partial authoring scene.
+- Reloading that project validates the persisted prefab source path, revision,
+  membership, and durable source IDs against the already materialized live
+  instance, then reapplies the document-authored transform and hierarchy
+  through the prepared scene swap. A changed or stale prefab source fails
+  closed while preserving the previous live scene and authored document.
 - Snapshot text is owned by the prefab. Meshes, shaders, textures, and material
   definitions remain borrowed from their existing owners and must outlive the
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls
