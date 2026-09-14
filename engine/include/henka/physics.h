@@ -191,7 +191,8 @@ henka_physics_collider_desc henka_physics_collider_heightfield(
  * Creates a bounded static triangle mesh collider. Input vertex and index
  * arrays are borrowed for this call only. A body created or updated with this
  * collider owns checked copies for its lifetime. The supported v1 narrowphase
- * pairs are dynamic/kinematic spheres and raycasts; mesh bodies are static.
+ * pairs are dynamic/kinematic spheres, upright capsules, axis-aligned boxes,
+ * and raycasts; mesh bodies are static.
  */
 henka_physics_collider_desc henka_physics_collider_triangle_mesh(
     const henka_vec3* vertices,
