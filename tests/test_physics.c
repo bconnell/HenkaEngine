@@ -895,7 +895,9 @@ static void henka_test_physics_triangle_mesh_contract(void)
     henka_physics_world* world;
     henka_physics_raycast_hit hit;
     const henka_physics_contact* contacts;
+    henka_result result;
     size_t contact_count;
+    size_t allocations_before_failure;
 
     collider = henka_test_triangle_mesh_collider(
         vertices,
@@ -956,6 +958,26 @@ static void henka_test_physics_triangle_mesh_contract(void)
         world,
         mesh_body,
         collider) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, mesh_body, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.collider.shape == before_failed_replace.collider.shape);
+    HENKA_TEST_ASSERT(state.collider.data.triangle_mesh.vertices ==
+        before_failed_replace.collider.data.triangle_mesh.vertices);
+    HENKA_TEST_ASSERT(state.collider.data.triangle_mesh.indices ==
+        before_failed_replace.collider.data.triangle_mesh.indices);
+
+    allocations_before_failure = henka_memory_get_allocation_count();
+    henka_memory_test_fail_after(0U);
+    result = henka_physics_body_set_collider(
+        world,
+        mesh_body,
+        henka_test_triangle_mesh_collider(
+            replacement_vertices,
+            3U,
+            replacement_indices,
+            3U));
+    henka_memory_test_disable_failures();
+    HENKA_TEST_ASSERT(result == HENKA_ERROR_OUT_OF_MEMORY);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_failure);
     HENKA_TEST_ASSERT(henka_physics_body_get_state(world, mesh_body, &state) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(state.collider.shape == before_failed_replace.collider.shape);
     HENKA_TEST_ASSERT(state.collider.data.triangle_mesh.vertices ==
