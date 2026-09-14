@@ -327,16 +327,23 @@ history remain open.
   snapshot transactionally from a live source root and increments its revision;
   each newly created instance records the revision it captured. A rejected
   refresh leaves the previous snapshot and revision unchanged.
+- `henka_prefab_instance_refresh` reapplies the supported inline presentation
+  values to a live mapped instance when source membership and source-local IDs
+  are unchanged. It preserves local-transform overrides, updates their source
+  baselines, rejects stale mappings or membership changes before mutation, and
+  is idempotent for an already-applied revision. Borrowed material-asset state
+  is outside this refresh boundary and fails closed rather than becoming an
+  inline override.
 - Snapshot text is owned by the prefab. Meshes, shaders, textures, and material
   definitions remain borrowed from their existing owners and must outlive the
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls
   back all newly created entities if validation or allocation fails.
 - Persistent prefab identities and serialized revisions,
-  inherited-versus-overridden values, source-change propagation to existing
-  instances, duplication, unpacking, serialized prefab assets, editor
-  authoring, and packaged/external-project workflows remain in progress. The
-  current runtime snapshot and refresh API are a foundation rather than a
-  complete prefab authoring system.
+  inherited-versus-overridden values beyond the supported inline presentation
+  refresh, duplication, unpacking, serialized prefab assets, editor authoring,
+  and packaged/external-project workflows remain in progress. The current
+  runtime snapshot and refresh API are a foundation rather than a complete
+  prefab authoring system.
 
 ## Modeling / Content Authoring
 

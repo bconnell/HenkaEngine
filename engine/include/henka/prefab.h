@@ -109,6 +109,15 @@ henka_result henka_prefab_instance_get_local_transform_override(
     henka_prefab_source_id source_id,
     bool* out_has_override,
     henka_transform* out_transform);
+/* Reapplies the current source snapshot to the live mapped entities. The
+ * source prefab is borrowed and must outlive the instance. Stable source IDs
+ * and live Scene identities must still match the captured membership.
+ * Supported inline-presentation values refresh atomically; local transform
+ * overrides remain in place and their source baselines are updated. Snapshot
+ * entries with borrowed material assets are rejected until their asset state
+ * can be refreshed atomically through the owning asset authority. A call for
+ * the already-applied prefab revision is an idempotent no-op. */
+henka_result henka_prefab_instance_refresh(henka_prefab_instance* instance);
 henka_result henka_prefab_instance_get_entity_at(
     const henka_prefab_instance* instance,
     size_t index,

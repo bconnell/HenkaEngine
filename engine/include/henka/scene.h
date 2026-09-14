@@ -469,6 +469,13 @@ henka_result henka_scene_apply_entity_presentation_batch(
     const henka_entity* entities,
     const henka_scene_entity_presentation_update* updates,
     size_t update_count);
+/* Applies the same preflighted presentation transaction when each input
+ * transform is local to its entity's current parent. */
+henka_result henka_scene_apply_entity_local_presentation_batch(
+    henka_scene* scene,
+    const henka_entity* entities,
+    const henka_scene_entity_presentation_update* updates,
+    size_t update_count);
 henka_result henka_scene_translate_entity(henka_scene* scene, henka_entity entity, henka_vec3 delta);
 henka_result henka_scene_rotate_entity(henka_scene* scene, henka_entity entity, henka_quat delta_rotation);
 henka_result henka_scene_scale_entity(henka_scene* scene, henka_entity entity, henka_vec3 scale_multiplier);

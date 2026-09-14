@@ -1639,6 +1639,77 @@ prepare_failed:
     return result;
 }
 
+henka_result henka_scene_apply_entity_local_presentation_batch(
+    henka_scene* scene,
+    const henka_entity* entities,
+    const henka_scene_entity_presentation_update* updates,
+    size_t update_count)
+{
+    henka_scene_entity_presentation_update* world_updates;
+    size_t allocation_size;
+    size_t index;
+    henka_result result;
+
+    if (scene == NULL || entities == NULL || updates == NULL ||
+        update_count == 0U ||
+        !henka_checked_size_multiply(
+            update_count,
+            sizeof(*world_updates),
+            &allocation_size))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    world_updates = (henka_scene_entity_presentation_update*)henka_malloc(
+        allocation_size);
+    if (world_updates == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    for (index = 0U; index < update_count; ++index)
+    {
+        const henka_scene_entity_record* record =
+            henka_scene_get_entity_record_const(scene, entities[index]);
+        const henka_scene_entity_record* parent_record;
+        henka_transform local_transform;
+
+        if (record == NULL || !henka_transform_is_valid(updates[index].transform))
+        {
+            henka_free(world_updates);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        local_transform = henka_transform_sanitize(updates[index].transform);
+        parent_record = henka_scene_get_entity_record_const(scene, record->parent);
+        world_updates[index] = updates[index];
+        if (record->parent == HENKA_INVALID_ENTITY)
+        {
+            world_updates[index].transform = local_transform;
+        }
+        else if (parent_record == NULL ||
+            !henka_transform_is_valid(parent_record->transform) ||
+            !henka_scene_transform_scale_is_uniform(parent_record->transform))
+        {
+            henka_free(world_updates);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        else
+        {
+            world_updates[index].transform =
+                henka_scene_compose_hierarchy_transform(
+                    parent_record->transform,
+                    local_transform);
+        }
+    }
+
+    result = henka_scene_apply_entity_presentation_batch(
+        scene,
+        entities,
+        world_updates,
+        update_count);
+    henka_free(world_updates);
+    return result;
+}
+
 static bool henka_scene_prepare_entity_transform_update(
     const henka_scene_entity_transform_update* update,
     henka_transform* out_sanitized_transform,
