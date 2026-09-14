@@ -331,15 +331,17 @@ history remain open.
   each newly created instance records the revision it captured. A rejected
   refresh leaves the previous snapshot and revision unchanged.
 - `henka_prefab_instance_refresh` reapplies the supported inline presentation
-  values to a live mapped instance when source membership and source-local IDs
-  are unchanged. It adopts current canonical local transforms edited through
-  the general scene API before applying the source: root placement remains
-  instance state, and a changed non-root transform becomes an instance
-  override. It preserves those overrides, updates their source baselines,
-  rejects stale mappings or membership changes before mutation, and is
-  idempotent for an already-applied revision. Borrowed material-asset state is
-  outside this refresh boundary and fails closed rather than becoming an
-  inline override.
+  values and borrowed source mesh pointers to a live mapped instance when
+  source membership and source-local IDs are unchanged. It adopts current
+  canonical local transforms edited through the general scene API before
+  applying the source: root placement remains instance state, and a changed
+  non-root transform becomes an instance override. It preserves those
+  overrides, updates their source baselines, rejects stale mappings or
+  membership changes before mutation, and is idempotent for an already-applied
+  revision. Borrowed material-asset state is outside this refresh boundary and
+  fails closed rather than becoming an inline override. Mesh and presentation
+  changes use one preflighted scene transaction, so capacity or allocation
+  failure leaves the live instance and its refresh bookkeeping unchanged.
 - `henka_prefab_set_asset_path` and `henka_prefab_save_file` provide a
   project-relative `.hprefab` identity and confined, atomic persistence for
   captured source IDs, revisions, hierarchy, transforms, presentation values,
@@ -386,11 +388,11 @@ history remain open.
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls
   back all newly created entities if validation or allocation fails.
 - Explicit serialized per-instance override metadata, source-refresh of
-  non-presentation state, duplication, unpacking, editor authoring, and
-  packaged/external-project prefab workflows remain in progress. The current
-  runtime snapshot, persisted asset, transactional presentation save/reload,
-  and refresh APIs are a foundation rather than a complete prefab authoring
-  system.
+  manager-owned asset state and non-mesh non-presentation state, duplication,
+  unpacking, editor authoring, and packaged/external-project prefab workflows
+  remain in progress. The current runtime snapshot, persisted asset,
+  transactional presentation and source-mesh refresh, save/reload, and
+  refresh APIs are a foundation rather than a complete prefab authoring system.
 
 ## Modeling / Content Authoring
 

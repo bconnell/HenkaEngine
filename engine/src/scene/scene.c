@@ -1376,6 +1376,8 @@ typedef struct henka_prepared_entity_presentation
     bool renderer_enabled_changed;
     bool interaction_changed;
     bool material_changed;
+    bool mesh_changed;
+    henka_mesh* mesh;
 } henka_prepared_entity_presentation;
 
 static void henka_scene_discard_prepared_entity_presentations(
@@ -1396,10 +1398,11 @@ static void henka_scene_discard_prepared_entity_presentations(
     henka_free(prepared);
 }
 
-henka_result henka_scene_apply_entity_presentation_batch(
+static henka_result henka_scene_apply_entity_presentation_batch_internal(
     henka_scene* scene,
     const henka_entity* entities,
     const henka_scene_entity_presentation_update* updates,
+    const henka_scene_entity_mesh_update* mesh_updates,
     size_t update_count)
 {
     henka_prepared_entity_presentation* prepared = NULL;
@@ -1477,6 +1480,12 @@ henka_result henka_scene_apply_entity_presentation_batch(
                 record->interaction_prompt,
                 updates[index].interaction.prompt);
         prepared[index].material_changed = updates[index].apply_material;
+        prepared[index].mesh_changed = mesh_updates != NULL &&
+            mesh_updates[index].apply_mesh &&
+            record->mesh != mesh_updates[index].mesh;
+        prepared[index].mesh = mesh_updates == NULL
+            ? NULL
+            : mesh_updates[index].mesh;
         prepared[index].local_transform = prepared[index].sanitized_transform;
 
         if (prepared[index].transform_changed)
@@ -1523,7 +1532,8 @@ henka_result henka_scene_apply_entity_presentation_batch(
             (prepared[index].visible_changed ? UINT64_C(1) : UINT64_C(0)) +
             (prepared[index].renderer_enabled_changed ? UINT64_C(1) : UINT64_C(0)) +
             (prepared[index].interaction_changed ? UINT64_C(1) : UINT64_C(0)) +
-            (prepared[index].material_changed ? UINT64_C(1) : UINT64_C(0));
+            (prepared[index].material_changed ? UINT64_C(1) : UINT64_C(0)) +
+            (prepared[index].mesh_changed ? UINT64_C(1) : UINT64_C(0));
         if (update_mutation_count > UINT64_MAX - mutation_count)
         {
             result = HENKA_ERROR_LIMIT;
@@ -1629,6 +1639,11 @@ henka_result henka_scene_apply_entity_presentation_batch(
             }
             (void)henka_scene_bump_render_revision(scene);
         }
+        if (item->mesh_changed)
+        {
+            record->mesh = item->mesh;
+            (void)henka_scene_bump_render_revision(scene);
+        }
     }
 
     henka_scene_discard_prepared_entity_presentations(prepared, update_count);
@@ -1639,10 +1654,21 @@ prepare_failed:
     return result;
 }
 
-henka_result henka_scene_apply_entity_local_presentation_batch(
+henka_result henka_scene_apply_entity_presentation_batch(
     henka_scene* scene,
     const henka_entity* entities,
     const henka_scene_entity_presentation_update* updates,
+    size_t update_count)
+{
+    return henka_scene_apply_entity_presentation_batch_internal(
+        scene, entities, updates, NULL, update_count);
+}
+
+static henka_result henka_scene_apply_entity_local_presentation_batch_internal(
+    henka_scene* scene,
+    const henka_entity* entities,
+    const henka_scene_entity_presentation_update* updates,
+    const henka_scene_entity_mesh_update* mesh_updates,
     size_t update_count)
 {
     henka_scene_entity_presentation_update* world_updates;
@@ -1701,13 +1727,35 @@ henka_result henka_scene_apply_entity_local_presentation_batch(
         }
     }
 
-    result = henka_scene_apply_entity_presentation_batch(
+    result = henka_scene_apply_entity_presentation_batch_internal(
         scene,
         entities,
         world_updates,
+        mesh_updates,
         update_count);
     henka_free(world_updates);
     return result;
+}
+
+henka_result henka_scene_apply_entity_local_presentation_batch(
+    henka_scene* scene,
+    const henka_entity* entities,
+    const henka_scene_entity_presentation_update* updates,
+    size_t update_count)
+{
+    return henka_scene_apply_entity_local_presentation_batch_internal(
+        scene, entities, updates, NULL, update_count);
+}
+
+henka_result henka_scene_apply_entity_local_mesh_refresh_batch(
+    henka_scene* scene,
+    const henka_entity* entities,
+    const henka_scene_entity_presentation_update* updates,
+    const henka_scene_entity_mesh_update* mesh_updates,
+    size_t update_count)
+{
+    return henka_scene_apply_entity_local_presentation_batch_internal(
+        scene, entities, updates, mesh_updates, update_count);
 }
 
 static bool henka_scene_prepare_entity_transform_update(

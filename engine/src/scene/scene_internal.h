@@ -74,8 +74,27 @@ typedef struct henka_scene_entity_transform_update
     henka_transform transform;
 } henka_scene_entity_transform_update;
 
+/* A borrowed mesh replacement used by Prefab source-refresh transactions.
+ * The scene owns only the pointer relationship; the mesh owner must outlive
+ * the target scene just as it does for the ordinary mesh setter. */
+typedef struct henka_scene_entity_mesh_update
+{
+    bool apply_mesh;
+    henka_mesh* mesh;
+} henka_scene_entity_mesh_update;
+
 henka_result henka_scene_apply_entity_transform_updates(
     const henka_scene_entity_transform_update* updates,
+    size_t update_count);
+
+/* Applies local presentation and borrowed mesh updates as one preflighted
+ * transaction. No allocation or fallible setter is required after the first
+ * scene field is published. */
+henka_result henka_scene_apply_entity_local_mesh_refresh_batch(
+    henka_scene* scene,
+    const henka_entity* entities,
+    const henka_scene_entity_presentation_update* updates,
+    const henka_scene_entity_mesh_update* mesh_updates,
     size_t update_count);
 
 /* Internal lifetime bridge for runtime owners that borrow a scene link. */

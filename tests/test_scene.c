@@ -1,12 +1,15 @@
 #include "test_suite.h"
 
 #include <float.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
 #include <henka/core.h>
+#include <henka/engine.h>
 #include <henka/memory.h>
+#include <henka/mesh.h>
 #include <henka/persistence.h>
 #include <henka/prefab.h>
 #include <henka/scene.h>
@@ -1276,6 +1279,169 @@ static void henka_test_prefab_instance_refresh_recovers_scene_edit(void)
     henka_scene_destroy(source);
 }
 
+static void henka_test_prefab_instance_refresh_updates_source_mesh(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* source = NULL;
+    henka_scene* target = NULL;
+    henka_prefab* prefab = NULL;
+    henka_prefab_instance* instance = NULL;
+    henka_mesh* initial_mesh = NULL;
+    henka_mesh* replacement_mesh = NULL;
+    henka_mesh* target_mesh = NULL;
+    henka_scene_object_info target_info;
+    henka_transform authored_override;
+    henka_transform read_override;
+    henka_entity source_root = HENKA_INVALID_ENTITY;
+    henka_entity source_child = HENKA_INVALID_ENTITY;
+    henka_entity instance_child = HENKA_INVALID_ENTITY;
+    henka_prefab_source_id child_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+    uint64_t prefab_revision;
+    uint64_t instance_prefab_revision;
+    bool has_override;
+    bool passed = true;
+
+    config.application_name = "Henka Prefab Mesh Refresh Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS ||
+        henka_mesh_create_cube(engine, &initial_mesh) != HENKA_SUCCESS ||
+        henka_mesh_create_cube(engine, &replacement_mesh) != HENKA_SUCCESS ||
+        henka_scene_create(&source) != HENKA_SUCCESS)
+    {
+        passed = false;
+        goto cleanup;
+    }
+    source_root = henka_scene_create_entity_named(source, "Mesh Refresh Root");
+    source_child = henka_scene_create_entity_named(source, "Mesh Refresh Child");
+    if (source_root == HENKA_INVALID_ENTITY ||
+        source_child == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_parent(
+            source, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) !=
+            HENKA_SUCCESS ||
+        henka_scene_set_entity_mesh(source, source_child, initial_mesh) !=
+            HENKA_SUCCESS ||
+        henka_prefab_create_from_scene(source, source_root, &prefab) !=
+            HENKA_SUCCESS ||
+        henka_prefab_get_source_id_at(
+            prefab, 1U, &child_source_id) != HENKA_SUCCESS ||
+        henka_scene_create(&target) != HENKA_SUCCESS ||
+        henka_prefab_instantiate_with_instance(
+            prefab, target, henka_transform_identity(), &instance) !=
+            HENKA_SUCCESS ||
+        henka_prefab_instance_get_entity_for_source_id(
+            instance, child_source_id, &instance_child) != HENKA_SUCCESS ||
+        henka_scene_get_entity_mesh(target, instance_child, &target_mesh) !=
+            HENKA_SUCCESS ||
+        target_mesh != initial_mesh)
+    {
+        passed = false;
+        goto cleanup;
+    }
+    authored_override = henka_transform_identity();
+    authored_override.position = (henka_vec3){4.0f, 5.0f, 6.0f};
+    if (henka_scene_set_entity_local_transform(
+            target, instance_child, authored_override) != HENKA_SUCCESS ||
+        henka_prefab_instance_get_local_transform_override(
+            instance,
+            child_source_id,
+            &has_override,
+            &read_override) != HENKA_SUCCESS ||
+        !has_override)
+    {
+        passed = false;
+        goto cleanup;
+    }
+
+    if (henka_scene_set_entity_mesh(source, source_child, replacement_mesh) !=
+            HENKA_SUCCESS ||
+        henka_scene_set_entity_name(
+            source, source_child, "Mesh Refresh Child Updated") != HENKA_SUCCESS)
+    {
+        passed = false;
+        goto cleanup;
+    }
+    prefab_revision = henka_prefab_get_revision(prefab);
+    if (henka_prefab_refresh_from_scene(
+            prefab, source, source_root) != HENKA_SUCCESS ||
+        henka_prefab_get_revision(prefab) != prefab_revision + 1U)
+    {
+        passed = false;
+        goto cleanup;
+    }
+    instance_prefab_revision =
+        henka_prefab_instance_get_prefab_revision(instance);
+    target->render_revision = UINT64_MAX;
+    target->content_revision = UINT64_MAX;
+    if (henka_prefab_instance_refresh(instance) != HENKA_ERROR_LIMIT ||
+        henka_prefab_instance_get_prefab_revision(instance) !=
+            instance_prefab_revision ||
+        henka_scene_get_entity_info(target, instance_child, &target_info) !=
+            HENKA_SUCCESS ||
+        strcmp(target_info.name, "Mesh Refresh Child") != 0 ||
+        henka_scene_get_entity_mesh(target, instance_child, &target_mesh) !=
+            HENKA_SUCCESS ||
+        target_mesh != initial_mesh ||
+        target->render_revision != UINT64_MAX ||
+        target->content_revision != UINT64_MAX ||
+        henka_prefab_instance_get_local_transform_override(
+            instance,
+            child_source_id,
+            &has_override,
+            &read_override) != HENKA_SUCCESS ||
+        !has_override ||
+        fabsf(read_override.position.x - authored_override.position.x) > 0.0001f ||
+        fabsf(read_override.position.y - authored_override.position.y) > 0.0001f ||
+        fabsf(read_override.position.z - authored_override.position.z) > 0.0001f ||
+        henka_prefab_instance_clear_local_transform_override(
+            instance, child_source_id) != HENKA_SUCCESS ||
+        henka_prefab_instance_get_local_transform_override(
+            instance,
+            child_source_id,
+            &has_override,
+            &read_override) != HENKA_SUCCESS ||
+        !has_override)
+    {
+        passed = false;
+        goto cleanup;
+    }
+    target->render_revision = 1U;
+    target->content_revision = 1U;
+    if (henka_prefab_instance_refresh(instance) != HENKA_SUCCESS ||
+        henka_prefab_instance_get_prefab_revision(instance) !=
+            henka_prefab_get_revision(prefab) ||
+        henka_scene_get_entity_info(target, instance_child, &target_info) !=
+            HENKA_SUCCESS ||
+        strcmp(target_info.name, "Mesh Refresh Child Updated") != 0 ||
+        henka_scene_get_entity_mesh(target, instance_child, &target_mesh) !=
+            HENKA_SUCCESS ||
+        target_mesh != replacement_mesh ||
+        henka_prefab_instance_get_local_transform_override(
+            instance,
+            child_source_id,
+            &has_override,
+            &read_override) != HENKA_SUCCESS ||
+        !has_override ||
+        fabsf(read_override.position.x - authored_override.position.x) > 0.0001f ||
+        fabsf(read_override.position.y - authored_override.position.y) > 0.0001f ||
+        fabsf(read_override.position.z - authored_override.position.z) > 0.0001f)
+    {
+        passed = false;
+    }
+
+cleanup:
+    henka_prefab_instance_destroy(instance);
+    henka_prefab_destroy(prefab);
+    henka_scene_destroy(target);
+    henka_scene_destroy(source);
+    henka_mesh_destroy(replacement_mesh);
+    henka_mesh_destroy(initial_mesh);
+    henka_engine_destroy(engine);
+    HENKA_TEST_ASSERT(passed);
+}
+
 static void henka_test_prefab_asset_persistence(void)
 {
     const char* project_root = "build/test_tmp";
@@ -2298,6 +2464,7 @@ void henka_test_scene(void)
     henka_test_prefab_instance_transform_overrides();
     henka_test_prefab_instance_refresh_preserves_overrides();
     henka_test_prefab_instance_refresh_recovers_scene_edit();
+    henka_test_prefab_instance_refresh_updates_source_mesh();
     henka_test_prefab_asset_persistence();
     henka_test_prefab_revision_capacity_transaction();
     henka_test_prefab_allocation_failure_transaction();
