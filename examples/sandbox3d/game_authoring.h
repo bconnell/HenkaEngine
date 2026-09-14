@@ -68,6 +68,9 @@ henka_result sandbox3d_game_authoring_register_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
     henka_scene_document_id* out_document_id);
+/* Removes the binding and promotes direct children to authored roots, matching
+ * the runtime scene's parent-destruction semantics.  Any still-live child is
+ * detached from the runtime scene before its authored parent link is cleared. */
 henka_result sandbox3d_game_authoring_unregister_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity);

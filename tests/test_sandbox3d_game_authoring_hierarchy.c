@@ -9,7 +9,7 @@
 
 int main(void)
 {
-    const char* relative_path = "build/test_tmp/game_authoring_hierarchy.hscene";
+    const char* relative_path = "game_authoring_hierarchy.hscene";
     henka_scene* scene = NULL;
     sandbox3d_game_authoring* authoring = NULL;
     henka_entity parent = HENKA_INVALID_ENTITY;
@@ -246,16 +246,26 @@ int main(void)
         goto cleanup;
     }
 
-    henka_scene_destroy_entity(scene, parent_c);
     if (sandbox3d_game_authoring_reparent_entity(
             authoring,
             child,
             parent_c,
-            HENKA_SCENE_PARENT_KEEP_WORLD) == HENKA_SUCCESS ||
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "game authoring hierarchy test failed to establish deleted-parent case\n");
+        goto cleanup;
+    }
+    henka_scene_destroy_entity(scene, parent_c);
+    if (sandbox3d_game_authoring_unregister_entity(authoring, parent_c) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_get_object_for_entity(
             authoring, child, &duplicate_child_id, &child_object) != HENKA_SUCCESS ||
         duplicate_child_id != child_id ||
-        child_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+        child_object.parent_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_reparent_entity(
+            authoring,
+            child,
+            parent_c,
+            HENKA_SCENE_PARENT_KEEP_WORLD) == HENKA_SUCCESS)
     {
         fprintf(stderr, "game authoring hierarchy test accepted a deleted parent\n");
         goto cleanup;

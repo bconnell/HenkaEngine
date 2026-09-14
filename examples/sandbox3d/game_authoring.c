@@ -1627,18 +1627,103 @@ henka_result sandbox3d_game_authoring_unregister_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity)
 {
+    henka_scene_document_id document_id;
+    size_t document_index;
+    size_t child_detach_count = 0U;
     size_t index;
     if (authoring == NULL || sandbox3d_game_authoring_is_play_locked(authoring) ||
         (index = sandbox3d_game_authoring_find_binding(authoring, entity)) == SIZE_MAX)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
+    /* Scene destruction promotes direct children to roots.  Keep the authored
+     * hierarchy in the same state before retiring the parent's binding, so a
+     * later save or validation cannot retain a parent document ID that no
+     * longer exists.  Preflight the live detach mutations before publishing
+     * any document change. */
+    document_id = authoring->bindings[index].document_id;
+    for (document_index = 0U;
+         document_index < henka_scene_document_get_object_count(authoring->document);
+         ++document_index)
+    {
+        henka_scene_document_object child_object;
+        henka_entity child_entity = HENKA_INVALID_ENTITY;
+        henka_entity child_parent = HENKA_INVALID_ENTITY;
+
+        if (henka_scene_document_get_object_at(
+                authoring->document, document_index, &child_object) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (child_object.parent_id != document_id)
+        {
+            continue;
+        }
+        if (sandbox3d_game_authoring_get_entity_for_document_id(
+                authoring, child_object.id, &child_entity) != HENKA_SUCCESS ||
+            henka_scene_get_entity_parent(
+                authoring->scene, child_entity, &child_parent) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (child_parent != HENKA_INVALID_ENTITY)
+        {
+            ++child_detach_count;
+        }
+    }
+    if (child_detach_count > 0U &&
+        !henka_scene_has_render_revision_capacity(
+            authoring->scene, (uint64_t)child_detach_count))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (document_index = 0U;
+         document_index < henka_scene_document_get_object_count(authoring->document);
+         ++document_index)
+    {
+        henka_scene_document_object child_object;
+        henka_entity child_entity = HENKA_INVALID_ENTITY;
+        henka_entity child_parent = HENKA_INVALID_ENTITY;
+
+        if (henka_scene_document_get_object_at(
+                authoring->document, document_index, &child_object) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (child_object.parent_id != document_id)
+        {
+            continue;
+        }
+        if (
+            sandbox3d_game_authoring_get_entity_for_document_id(
+                authoring, child_object.id, &child_entity) != HENKA_SUCCESS ||
+            henka_scene_get_entity_parent(
+                authoring->scene, child_entity, &child_parent) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (child_parent != HENKA_INVALID_ENTITY &&
+            henka_scene_set_entity_parent(
+                authoring->scene,
+                child_entity,
+                HENKA_INVALID_ENTITY,
+                HENKA_SCENE_PARENT_KEEP_WORLD) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        child_object.parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+        if (henka_scene_document_set_object(authoring->document, &child_object) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+    }
     if (sandbox3d_scene_document_bridge_unbind(
             authoring->bridge,
-            authoring->bindings[index].document_id) != HENKA_SUCCESS ||
+            document_id) != HENKA_SUCCESS ||
         henka_scene_document_remove_object(
             authoring->document,
-            authoring->bindings[index].document_id) != HENKA_SUCCESS)
+            document_id) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
