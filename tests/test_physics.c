@@ -770,6 +770,90 @@ static void henka_test_physics_shape_pair(
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_physics_kinematic_static_surface_shape_pair(
+    henka_physics_collider_desc surface_collider,
+    henka_physics_collider_desc shape_collider,
+    henka_vec3 shape_position)
+{
+    henka_physics_world* world;
+    henka_physics_body_desc desc;
+    henka_physics_body_id shape_body;
+    henka_physics_body_id surface_body;
+    henka_physics_body_state shape_state;
+    const henka_physics_contact* contacts;
+    size_t count;
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_KINEMATIC,
+        shape_collider,
+        shape_position);
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &shape_body) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        surface_collider,
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &surface_body) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, shape_body, &shape_state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(shape_state.type == HENKA_PHYSICS_BODY_KINEMATIC);
+    HENKA_TEST_ASSERT(shape_state.colliding);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        shape_state.transform.position.y,
+        shape_position.y,
+        0.0001f);
+    contacts = henka_physics_world_get_contacts(world, &count);
+    HENKA_TEST_ASSERT(contacts != NULL && count == 1U);
+    if (contacts != NULL && count == 1U)
+    {
+        HENKA_TEST_ASSERT(
+            (contacts[0].body_a == shape_body && contacts[0].body_b == surface_body) ||
+            (contacts[0].body_a == surface_body && contacts[0].body_b == shape_body));
+    }
+    henka_physics_world_destroy(world);
+}
+
+static void henka_test_physics_kinematic_static_surface_shape_pairs(void)
+{
+    int32_t heights[9] = {0};
+    const henka_physics_collider_desc plane =
+        henka_physics_collider_plane((henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f);
+    const henka_physics_collider_desc heightfield = henka_physics_collider_heightfield(
+        3U,
+        3U,
+        1.0f,
+        heights,
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+
+    henka_test_physics_kinematic_static_surface_shape_pair(
+        plane,
+        henka_physics_collider_sphere(0.5f),
+        (henka_vec3){0.0f, 0.4f, 0.0f});
+    henka_test_physics_kinematic_static_surface_shape_pair(
+        plane,
+        henka_physics_collider_capsule(0.5f, 0.5f),
+        (henka_vec3){0.0f, 0.25f, 0.0f});
+    henka_test_physics_kinematic_static_surface_shape_pair(
+        plane,
+        henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f}),
+        (henka_vec3){0.0f, 0.25f, 0.0f});
+    henka_test_physics_kinematic_static_surface_shape_pair(
+        heightfield,
+        henka_physics_collider_sphere(0.5f),
+        (henka_vec3){1.0f, 0.4f, 1.0f});
+    henka_test_physics_kinematic_static_surface_shape_pair(
+        heightfield,
+        henka_physics_collider_capsule(0.5f, 0.5f),
+        (henka_vec3){1.0f, 0.25f, 1.0f});
+    henka_test_physics_kinematic_static_surface_shape_pair(
+        heightfield,
+        henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f}),
+        (henka_vec3){1.0f, 0.25f, 1.0f});
+}
+
 static henka_physics_collider_desc henka_test_triangle_mesh_collider(
     const henka_vec3* vertices,
     uint32_t vertex_count,
@@ -2486,6 +2570,7 @@ void henka_test_physics(void)
     henka_test_physics_capsule_box_separation();
     henka_test_physics_axis_aligned_box_rotation_boundary();
     henka_test_physics_shape_pairs_and_raycast();
+    henka_test_physics_kinematic_static_surface_shape_pairs();
     henka_test_physics_static_only_shape_boundaries();
     henka_test_physics_triangle_mesh_contract();
     henka_test_physics_triangle_mesh_shape_pairs();

@@ -146,7 +146,9 @@ capsule collider, fixed-step motion, collision and trigger events, a
 camera-style raycast, and world reset. It also creates bounded heightfield and
 triangle-mesh physics worlds to exercise heightfield contact and raycast
 traversal plus dynamic and kinematic sphere, upright-capsule, and
-axis-aligned-box triangle-mesh contacts, then
+axis-aligned-box triangle-mesh contacts, plus kinematic sphere, upright-capsule,
+and axis-aligned-box contacts against a plane and a bounded flat heightfield,
+then
 creates a bounded real Scene Document and Play session to exercise
 character-controller movement, jump, scene-link synchronization, and stop-time
 restoration. The command exits after reporting the complete scenario and does

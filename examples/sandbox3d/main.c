@@ -11702,6 +11702,131 @@ cleanup:
     return result;
 }
 
+static henka_result sandbox3d_run_kinematic_static_surface_shape_smoke(
+    henka_physics_collider_desc surface_collider,
+    henka_physics_collider_desc shape_collider,
+    henka_vec3 shape_position)
+{
+    henka_physics_world* world = NULL;
+    henka_physics_body_id surface = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id shape = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_desc surface_desc = {0};
+    henka_physics_body_desc shape_desc = {0};
+    henka_physics_body_state shape_state = {0};
+    const henka_physics_contact* contacts = NULL;
+    size_t contact_count = 0U;
+    bool shape_contact = false;
+    henka_result result = HENKA_ERROR_UNKNOWN;
+    size_t index;
+
+    surface_desc.type = HENKA_PHYSICS_BODY_STATIC;
+    surface_desc.transform = henka_transform_identity();
+    surface_desc.mass = 0.0f;
+    surface_desc.material = henka_physics_material_default();
+    surface_desc.collider = surface_collider;
+    shape_desc.type = HENKA_PHYSICS_BODY_KINEMATIC;
+    shape_desc.transform = henka_transform_identity();
+    shape_desc.transform.position = shape_position;
+    shape_desc.mass = 1.0f;
+    shape_desc.material = henka_physics_material_default();
+    shape_desc.collider = shape_collider;
+
+    if (henka_physics_world_create(&world) != HENKA_SUCCESS ||
+        henka_physics_world_set_gravity(world, (henka_vec3){0.0f, 0.0f, 0.0f}) != HENKA_SUCCESS ||
+        henka_physics_body_create(world, &surface_desc, &surface) != HENKA_SUCCESS ||
+        henka_physics_body_create(world, &shape_desc, &shape) != HENKA_SUCCESS ||
+        henka_physics_world_step_fixed(world) != HENKA_SUCCESS ||
+        henka_physics_body_get_state(world, shape, &shape_state) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    contacts = henka_physics_world_get_contacts(world, &contact_count);
+    for (index = 0U; contacts != NULL && index < contact_count; ++index)
+    {
+        if ((contacts[index].body_a == surface && contacts[index].body_b == shape) ||
+            (contacts[index].body_a == shape && contacts[index].body_b == surface))
+        {
+            shape_contact = true;
+            break;
+        }
+    }
+    if (shape_state.type != HENKA_PHYSICS_BODY_KINEMATIC ||
+        !shape_state.colliding ||
+        !shape_contact ||
+        !sandbox3d_physics_smoke_position_matches(
+            shape_state.transform.position,
+            shape_position))
+    {
+        goto cleanup;
+    }
+
+    result = HENKA_SUCCESS;
+
+cleanup:
+    henka_physics_world_destroy(world);
+    return result;
+}
+
+static henka_result sandbox3d_run_kinematic_static_surface_physics_smoke(void)
+{
+    int32_t heights[9] = {0};
+    const henka_physics_collider_desc plane =
+        henka_physics_collider_plane((henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f);
+    const henka_physics_collider_desc heightfield = henka_physics_collider_heightfield(
+        3U,
+        3U,
+        1.0f,
+        heights,
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    henka_result result;
+
+    result = sandbox3d_run_kinematic_static_surface_shape_smoke(
+        plane,
+        henka_physics_collider_sphere(0.5f),
+        (henka_vec3){0.0f, 0.4f, 0.0f});
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = sandbox3d_run_kinematic_static_surface_shape_smoke(
+        plane,
+        henka_physics_collider_capsule(0.5f, 0.5f),
+        (henka_vec3){0.0f, 0.25f, 0.0f});
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = sandbox3d_run_kinematic_static_surface_shape_smoke(
+        plane,
+        henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f}),
+        (henka_vec3){0.0f, 0.25f, 0.0f});
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = sandbox3d_run_kinematic_static_surface_shape_smoke(
+        heightfield,
+        henka_physics_collider_sphere(0.5f),
+        (henka_vec3){1.0f, 0.4f, 1.0f});
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = sandbox3d_run_kinematic_static_surface_shape_smoke(
+        heightfield,
+        henka_physics_collider_capsule(0.5f, 0.5f),
+        (henka_vec3){1.0f, 0.25f, 1.0f});
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    return sandbox3d_run_kinematic_static_surface_shape_smoke(
+        heightfield,
+        henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f}),
+        (henka_vec3){1.0f, 0.25f, 1.0f});
+}
+
 static henka_result sandbox3d_run_triangle_mesh_shape_contact_smoke(
     henka_physics_body_type shape_type,
     henka_physics_collider_desc shape_collider)
@@ -12154,6 +12279,13 @@ static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
         goto fail;
     }
 
+    stage = "kinematic plane/heightfield shape pairs";
+    result = sandbox3d_run_kinematic_static_surface_physics_smoke();
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
     stage = "triangle-mesh contact/raycast";
     result = sandbox3d_run_triangle_mesh_physics_smoke();
     if (result != HENKA_SUCCESS)
@@ -12169,7 +12301,7 @@ static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
     }
 
     printf(
-        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, heightfield contact/raycast, triangle-mesh dynamic/kinematic sphere/capsule/box contact/raycast, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
+        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, heightfield contact/raycast, kinematic sphere/capsule/box plane/heightfield contact, triangle-mesh dynamic/kinematic sphere/capsule/box contact/raycast, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 

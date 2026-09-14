@@ -1091,7 +1091,7 @@ if ($NonInteractive) {
         -WorkingDirectory $packageRoot `
         -Label "Run packaged Physics QA smoke"
 
-    if ($physicsSmoke.Stdout -notmatch "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, heightfield contact/raycast, triangle-mesh dynamic/kinematic sphere/capsule/box contact/raycast, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed\.") {
+    if ($physicsSmoke.Stdout -notmatch "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, heightfield contact/raycast, kinematic sphere/capsule/box plane/heightfield contact, triangle-mesh dynamic/kinematic sphere/capsule/box contact/raycast, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed\.") {
         throw "The packaged Physics smoke test did not report its complete production scenario."
     }
     if ($physicsSmoke.Stderr -notmatch "leaving engine run loop") {
