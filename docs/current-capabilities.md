@@ -346,9 +346,13 @@ history remain open.
 - `henka_prefab_load_file` reconstructs an independent prefab candidate through
   the supplied asset manager and runtime shader authority. Malformed, future-
   version, path-confined, or unresolved-dependency inputs fail closed without
-  publishing a partial output. Persisted prefab assets do not yet serialize
-  per-instance overrides or provide atomic source-refresh of asset-backed
-  material state.
+  publishing a partial output. `henka_assets_reload_prefab_asset` adopts a
+  successfully loaded candidate into the existing manager-owned prefab pointer,
+  preserving source-local IDs and allowing already mapped instances to refresh
+  from the new snapshot. A failed reload leaves the prior prefab and metadata
+  unchanged. Persisted prefab assets do not yet serialize per-instance overrides,
+  and mapped-instance refresh remains closed for asset-backed material state
+  until that owner can provide an equivalent atomic transaction.
 - HSCN v15 persists prefab-instance provenance for a prefab-backed object group:
   the project-relative prefab path, instance-root ID, durable source ID, and
   source revision. The document validator rejects missing or mismatched

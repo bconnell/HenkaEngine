@@ -884,6 +884,9 @@ henka_result henka_texture_adopt_owned_payload(
 henka_result henka_texture_replace_owned_payload(
     henka_texture* target,
     henka_texture* replacement);
+henka_result henka_prefab_replace_contents(
+    henka_prefab* target,
+    henka_prefab* replacement);
 henka_result henka_asset_manager_create(struct henka_engine* engine, struct henka_asset_manager** out_manager);
 void henka_asset_manager_destroy(struct henka_asset_manager* manager);
 

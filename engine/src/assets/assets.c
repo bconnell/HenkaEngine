@@ -5388,6 +5388,67 @@ henka_result henka_assets_load_prefab_asset(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_reload_prefab_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_shader* inline_material_shader,
+    henka_prefab** out_prefab)
+{
+    char* key = NULL;
+    henka_asset_prefab_entry* entry;
+    henka_prefab* replacement = NULL;
+    henka_result result;
+
+    if (out_prefab != NULL)
+    {
+        *out_prefab = NULL;
+    }
+    if (manager == NULL || manager->engine == NULL || path == NULL ||
+        out_prefab == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    entry = henka_asset_manager_find_prefab_entry(manager, key);
+    henka_free(key);
+    if (entry == NULL || entry->prefab == NULL || entry->source_path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_prefab_load_file(
+        manager,
+        inline_material_shader,
+        henka_engine_get_asset_base_path(manager->engine),
+        entry->source_path,
+        &replacement);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_prefab_replace_contents(entry->prefab, replacement);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_prefab_destroy(replacement);
+        return result;
+    }
+    henka_prefab_destroy(replacement);
+    entry->metadata.loaded = true;
+    entry->metadata.fallback = false;
+    entry->metadata.reload_supported = true;
+    henka_asset_set_summary(
+        &entry->metadata,
+        "Persisted prefab reloaded transactionally while preserving the borrowed prefab identity.",
+        "");
+    *out_prefab = entry->prefab;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_assets_reload_gltf_scene_asset(
     henka_asset_manager* manager,
     const char* path,

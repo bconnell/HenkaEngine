@@ -1716,6 +1716,47 @@ load_cleanup:
     return result;
 }
 
+henka_result henka_prefab_replace_contents(
+    henka_prefab* target,
+    henka_prefab* replacement)
+{
+    henka_prefab_entry* old_entries;
+    size_t old_entity_count;
+    size_t old_root_index;
+    uint64_t old_revision;
+    henka_prefab_source_id old_next_source_id;
+    char* old_asset_path;
+
+    if (target == NULL || replacement == NULL || target == replacement ||
+        target->entries == NULL || replacement->entries == NULL ||
+        target->entity_count == 0U || replacement->entity_count == 0U ||
+        target->asset_path == NULL || replacement->asset_path == NULL ||
+        strcmp(target->asset_path, replacement->asset_path) != 0)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    old_entries = target->entries;
+    old_entity_count = target->entity_count;
+    old_root_index = target->root_index;
+    old_revision = target->revision;
+    old_next_source_id = target->next_source_id;
+    old_asset_path = target->asset_path;
+    target->entries = replacement->entries;
+    target->entity_count = replacement->entity_count;
+    target->root_index = replacement->root_index;
+    target->revision = replacement->revision;
+    target->next_source_id = replacement->next_source_id;
+    target->asset_path = replacement->asset_path;
+    replacement->entries = old_entries;
+    replacement->entity_count = old_entity_count;
+    replacement->root_index = old_root_index;
+    replacement->revision = old_revision;
+    replacement->next_source_id = old_next_source_id;
+    replacement->asset_path = old_asset_path;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_prefab_get_source_id_at(
     const henka_prefab* prefab,
     size_t index,

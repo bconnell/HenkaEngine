@@ -512,9 +512,18 @@ henka_result henka_assets_reload_gltf_scene_asset(
  * authority. The returned prefab is borrowed and remains manager-owned;
  * equivalent canonical paths return the same stable pointer. An inline
  * material shader is required only when the prefab contains inline material
- * values. The manager currently provides load/cache ownership; source-file
- * refresh is a separate explicit operation. */
+ * values. */
 henka_result henka_assets_load_prefab_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_shader* inline_material_shader,
+    henka_prefab** out_prefab);
+/* Reloads an existing manager-owned prefab from its confined source path.
+ * The borrowed prefab identity remains stable so existing instances continue
+ * to reference the manager's authority. The candidate is fully loaded before
+ * its contents are adopted; a failed read, validation, dependency, or path
+ * check leaves the prior prefab, metadata, and caller output unchanged. */
+henka_result henka_assets_reload_prefab_asset(
     henka_asset_manager* manager,
     const char* path,
     henka_shader* inline_material_shader,
