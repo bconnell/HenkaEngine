@@ -2490,6 +2490,8 @@ void henka_test_physics(void)
     henka_test_physics_triangle_mesh_contract();
     henka_test_physics_triangle_mesh_shape_pairs();
     henka_test_physics_triangle_mesh_kinematic_shape_pair(
+        henka_physics_collider_sphere(0.5f));
+    henka_test_physics_triangle_mesh_kinematic_shape_pair(
         henka_physics_collider_capsule(0.5f, 0.5f));
     henka_test_physics_triangle_mesh_kinematic_shape_pair(
         henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f}));

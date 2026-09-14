@@ -11851,6 +11851,9 @@ static henka_result sandbox3d_run_triangle_mesh_physics_smoke(void)
             henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f})) != HENKA_SUCCESS ||
         sandbox3d_run_triangle_mesh_shape_contact_smoke(
             HENKA_PHYSICS_BODY_KINEMATIC,
+            henka_physics_collider_sphere(0.5f)) != HENKA_SUCCESS ||
+        sandbox3d_run_triangle_mesh_shape_contact_smoke(
+            HENKA_PHYSICS_BODY_KINEMATIC,
             henka_physics_collider_capsule(0.5f, 0.5f)) != HENKA_SUCCESS ||
         sandbox3d_run_triangle_mesh_shape_contact_smoke(
             HENKA_PHYSICS_BODY_KINEMATIC,
