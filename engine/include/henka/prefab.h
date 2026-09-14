@@ -86,6 +86,13 @@ size_t henka_prefab_instance_get_entity_count(
     const henka_prefab_instance* instance);
 uint64_t henka_prefab_instance_get_prefab_revision(
     const henka_prefab_instance* instance);
+/* Resolves an instance entity by the source-local identity captured in the
+ * prefab. The lookup remains valid when source ordering changes; a destroyed
+ * mapped entity is reported as invalid rather than returned as stale state. */
+henka_result henka_prefab_instance_get_entity_for_source_id(
+    const henka_prefab_instance* instance,
+    henka_prefab_source_id source_id,
+    henka_entity* out_entity);
 henka_result henka_prefab_instance_get_entity_at(
     const henka_prefab_instance* instance,
     size_t index,

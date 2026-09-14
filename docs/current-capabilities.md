@@ -313,6 +313,10 @@ history remain open.
   Surviving source objects retain that ID across an in-memory refresh, while
   newly captured objects receive monotonically increasing IDs. These IDs are
   not yet serialized prefab-asset identities.
+- `henka_prefab_instance_get_entity_for_source_id` resolves a live instance
+  entity from its captured source-local ID. The lookup is independent of source
+  ordering and rejects destroyed or unknown mappings instead of returning stale
+  entity state.
 - `henka_prefab_get_revision` and `henka_prefab_refresh_from_scene` provide
   bounded in-memory snapshot refresh. A successful refresh rebuilds the
   snapshot transactionally from a live source root and increments its revision;
