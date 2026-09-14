@@ -331,10 +331,13 @@ history remain open.
   refresh leaves the previous snapshot and revision unchanged.
 - `henka_prefab_instance_refresh` reapplies the supported inline presentation
   values to a live mapped instance when source membership and source-local IDs
-  are unchanged. It preserves local-transform overrides, updates their source
-  baselines, rejects stale mappings or membership changes before mutation, and
-  is idempotent for an already-applied revision. Borrowed material-asset state
-  is outside this refresh boundary and fails closed rather than becoming an
+  are unchanged. It adopts current canonical local transforms edited through
+  the general scene API before applying the source: root placement remains
+  instance state, and a changed non-root transform becomes an instance
+  override. It preserves those overrides, updates their source baselines,
+  rejects stale mappings or membership changes before mutation, and is
+  idempotent for an already-applied revision. Borrowed material-asset state is
+  outside this refresh boundary and fails closed rather than becoming an
   inline override.
 - `henka_prefab_set_asset_path` and `henka_prefab_save_file` provide a
   project-relative `.hprefab` identity and confined, atomic persistence for

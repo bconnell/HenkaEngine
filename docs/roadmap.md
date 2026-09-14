@@ -226,8 +226,11 @@ attachment to existing gameplay hierarchies.
 The runtime API also supports transactional refresh from a live source root.
 Successful refreshes replace the bounded snapshot and increment its in-memory
 revision; newly created instances record the revision they captured. A failed
-refresh preserves the prior snapshot. Refresh does not persist prefab identity
-or propagate changes into existing instances.
+refresh preserves the prior snapshot and a successful refresh propagates the
+supported presentation changes into existing mapped instances. Current local
+scene edits are adopted before refresh: the root remains instance placement and
+changed non-root transforms remain instance overrides. Refresh does not persist
+prefab identity or per-instance overrides.
 Asset-backed `.hprefab` persistence, stable serialized identity and revisions,
 and Scene Document startup materialization now exist within the bounded
 runtime/project-open path. Editor authoring, source-change propagation, and

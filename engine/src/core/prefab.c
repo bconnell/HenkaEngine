@@ -70,6 +70,22 @@ struct henka_prefab_instance
     uint64_t prefab_revision;
 };
 
+static bool henka_prefab_transform_equal(
+    henka_transform left,
+    henka_transform right)
+{
+    return left.position.x == right.position.x &&
+        left.position.y == right.position.y &&
+        left.position.z == right.position.z &&
+        left.rotation.x == right.rotation.x &&
+        left.rotation.y == right.rotation.y &&
+        left.rotation.z == right.rotation.z &&
+        left.rotation.w == right.rotation.w &&
+        left.scale.x == right.scale.x &&
+        left.scale.y == right.scale.y &&
+        left.scale.z == right.scale.z;
+}
+
 static henka_result henka_prefab_duplicate_text(const char* source, char** out_copy)
 {
     size_t length;
@@ -2221,9 +2237,41 @@ henka_result henka_prefab_instance_refresh(henka_prefab_instance* instance)
     {
         return HENKA_SUCCESS;
     }
+
+    /* Scene edits can arrive through the general authoring scene API rather
+     * than the prefab-instance convenience setter. Reconcile the current
+     * canonical local transforms before applying a refreshed source. The
+     * root transform is instance placement; non-root transforms that differ
+     * from their captured baseline are durable per-instance overrides. */
+    for (index = 0U; index < instance->entity_count; ++index)
+    {
+        henka_transform actual_transform;
+
+        if (henka_scene_get_entity_local_transform(
+                instance->target_scene,
+                instance->entities[index],
+                &actual_transform) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (index == instance->prefab->root_index)
+        {
+            instance->base_local_transforms[index] = actual_transform;
+            instance->local_transform_overrides[index] = actual_transform;
+            instance->transform_override_flags[index] = false;
+        }
+        else
+        {
+            instance->local_transform_overrides[index] = actual_transform;
+            instance->transform_override_flags[index] =
+                !henka_prefab_transform_equal(
+                    actual_transform,
+                    instance->base_local_transforms[index]);
+        }
+    }
     if (!henka_checked_size_multiply(
-            instance->entity_count,
-            sizeof(*updates),
+        instance->entity_count,
+        sizeof(*updates),
             &allocation_size))
     {
         return HENKA_ERROR_NUMERIC_RANGE;
