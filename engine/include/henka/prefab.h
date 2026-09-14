@@ -11,6 +11,10 @@
 typedef struct henka_prefab henka_prefab;
 typedef struct henka_prefab_instance henka_prefab_instance;
 
+typedef uint64_t henka_prefab_source_id;
+
+#define HENKA_INVALID_PREFAB_SOURCE_ID ((henka_prefab_source_id)0)
+
 /* A prefab snapshot is intentionally bounded until project persistence and
  * stable serialized prefab identities are available. */
 #define HENKA_MAX_PREFAB_ENTITIES ((size_t)4096U)
@@ -38,6 +42,18 @@ henka_result henka_prefab_find_source_index(
     henka_entity source_entity,
     size_t* out_index);
 uint64_t henka_prefab_get_revision(const henka_prefab* prefab);
+
+/* Resolves the stable source-local identity stored at a captured index. The
+ * identity survives an in-memory refresh for surviving source entities; it is
+ * not yet a serialized prefab-asset identity. */
+henka_result henka_prefab_get_source_id_at(
+    const henka_prefab* prefab,
+    size_t index,
+    henka_prefab_source_id* out_source_id);
+henka_result henka_prefab_find_source_id(
+    const henka_prefab* prefab,
+    henka_prefab_source_id source_id,
+    size_t* out_index);
 
 /* Rebuilds the bounded snapshot from a live source root. The existing
  * snapshot remains unchanged if capture or validation fails. A successful

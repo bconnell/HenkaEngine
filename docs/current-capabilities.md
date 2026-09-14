@@ -309,6 +309,10 @@ history remain open.
   `henka_prefab_instance_destroy_entities` provides an explicit transactional
   teardown path for all currently live mapped entities, while retaining the
   handle with stale entries for idempotent cleanup.
+- Each captured source object also has a distinct in-memory source-local ID.
+  Surviving source objects retain that ID across an in-memory refresh, while
+  newly captured objects receive monotonically increasing IDs. These IDs are
+  not yet serialized prefab-asset identities.
 - `henka_prefab_get_revision` and `henka_prefab_refresh_from_scene` provide
   bounded in-memory snapshot refresh. A successful refresh rebuilds the
   snapshot transactionally from a live source root and increments its revision;

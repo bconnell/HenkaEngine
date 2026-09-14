@@ -836,6 +836,74 @@ static void henka_test_prefab_revision_refresh(void)
     henka_scene_destroy(source);
 }
 
+static void henka_test_prefab_source_local_identity(void)
+{
+    henka_scene* source = NULL;
+    henka_prefab* prefab = NULL;
+    henka_entity root;
+    henka_entity first_child;
+    henka_entity second_child;
+    henka_prefab_source_id root_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+    henka_prefab_source_id first_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+    henka_prefab_source_id second_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+    size_t root_index = SIZE_MAX;
+    size_t first_index = SIZE_MAX;
+    size_t second_index = SIZE_MAX;
+    size_t found_index = SIZE_MAX;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
+    root = henka_scene_create_entity_named(source, "Source Identity Root");
+    first_child = henka_scene_create_entity_named(source, "Source Identity First");
+    HENKA_TEST_ASSERT(root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(first_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        source, first_child, root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_create_from_scene(source, root, &prefab) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_index(prefab, root, &root_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_index(prefab, first_child, &first_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_source_id_at(prefab, root_index, &root_source_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_source_id_at(prefab, first_index, &first_source_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(root_source_id != HENKA_INVALID_PREFAB_SOURCE_ID);
+    HENKA_TEST_ASSERT(first_source_id != HENKA_INVALID_PREFAB_SOURCE_ID);
+    HENKA_TEST_ASSERT(root_source_id != first_source_id);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_id(
+        prefab, first_source_id, &found_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(found_index == first_index);
+    found_index = SIZE_MAX;
+    HENKA_TEST_ASSERT(henka_prefab_find_source_id(
+        prefab, HENKA_INVALID_PREFAB_SOURCE_ID, &found_index) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(found_index == SIZE_MAX);
+    second_source_id = UINT64_C(99);
+    HENKA_TEST_ASSERT(henka_prefab_get_source_id_at(
+        prefab, SIZE_MAX, &second_source_id) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(second_source_id == HENKA_INVALID_PREFAB_SOURCE_ID);
+
+    HENKA_TEST_ASSERT(henka_scene_set_entity_name(
+        source, first_child, "Source Identity First Updated") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_refresh_from_scene(prefab, source, root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_index(prefab, root, &found_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_source_id_at(prefab, found_index, &second_source_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(second_source_id == root_source_id);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_index(prefab, first_child, &found_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_source_id_at(prefab, found_index, &second_source_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(second_source_id == first_source_id);
+
+    second_child = henka_scene_create_entity_named(source, "Source Identity Second");
+    HENKA_TEST_ASSERT(second_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        source, second_child, root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_refresh_from_scene(prefab, source, root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_index(prefab, second_child, &second_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_source_id_at(prefab, second_index, &second_source_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(second_source_id > first_source_id);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_id(
+        prefab, second_source_id, &found_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(found_index == second_index);
+
+    henka_prefab_destroy(prefab);
+    henka_scene_destroy(source);
+}
+
 static void henka_test_scene_child_enumeration(void)
 {
     henka_scene* scene;
@@ -1712,6 +1780,7 @@ void henka_test_scene(void)
     henka_test_prefab_instance_mapping();
     henka_test_prefab_instance_destroy_entities();
     henka_test_prefab_revision_refresh();
+    henka_test_prefab_source_local_identity();
     henka_test_prefab_revision_capacity_transaction();
     henka_test_prefab_allocation_failure_transaction();
 }

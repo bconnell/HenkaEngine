@@ -12,6 +12,7 @@
 
 typedef struct henka_prefab_entry
 {
+    henka_prefab_source_id source_id;
     henka_entity source_entity;
     henka_entity source_parent;
     henka_entity source_selection_owner;
@@ -42,6 +43,7 @@ struct henka_prefab
     size_t entity_count;
     size_t root_index;
     uint64_t revision;
+    henka_prefab_source_id next_source_id;
 };
 
 struct henka_prefab_instance
@@ -194,6 +196,7 @@ henka_result henka_prefab_create_from_scene(
     prefab->entity_count = count;
     prefab->root_index = SIZE_MAX;
     prefab->revision = UINT64_C(1);
+    prefab->next_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
     if (!henka_checked_size_multiply(count, sizeof(*prefab->entries), &allocation_size))
     {
         henka_free(prefab);
@@ -295,6 +298,7 @@ henka_result henka_prefab_create_from_scene(
             return result;
         }
         entry->source_entity = entity;
+        entry->source_id = (henka_prefab_source_id)(count + 1U);
         if (entity == root_entity)
         {
             prefab->root_index = count;
@@ -354,6 +358,8 @@ henka_result henka_prefab_create_from_scene(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    prefab->next_source_id = (henka_prefab_source_id)(prefab->entity_count + 1U);
+
     for (index = 0U; index < prefab->entity_count; ++index)
     {
         prefab->entries[index].selection_owner_index =
@@ -405,6 +411,91 @@ uint64_t henka_prefab_get_revision(const henka_prefab* prefab)
     return prefab == NULL ? 0U : prefab->revision;
 }
 
+henka_result henka_prefab_get_source_id_at(
+    const henka_prefab* prefab,
+    size_t index,
+    henka_prefab_source_id* out_source_id)
+{
+    if (out_source_id == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+    if (prefab == NULL || index >= prefab->entity_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_source_id = prefab->entries[index].source_id;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_prefab_find_source_id(
+    const henka_prefab* prefab,
+    henka_prefab_source_id source_id,
+    size_t* out_index)
+{
+    size_t index;
+
+    if (out_index == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_index = SIZE_MAX;
+    if (prefab == NULL || source_id == HENKA_INVALID_PREFAB_SOURCE_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < prefab->entity_count; ++index)
+    {
+        if (prefab->entries[index].source_id == source_id)
+        {
+            *out_index = index;
+            return HENKA_SUCCESS;
+        }
+    }
+    return HENKA_ERROR_UNKNOWN;
+}
+
+static henka_result henka_prefab_preserve_source_ids(
+    const henka_prefab* previous,
+    henka_prefab* candidate)
+{
+    henka_prefab_source_id next_source_id;
+    size_t index;
+
+    if (previous == NULL || candidate == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    next_source_id = previous->next_source_id;
+    for (index = 0U; index < candidate->entity_count; ++index)
+    {
+        const size_t previous_index = henka_prefab_find_entry(
+            previous, candidate->entries[index].source_entity);
+        if (previous_index != SIZE_MAX)
+        {
+            candidate->entries[index].source_id =
+                previous->entries[previous_index].source_id;
+            continue;
+        }
+        if (next_source_id == HENKA_INVALID_PREFAB_SOURCE_ID)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        candidate->entries[index].source_id = next_source_id;
+        if (next_source_id == UINT64_MAX)
+        {
+            next_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+        }
+        else
+        {
+            next_source_id += UINT64_C(1);
+        }
+    }
+    candidate->next_source_id = next_source_id;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_prefab_refresh_from_scene(
     henka_prefab* prefab,
     const henka_scene* source_scene,
@@ -414,6 +505,7 @@ henka_result henka_prefab_refresh_from_scene(
     henka_prefab_entry* old_entries;
     size_t old_entity_count;
     size_t old_root_index;
+    henka_prefab_source_id old_next_source_id;
     henka_result result;
 
     if (prefab == NULL || source_scene == NULL)
@@ -431,18 +523,27 @@ henka_result henka_prefab_refresh_from_scene(
     {
         return result;
     }
+    result = henka_prefab_preserve_source_ids(prefab, candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_prefab_destroy(candidate);
+        return result;
+    }
     candidate->revision = prefab->revision + UINT64_C(1);
 
     old_entries = prefab->entries;
     old_entity_count = prefab->entity_count;
     old_root_index = prefab->root_index;
+    old_next_source_id = prefab->next_source_id;
     prefab->entries = candidate->entries;
     prefab->entity_count = candidate->entity_count;
     prefab->root_index = candidate->root_index;
     prefab->revision = candidate->revision;
+    prefab->next_source_id = candidate->next_source_id;
     candidate->entries = old_entries;
     candidate->entity_count = old_entity_count;
     candidate->root_index = old_root_index;
+    candidate->next_source_id = old_next_source_id;
     henka_prefab_destroy(candidate);
     return HENKA_SUCCESS;
 }
