@@ -314,10 +314,10 @@ history remain open.
   leaves the reusable prefab snapshot unchanged, uses the scene's canonical
   transform representation, and clears as an idempotent return to the
   instance's captured baseline.
-- Each captured source object also has a distinct in-memory source-local ID.
-  Surviving source objects retain that ID across an in-memory refresh, while
-  newly captured objects receive monotonically increasing IDs. These IDs are
-  not yet serialized prefab-asset identities.
+- Each captured source object also has a distinct source-local ID. Surviving
+  source objects retain that ID across an in-memory refresh, newly captured
+  objects receive monotonically increasing IDs, and saved prefab assets retain
+  those IDs as their durable entry identities.
 - `henka_prefab_instance_get_entity_for_source_id` resolves a live instance
   entity from its captured source-local ID. The lookup is independent of source
   ordering and rejects destroyed or unknown mappings instead of returning stale
@@ -334,16 +334,28 @@ history remain open.
   is idempotent for an already-applied revision. Borrowed material-asset state
   is outside this refresh boundary and fails closed rather than becoming an
   inline override.
+- `henka_prefab_set_asset_path` and `henka_prefab_save_file` provide a
+  project-relative `.hprefab` identity and confined, atomic persistence for
+  captured source IDs, revisions, hierarchy, transforms, presentation values,
+  interaction state, bounds, and supported material state. Inline material
+  scalars are persisted when they have no borrowed texture dependencies;
+  manager-owned mesh and material assets are represented by their canonical
+  source paths.
+- `henka_prefab_load_file` reconstructs an independent prefab candidate through
+  the supplied asset manager and runtime shader authority. Malformed, future-
+  version, path-confined, or unresolved-dependency inputs fail closed without
+  publishing a partial output. Persisted prefab assets do not yet serialize
+  per-instance overrides or provide atomic source-refresh of asset-backed
+  material state.
 - Snapshot text is owned by the prefab. Meshes, shaders, textures, and material
   definitions remain borrowed from their existing owners and must outlive the
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls
   back all newly created entities if validation or allocation fails.
-- Persistent prefab identities and serialized revisions,
-  inherited-versus-overridden values beyond the supported inline presentation
-  refresh, duplication, unpacking, serialized prefab assets, editor authoring,
-  and packaged/external-project workflows remain in progress. The current
-  runtime snapshot and refresh API are a foundation rather than a complete
-  prefab authoring system.
+- Persisted per-instance overrides, source-refresh of non-presentation state,
+  duplication, unpacking, editor authoring, and packaged/external-project
+  prefab workflows remain in progress. The current runtime snapshot, persisted
+  asset, and refresh APIs are a foundation rather than a complete prefab
+  authoring system.
 
 ## Modeling / Content Authoring
 

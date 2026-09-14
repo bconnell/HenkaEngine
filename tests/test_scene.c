@@ -1,11 +1,13 @@
 #include "test_suite.h"
 
 #include <float.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
 #include <henka/core.h>
 #include <henka/memory.h>
+#include <henka/persistence.h>
 #include <henka/prefab.h>
 #include <henka/scene.h>
 
@@ -1191,6 +1193,147 @@ static void henka_test_prefab_instance_refresh_preserves_overrides(void)
     henka_scene_destroy(source);
 }
 
+static void henka_test_prefab_asset_persistence(void)
+{
+    const char* project_root = "build/test_tmp";
+    const char* relative_path = "prefabs/persistence_test.hprefab";
+    const char* file_path = "build/test_tmp/prefabs/persistence_test.hprefab";
+    henka_scene* source = NULL;
+    henka_scene* target = NULL;
+    henka_prefab* prefab = NULL;
+    henka_prefab* loaded = NULL;
+    henka_prefab* rejected = NULL;
+    henka_prefab_instance* instance = NULL;
+    henka_entity source_root;
+    henka_entity source_child;
+    henka_entity target_root = HENKA_INVALID_ENTITY;
+    henka_entity target_child = HENKA_INVALID_ENTITY;
+    henka_prefab_source_id child_source_id;
+    size_t child_index;
+    henka_transform transform = henka_transform_identity();
+    henka_bounds bounds = (henka_bounds){{-1.0f, -2.0f, -3.0f}, {1.0f, 2.0f, 3.0f}};
+    henka_interaction_desc interaction = {true, 6.0f, "Inspect persisted prefab"};
+    henka_material material = henka_material_default();
+    henka_material loaded_material;
+    henka_scene_object_info info;
+    henka_settings* settings = NULL;
+    henka_shader* inline_shader = (henka_shader*)(uintptr_t)1U;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
+    source_root = henka_scene_create_entity_named(source, "Persisted Prefab Root");
+    source_child = henka_scene_create_entity_named(source, "Persisted Prefab Child");
+    HENKA_TEST_ASSERT(source_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_child != HENKA_INVALID_ENTITY);
+    transform.position = (henka_vec3){2.0f, 3.0f, 4.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(
+        source, source_child, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        source, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_tag(
+        source, source_child, "persisted-part") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_visible(
+        source, source_child, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_renderer_enabled(
+        source, source_child, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
+        source, source_child, HENKA_SCENE_ENTITY_FLAG_HELPER) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(
+        source, source_child, bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_interaction(
+        source, source_child, &interaction) == HENKA_SUCCESS);
+    material.name = "Persisted Inline Material";
+    material.shader = inline_shader;
+    material.base_color = (henka_vec4){0.2f, 0.4f, 0.8f, 1.0f};
+    material.metallic = 0.35f;
+    material.roughness = 0.65f;
+    HENKA_TEST_ASSERT(henka_scene_set_entity_material(
+        source, source_child, material) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_prefab_create_from_scene(
+        source, source_root, &prefab) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_set_asset_path(
+        prefab, relative_path) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        henka_prefab_get_asset_path(prefab), relative_path) == 0);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_index(
+        prefab, source_child, &child_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_source_id_at(
+        prefab, child_index, &child_source_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_save_file(
+        prefab, NULL, project_root, relative_path) == HENKA_SUCCESS);
+    henka_scene_destroy(source);
+    source = NULL;
+
+    HENKA_TEST_ASSERT(henka_prefab_load_file(
+        NULL, inline_shader, project_root, relative_path, &loaded) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(loaded != NULL);
+    HENKA_TEST_ASSERT(strcmp(
+        henka_prefab_get_asset_path(loaded), relative_path) == 0);
+    HENKA_TEST_ASSERT(henka_prefab_get_entity_count(loaded) == 2U);
+    HENKA_TEST_ASSERT(henka_prefab_find_source_id(
+        loaded, child_source_id, &child_index) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_with_instance(
+        loaded, target, henka_transform_identity(), &instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_for_source_id(
+        instance, child_source_id, &target_child) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_root_entity(
+        instance, &target_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_info(
+        target, target_child, &info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(info.name, "Persisted Prefab Child") == 0);
+    HENKA_TEST_ASSERT(strcmp(info.tag, "persisted-part") == 0);
+    HENKA_TEST_ASSERT(!info.visible && !info.renderer_enabled);
+    HENKA_TEST_ASSERT(henka_scene_is_entity_helper(target, target_child));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_parent(
+        target, target_child, &source_child) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(source_child == target_root);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_transform(
+        target, target_child, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, 3.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, 4.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
+        target, target_child, &bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.y, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_interaction(
+        target, target_child, &interaction) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(interaction.enabled);
+    HENKA_TEST_ASSERT(strcmp(interaction.prompt, "Inspect persisted prefab") == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        target, target_child, &loaded_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(loaded_material.shader == inline_shader);
+    HENKA_TEST_ASSERT(strcmp(loaded_material.name, "Persisted Inline Material") == 0);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_material.base_color.z, 0.8f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_material.metallic, 0.35f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_material.roughness, 0.65f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_settings_create(&settings) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_load_file(settings, file_path) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_int(
+        settings, "prefab.format_version", 999) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_save_file(settings, file_path) == HENKA_SUCCESS);
+    henka_settings_destroy(settings);
+    settings = NULL;
+    HENKA_TEST_ASSERT(henka_prefab_load_file(
+        NULL, inline_shader, project_root, relative_path, &rejected) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(rejected == NULL);
+    HENKA_TEST_ASSERT(henka_prefab_save_file(
+        prefab, NULL, project_root, relative_path) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_load_file(
+        NULL, inline_shader, project_root, "../outside.hprefab", &rejected) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(rejected == NULL);
+
+    remove(file_path);
+    henka_prefab_instance_destroy(instance);
+    henka_prefab_destroy(loaded);
+    henka_prefab_destroy(prefab);
+    henka_scene_destroy(target);
+}
+
 static void henka_test_scene_child_enumeration(void)
 {
     henka_scene* scene;
@@ -2071,6 +2214,7 @@ void henka_test_scene(void)
     henka_test_prefab_instance_source_mapping();
     henka_test_prefab_instance_transform_overrides();
     henka_test_prefab_instance_refresh_preserves_overrides();
+    henka_test_prefab_asset_persistence();
     henka_test_prefab_revision_capacity_transaction();
     henka_test_prefab_allocation_failure_transaction();
 }

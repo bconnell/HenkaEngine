@@ -10,14 +10,17 @@
 
 typedef struct henka_prefab henka_prefab;
 typedef struct henka_prefab_instance henka_prefab_instance;
+typedef struct henka_asset_manager henka_asset_manager;
 
 typedef uint64_t henka_prefab_source_id;
 
 #define HENKA_INVALID_PREFAB_SOURCE_ID ((henka_prefab_source_id)0)
 
-/* A prefab snapshot is intentionally bounded until project persistence and
- * stable serialized prefab identities are available. */
+/* Prefab capture and persisted prefab assets are bounded by the same source
+ * membership limit. */
 #define HENKA_MAX_PREFAB_ENTITIES ((size_t)4096U)
+#define HENKA_PREFAB_ASSET_FORMAT_VERSION 1U
+#define HENKA_PREFAB_MAX_ASSET_PATH_BYTES ((size_t)4096U)
 
 /* Captures the selected entity and its active descendants in deterministic
  * scene order. Names, tags, transforms, materials, visibility, renderer
@@ -43,9 +46,39 @@ henka_result henka_prefab_find_source_index(
     size_t* out_index);
 uint64_t henka_prefab_get_revision(const henka_prefab* prefab);
 
+/* The project-relative asset path is the durable prefab identity. A newly
+ * captured snapshot has no identity until it is assigned or saved. The path
+ * is confined and normalized without touching the filesystem. */
+henka_result henka_prefab_set_asset_path(
+    henka_prefab* prefab,
+    const char* project_relative_path);
+const char* henka_prefab_get_asset_path(const henka_prefab* prefab);
+
+/* Saves a prefab asset through the existing confined, atomic settings
+ * persistence path. Manager-owned meshes and material assets are recorded by
+ * their canonical source paths; inline materials are value-persisted only
+ * when they have no borrowed texture dependencies. Unresolved borrowed
+ * dependencies fail closed rather than becoming copied or stale pointers. */
+henka_result henka_prefab_save_file(
+    const henka_prefab* prefab,
+    const henka_asset_manager* asset_manager,
+    const char* project_root,
+    const char* relative_path);
+/* Loads a persisted prefab into an independent candidate. Meshes and
+ * material assets are resolved through the supplied manager; inline material
+ * values require the caller's runtime shader authority. The destination
+ * output remains NULL on every failure, including malformed, future-version,
+ * missing-dependency, and path-confinement failures. */
+henka_result henka_prefab_load_file(
+    henka_asset_manager* asset_manager,
+    henka_shader* inline_material_shader,
+    const char* project_root,
+    const char* relative_path,
+    henka_prefab** out_prefab);
+
 /* Resolves the stable source-local identity stored at a captured index. The
- * identity survives an in-memory refresh for surviving source entities; it is
- * not yet a serialized prefab-asset identity. */
+ * identity survives an in-memory refresh for surviving source entities and is
+ * persisted as the prefab entry identity when the asset is saved. */
 henka_result henka_prefab_get_source_id_at(
     const henka_prefab* prefab,
     size_t index,
@@ -57,8 +90,8 @@ henka_result henka_prefab_find_source_id(
 
 /* Rebuilds the bounded snapshot from a live source root. The existing
  * snapshot remains unchanged if capture or validation fails. A successful
- * refresh increments the in-memory revision; serialized prefab identity and
- * persistence are separate contracts. */
+ * refresh increments the in-memory revision; persisted prefab assets are
+ * updated only by an explicit save call. */
 henka_result henka_prefab_refresh_from_scene(
     henka_prefab* prefab,
     const henka_scene* source_scene,
