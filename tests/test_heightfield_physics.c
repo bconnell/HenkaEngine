@@ -1,6 +1,9 @@
 #include <stdint.h>
 
+#include <henka/memory.h>
 #include <henka/physics.h>
+
+#include "../engine/src/core/memory_internal.h"
 
 static henka_transform test_transform(float x, float y, float z)
 {
@@ -22,8 +25,10 @@ int main(void)
     henka_physics_body_desc terrain_desc = {0};
     henka_physics_body_desc sphere_desc = {0};
     henka_physics_body_state state;
+    henka_physics_body_state before_failed_replace;
     henka_physics_raycast_hit ray_hit;
     henka_physics_collider_desc collider;
+    size_t allocations_before_failure;
 
     collider = henka_physics_collider_heightfield(3U, 3U, 1.0f, flat, (henka_vec3){0.0f, 0.0f, 0.0f});
     terrain_desc.type = HENKA_PHYSICS_BODY_STATIC;
@@ -98,6 +103,40 @@ int main(void)
     {
         henka_physics_world_destroy(world);
         return 5;
+    }
+
+    if (henka_physics_body_get_state(world, terrain, &before_failed_replace) != HENKA_SUCCESS)
+    {
+        henka_physics_world_destroy(world);
+        return 10;
+    }
+    allocations_before_failure = henka_memory_get_allocation_count();
+    henka_memory_test_fail_after(0U);
+    if (henka_physics_body_set_collider(
+            world,
+            terrain,
+            henka_physics_collider_heightfield(
+                3U,
+                3U,
+                1.0f,
+                flat,
+                (henka_vec3){0.0f, 4.0f, 0.0f})) != HENKA_ERROR_OUT_OF_MEMORY)
+    {
+        henka_memory_test_disable_failures();
+        henka_physics_world_destroy(world);
+        return 11;
+    }
+    henka_memory_test_disable_failures();
+    if (henka_memory_get_allocation_count() != allocations_before_failure ||
+        henka_physics_body_get_state(world, terrain, &state) != HENKA_SUCCESS ||
+        state.collider.data.heightfield.heights_millimeters !=
+            before_failed_replace.collider.data.heightfield.heights_millimeters ||
+        state.collider.data.heightfield.origin.y !=
+            before_failed_replace.collider.data.heightfield.origin.y ||
+        state.collider.data.heightfield.heights_millimeters[6] != 2000)
+    {
+        henka_physics_world_destroy(world);
+        return 12;
     }
 
     sphere_desc.transform = test_transform(0.5f, 0.4f, 0.5f);
