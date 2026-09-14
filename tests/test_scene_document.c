@@ -251,6 +251,7 @@ static bool test_scene_document_legacy_compact_current_extensions(
     unsigned char* data,
     size_t source_size,
     size_t object_count,
+    bool remove_prefab_transform_extension,
     bool remove_texture_extensions,
     bool remove_capsule_extensions,
     size_t* out_size)
@@ -279,6 +280,10 @@ static bool test_scene_document_legacy_compact_current_extensions(
         const size_t current_physics_bytes = 76U;
         size_t prefab_extension_start;
         size_t prefab_extension_end;
+        size_t prefab_transform_start;
+        size_t prefab_transform_end;
+        size_t prefab_copy_start;
+        size_t prefab_copy_end;
         size_t texture_extension_start;
         size_t texture_extension_end;
         size_t capsule_extension_start;
@@ -310,11 +315,21 @@ static bool test_scene_document_legacy_compact_current_extensions(
         }
         prefab_extension_start = read_position;
         if (!test_scene_document_legacy_skip_bytes(
-                data, source_size, &read_position, 3U * sizeof(uint64_t)))
+                data, source_size, &read_position,
+                3U * sizeof(uint64_t) + sizeof(uint32_t) +
+                    10U * sizeof(uint32_t)))
         {
             return false;
         }
         prefab_extension_end = read_position;
+        prefab_transform_start = prefab_extension_start +
+            3U * sizeof(uint64_t);
+        prefab_transform_end = prefab_transform_start + sizeof(uint32_t) +
+            10U * sizeof(uint32_t);
+        prefab_copy_start = remove_prefab_transform_extension
+            ? prefab_transform_start : prefab_extension_start;
+        prefab_copy_end = remove_prefab_transform_extension
+            ? prefab_transform_end : prefab_extension_end;
         if (!test_scene_document_legacy_skip_string(
                 data, source_size, &read_position) ||
             !test_scene_document_legacy_skip_bytes(
@@ -387,15 +402,18 @@ static bool test_scene_document_legacy_compact_current_extensions(
             capsule_extension_end < capsule_extension_start ||
             prefab_extension_start < object_start ||
             prefab_extension_end < prefab_extension_start ||
-            texture_extension_start < prefab_extension_end ||
+            prefab_transform_start < prefab_extension_start ||
+            prefab_transform_end < prefab_transform_start ||
+            prefab_transform_end > prefab_extension_end ||
+            texture_extension_start < prefab_copy_end ||
             write_position > source_size)
         {
             return false;
         }
-        prefix_bytes = prefab_extension_start - object_start;
+        prefix_bytes = prefab_copy_start - object_start;
         middle_bytes = (remove_texture_extensions ? texture_extension_start :
             remove_capsule_extensions ? capsule_extension_start : object_end) -
-            prefab_extension_end;
+            prefab_copy_end;
         suffix_bytes = remove_capsule_extensions ?
             object_end - capsule_extension_end : 0U;
         if (prefix_bytes > source_size - write_position ||
@@ -413,7 +431,7 @@ static bool test_scene_document_legacy_compact_current_extensions(
         {
             memmove(
                 data + write_position,
-                data + prefab_extension_end,
+                data + prefab_copy_end,
                 middle_bytes);
             write_position += middle_bytes;
         }
@@ -973,7 +991,8 @@ static bool test_scene_document_write_v9_fixture(
     if (!test_scene_document_legacy_read_u32(
             data, source_size, &(size_t){20U}, &object_count) ||
         !test_scene_document_legacy_compact_current_extensions(
-            data, source_size, (size_t)object_count, true, true, &compacted_size) ||
+            data, source_size, (size_t)object_count, false, true, true,
+            &compacted_size) ||
         compacted_size < environment_bytes + render_settings_bytes +
             render_resources_bytes)
     {
@@ -1038,7 +1057,8 @@ static bool test_scene_document_write_v10_fixture(
     if (!test_scene_document_legacy_read_u32(
             data, source_size, &(size_t){20U}, &object_count) ||
         !test_scene_document_legacy_compact_current_extensions(
-            data, source_size, (size_t)object_count, true, true, &compacted_size) ||
+            data, source_size, (size_t)object_count, false, true, true,
+            &compacted_size) ||
         compacted_size < render_settings_bytes + render_resources_bytes)
     {
         free(data);
@@ -1103,6 +1123,7 @@ static bool test_scene_document_write_v11_fixture(
             data,
             source_size,
             (size_t)object_count,
+            false,
             true,
             true,
             &compacted_size) ||
@@ -1164,7 +1185,8 @@ static bool test_scene_document_write_v12_fixture(
     if (!test_scene_document_legacy_read_u32(
             data, source_size, &(size_t){20U}, &object_count) ||
         !test_scene_document_legacy_compact_current_extensions(
-            data, source_size, (size_t)object_count, true, true, &destination_size))
+            data, source_size, (size_t)object_count, false, true, true,
+            &destination_size))
     {
         free(data);
         return false;
@@ -1221,7 +1243,8 @@ static bool test_scene_document_write_v13_fixture(
     if (!test_scene_document_legacy_read_u32(
             data, source_size, &(size_t){20U}, &object_count) ||
         !test_scene_document_legacy_compact_current_extensions(
-            data, source_size, (size_t)object_count, false, true, &destination_size))
+            data, source_size, (size_t)object_count, false, false, true,
+            &destination_size))
     {
         free(data);
         return false;
@@ -1278,13 +1301,77 @@ static bool test_scene_document_write_v14_fixture(
     if (!test_scene_document_legacy_read_u32(
             data, source_size, &(size_t){20U}, &object_count) ||
         !test_scene_document_legacy_compact_current_extensions(
-            data, source_size, (size_t)object_count, false, false, &destination_size))
+            data, source_size, (size_t)object_count, false, false, false,
+            &destination_size))
     {
         free(data);
         return false;
     }
     (void)test_scene_document_legacy_write_u32(
         data, source_size, &(size_t){4U}, 14U);
+    (void)test_scene_document_legacy_write_u64(
+        data, source_size, &(size_t){12U}, (uint64_t)(destination_size - 40U));
+    (void)test_scene_document_legacy_write_u32(
+        data,
+        source_size,
+        &(size_t){32U},
+        test_scene_document_legacy_checksum(data + 40U, destination_size - 40U));
+    result = test_scene_document_write_bytes(
+        destination_path, data, destination_size);
+    free(data);
+    return result;
+}
+
+static bool test_scene_document_write_v15_fixture(
+    const char* source_path,
+    const char* destination_path)
+{
+    FILE* source = NULL;
+    unsigned char* data = NULL;
+    long length;
+    size_t source_size;
+    size_t destination_size;
+    uint32_t object_count;
+    bool result = false;
+
+    if (source_path == NULL || destination_path == NULL ||
+#if defined(_WIN32)
+        (fopen_s(&source, source_path, "rb") != 0) ||
+#else
+        (source = fopen(source_path, "rb")) == NULL ||
+#endif
+        fseek(source, 0L, SEEK_END) != 0 ||
+        (length = ftell(source)) < 40L ||
+        fseek(source, 0L, SEEK_SET) != 0)
+    {
+        if (source != NULL) fclose(source);
+        return false;
+    }
+    source_size = (size_t)length;
+    if ((data = (unsigned char*)malloc(source_size)) == NULL ||
+        fread(data, 1U, source_size, source) != source_size)
+    {
+        free(data);
+        fclose(source);
+        return false;
+    }
+    fclose(source);
+    if (!test_scene_document_legacy_read_u32(
+            data, source_size, &(size_t){20U}, &object_count) ||
+        !test_scene_document_legacy_compact_current_extensions(
+            data,
+            source_size,
+            (size_t)object_count,
+            true,
+            false,
+            false,
+            &destination_size))
+    {
+        free(data);
+        return false;
+    }
+    (void)test_scene_document_legacy_write_u32(
+        data, source_size, &(size_t){4U}, 15U);
     (void)test_scene_document_legacy_write_u64(
         data, source_size, &(size_t){12U}, (uint64_t)(destination_size - 40U));
     (void)test_scene_document_legacy_write_u32(
@@ -1435,6 +1522,99 @@ static void test_scene_document_prefab_provenance_round_trip(void)
     henka_scene_document_destroy(document);
 }
 
+static void test_scene_document_prefab_transform_override_round_trip(void)
+{
+    const char* path =
+        "build/test_tmp/scene_document_prefab_transform_override.hscene";
+    const char* malformed_path =
+        "build/test_tmp/scene_document_prefab_transform_override_malformed.hscene";
+    henka_scene_document* document = NULL;
+    henka_scene_document* loaded = NULL;
+    henka_scene_document_object root;
+    henka_scene_document_object child;
+    henka_scene_document_object loaded_child;
+    henka_scene_document_id root_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+
+    assert(henka_scene_document_create(&document) == HENKA_SUCCESS);
+    assert(henka_scene_document_create(&loaded) == HENKA_SUCCESS);
+
+    root = henka_scene_document_object_default();
+    (void)snprintf(root.name, sizeof(root.name), "OverrideRoot");
+    assert(henka_scene_document_add_object(document, &root, &root_id) ==
+        HENKA_SUCCESS);
+    assert(henka_scene_document_get_object(document, root_id, &root) ==
+        HENKA_SUCCESS);
+    root.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_ASSET;
+    root.source.asset_kind = HENKA_SCENE_DOCUMENT_ASSET_PREFAB;
+    (void)snprintf(root.source.path, sizeof(root.source.path),
+        "prefabs/crane.hprefab");
+    root.source.prefab_instance_root_id = root_id;
+    root.source.prefab_source_id = UINT64_C(101);
+    root.source.prefab_source_revision = UINT64_C(7);
+    assert(henka_scene_document_set_object(document, &root) == HENKA_SUCCESS);
+
+    child = henka_scene_document_object_default();
+    (void)snprintf(child.name, sizeof(child.name), "OverrideChild");
+    child.parent_id = root_id;
+    child.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_ASSET;
+    child.source.asset_kind = HENKA_SCENE_DOCUMENT_ASSET_PREFAB;
+    (void)snprintf(child.source.path, sizeof(child.source.path),
+        "prefabs/crane.hprefab");
+    child.source.prefab_instance_root_id = root_id;
+    child.source.prefab_source_id = UINT64_C(102);
+    child.source.prefab_source_revision = UINT64_C(7);
+    child.source.prefab_local_transform_override = true;
+    child.source.prefab_local_transform = (henka_transform){
+        {2.0f, 3.0f, 4.0f},
+        {0.0f, 0.0f, 0.0f, 1.0f},
+        {1.5f, 2.0f, 2.5f}};
+    assert(henka_scene_document_add_object(document, &child, &child_id) ==
+        HENKA_SUCCESS);
+    assert(henka_scene_document_validate(document) == HENKA_SUCCESS);
+    {
+        henka_scene_document_object invalid_child = child;
+        invalid_child.source.prefab_local_transform.rotation.w = 0.0f;
+        assert(henka_scene_document_set_object(document, &invalid_child) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+    }
+    assert(henka_scene_document_save_file(document, ".", path) ==
+        HENKA_SUCCESS);
+    assert(henka_scene_document_load_file(loaded, ".", path) == HENKA_SUCCESS);
+    assert(henka_scene_document_get_object(
+        loaded, child_id, &loaded_child) == HENKA_SUCCESS);
+    assert(loaded_child.source.prefab_local_transform_override);
+    assert(loaded_child.source.prefab_local_transform.position.x == 2.0f);
+    assert(loaded_child.source.prefab_local_transform.position.y == 3.0f);
+    assert(loaded_child.source.prefab_local_transform.position.z == 4.0f);
+    assert(loaded_child.source.prefab_local_transform.scale.x == 1.5f);
+    assert(loaded_child.source.prefab_local_transform.scale.y == 2.0f);
+    assert(loaded_child.source.prefab_local_transform.scale.z == 2.5f);
+    assert(henka_scene_document_save_file(document, ".", malformed_path) ==
+        HENKA_SUCCESS);
+    assert(test_scene_document_patch_u32_and_checksum(
+        malformed_path,
+        40L +
+            2L * (long)sizeof(uint64_t) +
+            (long)sizeof(uint32_t) +
+            (long)sizeof(uint16_t) + (long)strlen(root.name) +
+            10L * (long)sizeof(uint32_t) +
+            2L * (long)sizeof(uint32_t) +
+            3L * (long)sizeof(uint32_t) +
+            (long)sizeof(uint16_t) + (long)strlen(root.source.path) +
+            (long)sizeof(uint32_t) + 3L * (long)sizeof(uint64_t),
+        2U));
+    assert(henka_scene_document_load_file(loaded, ".", malformed_path) !=
+        HENKA_SUCCESS);
+    assert(henka_scene_document_get_object(
+        loaded, child_id, &loaded_child) == HENKA_SUCCESS);
+    assert(loaded_child.source.prefab_local_transform_override);
+    assert(loaded_child.source.prefab_local_transform.position.x == 2.0f);
+
+    henka_scene_document_destroy(loaded);
+    henka_scene_document_destroy(document);
+}
+
 int main(void)
 {
     const char* first_path = "build/test_tmp/scene_document_slice_b.hscene";
@@ -1454,6 +1634,7 @@ int main(void)
     const char* v12_path = "build/test_tmp/scene_document_legacy_v12.hscene";
     const char* v13_path = "build/test_tmp/scene_document_legacy_v13.hscene";
     const char* v14_path = "build/test_tmp/scene_document_legacy_v14.hscene";
+    const char* v15_path = "build/test_tmp/scene_document_legacy_v15.hscene";
     const char* malformed_resources_path =
         "build/test_tmp/scene_document_malformed_resources.hscene";
     const char* camera_path = "build/test_tmp/scene_document_camera.hscene";
@@ -1496,6 +1677,7 @@ int main(void)
     test_scene_document_save_propagates_path_errors();
     test_scene_document_load_propagates_path_errors();
     test_scene_document_prefab_provenance_round_trip();
+    test_scene_document_prefab_transform_override_round_trip();
     authored_listener.position = (henka_vec3){4.0f, 2.0f, -6.0f};
     authored_listener.forward = (henka_vec3){0.0f, -0.25f, -1.0f};
     authored_listener.up = (henka_vec3){0.0f, 1.0f, -0.1f};
@@ -1664,7 +1846,7 @@ int main(void)
         !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)) ||
         henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=15 objects=257") == NULL ||
+        inspection_size == 0U || strstr(inspection, "HSCN version=16 objects=257") == NULL ||
         henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
         !loaded_render_resources.local_light_active[1] ||
@@ -1705,6 +1887,21 @@ int main(void)
         loaded_object.source.prefab_source_revision != 0U)
     {
         fprintf(stderr, "scene document test failed during v14 prefab migration\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_write_v15_fixture(
+            "build/test_tmp/scene_document_prefab_provenance.hscene",
+            v15_path) ||
+        henka_scene_document_load_file(loaded, ".", v15_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_object_at(loaded, 1U, &loaded_object) != HENKA_SUCCESS ||
+        loaded_object.source.prefab_instance_root_id != loaded_object.parent_id ||
+        loaded_object.source.prefab_source_id != UINT64_C(42) ||
+        loaded_object.source.prefab_source_revision != UINT64_C(9) ||
+        loaded_object.source.prefab_local_transform_override ||
+        loaded_object.source.prefab_local_transform.position.x != 0.0f ||
+        loaded_object.source.prefab_local_transform.scale.x != 1.0f)
+    {
+        fprintf(stderr, "scene document test failed during v15 prefab compatibility load\n");
         goto cleanup;
     }
     if (henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
@@ -2069,7 +2266,7 @@ int main(void)
         !loaded_object.audio.streaming ||
         henka_scene_document_format_inspection(
             loaded, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        strstr(inspection, "HSCN version=15") == NULL)
+        strstr(inspection, "HSCN version=16") == NULL)
     {
         fprintf(stderr, "scene document test failed during streamed audio v7 round-trip\n");
         goto cleanup;

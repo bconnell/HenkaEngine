@@ -541,10 +541,17 @@ static henka_result henka_scene_document_validate_object(
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
+        if (source->prefab_local_transform_override &&
+            !henka_scene_document_valid_transform(
+                &source->prefab_local_transform))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
     }
     else if (source->prefab_instance_root_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
         source->prefab_source_id != HENKA_INVALID_SCENE_DOCUMENT_PREFAB_SOURCE_ID ||
-        source->prefab_source_revision != 0U)
+        source->prefab_source_revision != 0U ||
+        source->prefab_local_transform_override)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -882,6 +889,11 @@ static henka_result henka_scene_document_validate_storage(
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
+        if (source->prefab_local_transform_override &&
+            storage->objects[root_index].id == storage->objects[index].id)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
         for (other_index = 0U; other_index < index; ++other_index)
         {
             const henka_scene_document_source* other_source =
@@ -913,6 +925,7 @@ henka_scene_document_object henka_scene_document_object_default(void)
     object.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_NONE;
     object.source.primitive = HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX;
     object.source.primitive_dimensions = (henka_vec3){1.0f, 1.0f, 1.0f};
+    object.source.prefab_local_transform = henka_transform_identity();
     object.renderer.enabled = true;
     object.renderer.material_type = HENKA_MATERIAL_TYPE_LIT;
     object.renderer.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
@@ -1889,6 +1902,7 @@ static bool henka_scene_document_payload_size(
                 8U + 8U + 4U + 2U + name_length + 40U +
                 4U + 4U + 12U + 2U + source_path_length + 4U +
                 3U * sizeof(uint64_t) +
+                sizeof(uint32_t) + 10U * sizeof(uint32_t) +
                 2U + material_path_length + 40U + inline_renderer_bytes +
                 texture_identity_bytes +
                 4U + 2U + prompt_length +
@@ -2043,6 +2057,35 @@ static void henka_scene_document_encode_object(
     henka_scene_document_writer_u64(writer, object->source.prefab_source_id);
     henka_scene_document_writer_u64(
         writer, object->source.prefab_source_revision);
+    {
+        const henka_transform prefab_local_transform =
+            object->source.prefab_local_transform_override
+                ? object->source.prefab_local_transform
+                : henka_transform_identity();
+        henka_scene_document_writer_u32(
+            writer,
+            object->source.prefab_local_transform_override ? 1U : 0U);
+        henka_scene_document_writer_float(
+            writer, prefab_local_transform.position.x);
+        henka_scene_document_writer_float(
+            writer, prefab_local_transform.position.y);
+        henka_scene_document_writer_float(
+            writer, prefab_local_transform.position.z);
+        henka_scene_document_writer_float(
+            writer, prefab_local_transform.rotation.x);
+        henka_scene_document_writer_float(
+            writer, prefab_local_transform.rotation.y);
+        henka_scene_document_writer_float(
+            writer, prefab_local_transform.rotation.z);
+        henka_scene_document_writer_float(
+            writer, prefab_local_transform.rotation.w);
+        henka_scene_document_writer_float(
+            writer, prefab_local_transform.scale.x);
+        henka_scene_document_writer_float(
+            writer, prefab_local_transform.scale.y);
+        henka_scene_document_writer_float(
+            writer, prefab_local_transform.scale.z);
+    }
     henka_scene_document_writer_string(writer, object->renderer.material_path);
     henka_scene_document_writer_float(writer, object->renderer.base_color.x);
     henka_scene_document_writer_float(writer, object->renderer.base_color.y);
@@ -2654,15 +2697,45 @@ static bool henka_scene_document_decode_object(
         !henka_scene_document_reader_string(reader, object->source.path, sizeof(object->source.path)) ||
         !henka_scene_document_reader_u32(reader, &value)) return false;
     object->source.asset_kind = (henka_scene_document_asset_kind)value;
-    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V15 &&
         (!henka_scene_document_reader_u64(
             reader, &object->source.prefab_instance_root_id) ||
          !henka_scene_document_reader_u64(
             reader, &object->source.prefab_source_id) ||
-         !henka_scene_document_reader_u64(
-            reader, &object->source.prefab_source_revision)))
+            !henka_scene_document_reader_u64(
+                reader, &object->source.prefab_source_revision)))
     {
         return false;
+    }
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    {
+        uint32_t override_flag;
+        if (!henka_scene_document_reader_u32(reader, &override_flag) ||
+            override_flag > 1U ||
+            !henka_scene_document_reader_float(
+                reader, &object->source.prefab_local_transform.position.x) ||
+            !henka_scene_document_reader_float(
+                reader, &object->source.prefab_local_transform.position.y) ||
+            !henka_scene_document_reader_float(
+                reader, &object->source.prefab_local_transform.position.z) ||
+            !henka_scene_document_reader_float(
+                reader, &object->source.prefab_local_transform.rotation.x) ||
+            !henka_scene_document_reader_float(
+                reader, &object->source.prefab_local_transform.rotation.y) ||
+            !henka_scene_document_reader_float(
+                reader, &object->source.prefab_local_transform.rotation.z) ||
+            !henka_scene_document_reader_float(
+                reader, &object->source.prefab_local_transform.rotation.w) ||
+            !henka_scene_document_reader_float(
+                reader, &object->source.prefab_local_transform.scale.x) ||
+            !henka_scene_document_reader_float(
+                reader, &object->source.prefab_local_transform.scale.y) ||
+            !henka_scene_document_reader_float(
+                reader, &object->source.prefab_local_transform.scale.z))
+        {
+            return false;
+        }
+        object->source.prefab_local_transform_override = override_flag != 0U;
     }
     if (!henka_scene_document_reader_string(reader, object->renderer.material_path, sizeof(object->renderer.material_path)) ||
         !henka_scene_document_reader_float(reader, &object->renderer.base_color.x) ||
@@ -3181,6 +3254,7 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V12 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V13 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V14 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V15 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)

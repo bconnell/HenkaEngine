@@ -13,7 +13,8 @@
 #include <henka/scene.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(15)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(16)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V15 UINT32_C(15)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V14 UINT32_C(14)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V13 UINT32_C(13)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V12 UINT32_C(12)
@@ -79,6 +80,11 @@ typedef struct henka_scene_document_source
     henka_scene_document_id prefab_instance_root_id;
     uint64_t prefab_source_id;
     uint64_t prefab_source_revision;
+    /* A non-root prefab member may persist an explicit local transform
+     * override. The root placement remains object.transform. When false,
+     * prefab_local_transform is ignored and defaults to identity. */
+    bool prefab_local_transform_override;
+    henka_transform prefab_local_transform;
 } henka_scene_document_source;
 
 #define HENKA_INVALID_SCENE_DOCUMENT_PREFAB_SOURCE_ID UINT64_C(0)

@@ -49,7 +49,7 @@ See [architecture.md](architecture.md), [runtime-foundations.md](runtime-foundat
 
 - The Sandbox exposes Wireframe, Solid, Material Preview, and Rendered Scene View policies through the OpenGL renderer path.
 - Rendered mode consumes imported PBR materials, scene lighting, HDR targets, bounded environment/IBL fallbacks, directional and bounded local-light shadows, fog, bloom, tone mapping, AO, and a temporal reconstruction foundation.
-- Scene-owned render settings, environment, value-owned local lights, and reflection probes persist through the supported Scene Document v12 path and are consumed by Play and packaged Rendered startup within the bounded renderer scope.
+- Scene-owned render settings, environment, value-owned local lights, and reflection probes persist through the supported Scene Document v16 path and are consumed by Play and packaged Rendered startup within the bounded renderer scope.
 - The renderer boundary is isolated from renderer-independent runtime and authoring data.
 
 ### Remaining hardening
@@ -253,14 +253,15 @@ The public runtime scene now provides a bounded generation-checked parent/child
 transform foundation with cycle rejection, keep-local/keep-world reparenting,
 deterministic direct-child enumeration, subtree propagation, and parent-
 destruction promotion. Passing `HENKA_INVALID_ENTITY` enumerates root entities.
-HSCN v15 persists parent IDs, an optional authored scene camera, the value-owned
+HSCN v16 persists parent IDs, an optional authored scene camera, the value-owned
 Character Controller component, pointer-free inline renderer material state,
 supported non-terrain material-instance texture overrides by confined source
 path, value-owned scene environment settings, direct lighting, fog, local-light
 descriptors, reflection-probe volume descriptors, and prefab-instance provenance
 for prefab-backed objects. That provenance includes the project-relative prefab
-path, instance-root ID, durable source ID, and source revision. v1-v14
-documents migrate objects to roots in memory without rewriting the source file;
+path, instance-root ID, durable source ID, and source revision. It also stores
+an explicit non-root prefab local-transform override when one is authored.
+v1-v14 documents migrate objects to roots in memory without rewriting the source file;
 v7 data defaults the new controller component to disabled, v8 data retains its
 controller payload while using defaults for the v9 renderer fields, and v10
 data retains its environment while using default direct-lighting, fog, and
@@ -359,12 +360,15 @@ history remain open.
   prefab assets do not yet serialize explicit per-instance override metadata,
   and mapped-instance refresh remains closed for asset-backed material state
   until that owner can provide an equivalent atomic transaction.
-- HSCN v15 persists prefab-instance provenance for a prefab-backed object group:
+- HSCN v16 persists prefab-instance provenance and explicit non-root local
+  transform override metadata for a prefab-backed object group:
   the project-relative prefab path, instance-root ID, durable source ID, and
   source revision. The document validator rejects missing or mismatched
-  provenance, duplicate source IDs within an instance, and prefab fields on
-  non-prefab sources. Loading v1-v14 documents initializes these new fields to
-  zero in memory and does not rewrite the legacy file.
+  provenance, duplicate source IDs within an instance, prefab fields on
+  non-prefab sources, invalid override transforms, and overrides on a prefab
+  root. Loading v1-v14 documents initializes provenance and override fields to
+  their defaults in memory; v15 documents retain provenance and initialize the
+  new override fields to their defaults. Legacy files are not rewritten.
 - The Sandbox3D asset-backed project-open path materializes each persisted
   prefab group through the supplied asset-manager authority, the normal Scene
   Document, and the runtime scene. It resolves the saved prefab path and
