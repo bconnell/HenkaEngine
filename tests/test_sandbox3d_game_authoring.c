@@ -37,8 +37,10 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     henka_settings* manifest = NULL;
     henka_scene* loaded_scene = NULL;
     sandbox3d_game_authoring* loaded_authoring = NULL;
+    henka_scene_document* persisted_document = NULL;
     henka_scene_document_object root_object;
     henka_scene_document_object child_object;
+    henka_scene_document_object persisted_child_object;
     henka_asset_metadata prefab_metadata;
     henka_scene_document_id root_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
@@ -57,6 +59,14 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     henka_scene_object_info root_info;
     henka_scene_object_info child_info;
     henka_transform transform;
+    henka_transform authored_local_override = {
+        {2.0f, 3.0f, 4.0f},
+        {0.0f, 0.0f, 0.0f, 1.0f},
+        {1.25f, 1.5f, 1.75f}};
+    henka_transform mutated_local_override = {
+        {-5.0f, -6.0f, -7.0f},
+        {0.0f, 0.0f, 0.0f, 1.0f},
+        {0.75f, 0.8f, 0.9f}};
     henka_result result;
     henka_result reload_result;
     henka_result document_set_result;
@@ -293,6 +303,52 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     {
         goto cleanup;
     }
+    if (henka_scene_set_entity_local_transform(
+            loaded_scene, loaded_child, authored_local_override) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_save(loaded_authoring, project_root) !=
+            HENKA_SUCCESS ||
+        henka_scene_document_create(&persisted_document) != HENKA_SUCCESS ||
+        henka_scene_document_load_file(
+            persisted_document, project_root, scene_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(
+            persisted_document, child_id, &persisted_child_object) !=
+            HENKA_SUCCESS ||
+        !persisted_child_object.source.prefab_local_transform_override ||
+        fabsf(persisted_child_object.source.prefab_local_transform.position.x -
+            authored_local_override.position.x) > 0.0001f ||
+        fabsf(persisted_child_object.source.prefab_local_transform.position.y -
+            authored_local_override.position.y) > 0.0001f ||
+        fabsf(persisted_child_object.source.prefab_local_transform.position.z -
+            authored_local_override.position.z) > 0.0001f ||
+        fabsf(persisted_child_object.source.prefab_local_transform.scale.x -
+            authored_local_override.scale.x) > 0.0001f ||
+        fabsf(persisted_child_object.source.prefab_local_transform.scale.y -
+            authored_local_override.scale.y) > 0.0001f ||
+        fabsf(persisted_child_object.source.prefab_local_transform.scale.z -
+            authored_local_override.scale.z) > 0.0001f)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_set_entity_local_transform(
+            loaded_scene, loaded_child, mutated_local_override) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(loaded_authoring, project_root) !=
+            HENKA_SUCCESS ||
+        henka_scene_get_entity_local_transform(
+            loaded_scene, loaded_child, &transform) != HENKA_SUCCESS ||
+        fabsf(transform.position.x - authored_local_override.position.x) >
+            0.0001f ||
+        fabsf(transform.position.y - authored_local_override.position.y) >
+            0.0001f ||
+        fabsf(transform.position.z - authored_local_override.position.z) >
+            0.0001f ||
+        fabsf(transform.scale.x - authored_local_override.scale.x) > 0.0001f ||
+        fabsf(transform.scale.y - authored_local_override.scale.y) > 0.0001f ||
+        fabsf(transform.scale.z - authored_local_override.scale.z) > 0.0001f)
+    {
+        goto cleanup;
+    }
     {
         henka_result save_result;
         henka_result root_capture_result;
@@ -493,6 +549,7 @@ cleanup:
     sandbox3d_game_authoring_destroy(loaded_authoring);
     henka_scene_destroy(loaded_scene);
     henka_settings_destroy(manifest);
+    henka_scene_document_destroy(persisted_document);
     henka_scene_document_destroy(document);
     henka_prefab_destroy(prefab);
     henka_scene_destroy(prefab_source_scene);
