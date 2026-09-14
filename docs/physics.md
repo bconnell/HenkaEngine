@@ -145,8 +145,8 @@ to exercise static, dynamic, and kinematic body types, including an upright
 capsule collider, fixed-step motion, collision and trigger events, a
 camera-style raycast, and world reset. It also creates bounded heightfield and
 triangle-mesh physics worlds to exercise heightfield contact and raycast
-traversal plus sphere, upright-capsule, and axis-aligned-box triangle-mesh
-contacts, then
+traversal plus dynamic and kinematic sphere, upright-capsule, and
+axis-aligned-box triangle-mesh contacts, then
 creates a bounded real Scene Document and Play session to exercise
 character-controller movement, jump, scene-link synchronization, and stop-time
 restoration. The command exits after reporting the complete scenario and does

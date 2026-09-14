@@ -1024,6 +1024,51 @@ static void henka_test_physics_triangle_mesh_shape_pairs(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_physics_triangle_mesh_kinematic_shape_pair(
+    henka_physics_collider_desc shape_collider)
+{
+    const henka_vec3 vertices[4] = {
+        {-2.0f, 0.0f, -2.0f},
+        {2.0f, 0.0f, -2.0f},
+        {2.0f, 0.0f, 2.0f},
+        {-2.0f, 0.0f, 2.0f}};
+    const uint32_t indices[6] = {0U, 1U, 2U, 0U, 2U, 3U};
+    henka_physics_world* world = NULL;
+    henka_physics_body_desc desc;
+    henka_physics_body_id shape_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id mesh_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_state shape_state;
+    henka_physics_collider_desc mesh_collider =
+        henka_test_triangle_mesh_collider(vertices, 4U, indices, 6U);
+    const henka_physics_contact* contacts;
+    size_t contact_count;
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_KINEMATIC,
+        shape_collider,
+        (henka_vec3){0.0f, 0.25f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &shape_body) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        mesh_collider,
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &mesh_body) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, shape_body, &shape_state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(shape_state.type == HENKA_PHYSICS_BODY_KINEMATIC);
+    contacts = henka_physics_world_get_contacts(world, &contact_count);
+    HENKA_TEST_ASSERT(contacts != NULL && contact_count == 1U);
+    if (contacts != NULL && contact_count == 1U)
+    {
+        HENKA_TEST_ASSERT(contacts[0].body_a == shape_body);
+        HENKA_TEST_ASSERT(contacts[0].body_b == mesh_body);
+        HENKA_TEST_ASSERT(contacts[0].normal.y < -0.9f);
+        HENKA_TEST_ASSERT(contacts[0].penetration > 0.2f);
+    }
+    henka_physics_world_destroy(world);
+}
+
 static void henka_test_physics_pair_filters_and_response(void)
 {
     henka_physics_world* world;
@@ -2444,6 +2489,10 @@ void henka_test_physics(void)
     henka_test_physics_static_only_shape_boundaries();
     henka_test_physics_triangle_mesh_contract();
     henka_test_physics_triangle_mesh_shape_pairs();
+    henka_test_physics_triangle_mesh_kinematic_shape_pair(
+        henka_physics_collider_capsule(0.5f, 0.5f));
+    henka_test_physics_triangle_mesh_kinematic_shape_pair(
+        henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f}));
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();
     henka_test_physics_scene_link_hierarchy();

@@ -11703,6 +11703,7 @@ cleanup:
 }
 
 static henka_result sandbox3d_run_triangle_mesh_shape_contact_smoke(
+    henka_physics_body_type shape_type,
     henka_physics_collider_desc shape_collider)
 {
     const henka_vec3 vertices[4] = {
@@ -11731,7 +11732,7 @@ static henka_result sandbox3d_run_triangle_mesh_shape_contact_smoke(
         4U,
         indices,
         6U);
-    shape_desc.type = HENKA_PHYSICS_BODY_DYNAMIC;
+    shape_desc.type = shape_type;
     shape_desc.transform = henka_transform_identity();
     shape_desc.transform.position = (henka_vec3){0.0f, 0.4f, 0.0f};
     shape_desc.mass = 1.0f;
@@ -11757,7 +11758,7 @@ static henka_result sandbox3d_run_triangle_mesh_shape_contact_smoke(
             break;
         }
     }
-    if (shape_state.grounded && shape_contact)
+    if (shape_state.type == shape_type && shape_state.colliding && shape_contact)
     {
         result = HENKA_SUCCESS;
     }
@@ -11843,8 +11844,16 @@ static henka_result sandbox3d_run_triangle_mesh_physics_smoke(void)
     }
 
     if (sandbox3d_run_triangle_mesh_shape_contact_smoke(
+            HENKA_PHYSICS_BODY_DYNAMIC,
             henka_physics_collider_capsule(0.5f, 0.5f)) != HENKA_SUCCESS ||
         sandbox3d_run_triangle_mesh_shape_contact_smoke(
+            HENKA_PHYSICS_BODY_DYNAMIC,
+            henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f})) != HENKA_SUCCESS ||
+        sandbox3d_run_triangle_mesh_shape_contact_smoke(
+            HENKA_PHYSICS_BODY_KINEMATIC,
+            henka_physics_collider_capsule(0.5f, 0.5f)) != HENKA_SUCCESS ||
+        sandbox3d_run_triangle_mesh_shape_contact_smoke(
+            HENKA_PHYSICS_BODY_KINEMATIC,
             henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f})) != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -12157,7 +12166,7 @@ static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
     }
 
     printf(
-        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, heightfield contact/raycast, triangle-mesh sphere/capsule/box contact/raycast, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
+        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, heightfield contact/raycast, triangle-mesh dynamic/kinematic sphere/capsule/box contact/raycast, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 
