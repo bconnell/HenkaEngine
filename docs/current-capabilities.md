@@ -353,7 +353,10 @@ history remain open.
   successfully loaded candidate into the existing manager-owned prefab pointer,
   preserving source-local IDs and allowing already mapped instances to refresh
   from the new snapshot. A failed reload leaves the prior prefab and metadata
-  unchanged. Persisted prefab assets do not yet serialize per-instance overrides,
+  unchanged. Saving a bound authoring scene synchronizes supported runtime
+  presentation values, including prefab-instance transforms, into the Scene
+  Document candidate; reload restores those values transactionally. Persisted
+  prefab assets do not yet serialize explicit per-instance override metadata,
   and mapped-instance refresh remains closed for asset-backed material state
   until that owner can provide an equivalent atomic transaction.
 - HSCN v15 persists prefab-instance provenance for a prefab-backed object group:
@@ -378,11 +381,12 @@ history remain open.
   definitions remain borrowed from their existing owners and must outlive the
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls
   back all newly created entities if validation or allocation fails.
-- Persisted per-instance overrides, source-refresh of non-presentation state,
-  duplication, unpacking, editor authoring, and packaged/external-project
-  prefab workflows remain in progress. The current runtime snapshot, persisted
-  asset, and refresh APIs are a foundation rather than a complete prefab
-  authoring system.
+- Explicit serialized per-instance override metadata, source-refresh of
+  non-presentation state, duplication, unpacking, editor authoring, and
+  packaged/external-project prefab workflows remain in progress. The current
+  runtime snapshot, persisted asset, transactional presentation save/reload,
+  and refresh APIs are a foundation rather than a complete prefab authoring
+  system.
 
 ## Modeling / Content Authoring
 

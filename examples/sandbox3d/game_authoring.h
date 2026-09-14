@@ -173,8 +173,10 @@ henka_result sandbox3d_game_authoring_attach_script_template(
     henka_entity entity,
     henka_script_language language);
 
-/* Saves the bound Scene Document and a bounded henka.project entry containing
- * the confined startup scene path. */
+/* Snapshots and synchronizes every bound runtime object, camera, and scene
+ * presentation setting into a validated document candidate before writing the
+ * candidate and its bounded henka.project entry. The candidate is published
+ * in memory only after both writes succeed. */
 henka_result sandbox3d_game_authoring_save(
     sandbox3d_game_authoring* authoring,
     const char* project_root);

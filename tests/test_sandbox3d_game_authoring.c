@@ -293,6 +293,42 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     {
         goto cleanup;
     }
+    {
+        henka_result save_result;
+        henka_result root_capture_result;
+        henka_result child_capture_result;
+        if (henka_scene_set_entity_transform(
+                loaded_scene,
+                loaded_root,
+                (henka_transform){{30.0f, 31.0f, 32.0f},
+                    {0.0f, 0.0f, 0.0f, 1.0f},
+                    {1.0f, 1.0f, 1.0f}}) != HENKA_SUCCESS ||
+            henka_scene_set_entity_transform(
+                loaded_scene,
+                loaded_child,
+                (henka_transform){{34.0f, 35.0f, 36.0f},
+                    {0.0f, 0.0f, 0.0f, 1.0f},
+                    {1.0f, 1.0f, 1.0f}}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        save_result = sandbox3d_game_authoring_save(
+            loaded_authoring, project_root);
+        root_capture_result = sandbox3d_game_authoring_get_object_for_entity(
+            loaded_authoring, loaded_root, &root_id, &root_object);
+        child_capture_result = sandbox3d_game_authoring_get_object_for_entity(
+            loaded_authoring, loaded_child, &child_id, &child_object);
+        if (save_result != HENKA_SUCCESS ||
+            root_capture_result != HENKA_SUCCESS ||
+            child_capture_result != HENKA_SUCCESS ||
+            root_object.transform.position.x != 30.0f ||
+            root_object.transform.position.z != 32.0f ||
+            child_object.transform.position.x != 34.0f ||
+            child_object.transform.position.z != 36.0f)
+        {
+            goto cleanup;
+        }
+    }
     if (henka_scene_set_entity_transform(
             loaded_scene,
             loaded_root,
@@ -329,7 +365,10 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
         loaded_parent != loaded_root ||
         henka_scene_get_entity_transform(
             loaded_scene, loaded_root, &transform) != HENKA_SUCCESS ||
-        transform.position.x != 10.0f || transform.position.z != 20.0f ||
+        transform.position.x != 30.0f || transform.position.z != 32.0f ||
+        henka_scene_get_entity_transform(
+            loaded_scene, loaded_child, &transform) != HENKA_SUCCESS ||
+        transform.position.x != 34.0f || transform.position.z != 36.0f ||
         henka_scene_get_entity_parent(
             loaded_scene, loaded_second_child, &loaded_second_parent) !=
             HENKA_SUCCESS ||
