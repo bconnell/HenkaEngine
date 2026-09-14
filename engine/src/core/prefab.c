@@ -2185,6 +2185,26 @@ henka_result henka_prefab_instance_get_local_transform_override(
     {
         return result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
     }
+    if (index != instance->root_index)
+    {
+        henka_transform actual_transform;
+
+        if (henka_scene_get_entity_local_transform(
+                instance->target_scene,
+                instance->entities[index],
+                &actual_transform) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (!henka_prefab_transform_equal(
+                actual_transform,
+                instance->base_local_transforms[index]))
+        {
+            *out_has_override = true;
+            *out_transform = actual_transform;
+            return HENKA_SUCCESS;
+        }
+    }
     *out_has_override = instance->transform_override_flags[index];
     *out_transform = *out_has_override
         ? instance->local_transform_overrides[index]

@@ -1238,6 +1238,15 @@ static void henka_test_prefab_instance_refresh_recovers_scene_edit(void)
     scene_edit.position = (henka_vec3){5.0f, 6.0f, 7.0f};
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(
         target, instance_child, scene_edit) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_local_transform_override(
+        instance,
+        child_source_id,
+        &has_override,
+        &current_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(has_override);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.x, 5.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.y, 6.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.z, 7.0f, 0.0001f);
     source_transform.position = (henka_vec3){9.0f, 10.0f, 11.0f};
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(
         source, source_child, source_transform) == HENKA_SUCCESS);
