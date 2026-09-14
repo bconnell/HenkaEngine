@@ -970,6 +970,112 @@ static void henka_test_prefab_instance_source_mapping(void)
     henka_scene_destroy(source);
 }
 
+static void henka_test_prefab_instance_transform_overrides(void)
+{
+    henka_scene* source = NULL;
+    henka_scene* target = NULL;
+    henka_prefab* prefab = NULL;
+    henka_prefab_instance* instance = NULL;
+    henka_entity source_root;
+    henka_entity source_child;
+    henka_entity instance_child = HENKA_INVALID_ENTITY;
+    henka_prefab_source_id child_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+    henka_transform source_child_transform = henka_transform_identity();
+    henka_transform override_transform = henka_transform_identity();
+    henka_transform current_transform = henka_transform_identity();
+    henka_transform expected_transform = henka_transform_identity();
+    uint64_t render_revision;
+    bool has_override = true;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
+    source_root = henka_scene_create_entity_named(source, "Override Source Root");
+    source_child = henka_scene_create_entity_named(source, "Override Source Child");
+    HENKA_TEST_ASSERT(source_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(source_child != HENKA_INVALID_ENTITY);
+    source_child_transform.position = (henka_vec3){1.0f, 2.0f, 3.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_transform(
+        source, source_child, source_child_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        source, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_create_from_scene(
+        source, source_root, &prefab) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_source_id_at(
+        prefab, 1U, &child_source_id) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_with_instance(
+        prefab, target, henka_transform_identity(), &instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance != NULL);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_entity_for_source_id(
+        instance, child_source_id, &instance_child) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance_child != HENKA_INVALID_ENTITY);
+
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_local_transform_override(
+        instance, child_source_id, &has_override, &current_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!has_override);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.y, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.z, 3.0f, 0.0001f);
+
+    override_transform.position = (henka_vec3){5.0f, 6.0f, 7.0f};
+    override_transform.rotation = (henka_quat){0.0f, 0.0f, 0.0f, 2.0f};
+    render_revision = henka_scene_get_render_revision(target);
+    HENKA_TEST_ASSERT(henka_prefab_instance_set_local_transform_override(
+        instance, child_source_id, override_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(target) == render_revision + 1U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_transform(
+        target, instance_child, &expected_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(expected_transform.position.x, 5.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(expected_transform.position.y, 6.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(expected_transform.position.z, 7.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(expected_transform.rotation.w, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_local_transform_override(
+        instance, child_source_id, &has_override, &current_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(has_override);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.x, 5.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.y, 6.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.z, 7.0f, 0.0001f);
+
+    render_revision = henka_scene_get_render_revision(target);
+    HENKA_TEST_ASSERT(henka_prefab_instance_set_local_transform_override(
+        instance, child_source_id, expected_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(target) == render_revision);
+
+    render_revision = henka_scene_get_render_revision(target);
+    HENKA_TEST_ASSERT(henka_prefab_instance_clear_local_transform_override(
+        instance, child_source_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(target) == render_revision + 1U);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_local_transform_override(
+        instance, child_source_id, &has_override, &current_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!has_override);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.y, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.z, 3.0f, 0.0001f);
+
+    render_revision = henka_scene_get_render_revision(target);
+    HENKA_TEST_ASSERT(henka_prefab_instance_clear_local_transform_override(
+        instance, child_source_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(target) == render_revision);
+
+    henka_scene_destroy_entity(target, instance_child);
+    instance_child = HENKA_INVALID_ENTITY;
+    has_override = true;
+    current_transform.position.x = 42.0f;
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_local_transform_override(
+        instance, child_source_id, &has_override, &current_transform) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(!has_override);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(current_transform.position.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_prefab_instance_set_local_transform_override(
+        instance, child_source_id, override_transform) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_prefab_instance_clear_local_transform_override(
+        instance, child_source_id) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    henka_prefab_instance_destroy(instance);
+    henka_prefab_destroy(prefab);
+    henka_scene_destroy(target);
+    henka_scene_destroy(source);
+}
+
 static void henka_test_scene_child_enumeration(void)
 {
     henka_scene* scene;
@@ -1848,6 +1954,7 @@ void henka_test_scene(void)
     henka_test_prefab_revision_refresh();
     henka_test_prefab_source_local_identity();
     henka_test_prefab_instance_source_mapping();
+    henka_test_prefab_instance_transform_overrides();
     henka_test_prefab_revision_capacity_transaction();
     henka_test_prefab_allocation_failure_transaction();
 }

@@ -309,6 +309,11 @@ history remain open.
   `henka_prefab_instance_destroy_entities` provides an explicit transactional
   teardown path for all currently live mapped entities, while retaining the
   handle with stale entries for idempotent cleanup.
+- A live instance can apply, clear, and query a bounded local-transform
+  override by source-local ID. The override is stored on the instance handle,
+  leaves the reusable prefab snapshot unchanged, uses the scene's canonical
+  transform representation, and clears as an idempotent return to the
+  instance's captured baseline.
 - Each captured source object also has a distinct in-memory source-local ID.
   Surviving source objects retain that ID across an in-memory refresh, while
   newly captured objects receive monotonically increasing IDs. These IDs are

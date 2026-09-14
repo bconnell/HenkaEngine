@@ -93,6 +93,22 @@ henka_result henka_prefab_instance_get_entity_for_source_id(
     const henka_prefab_instance* instance,
     henka_prefab_source_id source_id,
     henka_entity* out_entity);
+/* Applies a bounded per-instance local-transform override without changing
+ * the reusable prefab snapshot. The override is keyed by source-local ID,
+ * uses the scene's canonical transform representation, and remains in memory
+ * until it is cleared or the instance handle is destroyed. */
+henka_result henka_prefab_instance_set_local_transform_override(
+    henka_prefab_instance* instance,
+    henka_prefab_source_id source_id,
+    henka_transform transform);
+henka_result henka_prefab_instance_clear_local_transform_override(
+    henka_prefab_instance* instance,
+    henka_prefab_source_id source_id);
+henka_result henka_prefab_instance_get_local_transform_override(
+    const henka_prefab_instance* instance,
+    henka_prefab_source_id source_id,
+    bool* out_has_override,
+    henka_transform* out_transform);
 henka_result henka_prefab_instance_get_entity_at(
     const henka_prefab_instance* instance,
     size_t index,
