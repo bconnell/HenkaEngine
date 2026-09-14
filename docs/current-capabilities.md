@@ -359,11 +359,13 @@ history remain open.
   provenance, duplicate source IDs within an instance, and prefab fields on
   non-prefab sources. Loading v1-v14 documents initializes these new fields to
   zero in memory and does not rewrite the legacy file.
-- The Sandbox3D asset-backed project-open path materializes a persisted prefab
-  group through the normal Scene Document and runtime scene authorities. It
-  resolves the saved prefab path and revision, maps each durable source ID to
-  the corresponding live entity, and rejects incomplete or mismatched groups
-  before publishing a partial authoring scene.
+- The Sandbox3D asset-backed project-open path materializes each persisted
+  prefab group through the supplied asset-manager authority, the normal Scene
+  Document, and the runtime scene. It resolves the saved prefab path and
+  revision, reuses the manager-owned prefab for repeated instances, maps each
+  durable source ID to the corresponding live entity, and rejects incomplete
+  or mismatched groups before publishing a partial authoring scene. The asset
+  manager must outlive the returned authoring coordinator and its instances.
 - Reloading that project validates the persisted prefab source path, revision,
   membership, and durable source IDs against the already materialized live
   instance, then reapplies the document-authored transform and hierarchy

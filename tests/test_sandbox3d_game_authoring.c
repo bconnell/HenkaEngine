@@ -39,6 +39,7 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     sandbox3d_game_authoring* loaded_authoring = NULL;
     henka_scene_document_object root_object;
     henka_scene_document_object child_object;
+    henka_asset_metadata prefab_metadata;
     henka_scene_document_id root_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id second_root_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
@@ -66,7 +67,7 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     config.window_width = 320;
     config.window_height = 240;
     config.enable_vsync = false;
-    config.asset_base_path = ".";
+    config.asset_base_path = project_root;
     result = henka_engine_create(&config, &engine);
     if (result != HENKA_SUCCESS)
     {
@@ -220,6 +221,14 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
         &loaded_scene,
         &loaded_authoring);
     if (result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_assets_get_prefab_metadata_for_path(
+            assets, prefab_path, &prefab_metadata) != HENKA_SUCCESS ||
+        prefab_metadata.type != HENKA_ASSET_TYPE_PREFAB ||
+        !prefab_metadata.loaded || prefab_metadata.source_path == NULL ||
+        strcmp(prefab_metadata.source_path, prefab_path) != 0)
     {
         goto cleanup;
     }
@@ -425,6 +434,17 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
         loaded_scene, loaded_second_root, &transform);
     if (loaded_second_parent != HENKA_INVALID_ENTITY ||
         transform.position.x != -99.0f || transform.position.z != -97.0f)
+    {
+        goto cleanup;
+    }
+    sandbox3d_game_authoring_destroy(loaded_authoring);
+    loaded_authoring = NULL;
+    henka_scene_destroy(loaded_scene);
+    loaded_scene = NULL;
+    if (henka_assets_get_prefab_metadata_for_path(
+            assets, prefab_path, &prefab_metadata) != HENKA_SUCCESS ||
+        prefab_metadata.type != HENKA_ASSET_TYPE_PREFAB ||
+        !prefab_metadata.loaded)
     {
         goto cleanup;
     }
