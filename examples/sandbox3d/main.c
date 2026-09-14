@@ -11702,6 +11702,71 @@ cleanup:
     return result;
 }
 
+static henka_result sandbox3d_run_triangle_mesh_shape_contact_smoke(
+    henka_physics_collider_desc shape_collider)
+{
+    const henka_vec3 vertices[4] = {
+        {-2.0f, 0.0f, -2.0f},
+        {2.0f, 0.0f, -2.0f},
+        {2.0f, 0.0f, 2.0f},
+        {-2.0f, 0.0f, 2.0f}};
+    const uint32_t indices[6] = {0U, 1U, 2U, 0U, 2U, 3U};
+    henka_physics_world* world = NULL;
+    henka_physics_body_id mesh = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id shape = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_desc mesh_desc = {0};
+    henka_physics_body_desc shape_desc = {0};
+    henka_physics_body_state shape_state = {0};
+    const henka_physics_contact* contacts = NULL;
+    size_t contact_count = 0U;
+    bool shape_contact = false;
+    henka_result result = HENKA_ERROR_UNKNOWN;
+    size_t index;
+
+    mesh_desc.type = HENKA_PHYSICS_BODY_STATIC;
+    mesh_desc.transform = henka_transform_identity();
+    mesh_desc.material = henka_physics_material_default();
+    mesh_desc.collider = henka_physics_collider_triangle_mesh(
+        vertices,
+        4U,
+        indices,
+        6U);
+    shape_desc.type = HENKA_PHYSICS_BODY_DYNAMIC;
+    shape_desc.transform = henka_transform_identity();
+    shape_desc.transform.position = (henka_vec3){0.0f, 0.4f, 0.0f};
+    shape_desc.mass = 1.0f;
+    shape_desc.material = henka_physics_material_default();
+    shape_desc.collider = shape_collider;
+
+    if (henka_physics_world_create(&world) != HENKA_SUCCESS ||
+        henka_physics_body_create(world, &mesh_desc, &mesh) != HENKA_SUCCESS ||
+        henka_physics_body_create(world, &shape_desc, &shape) != HENKA_SUCCESS ||
+        henka_physics_world_step_fixed(world) != HENKA_SUCCESS ||
+        henka_physics_body_get_state(world, shape, &shape_state) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    contacts = henka_physics_world_get_contacts(world, &contact_count);
+    for (index = 0U; contacts != NULL && index < contact_count; ++index)
+    {
+        if ((contacts[index].body_a == mesh && contacts[index].body_b == shape) ||
+            (contacts[index].body_a == shape && contacts[index].body_b == mesh))
+        {
+            shape_contact = true;
+            break;
+        }
+    }
+    if (shape_state.grounded && shape_contact)
+    {
+        result = HENKA_SUCCESS;
+    }
+
+cleanup:
+    henka_physics_world_destroy(world);
+    return result;
+}
+
 static henka_result sandbox3d_run_triangle_mesh_physics_smoke(void)
 {
     const henka_vec3 vertices[4] = {
@@ -11773,6 +11838,14 @@ static henka_result sandbox3d_run_triangle_mesh_physics_smoke(void)
         raycast_hit.distance > 2.1f ||
         !isfinite(raycast_hit.normal.y) ||
         raycast_hit.normal.y < 0.9f)
+    {
+        goto cleanup;
+    }
+
+    if (sandbox3d_run_triangle_mesh_shape_contact_smoke(
+            henka_physics_collider_capsule(0.5f, 0.5f)) != HENKA_SUCCESS ||
+        sandbox3d_run_triangle_mesh_shape_contact_smoke(
+            henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f})) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -12084,7 +12157,7 @@ static henka_result sandbox3d_run_physics_smoke(sandbox3d_state* state)
     }
 
     printf(
-        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, heightfield contact/raycast, triangle-mesh contact/raycast, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
+        "Physics smoke: real scene-linked bodies exercised static, dynamic, and kinematic paths; capsule collider, heightfield contact/raycast, triangle-mesh sphere/capsule/box contact/raycast, character-controller Play movement/jump, fixed-step contact/events, trigger state, raycast, and reset passed.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 
