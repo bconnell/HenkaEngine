@@ -253,11 +253,13 @@ The public runtime scene now provides a bounded generation-checked parent/child
 transform foundation with cycle rejection, keep-local/keep-world reparenting,
 deterministic direct-child enumeration, subtree propagation, and parent-
 destruction promotion. Passing `HENKA_INVALID_ENTITY` enumerates root entities.
-HSCN v14 persists parent IDs, an optional authored scene camera, the value-owned
+HSCN v15 persists parent IDs, an optional authored scene camera, the value-owned
 Character Controller component, pointer-free inline renderer material state,
 supported non-terrain material-instance texture overrides by confined source
 path, value-owned scene environment settings, direct lighting, fog, local-light
-descriptors, and reflection-probe volume descriptors. v1-v9
+descriptors, reflection-probe volume descriptors, and prefab-instance provenance
+for prefab-backed objects. That provenance includes the project-relative prefab
+path, instance-root ID, durable source ID, and source revision. v1-v14
 documents migrate objects to roots in memory without rewriting the source file;
 v7 data defaults the new controller component to disabled, v8 data retains its
 controller payload while using defaults for the v9 renderer fields, and v10
@@ -347,6 +349,12 @@ history remain open.
   publishing a partial output. Persisted prefab assets do not yet serialize
   per-instance overrides or provide atomic source-refresh of asset-backed
   material state.
+- HSCN v15 persists prefab-instance provenance for a prefab-backed object group:
+  the project-relative prefab path, instance-root ID, durable source ID, and
+  source revision. The document validator rejects missing or mismatched
+  provenance, duplicate source IDs within an instance, and prefab fields on
+  non-prefab sources. Loading v1-v14 documents initializes these new fields to
+  zero in memory and does not rewrite the legacy file.
 - Snapshot text is owned by the prefab. Meshes, shaders, textures, and material
   definitions remain borrowed from their existing owners and must outlive the
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls

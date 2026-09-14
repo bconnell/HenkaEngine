@@ -13,7 +13,8 @@
 #include <henka/scene.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(14)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(15)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V14 UINT32_C(14)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V13 UINT32_C(13)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V12 UINT32_C(12)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V11 UINT32_C(11)
@@ -60,7 +61,8 @@ typedef enum henka_scene_document_asset_kind
     HENKA_SCENE_DOCUMENT_ASSET_UNKNOWN = 0,
     HENKA_SCENE_DOCUMENT_ASSET_MESH,
     HENKA_SCENE_DOCUMENT_ASSET_GLTF_SCENE,
-    HENKA_SCENE_DOCUMENT_ASSET_MATERIAL
+    HENKA_SCENE_DOCUMENT_ASSET_MATERIAL,
+    HENKA_SCENE_DOCUMENT_ASSET_PREFAB
 } henka_scene_document_asset_kind;
 
 typedef struct henka_scene_document_source
@@ -70,7 +72,16 @@ typedef struct henka_scene_document_source
     henka_vec3 primitive_dimensions;
     henka_scene_document_asset_kind asset_kind;
     char path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
+    /* Prefab instance provenance is value-owned Scene Document state. The
+     * root ID identifies one placed instance in this document; the source ID
+     * and source revision identify the corresponding reusable prefab entry and
+     * snapshot. These fields are zero for every non-prefab source. */
+    henka_scene_document_id prefab_instance_root_id;
+    uint64_t prefab_source_id;
+    uint64_t prefab_source_revision;
 } henka_scene_document_source;
+
+#define HENKA_INVALID_SCENE_DOCUMENT_PREFAB_SOURCE_ID UINT64_C(0)
 
 /* Supported non-terrain texture dependency identities may be persisted by
  * confined source path when a manager-owned material instance explicitly

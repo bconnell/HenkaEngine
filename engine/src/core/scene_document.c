@@ -497,7 +497,7 @@ static henka_result henka_scene_document_validate_object(
         source->primitive < HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX ||
         source->primitive > HENKA_SCENE_DOCUMENT_PRIMITIVE_PLANE ||
         source->asset_kind < HENKA_SCENE_DOCUMENT_ASSET_UNKNOWN ||
-        source->asset_kind > HENKA_SCENE_DOCUMENT_ASSET_MATERIAL ||
+        source->asset_kind > HENKA_SCENE_DOCUMENT_ASSET_PREFAB ||
         !henka_scene_document_finite_vec3(source->primitive_dimensions))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -529,6 +529,22 @@ static henka_result henka_scene_document_validate_object(
     }
     if (source->kind == HENKA_SCENE_DOCUMENT_SOURCE_ASSET &&
         (source->path[0] == '\0' || source->asset_kind == HENKA_SCENE_DOCUMENT_ASSET_UNKNOWN))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (source->kind == HENKA_SCENE_DOCUMENT_SOURCE_ASSET &&
+        source->asset_kind == HENKA_SCENE_DOCUMENT_ASSET_PREFAB)
+    {
+        if (source->prefab_instance_root_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+            source->prefab_source_id == HENKA_INVALID_SCENE_DOCUMENT_PREFAB_SOURCE_ID ||
+            source->prefab_source_revision == 0U)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    else if (source->prefab_instance_root_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        source->prefab_source_id != HENKA_INVALID_SCENE_DOCUMENT_PREFAB_SOURCE_ID ||
+        source->prefab_source_revision != 0U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -835,6 +851,49 @@ static henka_result henka_scene_document_validate_storage(
             false) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < storage->object_count; ++index)
+    {
+        const henka_scene_document_source* source =
+            &storage->objects[index].source;
+        size_t root_index = SIZE_MAX;
+        size_t other_index;
+
+        if (source->asset_kind != HENKA_SCENE_DOCUMENT_ASSET_PREFAB)
+        {
+            continue;
+        }
+        for (other_index = 0U; other_index < storage->object_count; ++other_index)
+        {
+            if (storage->objects[other_index].id == source->prefab_instance_root_id)
+            {
+                root_index = other_index;
+                break;
+            }
+        }
+        if (root_index == SIZE_MAX ||
+            storage->objects[root_index].source.asset_kind !=
+                HENKA_SCENE_DOCUMENT_ASSET_PREFAB ||
+            storage->objects[root_index].source.prefab_instance_root_id !=
+                source->prefab_instance_root_id ||
+            storage->objects[root_index].source.prefab_source_revision !=
+                source->prefab_source_revision ||
+            strcmp(storage->objects[root_index].source.path, source->path) != 0)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        for (other_index = 0U; other_index < index; ++other_index)
+        {
+            const henka_scene_document_source* other_source =
+                &storage->objects[other_index].source;
+            if (other_source->asset_kind == HENKA_SCENE_DOCUMENT_ASSET_PREFAB &&
+                other_source->prefab_instance_root_id ==
+                    source->prefab_instance_root_id &&
+                other_source->prefab_source_id == source->prefab_source_id)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
     }
     if ((storage->next_id != 0U && storage->next_id <= maximum_id) ||
         (storage->next_id == 0U && maximum_id != UINT64_MAX))
@@ -1829,6 +1888,7 @@ static bool henka_scene_document_payload_size(
         if (!henka_scene_document_size_add(&size,
                 8U + 8U + 4U + 2U + name_length + 40U +
                 4U + 4U + 12U + 2U + source_path_length + 4U +
+                3U * sizeof(uint64_t) +
                 2U + material_path_length + 40U + inline_renderer_bytes +
                 texture_identity_bytes +
                 4U + 2U + prompt_length +
@@ -1978,6 +2038,11 @@ static void henka_scene_document_encode_object(
     henka_scene_document_writer_float(writer, object->source.primitive_dimensions.z);
     henka_scene_document_writer_string(writer, object->source.path);
     henka_scene_document_writer_u32(writer, (uint32_t)object->source.asset_kind);
+    henka_scene_document_writer_u64(
+        writer, object->source.prefab_instance_root_id);
+    henka_scene_document_writer_u64(writer, object->source.prefab_source_id);
+    henka_scene_document_writer_u64(
+        writer, object->source.prefab_source_revision);
     henka_scene_document_writer_string(writer, object->renderer.material_path);
     henka_scene_document_writer_float(writer, object->renderer.base_color.x);
     henka_scene_document_writer_float(writer, object->renderer.base_color.y);
@@ -2589,6 +2654,16 @@ static bool henka_scene_document_decode_object(
         !henka_scene_document_reader_string(reader, object->source.path, sizeof(object->source.path)) ||
         !henka_scene_document_reader_u32(reader, &value)) return false;
     object->source.asset_kind = (henka_scene_document_asset_kind)value;
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        (!henka_scene_document_reader_u64(
+            reader, &object->source.prefab_instance_root_id) ||
+         !henka_scene_document_reader_u64(
+            reader, &object->source.prefab_source_id) ||
+         !henka_scene_document_reader_u64(
+            reader, &object->source.prefab_source_revision)))
+    {
+        return false;
+    }
     if (!henka_scene_document_reader_string(reader, object->renderer.material_path, sizeof(object->renderer.material_path)) ||
         !henka_scene_document_reader_float(reader, &object->renderer.base_color.x) ||
         !henka_scene_document_reader_float(reader, &object->renderer.base_color.y) ||
@@ -2709,7 +2784,7 @@ static bool henka_scene_document_decode_object(
         !henka_scene_document_reader_float(reader, &object->physics.collider_offset.y) ||
         !henka_scene_document_reader_float(reader, &object->physics.collider_offset.z) ||
         !henka_scene_document_reader_float(reader, &object->physics.sphere_radius) ||
-        (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V14 &&
             (!henka_scene_document_reader_float(
                 reader, &object->physics.capsule_radius) ||
              !henka_scene_document_reader_float(
@@ -2725,7 +2800,7 @@ static bool henka_scene_document_decode_object(
         !henka_scene_document_reader_float(reader, &object->physics.material.angular_damping) ||
         !henka_scene_document_reader_u32(reader, &object->physics.layer) ||
         !henka_scene_document_reader_u32(reader, &object->physics.mask) ||
-        (format_version < HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        (format_version < HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V14 &&
             object->physics.shape == HENKA_PHYSICS_SHAPE_CAPSULE)) return false;
     if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V3)
     {
@@ -3105,6 +3180,7 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V11 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V12 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V13 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V14 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
