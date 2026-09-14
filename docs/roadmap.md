@@ -228,8 +228,10 @@ Successful refreshes replace the bounded snapshot and increment its in-memory
 revision; newly created instances record the revision they captured. A failed
 refresh preserves the prior snapshot. Refresh does not persist prefab identity
 or propagate changes into existing instances.
-Persistent prefab assets, stable serialized identity and revisions, editor
-authoring, and source-change propagation remain planned work.
+Asset-backed `.hprefab` persistence, stable serialized identity and revisions,
+and Scene Document startup materialization now exist within the bounded
+runtime/project-open path. Editor authoring, source-change propagation, and
+broader project workflows remain planned work.
 
 ### Core prefab capability
 
