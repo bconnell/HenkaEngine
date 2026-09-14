@@ -1417,9 +1417,11 @@ static void henka_test_sandbox3d_loose_component_creation(void)
 static void henka_test_sandbox3d_object_authoring_duplicate(void)
 {
     henka_scene* scene;
+    henka_entity parent;
     henka_entity source;
     henka_entity duplicate;
     henka_entity helper;
+    henka_transform parent_transform;
     henka_transform source_transform;
     henka_transform duplicate_transform;
     henka_bounds bounds;
@@ -1430,16 +1432,24 @@ static void henka_test_sandbox3d_object_authoring_duplicate(void)
     henka_result result;
 
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    parent = henka_scene_create_entity_named(scene, "Parent");
     source = henka_scene_create_entity_named(scene, "Source");
     helper = henka_scene_create_entity_named(scene, "Helper");
+    HENKA_TEST_ASSERT(parent != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(source != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(helper != HENKA_INVALID_ENTITY);
+    parent_transform = henka_transform_identity();
+    parent_transform.position = (henka_vec3){10.0f, 0.0f, 0.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+        scene, parent, parent_transform) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_set_entity_tag(scene, source, "authoring") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_set_entity_visible(scene, source, false) == HENKA_SUCCESS);
     source_transform = henka_transform_identity();
     source_transform.position = (henka_vec3){2.0f, 3.0f, 4.0f};
     source_transform.scale = (henka_vec3){2.0f, 1.5f, 0.5f};
     HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, source, source_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_parent(
+        scene, source, parent, HENKA_SCENE_PARENT_KEEP_LOCAL) == HENKA_SUCCESS);
     bounds = (henka_bounds){{1.0f, 2.0f, 3.0f}, {0.5f, 0.75f, 1.0f}};
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, source, bounds) == HENKA_SUCCESS);
     interaction = (henka_interaction_desc){true, 7.0f, "Use"};
@@ -1458,9 +1468,16 @@ static void henka_test_sandbox3d_object_authoring_duplicate(void)
     HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(scene, duplicate), "Duplicate") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_tag(scene, duplicate), "authoring") == 0);
     HENKA_TEST_ASSERT(!henka_scene_is_entity_visible(scene, duplicate));
-    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, duplicate, &duplicate_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_transform(
+        scene, duplicate, &duplicate_transform) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(duplicate_transform.position.x, 2.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(duplicate_transform.scale.z, 0.5f, 0.0001f);
+    {
+        henka_entity duplicate_parent = HENKA_INVALID_ENTITY;
+        HENKA_TEST_ASSERT(henka_scene_get_entity_parent(
+            scene, duplicate, &duplicate_parent) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(duplicate_parent == parent);
+    }
     HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, duplicate, &bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.y, 0.75f, 0.0001f);
     HENKA_TEST_ASSERT(henka_scene_get_entity_interaction(scene, duplicate, &interaction) == HENKA_SUCCESS);
@@ -1474,7 +1491,8 @@ static void henka_test_sandbox3d_object_authoring_duplicate(void)
 
     duplicate_transform.position.x = 99.0f;
     HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, duplicate, duplicate_transform) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, source, &source_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_transform(
+        scene, source, &source_transform) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(source_transform.position.x, 2.0f, 0.0001f);
 
     HENKA_TEST_ASSERT(sandbox3d_object_authoring_duplicate_entity(scene, helper, "Invalid", &duplicate) == HENKA_ERROR_INVALID_ARGUMENT);

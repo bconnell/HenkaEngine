@@ -1972,6 +1972,7 @@ henka_result sandbox3d_object_authoring_duplicate_entity(
     henka_entity* out_duplicate)
 {
     henka_entity duplicate;
+    henka_entity source_parent;
     henka_transform transform;
     henka_mesh* mesh;
     henka_material material;
@@ -1995,7 +1996,8 @@ henka_result sandbox3d_object_authoring_duplicate_entity(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (henka_scene_get_entity_transform(scene, source, &transform) != HENKA_SUCCESS ||
+    if (henka_scene_get_entity_local_transform(scene, source, &transform) != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(scene, source, &source_parent) != HENKA_SUCCESS ||
         henka_scene_get_entity_mesh(scene, source, &mesh) != HENKA_SUCCESS ||
         henka_scene_get_entity_material(scene, source, &material) != HENKA_SUCCESS ||
         henka_scene_get_entity_material_asset(scene, source, &material_asset) != HENKA_SUCCESS ||
@@ -2050,6 +2052,14 @@ henka_result sandbox3d_object_authoring_duplicate_entity(
     if (result == HENKA_SUCCESS)
     {
         result = henka_scene_set_entity_interaction(scene, duplicate, &interaction);
+    }
+    if (result == HENKA_SUCCESS && source_parent != HENKA_INVALID_ENTITY)
+    {
+        result = henka_scene_set_entity_parent(
+            scene,
+            duplicate,
+            source_parent,
+            HENKA_SCENE_PARENT_KEEP_LOCAL);
     }
 
     if (result != HENKA_SUCCESS)
