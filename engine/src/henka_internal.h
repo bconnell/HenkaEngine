@@ -263,6 +263,15 @@ typedef struct henka_asset_audio_entry
     henka_asset_metadata metadata;
 } henka_asset_audio_entry;
 
+typedef struct henka_asset_prefab_entry
+{
+    char* key;
+    char* source_path;
+    char* display_name;
+    henka_prefab* prefab;
+    henka_asset_metadata metadata;
+} henka_asset_prefab_entry;
+
 struct henka_material_asset
 {
     char* key;
@@ -314,6 +323,9 @@ struct henka_asset_manager
     henka_gltf_scene_asset** gltf_scene_entries;
     size_t gltf_scene_count;
     size_t gltf_scene_capacity;
+    henka_asset_prefab_entry** prefab_entries;
+    size_t prefab_count;
+    size_t prefab_capacity;
     henka_texture* white_texture;
     henka_texture* error_texture;
     henka_texture* normal_texture;

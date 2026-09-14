@@ -6,6 +6,7 @@
 #include <henka/assets.h>
 #include <henka/engine.h>
 #include <henka/memory.h>
+#include <henka/prefab.h>
 
 #include "../engine/src/core/checked.h"
 #include "../engine/src/core/memory_internal.h"
@@ -35,6 +36,79 @@ static bool henka_test_write_file(
     success = fwrite(data, 1U, size, file) == size;
     if (fclose(file) != 0) success = false;
     return success;
+}
+
+static void henka_test_prefab_asset_manager_registration(void)
+{
+    const char* project_root = "build/test_tmp";
+    const char* relative_path = "prefab-manager-registration.hprefab";
+    const char* file_path = "build/test_tmp/prefab-manager-registration.hprefab";
+    henka_scene* source = NULL;
+    henka_prefab* prefab = NULL;
+    henka_prefab* managed = NULL;
+    henka_prefab* managed_again = NULL;
+    henka_prefab* preserved_output;
+    henka_asset_manager* manager = NULL;
+    henka_engine engine;
+    henka_shader inline_shader;
+    henka_asset_metadata metadata;
+    henka_entity root;
+
+    memset(&engine, 0, sizeof(engine));
+    memset(&inline_shader, 0, sizeof(inline_shader));
+    engine.asset_base_path = (char*)project_root;
+    manager = henka_calloc(1U, sizeof(*manager));
+    HENKA_TEST_ASSERT(manager != NULL);
+    manager->engine = &engine;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
+    root = henka_scene_create_entity_named(source, "Manager Prefab Root");
+    HENKA_TEST_ASSERT(root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_prefab_create_from_scene(
+        source, root, &prefab) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_set_asset_path(
+        prefab, relative_path) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_save_file(
+        prefab, NULL, project_root, relative_path) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_assets_load_prefab_asset(
+        manager, relative_path, &inline_shader, &managed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(managed != NULL);
+    preserved_output = managed;
+    HENKA_TEST_ASSERT(henka_assets_load_prefab_asset(
+        manager, "missing-prefab.hprefab", &inline_shader,
+        &preserved_output) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(preserved_output == managed);
+    preserved_output = NULL;
+    HENKA_TEST_ASSERT(henka_assets_load_prefab_asset(
+        manager, "missing-prefab.hprefab", &inline_shader,
+        &preserved_output) == HENKA_ERROR_UNKNOWN);
+    HENKA_TEST_ASSERT(preserved_output == NULL);
+    HENKA_TEST_ASSERT(henka_assets_load_prefab_asset(
+        manager, "./prefab-manager-registration.hprefab", &inline_shader,
+        &managed_again) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(managed_again == managed);
+    HENKA_TEST_ASSERT(henka_assets_get_prefab_metadata(
+        manager, managed, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.type == HENKA_ASSET_TYPE_PREFAB);
+    HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback);
+    HENKA_TEST_ASSERT(!metadata.reload_supported);
+    HENKA_TEST_ASSERT(strcmp(metadata.source_path, relative_path) == 0);
+    HENKA_TEST_ASSERT(strcmp(metadata.display_name,
+        "prefab-manager-registration.hprefab") == 0);
+    HENKA_TEST_ASSERT(henka_assets_get_prefab_metadata_for_path(
+        manager, relative_path, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_get_metadata_count(manager) == 1U);
+    HENKA_TEST_ASSERT(henka_assets_get_metadata_at_index(
+        manager, 0U, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.type == HENKA_ASSET_TYPE_PREFAB);
+    HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(
+        HENKA_ASSET_TYPE_PREFAB), "Prefab") == 0);
+
+    remove(file_path);
+    henka_asset_manager_destroy(manager);
+    henka_prefab_destroy(prefab);
+    henka_scene_destroy(source);
 }
 
 static void henka_test_material_load_does_not_populate_mesh_cache(void)
@@ -1603,6 +1677,7 @@ static void henka_test_shader_and_audio_loaders_preserve_nonempty_output(void)
 
 void henka_test_assets(void)
 {
+    henka_test_prefab_asset_manager_registration();
     henka_test_material_load_does_not_populate_mesh_cache();
     henka_test_material_dependency_failure_is_transactional();
     henka_test_gltf_scene_dependency_failure_is_transactional();

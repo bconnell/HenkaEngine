@@ -18,6 +18,7 @@ typedef struct henka_shader henka_shader;
 typedef struct henka_texture henka_texture;
 typedef struct henka_material_asset henka_material_asset;
 typedef struct henka_gltf_scene_asset henka_gltf_scene_asset;
+typedef struct henka_prefab henka_prefab;
 
 typedef enum henka_asset_type
 {
@@ -27,7 +28,8 @@ typedef enum henka_asset_type
     HENKA_ASSET_TYPE_MESH,
     HENKA_ASSET_TYPE_MATERIAL,
     HENKA_ASSET_TYPE_GLTF_SCENE,
-    HENKA_ASSET_TYPE_AUDIO
+    HENKA_ASSET_TYPE_AUDIO,
+    HENKA_ASSET_TYPE_PREFAB
 } henka_asset_type;
 
 typedef struct henka_asset_metadata
@@ -506,6 +508,17 @@ henka_result henka_assets_reload_gltf_scene_asset(
     henka_asset_manager* manager,
     const char* path,
     henka_gltf_scene_asset** out_asset);
+/* Persisted prefab assets are loaded through the existing asset-manager
+ * authority. The returned prefab is borrowed and remains manager-owned;
+ * equivalent canonical paths return the same stable pointer. An inline
+ * material shader is required only when the prefab contains inline material
+ * values. The manager currently provides load/cache ownership; source-file
+ * refresh is a separate explicit operation. */
+henka_result henka_assets_load_prefab_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_shader* inline_material_shader,
+    henka_prefab** out_prefab);
 /* Instantiated entities borrow the scene asset's primitive mesh wrappers.
  * Successful reload preserves prior wrappers until the owning scene asset is
  * destroyed, so existing entities do not retain dangling mesh pointers. */
@@ -576,6 +589,14 @@ henka_result henka_assets_get_audio_metadata_for_path(
     const char* path,
     henka_asset_metadata* out_metadata);
 henka_result henka_assets_get_material_metadata_for_path(
+    const henka_asset_manager* manager,
+    const char* path,
+    henka_asset_metadata* out_metadata);
+henka_result henka_assets_get_prefab_metadata(
+    const henka_asset_manager* manager,
+    const henka_prefab* prefab,
+    henka_asset_metadata* out_metadata);
+henka_result henka_assets_get_prefab_metadata_for_path(
     const henka_asset_manager* manager,
     const char* path,
     henka_asset_metadata* out_metadata);

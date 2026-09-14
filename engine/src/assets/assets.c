@@ -1,6 +1,7 @@
 #include "henka_internal.h"
 
 #include <henka/model.h>
+#include <henka/prefab.h>
 
 #include <ctype.h>
 #include <limits.h>
@@ -684,6 +685,8 @@ const char* henka_assets_get_type_label(henka_asset_type type)
             return "glTF Scene";
         case HENKA_ASSET_TYPE_AUDIO:
             return "Audio";
+        case HENKA_ASSET_TYPE_PREFAB:
+            return "Prefab";
         case HENKA_ASSET_TYPE_UNKNOWN:
         default:
             return "Unknown";
@@ -860,6 +863,39 @@ static henka_result henka_asset_manager_grow_gltf_scenes(henka_asset_manager* ma
     if (entries == NULL) return HENKA_ERROR_OUT_OF_MEMORY;
     manager->gltf_scene_entries = entries;
     manager->gltf_scene_capacity = new_capacity;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_asset_manager_grow_prefabs(
+    henka_asset_manager* manager)
+{
+    size_t allocation_size;
+    size_t new_capacity;
+    size_t required;
+    henka_asset_prefab_entry** entries;
+
+    if (manager == NULL ||
+        !henka_checked_size_add(manager->prefab_count, 1U, &required) ||
+        !henka_checked_capacity(
+            manager->prefab_capacity,
+            required,
+            4U,
+            HENKA_MAX_ASSET_CACHE_ENTRIES,
+            &new_capacity) ||
+        !henka_checked_size_multiply(
+            new_capacity, sizeof(*entries), &allocation_size))
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    entries = henka_realloc(manager->prefab_entries, allocation_size);
+    if (entries == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    manager->prefab_entries = entries;
+    manager->prefab_capacity = new_capacity;
     return HENKA_SUCCESS;
 }
 
@@ -1112,6 +1148,38 @@ static henka_gltf_scene_asset* henka_asset_manager_find_gltf_scene_entry(
             return manager->gltf_scene_entries[index];
     }
     return NULL;
+}
+
+static henka_asset_prefab_entry*
+henka_asset_manager_find_prefab_entry(
+    henka_asset_manager* manager,
+    const char* key)
+{
+    size_t index;
+
+    if (manager == NULL || key == NULL)
+    {
+        return NULL;
+    }
+
+    for (index = 0U; index < manager->prefab_count; ++index)
+    {
+        if (strcmp(manager->prefab_entries[index]->key, key) == 0)
+        {
+            return manager->prefab_entries[index];
+        }
+    }
+
+    return NULL;
+}
+
+static const henka_asset_prefab_entry*
+henka_asset_manager_find_prefab_entry_const(
+    const henka_asset_manager* manager,
+    const char* key)
+{
+    return henka_asset_manager_find_prefab_entry(
+        (henka_asset_manager*)manager, key);
 }
 
 static void henka_assets_destroy_gltf_scene_payload(henka_gltf_scene_asset* asset)
@@ -1393,6 +1461,18 @@ void henka_asset_manager_destroy(
         henka_free(manager->audio_entries[index].display_name);
     }
 
+    /* Prefab entries borrow manager-owned mesh/material dependencies. Destroy
+     * the snapshots before those authorities so no borrowed pointer can be
+     * observed after its owner has gone away. */
+    for (index = 0U; index < manager->prefab_count; ++index)
+    {
+        henka_prefab_destroy(manager->prefab_entries[index]->prefab);
+        henka_free(manager->prefab_entries[index]->key);
+        henka_free(manager->prefab_entries[index]->source_path);
+        henka_free(manager->prefab_entries[index]->display_name);
+        henka_free(manager->prefab_entries[index]);
+    }
+
     for (index = 0U; index < manager->material_count; ++index)
     {
         henka_free(manager->material_entries[index]->key);
@@ -1416,6 +1496,7 @@ void henka_asset_manager_destroy(
     henka_free(manager->audio_entries);
     henka_free(manager->material_entries);
     henka_free(manager->gltf_scene_entries);
+    henka_free(manager->prefab_entries);
     henka_mesh_destroy_owned(manager->fallback_mesh);
     henka_texture_destroy_owned(manager->white_texture);
     henka_texture_destroy_owned(manager->error_texture);
@@ -5202,6 +5283,111 @@ henka_result henka_assets_load_gltf_scene_asset(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_load_prefab_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_shader* inline_material_shader,
+    henka_prefab** out_prefab)
+{
+    char* key = NULL;
+    char* source_path = NULL;
+    char* display_name = NULL;
+    henka_asset_prefab_entry* entry = NULL;
+    henka_prefab* prefab = NULL;
+    henka_result result;
+
+    if (manager == NULL || manager->engine == NULL || path == NULL ||
+        out_prefab == NULL || *out_prefab != NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_assets_normalize_source_path(path, &source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        return result;
+    }
+
+    entry = henka_asset_manager_find_prefab_entry(manager, key);
+    if (entry != NULL)
+    {
+        *out_prefab = entry->prefab;
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_SUCCESS;
+    }
+
+    result = henka_prefab_load_file(
+        manager,
+        inline_material_shader,
+        henka_engine_get_asset_base_path(manager->engine),
+        source_path,
+        &prefab);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        henka_free(source_path);
+        return result;
+    }
+
+    display_name = henka_asset_copy_display_name(source_path);
+    if (display_name == NULL)
+    {
+        henka_prefab_destroy(prefab);
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    entry = henka_calloc(1U, sizeof(*entry));
+    if (entry == NULL)
+    {
+        henka_free(display_name);
+        henka_prefab_destroy(prefab);
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    if (manager->prefab_count == manager->prefab_capacity)
+    {
+        result = henka_asset_manager_grow_prefabs(manager);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(entry);
+            henka_free(display_name);
+            henka_prefab_destroy(prefab);
+            henka_free(key);
+            henka_free(source_path);
+            return result;
+        }
+    }
+
+    entry->key = key;
+    entry->source_path = source_path;
+    entry->display_name = display_name;
+    entry->prefab = prefab;
+    entry->metadata.type = HENKA_ASSET_TYPE_PREFAB;
+    entry->metadata.source_path = source_path;
+    entry->metadata.display_name = display_name;
+    entry->metadata.loaded = true;
+    entry->metadata.fallback = false;
+    entry->metadata.reload_supported = false;
+    henka_asset_set_summary(
+        &entry->metadata,
+        "Persisted prefab loaded through the project asset-manager authority.",
+        "");
+    manager->prefab_entries[manager->prefab_count++] = entry;
+    *out_prefab = prefab;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_assets_reload_gltf_scene_asset(
     henka_asset_manager* manager,
     const char* path,
@@ -5962,7 +6148,9 @@ size_t henka_assets_get_metadata_count(const henka_asset_manager* manager)
         return 0U;
     }
 
-    return manager->shader_count + manager->texture_count + manager->mesh_count + manager->audio_count + manager->material_count + manager->gltf_scene_count;
+    return manager->shader_count + manager->texture_count + manager->mesh_count +
+        manager->audio_count + manager->material_count + manager->gltf_scene_count +
+        manager->prefab_count;
 }
 
 henka_result henka_assets_get_metadata_at_index(
@@ -6018,6 +6206,13 @@ henka_result henka_assets_get_metadata_at_index(
     if (index < manager->gltf_scene_count)
     {
         *out_metadata = manager->gltf_scene_entries[index]->metadata;
+        return HENKA_SUCCESS;
+    }
+
+    index -= manager->gltf_scene_count;
+    if (index < manager->prefab_count)
+    {
+        *out_metadata = manager->prefab_entries[index]->metadata;
         return HENKA_SUCCESS;
     }
 
@@ -6387,6 +6582,71 @@ henka_result henka_assets_get_material_metadata_for_path(
     }
 
     entry = henka_asset_manager_find_material_entry_const(manager, key);
+    henka_free(key);
+    if (entry == NULL)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    *out_metadata = entry->metadata;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_get_prefab_metadata(
+    const henka_asset_manager* manager,
+    const henka_prefab* prefab,
+    henka_asset_metadata* out_metadata)
+{
+    size_t index;
+
+    if (out_metadata != NULL)
+    {
+        memset(out_metadata, 0, sizeof(*out_metadata));
+    }
+    if (manager == NULL || prefab == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < manager->prefab_count; ++index)
+    {
+        const henka_asset_prefab_entry* entry = manager->prefab_entries[index];
+        if (entry->prefab == prefab)
+        {
+            *out_metadata = entry->metadata;
+            return HENKA_SUCCESS;
+        }
+    }
+
+    return HENKA_ERROR_UNKNOWN;
+}
+
+henka_result henka_assets_get_prefab_metadata_for_path(
+    const henka_asset_manager* manager,
+    const char* path,
+    henka_asset_metadata* out_metadata)
+{
+    char* key;
+    const henka_asset_prefab_entry* entry;
+    henka_result result;
+
+    if (out_metadata != NULL)
+    {
+        memset(out_metadata, 0, sizeof(*out_metadata));
+    }
+    if (manager == NULL || path == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    key = NULL;
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    entry = henka_asset_manager_find_prefab_entry_const(manager, key);
     henka_free(key);
     if (entry == NULL)
     {
