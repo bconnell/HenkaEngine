@@ -2334,6 +2334,54 @@ henka_result sandbox3d_game_authoring_register_duplicate_entity(
         authoring, duplicate_entity, out_document_id);
 }
 
+henka_result sandbox3d_game_authoring_create_prefab_asset(
+    sandbox3d_game_authoring* authoring,
+    henka_entity root_entity,
+    const char* project_root,
+    const char* relative_path)
+{
+    henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object object;
+    henka_prefab* prefab = NULL;
+    henka_result result;
+
+    if (authoring == NULL || authoring->scene == NULL ||
+        root_entity == HENKA_INVALID_ENTITY || project_root == NULL ||
+        project_root[0] == '\0' || relative_path == NULL ||
+        relative_path[0] == '\0' ||
+        sandbox3d_game_authoring_is_play_locked(authoring) ||
+        !henka_scene_is_entity_valid(authoring->scene, root_entity) ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, root_entity, &document_id, &object) != HENKA_SUCCESS ||
+        document_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        object.source.prefab_instance_root_id !=
+            HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        object.source.prefab_source_id !=
+            HENKA_INVALID_SCENE_DOCUMENT_PREFAB_SOURCE_ID ||
+        object.source.prefab_source_revision != 0U ||
+        object.source.prefab_local_transform_override)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_prefab_create_from_scene(
+        authoring->scene, root_entity, &prefab);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_prefab_set_asset_path(prefab, relative_path);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_prefab_save_file(
+            prefab,
+            authoring->project_assets,
+            project_root,
+            relative_path);
+    }
+    henka_prefab_destroy(prefab);
+    return result;
+}
+
 henka_result sandbox3d_game_authoring_unregister_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity)

@@ -385,6 +385,11 @@ history remain open.
   prefab-instance member is rejected until explicit instance-duplication
   semantics exist; its prefab provenance is not silently flattened into an
   ordinary object.
+- The bound-object Authoring panel exposes a confined Create Prefab action.
+  It captures the selected ordinary scene root through the production prefab
+  authority and saves `prefabs/object_<document-id>.hprefab` without mutating
+  the live Scene Document. Prefab-derived members are rejected until explicit
+  instance-duplication semantics exist.
 - Reloading that project validates the persisted prefab source path, revision,
   membership, and durable source IDs against the already materialized live
   instance, then reapplies the document-authored transform and hierarchy

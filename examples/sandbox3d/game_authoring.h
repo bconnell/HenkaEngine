@@ -76,6 +76,14 @@ henka_result sandbox3d_game_authoring_register_duplicate_entity(
     henka_entity source_entity,
     henka_entity duplicate_entity,
     henka_scene_document_id* out_document_id);
+/* Captures one ordinary authored scene root into a confined prefab asset. The
+ * source document and live scene are unchanged; prefab-instance members are
+ * rejected until explicit instance-duplication semantics exist. */
+henka_result sandbox3d_game_authoring_create_prefab_asset(
+    sandbox3d_game_authoring* authoring,
+    henka_entity root_entity,
+    const char* project_root,
+    const char* relative_path);
 /* Removes the binding and promotes direct children to authored roots, matching
  * the runtime scene's parent-destruction semantics.  Any still-live child is
  * detached from the runtime scene before its authored parent link is cleared. */

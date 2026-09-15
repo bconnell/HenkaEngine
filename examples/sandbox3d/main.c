@@ -25566,6 +25566,7 @@ static void sandbox3d_draw_object_details_panel(
     char interaction_text[64];
     char lock_action_id[64];
     char lock_action_label[32];
+    char prefab_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
     char physics_text[96];
     char position_text[64];
     char reset_action_id[64];
@@ -26994,6 +26995,80 @@ details_group_authoring:
                     native_material_owned
                         ? "Authoring mesh + material instance"
                         : "Authoring mesh (per-object user slot)");
+                if (authored_object_available &&
+                    sandbox3d_details_flow_next_row(
+                        state,
+                        flow_desc.bounds,
+                        28.0f,
+                        1U,
+                        &context_move_row) &&
+                    context_move_row.width >= 190.0f)
+                {
+                    const bool prefab_instance =
+                        authored_object.source.prefab_instance_root_id !=
+                            HENKA_INVALID_SCENE_DOCUMENT_ID ||
+                        authored_object.source.prefab_source_id !=
+                            HENKA_INVALID_SCENE_DOCUMENT_PREFAB_SOURCE_ID ||
+                        authored_object.source.prefab_source_revision != 0U ||
+                        authored_object.source.prefab_local_transform_override;
+                    const int path_written = snprintf(
+                        prefab_path,
+                        sizeof(prefab_path),
+                        "prefabs/object_%llu.hprefab",
+                        (unsigned long long)authored_document_id);
+                    (void)henka_ui_label_colored(
+                        state->ui,
+                        context_move_row.x,
+                        context_move_row.y + 5.0f,
+                        0.85f,
+                        "Prefab",
+                        HENKA_UI_COLOR_INFO);
+                    if (prefab_instance)
+                    {
+                        (void)henka_ui_label_colored(
+                            state->ui,
+                            context_move_row.x + 64.0f,
+                            context_move_row.y + 5.0f,
+                            0.85f,
+                            "Prefab Instance",
+                            HENKA_UI_COLOR_MUTED);
+                    }
+                    else if (henka_ui_button(
+                                 state->ui,
+                                 "authoring_create_prefab",
+                                 (henka_ui_rect){
+                                     context_move_row.x + 64.0f,
+                                     context_move_row.y,
+                                     126.0f,
+                                     24.0f},
+                                 "Create Prefab"))
+                    {
+                        const char* project_root =
+                            henka_engine_get_user_data_base_path(engine);
+                        henka_result prefab_result = HENKA_ERROR_INVALID_ARGUMENT;
+                        if (path_written >= 0 &&
+                            (size_t)path_written < sizeof(prefab_path) &&
+                            project_root != NULL)
+                        {
+                            prefab_result =
+                                sandbox3d_game_authoring_create_prefab_asset(
+                                    state->game_authoring,
+                                    entity,
+                                    project_root,
+                                    prefab_path);
+                        }
+                        sandbox3d_set_statusf(
+                            state,
+                            prefab_result != HENKA_SUCCESS,
+                            false,
+                            prefab_result == HENKA_SUCCESS
+                                ? "Prefab asset saved: %s."
+                                : "Prefab asset was not saved: %s.",
+                            prefab_result == HENKA_SUCCESS
+                                ? prefab_path
+                                : henka_result_to_string(prefab_result));
+                    }
+                }
                 if (selected_component_count > 0U &&
                     sandbox3d_details_flow_next_row(
                         state,

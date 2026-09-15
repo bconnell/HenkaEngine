@@ -18,6 +18,80 @@
 #include "../engine/src/core/memory_internal.h"
 #include "../engine/src/scene/scene_internal.h"
 
+static bool test_create_prefab_asset_from_authored_scene(void)
+{
+    const char* project_root = "build/test_tmp";
+    const char* relative_path = "prefab_create_from_authoring.hprefab";
+    const char* file_path = "build/test_tmp/prefab_create_from_authoring.hprefab";
+    henka_scene* scene = NULL;
+    henka_scene* target_scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_prefab* loaded_prefab = NULL;
+    henka_entity root = HENKA_INVALID_ENTITY;
+    henka_entity instance_root = HENKA_INVALID_ENTITY;
+    henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_object_info info;
+    bool success = false;
+
+    (void)remove(file_path);
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        (root = henka_scene_create_entity_named(scene, "Authoring Prefab Root")) ==
+            HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create(scene, "authoring_prefab_scene.hscene", &authoring) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, root, &document_id) != HENKA_SUCCESS ||
+        document_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_create_prefab_asset(
+            authoring, root, project_root, relative_path) != HENKA_SUCCESS ||
+        henka_prefab_load_file(
+            NULL, NULL, project_root, relative_path, &loaded_prefab) != HENKA_SUCCESS ||
+        loaded_prefab == NULL ||
+        henka_prefab_get_entity_count(loaded_prefab) != 1U ||
+        henka_scene_create(&target_scene) != HENKA_SUCCESS ||
+        henka_prefab_instantiate(
+            loaded_prefab,
+            target_scene,
+            henka_transform_identity(),
+            &instance_root) != HENKA_SUCCESS ||
+        henka_scene_get_entity_info(target_scene, instance_root, &info) != HENKA_SUCCESS ||
+        strcmp(info.name, "Authoring Prefab Root") != 0)
+    {
+        goto cleanup;
+    }
+
+    henka_scene_destroy_entity(scene, root);
+    root = HENKA_INVALID_ENTITY;
+    if (sandbox3d_game_authoring_create_prefab_asset(
+            authoring, root, project_root, relative_path) != HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        goto cleanup;
+    }
+    henka_prefab_destroy(loaded_prefab);
+    loaded_prefab = NULL;
+    if (henka_prefab_load_file(
+            NULL, NULL, project_root, relative_path, &loaded_prefab) != HENKA_SUCCESS ||
+        loaded_prefab == NULL ||
+        henka_prefab_get_entity_count(loaded_prefab) != 1U)
+    {
+        goto cleanup;
+    }
+    success = true;
+
+cleanup:
+    henka_prefab_destroy(loaded_prefab);
+    if (target_scene != NULL && instance_root != HENKA_INVALID_ENTITY &&
+        henka_scene_is_entity_valid(target_scene, instance_root))
+    {
+        henka_scene_destroy_entity(target_scene, instance_root);
+    }
+    henka_scene_destroy(target_scene);
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove(file_path);
+    return success;
+}
+
 static bool test_registered_duplicate_enters_document(void)
 {
     const char* relative_path = "game_authoring_duplicate.hscene";
@@ -2153,6 +2227,11 @@ int main(void)
     henka_result parent_result;
     int exit_code = 1;
 
+    if (!test_create_prefab_asset_from_authored_scene())
+    {
+        fprintf(stderr, "game authoring prefab creation test failed\n");
+        return 1;
+    }
     if (!test_registered_duplicate_enters_document())
     {
         fprintf(stderr, "game authoring duplicate registration test failed\n");
