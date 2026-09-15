@@ -1296,11 +1296,100 @@ cleanup:
     return success;
 }
 
-int main(void)
+
+static bool external_prefab_workflow(void)
+{
+    const char* relative_path = "external_prefab_workflow.hprefab";
+    henka_scene* source_scene = NULL;
+    henka_scene* target_scene = NULL;
+    henka_prefab* source_prefab = NULL;
+    henka_prefab* loaded_prefab = NULL;
+    henka_prefab_instance* instance = NULL;
+    henka_prefab_instance* duplicate = NULL;
+    henka_entity source_root = HENKA_INVALID_ENTITY;
+    henka_entity source_child = HENKA_INVALID_ENTITY;
+    henka_entity instance_child = HENKA_INVALID_ENTITY;
+    henka_entity duplicate_root = HENKA_INVALID_ENTITY;
+    henka_entity duplicate_child = HENKA_INVALID_ENTITY;
+    henka_prefab_source_id child_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+    size_t child_index = SIZE_MAX;
+    bool has_override = false;
+    henka_transform override_transform;
+    bool success = false;
+
+    (void)remove(relative_path);
+    if (henka_scene_create(&source_scene) != HENKA_SUCCESS ||
+        (source_root = henka_scene_create_entity_named(source_scene, "External Prefab Root")) == HENKA_INVALID_ENTITY ||
+        (source_child = henka_scene_create_entity_named(source_scene, "External Prefab Child")) == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_parent(
+            source_scene, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        henka_scene_set_entity_local_transform(
+            source_scene,
+            source_child,
+            (henka_transform){{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}}) != HENKA_SUCCESS ||
+        henka_prefab_create_from_scene(source_scene, source_root, &source_prefab) != HENKA_SUCCESS ||
+        henka_prefab_set_asset_path(source_prefab, relative_path) != HENKA_SUCCESS ||
+        henka_prefab_find_source_index(source_prefab, source_child, &child_index) != HENKA_SUCCESS ||
+        henka_prefab_get_source_id_at(source_prefab, child_index, &child_source_id) != HENKA_SUCCESS ||
+        henka_prefab_save_file(source_prefab, NULL, ".", relative_path) != HENKA_SUCCESS ||
+        henka_prefab_load_file(NULL, NULL, ".", relative_path, &loaded_prefab) != HENKA_SUCCESS ||
+        loaded_prefab == NULL ||
+        henka_scene_create(&target_scene) != HENKA_SUCCESS ||
+        henka_prefab_instantiate_with_instance(
+            loaded_prefab, target_scene, henka_transform_identity(), &instance) != HENKA_SUCCESS ||
+        henka_prefab_instance_get_entity_for_source_id(
+            instance, child_source_id, &instance_child) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    override_transform = (henka_transform){
+        {2.0f, 3.0f, 4.0f},
+        {0.0f, 0.0f, 0.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f}};
+    if (henka_prefab_instance_set_local_transform_override(
+            instance, child_source_id, override_transform) != HENKA_SUCCESS ||
+        henka_prefab_instance_duplicate(instance, &duplicate) != HENKA_SUCCESS ||
+        duplicate == NULL ||
+        henka_prefab_instance_get_root_entity(duplicate, &duplicate_root) != HENKA_SUCCESS ||
+        henka_prefab_instance_get_entity_for_source_id(
+            duplicate, child_source_id, &duplicate_child) != HENKA_SUCCESS ||
+        duplicate_root == HENKA_INVALID_ENTITY ||
+        duplicate_child == HENKA_INVALID_ENTITY ||
+        duplicate_child == instance_child ||
+        henka_prefab_instance_get_local_transform_override(
+            duplicate, child_source_id, &has_override, &override_transform) != HENKA_SUCCESS ||
+        !has_override ||
+        override_transform.position.x != 2.0f ||
+        override_transform.position.y != 3.0f ||
+        override_transform.position.z != 4.0f ||
+        henka_prefab_instance_detach(&duplicate) != HENKA_SUCCESS ||
+        duplicate != NULL ||
+        !henka_scene_is_entity_valid(target_scene, duplicate_root) ||
+        !henka_scene_is_entity_valid(target_scene, duplicate_child) ||
+        henka_prefab_instance_destroy_entities(instance) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    success = true;
+    printf("External public Prefab save/load/instantiate/override/duplicate/detach workflow passed.\n");
+
+cleanup:
+    henka_prefab_instance_destroy(duplicate);
+    henka_prefab_instance_destroy(instance);
+    henka_prefab_destroy(loaded_prefab);
+    henka_prefab_destroy(source_prefab);
+    henka_scene_destroy(target_scene);
+    henka_scene_destroy(source_scene);
+    (void)remove(relative_path);
+    return success;
+}int main(void)
 {
     if (!external_terrain_workflow() ||
         !external_graphical_terrain_workflow() ||
         !external_audio_workflow() ||
+        !external_prefab_workflow() ||
         !external_scripting_workflow())
     {
         return 1;

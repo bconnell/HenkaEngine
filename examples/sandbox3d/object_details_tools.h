@@ -7,6 +7,7 @@
 #include <henka/assets.h>
 #include <henka/result.h>
 #include <henka/scene.h>
+#include <henka/scene_document.h>
 
 typedef enum sandbox3d_material_access
 {
@@ -63,7 +64,29 @@ void sandbox3d_destroy_material_editor_bindings(
     size_t binding_count);
 
 
-typedef struct sandbox3d_selected_material_display
+
+typedef struct sandbox3d_object_details_prefab_state
+{
+    bool is_prefab_instance;
+    bool can_create_prefab;
+    bool can_apply_instance_edits;
+    bool can_revert_to_prefab;
+    bool can_unpack;
+    bool can_destroy_instance;
+    henka_scene_document_id instance_root_id;
+    uint64_t source_id;
+    uint64_t source_revision;
+    char asset_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
+} sandbox3d_object_details_prefab_state;
+
+/* Resolves the Scene Document's canonical Prefab provenance into editor action
+ * availability. Ordinary authored objects expose Create Prefab. Complete,
+ * valid Prefab provenance exposes instance lifecycle actions. Partial or
+ * contradictory provenance fails closed instead of presenting destructive
+ * controls for an ambiguous object. */
+henka_result sandbox3d_object_details_resolve_prefab_state(
+    const henka_scene_document_object* object,
+    sandbox3d_object_details_prefab_state* out_state);typedef struct sandbox3d_selected_material_display
 {
     char material_slot[24];
     char name[64];

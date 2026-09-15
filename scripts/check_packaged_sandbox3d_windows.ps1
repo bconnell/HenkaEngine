@@ -1133,6 +1133,17 @@ if ($NonInteractive) {
     }
 
     Write-Output "[pass] Packaged Audio fixture smoke completed."
+    Write-Step "Running packaged Prefab public API smoke"
+    $prefabSmoke = Invoke-HenkaNativeCapture `
+        -FilePath $packagedExe `
+        -Arguments @("--prefab-smoke-test") `
+        -WorkingDirectory $packageRoot `
+        -Label "Run packaged Prefab public API smoke"
+
+    if ($prefabSmoke.Stdout -notmatch "Prefab package smoke: public save/load/instantiate/override/duplicate/detach workflow passed\.") {
+        throw "The packaged Prefab smoke test did not prove the public Prefab workflow."
+    }
+    Write-Output "[pass] Packaged Prefab public API smoke completed."
 
     Write-Step "Running bounded packaged Terrain stream stress"
     $terrainStreamStress = Invoke-HenkaNativeCapture `

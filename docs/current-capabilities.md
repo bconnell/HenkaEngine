@@ -401,8 +401,9 @@ history remain open.
   IDs, and Scene Document provenance. The Game Authoring coordinator also places
   a mapped instance under a bound ordinary parent using a local root transform;
   prefab-derived parents are rejected, and the Asset Browser exposes this as
-  Place Under Selected. Placement remains a bounded first-step authoring action;
-  per-instance override persistence and broader placement controls remain open.
+  Place Under Selected. Placement remains the bounded placement authority;
+  supported durable instance overrides, Apply/Revert, Unpack, and grouped
+  Delete are owned by Game Authoring.
 - Ordinary Sandbox Delete recognizes a mapped prefab member and routes through
   coordinator-owned group teardown. The complete mapped instance is removed,
   the manager-owned prefab asset and other instances remain available, and a
@@ -429,12 +430,13 @@ history remain open.
   source; Revert restores the current source values. Both operations participate
   in the existing Game Authoring undo/redo stack, and replay reconciles the
   live Prefab mapping rather than creating a second history authority.
-  Complete editor controls and packaged/external Prefab workflows remain in
-  progress.
-  The current runtime snapshot, persisted asset, transactional presentation,
-  source-mesh, and non-overridden manager-owned material-asset refresh, save/
-  reload, and refresh APIs are a foundation rather than a complete prefab
-  authoring system.
+  Editor-native Create/Place plus selected-instance Apply, Revert, Unpack, and
+  Delete controls now reach the existing Prefab/Game Authoring authorities.
+  The packaged Sandbox and external game template also exercise the public
+  Prefab save/load/instantiate/override/duplicate/detach workflow. Within the
+  declared bounded 3D Prefab scope, the runtime, editor, persistence, package,
+  and external-consumer paths form the available workflow. Nested Prefab
+  composition and cross-project asset relocation remain future expansion.
 
 ## Modeling / Content Authoring
 

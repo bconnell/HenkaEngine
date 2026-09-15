@@ -290,7 +290,71 @@ henka_result sandbox3d_resolve_selected_material(
     return HENKA_SUCCESS;
 }
 
-static const char* sandbox3d_material_alpha_mode_label(
+
+henka_result sandbox3d_object_details_resolve_prefab_state(
+    const henka_scene_document_object* object,
+    sandbox3d_object_details_prefab_state* out_state)
+{
+    bool prefab_asset_source;
+    bool prefab_provenance_present;
+    int written;
+
+    if (out_state != NULL)
+    {
+        memset(out_state, 0, sizeof(*out_state));
+        out_state->instance_root_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+        out_state->source_id = HENKA_INVALID_SCENE_DOCUMENT_PREFAB_SOURCE_ID;
+    }
+    if (object == NULL || out_state == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    prefab_asset_source =
+        object->source.kind == HENKA_SCENE_DOCUMENT_SOURCE_ASSET &&
+        object->source.asset_kind == HENKA_SCENE_DOCUMENT_ASSET_PREFAB;
+    prefab_provenance_present =
+        prefab_asset_source ||
+        object->source.prefab_instance_root_id != HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        object->source.prefab_source_id != HENKA_INVALID_SCENE_DOCUMENT_PREFAB_SOURCE_ID ||
+        object->source.prefab_source_revision != 0U ||
+        object->source.prefab_local_transform_override;
+
+    if (!prefab_provenance_present)
+    {
+        out_state->can_create_prefab = true;
+        return HENKA_SUCCESS;
+    }
+
+    if (!prefab_asset_source || object->source.path[0] == '\0' ||
+        object->source.prefab_instance_root_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        object->source.prefab_source_id == HENKA_INVALID_SCENE_DOCUMENT_PREFAB_SOURCE_ID ||
+        object->source.prefab_source_revision == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    written = snprintf(
+        out_state->asset_path,
+        sizeof(out_state->asset_path),
+        "%s",
+        object->source.path);
+    if (written < 0 || (size_t)written >= sizeof(out_state->asset_path))
+    {
+        memset(out_state, 0, sizeof(*out_state));
+        return HENKA_ERROR_LIMIT;
+    }
+
+    out_state->is_prefab_instance = true;
+    out_state->can_apply_instance_edits = true;
+    out_state->can_revert_to_prefab = true;
+    out_state->can_unpack = true;
+    out_state->can_destroy_instance = true;
+    out_state->instance_root_id = object->source.prefab_instance_root_id;
+    out_state->source_id = object->source.prefab_source_id;
+    out_state->source_revision = object->source.prefab_source_revision;
+    return HENKA_SUCCESS;
+}static const char* sandbox3d_material_alpha_mode_label(
     henka_material_alpha_mode mode)
 {
     switch (mode)

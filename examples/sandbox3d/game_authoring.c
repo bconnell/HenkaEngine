@@ -3102,8 +3102,8 @@ henka_result sandbox3d_game_authoring_unpack_prefab_instance(
 
     for (index = 0U; index < entity_count; ++index)
     {
-        henka_scene_document_object current_object;
-        henka_transform local_transform;
+        henka_scene_document_object current_object = {0};
+        henka_transform local_transform = henka_transform_identity();
 
         result = henka_prefab_instance_get_entity_at(
             instance, index, &entities[index]);

@@ -1025,3 +1025,15 @@ The packaged Sandbox currently opens a console window. In-window utilities and s
 More UI detail is available in [ui.md](../ui.md).
 
 For step-by-step manual verification, use [qa/sandbox3d-manual-checklist.md](../qa/sandbox3d-manual-checklist.md).
+## Prefab Authoring
+
+The bounded Prefab workflow is available through the normal editor surfaces:
+
+- select an ordinary authored object and use **Object Details > Authoring > Create Prefab**;
+- use **Asset Browser > Place Prefab** or **Place Under Selected** to create a mapped instance;
+- select a Prefab member and use **Apply Edits** to persist supported transform/material edits as instance-owned Scene Document overrides;
+- use **Revert** to restore supported values from the current Prefab source;
+- use **Unpack** to keep the live authored objects while removing Prefab provenance;
+- use **Delete Instance** to remove the complete mapped instance.
+
+Apply does not silently rewrite the reusable `.hprefab` source. Instance Apply/Revert participates in the existing Game Authoring undo/redo authority. Unsupported or ambiguous provenance fails closed.

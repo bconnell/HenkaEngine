@@ -27044,9 +27044,17 @@ details_group_materials:
 
 details_group_authoring:
     {
+    sandbox3d_object_details_prefab_state prefab_authoring_state = {0};
+    const bool prefab_authoring_state_valid =
+        authored_object_available &&
+        sandbox3d_object_details_resolve_prefab_state(
+            &authored_object,
+            &prefab_authoring_state) == HENKA_SUCCESS;
     const bool authoring_active =
         state->authoring_object != NULL &&
         entity != HENKA_INVALID_ENTITY &&
+        !(prefab_authoring_state_valid &&
+          prefab_authoring_state.is_prefab_instance) &&
         sandbox3d_entities_share_selection_owner(
             state,
             entity,
@@ -27060,6 +27068,218 @@ details_group_authoring:
         details_display_order,
         &state->editor_ui.details_authoring_expanded,
         &disclosure_changed);
+    if (!authoring_active &&
+        state->editor_ui.details_authoring_expanded &&
+        prefab_authoring_state_valid)
+    {
+        if (prefab_authoring_state.is_prefab_instance)
+        {
+            if (sandbox3d_details_flow_next_row(
+                    state, flow_desc.bounds, 22.0f, 1U, &row))
+            {
+                sandbox3d_draw_value_row(
+                    state->ui,
+                    row.x,
+                    row.y,
+                    row.width,
+                    "Prefab",
+                    prefab_authoring_state.asset_path);
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state, flow_desc.bounds, 22.0f, 1U, &row))
+            {
+                (void)snprintf(
+                    prefab_path,
+                    sizeof(prefab_path),
+                    "root=%llu source=%llu revision=%llu",
+                    (unsigned long long)prefab_authoring_state.instance_root_id,
+                    (unsigned long long)prefab_authoring_state.source_id,
+                    (unsigned long long)prefab_authoring_state.source_revision);
+                sandbox3d_draw_value_row(
+                    state->ui,
+                    row.x,
+                    row.y,
+                    row.width,
+                    "Instance",
+                    prefab_path);
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 190.0f)
+            {
+                const float action_width = (row.width - 6.0f) * 0.5f;
+                if (prefab_authoring_state.can_apply_instance_edits &&
+                    henka_ui_button(
+                        state->ui,
+                        "prefab_apply_instance",
+                        (henka_ui_rect){row.x, row.y, action_width, 24.0f},
+                        "Apply Edits"))
+                {
+                    const henka_result prefab_result =
+                        sandbox3d_game_authoring_apply_prefab_instance_edits(
+                            state->game_authoring,
+                            entity);
+                    if (prefab_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Prefab instance edits applied to instance state.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Prefab Apply rejected: %s.",
+                            henka_result_to_string(prefab_result));
+                    }
+                }
+                if (prefab_authoring_state.can_revert_to_prefab &&
+                    henka_ui_button(
+                        state->ui,
+                        "prefab_revert_instance",
+                        (henka_ui_rect){
+                            row.x + action_width + 6.0f,
+                            row.y,
+                            action_width,
+                            24.0f},
+                        "Revert"))
+                {
+                    const henka_result prefab_result =
+                        sandbox3d_game_authoring_revert_prefab_instance_edits(
+                            state->game_authoring,
+                            entity);
+                    if (prefab_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Prefab instance reverted to source.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Prefab Revert rejected: %s.",
+                            henka_result_to_string(prefab_result));
+                    }
+                }
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 190.0f)
+            {
+                const float action_width = (row.width - 6.0f) * 0.5f;
+                if (prefab_authoring_state.can_unpack &&
+                    henka_ui_button(
+                        state->ui,
+                        "prefab_unpack_instance",
+                        (henka_ui_rect){row.x, row.y, action_width, 24.0f},
+                        "Unpack"))
+                {
+                    const henka_result prefab_result =
+                        sandbox3d_game_authoring_unpack_prefab_instance(
+                            state->game_authoring,
+                            entity);
+                    if (prefab_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Prefab instance unpacked into ordinary authored objects.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Prefab Unpack rejected: %s.",
+                            henka_result_to_string(prefab_result));
+                    }
+                    if (prefab_result == HENKA_SUCCESS)
+                    {
+                        goto details_groups_complete;
+                    }
+                }
+                if (prefab_authoring_state.can_destroy_instance &&
+                    henka_ui_button(
+                        state->ui,
+                        "prefab_delete_instance",
+                        (henka_ui_rect){
+                            row.x + action_width + 6.0f,
+                            row.y,
+                            action_width,
+                            24.0f},
+                        "Delete Instance"))
+                {
+                    /* Reuse the editor's existing Delete authority. It already
+                     * routes mapped Prefab members through grouped coordinator
+                     * teardown and releases Sandbox-owned authoring state. */
+                    if (sandbox3d_delete_selected_object(state))
+                    {
+                        goto details_groups_complete;
+                    }
+                    sandbox3d_set_status(
+                        state,
+                        true,
+                        "Prefab instance delete was rejected; prior state was preserved.");
+                }
+            }
+        }
+        else if (prefab_authoring_state.can_create_prefab &&
+                 sandbox3d_details_flow_next_row(
+                    state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                 row.width >= 190.0f)
+        {
+            const int path_written = snprintf(
+                prefab_path,
+                sizeof(prefab_path),
+                "prefabs/object_%llu.hprefab",
+                (unsigned long long)authored_document_id);
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width - 132.0f,
+                "Prefab",
+                "Ordinary authored object");
+            if (henka_ui_button(
+                    state->ui,
+                    "authoring_create_prefab_general",
+                    (henka_ui_rect){row.x + row.width - 126.0f, row.y, 126.0f, 24.0f},
+                    "Create Prefab"))
+            {
+                const char* project_root =
+                    henka_engine_get_user_data_base_path(engine);
+                henka_result prefab_result = HENKA_ERROR_INVALID_ARGUMENT;
+                if (path_written >= 0 &&
+                    (size_t)path_written < sizeof(prefab_path) &&
+                    project_root != NULL)
+                {
+                    prefab_result = sandbox3d_game_authoring_create_prefab_asset(
+                        state->game_authoring,
+                        entity,
+                        project_root,
+                        prefab_path);
+                }
+                sandbox3d_set_statusf(
+                    state,
+                    prefab_result != HENKA_SUCCESS,
+                    false,
+                    prefab_result == HENKA_SUCCESS
+                        ? "Prefab asset saved: %s. Place it from Asset Browser."
+                        : "Prefab asset was not saved: %s.",
+                    prefab_result == HENKA_SUCCESS
+                        ? prefab_path
+                        : henka_result_to_string(prefab_result));
+            }
+        }
+    }
     if (authoring_active)
     {
         if (state->editor_ui.details_authoring_expanded)
@@ -39522,7 +39742,93 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     sandbox3d_release_owned_resources(state);
 }
 
-int main(int argc, char** argv)
+
+static bool sandbox3d_run_prefab_public_smoke(void)
+{
+    const char* relative_path = "henka_prefab_package_smoke.hprefab";
+    henka_scene* source_scene = NULL;
+    henka_scene* target_scene = NULL;
+    henka_prefab* source_prefab = NULL;
+    henka_prefab* loaded_prefab = NULL;
+    henka_prefab_instance* instance = NULL;
+    henka_prefab_instance* duplicate = NULL;
+    henka_entity source_root = HENKA_INVALID_ENTITY;
+    henka_entity source_child = HENKA_INVALID_ENTITY;
+    henka_entity instance_child = HENKA_INVALID_ENTITY;
+    henka_entity duplicate_root = HENKA_INVALID_ENTITY;
+    henka_entity duplicate_child = HENKA_INVALID_ENTITY;
+    henka_prefab_source_id child_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+    size_t child_index = SIZE_MAX;
+    bool has_override = false;
+    henka_transform override_transform;
+    bool success = false;
+
+    (void)remove(relative_path);
+    if (henka_scene_create(&source_scene) != HENKA_SUCCESS ||
+        (source_root = henka_scene_create_entity_named(source_scene, "Packaged Prefab Root")) == HENKA_INVALID_ENTITY ||
+        (source_child = henka_scene_create_entity_named(source_scene, "Packaged Prefab Child")) == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_parent(
+            source_scene, source_child, source_root, HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        henka_scene_set_entity_local_transform(
+            source_scene,
+            source_child,
+            (henka_transform){{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}}) != HENKA_SUCCESS ||
+        henka_prefab_create_from_scene(source_scene, source_root, &source_prefab) != HENKA_SUCCESS ||
+        henka_prefab_set_asset_path(source_prefab, relative_path) != HENKA_SUCCESS ||
+        henka_prefab_find_source_index(source_prefab, source_child, &child_index) != HENKA_SUCCESS ||
+        henka_prefab_get_source_id_at(source_prefab, child_index, &child_source_id) != HENKA_SUCCESS ||
+        henka_prefab_save_file(source_prefab, NULL, ".", relative_path) != HENKA_SUCCESS ||
+        henka_prefab_load_file(NULL, NULL, ".", relative_path, &loaded_prefab) != HENKA_SUCCESS ||
+        loaded_prefab == NULL ||
+        henka_scene_create(&target_scene) != HENKA_SUCCESS ||
+        henka_prefab_instantiate_with_instance(
+            loaded_prefab, target_scene, henka_transform_identity(), &instance) != HENKA_SUCCESS ||
+        henka_prefab_instance_get_entity_for_source_id(
+            instance, child_source_id, &instance_child) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    override_transform = (henka_transform){
+        {5.0f, 6.0f, 7.0f},
+        {0.0f, 0.0f, 0.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f}};
+    if (henka_prefab_instance_set_local_transform_override(
+            instance, child_source_id, override_transform) != HENKA_SUCCESS ||
+        henka_prefab_instance_duplicate(instance, &duplicate) != HENKA_SUCCESS ||
+        duplicate == NULL ||
+        henka_prefab_instance_get_root_entity(duplicate, &duplicate_root) != HENKA_SUCCESS ||
+        henka_prefab_instance_get_entity_for_source_id(
+            duplicate, child_source_id, &duplicate_child) != HENKA_SUCCESS ||
+        duplicate_child == instance_child ||
+        henka_prefab_instance_get_local_transform_override(
+            duplicate, child_source_id, &has_override, &override_transform) != HENKA_SUCCESS ||
+        !has_override ||
+        override_transform.position.x != 5.0f ||
+        override_transform.position.y != 6.0f ||
+        override_transform.position.z != 7.0f ||
+        henka_prefab_instance_detach(&duplicate) != HENKA_SUCCESS ||
+        duplicate != NULL ||
+        !henka_scene_is_entity_valid(target_scene, duplicate_root) ||
+        !henka_scene_is_entity_valid(target_scene, duplicate_child) ||
+        henka_prefab_instance_destroy_entities(instance) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    success = true;
+    printf("Prefab package smoke: public save/load/instantiate/override/duplicate/detach workflow passed.\n");
+
+cleanup:
+    henka_prefab_instance_destroy(duplicate);
+    henka_prefab_instance_destroy(instance);
+    henka_prefab_destroy(loaded_prefab);
+    henka_prefab_destroy(source_prefab);
+    henka_scene_destroy(target_scene);
+    henka_scene_destroy(source_scene);
+    (void)remove(relative_path);
+    return success;
+}int main(int argc, char** argv)
 {
     henka_engine* engine;
     henka_engine_config config;
@@ -39532,6 +39838,7 @@ int main(int argc, char** argv)
     bool smoke_test;
     bool physics_smoke_test;
     bool audio_smoke_test;
+    bool prefab_smoke_test;
     bool primitive_gallery;
     bool residency_stress;
     bool temporal_stress;
@@ -39562,6 +39869,7 @@ int main(int argc, char** argv)
     smoke_test = false;
     physics_smoke_test = false;
     audio_smoke_test = false;
+    prefab_smoke_test = false;
     primitive_gallery = false;
     residency_stress = false;
     temporal_stress = false;
@@ -39596,6 +39904,10 @@ int main(int argc, char** argv)
     else if (argc == 2 && strcmp(argv[1], "--physics-smoke-test") == 0)
     {
         physics_smoke_test = true;
+    }
+    else if (argc == 2 && strcmp(argv[1], "--prefab-smoke-test") == 0)
+    {
+        prefab_smoke_test = true;
     }
     else if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
     {
@@ -39883,8 +40195,13 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --physics-smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --mcp-stdio | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-physics-view wide|close rendered output_directory | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference ibl_normal|ibl_diffuse|ibl_specular|ibl_simple|ibl_empty wide|close rendered | --capture-realism-reference ibl_rotation -360..360 wide|close rendered | --capture-realism-reference ibl_mip 0..6 wide|close rendered | --capture-realism-reference ibl_ordinary_mip 0..6 wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --physics-smoke-test | --prefab-smoke-test | --audio-smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --mcp-stdio | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-physics-view wide|close rendered output_directory | --capture-realism-reference wide|close solid|material_preview|rendered | --capture-realism-reference lighting wide|close solid|material_preview|rendered | --capture-realism-reference color_space wide|close solid|material_preview|rendered | --capture-realism-reference energy wide|close solid|material_preview|rendered | --capture-realism-reference ibl wide|close rendered | --capture-realism-reference ibl_normal|ibl_diffuse|ibl_specular|ibl_simple|ibl_empty wide|close rendered | --capture-realism-reference ibl_rotation -360..360 wide|close rendered | --capture-realism-reference ibl_mip 0..6 wide|close rendered | --capture-realism-reference ibl_ordinary_mip 0..6 wide|close rendered | --capture-realism-reference scene_probe wide|close rendered | --capture-realism-reference hdr wide|close -16..16 rendered | --capture-realism-reference sss wide|close opaque|thin|thick rendered | --capture-realism-reference ssgi wide|close rendered output_directory | --capture-realism-reference ssgi_motion wide|close rendered output_directory | --capture-realism-reference ssgi_performance wide|close rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
+    }
+
+    if (prefab_smoke_test)
+    {
+        return sandbox3d_run_prefab_public_smoke() ? 0 : 1;
     }
 
 #if defined(_WIN32)

@@ -10,6 +10,7 @@
 #include <henka/engine.h>
 #include <henka/mesh.h>
 #include <henka/scene.h>
+#include <henka/scene_document.h>
 
 #include "../engine/src/henka_internal.h"
 #include "../examples/sandbox3d/object_details_tools.h"
@@ -172,8 +173,63 @@ cleanup:
 #undef HENKA_OBJECT_DETAILS_REQUIRE
 }
 
-void henka_test_sandbox3d_object_details(void)
+
+static void henka_test_sandbox3d_object_details_prefab_state(void)
 {
+    henka_scene_document_object object = henka_scene_document_object_default();
+    sandbox3d_object_details_prefab_state state;
+
+    memset(&state, 0x7f, sizeof(state));
+    HENKA_TEST_ASSERT(
+        sandbox3d_object_details_resolve_prefab_state(&object, &state) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!state.is_prefab_instance);
+    HENKA_TEST_ASSERT(state.can_create_prefab);
+    HENKA_TEST_ASSERT(!state.can_apply_instance_edits);
+    HENKA_TEST_ASSERT(!state.can_revert_to_prefab);
+    HENKA_TEST_ASSERT(!state.can_unpack);
+    HENKA_TEST_ASSERT(!state.can_destroy_instance);
+
+    object.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_ASSET;
+    object.source.asset_kind = HENKA_SCENE_DOCUMENT_ASSET_PREFAB;
+    (void)snprintf(
+        object.source.path,
+        sizeof(object.source.path),
+        "%s",
+        "prefabs/editor-controls.hprefab");
+    object.source.prefab_instance_root_id = (henka_scene_document_id)41U;
+    object.source.prefab_source_id = UINT64_C(9);
+    object.source.prefab_source_revision = UINT64_C(3);
+    object.source.prefab_local_transform_override = true;
+    object.source.prefab_local_transform = (henka_transform){
+        {1.0f, 2.0f, 3.0f},
+        {0.0f, 0.0f, 0.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f}};
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_object_details_resolve_prefab_state(&object, &state) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.is_prefab_instance);
+    HENKA_TEST_ASSERT(!state.can_create_prefab);
+    HENKA_TEST_ASSERT(state.can_apply_instance_edits);
+    HENKA_TEST_ASSERT(state.can_revert_to_prefab);
+    HENKA_TEST_ASSERT(state.can_unpack);
+    HENKA_TEST_ASSERT(state.can_destroy_instance);
+    HENKA_TEST_ASSERT(state.instance_root_id == (henka_scene_document_id)41U);
+    HENKA_TEST_ASSERT(state.source_id == UINT64_C(9));
+    HENKA_TEST_ASSERT(state.source_revision == UINT64_C(3));
+    HENKA_TEST_ASSERT(strcmp(state.asset_path, "prefabs/editor-controls.hprefab") == 0);
+
+    object.source.path[0] = '\0';
+    memset(&state, 0x7f, sizeof(state));
+    HENKA_TEST_ASSERT(
+        sandbox3d_object_details_resolve_prefab_state(&object, &state) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(!state.is_prefab_instance);
+    HENKA_TEST_ASSERT(!state.can_create_prefab);
+}void henka_test_sandbox3d_object_details(void)
+{
+    henka_test_sandbox3d_object_details_prefab_state();
     henka_entity entity;
     henka_entity no_mesh_entity;
     henka_material material;

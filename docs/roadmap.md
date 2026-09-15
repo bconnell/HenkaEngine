@@ -243,8 +243,10 @@ Asset-backed `.hprefab` persistence, stable serialized identity and revisions,
  owns explicit instance Apply/Revert semantics for supported transform/material
  overrides through the existing Scene Document plus Game Authoring history.
  Apply records instance state without silently rewriting the reusable Prefab
- asset; Revert restores current source state. Complete editor-native Prefab
- controls and broader packaged/external workflows remain planned work.
+ asset; Revert restores current source state. Object Details now exposes Create,
+ Apply, Revert, Unpack, and Delete Instance while Asset Browser remains the
+ Place/Place Under Selected authority. Packaged Sandbox and external-template
+ public Prefab workflows now provide the bounded package/consumer proof.
 
 ### Core prefab capability
 
