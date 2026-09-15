@@ -84,6 +84,15 @@ henka_result sandbox3d_game_authoring_create_prefab_asset(
     henka_entity root_entity,
     const char* project_root,
     const char* relative_path);
+/* Loads one manager-owned prefab asset and places a real mapped instance in
+ * the authoring scene. The new members are registered in the Scene Document
+ * with prefab provenance, so the placement remains save/load reconstructible.
+ * The asset manager and its configured project root are borrowed authorities. */
+henka_result sandbox3d_game_authoring_instantiate_prefab_asset(
+    sandbox3d_game_authoring* authoring,
+    const char* asset_path,
+    henka_transform root_transform,
+    henka_entity* out_root_entity);
 /* Removes the binding and promotes direct children to authored roots, matching
  * the runtime scene's parent-destruction semantics.  Any still-live child is
  * detached from the runtime scene before its authored parent link is cleared. */

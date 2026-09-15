@@ -390,6 +390,13 @@ history remain open.
   authority and saves `prefabs/object_<document-id>.hprefab` without mutating
   the live Scene Document. Prefab-derived members are rejected until explicit
   instance-duplication semantics exist.
+- The Sandbox manager asset browser exposes persisted Prefabs separately from
+  textures, materials, and meshes. Selecting a manager-owned prefab resolves it
+  through the asset authority; Place Prefab creates a real mapped authoring
+  instance at the origin and records its prefab path, revision, durable source
+  IDs, and Scene Document provenance. Placement remains a bounded first-step
+  authoring action; per-instance override persistence and broader placement
+  controls remain open.
 - Reloading that project validates the persisted prefab source path, revision,
   membership, and durable source IDs against the already materialized live
   instance, then reapplies the document-authored transform and hierarchy

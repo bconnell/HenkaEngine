@@ -583,6 +583,7 @@ typedef struct sandbox3d_state
     size_t asset_browser_selected_metadata_index;
     henka_texture* asset_browser_selected_texture;
     const henka_material_asset* asset_browser_selected_material;
+    const henka_prefab* asset_browser_selected_prefab;
     bool asset_browser_selection_valid;
     henka_material_instance_parameter material_editor_parameter;
     unsigned int material_editor_component;
@@ -32583,34 +32584,50 @@ static void sandbox3d_draw_utility_panel(
             {
                 type_label = "Meshes";
             }
+            else if (state->asset_browser_type == HENKA_ASSET_TYPE_PREFAB)
+            {
+                type_label = "Prefabs";
+            }
             else
             {
                 type_label = "Textures";
             }
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Manager asset browser");
-            if (henka_ui_tab(state->ui, "asset_browser_textures", (henka_ui_rect){x_left, y_start + 20.0f, 82.0f, 24.0f}, "Textures", state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE))
+            if (henka_ui_tab(state->ui, "asset_browser_textures", (henka_ui_rect){x_left, y_start + 20.0f, 68.0f, 24.0f}, "Textures", state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE))
             {
                 state->asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
                 state->asset_browser_page = 0U;
                 state->asset_browser_selection_valid = false;
                 state->asset_browser_selected_texture = NULL;
                 state->asset_browser_selected_material = NULL;
+                state->asset_browser_selected_prefab = NULL;
             }
-            if (henka_ui_tab(state->ui, "asset_browser_materials", (henka_ui_rect){x_left + 88.0f, y_start + 20.0f, 88.0f, 24.0f}, "Materials", state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL))
+            if (henka_ui_tab(state->ui, "asset_browser_materials", (henka_ui_rect){x_left + 74.0f, y_start + 20.0f, 76.0f, 24.0f}, "Materials", state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL))
             {
                 state->asset_browser_type = HENKA_ASSET_TYPE_MATERIAL;
                 state->asset_browser_page = 0U;
                 state->asset_browser_selection_valid = false;
                 state->asset_browser_selected_texture = NULL;
                 state->asset_browser_selected_material = NULL;
+                state->asset_browser_selected_prefab = NULL;
             }
-            if (henka_ui_tab(state->ui, "asset_browser_meshes", (henka_ui_rect){x_left + 182.0f, y_start + 20.0f, 76.0f, 24.0f}, "Meshes", state->asset_browser_type == HENKA_ASSET_TYPE_MESH))
+            if (henka_ui_tab(state->ui, "asset_browser_meshes", (henka_ui_rect){x_left + 156.0f, y_start + 20.0f, 60.0f, 24.0f}, "Meshes", state->asset_browser_type == HENKA_ASSET_TYPE_MESH))
             {
                 state->asset_browser_type = HENKA_ASSET_TYPE_MESH;
                 state->asset_browser_page = 0U;
                 state->asset_browser_selection_valid = false;
                 state->asset_browser_selected_texture = NULL;
                 state->asset_browser_selected_material = NULL;
+                state->asset_browser_selected_prefab = NULL;
+            }
+            if (henka_ui_tab(state->ui, "asset_browser_prefabs", (henka_ui_rect){x_left + 222.0f, y_start + 20.0f, 70.0f, 24.0f}, "Prefabs", state->asset_browser_type == HENKA_ASSET_TYPE_PREFAB))
+            {
+                state->asset_browser_type = HENKA_ASSET_TYPE_PREFAB;
+                state->asset_browser_page = 0U;
+                state->asset_browser_selection_valid = false;
+                state->asset_browser_selected_texture = NULL;
+                state->asset_browser_selected_material = NULL;
+                state->asset_browser_selected_prefab = NULL;
             }
             page_count = sandbox3d_asset_browser_page_count(assets, state->asset_browser_type, asset_page_size);
             if (page_count == 0U)
@@ -32648,6 +32665,7 @@ static void sandbox3d_draw_utility_panel(
                     state->asset_browser_selected_metadata_index = items[item_index].metadata_index;
                     state->asset_browser_selected_texture = NULL;
                     state->asset_browser_selected_material = NULL;
+                    state->asset_browser_selected_prefab = NULL;
                     if (state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE && items[item_index].metadata.source_path != NULL)
                     {
                         henka_texture* selected_texture = NULL;
@@ -32684,6 +32702,35 @@ static void sandbox3d_draw_utility_panel(
                                 true,
                                 false,
                                 "Material resolution rejected: %s",
+                                items[item_index].metadata.source_path);
+                        }
+                    }
+                    else if (state->asset_browser_type == HENKA_ASSET_TYPE_PREFAB &&
+                             items[item_index].metadata.source_path != NULL)
+                    {
+                        henka_prefab* selected_prefab = NULL;
+                        if (henka_assets_load_prefab_asset(
+                                henka_engine_get_asset_manager(engine),
+                                items[item_index].metadata.source_path,
+                                NULL,
+                                &selected_prefab) == HENKA_SUCCESS &&
+                            selected_prefab != NULL)
+                        {
+                            state->asset_browser_selected_prefab = selected_prefab;
+                            sandbox3d_set_statusf(
+                                state,
+                                false,
+                                false,
+                                "Selected manager prefab: %s",
+                                items[item_index].metadata.source_path);
+                        }
+                        else
+                        {
+                            sandbox3d_set_statusf(
+                                state,
+                                true,
+                                false,
+                                "Prefab load rejected: %s",
                                 items[item_index].metadata.source_path);
                         }
                     }
@@ -32755,6 +32802,59 @@ static void sandbox3d_draw_utility_panel(
                             true,
                             false,
                             "Material instance application rejected.");
+                    }
+                }
+            }
+            if (state->asset_browser_type == HENKA_ASSET_TYPE_PREFAB &&
+                state->asset_browser_selected_prefab != NULL &&
+                state->asset_browser_selection_valid)
+            {
+                henka_ui_label(
+                    state->ui,
+                    x_left,
+                    y_start + 330.0f,
+                    1.0f,
+                    "Manager-owned prefab; place a mapped authoring instance.");
+                if (henka_ui_button(
+                        state->ui,
+                        "asset_browser_place_prefab",
+                        (henka_ui_rect){x_left, y_start + 350.0f, panel_bounds.width - 28.0f, 24.0f},
+                        "Place Prefab"))
+                {
+                    henka_asset_metadata selected_metadata;
+                    henka_entity placed_root = HENKA_INVALID_ENTITY;
+                    henka_result place_result = HENKA_ERROR_INVALID_ARGUMENT;
+                    if (henka_assets_get_metadata_at_index(
+                            assets,
+                            state->asset_browser_selected_metadata_index,
+                            &selected_metadata) == HENKA_SUCCESS &&
+                        selected_metadata.source_path != NULL &&
+                        state->game_authoring != NULL)
+                    {
+                        place_result = sandbox3d_game_authoring_instantiate_prefab_asset(
+                            state->game_authoring,
+                            selected_metadata.source_path,
+                            henka_transform_identity(),
+                            &placed_root);
+                    }
+                    if (place_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Prefab placed at origin: %llu",
+                            (unsigned long long)placed_root);
+                        state->selected_entity = placed_root;
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Prefab placement rejected: %s",
+                            henka_result_to_string(place_result));
                     }
                 }
             }
@@ -39712,6 +39812,7 @@ int main(int argc, char** argv)
         capture_output_directory);
     state.asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
     state.asset_browser_selected_material = NULL;
+    state.asset_browser_selected_prefab = NULL;
     sandbox3d_view_compass_preferences_defaults(&state.compass_preferences);
     sandbox3d_view_compass_state_reset(&state.compass);
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);

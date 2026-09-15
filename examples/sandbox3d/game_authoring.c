@@ -2382,6 +2382,197 @@ henka_result sandbox3d_game_authoring_create_prefab_asset(
     return result;
 }
 
+henka_result sandbox3d_game_authoring_instantiate_prefab_asset(
+    sandbox3d_game_authoring* authoring,
+    const char* asset_path,
+    henka_transform root_transform,
+    henka_entity* out_root_entity)
+{
+    henka_prefab* prefab = NULL;
+    henka_prefab_instance* instance = NULL;
+    henka_entity entities[SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
+    henka_scene_document_id document_ids[
+        SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
+    size_t initial_binding_count;
+    size_t entity_count;
+    size_t index;
+    size_t root_index = SIZE_MAX;
+    henka_entity root_entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id root_document_id =
+        HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_result result;
+
+    if (out_root_entity != NULL)
+    {
+        *out_root_entity = HENKA_INVALID_ENTITY;
+    }
+    if (authoring == NULL || authoring->scene == NULL ||
+        authoring->document == NULL || authoring->bridge == NULL ||
+        authoring->project_assets == NULL || asset_path == NULL ||
+        asset_path[0] == '\0' || out_root_entity == NULL ||
+        sandbox3d_game_authoring_is_play_locked(authoring) ||
+        authoring->project_prefab_count >=
+            SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_assets_load_prefab_asset(
+        authoring->project_assets, asset_path, NULL, &prefab);
+    if (result != HENKA_SUCCESS || prefab == NULL)
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_ASSET_SOURCE : result;
+    }
+    entity_count = henka_prefab_get_entity_count(prefab);
+    initial_binding_count = authoring->binding_count;
+    if (entity_count == 0U ||
+        entity_count > SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS ||
+        initial_binding_count >
+            SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS - entity_count)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    result = henka_prefab_instantiate_with_instance(
+        prefab, authoring->scene, root_transform, &instance);
+    if (result != HENKA_SUCCESS || instance == NULL)
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    }
+    result = henka_prefab_instance_get_root_entity(instance, &root_entity);
+    if (result != HENKA_SUCCESS || root_entity == HENKA_INVALID_ENTITY)
+    {
+        goto rollback;
+    }
+
+    for (index = 0U; index < entity_count; ++index)
+    {
+        henka_prefab_source_id source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+
+        if (henka_prefab_get_source_id_at(prefab, index, &source_id) !=
+                HENKA_SUCCESS ||
+            source_id == HENKA_INVALID_PREFAB_SOURCE_ID ||
+            henka_prefab_instance_get_entity_for_source_id(
+                instance, source_id, &entities[index]) != HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto rollback;
+        }
+        if (sandbox3d_game_authoring_register_entity(
+                authoring, entities[index], &document_ids[index]) !=
+                HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto rollback;
+        }
+        if (entities[index] == root_entity)
+        {
+            root_index = index;
+            root_document_id = document_ids[index];
+        }
+    }
+    if (root_index == SIZE_MAX ||
+        root_document_id == HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto rollback;
+    }
+
+    for (index = 0U; index < entity_count; ++index)
+    {
+        henka_scene_document_object object;
+        henka_entity parent_entity = HENKA_INVALID_ENTITY;
+        size_t parent_index;
+        henka_prefab_source_id source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+        int path_written;
+
+        if (sandbox3d_game_authoring_get_object_for_entity(
+                authoring,
+                entities[index],
+                &document_ids[index],
+                &object) != HENKA_SUCCESS ||
+            henka_prefab_get_source_id_at(prefab, index, &source_id) !=
+                HENKA_SUCCESS ||
+            source_id == HENKA_INVALID_PREFAB_SOURCE_ID ||
+            henka_scene_get_entity_parent(
+                authoring->scene, entities[index], &parent_entity) !=
+                HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto rollback;
+        }
+
+        object.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_ASSET;
+        object.source.asset_kind = HENKA_SCENE_DOCUMENT_ASSET_PREFAB;
+        path_written = snprintf(
+            object.source.path,
+            sizeof(object.source.path),
+            "%s",
+            asset_path);
+        if (path_written < 0 ||
+            (size_t)path_written >= sizeof(object.source.path))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto rollback;
+        }
+        object.source.prefab_instance_root_id = root_document_id;
+        object.source.prefab_source_id = source_id;
+        object.source.prefab_source_revision =
+            henka_prefab_get_revision(prefab);
+        object.source.prefab_local_transform_override = false;
+        object.source.prefab_local_transform = henka_transform_identity();
+        if (parent_entity == HENKA_INVALID_ENTITY)
+        {
+            object.parent_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+        }
+        else
+        {
+            for (parent_index = 0U; parent_index < entity_count; ++parent_index)
+            {
+                if (entities[parent_index] == parent_entity)
+                {
+                    object.parent_id = document_ids[parent_index];
+                    break;
+                }
+            }
+            if (parent_index == entity_count)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto rollback;
+            }
+        }
+        result = henka_scene_document_set_object(authoring->document, &object);
+        if (result != HENKA_SUCCESS)
+        {
+            goto rollback;
+        }
+    }
+
+    authoring->project_prefabs[authoring->project_prefab_count] = prefab;
+    authoring->project_prefab_instances[
+        authoring->project_prefab_count] = instance;
+    authoring->project_prefab_manager_owned[
+        authoring->project_prefab_count] = true;
+    authoring->project_prefab_count += 1U;
+    *out_root_entity = root_entity;
+    return HENKA_SUCCESS;
+
+rollback:
+    while (authoring->binding_count > initial_binding_count)
+    {
+        const sandbox3d_game_authoring_binding binding =
+            authoring->bindings[authoring->binding_count - 1U];
+        (void)sandbox3d_scene_document_bridge_unbind(
+            authoring->bridge, binding.document_id);
+        (void)henka_scene_document_remove_object(
+            authoring->document, binding.document_id);
+        authoring->binding_count -= 1U;
+    }
+    (void)henka_prefab_instance_destroy_entities(instance);
+    henka_prefab_instance_destroy(instance);
+    return result;
+}
+
 henka_result sandbox3d_game_authoring_unregister_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity)
