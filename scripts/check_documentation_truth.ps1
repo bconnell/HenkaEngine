@@ -57,6 +57,7 @@ $expectedCapabilityAreas = @(
     "Networking/server",
     "External projects",
     "Game authoring",
+    "Prefabs",
     "2D",
     "Audio",
     "Scripting/behaviors"
