@@ -99,6 +99,12 @@ henka_result sandbox3d_game_authoring_instantiate_prefab_asset_under_parent(
     henka_entity parent_entity,
     henka_transform root_transform,
     henka_entity* out_root_entity);
+/* Removes every mapped member of one authored prefab instance while retaining
+ * the manager-owned prefab asset and all other scene instances. The supplied
+ * entity may be any live member of the instance. */
+henka_result sandbox3d_game_authoring_destroy_prefab_instance(
+    sandbox3d_game_authoring* authoring,
+    henka_entity instance_entity);
 /* Removes the binding and promotes direct children to authored roots, matching
  * the runtime scene's parent-destruction semantics.  Any still-live child is
  * detached from the runtime scene before its authored parent link is cleared. */
