@@ -17120,6 +17120,41 @@ static bool sandbox3d_duplicate_selected_object(henka_engine* engine, sandbox3d_
         }
     }
 
+    if (state->game_authoring != NULL)
+    {
+        henka_scene_document_id source_document_id =
+            HENKA_INVALID_SCENE_DOCUMENT_ID;
+        henka_scene_document_object source_object;
+        const henka_result source_lookup =
+            sandbox3d_game_authoring_get_object_for_entity(
+                state->game_authoring,
+                selected_entity,
+                &source_document_id,
+                &source_object);
+
+        if (source_lookup == HENKA_SUCCESS &&
+            sandbox3d_game_authoring_register_duplicate_entity(
+                state->game_authoring,
+                selected_entity,
+                duplicate,
+                &(henka_scene_document_id){HENKA_INVALID_SCENE_DOCUMENT_ID}) !=
+                HENKA_SUCCESS)
+        {
+            sandbox3d_select_entity(state, duplicate);
+            (void)sandbox3d_delete_selected_object(state);
+            if (selected_entity != HENKA_INVALID_ENTITY &&
+                henka_scene_is_entity_valid(state->scene, selected_entity))
+            {
+                sandbox3d_select_entity(state, selected_entity);
+            }
+            else
+            {
+                sandbox3d_clear_selection(state, "Duplicate selection cleared");
+            }
+            return false;
+        }
+    }
+
     sandbox3d_select_entity(state, duplicate);
     return true;
 }

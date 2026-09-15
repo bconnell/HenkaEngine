@@ -68,6 +68,14 @@ henka_result sandbox3d_game_authoring_register_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
     henka_scene_document_id* out_document_id);
+/* Registers a newly-created ordinary authored duplicate. Prefab instance
+ * members are rejected until the coordinator has explicit instance-duplication
+ * semantics, so a clone cannot silently lose its prefab provenance. */
+henka_result sandbox3d_game_authoring_register_duplicate_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity source_entity,
+    henka_entity duplicate_entity,
+    henka_scene_document_id* out_document_id);
 /* Removes the binding and promotes direct children to authored roots, matching
  * the runtime scene's parent-destruction semantics.  Any still-live child is
  * detached from the runtime scene before its authored parent link is cleared. */

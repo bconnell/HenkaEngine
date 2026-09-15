@@ -378,6 +378,13 @@ history remain open.
   durable source ID to the corresponding live entity, and rejects incomplete
   or mismatched groups before publishing a partial authoring scene. The asset
   manager must outlive the returned authoring coordinator and its instances.
+- When an ordinary Sandbox clone source already has a Game Authoring binding,
+  the newly-created duplicate is registered with the same Scene Document and
+  receives a distinct authored identity for later save and reload. Sources
+  outside that binding boundary remain live editor objects. Cloning a
+  prefab-instance member is rejected until explicit instance-duplication
+  semantics exist; its prefab provenance is not silently flattened into an
+  ordinary object.
 - Reloading that project validates the persisted prefab source path, revision,
   membership, and durable source IDs against the already materialized live
   instance, then reapplies the document-authored transform and hierarchy

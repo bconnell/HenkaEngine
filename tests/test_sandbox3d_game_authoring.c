@@ -18,6 +18,62 @@
 #include "../engine/src/core/memory_internal.h"
 #include "../engine/src/scene/scene_internal.h"
 
+static bool test_registered_duplicate_enters_document(void)
+{
+    const char* relative_path = "game_authoring_duplicate.hscene";
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_entity source = HENKA_INVALID_ENTITY;
+    henka_entity duplicate = HENKA_INVALID_ENTITY;
+    henka_scene_document_id source_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id duplicate_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id stale_duplicate_id =
+        HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object duplicate_object;
+    bool success = false;
+
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        (source = henka_scene_create_entity_named(
+             scene, "Duplicate Source")) == HENKA_INVALID_ENTITY ||
+        (duplicate = henka_scene_create_entity_named(
+             scene, "Duplicate Runtime Copy")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create(scene, relative_path, &authoring) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, source, &source_id) != HENKA_SUCCESS ||
+        source_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_register_duplicate_entity(
+            authoring, source, duplicate, &duplicate_id) != HENKA_SUCCESS ||
+        duplicate_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        duplicate_id == source_id ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, duplicate, &duplicate_id, &duplicate_object) !=
+            HENKA_SUCCESS ||
+        strcmp(duplicate_object.name, "Duplicate Runtime Copy") != 0)
+    {
+        goto cleanup;
+    }
+    henka_scene_destroy_entity(scene, source);
+    duplicate = henka_scene_create_entity_named(
+        scene, "Stale Source Copy");
+    if (duplicate == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_register_duplicate_entity(
+            authoring, source, duplicate, &stale_duplicate_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        stale_duplicate_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        goto cleanup;
+    }
+    henka_scene_destroy_entity(scene, duplicate);
+    duplicate = HENKA_INVALID_ENTITY;
+    success = true;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    return success;
+}
+
 static bool test_persisted_prefab_materializes_through_authoring(void)
 {
     const char* project_root = "build/test_tmp";
@@ -56,6 +112,9 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     henka_entity loaded_second_root = HENKA_INVALID_ENTITY;
     henka_entity loaded_second_child = HENKA_INVALID_ENTITY;
     henka_entity loaded_second_parent = HENKA_INVALID_ENTITY;
+    henka_entity duplicate_prefab_entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id duplicate_prefab_id =
+        HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_object_info root_info;
     henka_scene_object_info child_info;
     henka_transform transform;
@@ -263,6 +322,20 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     {
         goto cleanup;
     }
+    duplicate_prefab_entity = henka_scene_create_entity_named(
+        loaded_scene, "Rejected Prefab Duplicate");
+    if (duplicate_prefab_entity == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_register_duplicate_entity(
+            loaded_authoring,
+            loaded_root,
+            duplicate_prefab_entity,
+            &duplicate_prefab_id) != HENKA_ERROR_INVALID_ARGUMENT ||
+        duplicate_prefab_id != HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        goto cleanup;
+    }
+    henka_scene_destroy_entity(loaded_scene, duplicate_prefab_entity);
+    duplicate_prefab_entity = HENKA_INVALID_ENTITY;
     if (henka_scene_get_entity_parent(
             loaded_scene, loaded_child, &loaded_parent) != HENKA_SUCCESS ||
         loaded_parent != loaded_root)
@@ -546,6 +619,12 @@ static bool test_persisted_prefab_materializes_through_authoring(void)
     success = true;
 
 cleanup:
+    if (duplicate_prefab_entity != HENKA_INVALID_ENTITY &&
+        loaded_scene != NULL &&
+        henka_scene_is_entity_valid(loaded_scene, duplicate_prefab_entity))
+    {
+        henka_scene_destroy_entity(loaded_scene, duplicate_prefab_entity);
+    }
     sandbox3d_game_authoring_destroy(loaded_authoring);
     henka_scene_destroy(loaded_scene);
     henka_settings_destroy(manifest);
@@ -2074,6 +2153,11 @@ int main(void)
     henka_result parent_result;
     int exit_code = 1;
 
+    if (!test_registered_duplicate_enters_document())
+    {
+        fprintf(stderr, "game authoring duplicate registration test failed\n");
+        return 1;
+    }
     if (!test_persisted_prefab_materializes_through_authoring())
     {
         fprintf(stderr, "persisted prefab authoring materialization test failed\n");
