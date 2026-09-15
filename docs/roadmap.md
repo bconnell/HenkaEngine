@@ -225,17 +225,26 @@ a live scene entity using a local root transform, which supports runtime
 attachment to existing gameplay hierarchies.
 The runtime API also supports transactional refresh from a live source root.
 Successful refreshes replace the bounded snapshot and increment its in-memory
-revision; newly created instances record the revision they captured. A failed
-refresh preserves the prior snapshot and a successful refresh propagates the
-supported presentation changes into existing mapped instances. Current local
-scene edits are adopted before refresh: the root remains instance placement and
-changed non-root transforms remain instance overrides. Authoring save/reload
-persists supported runtime presentation transforms through the Scene Document;
-explicit serialized per-instance override metadata is not yet available.
+ revision; newly created instances record the revision they captured. A failed
+ refresh preserves the prior snapshot and a successful refresh propagates the
+ supported presentation, tags, flags, bounds, logical selection ownership, and
+ non-overridden manager-owned material-asset state into existing mapped
+ instances. Current local scene edits are adopted before
+ refresh: the root remains instance placement and changed non-root transforms
+ remain instance overrides. Authoring save/reload persists supported runtime
+ presentation transforms through the Scene Document; explicit serialized
+ per-instance override metadata is not yet available.
 Asset-backed `.hprefab` persistence, stable serialized identity and revisions,
-and Scene Document startup materialization now exist within the bounded
-runtime/project-open path. Editor authoring, source-change propagation, and
-broader project workflows remain planned work.
+ and Scene Document startup materialization now exist within the bounded
+ runtime/project-open path. Core structural reconciliation, mapped duplication,
+ mapping detach, and manager-owned asset-backed instance material override
+ ownership have runtime primitives. Game Authoring proves Prefab material
+ override save/load, provides bounded durable manager-owned unpack, and now
+ owns explicit instance Apply/Revert semantics for supported transform/material
+ overrides through the existing Scene Document plus Game Authoring history.
+ Apply records instance state without silently rewriting the reusable Prefab
+ asset; Revert restores current source state. Complete editor-native Prefab
+ controls and broader packaged/external workflows remain planned work.
 
 ### Core prefab capability
 

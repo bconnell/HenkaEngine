@@ -2226,6 +2226,99 @@ henka_result henka_scene_replace_contents(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_replace_contents_structural(
+    henka_scene* destination,
+    henka_scene* prepared_source)
+{
+    henka_scene temporary;
+    size_t destination_active_count;
+    size_t prepared_active_count;
+    size_t destination_physics_links;
+    size_t destination_audio_links;
+    size_t index;
+    bool removes_existing_identity;
+
+    if (destination == NULL || prepared_source == NULL ||
+        destination == prepared_source || destination->destroyed ||
+        prepared_source->destroyed ||
+        prepared_source->linked_physics_ref_count != 0U ||
+        prepared_source->linked_audio_ref_count != 0U ||
+        destination->entity_capacity > HENKA_MAX_SCENE_ENTITIES ||
+        prepared_source->entity_capacity > HENKA_MAX_SCENE_ENTITIES ||
+        destination->entity_count > destination->entity_capacity ||
+        prepared_source->entity_count > prepared_source->entity_capacity)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    destination_active_count = 0U;
+    for (index = 0U; index < destination->entity_capacity; ++index)
+    {
+        if (destination->entities[index].active)
+        {
+            destination_active_count += 1U;
+        }
+    }
+    if (destination_active_count != destination->entity_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    prepared_active_count = 0U;
+    for (index = 0U; index < prepared_source->entity_capacity; ++index)
+    {
+        if (prepared_source->entities[index].active)
+        {
+            prepared_active_count += 1U;
+        }
+    }
+    if (prepared_active_count != prepared_source->entity_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    removes_existing_identity = false;
+    for (index = 0U; index < destination->entity_capacity; ++index)
+    {
+        const henka_scene_entity_record* destination_record =
+            &destination->entities[index];
+
+        if (!destination_record->active)
+        {
+            continue;
+        }
+
+        if (index >= prepared_source->entity_capacity ||
+            !prepared_source->entities[index].active ||
+            prepared_source->entities[index].generation !=
+                destination_record->generation)
+        {
+            removes_existing_identity = true;
+            break;
+        }
+    }
+
+    destination_physics_links = destination->linked_physics_ref_count;
+    destination_audio_links = destination->linked_audio_ref_count;
+
+    if (removes_existing_identity &&
+        (destination_physics_links != 0U ||
+            destination_audio_links != 0U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    temporary = *destination;
+    *destination = *prepared_source;
+    *prepared_source = temporary;
+
+    destination->linked_physics_ref_count = destination_physics_links;
+    destination->linked_audio_ref_count = destination_audio_links;
+    prepared_source->linked_physics_ref_count = 0U;
+    prepared_source->linked_audio_ref_count = 0U;
+
+    return HENKA_SUCCESS;
+}
 void henka_scene_destroy(henka_scene* scene)
 {
     size_t index;
@@ -2938,8 +3031,9 @@ henka_result henka_scene_set_entity_selection_owner(
     owner_record = henka_scene_get_entity_record_const(scene, owner);
     if (record == NULL || owner_record == NULL ||
         (record->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U ||
-        owner_record->selection_owner != owner ||
-        (owner_record->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U)
+        (owner != entity &&
+            (owner_record->selection_owner != owner ||
+                (owner_record->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U)))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -2947,6 +3041,11 @@ henka_result henka_scene_set_entity_selection_owner(
     {
         return HENKA_ERROR_LIMIT;
     }
+
+    /* owner == entity is the canonical reset-to-self operation.
+     * A non-self owner must already be a valid logical selection root.
+     * Without this self-reset exception, assigning an entity to another
+     * owner is irreversible through the public scene authority. */
     record->selection_owner = owner;
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;

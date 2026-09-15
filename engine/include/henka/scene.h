@@ -449,7 +449,9 @@ henka_result henka_scene_get_entity_selection_owner(
     henka_entity entity,
     henka_entity* out_owner);
 /* Assigns a valid scene entity as the logical selection owner for one render
- * entity. Ownership does not remove child identity or alter rendering. */
+ * entity. Passing the entity itself restores self ownership. A distinct owner
+ * must already be a valid logical selection root. Ownership does not remove
+ * child identity or alter rendering. */
 henka_result henka_scene_set_entity_selection_owner(
     henka_scene* scene,
     henka_entity entity,

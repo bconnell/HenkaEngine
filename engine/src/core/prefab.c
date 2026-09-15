@@ -2212,11 +2212,752 @@ henka_result henka_prefab_instance_get_local_transform_override(
     return HENKA_SUCCESS;
 }
 
+static bool henka_prefab_optional_text_equal(
+    const char* left,
+    const char* right)
+{
+    if (left == NULL || right == NULL)
+    {
+        return left == right;
+    }
+    return strcmp(left, right) == 0;
+}
+
+static bool henka_prefab_bounds_equal(
+    henka_bounds left,
+    henka_bounds right)
+{
+    return left.center.x == right.center.x &&
+        left.center.y == right.center.y &&
+        left.center.z == right.center.z &&
+        left.extents.x == right.extents.x &&
+        left.extents.y == right.extents.y &&
+        left.extents.z == right.extents.z;
+}
+
+static henka_result henka_prefab_instance_apply_source_metadata_candidate(
+    const henka_prefab_instance* instance,
+    henka_scene* candidate_scene)
+{
+    size_t index;
+
+    if (instance == NULL || candidate_scene == NULL ||
+        instance->prefab == NULL || instance->entities == NULL ||
+        instance->entity_count != instance->prefab->entity_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < instance->entity_count; ++index)
+    {
+        const henka_prefab_entry* entry = &instance->prefab->entries[index];
+        const henka_entity entity = instance->entities[index];
+        henka_entity desired_owner = entity;
+        henka_entity current_owner = entity;
+        henka_bounds current_bounds;
+        uint32_t current_flags;
+        henka_result owner_result;
+        henka_result bounds_result;
+        henka_result result;
+        const char* current_tag;
+        bool current_helper;
+        bool desired_helper;
+
+        if (!henka_scene_is_entity_valid(candidate_scene, entity) ||
+            henka_scene_get_entity_flags(
+                candidate_scene, entity, &current_flags) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+
+        if (entry->selection_owner_index != SIZE_MAX)
+        {
+            if (entry->selection_owner_index >= instance->entity_count)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+
+            desired_owner =
+                instance->entities[entry->selection_owner_index];
+
+            if (!henka_scene_is_entity_valid(
+                    candidate_scene, desired_owner))
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+
+        current_helper =
+            (current_flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U;
+
+        desired_helper =
+            (entry->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U;
+
+        owner_result = henka_scene_get_entity_selection_owner(
+            candidate_scene, entity, &current_owner);
+
+        if (owner_result == HENKA_ERROR_UNKNOWN && current_helper)
+        {
+            current_owner = entity;
+        }
+        else if (owner_result != HENKA_SUCCESS)
+        {
+            return owner_result;
+        }
+
+        if (!current_helper && desired_helper)
+        {
+            if (desired_owner != entity)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+
+            if (current_owner != entity)
+            {
+                result = henka_scene_set_entity_selection_owner(
+                    candidate_scene, entity, entity);
+
+                if (result != HENKA_SUCCESS)
+                {
+                    return result;
+                }
+
+                current_owner = entity;
+            }
+        }
+
+        if (current_flags != entry->flags)
+        {
+            result = henka_scene_set_entity_flags(
+                candidate_scene, entity, entry->flags);
+
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+
+            current_flags = entry->flags;
+            current_helper = desired_helper;
+        }
+
+        if (!desired_helper && current_owner != desired_owner)
+        {
+            result = henka_scene_set_entity_selection_owner(
+                candidate_scene, entity, desired_owner);
+
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+        }
+        else if (desired_helper && desired_owner != entity)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+
+        current_tag =
+            henka_scene_get_entity_tag(candidate_scene, entity);
+
+        if (!henka_prefab_optional_text_equal(
+                current_tag, entry->tag))
+        {
+            result = henka_scene_set_entity_tag(
+                candidate_scene, entity, entry->tag);
+
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+        }
+
+        bounds_result = henka_scene_get_entity_local_bounds(
+            candidate_scene, entity, &current_bounds);
+
+        if (entry->has_local_bounds)
+        {
+            if (bounds_result != HENKA_SUCCESS ||
+                !henka_prefab_bounds_equal(
+                    current_bounds, entry->local_bounds))
+            {
+                result = henka_scene_set_entity_local_bounds(
+                    candidate_scene,
+                    entity,
+                    entry->local_bounds);
+
+                if (result != HENKA_SUCCESS)
+                {
+                    return result;
+                }
+            }
+        }
+        else if (bounds_result == HENKA_SUCCESS)
+        {
+            result = henka_scene_clear_entity_local_bounds(
+                candidate_scene, entity);
+
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+        }
+    }
+
+    return HENKA_SUCCESS;
+}
+
+static size_t henka_prefab_instance_find_mapped_source_id(
+    const henka_prefab_instance* instance,
+    henka_prefab_source_id source_id)
+{
+    size_t index;
+
+    if (instance == NULL || instance->source_ids == NULL ||
+        source_id == HENKA_INVALID_PREFAB_SOURCE_ID)
+    {
+        return SIZE_MAX;
+    }
+    for (index = 0U; index < instance->entity_count; ++index)
+    {
+        if (instance->source_ids[index] == source_id)
+        {
+            return index;
+        }
+    }
+    return SIZE_MAX;
+}
+
+static bool henka_prefab_instance_membership_matches(
+    const henka_prefab_instance* instance)
+{
+    size_t index;
+
+    if (instance == NULL || instance->prefab == NULL ||
+        instance->source_ids == NULL ||
+        instance->entity_count != instance->prefab->entity_count)
+    {
+        return false;
+    }
+    for (index = 0U; index < instance->entity_count; ++index)
+    {
+        if (instance->source_ids[index] !=
+            instance->prefab->entries[index].source_id)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static henka_result henka_prefab_instance_reconcile_membership(
+    henka_prefab_instance* instance)
+{
+    const henka_prefab* prefab;
+    henka_prefab_instance candidate_instance;
+    henka_scene* candidate_scene;
+    henka_entity* new_entities;
+    henka_prefab_source_id* new_source_ids;
+    henka_transform* new_base_local_transforms;
+    henka_transform* new_local_transform_overrides;
+    bool* new_transform_override_flags;
+    bool* old_survives;
+    henka_entity old_root_entity;
+    henka_entity external_parent;
+    henka_transform old_root_transform;
+    size_t entity_bytes;
+    size_t source_id_bytes;
+    size_t transform_bytes;
+    size_t old_root_index;
+    size_t index;
+    henka_result result;
+
+    if (instance == NULL || instance->prefab == NULL ||
+        instance->target_scene == NULL || instance->entities == NULL ||
+        instance->source_ids == NULL || instance->base_local_transforms == NULL ||
+        instance->local_transform_overrides == NULL ||
+        instance->transform_override_flags == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    prefab = instance->prefab;
+    if (prefab->entity_count == 0U ||
+        prefab->entity_count > HENKA_MAX_PREFAB_ENTITIES ||
+        prefab->root_index >= prefab->entity_count ||
+        instance->root_index >= instance->entity_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    old_root_index = instance->root_index;
+    old_root_entity = instance->entities[old_root_index];
+
+    if (!henka_scene_is_entity_valid(
+            instance->target_scene, old_root_entity) ||
+        henka_scene_get_entity_parent(
+            instance->target_scene,
+            old_root_entity,
+            &external_parent) != HENKA_SUCCESS ||
+        henka_scene_get_entity_local_transform(
+            instance->target_scene,
+            old_root_entity,
+            &old_root_transform) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!henka_checked_size_multiply(
+            prefab->entity_count,
+            sizeof(*new_entities),
+            &entity_bytes) ||
+        !henka_checked_size_multiply(
+            prefab->entity_count,
+            sizeof(*new_source_ids),
+            &source_id_bytes) ||
+        !henka_checked_size_multiply(
+            prefab->entity_count,
+            sizeof(*new_base_local_transforms),
+            &transform_bytes))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+
+    new_entities = (henka_entity*)henka_malloc(entity_bytes);
+    new_source_ids =
+        (henka_prefab_source_id*)henka_malloc(source_id_bytes);
+    new_base_local_transforms =
+        (henka_transform*)henka_malloc(transform_bytes);
+    new_local_transform_overrides =
+        (henka_transform*)henka_malloc(transform_bytes);
+    new_transform_override_flags =
+        (bool*)henka_calloc(
+            prefab->entity_count,
+            sizeof(*new_transform_override_flags));
+    old_survives =
+        (bool*)henka_calloc(
+            instance->entity_count,
+            sizeof(*old_survives));
+
+    if (new_entities == NULL || new_source_ids == NULL ||
+        new_base_local_transforms == NULL ||
+        new_local_transform_overrides == NULL ||
+        new_transform_override_flags == NULL ||
+        old_survives == NULL)
+    {
+        henka_free(old_survives);
+        henka_free(new_transform_override_flags);
+        henka_free(new_local_transform_overrides);
+        henka_free(new_base_local_transforms);
+        henka_free(new_source_ids);
+        henka_free(new_entities);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    candidate_scene = NULL;
+    result = henka_scene_clone(
+        instance->target_scene,
+        &candidate_scene);
+
+    if (result != HENKA_SUCCESS)
+    {
+        goto reconcile_failed_without_scene;
+    }
+
+    for (index = 0U; index < prefab->entity_count; ++index)
+    {
+        const henka_prefab_entry* entry = &prefab->entries[index];
+        const size_t old_index =
+            henka_prefab_instance_find_mapped_source_id(
+                instance,
+                entry->source_id);
+
+        new_source_ids[index] = entry->source_id;
+
+        if (old_index != SIZE_MAX)
+        {
+            henka_transform actual_transform;
+
+            if (old_index >= instance->entity_count ||
+                !henka_scene_is_entity_valid(
+                    candidate_scene,
+                    instance->entities[old_index]) ||
+                henka_scene_get_entity_local_transform(
+                    candidate_scene,
+                    instance->entities[old_index],
+                    &actual_transform) != HENKA_SUCCESS)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto reconcile_failed;
+            }
+
+            new_entities[index] = instance->entities[old_index];
+            old_survives[old_index] = true;
+
+            new_base_local_transforms[index] =
+                instance->base_local_transforms[old_index];
+            new_local_transform_overrides[index] =
+                instance->local_transform_overrides[old_index];
+            new_transform_override_flags[index] =
+                instance->transform_override_flags[old_index];
+
+            if (old_index != old_root_index &&
+                !henka_prefab_transform_equal(
+                    actual_transform,
+                    instance->base_local_transforms[old_index]))
+            {
+                new_local_transform_overrides[index] =
+                    actual_transform;
+                new_transform_override_flags[index] = true;
+            }
+        }
+        else
+        {
+            new_entities[index] =
+                henka_scene_create_entity_named(
+                    candidate_scene,
+                    entry->name);
+
+            if (new_entities[index] == HENKA_INVALID_ENTITY)
+            {
+                result = HENKA_ERROR_OUT_OF_MEMORY;
+                goto reconcile_failed;
+            }
+
+            new_base_local_transforms[index] =
+                entry->local_transform;
+            new_local_transform_overrides[index] =
+                entry->local_transform;
+            new_transform_override_flags[index] = false;
+        }
+    }
+
+    /*
+     * Rebuild authoritative hierarchy before retiring removed members.
+     * Surviving children are therefore already attached to their current
+     * source parent when an obsolete source member is destroyed.
+     */
+    for (index = 0U; index < prefab->entity_count; ++index)
+    {
+        const henka_prefab_entry* entry = &prefab->entries[index];
+        henka_entity desired_parent;
+
+        if (index == prefab->root_index)
+        {
+            desired_parent = external_parent;
+        }
+        else
+        {
+            if (entry->parent_index == SIZE_MAX ||
+                entry->parent_index >= prefab->entity_count)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto reconcile_failed;
+            }
+
+            desired_parent =
+                new_entities[entry->parent_index];
+        }
+
+        result = henka_scene_set_entity_parent(
+            candidate_scene,
+            new_entities[index],
+            desired_parent,
+            HENKA_SCENE_PARENT_KEEP_LOCAL);
+
+        if (result != HENKA_SUCCESS)
+        {
+            goto reconcile_failed;
+        }
+    }
+
+    for (index = instance->entity_count; index > 0U; --index)
+    {
+        const size_t old_index = index - 1U;
+
+        if (!old_survives[old_index] &&
+            henka_scene_is_entity_valid(
+                candidate_scene,
+                instance->entities[old_index]))
+        {
+            henka_scene_destroy_entity(
+                candidate_scene,
+                instance->entities[old_index]);
+        }
+    }
+
+    for (index = 0U; index < prefab->entity_count; ++index)
+    {
+        henka_transform desired_transform;
+
+        if (index == prefab->root_index)
+        {
+            desired_transform = old_root_transform;
+        }
+        else if (new_transform_override_flags[index])
+        {
+            desired_transform =
+                new_local_transform_overrides[index];
+        }
+        else
+        {
+            desired_transform =
+                prefab->entries[index].local_transform;
+        }
+
+        result = henka_scene_set_entity_local_transform(
+            candidate_scene,
+            new_entities[index],
+            desired_transform);
+
+        if (result != HENKA_SUCCESS)
+        {
+            goto reconcile_failed;
+        }
+    }
+
+    /*
+     * Run the ordinary already-hardened Prefab refresh against the candidate
+     * only. Membership now matches, so this cannot recurse into structural
+     * reconciliation. Repair 1A's prepared presentation/metadata transaction
+     * remains the single authority for supported source-state refresh.
+     */
+    memset(
+        &candidate_instance,
+        0,
+        sizeof(candidate_instance));
+
+    candidate_instance.target_scene = candidate_scene;
+    candidate_instance.prefab = prefab;
+    candidate_instance.entities = new_entities;
+    candidate_instance.source_ids = new_source_ids;
+    candidate_instance.base_local_transforms =
+        new_base_local_transforms;
+    candidate_instance.local_transform_overrides =
+        new_local_transform_overrides;
+    candidate_instance.transform_override_flags =
+        new_transform_override_flags;
+    candidate_instance.entity_count = prefab->entity_count;
+    candidate_instance.root_index = prefab->root_index;
+    candidate_instance.prefab_revision =
+        instance->prefab_revision;
+
+    result = henka_prefab_instance_refresh(
+        &candidate_instance);
+
+    if (result != HENKA_SUCCESS)
+    {
+        goto reconcile_failed;
+    }
+
+    /*
+     * No fallible Prefab mutation remains after this commit. The structural
+     * Scene swap is allocation-free. The original live instance mapping is
+     * published only after the Scene commit succeeds.
+     */
+    result = henka_scene_replace_contents_structural(
+        instance->target_scene,
+        candidate_scene);
+
+    if (result != HENKA_SUCCESS)
+    {
+        goto reconcile_failed;
+    }
+
+    henka_scene_destroy(candidate_scene);
+    candidate_scene = NULL;
+
+    henka_free(instance->transform_override_flags);
+    henka_free(instance->local_transform_overrides);
+    henka_free(instance->base_local_transforms);
+    henka_free(instance->source_ids);
+    henka_free(instance->entities);
+
+    instance->entities = new_entities;
+    instance->source_ids = new_source_ids;
+    instance->base_local_transforms =
+        new_base_local_transforms;
+    instance->local_transform_overrides =
+        new_local_transform_overrides;
+    instance->transform_override_flags =
+        new_transform_override_flags;
+    instance->entity_count = prefab->entity_count;
+    instance->root_index = prefab->root_index;
+    instance->prefab_revision =
+        candidate_instance.prefab_revision;
+
+    henka_free(old_survives);
+    return HENKA_SUCCESS;
+
+reconcile_failed:
+    henka_scene_destroy(candidate_scene);
+
+reconcile_failed_without_scene:
+    henka_free(old_survives);
+    henka_free(new_transform_override_flags);
+    henka_free(new_local_transform_overrides);
+    henka_free(new_base_local_transforms);
+    henka_free(new_source_ids);
+    henka_free(new_entities);
+    return result;
+}
+henka_result henka_prefab_instance_get_material_override(
+    const henka_prefab_instance* instance,
+    henka_prefab_source_id source_id,
+    bool* out_has_override,
+    henka_material* out_material)
+{
+    const henka_prefab_entry* entry;
+    const henka_material_asset* target_asset;
+    uint64_t target_revision;
+    bool target_overridden;
+    size_t index;
+    henka_result result;
+
+    if (out_has_override == NULL || out_material == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_has_override = false;
+    *out_material = henka_material_default();
+
+    result = henka_prefab_instance_find_source_index(
+        instance, source_id, &index);
+    if (result != HENKA_SUCCESS || instance->prefab == NULL ||
+        instance->prefab_revision != instance->prefab->revision ||
+        !henka_prefab_instance_membership_matches(instance))
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
+    }
+
+    entry = &instance->prefab->entries[index];
+    result = henka_scene_get_entity_material(
+        instance->target_scene, instance->entities[index], out_material);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    if (entry->material_asset == NULL)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (entry->material_asset_overridden ||
+        henka_scene_get_entity_material_asset(
+            instance->target_scene,
+            instance->entities[index],
+            &target_asset) != HENKA_SUCCESS ||
+        henka_scene_get_material_asset_state(
+            instance->target_scene,
+            instance->entities[index],
+            &target_revision,
+            &target_overridden) != HENKA_SUCCESS ||
+        target_asset != entry->material_asset)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    (void)target_revision;
+    *out_has_override = target_overridden;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_prefab_instance_set_material_override(
+    henka_prefab_instance* instance,
+    henka_prefab_source_id source_id,
+    henka_material material)
+{
+    const henka_prefab_entry* entry;
+    const henka_material_asset* target_asset;
+    size_t index;
+    henka_result result;
+
+    result = henka_prefab_instance_find_source_index(
+        instance, source_id, &index);
+    if (result != HENKA_SUCCESS || instance->prefab == NULL ||
+        instance->prefab_revision != instance->prefab->revision ||
+        !henka_prefab_instance_membership_matches(instance))
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
+    }
+
+    entry = &instance->prefab->entries[index];
+    if (entry->material_asset == NULL || entry->material_asset_overridden ||
+        henka_scene_get_entity_material_asset(
+            instance->target_scene,
+            instance->entities[index],
+            &target_asset) != HENKA_SUCCESS ||
+        target_asset != entry->material_asset)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_scene_apply_material_asset_override(
+        instance->target_scene,
+        instance->entities[index],
+        entry->material_asset,
+        material);
+}
+
+henka_result henka_prefab_instance_clear_material_override(
+    henka_prefab_instance* instance,
+    henka_prefab_source_id source_id)
+{
+    const henka_prefab_entry* entry;
+    const henka_material_asset* target_asset;
+    henka_material source_material;
+    uint64_t source_revision;
+    uint64_t target_revision;
+    bool target_overridden;
+    size_t index;
+    henka_result result;
+
+    result = henka_prefab_instance_find_source_index(
+        instance, source_id, &index);
+    if (result != HENKA_SUCCESS || instance->prefab == NULL ||
+        instance->prefab_revision != instance->prefab->revision ||
+        !henka_prefab_instance_membership_matches(instance))
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
+    }
+
+    entry = &instance->prefab->entries[index];
+    if (entry->material_asset == NULL || entry->material_asset_overridden ||
+        henka_scene_get_entity_material_asset(
+            instance->target_scene,
+            instance->entities[index],
+            &target_asset) != HENKA_SUCCESS ||
+        henka_scene_get_material_asset_state(
+            instance->target_scene,
+            instance->entities[index],
+            &target_revision,
+            &target_overridden) != HENKA_SUCCESS ||
+        target_asset != entry->material_asset ||
+        henka_assets_get_material_asset_material(
+            entry->material_asset, &source_material) != HENKA_SUCCESS ||
+        henka_assets_get_material_asset_revision(
+            entry->material_asset, &source_revision) != HENKA_SUCCESS ||
+        source_revision == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!target_overridden && target_revision == source_revision)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    return henka_scene_apply_material_asset(
+        instance->target_scene,
+        instance->entities[index],
+        entry->material_asset,
+        source_material,
+        source_revision);
+}
 henka_result henka_prefab_instance_refresh(henka_prefab_instance* instance)
 {
     henka_scene_entity_presentation_update* updates;
     henka_scene_entity_mesh_update* mesh_updates;
     henka_scene_entity_material_asset_update* material_asset_updates;
+    henka_scene* candidate_scene;
     bool* reconciled_override_flags;
     bool material_asset_updates_present;
     bool refresh_required;
@@ -2234,10 +2975,13 @@ henka_result henka_prefab_instance_refresh(henka_prefab_instance* instance)
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     prefab_revision = instance->prefab->revision;
-    if (instance->prefab->entity_count != instance->entity_count ||
-        instance->prefab->root_index >= instance->prefab->entity_count)
+    if (instance->prefab->root_index >= instance->prefab->entity_count)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_prefab_instance_membership_matches(instance))
+    {
+        return henka_prefab_instance_reconcile_membership(instance);
     }
     material_asset_updates = NULL;
     material_asset_updates_present = false;
@@ -2314,11 +3058,11 @@ henka_result henka_prefab_instance_refresh(henka_prefab_instance* instance)
             }
             if (target_overridden)
             {
-                /* Keep a live instance override intact for an idempotent
-                 * call. If the source snapshot itself changed, the
-                 * unsupported combination must fail closed rather than
-                 * silently replacing the override with source state. */
-                if (refresh_required || target_asset != entry->material_asset)
+                /* A live asset-backed instance override is Scene-owned state.
+                 * Preserve it while compatible Prefab source state refreshes
+                 * around it. A changed material definition identity remains a
+                 * hard authority conflict and fails closed. */
+                if (target_asset != entry->material_asset)
                 {
                     henka_free(material_asset_updates);
                     return HENKA_ERROR_INVALID_ARGUMENT;
@@ -2443,16 +3187,43 @@ henka_result henka_prefab_instance_refresh(henka_prefab_instance* instance)
         }
     }
 
-    result = henka_scene_apply_entity_local_mesh_refresh_with_material_assets_batch(
+    candidate_scene = NULL;
+
+    result = henka_scene_clone(
         instance->target_scene,
-        instance->entities,
-        updates,
-        mesh_updates,
-        material_asset_updates,
-        instance->entity_count);
+        &candidate_scene);
+
+    if (result == HENKA_SUCCESS)
+    {
+        result =
+            henka_scene_apply_entity_local_mesh_refresh_with_material_assets_batch(
+                candidate_scene,
+                instance->entities,
+                updates,
+                mesh_updates,
+                material_asset_updates,
+                instance->entity_count);
+    }
+
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_prefab_instance_apply_source_metadata_candidate(
+            instance,
+            candidate_scene);
+    }
+
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_replace_contents(
+            instance->target_scene,
+            candidate_scene);
+    }
+
+    henka_scene_destroy(candidate_scene);
     henka_free(updates);
     henka_free(mesh_updates);
     henka_free(material_asset_updates);
+
     if (result != HENKA_SUCCESS)
     {
         henka_free(reconciled_override_flags);
@@ -2493,6 +3264,153 @@ henka_result henka_prefab_instance_refresh(henka_prefab_instance* instance)
     return HENKA_SUCCESS;
 }
 
+henka_result henka_prefab_instance_duplicate(
+    const henka_prefab_instance* source_instance,
+    henka_prefab_instance** out_duplicate)
+{
+    henka_prefab_instance* duplicate;
+    henka_entity source_root;
+    henka_entity parent;
+    henka_transform root_transform;
+    size_t index;
+    henka_result result;
+
+    if (out_duplicate == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_duplicate = NULL;
+
+    if (source_instance == NULL ||
+        source_instance->target_scene == NULL ||
+        source_instance->prefab == NULL ||
+        source_instance->entities == NULL ||
+        source_instance->source_ids == NULL ||
+        source_instance->prefab_revision != source_instance->prefab->revision ||
+        !henka_prefab_instance_membership_matches(source_instance))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_prefab_instance_get_root_entity(
+        source_instance, &source_root);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_scene_get_entity_parent(
+        source_instance->target_scene, source_root, &parent);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_scene_get_entity_local_transform(
+        source_instance->target_scene, source_root, &root_transform);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    duplicate = NULL;
+    if (parent == HENKA_INVALID_ENTITY)
+    {
+        result = henka_prefab_instantiate_with_instance(
+            source_instance->prefab,
+            source_instance->target_scene,
+            root_transform,
+            &duplicate);
+    }
+    else
+    {
+        result = henka_prefab_instantiate_under_parent_with_instance(
+            source_instance->prefab,
+            source_instance->target_scene,
+            parent,
+            root_transform,
+            &duplicate);
+    }
+
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    for (index = 0U; index < source_instance->entity_count; ++index)
+    {
+        bool has_transform_override;
+        bool has_material_override;
+        henka_transform override_transform;
+        henka_material override_material;
+
+        result = henka_prefab_instance_get_local_transform_override(
+            source_instance,
+            source_instance->source_ids[index],
+            &has_transform_override,
+            &override_transform);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_prefab_instance_destroy_entities(duplicate);
+            henka_prefab_instance_destroy(duplicate);
+            return result;
+        }
+
+        if (has_transform_override)
+        {
+            result = henka_prefab_instance_set_local_transform_override(
+                duplicate,
+                source_instance->source_ids[index],
+                override_transform);
+            if (result != HENKA_SUCCESS)
+            {
+                henka_prefab_instance_destroy_entities(duplicate);
+                henka_prefab_instance_destroy(duplicate);
+                return result;
+            }
+        }
+
+        result = henka_prefab_instance_get_material_override(
+            source_instance,
+            source_instance->source_ids[index],
+            &has_material_override,
+            &override_material);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_prefab_instance_destroy_entities(duplicate);
+            henka_prefab_instance_destroy(duplicate);
+            return result;
+        }
+
+        if (has_material_override)
+        {
+            result = henka_prefab_instance_set_material_override(
+                duplicate,
+                source_instance->source_ids[index],
+                override_material);
+            if (result != HENKA_SUCCESS)
+            {
+                henka_prefab_instance_destroy_entities(duplicate);
+                henka_prefab_instance_destroy(duplicate);
+                return result;
+            }
+        }
+    }
+
+    *out_duplicate = duplicate;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_prefab_instance_detach(
+    henka_prefab_instance** inout_instance)
+{
+    if (inout_instance == NULL || *inout_instance == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    henka_prefab_instance_destroy(*inout_instance);
+    *inout_instance = NULL;
+    return HENKA_SUCCESS;
+}
 henka_result henka_prefab_instance_get_entity_at(
     const henka_prefab_instance* instance,
     size_t index,

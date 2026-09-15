@@ -117,6 +117,15 @@ henka_result henka_scene_apply_entity_local_mesh_refresh_with_material_assets_ba
     const henka_scene_entity_material_asset_update* material_asset_updates,
     size_t update_count);
 
+/* Commits a fully prepared structural clone into destination without
+ * allocating. Surviving active entity slots keep their opaque identity.
+ * Additions and removals are allowed. When destination has external physics
+ * or audio borrowers, removing or generation-replacing an existing active
+ * identity fails closed because Scene cannot prove which entity the external
+ * owner references. prepared_source must not itself own external links. */
+henka_result henka_scene_replace_contents_structural(
+    henka_scene* destination,
+    henka_scene* prepared_source);
 /* Internal lifetime bridge for runtime owners that borrow a scene link. */
 henka_result henka_scene_acquire_physics_link(henka_scene* scene);
 void henka_scene_release_physics_link(henka_scene* scene);

@@ -105,6 +105,33 @@ henka_result sandbox3d_game_authoring_instantiate_prefab_asset_under_parent(
 henka_result sandbox3d_game_authoring_destroy_prefab_instance(
     sandbox3d_game_authoring* authoring,
     henka_entity instance_entity);
+/* Deliberately removes Prefab ownership from one manager-owned authored
+ * instance while retaining its live entities and persistent document IDs.
+ * Current supported authored state and hierarchy are synchronized into a
+ * prepared Scene Document candidate before Prefab provenance is removed.
+ * Live meshes must be absent or resolve to a manager-owned reconstructible
+ * mesh source; otherwise unpack fails before publication instead of silently
+ * losing source identity. The supplied entity may be any live instance member. */
+henka_result sandbox3d_game_authoring_unpack_prefab_instance(
+    sandbox3d_game_authoring* authoring,
+    henka_entity instance_entity);
+
+/* Captures current supported live edits on one mapped Prefab member as
+ * explicit instance-owned Scene Document state. Non-root local transform and
+ * manager-owned asset-backed material overrides are supported. This operation
+ * deliberately does not rewrite the reusable .hprefab source asset. It enters
+ * the existing Game Authoring undo/redo history. */
+henka_result sandbox3d_game_authoring_apply_prefab_instance_edits(
+    sandbox3d_game_authoring* authoring,
+    henka_entity instance_entity);
+
+/* Restores supported instance-owned state on one mapped Prefab member to the
+ * current Prefab source. The root transform remains instance placement;
+ * non-root local transform and manager-owned asset-backed material overrides
+ * are reverted. This operation enters the existing Game Authoring history. */
+henka_result sandbox3d_game_authoring_revert_prefab_instance_edits(
+    sandbox3d_game_authoring* authoring,
+    henka_entity instance_entity);
 /* Removes the binding and promotes direct children to authored roots, matching
  * the runtime scene's parent-destruction semantics.  Any still-live child is
  * detached from the runtime scene before its authored parent link is cleared. */

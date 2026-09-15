@@ -331,8 +331,9 @@ history remain open.
   each newly created instance records the revision it captured. A rejected
   refresh leaves the previous snapshot and revision unchanged.
 - `henka_prefab_instance_refresh` reapplies the supported inline presentation
-  values, borrowed source mesh pointers, and non-overridden borrowed material
-  asset state to a live mapped instance when
+  values, tags, entity flags, local bounds, logical selection ownership,
+  borrowed source mesh pointers, and non-overridden borrowed material asset
+  state to a live mapped instance when
   source membership and source-local IDs are unchanged. It adopts current
   canonical local transforms edited through the general scene API before
   applying the source: root placement remains instance state, and a changed
@@ -415,12 +416,25 @@ history remain open.
   definitions remain borrowed from their existing owners and must outlive the
   prefab and its instances. Instantiation is bounded to 4096 entries and rolls
   back all newly created entities if validation or allocation fails.
-- Explicit serialized per-instance override metadata, source-refresh of
-  manager-owned asset state and non-mesh non-presentation state, duplication,
-  unpacking, editor authoring, and packaged/external-project prefab workflows
-  remain in progress. The current runtime snapshot, persisted asset,
-  transactional presentation and source-mesh refresh, save/reload, and
-  refresh APIs are a foundation rather than a complete prefab authoring system.
+- Runtime structural source-membership reconciliation, explicit mapped-instance
+  duplication, mapping detach, and manager-owned asset-backed instance material
+  overrides are implemented at the core Prefab layer. Game Authoring save/load
+  directly proves asset-backed material override persistence, and bounded
+  manager-owned unpack preserves persistent document IDs, hierarchy, current
+  supported authored state, and reconstructible manager-backed mesh identity.
+  Game Authoring now also exposes explicit Apply Instance Edits and Revert to
+  Prefab operations for supported non-root local-transform and manager-owned
+  asset-backed material overrides. Apply records current live edits as
+  instance-owned Scene Document state without rewriting the reusable `.hprefab`
+  source; Revert restores the current source values. Both operations participate
+  in the existing Game Authoring undo/redo stack, and replay reconciles the
+  live Prefab mapping rather than creating a second history authority.
+  Complete editor controls and packaged/external Prefab workflows remain in
+  progress.
+  The current runtime snapshot, persisted asset, transactional presentation,
+  source-mesh, and non-overridden manager-owned material-asset refresh, save/
+  reload, and refresh APIs are a foundation rather than a complete prefab
+  authoring system.
 
 ## Modeling / Content Authoring
 

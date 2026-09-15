@@ -142,18 +142,38 @@ henka_result henka_prefab_instance_get_local_transform_override(
     henka_prefab_source_id source_id,
     bool* out_has_override,
     henka_transform* out_transform);
+
+/* Asset-backed instance material overrides remain owned by the live Scene
+ * entity and are addressed through the Prefab's stable source-local ID. The
+ * reusable Prefab snapshot is never modified. Set/clear require the mapped
+ * instance to be current and to retain the same manager-owned material asset
+ * authority as the source entry. */
+henka_result henka_prefab_instance_set_material_override(
+    henka_prefab_instance* instance,
+    henka_prefab_source_id source_id,
+    henka_material material);
+henka_result henka_prefab_instance_clear_material_override(
+    henka_prefab_instance* instance,
+    henka_prefab_source_id source_id);
+henka_result henka_prefab_instance_get_material_override(
+    const henka_prefab_instance* instance,
+    henka_prefab_source_id source_id,
+    bool* out_has_override,
+    henka_material* out_material);
 /* Reapplies the current source snapshot to the live mapped entities. The
  * source prefab is borrowed and must outlive the instance. Stable source IDs
- * and live Scene identities must still match the captured membership.
+ * reconcile surviving Scene identities across source additions, removals, and
+ * source-order changes before supported source state is reapplied.
  * Supported inline-presentation values and non-overridden borrowed material
  * asset state refresh atomically; local transform
  * overrides remain in place and their source baselines are updated. Local
  * transforms edited through the general scene API are adopted before a
  * refresh: the root remains instance placement and a changed non-root becomes
- * an instance override. Snapshot entries with persisted asset-backed overrides
- * fail closed when a source refresh would conflict with their unsupported
- * override payload. A call for the already-applied prefab revision is an
- * idempotent no-op. */
+ * an instance override. Supported live asset-backed instance material
+ * overrides remain authoritative while compatible source state refreshes
+ * around them. Snapshot entries that themselves contain asset-backed override
+ * payloads still fail closed. A call for the already-applied prefab revision
+ * is an idempotent no-op. */
 henka_result henka_prefab_instance_refresh(henka_prefab_instance* instance);
 henka_result henka_prefab_instance_get_entity_at(
     const henka_prefab_instance* instance,
@@ -162,6 +182,19 @@ henka_result henka_prefab_instance_get_entity_at(
 henka_result henka_prefab_instance_get_root_entity(
     const henka_prefab_instance* instance,
     henka_entity* out_entity);
+
+/* Creates a second mapped instance in the same target scene and hierarchy
+ * context as source_instance. Stable prefab provenance and supported local
+ * transform overrides are copied into independent per-instance state. */
+henka_result henka_prefab_instance_duplicate(
+    const henka_prefab_instance* source_instance,
+    henka_prefab_instance** out_duplicate);
+
+/* Releases prefab mapping ownership without destroying the mapped scene
+ * entities. The surviving entities immediately become ordinary scene content.
+ * On success the caller's handle is set to NULL. */
+henka_result henka_prefab_instance_detach(
+    henka_prefab_instance** inout_instance);
 
 /* Instantiates one mapped prefab beneath a live scene entity. root_transform
  * is local to parent_entity; stale or invalid parents fail before allocation. */
