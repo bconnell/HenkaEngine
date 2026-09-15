@@ -93,6 +93,12 @@ henka_result sandbox3d_game_authoring_instantiate_prefab_asset(
     const char* asset_path,
     henka_transform root_transform,
     henka_entity* out_root_entity);
+henka_result sandbox3d_game_authoring_instantiate_prefab_asset_under_parent(
+    sandbox3d_game_authoring* authoring,
+    const char* asset_path,
+    henka_entity parent_entity,
+    henka_transform root_transform,
+    henka_entity* out_root_entity);
 /* Removes the binding and promotes direct children to authored roots, matching
  * the runtime scene's parent-destruction semantics.  Any still-live child is
  * detached from the runtime scene before its authored parent link is cleared. */

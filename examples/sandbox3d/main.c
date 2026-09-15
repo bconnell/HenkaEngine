@@ -32857,6 +32857,66 @@ static void sandbox3d_draw_utility_panel(
                             henka_result_to_string(place_result));
                     }
                 }
+                if (henka_ui_button(
+                        state->ui,
+                        "asset_browser_place_prefab_under_selected",
+                        (henka_ui_rect){x_left, y_start + 378.0f, panel_bounds.width - 28.0f, 24.0f},
+                        "Place Under Selected"))
+                {
+                    const henka_entity parent_entity =
+                        sandbox3d_get_real_selected_entity(state);
+                    henka_asset_metadata selected_metadata;
+                    henka_entity placed_root = HENKA_INVALID_ENTITY;
+                    henka_scene_document_id parent_document_id =
+                        HENKA_INVALID_SCENE_DOCUMENT_ID;
+                    henka_scene_document_object parent_object;
+                    henka_result place_result = HENKA_ERROR_INVALID_ARGUMENT;
+                    if (state->game_authoring != NULL &&
+                        parent_entity != HENKA_INVALID_ENTITY &&
+                        sandbox3d_game_authoring_get_object_for_entity(
+                            state->game_authoring,
+                            parent_entity,
+                            &parent_document_id,
+                            &parent_object) == HENKA_SUCCESS &&
+                        parent_document_id != HENKA_INVALID_SCENE_DOCUMENT_ID &&
+                        !(parent_object.source.kind ==
+                              HENKA_SCENE_DOCUMENT_SOURCE_ASSET &&
+                          parent_object.source.asset_kind ==
+                              HENKA_SCENE_DOCUMENT_ASSET_PREFAB) &&
+                        henka_assets_get_metadata_at_index(
+                            assets,
+                            state->asset_browser_selected_metadata_index,
+                            &selected_metadata) == HENKA_SUCCESS &&
+                        selected_metadata.source_path != NULL)
+                    {
+                        place_result =
+                            sandbox3d_game_authoring_instantiate_prefab_asset_under_parent(
+                                state->game_authoring,
+                                selected_metadata.source_path,
+                                parent_entity,
+                                henka_transform_identity(),
+                                &placed_root);
+                    }
+                    if (place_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Prefab placed under selected object: %llu",
+                            (unsigned long long)placed_root);
+                        state->selected_entity = placed_root;
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Prefab parent placement rejected: select an ordinary scene object (%s).",
+                            henka_result_to_string(place_result));
+                    }
+                }
             }
             break;
         }

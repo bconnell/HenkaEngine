@@ -394,9 +394,11 @@ history remain open.
   textures, materials, and meshes. Selecting a manager-owned prefab resolves it
   through the asset authority; Place Prefab creates a real mapped authoring
   instance at the origin and records its prefab path, revision, durable source
-  IDs, and Scene Document provenance. Placement remains a bounded first-step
-  authoring action; per-instance override persistence and broader placement
-  controls remain open.
+  IDs, and Scene Document provenance. The Game Authoring coordinator also places
+  a mapped instance under a bound ordinary parent using a local root transform;
+  prefab-derived parents are rejected, and the Asset Browser exposes this as
+  Place Under Selected. Placement remains a bounded first-step authoring action;
+  per-instance override persistence and broader placement controls remain open.
 - Reloading that project validates the persisted prefab source path, revision,
   membership, and durable source IDs against the already materialized live
   instance, then reapplies the document-authored transform and hierarchy
