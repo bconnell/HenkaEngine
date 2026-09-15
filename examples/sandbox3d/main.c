@@ -17160,6 +17160,94 @@ static bool sandbox3d_duplicate_selected_object(henka_engine* engine, sandbox3d_
     return true;
 }
 
+static henka_result sandbox3d_delete_prefab_instance_for_entity(
+    sandbox3d_state* state,
+    henka_entity selected_entity)
+{
+    henka_scene_document_id selected_document_id =
+        HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object selected_object;
+    sandbox3d_authoring_object* deleted_objects[
+        SANDBOX3D_MAX_AUTHORING_OBJECTS];
+    sandbox3d_authoring_asset_document* document;
+    size_t deleted_object_count = 0U;
+    size_t index;
+    henka_result result;
+
+    if (state == NULL || state->game_authoring == NULL ||
+        selected_entity == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            state->game_authoring,
+            selected_entity,
+            &selected_document_id,
+            &selected_object) != HENKA_SUCCESS ||
+        selected_document_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        selected_object.source.kind != HENKA_SCENE_DOCUMENT_SOURCE_ASSET ||
+        selected_object.source.asset_kind != HENKA_SCENE_DOCUMENT_ASSET_PREFAB ||
+        selected_object.source.prefab_instance_root_id ==
+            HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < SANDBOX3D_MAX_AUTHORING_OBJECTS; ++index)
+    {
+        sandbox3d_authoring_object* object = state->authoring_objects[index];
+        henka_entity entity;
+        henka_scene_document_object authored_object;
+
+        if (object == NULL || deleted_object_count >=
+                SANDBOX3D_MAX_AUTHORING_OBJECTS)
+        {
+            continue;
+        }
+        entity = sandbox3d_authoring_object_get_entity(object);
+        if (sandbox3d_game_authoring_get_object_for_entity(
+                state->game_authoring,
+                entity,
+                &(henka_scene_document_id){HENKA_INVALID_SCENE_DOCUMENT_ID},
+                &authored_object) != HENKA_SUCCESS ||
+            authored_object.source.kind != HENKA_SCENE_DOCUMENT_SOURCE_ASSET ||
+            authored_object.source.asset_kind != HENKA_SCENE_DOCUMENT_ASSET_PREFAB ||
+            authored_object.source.prefab_instance_root_id !=
+                selected_object.source.prefab_instance_root_id)
+        {
+            continue;
+        }
+        deleted_objects[deleted_object_count++] = object;
+    }
+
+    result = sandbox3d_game_authoring_destroy_prefab_instance(
+        state->game_authoring, selected_entity);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    document = sandbox3d_authoring_asset_controller_get_document(
+        state->authoring_asset_controller);
+    for (index = 0U; index < deleted_object_count; ++index)
+    {
+        sandbox3d_authoring_object* object = deleted_objects[index];
+        if (sandbox3d_authoring_asset_document_forget_released_part(
+                document, object))
+        {
+            sandbox3d_authoring_asset_controller_get_ui(
+                state->authoring_asset_controller)->active_part_index = SIZE_MAX;
+        }
+        sandbox3d_release_authoring_physics(state, object);
+        sandbox3d_unregister_authoring_object(state, object);
+        if (state->authoring_object == object)
+        {
+            state->authoring_object = NULL;
+        }
+        sandbox3d_authoring_object_destroy(object);
+    }
+    state->authoring_object = NULL;
+    sandbox3d_clear_selection(state, "Prefab instance deleted");
+    return HENKA_SUCCESS;
+}
+
 static bool sandbox3d_delete_selected_object(sandbox3d_state* state)
 {
     henka_action_request request;
@@ -17191,6 +17279,25 @@ static bool sandbox3d_delete_selected_object(sandbox3d_state* state)
         sandbox3d_authoring_object_get_entity(state->modeling_operator.object) == selected_entity)
     {
         sandbox3d_cancel_active_modeling_operator_session(state);
+    }
+    if (state->game_authoring != NULL)
+    {
+        henka_scene_document_id selected_document_id =
+            HENKA_INVALID_SCENE_DOCUMENT_ID;
+        henka_scene_document_object selected_object;
+        if (sandbox3d_game_authoring_get_object_for_entity(
+                state->game_authoring,
+                selected_entity,
+                &selected_document_id,
+                &selected_object) == HENKA_SUCCESS &&
+            selected_object.source.kind == HENKA_SCENE_DOCUMENT_SOURCE_ASSET &&
+            selected_object.source.asset_kind == HENKA_SCENE_DOCUMENT_ASSET_PREFAB &&
+            selected_object.source.prefab_instance_root_id !=
+                HENKA_INVALID_SCENE_DOCUMENT_ID)
+        {
+            return sandbox3d_delete_prefab_instance_for_entity(
+                       state, selected_entity) == HENKA_SUCCESS;
+        }
     }
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;

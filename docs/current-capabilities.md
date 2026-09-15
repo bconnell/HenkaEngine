@@ -399,6 +399,10 @@ history remain open.
   prefab-derived parents are rejected, and the Asset Browser exposes this as
   Place Under Selected. Placement remains a bounded first-step authoring action;
   per-instance override persistence and broader placement controls remain open.
+- Ordinary Sandbox Delete recognizes a mapped prefab member and routes through
+  coordinator-owned group teardown. The complete mapped instance is removed,
+  the manager-owned prefab asset and other instances remain available, and a
+  stale member is rejected without being treated as an ordinary scene object.
 - Reloading that project validates the persisted prefab source path, revision,
   membership, and durable source IDs against the already materialized live
   instance, then reapplies the document-authored transform and hierarchy
