@@ -83,6 +83,19 @@ typedef struct henka_scene_entity_mesh_update
     henka_mesh* mesh;
 } henka_scene_entity_mesh_update;
 
+/* A borrowed manager-owned material refresh used by Prefab source updates.
+ * The current transaction supports the non-overridden definition state only;
+ * explicit asset-backed overrides remain a separate authority boundary until
+ * their full override payload can be carried atomically. */
+typedef struct henka_scene_entity_material_asset_update
+{
+    bool apply_asset;
+    const henka_material_asset* asset;
+    henka_material material;
+    uint64_t revision;
+    bool overridden;
+} henka_scene_entity_material_asset_update;
+
 henka_result henka_scene_apply_entity_transform_updates(
     const henka_scene_entity_transform_update* updates,
     size_t update_count);
@@ -95,6 +108,13 @@ henka_result henka_scene_apply_entity_local_mesh_refresh_batch(
     const henka_entity* entities,
     const henka_scene_entity_presentation_update* updates,
     const henka_scene_entity_mesh_update* mesh_updates,
+    size_t update_count);
+henka_result henka_scene_apply_entity_local_mesh_refresh_with_material_assets_batch(
+    henka_scene* scene,
+    const henka_entity* entities,
+    const henka_scene_entity_presentation_update* updates,
+    const henka_scene_entity_mesh_update* mesh_updates,
+    const henka_scene_entity_material_asset_update* material_asset_updates,
     size_t update_count);
 
 /* Internal lifetime bridge for runtime owners that borrow a scene link. */

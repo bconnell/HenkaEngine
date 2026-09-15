@@ -1376,6 +1376,7 @@ typedef struct henka_prepared_entity_presentation
     bool renderer_enabled_changed;
     bool interaction_changed;
     bool material_changed;
+    bool material_asset_changed;
     bool mesh_changed;
     henka_mesh* mesh;
 } henka_prepared_entity_presentation;
@@ -1403,6 +1404,7 @@ static henka_result henka_scene_apply_entity_presentation_batch_internal(
     const henka_entity* entities,
     const henka_scene_entity_presentation_update* updates,
     const henka_scene_entity_mesh_update* mesh_updates,
+    const henka_scene_entity_material_asset_update* material_asset_updates,
     size_t update_count)
 {
     henka_prepared_entity_presentation* prepared = NULL;
@@ -1442,7 +1444,14 @@ static henka_result henka_scene_apply_entity_presentation_batch_internal(
             !henka_is_finite_float(updates[index].interaction.max_distance) ||
             updates[index].interaction.max_distance < 0.0f ||
             (updates[index].apply_material &&
-                !henka_scene_material_is_valid(updates[index].material)))
+                !henka_scene_material_is_valid(updates[index].material)) ||
+            (material_asset_updates != NULL &&
+                material_asset_updates[index].apply_asset &&
+                (material_asset_updates[index].asset == NULL ||
+                    material_asset_updates[index].revision == 0U ||
+                    material_asset_updates[index].overridden ||
+                    !henka_scene_material_is_valid(
+                        material_asset_updates[index].material))))
         {
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto prepare_failed;
@@ -1480,6 +1489,14 @@ static henka_result henka_scene_apply_entity_presentation_batch_internal(
                 record->interaction_prompt,
                 updates[index].interaction.prompt);
         prepared[index].material_changed = updates[index].apply_material;
+        prepared[index].material_asset_changed =
+            material_asset_updates != NULL &&
+            material_asset_updates[index].apply_asset &&
+            (record->material_asset != material_asset_updates[index].asset ||
+                record->material_asset_revision !=
+                    material_asset_updates[index].revision ||
+                record->material_asset_overridden !=
+                    material_asset_updates[index].overridden);
         prepared[index].mesh_changed = mesh_updates != NULL &&
             mesh_updates[index].apply_mesh &&
             record->mesh != mesh_updates[index].mesh;
@@ -1533,6 +1550,7 @@ static henka_result henka_scene_apply_entity_presentation_batch_internal(
             (prepared[index].renderer_enabled_changed ? UINT64_C(1) : UINT64_C(0)) +
             (prepared[index].interaction_changed ? UINT64_C(1) : UINT64_C(0)) +
             (prepared[index].material_changed ? UINT64_C(1) : UINT64_C(0)) +
+            (prepared[index].material_asset_changed ? UINT64_C(1) : UINT64_C(0)) +
             (prepared[index].mesh_changed ? UINT64_C(1) : UINT64_C(0));
         if (update_mutation_count > UINT64_MAX - mutation_count)
         {
@@ -1639,6 +1657,23 @@ static henka_result henka_scene_apply_entity_presentation_batch_internal(
             }
             (void)henka_scene_bump_render_revision(scene);
         }
+        if (item->material_asset_changed)
+        {
+            const henka_scene_entity_material_asset_update* asset_update =
+                &material_asset_updates[index];
+
+            henka_free(record->material_name);
+            record->material_name = NULL;
+            record->material = asset_update->material;
+            record->material.name = asset_update->material.name != NULL &&
+                asset_update->material.name[0] != '\0'
+                ? asset_update->material.name
+                : "Material";
+            record->material_asset = asset_update->asset;
+            record->material_asset_revision = asset_update->revision;
+            record->material_asset_overridden = asset_update->overridden;
+            (void)henka_scene_bump_render_revision(scene);
+        }
         if (item->mesh_changed)
         {
             record->mesh = item->mesh;
@@ -1661,7 +1696,7 @@ henka_result henka_scene_apply_entity_presentation_batch(
     size_t update_count)
 {
     return henka_scene_apply_entity_presentation_batch_internal(
-        scene, entities, updates, NULL, update_count);
+        scene, entities, updates, NULL, NULL, update_count);
 }
 
 static henka_result henka_scene_apply_entity_local_presentation_batch_internal(
@@ -1669,6 +1704,7 @@ static henka_result henka_scene_apply_entity_local_presentation_batch_internal(
     const henka_entity* entities,
     const henka_scene_entity_presentation_update* updates,
     const henka_scene_entity_mesh_update* mesh_updates,
+    const henka_scene_entity_material_asset_update* material_asset_updates,
     size_t update_count)
 {
     henka_scene_entity_presentation_update* world_updates;
@@ -1732,6 +1768,7 @@ static henka_result henka_scene_apply_entity_local_presentation_batch_internal(
         entities,
         world_updates,
         mesh_updates,
+        material_asset_updates,
         update_count);
     henka_free(world_updates);
     return result;
@@ -1744,7 +1781,7 @@ henka_result henka_scene_apply_entity_local_presentation_batch(
     size_t update_count)
 {
     return henka_scene_apply_entity_local_presentation_batch_internal(
-        scene, entities, updates, NULL, update_count);
+        scene, entities, updates, NULL, NULL, update_count);
 }
 
 henka_result henka_scene_apply_entity_local_mesh_refresh_batch(
@@ -1755,7 +1792,24 @@ henka_result henka_scene_apply_entity_local_mesh_refresh_batch(
     size_t update_count)
 {
     return henka_scene_apply_entity_local_presentation_batch_internal(
-        scene, entities, updates, mesh_updates, update_count);
+        scene, entities, updates, mesh_updates, NULL, update_count);
+}
+
+henka_result henka_scene_apply_entity_local_mesh_refresh_with_material_assets_batch(
+    henka_scene* scene,
+    const henka_entity* entities,
+    const henka_scene_entity_presentation_update* updates,
+    const henka_scene_entity_mesh_update* mesh_updates,
+    const henka_scene_entity_material_asset_update* material_asset_updates,
+    size_t update_count)
+{
+    return henka_scene_apply_entity_local_presentation_batch_internal(
+        scene,
+        entities,
+        updates,
+        mesh_updates,
+        material_asset_updates,
+        update_count);
 }
 
 static bool henka_scene_prepare_entity_transform_update(

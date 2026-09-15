@@ -331,15 +331,17 @@ history remain open.
   each newly created instance records the revision it captured. A rejected
   refresh leaves the previous snapshot and revision unchanged.
 - `henka_prefab_instance_refresh` reapplies the supported inline presentation
-  values and borrowed source mesh pointers to a live mapped instance when
+  values, borrowed source mesh pointers, and non-overridden borrowed material
+  asset state to a live mapped instance when
   source membership and source-local IDs are unchanged. It adopts current
   canonical local transforms edited through the general scene API before
   applying the source: root placement remains instance state, and a changed
   non-root transform becomes an instance override. It preserves those
   overrides, updates their source baselines, rejects stale mappings or
   membership changes before mutation, and is idempotent for an already-applied
-  revision. Borrowed material-asset state is outside this refresh boundary and
-  fails closed rather than becoming an inline override. Mesh and presentation
+  revision. A persisted asset-backed material override fails closed when a
+  source refresh would conflict with its unsupported override payload rather
+  than becoming an inline override. Mesh, presentation, and material-asset
   changes use one preflighted scene transaction, so capacity or allocation
   failure leaves the live instance and its refresh bookkeeping unchanged.
 - `henka_prefab_set_asset_path` and `henka_prefab_save_file` provide a
@@ -359,9 +361,10 @@ history remain open.
   unchanged. Saving a bound authoring scene synchronizes supported runtime
   presentation values, including prefab-instance transforms, into the Scene
   Document candidate; reload restores those values transactionally. Persisted
-  prefab assets do not yet serialize explicit per-instance override metadata,
-  and mapped-instance refresh remains closed for asset-backed material state
-  until that owner can provide an equivalent atomic transaction.
+  prefab assets do not yet serialize explicit per-instance material override
+  payloads. Non-overridden borrowed material assets refresh through their
+  owning asset authority; persisted asset-backed overrides fail closed rather
+  than being flattened into inline material state.
 - HSCN v16 persists prefab-instance provenance and explicit non-root local
   transform override metadata for a prefab-backed object group:
   the project-relative prefab path, instance-root ID, durable source ID, and

@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include <henka/core.h>
+#include <henka/assets.h>
 #include <henka/engine.h>
 #include <henka/memory.h>
 #include <henka/mesh.h>
@@ -1442,6 +1443,144 @@ cleanup:
     HENKA_TEST_ASSERT(passed);
 }
 
+static void henka_test_prefab_instance_refresh_updates_manager_material(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_asset_manager* manager;
+    henka_shader* shader = NULL;
+    henka_material material;
+    henka_material updated_material;
+    henka_material override_material;
+    henka_material read_material;
+    henka_material_asset* asset = NULL;
+    henka_scene* source = NULL;
+    henka_scene* target = NULL;
+    henka_prefab* prefab = NULL;
+    henka_prefab_instance* instance = NULL;
+    henka_entity source_root = HENKA_INVALID_ENTITY;
+    henka_entity target_root = HENKA_INVALID_ENTITY;
+    uint64_t prefab_revision;
+    uint64_t target_revision;
+    uint64_t applied_revision;
+    bool overridden;
+    size_t refreshed_count;
+
+    config.application_name = "Henka Prefab Manager Material Refresh Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    manager = henka_engine_get_asset_manager(engine);
+    HENKA_TEST_ASSERT(manager != NULL);
+    HENKA_TEST_ASSERT(henka_assets_load_shader(
+        manager,
+        "assets/shaders/basic_lit.vert",
+        "assets/shaders/basic_lit.frag",
+        &shader) == HENKA_SUCCESS);
+    material = henka_material_default();
+    material.shader = shader;
+    material.name = "Managed Prefab Material";
+    material.base_color = (henka_vec4){0.8f, 0.2f, 0.1f, 1.0f};
+    HENKA_TEST_ASSERT(henka_assets_adopt_runtime_material(
+        manager, "prefab-manager-material", &material, &asset) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_scene_create(&source) == HENKA_SUCCESS);
+    source_root = henka_scene_create_entity_named(source, "Managed Material Root");
+    HENKA_TEST_ASSERT(source_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_apply_material_asset(
+        source, source_root, asset, material, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_create_from_scene(
+        source, source_root, &prefab) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instantiate_with_instance(
+        prefab, target, henka_transform_identity(), &instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_root_entity(
+        instance, &target_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_material_asset_state(
+        target, target_root, &applied_revision, &overridden) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(applied_revision == 1U && !overridden);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        target, target_root, &read_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_material.base_color.x, 0.8f, 0.0001f);
+
+    updated_material = material;
+    updated_material.base_color = (henka_vec4){0.1f, 0.7f, 0.9f, 1.0f};
+    asset->material = updated_material;
+    asset->revision = 2U;
+    refreshed_count = 0U;
+    HENKA_TEST_ASSERT(henka_assets_refresh_scene_material_bindings(
+        manager, source, &refreshed_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(refreshed_count == 1U);
+    prefab_revision = henka_prefab_get_revision(prefab);
+    HENKA_TEST_ASSERT(henka_prefab_refresh_from_scene(
+        prefab, source, source_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_revision(prefab) == prefab_revision + 1U);
+
+    target_revision = henka_scene_get_render_revision(target);
+    HENKA_TEST_ASSERT(henka_prefab_instance_refresh(instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(target) > target_revision);
+    HENKA_TEST_ASSERT(henka_scene_get_material_asset_state(
+        target, target_root, &applied_revision, &overridden) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(applied_revision == 2U && !overridden);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        target, target_root, &read_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_material.base_color.x, 0.1f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_material.base_color.y, 0.7f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_material.base_color.z, 0.9f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_prefab_revision(instance) ==
+        henka_prefab_get_revision(prefab));
+
+    target_revision = henka_scene_get_render_revision(target);
+    HENKA_TEST_ASSERT(henka_prefab_instance_refresh(instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(target) == target_revision);
+
+    override_material = updated_material;
+    override_material.base_color = (henka_vec4){0.95f, 0.8f, 0.2f, 1.0f};
+    HENKA_TEST_ASSERT(henka_scene_apply_material_asset_override(
+        target, target_root, asset, override_material) == HENKA_SUCCESS);
+    target_revision = henka_scene_get_render_revision(target);
+    HENKA_TEST_ASSERT(henka_prefab_instance_refresh(instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(target) == target_revision);
+    HENKA_TEST_ASSERT(henka_scene_get_material_asset_state(
+        target, target_root, &applied_revision, &overridden) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(applied_revision == 0U && overridden);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        target, target_root, &read_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_material.base_color.x, 0.95f, 0.0001f);
+
+    updated_material.base_color = (henka_vec4){0.3f, 0.4f, 0.5f, 1.0f};
+    asset->material = updated_material;
+    asset->revision = 3U;
+    refreshed_count = 0U;
+    HENKA_TEST_ASSERT(henka_assets_refresh_scene_material_bindings(
+        manager, source, &refreshed_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(refreshed_count == 1U);
+    prefab_revision = henka_prefab_get_revision(prefab);
+    HENKA_TEST_ASSERT(henka_prefab_refresh_from_scene(
+        prefab, source, source_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_revision(prefab) == prefab_revision + 1U);
+    target_revision = henka_scene_get_render_revision(target);
+    HENKA_TEST_ASSERT(henka_prefab_instance_refresh(instance) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(target) == target_revision);
+    HENKA_TEST_ASSERT(henka_prefab_instance_get_prefab_revision(instance) ==
+        prefab_revision);
+    HENKA_TEST_ASSERT(henka_scene_get_material_asset_state(
+        target, target_root, &applied_revision, &overridden) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(applied_revision == 0U && overridden);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        target, target_root, &read_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_material.base_color.x, 0.95f, 0.0001f);
+
+    henka_prefab_instance_destroy(instance);
+    henka_prefab_destroy(prefab);
+    henka_scene_destroy(target);
+    henka_scene_destroy(source);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_prefab_asset_persistence(void)
 {
     const char* project_root = "build/test_tmp";
@@ -2465,6 +2604,7 @@ void henka_test_scene(void)
     henka_test_prefab_instance_refresh_preserves_overrides();
     henka_test_prefab_instance_refresh_recovers_scene_edit();
     henka_test_prefab_instance_refresh_updates_source_mesh();
+    henka_test_prefab_instance_refresh_updates_manager_material();
     henka_test_prefab_asset_persistence();
     henka_test_prefab_revision_capacity_transaction();
     henka_test_prefab_allocation_failure_transaction();
