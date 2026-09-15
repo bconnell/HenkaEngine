@@ -6,6 +6,8 @@ param(
 
     [string]$TestFilter = "",
 
+    [string]$BuildTarget = "",
+
     [switch]$SkipBuild
 )
 
@@ -14,25 +16,26 @@ $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
+$totalStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$configureSeconds = 0.0
+$buildSeconds = 0.0
+$testSeconds = 0.0
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $buildRoot = Join-Path $repoRoot "build"
-$toolchain = Get-HenkaToolchain
-$cmake = $toolchain.CMakePath
-$ctest = $toolchain.CTestPath
+$cmake = Get-HenkaCMakePath
+$ctest = Get-HenkaCTestPath -CMakePath $cmake
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
-$executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
 $resolvedDependencyRoot = $DependencyRoot
 
 if ($SkipBuild) {
-    $toolchain = Get-HenkaToolchain
     $ctestArguments = @("--test-dir", $buildRoot, "--output-on-failure", "-C", $Configuration)
     if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
         $ctestArguments += @("-R", $TestFilter)
     }
     Write-Host "Build: skipped; executing tests against the already-proven candidate outputs"
-    Write-Host "ctest: $($toolchain.CTestPath)"
+    Write-Host "ctest: $ctest"
     Invoke-HenkaNative `
-        -FilePath $toolchain.CTestPath `
+        -FilePath $ctest `
         -Arguments $ctestArguments `
         -WorkingDirectory $repoRoot `
         -Label "Run Henka Engine tests without rebuild"
@@ -57,7 +60,35 @@ if ($dependencyRootWasExplicit) {
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
     -DependencyRoot $resolvedDependencyRoot `
     -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
-$configureArguments = @("-S", $repoRoot, "-B", $buildRoot) + @($fetchContent.Arguments)
+$configureArguments = @(
+    "-S", $repoRoot,
+    "-B", $buildRoot,
+    "-DCMAKE_VS_GLOBALS=TrackFileAccess=true") + @($fetchContent.Arguments)
+$validationPlan = Resolve-HenkaValidationPlan `
+    -BuildRoot $buildRoot `
+    -Configuration $Configuration `
+    -TestFilter $TestFilter `
+    -BuildTarget $BuildTarget
+$configurationReady = Test-HenkaCMakeConfigurationReady `
+    -BuildRoot $buildRoot `
+    -RepositoryRoot $repoRoot `
+    -ConfigureArguments $configureArguments
+if ($configurationReady -and
+    -not [string]::IsNullOrWhiteSpace($TestFilter) -and
+    $validationPlan.Resolution -eq "aggregate-or-unresolved") {
+    try {
+        $filterRegex = [System.Text.RegularExpressions.Regex]::new($TestFilter)
+        $registeredCount = @(Get-HenkaCTestCommandRecords -BuildRoot $buildRoot |
+            Where-Object { $filterRegex.IsMatch([string]$_.Name) }).Count
+        if ($registeredCount -eq 0) {
+            $configurationReady = $false
+            Write-Host "Configure: required to refresh missing CTest metadata for the requested filter."
+        }
+    }
+    catch {
+        throw "TestFilter is not a valid regular expression: $TestFilter"
+    }
+}
 foreach ($provider in $fetchContent.ProviderStates) {
     if ($provider.Available) {
         Write-Host "$($provider.Label) provider: repository-local populated source"
@@ -80,20 +111,44 @@ $dependencyDescription = if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoo
     $resolvedDependencyRoot
 }
 Write-Host "dependency root: $dependencyDescription"
+Write-Host "validation plan: $($validationPlan.Resolution)"
+if (-not [string]::IsNullOrWhiteSpace($validationPlan.BuildTarget)) {
+    Write-Host "validation target: $($validationPlan.BuildTarget)"
+}
+Write-Host "validation artifact: $($validationPlan.Artifact.Path)"
 
 $buildStateLock = Enter-HenkaBuildStateLock
 try {
-    Invoke-HenkaNative `
-        -FilePath $cmake `
-        -Arguments $configureArguments `
-        -WorkingDirectory $repoRoot `
-        -Label "Configure Henka Engine for tests"
+    if ($configurationReady) {
+        Write-Host "Configure: skipped; matching CMake cache is reusable."
+    } else {
+        $configureStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        Invoke-HenkaNative `
+            -FilePath $cmake `
+            -Arguments $configureArguments `
+            -WorkingDirectory $repoRoot `
+            -Label "Configure Henka Engine for tests"
+        $configureStopwatch.Stop()
+        $configureSeconds = $configureStopwatch.Elapsed.TotalSeconds
+        $validationPlan = Resolve-HenkaValidationPlan `
+            -BuildRoot $buildRoot `
+            -Configuration $Configuration `
+            -TestFilter $TestFilter `
+            -BuildTarget $BuildTarget
+    }
 
+    $buildArguments = @("--build", $buildRoot, "--config", $Configuration)
+    if (-not [string]::IsNullOrWhiteSpace($validationPlan.BuildTarget)) {
+        $buildArguments += @("--target", $validationPlan.BuildTarget)
+    }
+    $buildStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     Invoke-HenkaNative `
         -FilePath $cmake `
-        -Arguments @("--build", $buildRoot, "--config", $Configuration) `
+        -Arguments $buildArguments `
         -WorkingDirectory $repoRoot `
         -Label "Build Henka Engine tests"
+    $buildStopwatch.Stop()
+    $buildSeconds = $buildStopwatch.Elapsed.TotalSeconds
 
     $softwareOpenGLRoot = [string]$env:HENKA_CI_SOFTWARE_OPENGL_ROOT
     if (-not [string]::IsNullOrWhiteSpace($softwareOpenGLRoot)) {
@@ -128,14 +183,22 @@ if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
     $ctestArguments += @("-R", $TestFilter)
 }
 
+$testStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 Invoke-HenkaNative `
     -FilePath $ctest `
     -Arguments $ctestArguments `
     -WorkingDirectory $repoRoot `
     -Label "Run Henka Engine tests"
+$testStopwatch.Stop()
+$testSeconds = $testStopwatch.Elapsed.TotalSeconds
+
+$totalStopwatch.Stop()
+Write-Host ("VALIDATION_TIMING_SECONDS configure={0:N3} build={1:N3} test={2:N3} total={3:N3}" -f `
+    $configureSeconds, $buildSeconds, $testSeconds, $totalStopwatch.Elapsed.TotalSeconds)
 
 $buildStateLock = Enter-HenkaBuildStateLock
 try {
+    $executablePath = $validationPlan.Artifact.Path
     Invoke-HenkaNative `
         -FilePath "powershell.exe" `
         -Arguments @(

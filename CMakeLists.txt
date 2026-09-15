@@ -7,9 +7,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 if(MSVC)
-    # Keep clean Windows FetchContent builds independent of machine-wide
-    # MSBuild file tracking and resilient to KTX-Software's nested paths.
-    set(CMAKE_VS_GLOBALS "TrackFileAccess=false" CACHE STRING "" FORCE)
+    # Keep MSBuild file tracking enabled so unchanged dependency objects remain
+    # reusable between focused target builds. Bound generated object paths
+    # separately for KTX-Software's nested source tree.
+    set(CMAKE_VS_GLOBALS "TrackFileAccess=true" CACHE STRING "" FORCE)
     set(CMAKE_OBJECT_PATH_MAX 128 CACHE STRING "" FORCE)
     # KTX-Software returns application-owned buffers from its C API. Keep the
     # static dependency and every Henka target on the same CRT heap in every

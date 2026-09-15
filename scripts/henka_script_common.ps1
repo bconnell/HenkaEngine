@@ -367,6 +367,222 @@ function Get-HenkaCMakeFetchContentArguments {
     }
 }
 
+function Convert-HenkaCMakeValueForComparison {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Value
+    )
+
+    return $Value.Trim().Trim('"').Replace("\", "/")
+}
+
+function Get-HenkaCMakeCacheEntry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CacheText,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $pattern = "(?m)^" + [System.Text.RegularExpressions.Regex]::Escape($Name) +
+        ":[^=]*=(?<value>.*)$"
+    $match = [System.Text.RegularExpressions.Regex]::Match($CacheText, $pattern)
+    return [pscustomobject]@{
+        Found = $match.Success
+        Value = if ($match.Success) { $match.Groups["value"].Value.Trim() } else { "" }
+    }
+}
+
+function Test-HenkaCMakeConfigurationReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$ConfigureArguments
+    )
+
+    $cachePath = Join-Path $BuildRoot "CMakeCache.txt"
+    if (-not (Test-Path -LiteralPath $cachePath -PathType Leaf)) {
+        return $false
+    }
+
+    $cacheText = [System.IO.File]::ReadAllText($cachePath)
+    $repositoryValue = Convert-HenkaCMakeValueForComparison `
+        -Value ([System.IO.Path]::GetFullPath($RepositoryRoot))
+    $homeEntry = Get-HenkaCMakeCacheEntry `
+        -CacheText $cacheText `
+        -Name "CMAKE_HOME_DIRECTORY"
+    if (-not $homeEntry.Found -or
+        (Convert-HenkaCMakeValueForComparison -Value $homeEntry.Value) -ne $repositoryValue) {
+        return $false
+    }
+
+    foreach ($argument in @($ConfigureArguments)) {
+        if ([string]$argument -notmatch '^-D(?<name>[^=]+)=(?<value>.*)$') {
+            continue
+        }
+        $entry = Get-HenkaCMakeCacheEntry `
+            -CacheText $cacheText `
+            -Name $Matches.name
+        if (-not $entry.Found -or
+            (Convert-HenkaCMakeValueForComparison -Value $entry.Value) -ne
+                (Convert-HenkaCMakeValueForComparison -Value $Matches.value)) {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Get-HenkaCTestCommandRecords {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildRoot
+    )
+
+    if (-not (Test-Path -LiteralPath $BuildRoot -PathType Container)) {
+        return @()
+    }
+
+    $testFilePaths = @(
+        (Join-Path $BuildRoot "CTestTestfile.cmake"),
+        (Join-Path $BuildRoot "tests\CTestTestfile.cmake")
+    )
+    $testFiles = @($testFilePaths | ForEach-Object {
+        if (Test-Path -LiteralPath $_ -PathType Leaf) {
+            Get-Item -LiteralPath $_
+        }
+    })
+    foreach ($testFile in $testFiles) {
+        $text = [System.IO.File]::ReadAllText($testFile.FullName)
+        $matches = [System.Text.RegularExpressions.Regex]::Matches(
+            $text,
+            'add_test\(\[=\[(?<name>[^\]]+)\]=\]\s+"(?<command>[^"]+)"')
+        foreach ($match in $matches) {
+            $command = $match.Groups["command"].Value
+            [pscustomobject]@{
+                Name = $match.Groups["name"].Value
+                Command = $command
+            }
+        }
+    }
+}
+
+function Resolve-HenkaValidationPlan {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildRoot,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Debug", "Release")]
+        [string]$Configuration,
+
+        [string]$TestFilter = "",
+
+        [string]$BuildTarget = ""
+    )
+
+    $explicitTarget = $BuildTarget.Trim()
+    if (-not [string]::IsNullOrWhiteSpace($explicitTarget)) {
+        return [pscustomobject]@{
+            TestFilter = $TestFilter
+            BuildTarget = $explicitTarget
+            Artifact = Get-HenkaBuildArtifact `
+                -BuildRoot $BuildRoot `
+                -Configuration $Configuration `
+                -BuildTarget $explicitTarget
+            Resolution = "explicit-target"
+        }
+    }
+
+    $defaultArtifact = Get-HenkaBuildArtifact `
+        -BuildRoot $BuildRoot `
+        -Configuration $Configuration
+    if ([string]::IsNullOrWhiteSpace($TestFilter)) {
+        return [pscustomobject]@{
+            TestFilter = $TestFilter
+            BuildTarget = ""
+            Artifact = $defaultArtifact
+            Resolution = "default-build"
+        }
+    }
+
+    try {
+        $filterRegex = [System.Text.RegularExpressions.Regex]::new($TestFilter)
+    }
+    catch {
+        throw "TestFilter is not a valid regular expression: $TestFilter"
+    }
+
+    $matchingTests = @(Get-HenkaCTestCommandRecords -BuildRoot $BuildRoot |
+        Where-Object { $filterRegex.IsMatch([string]$_.Name) })
+    $configurationMarker = "[\\/]$([System.Text.RegularExpressions.Regex]::Escape($Configuration))[\\/]"
+    $configuredMatches = @($matchingTests | Where-Object {
+        ([string]$_.Command) -match $configurationMarker
+    })
+    if ($configuredMatches.Count -gt 0) {
+        $matchingTests = $configuredMatches
+    }
+    if ($matchingTests.Count -ne 1) {
+        return [pscustomobject]@{
+            TestFilter = $TestFilter
+            BuildTarget = ""
+            Artifact = $defaultArtifact
+            Resolution = "aggregate-or-unresolved"
+        }
+    }
+
+    $command = [string]$matchingTests[0].Command
+    if ([System.IO.Path]::GetExtension($command) -ne ".exe" -or
+        $command -notmatch "[\\/]$([System.Text.RegularExpressions.Regex]::Escape($Configuration))[\\/]") {
+        return [pscustomobject]@{
+            TestFilter = $TestFilter
+            BuildTarget = ""
+            Artifact = $defaultArtifact
+            Resolution = "non-executable-test"
+        }
+    }
+
+    $target = [System.IO.Path]::GetFileNameWithoutExtension($command)
+    try {
+        $artifact = Get-HenkaBuildArtifact `
+            -BuildRoot $BuildRoot `
+            -Configuration $Configuration `
+            -BuildTarget $target
+    }
+    catch {
+        return [pscustomobject]@{
+            TestFilter = $TestFilter
+            BuildTarget = ""
+            Artifact = $defaultArtifact
+            Resolution = "aggregate-or-unresolved"
+        }
+    }
+
+    if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals(
+            [System.IO.Path]::GetFileName($artifact.Path),
+            [System.IO.Path]::GetFileName([string]$matchingTests[0].Command))) {
+        return [pscustomobject]@{
+            TestFilter = $TestFilter
+            BuildTarget = ""
+            Artifact = $defaultArtifact
+            Resolution = "aggregate-or-unresolved"
+        }
+    }
+
+    return [pscustomobject]@{
+        TestFilter = $TestFilter
+        BuildTarget = $target
+        Artifact = $artifact
+        Resolution = "registered-executable"
+    }
+}
+
 function Get-HenkaGitPath {
     $gitCommand = Get-Command git.exe -ErrorAction SilentlyContinue
     if ($null -eq $gitCommand) {

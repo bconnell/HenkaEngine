@@ -194,6 +194,22 @@ Run the exact Release path with:
 .\scripts\test_windows.ps1 -Configuration Release
 ```
 
+For a single executable-backed test, provide an exact regular-expression
+filter:
+
+```powershell
+.\scripts\test_windows.ps1 -Configuration Debug -TestFilter '^henka_tests$'
+```
+
+The validation script resolves a unique executable CTest entry to its matching
+CMake target and builds only that target plus its direct build dependencies.
+Ambiguous selections and script-backed tests keep the broader build fallback.
+When the existing CMake cache still matches the repository and dependency
+configuration, the explicit configure step is skipped; the normal build
+system remains responsible for detecting source changes during the build.
+Exact-candidate validation continues to use its own isolated build tree and
+provenance.
+
 The GitHub Windows workflow covers the packaged Debug contract and bounded soak, then runs the Release build-and-test path before the external-game template validation.
 
 ### Sanitized runtime gate
