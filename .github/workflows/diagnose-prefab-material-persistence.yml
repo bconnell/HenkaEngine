@@ -25,15 +25,11 @@ jobs:
         shell: pwsh
         run: python .github/repair/diagnose_prefab_material_persistence.py
 
-      - name: Configure and build focused Debug test
-        shell: powershell
-        run: .\scripts\test_windows.ps1 -Configuration Debug -TestFilter '^henka_sandbox3d_game_authoring_tests$' -BuildOnly
-
       - name: Prepare pinned software OpenGL fallback
         shell: powershell
         run: .\scripts\setup_windows_software_opengl.ps1 -TargetDirectory @("build\tests\Debug", "build\examples\sandbox3d\Debug")
 
-      - name: Run focused Game Authoring diagnostic
+      - name: Build and run focused Game Authoring diagnostic
         shell: powershell
         env:
           HENKA_CI_SOFTWARE_OPENGL_ROOT: ${{ github.workspace }}\build\ci\mesa3d-26.1.7\extracted\x64
