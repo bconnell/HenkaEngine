@@ -70,10 +70,10 @@ prefab_c = replace_unique(
     "manager-owned Prefab material load guard",
 )
 
-# Preserve the separate inline-material requirement. This is an explicit
-# fail-closed guard against accidentally broadening the repair.
-inline_anchor = "if (shader == NULL || out_material == NULL ||"
-if inline_anchor not in prefab_c:
+# Preserve the separate inline-material requirement. This explicitly proves
+# that the repair only relaxes manager-owned material mode.
+inline_guard = "if (settings == NULL || shader == NULL || out_material == NULL)"
+if inline_guard not in prefab_c:
     raise RuntimeError("inline material shader guard is missing after repair")
 write(prefab_path, prefab_c)
 
