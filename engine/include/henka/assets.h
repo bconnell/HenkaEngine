@@ -380,7 +380,9 @@ henka_result henka_assets_load_gltf_mesh_with_material(
     henka_material* out_material);
 /* glTF material loads require an initialized empty output slot. The returned
  * asset is borrowed and manager-owned; rejected or failed loads preserve a
- * non-empty caller slot and leave an empty slot empty. */
+ * non-empty caller slot and leave an empty slot empty. A first load requires
+ * a non-null shader. A null shader may resolve an already-cached canonical
+ * material path, preserving the manager-owned definition's shader authority. */
 henka_result henka_assets_load_gltf_material_asset(
     henka_asset_manager* manager,
     const char* path,

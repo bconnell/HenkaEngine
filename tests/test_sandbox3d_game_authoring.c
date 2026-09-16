@@ -1424,6 +1424,68 @@ static bool test_prefab_write_text_file(const char* path, const char* text)
     return wrote_all;
 }
 
+static bool test_prefab_copy_file(
+    const char* source_path,
+    const char* destination_path)
+{
+    FILE* source = NULL;
+    FILE* destination = NULL;
+    unsigned char buffer[4096];
+    size_t count;
+    bool copied = true;
+
+    if (source_path == NULL || destination_path == NULL)
+    {
+        return false;
+    }
+#if defined(_WIN32)
+    if (fopen_s(&source, source_path, "rb") != 0)
+    {
+        source = NULL;
+    }
+    if (fopen_s(&destination, destination_path, "wb") != 0)
+    {
+        destination = NULL;
+    }
+#else
+    source = fopen(source_path, "rb");
+    destination = fopen(destination_path, "wb");
+#endif
+    if (source == NULL || destination == NULL)
+    {
+        if (source != NULL)
+        {
+            (void)fclose(source);
+        }
+        if (destination != NULL)
+        {
+            (void)fclose(destination);
+        }
+        return false;
+    }
+    while ((count = fread(buffer, 1U, sizeof(buffer), source)) > 0U)
+    {
+        if (fwrite(buffer, 1U, count, destination) != count)
+        {
+            copied = false;
+            break;
+        }
+    }
+    if (ferror(source))
+    {
+        copied = false;
+    }
+    if (fclose(source) != 0)
+    {
+        copied = false;
+    }
+    if (fclose(destination) != 0)
+    {
+        copied = false;
+    }
+    return copied;
+}
+
 static bool test_prefab_material_override_persists_through_authoring(void)
 {
     const char* project_root = "build/test_tmp";
@@ -1434,8 +1496,21 @@ static bool test_prefab_material_override_persists_through_authoring(void)
         "build/test_tmp/prefab_material_override_test.vert";
     const char* fragment_shader_path =
         "build/test_tmp/prefab_material_override_test.frag";
-    const char* material_identity =
-        "materials/prefab-instance-authoring-persistence";
+    const char* material_gltf_path =
+        "build/test_tmp/prefab_material_override_test.gltf";
+    const char* material_identity = "prefab_material_override_test.gltf";
+    static const char* material_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,"
+        "\"count\":3,\"type\":\"VEC3\"}],"
+        "\"materials\":[{\"name\":\"Prefab Authoring Source Material\","
+        "\"pbrMetallicRoughness\":{\"baseColorFactor\":[0.16,0.28,0.44,1.0],"
+        "\"metallicFactor\":0.0,\"roughnessFactor\":0.63}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},"
+        "\"material\":0}]}]}";
     henka_engine_config config;
     henka_engine* engine = NULL;
     henka_asset_manager* assets = NULL;
@@ -1466,18 +1541,18 @@ static bool test_prefab_material_override_persists_through_authoring(void)
     (void)remove("build/test_tmp/prefab_material_override_persistence.hprefab");
     (void)remove(vertex_shader_path);
     (void)remove(fragment_shader_path);
+    (void)remove(material_gltf_path);
     (void)remove("build/test_tmp/henka.project");
 
-    if (!test_prefab_write_text_file(
-            vertex_shader_path,
-            "#version 330 core\n"
-            "layout(location = 0) in vec3 a_position;\n"
-            "void main() { gl_Position = vec4(a_position, 1.0); }\n") ||
+    if (!test_prefab_copy_file(
+            "assets/shaders/basic_lit.vert",
+            vertex_shader_path) ||
+        !test_prefab_copy_file(
+            "assets/shaders/basic_lit.frag",
+            fragment_shader_path) ||
         !test_prefab_write_text_file(
-            fragment_shader_path,
-            "#version 330 core\n"
-            "out vec4 frag_color;\n"
-            "void main() { frag_color = vec4(1.0); }\n"))
+            material_gltf_path,
+            material_gltf))
     {
         goto cleanup;
     }
@@ -1503,16 +1578,15 @@ static bool test_prefab_material_override_persists_through_authoring(void)
         goto cleanup;
     }
 
-    source_material.shader = shader;
-    source_material.name = "Prefab Authoring Source Material";
-    source_material.base_color = (henka_vec4){0.16f, 0.28f, 0.44f, 1.0f};
-    source_material.roughness = 0.63f;
-    if (henka_assets_adopt_runtime_material(
+    if (henka_assets_load_gltf_material_asset(
             assets,
             material_identity,
-            &source_material,
+            shader,
             &material_asset) != HENKA_SUCCESS ||
         material_asset == NULL ||
+        henka_assets_get_material_asset_material(
+            material_asset,
+            &source_material) != HENKA_SUCCESS ||
         henka_scene_create(&source_scene) != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -1632,6 +1706,7 @@ cleanup:
     (void)remove("build/test_tmp/prefab_material_override_persistence.hprefab");
     (void)remove(vertex_shader_path);
     (void)remove(fragment_shader_path);
+    (void)remove(material_gltf_path);
     return success;
 }
 
@@ -1862,8 +1937,21 @@ static bool test_prefab_apply_revert_participates_in_history(void)
         "build/test_tmp/prefab_apply_revert_history.vert";
     const char* fragment_shader_path =
         "build/test_tmp/prefab_apply_revert_history.frag";
-    const char* material_identity =
-        "materials/prefab-apply-revert-history";
+    const char* material_gltf_path =
+        "build/test_tmp/prefab_apply_revert_history.gltf";
+    const char* material_identity = "prefab_apply_revert_history.gltf";
+    static const char* material_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,"
+        "\"count\":3,\"type\":\"VEC3\"}],"
+        "\"materials\":[{\"name\":\"Prefab Apply Revert Source Material\","
+        "\"pbrMetallicRoughness\":{\"baseColorFactor\":[0.18,0.31,0.47,1.0],"
+        "\"metallicFactor\":0.0,\"roughnessFactor\":0.68}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},"
+        "\"material\":0}]}]}";
     henka_engine_config config;
     henka_engine* engine = NULL;
     henka_asset_manager* assets = NULL;
@@ -1895,18 +1983,18 @@ static bool test_prefab_apply_revert_participates_in_history(void)
     (void)remove("build/test_tmp/prefab_apply_revert_history.hprefab");
     (void)remove(vertex_shader_path);
     (void)remove(fragment_shader_path);
+    (void)remove(material_gltf_path);
     (void)remove("build/test_tmp/henka.project");
 
-    if (!test_prefab_write_text_file(
-            vertex_shader_path,
-            "#version 330 core\n"
-            "layout(location = 0) in vec3 a_position;\n"
-            "void main() { gl_Position = vec4(a_position, 1.0); }\n") ||
+    if (!test_prefab_copy_file(
+            "assets/shaders/basic_lit.vert",
+            vertex_shader_path) ||
+        !test_prefab_copy_file(
+            "assets/shaders/basic_lit.frag",
+            fragment_shader_path) ||
         !test_prefab_write_text_file(
-            fragment_shader_path,
-            "#version 330 core\n"
-            "out vec4 frag_color;\n"
-            "void main() { frag_color = vec4(1.0); }\n"))
+            material_gltf_path,
+            material_gltf))
     {
         goto cleanup;
     }
@@ -1932,16 +2020,15 @@ static bool test_prefab_apply_revert_participates_in_history(void)
         goto cleanup;
     }
 
-    source_material.shader = shader;
-    source_material.name = "Prefab Apply Revert Source Material";
-    source_material.base_color = (henka_vec4){0.18f, 0.31f, 0.47f, 1.0f};
-    source_material.roughness = 0.68f;
-    if (henka_assets_adopt_runtime_material(
+    if (henka_assets_load_gltf_material_asset(
             assets,
             material_identity,
-            &source_material,
+            shader,
             &material_asset) != HENKA_SUCCESS ||
         material_asset == NULL ||
+        henka_assets_get_material_asset_material(
+            material_asset,
+            &source_material) != HENKA_SUCCESS ||
         henka_scene_create(&source_scene) != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -2163,6 +2250,7 @@ cleanup:
     (void)remove("build/test_tmp/prefab_apply_revert_history.hprefab");
     (void)remove(vertex_shader_path);
     (void)remove(fragment_shader_path);
+    (void)remove(material_gltf_path);
     return success;
 }
 static void test_write_u16(unsigned char* bytes, size_t offset, uint16_t value)

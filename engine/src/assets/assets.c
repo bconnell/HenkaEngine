@@ -4136,7 +4136,7 @@ henka_result henka_assets_load_gltf_material_asset(
     henka_material candidate;
     henka_result result;
 
-    if (manager == NULL || path == NULL || shader == NULL || out_asset == NULL || *out_asset != NULL)
+    if (manager == NULL || path == NULL || out_asset == NULL || *out_asset != NULL)
         return HENKA_ERROR_INVALID_ARGUMENT;
     result = henka_assets_make_canonical_key(path, &key);
     if (result != HENKA_SUCCESS) return result;
@@ -4145,7 +4145,7 @@ henka_result henka_assets_load_gltf_material_asset(
     asset = henka_asset_manager_find_material_entry(manager, key);
     if (asset != NULL)
     {
-        if (asset->material.shader != shader)
+        if (shader != NULL && asset->material.shader != shader)
         {
             henka_free(key);
             henka_free(source_path);
@@ -4155,6 +4155,12 @@ henka_result henka_assets_load_gltf_material_asset(
         henka_free(key);
         henka_free(source_path);
         return HENKA_SUCCESS;
+    }
+    if (shader == NULL)
+    {
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     result = henka_assets_build_gltf_material_instance(manager, source_path, shader, &candidate);
