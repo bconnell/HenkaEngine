@@ -1,0 +1,61 @@
+name: Repair Prefab Material Persistence
+
+on:
+  push:
+    branches:
+      - repair/prefab-material-persistence
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply guarded repair
+        shell: powershell
+        run: python scripts/repair_prefab_material_persistence.py
+
+      - name: Diff hygiene
+        shell: powershell
+        run: git diff --check
+
+      - name: Focused Debug Game Authoring tests
+        shell: powershell
+        run: .\scripts\test_windows.ps1 -Configuration Debug -TestFilter '^henka_sandbox3d_game_authoring_tests$'
+
+      - name: Full Debug tests
+        shell: powershell
+        run: .\scripts\test_windows.ps1 -Configuration Debug
+
+      - name: Focused Release Game Authoring tests
+        shell: powershell
+        run: .\scripts\test_windows.ps1 -Configuration Release -TestFilter '^henka_sandbox3d_game_authoring_tests$'
+
+      - name: Full Release tests
+        shell: powershell
+        run: .\scripts\test_windows.ps1 -Configuration Release
+
+      - name: Debug build
+        shell: powershell
+        run: .\scripts\build_windows.ps1 -Configuration Debug
+
+      - name: Release build
+        shell: powershell
+        run: .\scripts\build_windows.ps1 -Configuration Release
+
+      - name: Commit validated repair
+        shell: powershell
+        run: |
+          git config user.name "Henka Repair Automation"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Fix Prefab material persistence and cached asset resolution"
+          git push origin HEAD:repair/prefab-material-persistence
