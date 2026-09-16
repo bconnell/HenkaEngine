@@ -25,9 +25,9 @@ jobs:
         shell: pwsh
         run: python .github/repair/diagnose_prefab_material_persistence.py
 
-      - name: Build Debug
+      - name: Configure and build focused Debug test
         shell: powershell
-        run: .\scripts\build_windows.ps1 -Configuration Debug
+        run: .\scripts\test_windows.ps1 -Configuration Debug -TestFilter '^henka_sandbox3d_game_authoring_tests$' -BuildOnly
 
       - name: Prepare pinned software OpenGL fallback
         shell: powershell
