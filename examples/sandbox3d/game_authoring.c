@@ -4581,6 +4581,38 @@ henka_result sandbox3d_game_authoring_save(
         }
         if (result == HENKA_SUCCESS)
         {
+            henka_scene_document_object candidate_object;
+            henka_scene_document_object live_object;
+
+            /*
+             * The generic bridge intentionally owns only generic presentation
+             * synchronization. Manager-aware material identity, scalar
+             * overrides, and texture override paths are captured by Game
+             * Authoring's canonical object builder. Merge only renderer state
+             * so Prefab provenance, hierarchy, physics, behaviors, and other
+             * document-owned fields remain authoritative in the candidate.
+             */
+            result = henka_scene_document_get_object(
+                candidate_document,
+                document_id,
+                &candidate_object);
+            if (result == HENKA_SUCCESS)
+            {
+                result = sandbox3d_game_authoring_build_object(
+                    authoring,
+                    entity,
+                    &live_object);
+            }
+            if (result == HENKA_SUCCESS)
+            {
+                candidate_object.renderer = live_object.renderer;
+                result = henka_scene_document_set_object(
+                    candidate_document,
+                    &candidate_object);
+            }
+        }
+        if (result == HENKA_SUCCESS)
+        {
             result = sandbox3d_game_authoring_sync_prefab_transform_override(
                 authoring,
                 candidate_document,

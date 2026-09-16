@@ -1,0 +1,37 @@
+name: Diagnose Prefab Material Persistence
+
+on:
+  push:
+    branches:
+      - repair/prefab-material-persistence
+    paths:
+      - .github/repair/diagnose_prefab_material_persistence.py
+      - .github/workflows/diagnose-prefab-material-persistence.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: windows-2022
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: repair/prefab-material-persistence
+          fetch-depth: 1
+
+      - name: Instrument target test in runner workspace
+        shell: pwsh
+        run: python .github/repair/diagnose_prefab_material_persistence.py
+
+      - name: Prepare pinned software OpenGL fallback
+        shell: powershell
+        run: .\scripts\setup_windows_software_opengl.ps1 -TargetDirectory @("build\tests\Debug", "build\examples\sandbox3d\Debug")
+
+      - name: Build and run focused Game Authoring diagnostic
+        shell: powershell
+        env:
+          HENKA_CI_SOFTWARE_OPENGL_ROOT: ${{ github.workspace }}\build\ci\mesa3d-26.1.7\extracted\x64
+          GALLIUM_DRIVER: llvmpipe
+        run: .\scripts\test_windows.ps1 -Configuration Debug -TestFilter '^henka_sandbox3d_game_authoring_tests$'
