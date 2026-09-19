@@ -82,6 +82,18 @@ henka_result henka_authoring_mesh_extrude_face(
     henka_authoring_face_id face_id,
     float distance,
     henka_authoring_face_id* out_face_id);
+/* Extrudes a deterministic selected face region along its averaged face
+ * normal. Adjacent selected faces share one translated cap and do not create
+ * an internal side wall. An isolated region retains its source faces as the
+ * base; a region joined to unselected surface moves its source faces to the
+ * translated cap. The candidate is published only after topology and
+ * geometry validation, and duplicate/invalid selections fail closed. */
+henka_result henka_authoring_mesh_extrude_face_region(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_face_id* face_ids,
+    size_t face_count,
+    float distance,
+    henka_authoring_modeling_report* out_report);
 henka_result henka_authoring_mesh_inset_face(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,

@@ -98,11 +98,22 @@ Current operations include:
 - inset;
 - planar bevel ring;
 - face subdivision;
+- selected face-region extrusion with shared caps and transactional topology;
 - bounded edge bevel;
 - bounded loop-cut operations;
 - bounded vertex and edge extrusion paths described below.
 
 Each operation works on a clone and publishes only a validated result. Capacity, topology, geometry, or non-manifold rejection preserves the committed source.
+
+Face-region extrusion accepts a deterministic set of selected faces and moves
+the region along its averaged face normal. Selected adjacent faces share one
+translated cap and do not receive an internal wall. An isolated region keeps
+its source faces as the base; a region connected to unselected surface moves
+its source face identities to the translated cap. Material regions, smoothing,
+per-corner UVs, hard-edge intent, and seam intent are preserved. Duplicate,
+invalid, unsupported, or failed selections leave the source unchanged. The
+current public boundary is the authoring-mesh API; editor multi-face selection
+and preview/apply routing remains a later integration boundary.
 
 The shared Sandbox modeling session also routes one selected face through the
 same preview, Apply, Cancel, and undo boundary as the vertex and edge

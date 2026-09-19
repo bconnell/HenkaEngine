@@ -521,6 +521,8 @@ Available operations also include:
 - duplicate;
 - face winding flip;
 - face extrude;
+- selected face-region extrusion with shared translated caps and transactional
+  source-preserving behavior for isolated regions;
 - inset;
 - planar bevel rings;
 - face subdivision;
@@ -545,6 +547,13 @@ seam-delimited planar island on its dominant geometric axis before packing it;
 degenerate or non-planar islands fail closed without source mutation. The
 Edge-mode seam control also uses this path and provides preview, Apply/Cancel,
 and undo/redo history.
+
+The core authoring-mesh API also provides selected face-region extrusion. It
+averages the selected face normals, omits internal walls between adjacent
+selected faces, and preserves logical face, material, smoothing, UV, hard-edge,
+and seam state. The mesh operation is clone-validated and fail-closed; editor
+multi-face selection and preview/apply routing remains a separate integration
+boundary.
 
 ### HAMS persistence
 
