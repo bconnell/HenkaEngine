@@ -3005,8 +3005,7 @@ henka_result sandbox3d_game_authoring_unpack_prefab_instance(
     henka_entity entities[SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
     henka_scene_document_id document_ids[
         SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
-    henka_scene_document_object unpacked_objects[
-        SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
+    henka_scene_document_object* unpacked_objects = NULL;
     henka_scene_document_id root_document_id =
         HENKA_INVALID_SCENE_DOCUMENT_ID;
     size_t entity_count;
@@ -3066,6 +3065,12 @@ henka_result sandbox3d_game_authoring_unpack_prefab_instance(
         entity_count > SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    unpacked_objects = (henka_scene_document_object*)henka_calloc(
+        entity_count, sizeof(*unpacked_objects));
+    if (unpacked_objects == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
     result = henka_scene_document_create(&candidate);
@@ -3241,11 +3246,13 @@ henka_result sandbox3d_game_authoring_unpack_prefab_instance(
 
     sandbox3d_game_authoring_clear_history(authoring);
     henka_scene_document_destroy(candidate);
+    henka_free(unpacked_objects);
     return HENKA_SUCCESS;
 
 cleanup:
     sandbox3d_scene_document_bridge_destroy(candidate_bridge);
     henka_scene_document_destroy(candidate);
+    henka_free(unpacked_objects);
     return result;
 }
 henka_result sandbox3d_game_authoring_unregister_entity(
@@ -3731,6 +3738,28 @@ static henka_result sandbox3d_game_authoring_capture_prefab_edit_candidate(
     {
         result = sandbox3d_scene_document_bridge_sync_object(
             candidate_bridge, document_id);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        henka_scene_document_object candidate_object;
+        henka_scene_document_object live_object;
+
+        /* The generic bridge does not own manager-aware material identity or
+         * override state. Preserve the same canonical renderer merge used by
+         * document save while building the transactional edit candidate. */
+        result = henka_scene_document_get_object(
+            candidate, document_id, &candidate_object);
+        if (result == HENKA_SUCCESS)
+        {
+            result = sandbox3d_game_authoring_build_object(
+                authoring, entity, &live_object);
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            candidate_object.renderer = live_object.renderer;
+            result = henka_scene_document_set_object(
+                candidate, &candidate_object);
+        }
     }
     if (result == HENKA_SUCCESS)
     {
@@ -4578,6 +4607,38 @@ henka_result sandbox3d_game_authoring_save(
             result = sandbox3d_scene_document_bridge_sync_object(
                 candidate_bridge,
                 document_id);
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            henka_scene_document_object candidate_object;
+            henka_scene_document_object live_object;
+
+            /*
+             * The generic bridge intentionally owns only generic presentation
+             * synchronization. Manager-aware material identity, scalar
+             * overrides, and texture override paths are captured by Game
+             * Authoring's canonical object builder. Merge only renderer state
+             * so Prefab provenance, hierarchy, physics, behaviors, and other
+             * document-owned fields remain authoritative in the candidate.
+             */
+            result = henka_scene_document_get_object(
+                candidate_document,
+                document_id,
+                &candidate_object);
+            if (result == HENKA_SUCCESS)
+            {
+                result = sandbox3d_game_authoring_build_object(
+                    authoring,
+                    entity,
+                    &live_object);
+            }
+            if (result == HENKA_SUCCESS)
+            {
+                candidate_object.renderer = live_object.renderer;
+                result = henka_scene_document_set_object(
+                    candidate_document,
+                    &candidate_object);
+            }
         }
         if (result == HENKA_SUCCESS)
         {

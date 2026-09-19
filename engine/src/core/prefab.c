@@ -1455,21 +1455,35 @@ static bool henka_prefab_load_entry(
     else if (integer == 2)
     {
         const henka_material_asset* asset = NULL;
-        if (asset_manager == NULL || inline_material_shader == NULL ||
+        if (asset_manager == NULL ||
             !henka_prefab_make_key(key, sizeof(key), index, "material_asset_path") ||
             !henka_settings_has_key(settings, key))
         {
             return false;
         }
         path = henka_settings_get_string(settings, key, NULL);
-        if (path == NULL || path[0] == '\0' ||
-            henka_assets_load_gltf_material_asset(
-                asset_manager, path, inline_material_shader, &asset) != HENKA_SUCCESS ||
-            asset == NULL ||
+        if (path == NULL || path[0] == '\0')
+        {
+            return false;
+        }
+        /* A source material that is already manager-owned has an authoritative
+         * runtime shader and does not need a second caller-provided shader
+         * authority.  A cold load still fails closed unless the caller supplies
+         * the shader required to construct the source material. */
+        if (henka_assets_get_material_asset_for_path(
+                asset_manager, path, &asset) != HENKA_SUCCESS &&
+            (inline_material_shader == NULL ||
+             henka_assets_load_gltf_material_asset(
+                 asset_manager, path, inline_material_shader, &asset) != HENKA_SUCCESS))
+        {
+            return false;
+        }
+        if (asset == NULL ||
             henka_assets_get_material_asset_material(asset, &entry->material) != HENKA_SUCCESS ||
             !henka_prefab_make_key(key, sizeof(key), index, "material_asset_overridden") ||
             !henka_prefab_settings_get_bool(settings, key, &entry->material_asset_overridden) ||
-            !henka_assets_get_material_asset_revision(asset, &entry->material_asset_revision))
+            henka_assets_get_material_asset_revision(
+                asset, &entry->material_asset_revision) != HENKA_SUCCESS)
         {
             return false;
         }
