@@ -1145,6 +1145,21 @@ if ($NonInteractive) {
     }
     Write-Output "[pass] Packaged Prefab public API smoke completed."
 
+    Write-Step "Running packaged Prefab Game Authoring smoke"
+    $prefabAuthoringSmoke = Invoke-HenkaNativeCapture `
+        -FilePath $packagedExe `
+        -Arguments @("--prefab-authoring-smoke-test") `
+        -WorkingDirectory $packageRoot `
+        -Label "Run packaged Prefab Game Authoring smoke"
+
+    if ($prefabAuthoringSmoke.Stdout -notmatch "Prefab Game Authoring smoke: real source capture, mapped instance refresh, save/load, and Play restart workflow passed\.") {
+        throw "The packaged Prefab Game Authoring smoke test did not prove the product-native workflow."
+    }
+    if ($prefabAuthoringSmoke.Stderr -notmatch "leaving engine run loop") {
+        throw "The packaged Prefab Game Authoring smoke test did not leave the engine run loop cleanly."
+    }
+    Write-Output "[pass] Packaged Prefab Game Authoring smoke completed."
+
     Write-Step "Running bounded packaged Terrain stream stress"
     $terrainStreamStress = Invoke-HenkaNativeCapture `
         -FilePath $packagedExe `

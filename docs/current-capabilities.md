@@ -440,11 +440,14 @@ history remain open.
   Editor-native Create/Place/Update From Selected plus selected-instance Apply,
   Revert, Unpack, and Delete controls now reach the existing Prefab/Game
   Authoring authorities.
-  The packaged Sandbox and external game template also exercise the public
-  Prefab save/load/instantiate/override/duplicate/detach workflow. Within the
-  declared bounded 3D Prefab scope, the runtime, editor, persistence, package,
-  and external-consumer paths form the available workflow. Nested Prefab
-  composition and cross-project asset relocation remain future expansion.
+  The packaged Sandbox now also exercises the Game Authoring source-capture,
+  mapped-instance refresh, save/load, and Play-restart path. The packaged
+  Sandbox and external game template exercise the public Prefab
+  save/load/instantiate/override/duplicate/detach workflow. Within the
+  declared bounded 3D Prefab scope, the runtime, editor, persistence,
+  package, and external-consumer paths form the available workflow. Nested
+  Prefab composition and cross-project asset relocation remain future
+  expansion.
 
 ## Modeling / Content Authoring
 
