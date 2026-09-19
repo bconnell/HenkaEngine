@@ -33141,7 +33141,7 @@ static void sandbox3d_draw_utility_panel(
                     x_left,
                     y_start + 330.0f,
                     1.0f,
-                    "Manager-owned prefab; place a mapped authoring instance.");
+                    "Manager-owned prefab; place or update a mapped instance.");
                 if (henka_ui_button(
                         state->ui,
                         "asset_browser_place_prefab",
@@ -33242,6 +33242,50 @@ static void sandbox3d_draw_utility_panel(
                             false,
                             "Prefab parent placement rejected: select an ordinary scene object (%s).",
                             henka_result_to_string(place_result));
+                    }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "asset_browser_update_prefab_from_selected",
+                        (henka_ui_rect){x_left, y_start + 406.0f, panel_bounds.width - 28.0f, 24.0f},
+                        "Update From Selected"))
+                {
+                    const henka_entity source_entity =
+                        sandbox3d_get_real_selected_entity(state);
+                    henka_asset_metadata selected_metadata;
+                    henka_result update_result = HENKA_ERROR_INVALID_ARGUMENT;
+
+                    if (state->game_authoring != NULL &&
+                        source_entity != HENKA_INVALID_ENTITY &&
+                        henka_assets_get_metadata_at_index(
+                            assets,
+                            state->asset_browser_selected_metadata_index,
+                            &selected_metadata) == HENKA_SUCCESS &&
+                        selected_metadata.source_path != NULL)
+                    {
+                        update_result =
+                            sandbox3d_game_authoring_update_prefab_asset_from_entity(
+                                state->game_authoring,
+                                henka_engine_get_user_data_base_path(engine),
+                                selected_metadata.source_path,
+                                source_entity);
+                    }
+                    if (update_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Prefab updated and mapped instances refreshed.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Prefab update rejected: select an ordinary source object (%s).",
+                            henka_result_to_string(update_result));
                     }
                 }
             }

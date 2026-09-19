@@ -161,6 +161,190 @@ cleanup:
     return success;
 }
 
+static bool test_prefab_update_refreshes_instances(void)
+{
+    const char* project_root = "build/test_tmp";
+    const char* relative_path = "prefab_authoring_update.hprefab";
+    const char* file_path = "build/test_tmp/prefab_authoring_update.hprefab";
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_prefab* managed_prefab = NULL;
+    henka_prefab* loaded_prefab = NULL;
+    henka_entity source_root = HENKA_INVALID_ENTITY;
+    henka_entity source_child = HENKA_INVALID_ENTITY;
+    henka_entity placed_root_a = HENKA_INVALID_ENTITY;
+    henka_entity placed_root_b = HENKA_INVALID_ENTITY;
+    henka_scene_document_id source_root_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id source_child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object source_child_object;
+    henka_prefab_source_id child_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
+    uint64_t previous_revision = 0U;
+    size_t found_instances = 0U;
+    bool found_positive_instance = false;
+    bool found_negative_instance = false;
+    size_t document_index;
+    bool success = false;
+
+    (void)remove(file_path);
+    config.application_name = "Henka Prefab Authoring Update Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = project_root;
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        (source_root = henka_scene_create_entity_named(
+             scene, "Prefab Update Source")) == HENKA_INVALID_ENTITY ||
+        (source_child = henka_scene_create_entity_named(
+             scene, "Prefab Update Child")) == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_parent(
+            scene,
+            source_child,
+            source_root,
+            HENKA_SCENE_PARENT_KEEP_LOCAL) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create_with_engine(
+            scene, "prefab_authoring_update.hscene", engine, &authoring) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, source_root, &source_root_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, source_child, &source_child_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create_prefab_asset(
+            authoring, source_root, project_root, relative_path) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_instantiate_prefab_asset(
+            authoring,
+            relative_path,
+            (henka_transform){{4.0f, 0.0f, 0.0f},
+                {0.0f, 0.0f, 0.0f, 1.0f},
+                {1.0f, 1.0f, 1.0f}},
+            &placed_root_a) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_instantiate_prefab_asset(
+            authoring,
+            relative_path,
+            (henka_transform){{-4.0f, 0.0f, 0.0f},
+                {0.0f, 0.0f, 0.0f, 1.0f},
+                {1.0f, 1.0f, 1.0f}},
+            &placed_root_b) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring,
+            source_child,
+            &source_child_id,
+            &source_child_object) != HENKA_SUCCESS ||
+        henka_scene_set_entity_name(
+            scene, source_child, "Prefab Update Child Revised") !=
+            HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    source_child_object.name[0] = '\0';
+    (void)snprintf(
+        source_child_object.name,
+        sizeof(source_child_object.name),
+        "%s",
+        "Prefab Update Child Revised");
+    source_child_object.transform.position.x = 2.5f;
+    if (sandbox3d_game_authoring_update_object_for_entity(
+            authoring, source_child, &source_child_object) != HENKA_SUCCESS ||
+        henka_assets_load_prefab_asset(
+            henka_engine_get_asset_manager(engine),
+            relative_path,
+            NULL,
+            &managed_prefab) != HENKA_SUCCESS ||
+        managed_prefab == NULL ||
+        henka_prefab_get_entity_count(managed_prefab) != 2U ||
+        henka_prefab_get_source_id_at(
+            managed_prefab, 1U, &child_source_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    previous_revision = henka_prefab_get_revision(managed_prefab);
+
+    {
+        const henka_result rejected_result =
+            sandbox3d_game_authoring_update_prefab_asset_from_entity(
+                authoring, project_root, relative_path, placed_root_a);
+        const uint64_t revision_after_reject =
+            henka_prefab_get_revision(managed_prefab);
+
+        if (rejected_result != HENKA_ERROR_INVALID_ARGUMENT ||
+            revision_after_reject != previous_revision ||
+            sandbox3d_game_authoring_update_prefab_asset_from_entity(
+                authoring, project_root, relative_path, source_root) !=
+                HENKA_SUCCESS ||
+            henka_prefab_get_revision(managed_prefab) !=
+                previous_revision + 1U ||
+            henka_prefab_load_file(
+                NULL, NULL, project_root, relative_path, &loaded_prefab) !=
+                HENKA_SUCCESS ||
+            loaded_prefab == NULL ||
+            henka_prefab_get_revision(loaded_prefab) !=
+                previous_revision + 1U)
+        {
+            goto cleanup;
+        }
+    }
+
+    for (document_index = 0U;
+         document_index < henka_scene_get_entity_count(scene);
+         ++document_index)
+    {
+        henka_scene_document_object object =
+            henka_scene_document_object_default();
+        henka_entity entity = HENKA_INVALID_ENTITY;
+        henka_scene_object_info info = {0};
+
+        entity = henka_scene_get_entity_at_index(scene, document_index);
+        if (entity == HENKA_INVALID_ENTITY ||
+            sandbox3d_game_authoring_get_object_for_entity(
+                authoring, entity, &document_id, &object) != HENKA_SUCCESS ||
+            object.source.prefab_source_id != child_source_id ||
+            object.source.prefab_source_revision != previous_revision + 1U ||
+            henka_scene_get_entity_info(scene, entity, &info) != HENKA_SUCCESS ||
+            info.name == NULL ||
+            strcmp(info.name, "Prefab Update Child Revised") != 0)
+        {
+            continue;
+        }
+        ++found_instances;
+        if (fabsf(object.transform.position.x - 6.5f) < 0.0001f)
+        {
+            found_positive_instance = true;
+        }
+        if (fabsf(object.transform.position.x + 1.5f) < 0.0001f)
+        {
+            found_negative_instance = true;
+        }
+    }
+    {
+        henka_transform placed_transform_a;
+        henka_transform placed_transform_b;
+
+        success = found_instances == 2U &&
+        found_positive_instance &&
+        found_negative_instance &&
+        henka_scene_get_entity_transform(
+            scene, placed_root_a, &placed_transform_a) == HENKA_SUCCESS &&
+        henka_scene_get_entity_transform(
+            scene, placed_root_b, &placed_transform_b) == HENKA_SUCCESS &&
+        placed_transform_a.position.x == 4.0f &&
+        placed_transform_b.position.x == -4.0f;
+    }
+
+cleanup:
+    henka_prefab_destroy(loaded_prefab);
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+    (void)remove(file_path);
+    (void)source_root_id;
+    return success;
+}
+
 static bool test_registered_duplicate_enters_document(void)
 {
     const char* relative_path = "game_authoring_duplicate.hscene";
@@ -3445,6 +3629,11 @@ int main(void)
     if (!test_instantiate_prefab_asset_under_parent_enters_authoring_document())
     {
         fprintf(stderr, "game authoring prefab parent placement test failed\n");
+        return 1;
+    }
+    if (!test_prefab_update_refreshes_instances())
+    {
+        fprintf(stderr, "game authoring prefab update test failed\n");
         return 1;
     }
     if (!test_destroy_prefab_instance_preserves_sibling())

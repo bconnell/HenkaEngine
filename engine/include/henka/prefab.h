@@ -175,6 +175,14 @@ henka_result henka_prefab_instance_get_material_override(
  * payloads still fail closed. A call for the already-applied prefab revision
  * is an idempotent no-op. */
 henka_result henka_prefab_instance_refresh(henka_prefab_instance* instance);
+/* Refreshes a bounded set of instances that share one target scene and
+ * Prefab authority as one transaction. Every instance keeps its supported
+ * local transform/material overrides; the target scene and all instance
+ * metadata remain unchanged when any preflight, allocation, or refresh step
+ * fails. */
+henka_result henka_prefab_instance_refresh_batch(
+    henka_prefab_instance* const* instances,
+    size_t instance_count);
 henka_result henka_prefab_instance_get_entity_at(
     const henka_prefab_instance* instance,
     size_t index,

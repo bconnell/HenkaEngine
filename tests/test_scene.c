@@ -1759,6 +1759,7 @@ static void henka_test_prefab_asset_persistence(void)
     henka_entity target_root = HENKA_INVALID_ENTITY;
     henka_entity target_child = HENKA_INVALID_ENTITY;
     henka_prefab_source_id child_source_id;
+    henka_prefab_source_id loaded_child_source_id;
     size_t child_index;
     henka_transform transform = henka_transform_identity();
     henka_bounds bounds = (henka_bounds){{-1.0f, -2.0f, -3.0f}, {1.0f, 2.0f, 3.0f}};
@@ -1811,9 +1812,6 @@ static void henka_test_prefab_asset_persistence(void)
         prefab, child_index, &child_source_id) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_prefab_save_file(
         prefab, NULL, project_root, relative_path) == HENKA_SUCCESS);
-    henka_scene_destroy(source);
-    source = NULL;
-
     HENKA_TEST_ASSERT(henka_prefab_load_file(
         NULL, inline_shader, project_root, relative_path, &loaded) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(loaded != NULL);
@@ -1822,6 +1820,12 @@ static void henka_test_prefab_asset_persistence(void)
     HENKA_TEST_ASSERT(henka_prefab_get_entity_count(loaded) == 2U);
     HENKA_TEST_ASSERT(henka_prefab_find_source_id(
         loaded, child_source_id, &child_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_refresh_from_scene(
+        loaded, source, source_root) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_prefab_get_revision(loaded) == 2U);
+    HENKA_TEST_ASSERT(henka_prefab_get_source_id_at(
+        loaded, child_index, &loaded_child_source_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(loaded_child_source_id == child_source_id);
 
     HENKA_TEST_ASSERT(henka_scene_create(&target) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_prefab_instantiate_with_instance(
@@ -1881,6 +1885,7 @@ static void henka_test_prefab_asset_persistence(void)
     henka_prefab_instance_destroy(instance);
     henka_prefab_destroy(loaded);
     henka_prefab_destroy(prefab);
+    henka_scene_destroy(source);
     henka_scene_destroy(target);
 }
 

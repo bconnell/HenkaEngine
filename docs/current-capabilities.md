@@ -404,6 +404,13 @@ history remain open.
   Place Under Selected. Placement remains the bounded placement authority;
   supported durable instance overrides, Apply/Revert, Unpack, and grouped
   Delete are owned by Game Authoring.
+- The Asset Browser also exposes `Update From Selected` for a selected
+  manager-owned Prefab. It rebuilds the persisted asset from one ordinary
+  authored source object, preserves durable source-local IDs when the captured
+  membership and hierarchy remain compatible, and refreshes every tracked
+  mapped instance to the new revision. Prefab members, ambiguous persisted
+  identity, and source membership or hierarchy changes fail closed; deep nested
+  composition remains outside this bounded editor workflow.
 - Ordinary Sandbox Delete recognizes a mapped prefab member and routes through
   coordinator-owned group teardown. The complete mapped instance is removed,
   the manager-owned prefab asset and other instances remain available, and a
@@ -430,8 +437,9 @@ history remain open.
   source; Revert restores the current source values. Both operations participate
   in the existing Game Authoring undo/redo stack, and replay reconciles the
   live Prefab mapping rather than creating a second history authority.
-  Editor-native Create/Place plus selected-instance Apply, Revert, Unpack, and
-  Delete controls now reach the existing Prefab/Game Authoring authorities.
+  Editor-native Create/Place/Update From Selected plus selected-instance Apply,
+  Revert, Unpack, and Delete controls now reach the existing Prefab/Game
+  Authoring authorities.
   The packaged Sandbox and external game template also exercise the public
   Prefab save/load/instantiate/override/duplicate/detach workflow. Within the
   declared bounded 3D Prefab scope, the runtime, editor, persistence, package,

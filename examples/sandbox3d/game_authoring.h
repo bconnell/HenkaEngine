@@ -84,6 +84,16 @@ henka_result sandbox3d_game_authoring_create_prefab_asset(
     henka_entity root_entity,
     const char* project_root,
     const char* relative_path);
+/* Rebuilds an existing manager-owned Prefab from one ordinary authored source
+ * entity, persists the candidate, and refreshes every mapped instance in one
+ * scene transaction. The bounded path rejects membership changes and Prefab
+ * members as sources until the authoring document can reconcile those cases
+ * without losing source-local identity. */
+henka_result sandbox3d_game_authoring_update_prefab_asset_from_entity(
+    sandbox3d_game_authoring* authoring,
+    const char* project_root,
+    const char* asset_path,
+    henka_entity source_entity);
 /* Loads one manager-owned prefab asset and places a real mapped instance in
  * the authoring scene. The new members are registered in the Scene Document
  * with prefab provenance, so the placement remains save/load reconstructible.
