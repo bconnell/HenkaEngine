@@ -256,6 +256,8 @@ static bool test_prefab_update_refreshes_instances(void)
     henka_scene_document_id source_child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_object source_child_object;
+    henka_bounds expected_child_bounds =
+        {{-2.0f, 1.0f, 0.5f}, {3.0f, 4.0f, 5.0f}};
     henka_prefab_source_id child_source_id = HENKA_INVALID_PREFAB_SOURCE_ID;
     henka_entity source_extra = HENKA_INVALID_ENTITY;
     uint64_t previous_revision = 0U;
@@ -313,7 +315,14 @@ static bool test_prefab_update_refreshes_instances(void)
             &source_child_object) != HENKA_SUCCESS ||
         henka_scene_set_entity_name(
             scene, source_child, "Prefab Update Child Revised") !=
-            HENKA_SUCCESS)
+            HENKA_SUCCESS ||
+        henka_scene_set_entity_tag(
+            scene, source_child, "prefab-update-revised") != HENKA_SUCCESS ||
+        henka_scene_set_entity_flags(
+            scene, source_child, HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED) !=
+            HENKA_SUCCESS ||
+        henka_scene_set_entity_local_bounds(
+            scene, source_child, expected_child_bounds) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -447,8 +456,14 @@ static bool test_prefab_update_refreshes_instances(void)
             henka_scene_document_object_default();
         henka_entity entity = HENKA_INVALID_ENTITY;
         henka_scene_object_info info = {0};
+        henka_bounds instance_bounds;
+        uint32_t instance_flags = HENKA_SCENE_ENTITY_FLAG_NONE;
+        const char* instance_tag;
 
         entity = henka_scene_get_entity_at_index(scene, document_index);
+        instance_tag = entity == HENKA_INVALID_ENTITY
+            ? NULL
+            : henka_scene_get_entity_tag(scene, entity);
         if (entity == HENKA_INVALID_ENTITY ||
             sandbox3d_game_authoring_get_object_for_entity(
                 authoring, entity, &document_id, &object) != HENKA_SUCCESS ||
@@ -456,7 +471,20 @@ static bool test_prefab_update_refreshes_instances(void)
             object.source.prefab_source_revision != previous_revision + 1U ||
             henka_scene_get_entity_info(scene, entity, &info) != HENKA_SUCCESS ||
             info.name == NULL ||
-            strcmp(info.name, "Prefab Update Child Revised") != 0)
+            strcmp(info.name, "Prefab Update Child Revised") != 0 ||
+            instance_tag == NULL ||
+            strcmp(instance_tag, "prefab-update-revised") != 0 ||
+            henka_scene_get_entity_flags(scene, entity, &instance_flags) !=
+                HENKA_SUCCESS ||
+            instance_flags != HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED ||
+            henka_scene_get_entity_local_bounds(
+                scene, entity, &instance_bounds) != HENKA_SUCCESS ||
+            instance_bounds.center.x != expected_child_bounds.center.x ||
+            instance_bounds.center.y != expected_child_bounds.center.y ||
+            instance_bounds.center.z != expected_child_bounds.center.z ||
+            instance_bounds.extents.x != expected_child_bounds.extents.x ||
+            instance_bounds.extents.y != expected_child_bounds.extents.y ||
+            instance_bounds.extents.z != expected_child_bounds.extents.z)
         {
             continue;
         }
