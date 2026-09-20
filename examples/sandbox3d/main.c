@@ -36849,7 +36849,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             printf("Authoring smoke failure: initial face selection returned %s.\n", henka_result_to_string(result));
             goto fail;
         }
-        result = sandbox3d_authoring_object_extrude_selected_face(state->authoring_object, 0.25f);
+        result = sandbox3d_apply_authoring_face_region_extrude(state, 0.25f);
         if (result != HENKA_SUCCESS)
         {
             printf("Authoring smoke failure: extrude returned %s.\n", henka_result_to_string(result));
@@ -37257,8 +37257,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             state->authoring_object, 1U, false);
         if (result == HENKA_SUCCESS)
         {
-            result = sandbox3d_authoring_object_extrude_selected_face(
-                state->authoring_object, 0.25f);
+            result = sandbox3d_apply_authoring_face_region_extrude(state, 0.25f);
         }
         if (result != HENKA_SUCCESS ||
             henka_scene_get_entity_local_bounds(state->scene, state->cube_entity, &edited_bounds) != HENKA_SUCCESS ||
