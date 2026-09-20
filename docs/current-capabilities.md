@@ -541,6 +541,7 @@ Available operations also include:
 - inset;
 - planar bevel rings;
 - face subdivision;
+- deterministic planar face triangulation;
 - selected-face deletion;
 - bounded single-quad face Loop Cut;
 - bounded uniformly spaced multi-cut for one isolated boundary-only quad;

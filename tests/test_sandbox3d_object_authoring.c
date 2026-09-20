@@ -341,6 +341,68 @@ static void henka_test_destroy_authoring_object(
     }
 }
 
+static void henka_test_sandbox3d_object_authoring_triangulate_face(void)
+{
+    henka_engine_config config = {0};
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    const henka_vec3 positions[5] = {
+        {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f}, {2.0f, 2.0f, 0.0f},
+        {1.0f, 0.75f, 0.0f}, {0.0f, 2.0f, 0.0f}};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_vertex_id vertices[5];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    size_t index;
+
+    config.application_name = "Henka Triangulate Face Authoring Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    for (index = 0U; index < 5U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, positions[index], (henka_vec2){positions[index].x, positions[index].y},
+            9U, &vertices[index]) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+        source, vertices, 5U, 9U, true, &face_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_create_authoring_object_from_source(
+        engine, scene, source, "Triangulate Face", &entity, &object) == HENKA_SUCCESS);
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, face_id, false) == HENKA_SUCCESS);
+    before = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(before.vertices == 5U && before.edges == 5U && before.faces == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_triangulate_selected_face(object) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == 5U && after.edges == 7U && after.faces == 3U);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+        sandbox3d_authoring_object_get_mesh(object), face_id) != NULL);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+        sandbox3d_authoring_object_get_mesh(object), face_id)->corner_count == 3U);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).faces == before.faces);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).faces == after.faces);
+    henka_test_destroy_authoring_object(scene, entity, object);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_scene_policy(void)
 {
     henka_scene* scene;
@@ -5466,6 +5528,7 @@ static void henka_test_sandbox3d_create_revision_boundary(void)
 void henka_test_sandbox3d_object_authoring(void)
 {
     henka_test_sandbox3d_object_authoring_scene_policy();
+    henka_test_sandbox3d_object_authoring_triangulate_face();
     henka_test_sandbox3d_modeling_operator_session();
     henka_test_sandbox3d_modeling_operator_loose_extrude();
     henka_test_sandbox3d_modeling_operator_loose_vertex_batch_extrude();

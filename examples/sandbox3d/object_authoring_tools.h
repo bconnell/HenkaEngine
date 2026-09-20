@@ -417,6 +417,11 @@ henka_result sandbox3d_authoring_object_extrude_selected_face(
 henka_result sandbox3d_authoring_object_inset_selected_face(
     sandbox3d_authoring_object* object,
     float factor);
+/* Triangulates the selected simple planar polygon through the canonical
+ * candidate mesh, evaluated render, bounds, physics, selection, and history
+ * transaction. The source face identity remains the primary selected face. */
+henka_result sandbox3d_authoring_object_triangulate_selected_face(
+    sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_bevel_selected_face(
     sandbox3d_authoring_object* object,
     float width);

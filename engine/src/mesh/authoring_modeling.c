@@ -27,6 +27,101 @@ static bool modeling_finite_scalar(float value)
     return isfinite(value);
 }
 
+typedef struct modeling_projected_point
+{
+    float x;
+    float y;
+} modeling_projected_point;
+
+static modeling_projected_point modeling_project_position(henka_vec3 position, int axis)
+{
+    if (axis == 0) return (modeling_projected_point){position.y, position.z};
+    if (axis == 1) return (modeling_projected_point){position.x, position.z};
+    return (modeling_projected_point){position.x, position.y};
+}
+
+static float modeling_projected_cross(
+    modeling_projected_point first,
+    modeling_projected_point second,
+    modeling_projected_point third)
+{
+    return (second.x - first.x) * (third.y - first.y) -
+        (second.y - first.y) * (third.x - first.x);
+}
+
+static bool modeling_projected_point_on_segment(
+    modeling_projected_point point,
+    modeling_projected_point first,
+    modeling_projected_point second)
+{
+    const float epsilon = 1.0e-6f;
+    return point.x >= fminf(first.x, second.x) - epsilon &&
+        point.x <= fmaxf(first.x, second.x) + epsilon &&
+        point.y >= fminf(first.y, second.y) - epsilon &&
+        point.y <= fmaxf(first.y, second.y) + epsilon;
+}
+
+static bool modeling_projected_segments_intersect(
+    modeling_projected_point first,
+    modeling_projected_point second,
+    modeling_projected_point third,
+    modeling_projected_point fourth)
+{
+    const float epsilon = 1.0e-6f;
+    const float first_cross = modeling_projected_cross(first, second, third);
+    const float second_cross = modeling_projected_cross(first, second, fourth);
+    const float third_cross = modeling_projected_cross(third, fourth, first);
+    const float fourth_cross = modeling_projected_cross(third, fourth, second);
+    const bool first_straddles = (first_cross > epsilon && second_cross < -epsilon) ||
+        (first_cross < -epsilon && second_cross > epsilon);
+    const bool second_straddles = (third_cross > epsilon && fourth_cross < -epsilon) ||
+        (third_cross < -epsilon && fourth_cross > epsilon);
+    return (first_straddles && second_straddles) ||
+        (fabsf(first_cross) <= epsilon && modeling_projected_point_on_segment(third, first, second)) ||
+        (fabsf(second_cross) <= epsilon && modeling_projected_point_on_segment(fourth, first, second)) ||
+        (fabsf(third_cross) <= epsilon && modeling_projected_point_on_segment(first, third, fourth)) ||
+        (fabsf(fourth_cross) <= epsilon && modeling_projected_point_on_segment(second, third, fourth));
+}
+
+static bool modeling_projected_point_in_triangle(
+    modeling_projected_point point,
+    modeling_projected_point first,
+    modeling_projected_point second,
+    modeling_projected_point third)
+{
+    const float epsilon = 1.0e-6f;
+    const float first_cross = modeling_projected_cross(first, second, point);
+    const float second_cross = modeling_projected_cross(second, third, point);
+    const float third_cross = modeling_projected_cross(third, first, point);
+    return (first_cross >= -epsilon && second_cross >= -epsilon && third_cross >= -epsilon) ||
+        (first_cross <= epsilon && second_cross <= epsilon && third_cross <= epsilon);
+}
+
+static bool modeling_projected_polygon_is_simple(
+    const modeling_projected_point* points,
+    size_t point_count)
+{
+    size_t first_edge;
+    if (points == NULL || point_count < 3U) return false;
+    for (first_edge = 0U; first_edge < point_count; ++first_edge)
+    {
+        const size_t first_next = (first_edge + 1U) % point_count;
+        size_t second_edge;
+        for (second_edge = first_edge + 1U; second_edge < point_count; ++second_edge)
+        {
+            const size_t second_next = (second_edge + 1U) % point_count;
+            if (first_edge == second_next || first_next == second_edge) continue;
+            if (modeling_projected_segments_intersect(
+                    points[first_edge], points[first_next],
+                    points[second_edge], points[second_next]))
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static void modeling_report_reset(henka_authoring_modeling_report* report)
 {
     if (report == NULL) return;
@@ -7524,5 +7619,207 @@ henka_result henka_authoring_mesh_subdivide_face(
     {
         *out_center_vertex_id = center_id;
     }
+    return result;
+}
+
+henka_result henka_authoring_mesh_triangulate_face(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id,
+    henka_authoring_modeling_report* out_report)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_face_loop_update update = {0};
+    henka_authoring_vertex_id source_vertices[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_authoring_vertex_id triangle_vertices[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS][3];
+    henka_vec2 source_uvs[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_vec2 triangle_uvs[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS][3];
+    henka_vec3 source_positions[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    modeling_projected_point projected[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    size_t remaining[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    size_t corner_count;
+    size_t remaining_count;
+    size_t triangle_count = 0U;
+    size_t corner;
+    size_t guard = 0U;
+    uint32_t material_region;
+    bool smooth;
+    float normal_length;
+    float signed_area = 0.0f;
+    float orientation;
+    float extent = 1.0f;
+    int projection_axis;
+    henka_vec3 normal = {0.0f, 0.0f, 0.0f};
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+
+    modeling_report_reset(out_report);
+    if (mesh == NULL || !henka_authoring_mesh_validate(mesh)) return result;
+    {
+        const henka_authoring_face* source = henka_authoring_mesh_get_face(mesh, face_id);
+        if (source == NULL || source->corner_count < 3U ||
+            source->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+        {
+            return result;
+        }
+        corner_count = source->corner_count;
+        if (out_report != NULL) out_report->primary_face_id = face_id;
+        if (corner_count == 3U) return HENKA_SUCCESS;
+        material_region = source->material_region;
+        smooth = source->smooth;
+        for (corner = 0U; corner < corner_count; ++corner)
+        {
+            const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+                mesh, source->vertices[corner]);
+            const henka_authoring_vertex* next = henka_authoring_mesh_get_vertex(
+                mesh, source->vertices[(corner + 1U) % corner_count]);
+            if (vertex == NULL || next == NULL || !modeling_finite_vec3(vertex->position) ||
+                !modeling_finite_scalar(source->uvs[corner].x) ||
+                !modeling_finite_scalar(source->uvs[corner].y))
+            {
+                return result;
+            }
+            source_vertices[corner] = source->vertices[corner];
+            source_positions[corner] = vertex->position;
+            source_uvs[corner] = source->uvs[corner];
+            normal.x += (vertex->position.y - next->position.y) *
+                (vertex->position.z + next->position.z);
+            normal.y += (vertex->position.z - next->position.z) *
+                (vertex->position.x + next->position.x);
+            normal.z += (vertex->position.x - next->position.x) *
+                (vertex->position.y + next->position.y);
+        }
+    }
+    normal_length = henka_vec3_length(normal);
+    if (!modeling_finite_vec3(normal) || !isfinite(normal_length) || normal_length <= 1.0e-7f)
+    {
+        return result;
+    }
+    projection_axis = fabsf(normal.x) >= fabsf(normal.y) && fabsf(normal.x) >= fabsf(normal.z)
+        ? 0 : (fabsf(normal.y) >= fabsf(normal.z) ? 1 : 2);
+    for (corner = 0U; corner < corner_count; ++corner)
+    {
+        const henka_vec3 difference = henka_vec3_subtract(source_positions[corner], source_positions[0]);
+        const float distance = fabsf(henka_vec3_dot(normal, difference) / normal_length);
+        if (!isfinite(distance) || distance > 1.0e-4f * extent)
+        {
+            return result;
+        }
+        if (fabsf(difference.x) > extent) extent = fabsf(difference.x);
+        if (fabsf(difference.y) > extent) extent = fabsf(difference.y);
+        if (fabsf(difference.z) > extent) extent = fabsf(difference.z);
+        projected[corner] = modeling_project_position(source_positions[corner], projection_axis);
+    }
+    for (corner = 0U; corner < corner_count; ++corner)
+    {
+        signed_area += projected[corner].x * projected[(corner + 1U) % corner_count].y -
+            projected[(corner + 1U) % corner_count].x * projected[corner].y;
+    }
+    if (!isfinite(signed_area) || fabsf(signed_area) <= 1.0e-7f ||
+        !modeling_projected_polygon_is_simple(projected, corner_count))
+    {
+        return result;
+    }
+    orientation = signed_area > 0.0f ? 1.0f : -1.0f;
+    remaining_count = corner_count;
+    for (corner = 0U; corner < corner_count; ++corner) remaining[corner] = corner;
+    while (remaining_count > 3U)
+    {
+        bool found_ear = false;
+        size_t remaining_index;
+        if (++guard > corner_count * corner_count) return result;
+        for (remaining_index = 0U; remaining_index < remaining_count; ++remaining_index)
+        {
+            const size_t previous = remaining[(remaining_index + remaining_count - 1U) % remaining_count];
+            const size_t current = remaining[remaining_index];
+            const size_t next = remaining[(remaining_index + 1U) % remaining_count];
+            size_t other_index;
+            bool contains_vertex = false;
+            if (modeling_projected_cross(
+                    projected[previous], projected[current], projected[next]) * orientation <= 1.0e-7f)
+            {
+                continue;
+            }
+            for (other_index = 0U; other_index < remaining_count; ++other_index)
+            {
+                const size_t other = remaining[other_index];
+                if (other == previous || other == current || other == next) continue;
+                if (modeling_projected_point_in_triangle(
+                        projected[other], projected[previous], projected[current], projected[next]))
+                {
+                    contains_vertex = true;
+                    break;
+                }
+            }
+            if (contains_vertex) continue;
+            triangle_vertices[triangle_count][0] = source_vertices[previous];
+            triangle_vertices[triangle_count][1] = source_vertices[current];
+            triangle_vertices[triangle_count][2] = source_vertices[next];
+            triangle_uvs[triangle_count][0] = source_uvs[previous];
+            triangle_uvs[triangle_count][1] = source_uvs[current];
+            triangle_uvs[triangle_count][2] = source_uvs[next];
+            ++triangle_count;
+            memmove(
+                &remaining[remaining_index], &remaining[remaining_index + 1U],
+                (remaining_count - remaining_index - 1U) * sizeof(*remaining));
+            --remaining_count;
+            found_ear = true;
+            break;
+        }
+        if (!found_ear) return result;
+    }
+    triangle_vertices[triangle_count][0] = source_vertices[remaining[0]];
+    triangle_vertices[triangle_count][1] = source_vertices[remaining[1]];
+    triangle_vertices[triangle_count][2] = source_vertices[remaining[2]];
+    triangle_uvs[triangle_count][0] = source_uvs[remaining[0]];
+    triangle_uvs[triangle_count][1] = source_uvs[remaining[1]];
+    triangle_uvs[triangle_count][2] = source_uvs[remaining[2]];
+    ++triangle_count;
+    if (triangle_count != corner_count - 2U) return result;
+
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_get_desc(mesh).max_faces - before.faces < corner_count - 3U)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    for (corner = 1U; result == HENKA_SUCCESS && corner < triangle_count; ++corner)
+    {
+        henka_authoring_face_id added_face = HENKA_AUTHORING_INVALID_ID;
+        size_t uv_corner;
+        result = henka_authoring_mesh_add_face(
+            candidate, triangle_vertices[corner], 3U, material_region, smooth, &added_face);
+        for (uv_corner = 0U; result == HENKA_SUCCESS && uv_corner < 3U; ++uv_corner)
+        {
+            result = henka_authoring_mesh_set_face_corner_uv(
+                candidate, added_face, uv_corner, triangle_uvs[corner][uv_corner]);
+        }
+    }
+    update.face_id = face_id;
+    update.vertices = triangle_vertices[0];
+    update.uvs = triangle_uvs[0];
+    update.corner_count = 3U;
+    update.material_region = material_region;
+    update.smooth = smooth;
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_apply_face_loop_updates_internal(candidate, &update, 1U);
+    }
+    if (result == HENKA_SUCCESS &&
+        (!henka_authoring_mesh_validate(candidate) || !modeling_face_geometry_is_valid(candidate)))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        after = henka_authoring_mesh_get_counts(candidate);
+        result = henka_authoring_mesh_copy(mesh, candidate);
+        if (result == HENKA_SUCCESS)
+        {
+            modeling_report_count_delta(&before, &after, out_report);
+            if (out_report != NULL) out_report->primary_face_id = face_id;
+        }
+    }
+    henka_authoring_mesh_destroy(candidate);
     return result;
 }

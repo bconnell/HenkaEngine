@@ -30909,6 +30909,36 @@ details_group_authoring:
                     legacy_face_row_visible &&
                     row.width >= 290.0f)
             {
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_triangulate",
+                        (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
+                        "Triangulate"))
+                {
+                    const henka_result triangulate_result =
+                        sandbox3d_authoring_object_triangulate_selected_face(
+                            state->authoring_object);
+                    printf(
+                        "Native authoring face triangulate request: name=%s result=%s.\n",
+                        display_name,
+                        henka_result_to_string(triangulate_result));
+                    fflush(stdout);
+                    if (triangulate_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Selected planar face triangulated and evaluated into the scene.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Face triangulation rejected; source retained.");
+                    }
+                }
                 if (henka_ui_button(state->ui, "authoring_subdivide", (henka_ui_rect){row.x + 88.0f, row.y, 98.0f, 24.0f}, "Subdivide") &&
                     sandbox3d_authoring_object_subdivide_selected_face(state->authoring_object) == HENKA_SUCCESS)
                 {

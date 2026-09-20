@@ -969,6 +969,138 @@ cleanup:
     return result ? 1 : fail("modeling operations");
 }
 
+static int test_triangulate_face_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    const henka_vec3 positions[5] = {
+        {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f}, {2.0f, 2.0f, 0.0f},
+        {1.0f, 0.75f, 0.0f}, {0.0f, 2.0f, 0.0f}};
+    const henka_vec2 uvs[5] = {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.375f}, {0.0f, 1.0f}};
+    const henka_vec3 non_planar_positions[4] = {
+        {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {2.0f, 2.0f, 0.0f}, {0.0f, 2.0f, 0.1f}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[5];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_modeling_report report;
+    const henka_authoring_face* face;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 5U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], uvs[index], 7U, &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(mesh, vertices, 5U, 7U, true, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 5U; ++index)
+    {
+        if (henka_authoring_mesh_set_face_corner_uv(mesh, face_id, index, uvs[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (before.vertices != 5U || before.edges != 5U || before.faces != 1U ||
+        henka_authoring_mesh_triangulate_face(mesh, face_id, &report) != HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 0U || report.created_edges != 2U ||
+        report.created_faces != 2U || report.removed_vertices != 0U ||
+        report.removed_edges != 0U || report.removed_faces != 0U ||
+        report.primary_face_id != face_id)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    face = henka_authoring_mesh_get_face(mesh, face_id);
+    if (after.vertices != 5U || after.edges != 7U || after.faces != 3U ||
+        face == NULL || face->corner_count != 3U || face->material_region != 7U ||
+        !face->smooth || face->vertices[0] == HENKA_AUTHORING_INVALID_ID ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < face->corner_count; ++index)
+    {
+        size_t source_index;
+        for (source_index = 0U; source_index < 5U; ++source_index)
+        {
+            if (face->vertices[index] == vertices[source_index]) break;
+        }
+        if (source_index == 5U || face->uvs[index].x != uvs[source_index].x ||
+            face->uvs[index].y != uvs[source_index].y)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < after.faces; ++index)
+    {
+        henka_authoring_face_id active_id;
+        const henka_authoring_face* active_face;
+        if (henka_authoring_mesh_get_face_id_at(mesh, index, &active_id) != HENKA_SUCCESS ||
+            (active_face = henka_authoring_mesh_get_face(mesh, active_id)) == NULL ||
+            active_face->corner_count != 3U || active_face->material_region != 7U ||
+            !active_face->smooth)
+        {
+            goto cleanup;
+        }
+    }
+
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh,
+                non_planar_positions[index],
+                (henka_vec2){0.0f, 0.0f},
+                3U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    face_id = HENKA_AUTHORING_INVALID_ID;
+    if (henka_authoring_mesh_add_face(mesh, vertices, 4U, 3U, false, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_triangulate_face(mesh, face_id, &report) != HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    face = henka_authoring_mesh_get_face(mesh, face_id);
+    if (report.changed || before.vertices != after.vertices || before.edges != after.edges ||
+        before.faces != after.faces || face == NULL || face->corner_count != 4U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("triangulate face operation");
+}
+
 static int test_face_region_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 8U};
@@ -5240,7 +5372,7 @@ int main(void)
         test_history_create_output_fail_closed() &&
         test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
-        test_face_region_extrude_operation() &&
+        test_face_region_extrude_operation() && test_triangulate_face_operation() &&
         test_vertex_merge_operations() &&
         test_vertex_merge_input_limits() &&
         test_vertex_topology_operations() && test_vertex_bevel_operations() &&

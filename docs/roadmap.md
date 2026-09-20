@@ -467,7 +467,7 @@ Integrated authoring is already underway as part of the current 3D completion pa
    metadata-preserving duplicate faces, and degenerate faces. Unsafe winding,
    UV, material, smoothing, and non-manifold changes are rejected.
 7. Face winding flip, face extrude, inset, planar bevel rings, face subdivision,
-   selected-face deletion, planar UV projection, bounded per-face transforms,
+   deterministic planar face triangulation, selected-face deletion, planar UV projection, bounded per-face transforms,
    selected-island UV scaling/packing, deterministic all-island UV packing,
    planar-chart UV unwrap, seam detection, Make Editable, HAMS
    persistence, material promotion, and

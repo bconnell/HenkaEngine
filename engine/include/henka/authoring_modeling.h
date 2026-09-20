@@ -108,6 +108,15 @@ henka_result henka_authoring_mesh_subdivide_face(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,
     henka_authoring_vertex_id* out_center_vertex_id);
+/* Triangulates one simple planar polygon face with a deterministic ear-clipping
+ * candidate. The source face identity is retained by the first triangle;
+ * additional triangles receive fresh identities. Materials, smoothing, edge
+ * metadata, and per-corner UVs are preserved. Invalid or non-planar polygons
+ * fail closed without changing the source mesh. */
+henka_result henka_authoring_mesh_triangulate_face(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id,
+    henka_authoring_modeling_report* out_report);
 
 henka_result henka_authoring_mesh_merge_vertices(
     henka_authoring_mesh* mesh,
