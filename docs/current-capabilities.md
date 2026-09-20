@@ -759,15 +759,16 @@ Preview changes evaluated render state only. Authoritative source/history change
 
 The bounded bridge operation connects two distinct compatible boundary edges
 from different faces with one material- and smoothing-preserving quad, or two
-disjoint equal-length compatible open boundary-edge chains with one quad per
-paired edge, through the same transactional source/render/history boundary.
-Chain pairing is deterministic and preserves endpoint UV data.
+disjoint equal-length compatible boundary-edge chains with one quad per paired
+edge, through the same transactional source/render/history boundary. Both
+chains may be open or simple closed loops; pairing is deterministic and
+preserves endpoint UV data.
 
 A selected closed boundary edge loop can also be filled with one deterministic
 polygon through the same source/render/history transaction. Boundary-only,
 simple, compatible loops are supported; open loops and incompatible metadata
-fail closed without source mutation. Closed-loop and branching bridge domains,
-ambiguous loop-cut networks, and generalized split operations remain
+ fail closed without source mutation. Branching bridge domains,
+ ambiguous loop-cut networks, and generalized split operations remain
 incomplete.
 
 See [authoring-mesh.md](authoring-mesh.md), [runtime-foundations.md](runtime-foundations.md), and [showcase-assets.md](showcase-assets.md).

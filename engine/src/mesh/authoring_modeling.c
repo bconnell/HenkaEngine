@@ -1,5 +1,6 @@
 #include <henka/authoring_modeling.h>
 
+#include <float.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -2626,7 +2627,120 @@ henka_result henka_authoring_mesh_dissolve_edge(
     return result;
 }
 
-static henka_result modeling_collect_open_boundary_chain(
+static henka_result modeling_collect_closed_boundary_loop(
+    const henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* ordered_edges,
+    size_t edge_count,
+    henka_authoring_vertex_id* out_vertices,
+    henka_vec2* out_uvs,
+    uint32_t* out_material_region,
+    bool* out_smooth)
+{
+    size_t edge_index;
+
+    if (mesh == NULL || ordered_edges == NULL || out_vertices == NULL ||
+        out_uvs == NULL || out_material_region == NULL || out_smooth == NULL ||
+        edge_count < 3U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    {
+        const henka_authoring_edge* first_edge = henka_authoring_mesh_get_edge(
+            mesh, ordered_edges[0]);
+        if (first_edge == NULL || first_edge->face_count != 1U)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        out_vertices[0] = first_edge->vertices[0] < first_edge->vertices[1]
+            ? first_edge->vertices[0] : first_edge->vertices[1];
+    }
+    for (edge_index = 0U; edge_index < edge_count; ++edge_index)
+    {
+        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+            mesh, ordered_edges[edge_index]);
+        const henka_authoring_face* face;
+        size_t current_corner = SIZE_MAX;
+        size_t next_corner = SIZE_MAX;
+        henka_authoring_vertex_id current_vertex = out_vertices[edge_index];
+        henka_authoring_vertex_id next_vertex;
+        size_t corner;
+
+        if (edge == NULL || edge->face_count != 1U || edge->hard || edge->seam)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        face = henka_authoring_mesh_get_face(mesh, edge->faces[0]);
+        if (face == NULL || face->corner_count < 3U ||
+            face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (edge->vertices[0] == current_vertex)
+        {
+            next_vertex = edge->vertices[1];
+        }
+        else if (edge->vertices[1] == current_vertex)
+        {
+            next_vertex = edge->vertices[0];
+        }
+        else
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            if (face->vertices[corner] == current_vertex)
+            {
+                current_corner = corner;
+            }
+            if (face->vertices[corner] == next_vertex)
+            {
+                next_corner = corner;
+            }
+        }
+        if (current_corner == SIZE_MAX || next_corner == SIZE_MAX ||
+            !isfinite(face->uvs[current_corner].x) ||
+            !isfinite(face->uvs[current_corner].y) ||
+            !isfinite(face->uvs[next_corner].x) ||
+            !isfinite(face->uvs[next_corner].y))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (edge_index == 0U)
+        {
+            *out_material_region = face->material_region;
+            *out_smooth = face->smooth;
+        }
+        else if (face->material_region != *out_material_region ||
+                 face->smooth != *out_smooth ||
+                 !modeling_uv_near(out_uvs[edge_index], face->uvs[current_corner]))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        out_uvs[edge_index] = face->uvs[current_corner];
+        out_vertices[edge_index + 1U] = next_vertex;
+        out_uvs[edge_index + 1U] = face->uvs[next_corner];
+    }
+    if (out_vertices[edge_count] != out_vertices[0] ||
+        !modeling_uv_near(out_uvs[edge_count], out_uvs[0]))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (edge_index = 0U; edge_index < edge_count; ++edge_index)
+    {
+        size_t prior;
+        for (prior = 0U; prior < edge_index; ++prior)
+        {
+            if (out_vertices[prior] == out_vertices[edge_index])
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+static henka_result modeling_collect_boundary_chain(
     const henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* edge_ids,
     size_t edge_count,
@@ -2634,7 +2748,8 @@ static henka_result modeling_collect_open_boundary_chain(
     henka_authoring_vertex_id* out_vertices,
     henka_vec2* out_uvs,
     uint32_t* out_material_region,
-    bool* out_smooth)
+    bool* out_smooth,
+    bool* out_closed)
 {
     size_t ordered_count = 0U;
     bool closed = false;
@@ -2643,7 +2758,7 @@ static henka_result modeling_collect_open_boundary_chain(
 
     if (mesh == NULL || edge_ids == NULL || out_ordered_edges == NULL ||
         out_vertices == NULL || out_uvs == NULL || out_material_region == NULL ||
-        out_smooth == NULL || edge_count == 0U)
+        out_smooth == NULL || out_closed == NULL || edge_count == 0U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -2654,9 +2769,16 @@ static henka_result modeling_collect_open_boundary_chain(
     result = henka_authoring_topology_order_edge_loop(
         mesh, edge_ids, edge_count, out_ordered_edges,
         HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS, &ordered_count, &closed);
-    if (result != HENKA_SUCCESS || ordered_count != edge_count || closed)
+    if (result != HENKA_SUCCESS || ordered_count != edge_count)
     {
         return result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
+    }
+    *out_closed = closed;
+    if (closed)
+    {
+        return modeling_collect_closed_boundary_loop(
+            mesh, out_ordered_edges, edge_count, out_vertices, out_uvs,
+            out_material_region, out_smooth);
     }
     out_vertices[0] = HENKA_AUTHORING_INVALID_ID;
     for (edge_index = 0U; edge_index < edge_count; ++edge_index)
@@ -2773,7 +2895,10 @@ henka_result henka_authoring_mesh_bridge_boundary_edge_chains(
     uint32_t second_material_region = 0U;
     bool smooth = false;
     bool second_smooth = false;
+    bool first_closed = false;
+    bool second_closed = false;
     bool reverse_second = false;
+    size_t second_offset = 0U;
     size_t index;
     double direct_cost = 0.0;
     double reverse_cost = 0.0;
@@ -2798,21 +2923,23 @@ henka_result henka_authoring_mesh_bridge_boundary_edge_chains(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = modeling_collect_open_boundary_chain(
+    result = modeling_collect_boundary_chain(
         mesh, first_edge_ids, first_edge_count, first_ordered,
-        first_vertices, first_uvs, &material_region, &smooth);
+        first_vertices, first_uvs, &material_region, &smooth, &first_closed);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
-    result = modeling_collect_open_boundary_chain(
+    result = modeling_collect_boundary_chain(
         mesh, second_edge_ids, second_edge_count, second_ordered,
-        second_vertices, second_uvs, &second_material_region, &second_smooth);
+        second_vertices, second_uvs, &second_material_region, &second_smooth,
+        &second_closed);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
-    if (second_material_region != material_region || second_smooth != smooth)
+    if (first_closed != second_closed ||
+        second_material_region != material_region || second_smooth != smooth)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -2850,7 +2977,49 @@ henka_result henka_authoring_mesh_bridge_boundary_edge_chains(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    reverse_second = reverse_cost < direct_cost;
+    if (first_closed)
+    {
+        size_t direction;
+        size_t shift;
+        double best_cost = DBL_MAX;
+        for (direction = 0U; direction < 2U; ++direction)
+        {
+            for (shift = 0U; shift < first_edge_count; ++shift)
+            {
+                double cost = 0.0;
+                for (index = 0U; index < first_edge_count; ++index)
+                {
+                    const size_t second_index = direction == 0U
+                        ? (shift + index) % first_edge_count
+                        : (shift + first_edge_count - index) % first_edge_count;
+                    const henka_authoring_vertex* first_vertex =
+                        henka_authoring_mesh_get_vertex(mesh, first_vertices[index]);
+                    const henka_authoring_vertex* second_vertex =
+                        henka_authoring_mesh_get_vertex(mesh, second_vertices[second_index]);
+                    if (first_vertex == NULL || second_vertex == NULL)
+                    {
+                        return HENKA_ERROR_INVALID_ARGUMENT;
+                    }
+                    cost += (double)henka_vec3_length(henka_vec3_subtract(
+                        first_vertex->position, second_vertex->position));
+                }
+                if (cost < best_cost)
+                {
+                    best_cost = cost;
+                    second_offset = shift;
+                    reverse_second = direction != 0U;
+                }
+            }
+        }
+        if (!isfinite(best_cost))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    else
+    {
+        reverse_second = reverse_cost < direct_cost;
+    }
     before = henka_authoring_mesh_get_counts(mesh);
     result = henka_authoring_mesh_clone(mesh, &candidate);
     if (result != HENKA_SUCCESS)
@@ -2859,10 +3028,24 @@ henka_result henka_authoring_mesh_bridge_boundary_edge_chains(
     }
     for (index = 0U; result == HENKA_SUCCESS && index < first_edge_count; ++index)
     {
-        const size_t second_start = reverse_second
-            ? first_edge_count - index - 1U : index;
-        const size_t second_end = reverse_second
-            ? first_edge_count - index : index + 1U;
+        size_t second_start;
+        size_t second_end;
+        if (first_closed)
+        {
+            second_start = reverse_second
+                ? (second_offset + first_edge_count - index) % first_edge_count
+                : (second_offset + index) % first_edge_count;
+            second_end = reverse_second
+                ? (second_offset + first_edge_count - index - 1U) % first_edge_count
+                : (second_offset + index + 1U) % first_edge_count;
+        }
+        else
+        {
+            second_start = reverse_second
+                ? first_edge_count - index - 1U : index;
+            second_end = reverse_second
+                ? first_edge_count - index : index + 1U;
+        }
         const henka_authoring_vertex_id bridge_vertices[4] = {
             first_vertices[index], first_vertices[index + 1U],
             second_vertices[second_end], second_vertices[second_start]};

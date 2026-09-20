@@ -4121,6 +4121,151 @@ static void henka_test_sandbox3d_object_authoring_edge_chain_bridge(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_closed_boundary_loop_bridge(void)
+{
+    const henka_vec3 positions[16] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f, 1.0f},
+        {0.0f, 3.0f, 0.0f}, {1.0f, 3.0f, 0.0f}, {1.0f, 4.0f, 0.0f},
+        {0.0f, 4.0f, 0.0f}, {0.0f, 3.0f, 1.0f}, {1.0f, 3.0f, 1.0f},
+        {1.0f, 4.0f, 1.0f}, {0.0f, 4.0f, 1.0f}};
+    const henka_authoring_vertex_id face_vertices[10][4] = {
+        {1U, 4U, 3U, 2U}, {5U, 6U, 7U, 8U},
+        {1U, 5U, 8U, 4U}, {2U, 3U, 7U, 6U},
+        {1U, 2U, 6U, 5U},
+        {9U, 12U, 11U, 10U}, {13U, 14U, 15U, 16U},
+        {9U, 13U, 16U, 12U}, {10U, 11U, 15U, 14U},
+        {9U, 10U, 14U, 13U}};
+    const henka_authoring_vertex_id loop_vertices[2][4] = {
+        {4U, 8U, 7U, 3U}, {12U, 16U, 15U, 11U}};
+    const henka_authoring_mesh_desc desc = {16U, 32U, 16U, 8U};
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_edge_id loop_edges[2][4] = {
+        {HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID},
+        {HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID}};
+    henka_entity entity;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    sandbox3d_modeling_operator_session operator_session = {0};
+    size_t index;
+    size_t loop_index;
+
+    config.application_name = "Henka Closed Boundary Loop Bridge Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Closed Boundary Loop Bridge");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    for (index = 0U; index < 16U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, positions[index], (henka_vec2){0.125f * (float)index, 0.5f}, 6U,
+            &(henka_authoring_vertex_id){0U}) == HENKA_SUCCESS);
+    }
+    for (index = 0U; index < 10U; ++index)
+    {
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+            source, face_vertices[index], 4U, 6U, true, &face_id) == HENKA_SUCCESS);
+    }
+    for (index = 0U; index < desc.max_edges; ++index)
+    {
+        henka_authoring_edge_id edge_id;
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_edge_id_at(source, index, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(source, edge_id);
+        if (edge == NULL || edge->face_count != 1U)
+        {
+            continue;
+        }
+        for (loop_index = 0U; loop_index < 2U; ++loop_index)
+        {
+            size_t edge_index;
+            for (edge_index = 0U; edge_index < 4U; ++edge_index)
+            {
+                const henka_authoring_vertex_id first = loop_vertices[loop_index][edge_index];
+                const henka_authoring_vertex_id second =
+                    loop_vertices[loop_index][(edge_index + 1U) % 4U];
+                if ((edge->vertices[0] == first && edge->vertices[1] == second) ||
+                    (edge->vertices[0] == second && edge->vertices[1] == first))
+                {
+                    loop_edges[loop_index][edge_index] = edge_id;
+                }
+            }
+        }
+    }
+    for (loop_index = 0U; loop_index < 2U; ++loop_index)
+    {
+        for (index = 0U; index < 4U; ++index)
+        {
+            HENKA_TEST_ASSERT(loop_edges[loop_index][index] != HENKA_AUTHORING_INVALID_ID);
+        }
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 16U, &object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    for (loop_index = 0U; loop_index < 2U; ++loop_index)
+    {
+        for (index = 0U; index < 4U; ++index)
+        {
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+                object, loop_edges[loop_index][index],
+                loop_index != 0U || index != 0U) == HENKA_SUCCESS);
+        }
+    }
+    before = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_bridge_selected_boundary_edges(object) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices &&
+        after.edges == before.edges + 4U && after.faces == before.faces + 4U &&
+        henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &operator_session, object,
+        SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &operator_session, 0.0f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).faces == before.faces);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&operator_session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &operator_session, object,
+        SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &operator_session, 0.0f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&operator_session) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.edges == before.edges + 4U && after.faces == before.faces + 4U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    sandbox3d_modeling_operator_reset(&operator_session);
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_boundary_loop_fill(void)
 {
     const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 8U};
@@ -6391,6 +6536,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_edge_loop_exact_grid();
     henka_test_sandbox3d_object_authoring_edge_bridge();
     henka_test_sandbox3d_object_authoring_edge_chain_bridge();
+    henka_test_sandbox3d_object_authoring_closed_boundary_loop_bridge();
     henka_test_sandbox3d_object_authoring_boundary_loop_fill();
     henka_test_sandbox3d_object_authoring_edge_dissolve();
     henka_test_sandbox3d_object_authoring_edge_delete();

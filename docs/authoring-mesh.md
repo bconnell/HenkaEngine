@@ -429,10 +429,12 @@ The shared Sandbox modeling session exposes this path through Preview, Cancel, a
 ### Boundary Edge Bridge
 
 Edge mode can bridge either two distinct compatible boundary edges or two
-disjoint, equal-length compatible open boundary-edge chains. The chain form
-creates one transactional quad per paired edge, uses deterministic shorter-endpoint
-pairing, and preserves source material, smoothing, and endpoint UV data. The
-Sandbox modeling session exposes the operation through the Edge-mode
+disjoint, equal-length compatible boundary-edge chains. Both chains must be
+open or both must be simple closed loops. The chain form creates one
+transactional quad per paired edge, uses deterministic endpoint pairing for
+open chains or cyclic offset/direction pairing for closed loops, and preserves
+source material, smoothing, and endpoint UV data. The Sandbox modeling session
+exposes the operation through the Edge-mode
 Preview/Apply/Cancel path and the authoritative source/render/history
 transaction, with Undo and Redo for the applied edit.
 

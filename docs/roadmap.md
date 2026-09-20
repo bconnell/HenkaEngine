@@ -480,11 +480,11 @@ Integrated authoring is already underway as part of the current 3D completion pa
 8. The bounded bridge operation connects two distinct compatible boundary edges
    from different faces with one transactional quad while preserving source
    material, smoothing, and endpoint UV data. It also connects two disjoint,
-   equal-length compatible open boundary-edge chains with one transactional quad
-   per paired edge, using deterministic shorter-endpoint pairing. A selected
-   closed boundary edge loop can also be filled transactionally with one
-   metadata-compatible polygon. Generalized closed-loop, branching, and split
-   workflows remain future work.
+    equal-length compatible boundary-edge chains with one transactional quad
+    per paired edge, using deterministic open-chain endpoint or closed-loop
+    cyclic pairing. A selected closed boundary edge loop can also be filled
+    transactionally with one metadata-compatible polygon. Branching bridge and
+    generalized split workflows remain future work.
 9. HAMS preserves explicit loose vertices and standalone wire edges with stable
    IDs and bounded reusable storage. The topology overlay presents those source
    vertices and wire edges for inspection.
