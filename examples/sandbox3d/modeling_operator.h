@@ -28,6 +28,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally triangulates one selected planar face through the shared
      * Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_TRIANGULATE,
+    /* Transactionally insets one selected face through the shared
+     * Preview/Cancel/Apply session. */
+    SANDBOX3D_MODELING_OPERATOR_INSET,
     /* Transactional bridge of two compatible boundary edges or two compatible
      * equal-length open boundary-edge chains. */
     SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE,
