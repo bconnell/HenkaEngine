@@ -443,6 +443,10 @@ henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
     sandbox3d_authoring_object* object,
     size_t cut_count);
+/* Uses the selected-face route for an isolated quad and falls back to the
+ * compatible quad-strip route when the selected quad has shared strip edges.
+ * The candidate remains in Preview until the shared preview commit/cancel
+ * path publishes or discards it. */
 /* Splits the compatible quad strip traversed from the selected face with
  * uniformly spaced cuts. The candidate remains in Preview until the shared
  * preview commit/cancel path publishes or discards it. */

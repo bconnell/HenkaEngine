@@ -6787,6 +6787,13 @@ static henka_result sandbox3d_authoring_build_loop_cut_candidate(
     return result;
 }
 
+static henka_result sandbox3d_authoring_build_loop_cut_quad_strip_multi_candidate(
+    sandbox3d_authoring_object* object,
+    size_t cut_count,
+    henka_authoring_mesh** out_candidate,
+    henka_authoring_face_id* out_last_face_id,
+    bool* out_closed);
+
 static henka_result sandbox3d_authoring_build_loop_cut_multi_candidate(
     sandbox3d_authoring_object* object,
     size_t cut_count,
@@ -6824,7 +6831,9 @@ static henka_result sandbox3d_authoring_build_loop_cut_multi_candidate(
             object->mesh, face->edges[corner]);
         if (edge == NULL || edge->face_count != 1U || edge->faces[0] != face->id)
         {
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            bool closed = false;
+            return sandbox3d_authoring_build_loop_cut_quad_strip_multi_candidate(
+                object, cut_count, out_candidate, out_last_face_id, &closed);
         }
     }
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
