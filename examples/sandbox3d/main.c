@@ -1198,6 +1198,44 @@ static henka_result sandbox3d_apply_authoring_face_normal(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_subdivide_face(
+    sandbox3d_state* state)
+{
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        sandbox3d_authoring_object_get_selection_mode(state->authoring_object) !=
+            SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object) != 1U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator,
+            0.0f,
+            false,
+            false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_commit(
+            &state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static bool sandbox3d_modeling_operator_is_uv(
     sandbox3d_modeling_operator_kind kind)
 {
@@ -31259,7 +31297,7 @@ details_group_authoring:
                     }
                 }
                 if (henka_ui_button(state->ui, "authoring_subdivide", (henka_ui_rect){row.x + 88.0f, row.y, 98.0f, 24.0f}, "Subdivide") &&
-                    sandbox3d_authoring_object_subdivide_selected_face(state->authoring_object) == HENKA_SUCCESS)
+                    sandbox3d_apply_authoring_subdivide_face(state) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Authoring face subdivided and evaluated into the scene.");
                 }
