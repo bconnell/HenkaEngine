@@ -282,6 +282,7 @@ henka_result sandbox3d_modeling_operator_begin(
          kind != SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_DISTANCE &&
          kind != SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE &&
          kind != SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE &&
+         kind != SANDBOX3D_MODELING_OPERATOR_FILL_BOUNDARY_LOOP &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_PROJECT &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_PACK &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM &&
@@ -410,6 +411,11 @@ henka_result sandbox3d_modeling_operator_begin(
         (selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE ||
          selected_count < 2U ||
          (selected_count != 2U && (selected_count & 1U) != 0U)))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (kind == SANDBOX3D_MODELING_OPERATOR_FILL_BOUNDARY_LOOP &&
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE || selected_count < 3U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -682,6 +688,7 @@ henka_result sandbox3d_modeling_operator_preview(
     henka_authoring_edge_id extrude_result_edge = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_face_id extrude_result_face = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_face_id bridge_result_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id filled_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_edge_id* boundary_chain_edges = NULL;
     henka_authoring_mesh_desc mesh_desc = {0};
     size_t affected_count = 0U;
@@ -715,6 +722,7 @@ henka_result sandbox3d_modeling_operator_preview(
          session->kind != SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_DISTANCE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE &&
+         session->kind != SANDBOX3D_MODELING_OPERATOR_FILL_BOUNDARY_LOOP &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_PROJECT &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_PACK &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM &&
@@ -792,6 +800,9 @@ henka_result sandbox3d_modeling_operator_preview(
              session->selection_count < 2U ||
              (session->selection_count != 2U &&
               (session->selection_count & 1U) != 0U))) ||
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_FILL_BOUNDARY_LOOP &&
+            (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE ||
+             session->selection_count < 3U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE ||
              session->selection_count == 0U)) ||
@@ -1200,6 +1211,16 @@ henka_result sandbox3d_modeling_operator_preview(
                     &report);
             }
         }
+    }
+    if (result == HENKA_SUCCESS &&
+        session->kind == SANDBOX3D_MODELING_OPERATOR_FILL_BOUNDARY_LOOP)
+    {
+        result = henka_authoring_mesh_fill_boundary_loop(
+            candidate,
+            (const henka_authoring_edge_id*)session->selection_ids,
+            session->selection_count,
+            &filled_face_id,
+            &report);
     }
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PROJECT)

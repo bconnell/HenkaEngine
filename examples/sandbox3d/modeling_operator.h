@@ -67,6 +67,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactional bridge of two compatible boundary edges or two compatible
      * equal-length open boundary-edge chains. */
     SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE,
+    /* Transactionally fills one selected closed boundary edge loop through the
+     * shared Preview/Cancel/Apply session. */
+    SANDBOX3D_MODELING_OPERATOR_FILL_BOUNDARY_LOOP,
     /* Transactional projection of one selected face onto a principal plane. */
     SANDBOX3D_MODELING_OPERATOR_UV_PROJECT,
     /* Transactional packing of one selected face into the padded unit square. */
