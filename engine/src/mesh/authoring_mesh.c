@@ -1358,6 +1358,7 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
         {
             if (edge->face_count >= 2U)
             {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
                 goto rollback;
             }
             edge->faces[edge->face_count] = face->id;

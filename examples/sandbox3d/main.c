@@ -29610,11 +29610,11 @@ details_group_authoring:
                     sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) == 1U;
                 (void)henka_ui_label_colored(
                     state->ui, row.x, row.y + 5.0f, 0.85f,
-                    "Extrude (open vertex fan)", HENKA_UI_COLOR_INFO);
+                    "Extrude (vertex fan)", HENKA_UI_COLOR_INFO);
                 if (extrude_enabled && henka_ui_button(
                         state->ui, "authoring_extrude_vertex_top",
                         (henka_ui_rect){row.x + 160.0f, row.y, 120.0f, 24.0f},
-                        "Boundary Vertex"))
+                        "Vertex Fan"))
                 {
                     const henka_result extrude_result =
                         sandbox3d_authoring_object_extrude_selected_vertex(
@@ -30509,11 +30509,11 @@ details_group_authoring:
                     sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) == 1U;
                 (void)henka_ui_label_colored(
                     state->ui, row.x, row.y + 5.0f, 0.85f,
-                    "Extrude (open vertex fan)", HENKA_UI_COLOR_INFO);
+                    "Extrude (vertex fan)", HENKA_UI_COLOR_INFO);
                 if (extrude_enabled && henka_ui_button(
                         state->ui, "authoring_extrude_vertex",
                         (henka_ui_rect){row.x + 160.0f, row.y, 120.0f, 24.0f},
-                        "Boundary Vertex"))
+                        "Vertex Fan"))
                 {
                     const henka_result extrude_result =
                         sandbox3d_authoring_object_extrude_selected_vertex(

@@ -508,11 +508,13 @@ Published Vertex operations include:
 - Delete Vertex
 - Vertex Bevel
 - bounded Vertex Extrude for a connected open boundary vertex fan, including the one-face corner case
+- bounded homogeneous closed interior vertex-fan offset/cap replacement; the original selected vertex remains a valid loose vertex
 - bounded batch Vertex Extrude for pairwise fan-disjoint boundary vertices
 - bounded contiguous same-face boundary-vertex-chain extrusion, including a full
   face boundary, routed through the transactional boundary-edge-chain operation
 
-Bounded Vertex Extrude preserves the base vertex, creates one offset cap vertex, replaces the incident fan, and creates the two boundary side faces transactionally.
+Bounded open-fan Vertex Extrude preserves the base vertex, creates one offset cap vertex, replaces the incident fan, and creates the two boundary side faces transactionally.
+For a homogeneous closed interior fan, it replaces the incident fan with an offset cap and preserves the original selected vertex as a valid loose vertex; it does not publish a non-manifold single-vertex side wall.
 The batch form applies that same operation to selected vertices on disjoint
 face/edge neighborhoods in one candidate-first transaction. Mixed loose and
 surface selections, overlapping neighborhoods, and unsupported vertex fans fail
@@ -523,7 +525,8 @@ boundary vertices on one face and publishes the corresponding edge-chain
 extrusion transactionally. It does not broaden support to interior or branching
 vertex selections.
 
-Closed, disconnected, loose-edge, and incompatible-normal fans fail closed.
+Disconnected, loose-edge, and incompatible-normal fans fail closed. Closed
+interior fans with mixed material or smoothing metadata also fail closed.
 
 ### General transactional operations
 
@@ -694,9 +697,9 @@ extrusion.
 - Vertex-mode controls can add a loose vertex from finite X/Y/Z coordinates or add a standalone edge from exactly two selected vertices through the same transactional source/render/history boundary.
 
 Broader loose-component editing and general interior surface-connected
-Vertex/Edge Extrude workflows remain unavailable. Branching, mixed, and
-unsupported shared-endpoint domains remain outside the bounded boundary-chain
-path.
+Vertex/Edge Extrude workflows beyond the bounded homogeneous closed-fan cap
+replacement remain unavailable. Branching, mixed, and unsupported shared-endpoint
+domains remain outside the bounded boundary-chain path.
 
 ### Quad-strip traversal, Loop Cut, and Edge Slide
 
