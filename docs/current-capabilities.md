@@ -619,18 +619,24 @@ Available edge authoring includes:
 - bounded single-sided extrusion for one compatible interior edge shared by
   two quads, with deterministic incident-face selection and transactional
   preview/apply routing;
+- bounded connected interior-edge extrusion for a simple, pairwise
+  vertex-disjoint path across compatible quad strips, with deterministic
+  path ordering and transactional preview/apply routing;
 - transactional same-face extrusion for one contiguous boundary-edge chain.
 
 Surface-connected boundary-edge extrusion offsets each selected edge along its incident face normal, preserves the source face and selected hard-edge intent, and creates one connecting quad per edge transactionally.
 
 Compatible interior-edge extrusion selects the lower logical-ID incident quad,
 offsets that quad along its face normal, creates one connecting quad, and leaves
-the neighboring quad unchanged. Matching material/smoothing metadata and a
-non-hard, non-seamed source edge are required; preview, cancel, apply, undo,
-and redo use the existing authoring history boundary.
+the neighboring quad unchanged. The connected path form applies that same
+transactional step in deterministic path order. Matching material/smoothing
+metadata, continuous per-edge UVs, and non-hard, non-seamed source edges are
+required; preview, cancel, apply, undo, and redo use the existing authoring
+history boundary.
 
-Other interior/manifold configurations, mixed-face selections, disconnected
-chains, and otherwise unsupported batches remain rejected. A contiguous chain may wrap
+Other interior/manifold configurations, mixed-face selections, disconnected,
+cyclic, branching, shared-endpoint, and otherwise unsupported batches remain
+rejected. A contiguous chain may wrap
 around a face boundary; a complete face boundary is treated as a closed chain.
 
 Interior bevel rejects:

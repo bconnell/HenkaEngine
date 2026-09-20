@@ -394,7 +394,7 @@ broader interior edge-set bevel remain incomplete.
 
 ### Surface-connected Edge Extrude
 
-The core API supports bounded surface-connected extrusion for one open boundary edge, a pairwise vertex-disjoint batch on distinct faces, and one compatible interior edge shared by two quads.
+The core API supports bounded surface-connected extrusion for one open boundary edge, a pairwise vertex-disjoint batch on distinct faces, one compatible interior edge shared by two quads, and a simple connected interior-edge path across compatible quad strips.
 
 The operation:
 
@@ -404,11 +404,11 @@ The operation:
 - preserves selected hard-edge intent;
 - publishes after topology and geometry validation.
 
-For the compatible interior case, the lower logical-ID incident quad is selected deterministically. That quad replaces the shared edge with an offset edge and receives one connecting quad; the neighboring quad remains unchanged. The source faces must be quads with matching material and smoothing metadata, and the source edge must not be hard or seamed. Per-corner UVs and face metadata are preserved on the selected quad and connecting quad.
+For the compatible interior cases, the lower logical-ID incident quad is selected deterministically for each edge. That quad replaces the shared edge with an offset edge and receives one connecting quad; the neighboring quad remains unchanged. The source faces must be quads with matching material and smoothing metadata, and the source edges must not be hard or seamed. Per-corner UVs and face metadata are preserved on the selected quads and connecting quads. A connected path must be simple, pairwise vertex-disjoint, and have exactly two path endpoints; cyclic and branching selections are rejected as ambiguous.
 
-Other interior/manifold configurations, mixed metadata, non-quad faces, and mixed, shared-endpoint, same-face, or otherwise unsupported batches remain unsupported.
+Other interior/manifold configurations, mixed metadata, non-quad faces, and mixed, shared-endpoint, disconnected, cyclic, branching, or otherwise unsupported batches remain unsupported.
 
-The shared Sandbox modeling session exposes this path through Preview, Cancel, and Apply for one edge or a bounded batch. The Authoring panel uses the shared amount control.
+The shared Sandbox modeling session exposes this path through Preview, Cancel, and Apply for one edge or a bounded compatible interior path. The Authoring panel uses the shared amount control, and applied edits use the existing Undo/Redo history boundary.
 
 ### Boundary Edge Bridge
 
