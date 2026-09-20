@@ -199,6 +199,20 @@ henka_result henka_authoring_mesh_extrude_vertex(
     henka_authoring_vertex_id* out_new_vertex_id,
     henka_authoring_modeling_report* out_report);
 
+/* Extrudes a pairwise fan-disjoint set of surface vertices whose incident
+ * topology is compatible with the boundary-fan vertex operation. Each
+ * selected vertex is evaluated against the original mesh, then the complete
+ * batch is published transactionally. Loose vertices, duplicate selections,
+ * overlapping face/edge neighborhoods, unsupported vertex fans, invalid
+ * distances, and capacity failures are rejected without changing the source
+ * mesh. */
+henka_result henka_authoring_mesh_extrude_boundary_vertices(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t vertex_count,
+    float distance,
+    henka_authoring_modeling_report* out_report);
+
 /* Extrudes one loose vertex along an explicit direction into a standalone
  * wire edge. The source vertex remains in place, the new vertex inherits its
  * UV/material metadata, and no face is synthesized without surface context.

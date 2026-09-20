@@ -508,8 +508,13 @@ Published Vertex operations include:
 - Delete Vertex
 - Vertex Bevel
 - bounded Vertex Extrude for a connected open boundary vertex fan, including the one-face corner case
+- bounded batch Vertex Extrude for pairwise fan-disjoint boundary vertices
 
 Bounded Vertex Extrude preserves the base vertex, creates one offset cap vertex, replaces the incident fan, and creates the two boundary side faces transactionally.
+The batch form applies that same operation to selected vertices on disjoint
+face/edge neighborhoods in one candidate-first transaction. Mixed loose and
+surface selections, overlapping neighborhoods, and unsupported vertex fans fail
+closed.
 
 Closed, disconnected, loose-edge, and incompatible-normal fans fail closed.
 
@@ -524,6 +529,7 @@ Available operations also include:
 - selected face-region extrusion with shared translated caps and transactional
   source-preserving behavior for isolated regions;
 - bounded batch extrusion for pairwise-distinct loose vertex selections;
+- bounded batch extrusion for pairwise fan-disjoint boundary vertex selections;
 - inset;
 - planar bevel rings;
 - face subdivision;
@@ -659,7 +665,8 @@ The topology overlay presents all authored source vertices and distinguishes loo
 
 The shared Sandbox modeling-operator session and Authoring panel can preview,
 cancel, and apply extrusion for one selected face, one or a bounded batch of
-loose vertices, or one standalone edge through core transactional operations.
+loose vertices, one or a bounded batch of compatible boundary vertices, or one
+standalone edge through core transactional operations.
 The same control routes one or a bounded pairwise batch of selected open
 boundary edges through face-normal surface-connected extrusion.
 

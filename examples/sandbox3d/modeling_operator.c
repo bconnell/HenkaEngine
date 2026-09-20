@@ -702,13 +702,43 @@ henka_result sandbox3d_modeling_operator_preview(
         {
             if (session->selection_count > 1U)
             {
-                result = henka_authoring_mesh_extrude_loose_vertices(
-                    candidate,
-                    (const henka_authoring_vertex_id*)session->selection_ids,
-                    session->selection_count,
-                    direction,
-                    applied_amount,
-                    &report);
+                bool all_loose = true;
+                bool all_surface = true;
+                size_t selection_index;
+                for (selection_index = 0U;
+                     selection_index < session->selection_count;
+                     ++selection_index)
+                {
+                    const henka_authoring_vertex_id vertex_id =
+                        (henka_authoring_vertex_id)session->selection_ids[selection_index];
+                    const size_t edge_count = henka_authoring_mesh_get_vertex_edge_count(
+                        session->source_snapshot, vertex_id);
+                    all_loose = all_loose && edge_count == 0U;
+                    all_surface = all_surface && edge_count != 0U;
+                }
+                if (all_loose)
+                {
+                    result = henka_authoring_mesh_extrude_loose_vertices(
+                        candidate,
+                        (const henka_authoring_vertex_id*)session->selection_ids,
+                        session->selection_count,
+                        direction,
+                        applied_amount,
+                        &report);
+                }
+                else if (all_surface)
+                {
+                    result = henka_authoring_mesh_extrude_boundary_vertices(
+                        candidate,
+                        (const henka_authoring_vertex_id*)session->selection_ids,
+                        session->selection_count,
+                        applied_amount,
+                        &report);
+                }
+                else
+                {
+                    result = HENKA_ERROR_INVALID_ARGUMENT;
+                }
             }
             else
             {

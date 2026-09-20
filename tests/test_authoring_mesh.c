@@ -3968,6 +3968,92 @@ cleanup:
     return result ? 1 : fail("transactional loose vertex batch extrude");
 }
 
+static int test_boundary_vertex_batch_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 32U, 16U, 4U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[8] = {0};
+    henka_authoring_vertex_id batch_ids[2];
+    henka_authoring_vertex_id overlapping_ids[2];
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+        {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+        {3.0f, 0.0f, 0.0f}, {4.0f, 0.0f, 0.0f},
+        {4.0f, 1.0f, 0.0f}, {3.0f, 1.0f, 0.0f}};
+    henka_authoring_vertex_id first_face_vertices[4] = {0};
+    henka_authoring_vertex_id second_face_vertices[4] = {0};
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){positions[index].x, positions[index].y},
+                index < 4U ? 1U : 2U, &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        first_face_vertices[index] = vertices[index];
+        second_face_vertices[index] = vertices[index + 4U];
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, first_face_vertices, 4U, 1U, false, &face_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            mesh, second_face_vertices, 4U, 2U, false, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (!henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    before = henka_authoring_mesh_get_counts(mesh);
+    overlapping_ids[0] = vertices[0];
+    overlapping_ids[1] = vertices[1];
+    if (henka_authoring_mesh_extrude_boundary_vertices(
+            mesh, overlapping_ids, 2U, 0.5f, &report) == HENKA_SUCCESS ||
+        report.changed ||
+        henka_authoring_mesh_get_counts(mesh).vertices != before.vertices ||
+        henka_authoring_mesh_get_counts(mesh).edges != before.edges ||
+        henka_authoring_mesh_get_counts(mesh).faces != before.faces ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    batch_ids[0] = vertices[0];
+    batch_ids[1] = vertices[4];
+    if (henka_authoring_mesh_extrude_boundary_vertices(
+            mesh, batch_ids, 2U, 0.5f, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || report.created_vertices != 2U || report.created_faces != 4U ||
+        after.vertices != before.vertices + 2U || after.faces != before.faces + 4U ||
+        after.edges <= before.edges || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional boundary vertex batch extrude");
+}
+
 static int test_vertex_extrude_boundary_fan_operation(void)
 {
     const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 4U};
@@ -5024,6 +5110,7 @@ int main(void)
         test_edge_delete_operation() &&
         test_vertex_extrude_operation() &&
         test_loose_vertex_extrude_operation() &&
+        test_boundary_vertex_batch_extrude_operation() &&
         test_vertex_extrude_boundary_fan_operation() &&
         test_loose_edge_extrude_operation() &&
         test_boundary_edge_extrude_operation() &&
