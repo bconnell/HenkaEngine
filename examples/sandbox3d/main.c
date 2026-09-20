@@ -1031,6 +1031,72 @@ static henka_result sandbox3d_apply_authoring_vertex_fan(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_move(
+    sandbox3d_state* state,
+    henka_vec3 delta)
+{
+    sandbox3d_modeling_operator_axis axis;
+    float amount;
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        !isfinite(delta.x) || !isfinite(delta.y) || !isfinite(delta.z))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    axis = SANDBOX3D_MODELING_OPERATOR_AXIS_NONE;
+    amount = 0.0f;
+    if (delta.x != 0.0f && delta.y == 0.0f && delta.z == 0.0f)
+    {
+        axis = SANDBOX3D_MODELING_OPERATOR_AXIS_X;
+        amount = delta.x;
+    }
+    else if (delta.y != 0.0f && delta.x == 0.0f && delta.z == 0.0f)
+    {
+        axis = SANDBOX3D_MODELING_OPERATOR_AXIS_Y;
+        amount = delta.y;
+    }
+    else if (delta.z != 0.0f && delta.x == 0.0f && delta.y == 0.0f)
+    {
+        axis = SANDBOX3D_MODELING_OPERATOR_AXIS_Z;
+        amount = delta.z;
+    }
+    if (axis == SANDBOX3D_MODELING_OPERATOR_AXIS_NONE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_MOVE);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_set_axis(
+            &state->modeling_operator,
+            axis);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator,
+            amount,
+            false,
+            false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_commit(
+            &state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_apply_authoring_connect_vertices(
     sandbox3d_state* state)
 {
@@ -17486,8 +17552,8 @@ static henka_result sandbox3d_validate_add_primitive_smoke(
     sandbox3d_authoring_object_set_selection_mode(
         authoring_object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
     if (sandbox3d_authoring_object_select_component(authoring_object, 1U, false) != HENKA_SUCCESS ||
-        sandbox3d_authoring_object_move_selected_components(
-            authoring_object, (henka_vec3){0.125f, 0.0f, 0.0f}) != HENKA_SUCCESS ||
+        sandbox3d_apply_authoring_move(
+            state, (henka_vec3){0.125f, 0.0f, 0.0f}) != HENKA_SUCCESS ||
         sandbox3d_authoring_object_undo(authoring_object) != HENKA_SUCCESS)
     {
         (void)sandbox3d_delete_selected_object(state);
@@ -17563,8 +17629,8 @@ static henka_result sandbox3d_validate_authoring_duplicate_smoke(
     sandbox3d_authoring_object_set_selection_mode(
         duplicate_authoring, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
     if (sandbox3d_authoring_object_select_component(duplicate_authoring, 1U, false) != HENKA_SUCCESS ||
-        sandbox3d_authoring_object_move_selected_components(
-            duplicate_authoring, (henka_vec3){0.25f, 0.0f, 0.0f}) != HENKA_SUCCESS)
+        sandbox3d_apply_authoring_move(
+            state, (henka_vec3){0.25f, 0.0f, 0.0f}) != HENKA_SUCCESS)
     {
         goto fail;
     }
@@ -28058,8 +28124,8 @@ details_group_authoring:
                             "authoring_move_context_x",
                             (henka_ui_rect){context_move_row.x, context_move_row.y, 88.0f, 24.0f},
                             "Move X+") &&
-                        sandbox3d_authoring_object_move_selected_components(
-                            state->authoring_object,
+                        sandbox3d_apply_authoring_move(
+                            state,
                             (henka_vec3){0.1f, 0.0f, 0.0f}) == HENKA_SUCCESS)
                     {
                         const henka_authoring_mesh_counts counts =
@@ -29301,8 +29367,8 @@ details_group_authoring:
                         "Move X+"))
                 {
                     const henka_result move_result =
-                        sandbox3d_authoring_object_move_selected_components(
-                            state->authoring_object,
+                        sandbox3d_apply_authoring_move(
+                            state,
                             (henka_vec3){0.1f, 0.0f, 0.0f});
                     printf(
                         "Native authoring component move: name=%s result=%s mode=%s selected_components=%zu.\n",
@@ -29342,8 +29408,8 @@ details_group_authoring:
                         "Move Y+"))
                 {
                     const henka_result move_result =
-                        sandbox3d_authoring_object_move_selected_components(
-                            state->authoring_object,
+                        sandbox3d_apply_authoring_move(
+                            state,
                             (henka_vec3){0.0f, 0.1f, 0.0f});
                     printf(
                         "Native authoring component move: name=%s result=%s mode=%s selected_components=%zu.\n",
@@ -29373,8 +29439,8 @@ details_group_authoring:
                         "Move Z+"))
                 {
                     const henka_result move_result =
-                        sandbox3d_authoring_object_move_selected_components(
-                            state->authoring_object,
+                        sandbox3d_apply_authoring_move(
+                            state,
                             (henka_vec3){0.0f, 0.0f, 0.1f});
                     printf(
                         "Native authoring component move: name=%s result=%s mode=%s selected_components=%zu.\n",
@@ -29624,8 +29690,8 @@ details_group_authoring:
                         "Move X+"))
                 {
                     const henka_result move_result =
-                        sandbox3d_authoring_object_move_selected_components(
-                            state->authoring_object,
+                        sandbox3d_apply_authoring_move(
+                            state,
                             (henka_vec3){0.1f, 0.0f, 0.0f});
                     printf(
                         "Native authoring component move: name=%s result=%s mode=%s selected_components=%zu.\n",
@@ -30872,8 +30938,8 @@ details_group_authoring:
                 }
                 if (henka_ui_button(
                         state->ui, "authoring_move_x", (henka_ui_rect){row.x, row.y, 88.0f, 24.0f}, "Move X+") &&
-                    sandbox3d_authoring_object_move_selected_components(
-                        state->authoring_object, (henka_vec3){0.1f, 0.0f, 0.0f}) == HENKA_SUCCESS)
+                    sandbox3d_apply_authoring_move(
+                        state, (henka_vec3){0.1f, 0.0f, 0.0f}) == HENKA_SUCCESS)
                 {
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     const henka_authoring_mesh_counts counts =
@@ -30889,16 +30955,16 @@ details_group_authoring:
                 }
                 if (henka_ui_button(
                         state->ui, "authoring_move_y", (henka_ui_rect){row.x + 96.0f, row.y, 88.0f, 24.0f}, "Move Y+") &&
-                    sandbox3d_authoring_object_move_selected_components(
-                        state->authoring_object, (henka_vec3){0.0f, 0.1f, 0.0f}) == HENKA_SUCCESS)
+                    sandbox3d_apply_authoring_move(
+                        state, (henka_vec3){0.0f, 0.1f, 0.0f}) == HENKA_SUCCESS)
                 {
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     sandbox3d_set_status(state, false, "Selected authoring components moved on Y.");
                 }
                 if (henka_ui_button(
                         state->ui, "authoring_move_z", (henka_ui_rect){row.x + 192.0f, row.y, 88.0f, 24.0f}, "Move Z+") &&
-                    sandbox3d_authoring_object_move_selected_components(
-                        state->authoring_object, (henka_vec3){0.0f, 0.0f, 0.1f}) == HENKA_SUCCESS)
+                    sandbox3d_apply_authoring_move(
+                        state, (henka_vec3){0.0f, 0.0f, 0.1f}) == HENKA_SUCCESS)
                 {
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     sandbox3d_set_status(state, false, "Selected authoring components moved on Z.");
