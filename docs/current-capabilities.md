@@ -679,8 +679,10 @@ cancel, and apply extrusion for one selected face, one or a bounded batch of
 loose vertices, one or a bounded batch of compatible boundary vertices,
 including a contiguous same-face boundary-vertex chain, or one standalone edge
 through core transactional operations.
-The same control routes one or a bounded pairwise batch of selected open
-boundary edges through face-normal surface-connected extrusion.
+The same control routes one open boundary edge, a contiguous same-face
+boundary-edge chain including a full face boundary, or a bounded pairwise
+batch of selected open boundary edges through face-normal surface-connected
+extrusion.
 
 ### Renderer-backed loose geometry
 

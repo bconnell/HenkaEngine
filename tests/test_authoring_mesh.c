@@ -4398,9 +4398,13 @@ static int test_boundary_edge_chain_extrude_operation(void)
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_edge_id disconnected_edges[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id closed_edges[4] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_modeling_report report = {0};
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
+    henka_authoring_face_id closed_face_id = HENKA_AUTHORING_INVALID_ID;
     size_t index;
     int result = 0;
 
@@ -4467,6 +4471,62 @@ static int test_boundary_edge_chain_extrude_operation(void)
         report.changed ||
         (after = henka_authoring_mesh_get_counts(mesh),
             memcmp(&before, &after, sizeof(before)) != 0) ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        const henka_vec3 closed_positions[4] = {
+            {-1.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+            {1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}};
+        henka_authoring_vertex_id closed_vertices[4] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        for (index = 0U; index < 4U; ++index)
+        {
+            if (henka_authoring_mesh_add_vertex(
+                    mesh, closed_positions[index], (henka_vec2){0.0f, 0.0f}, 0U,
+                    &closed_vertices[index]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+        if (henka_authoring_mesh_add_face(
+                mesh, closed_vertices, 4U, 0U, true, &closed_face_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    {
+        const henka_authoring_face* closed_face = henka_authoring_mesh_get_face(
+            mesh, closed_face_id);
+        if (closed_face == NULL || closed_face->corner_count != 4U)
+        {
+            goto cleanup;
+        }
+        for (index = 0U; index < 4U; ++index)
+        {
+            closed_edges[index] = closed_face->edges[index];
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_extrude_boundary_edge_chain(
+            mesh, closed_edges, 4U, 0.5f, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || report.created_vertices != 4U || report.created_edges != 4U ||
+        report.created_faces != 4U || after.vertices != before.vertices + 4U ||
+        after.edges != before.edges + 4U || after.faces != before.faces + 4U ||
         !henka_authoring_mesh_validate(mesh))
     {
         goto cleanup;
