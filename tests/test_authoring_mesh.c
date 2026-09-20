@@ -4497,6 +4497,140 @@ cleanup:
     return result ? 1 : fail("transactional loose vertex batch extrude");
 }
 
+static int test_interior_vertex_batch_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 32U, 16U, 16U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id centers[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id rings[2][4];
+    henka_authoring_vertex_id face_vertices[3];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_modeling_report report = {0};
+    size_t component;
+    size_t index;
+    int result = 0;
+
+    memset(rings, 0, sizeof(rings));
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (component = 0U; component < 2U; ++component)
+    {
+        const float origin_x = component == 0U ? 0.0f : 4.0f;
+        const henka_vec3 ring_positions[4] = {
+            {origin_x + 1.0f, 0.0f, 0.0f}, {origin_x, 1.0f, 0.0f},
+            {origin_x - 1.0f, 0.0f, 0.0f}, {origin_x, -1.0f, 0.0f}};
+        if (henka_authoring_mesh_add_vertex(
+                mesh, (henka_vec3){origin_x, 0.0f, 0.0f},
+                (henka_vec2){0.5f, 0.5f}, 7U, &centers[component]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (index = 0U; index < 4U; ++index)
+        {
+            if (henka_authoring_mesh_add_vertex(
+                    mesh, ring_positions[index], (henka_vec2){0.0f, 0.0f},
+                    7U, &rings[component][index]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+        for (index = 0U; index < 4U; ++index)
+        {
+            face_vertices[0] = centers[component];
+            face_vertices[1] = rings[component][index];
+            face_vertices[2] = rings[component][(index + 1U) % 4U];
+            if (henka_authoring_mesh_add_face(
+                    mesh, face_vertices, 3U, 7U, true, &face_id) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_extrude_interior_vertices(
+            mesh, centers, 2U, 0.5f, &report) != HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 2U ||
+        before.vertices != 10U || before.faces != 8U ||
+        (after = henka_authoring_mesh_get_counts(mesh)).vertices != 12U ||
+        after.edges != before.edges || after.faces != before.faces ||
+        henka_authoring_mesh_get_vertex_edge_count(mesh, centers[0]) != 0U ||
+        henka_authoring_mesh_get_vertex_edge_count(mesh, centers[1]) != 0U ||
+        henka_authoring_mesh_get_vertex_edge_count(mesh, 11U) != 4U ||
+        henka_authoring_mesh_get_vertex_edge_count(mesh, 12U) != 4U ||
+        fabsf(henka_authoring_mesh_get_vertex(mesh, 11U)->position.z - 0.5f) > 0.0001f ||
+        fabsf(henka_authoring_mesh_get_vertex(mesh, 12U)->position.z - 0.5f) > 0.0001f ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    {
+        const henka_authoring_mesh_desc limited_desc = {11U, 32U, 16U, 16U};
+        henka_authoring_modeling_report limited_report = {0};
+        henka_authoring_mesh_counts limited_before;
+        if (henka_authoring_mesh_create(&limited_desc, &mesh) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (component = 0U; component < 2U; ++component)
+        {
+            const float origin_x = component == 0U ? 0.0f : 4.0f;
+            const henka_vec3 ring_positions[4] = {
+                {origin_x + 1.0f, 0.0f, 0.0f}, {origin_x, 1.0f, 0.0f},
+                {origin_x - 1.0f, 0.0f, 0.0f}, {origin_x, -1.0f, 0.0f}};
+            if (henka_authoring_mesh_add_vertex(
+                    mesh, (henka_vec3){origin_x, 0.0f, 0.0f},
+                    (henka_vec2){0.5f, 0.5f}, 7U, &centers[component]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+            for (index = 0U; index < 4U; ++index)
+            {
+                if (henka_authoring_mesh_add_vertex(
+                        mesh, ring_positions[index], (henka_vec2){0.0f, 0.0f},
+                        7U, &rings[component][index]) != HENKA_SUCCESS)
+                {
+                    goto cleanup;
+                }
+            }
+            for (index = 0U; index < 4U; ++index)
+            {
+                face_vertices[0] = centers[component];
+                face_vertices[1] = rings[component][index];
+                face_vertices[2] = rings[component][(index + 1U) % 4U];
+                if (henka_authoring_mesh_add_face(
+                        mesh, face_vertices, 3U, 7U, true, &face_id) != HENKA_SUCCESS)
+                {
+                    goto cleanup;
+                }
+            }
+        }
+        limited_before = henka_authoring_mesh_get_counts(mesh);
+        if (henka_authoring_mesh_extrude_interior_vertices(
+                mesh, centers, 2U, 0.5f, &limited_report) != HENKA_ERROR_LIMIT ||
+            limited_report.changed ||
+            henka_authoring_mesh_get_counts(mesh).vertices != limited_before.vertices ||
+            henka_authoring_mesh_get_counts(mesh).edges != limited_before.edges ||
+            henka_authoring_mesh_get_counts(mesh).faces != limited_before.faces ||
+            !henka_authoring_mesh_validate(mesh))
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional interior vertex batch extrude");
+}
+
 static int test_boundary_vertex_batch_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {16U, 32U, 16U, 4U};
@@ -6437,6 +6571,7 @@ int main(void)
         test_edge_dissolve_operation() &&
         test_edge_delete_operation() &&
         test_vertex_extrude_operation() &&
+        test_interior_vertex_batch_extrude_operation() &&
         test_loose_vertex_extrude_operation() &&
         test_boundary_vertex_batch_extrude_operation() &&
         test_vertex_extrude_boundary_fan_operation() &&

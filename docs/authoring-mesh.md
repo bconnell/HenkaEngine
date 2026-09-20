@@ -342,6 +342,16 @@ The operation:
 
 It rejects disconnected, loose-edge, and incompatible-normal fans.
 
+Batch Vertex Extrude also supports pairwise fan-disjoint compatible closed
+interior vertices. Each selected fan is evaluated from the original source,
+then the complete batch is published as one candidate; the original selected
+vertices remain valid loose vertices and each replacement cap preserves its
+source face material, smoothing, and corner UV state. Duplicate selections,
+overlapping fan neighborhoods, open or loose vertices, unsupported fans, and
+capacity exhaustion fail without changing the committed source. The Sandbox
+routes the batch through Preview, Cancel, Apply, and the existing Undo/Redo
+history boundary.
+
 ### Vertex Bevel
 
 Vertex Bevel is an atomic multi-selection operation. It uses a deterministic edge/end-point cut table and:
@@ -615,8 +625,9 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 
 - broader non-manifold vertex-fan handling;
 - incompatible-normal fan handling;
-- generalized surface-connected Vertex/Edge Extrude beyond the bounded supported
-  boundary-edge and compatible single-sided interior-edge cases;
+- generalized surface-connected Vertex/Edge Extrude beyond the bounded open-fan,
+  closed-fan batch, boundary-edge, and compatible single-sided interior-edge
+  cases;
 - generalized closed-loop, branching, and broader weld/split/bridge workflows;
 - multi-face and general loop-cut networks;
 - branching and broader interior edge-set bevel;
@@ -630,4 +641,8 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - production showcase rebuild workflows;
 - package-level authoring ownership completion.
 
-The bounded fan extrusion remains limited to connected open fans. The loose-component, boundary-edge, and compatible single-sided interior-edge extrusion paths cover their documented domains only. glTF and KTX2 material ownership continues through the existing asset system.
+The bounded fan extrusion remains limited to connected open fans and pairwise
+fan-disjoint compatible closed interior fans. The loose-component,
+boundary-edge, and compatible single-sided interior-edge extrusion paths cover
+their documented domains only. glTF and KTX2 material ownership continues
+through the existing asset system.

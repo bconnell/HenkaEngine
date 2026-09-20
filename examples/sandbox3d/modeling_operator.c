@@ -892,6 +892,7 @@ henka_result sandbox3d_modeling_operator_preview(
             {
                 bool all_loose = true;
                 bool all_surface = true;
+                bool all_closed = true;
                 size_t selection_index;
                 for (selection_index = 0U;
                      selection_index < session->selection_count;
@@ -901,8 +902,25 @@ henka_result sandbox3d_modeling_operator_preview(
                         (henka_authoring_vertex_id)session->selection_ids[selection_index];
                     const size_t edge_count = henka_authoring_mesh_get_vertex_edge_count(
                         session->source_snapshot, vertex_id);
+                    bool vertex_closed = edge_count > 0U;
+                    size_t edge_index;
                     all_loose = all_loose && edge_count == 0U;
                     all_surface = all_surface && edge_count != 0U;
+                    for (edge_index = 0U; edge_index < edge_count; ++edge_index)
+                    {
+                        henka_authoring_edge_id edge_id;
+                        const henka_authoring_edge* edge;
+                        if (henka_authoring_mesh_get_vertex_edge_at(
+                                session->source_snapshot, vertex_id, edge_index, &edge_id) != HENKA_SUCCESS ||
+                            (edge = henka_authoring_mesh_get_edge(
+                                session->source_snapshot, edge_id)) == NULL ||
+                            edge->face_count != 2U)
+                        {
+                            vertex_closed = false;
+                            break;
+                        }
+                    }
+                    all_closed = all_closed && vertex_closed;
                 }
                 if (all_loose)
                 {
@@ -916,42 +934,54 @@ henka_result sandbox3d_modeling_operator_preview(
                 }
                 else if (all_surface)
                 {
-                    size_t boundary_chain_edge_count = 0U;
-                    if (session->selection_count > SIZE_MAX / sizeof(*boundary_chain_edges))
+                    if (all_closed)
                     {
-                        result = HENKA_ERROR_LIMIT;
+                        result = henka_authoring_mesh_extrude_interior_vertices(
+                            candidate,
+                            (const henka_authoring_vertex_id*)session->selection_ids,
+                            session->selection_count,
+                            applied_amount,
+                            &report);
                     }
                     else
                     {
-                        boundary_chain_edges = henka_malloc(
-                            session->selection_count * sizeof(*boundary_chain_edges));
-                        if (boundary_chain_edges == NULL)
+                        size_t boundary_chain_edge_count = 0U;
+                        if (session->selection_count > SIZE_MAX / sizeof(*boundary_chain_edges))
                         {
-                            result = HENKA_ERROR_OUT_OF_MEMORY;
-                        }
-                        else if (sandbox3d_modeling_operator_collect_boundary_vertex_chain(
-                            session->source_snapshot,
-                            (const henka_authoring_vertex_id*)session->selection_ids,
-                            session->selection_count,
-                            boundary_chain_edges,
-                            session->selection_count,
-                            &boundary_chain_edge_count) == HENKA_SUCCESS)
-                        {
-                            result = henka_authoring_mesh_extrude_boundary_edge_chain(
-                                candidate,
-                                boundary_chain_edges,
-                                boundary_chain_edge_count,
-                                applied_amount,
-                                &report);
+                            result = HENKA_ERROR_LIMIT;
                         }
                         else
                         {
-                            result = henka_authoring_mesh_extrude_boundary_vertices(
-                                candidate,
+                            boundary_chain_edges = henka_malloc(
+                                session->selection_count * sizeof(*boundary_chain_edges));
+                            if (boundary_chain_edges == NULL)
+                            {
+                                result = HENKA_ERROR_OUT_OF_MEMORY;
+                            }
+                            else if (sandbox3d_modeling_operator_collect_boundary_vertex_chain(
+                                session->source_snapshot,
                                 (const henka_authoring_vertex_id*)session->selection_ids,
                                 session->selection_count,
-                                applied_amount,
-                                &report);
+                                boundary_chain_edges,
+                                session->selection_count,
+                                &boundary_chain_edge_count) == HENKA_SUCCESS)
+                            {
+                                result = henka_authoring_mesh_extrude_boundary_edge_chain(
+                                    candidate,
+                                    boundary_chain_edges,
+                                    boundary_chain_edge_count,
+                                    applied_amount,
+                                    &report);
+                            }
+                            else
+                            {
+                                result = henka_authoring_mesh_extrude_boundary_vertices(
+                                    candidate,
+                                    (const henka_authoring_vertex_id*)session->selection_ids,
+                                    session->selection_count,
+                                    applied_amount,
+                                    &report);
+                            }
                         }
                     }
                 }

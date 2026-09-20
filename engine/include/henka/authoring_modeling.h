@@ -240,6 +240,19 @@ henka_result henka_authoring_mesh_extrude_boundary_vertices(
     float distance,
     henka_authoring_modeling_report* out_report);
 
+/* Extrudes a pairwise fan-disjoint set of compatible closed interior vertex
+ * fans. Each selected source vertex remains as a valid loose vertex while its
+ * incident fan is replaced by a metadata-preserving offset cap. The complete
+ * batch is evaluated against the original mesh and published transactionally;
+ * open, loose, duplicate, overlapping, incompatible, and capacity-invalid
+ * selections fail without changing the source mesh. */
+henka_result henka_authoring_mesh_extrude_interior_vertices(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t vertex_count,
+    float distance,
+    henka_authoring_modeling_report* out_report);
+
 /* Extrudes one loose vertex along an explicit direction into a standalone
  * wire edge. The source vertex remains in place, the new vertex inherits its
  * UV/material metadata, and no face is synthesized without surface context.
