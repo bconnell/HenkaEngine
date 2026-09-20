@@ -22,6 +22,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Surface-connected extrusion of one or a bounded batch of selected open
      * boundary edges. */
     SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE,
+    /* Transactional bridge of two compatible boundary edges or two compatible
+     * equal-length open boundary-edge chains. */
+    SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE,
     /* Transactional projection of one selected face onto a principal plane. */
     SANDBOX3D_MODELING_OPERATOR_UV_PROJECT,
     /* Transactional packing of one selected face into the padded unit square. */

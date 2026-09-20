@@ -416,9 +416,9 @@ Edge mode can bridge either two distinct compatible boundary edges or two
 disjoint, equal-length compatible open boundary-edge chains. The chain form
 creates one transactional quad per paired edge, uses deterministic shorter-endpoint
 pairing, and preserves source material, smoothing, and endpoint UV data. The
-Sandbox modeling session applies the operation through the authoritative
-source/render/history transaction and exposes the resulting edit through Undo
-and Redo.
+Sandbox modeling session exposes the operation through the Edge-mode
+Preview/Apply/Cancel path and the authoritative source/render/history
+transaction, with Undo and Redo for the applied edit.
 
 ## Loop Cut and Edge Slide
 

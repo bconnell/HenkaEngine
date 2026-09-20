@@ -28178,6 +28178,50 @@ details_group_authoring:
                                     : "Edge Slide cancellation failed; inspect the authoring state.");
                         }
                     }
+                    if (state->modeling_operator.active &&
+                        state->modeling_operator.kind == SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE &&
+                        sandbox3d_authoring_object_has_preview(state->authoring_object) &&
+                        sandbox3d_details_flow_next_row(
+                            state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                        row.width >= 260.0f)
+                    {
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_edge_bridge_apply_top",
+                                (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                                "Apply"))
+                        {
+                            const henka_result apply_result =
+                                sandbox3d_modeling_operator_commit(
+                                    &state->modeling_operator);
+                            sandbox3d_set_status(
+                                state,
+                                apply_result != HENKA_SUCCESS,
+                                apply_result == HENKA_SUCCESS
+                                    ? "Boundary Edge Bridge applied transactionally."
+                                    : "Boundary Edge Bridge could not be applied; source retained.");
+                            if (apply_result == HENKA_SUCCESS)
+                            {
+                                sandbox3d_mark_generic_modeling_applied(state, entity);
+                            }
+                        }
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_edge_bridge_cancel_top",
+                                (henka_ui_rect){row.x + 128.0f, row.y, 126.0f, 24.0f},
+                                "Cancel"))
+                        {
+                            const henka_result cancel_result =
+                                sandbox3d_modeling_operator_cancel(
+                                    &state->modeling_operator);
+                            sandbox3d_set_status(
+                                state,
+                                cancel_result != HENKA_SUCCESS,
+                                cancel_result == HENKA_SUCCESS
+                                    ? "Boundary Edge Bridge canceled; source retained."
+                                    : "Boundary Edge Bridge cancellation failed; inspect the authoring state.");
+                        }
+                    }
                     if ((selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
                          selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE ||
                          selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE) &&
@@ -29300,19 +29344,41 @@ details_group_authoring:
                             (henka_ui_rect){row.x + 192.0f, row.y, 96.0f, 24.0f},
                             "Bridge"))
                     {
-                        const henka_result bridge_result =
-                            sandbox3d_authoring_object_bridge_selected_boundary_edges(
-                                state->authoring_object);
+                        henka_result bridge_result = HENKA_SUCCESS;
+                        if (state->modeling_operator.active)
+                        {
+                            bridge_result = state->modeling_operator.kind ==
+                                SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE
+                                ? sandbox3d_modeling_operator_cancel(
+                                    &state->modeling_operator)
+                                : HENKA_ERROR_INVALID_ARGUMENT;
+                        }
                         if (bridge_result == HENKA_SUCCESS)
                         {
-                            sandbox3d_mark_generic_modeling_applied(state, entity);
+                            bridge_result = sandbox3d_modeling_operator_begin(
+                                &state->modeling_operator,
+                                state->authoring_object,
+                                SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE);
+                        }
+                        if (bridge_result == HENKA_SUCCESS)
+                        {
+                            bridge_result = sandbox3d_modeling_operator_preview(
+                                &state->modeling_operator, 0.0f, false, false);
+                        }
+                        if (bridge_result == HENKA_SUCCESS)
+                        {
                             sandbox3d_set_status(
                                 state,
                                 false,
-                                "Selected boundary edges bridged transactionally.");
+                                "Boundary Edge Bridge preview ready; Apply or Cancel.");
                         }
                         else
                         {
+                            if (state->modeling_operator.active)
+                            {
+                                (void)sandbox3d_modeling_operator_cancel(
+                                    &state->modeling_operator);
+                            }
                             sandbox3d_set_status(
                                 state,
                                 true,

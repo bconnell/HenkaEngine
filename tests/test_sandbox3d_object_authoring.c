@@ -3850,6 +3850,7 @@ static void henka_test_sandbox3d_object_authoring_edge_chain_bridge(void)
     henka_authoring_face_id face_id;
     henka_entity entity;
     henka_authoring_mesh_counts counts;
+    sandbox3d_modeling_operator_session operator_session = {0};
     size_t index;
 
     config.application_name = "Henka Boundary Edge Chain Bridge Test";
@@ -3897,6 +3898,32 @@ static void henka_test_sandbox3d_object_authoring_edge_chain_bridge(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
         sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.faces == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &operator_session, object,
+        SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &operator_session, 0.0f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.faces == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&operator_session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).faces == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &operator_session, object,
+        SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &operator_session, 0.0f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&operator_session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).faces == 4U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    sandbox3d_modeling_operator_reset(&operator_session);
 
     sandbox3d_authoring_object_destroy(object);
     henka_authoring_mesh_destroy(source);

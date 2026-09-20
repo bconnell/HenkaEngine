@@ -291,6 +291,14 @@ henka_result sandbox3d_authoring_object_dissolve_selected_edge(
  * source/render/bounds/physics/undo transaction. */
 henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
     sandbox3d_authoring_object* object);
+/* Builds, but does not publish, the selected boundary-edge bridge candidate.
+ * The caller owns the returned candidate and may pass it to the shared
+ * preview transaction or destroy it on failure. */
+henka_result sandbox3d_authoring_object_build_selected_boundary_bridge_candidate(
+    const sandbox3d_authoring_object* object,
+    henka_authoring_mesh** out_candidate,
+    henka_authoring_face_id* out_bridge_face_id,
+    henka_authoring_modeling_report* out_report);
 /* Fills one selected closed boundary edge loop through the authoritative
  * source/render/bounds/physics/undo transaction. */
 henka_result sandbox3d_authoring_object_fill_selected_boundary_loop(

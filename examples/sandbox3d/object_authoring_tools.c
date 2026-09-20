@@ -4517,8 +4517,11 @@ static bool sandbox3d_authoring_edges_share_vertex(
          first_edge->vertices[1] == second_edge->vertices[1]);
 }
 
-henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
-    sandbox3d_authoring_object* object)
+henka_result sandbox3d_authoring_object_build_selected_boundary_bridge_candidate(
+    const sandbox3d_authoring_object* object,
+    henka_authoring_mesh** out_candidate,
+    henka_authoring_face_id* out_bridge_face_id,
+    henka_authoring_modeling_report* out_report)
 {
     const uint32_t* selected_ids;
     size_t selected_count = 0U;
@@ -4533,7 +4536,20 @@ henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
     henka_authoring_modeling_report report = {0};
     henka_result result;
 
-    if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE)
+    if (out_candidate != NULL)
+    {
+        *out_candidate = NULL;
+    }
+    if (out_bridge_face_id != NULL)
+    {
+        *out_bridge_face_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (out_report != NULL)
+    {
+        *out_report = (henka_authoring_modeling_report){0};
+    }
+    if (object == NULL || out_candidate == NULL || out_bridge_face_id == NULL ||
+        object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -4617,6 +4633,33 @@ henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
     }
     if (result == HENKA_SUCCESS)
     {
+        *out_candidate = candidate;
+        *out_bridge_face_id = bridge_face_id;
+        if (out_report != NULL)
+        {
+            *out_report = report;
+        }
+        candidate = NULL;
+    }
+cleanup:
+    henka_authoring_mesh_destroy(candidate);
+    henka_free(first_chain);
+    henka_free(second_chain);
+    henka_free(assigned);
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
+    sandbox3d_authoring_object* object)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_face_id bridge_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_result result =
+        sandbox3d_authoring_object_build_selected_boundary_bridge_candidate(
+            object, &candidate, &bridge_face_id, &report);
+    if (result == HENKA_SUCCESS)
+    {
         result = sandbox3d_authoring_publish_candidate(
             object, candidate, true, bridge_face_id);
     }
@@ -4624,10 +4667,6 @@ henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
     {
         henka_authoring_mesh_destroy(candidate);
     }
-cleanup:
-    henka_free(first_chain);
-    henka_free(second_chain);
-    henka_free(assigned);
     return result;
 }
 

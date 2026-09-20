@@ -612,7 +612,8 @@ Available edge authoring includes:
   pairwise vertex-disjoint selections, and covered connected quad strips;
 - transactional fill for one selected closed boundary edge loop;
 - bounded bridge for two distinct compatible boundary edges or two disjoint,
-  equal-length compatible open boundary-edge chains;
+  equal-length compatible open boundary-edge chains through the shared
+  Edge-mode Preview/Apply/Cancel transaction;
 - bounded surface-connected extrusion for one open boundary edge or a
   pairwise vertex-disjoint batch on distinct faces;
 - bounded single-sided extrusion for one compatible interior edge shared by
