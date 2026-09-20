@@ -479,9 +479,12 @@ Integrated authoring is already underway as part of the current 3D completion pa
    workflow.
 8. The bounded bridge operation connects two distinct compatible boundary edges
    from different faces with one transactional quad while preserving source
-   material, smoothing, and endpoint UV data. A selected closed boundary edge
-   loop can also be filled transactionally with one metadata-compatible
-   polygon. Generalized edge-loop bridge and split workflows remain future work.
+   material, smoothing, and endpoint UV data. It also connects two disjoint,
+   equal-length compatible open boundary-edge chains with one transactional quad
+   per paired edge, using deterministic shorter-endpoint pairing. A selected
+   closed boundary edge loop can also be filled transactionally with one
+   metadata-compatible polygon. Generalized closed-loop, branching, and split
+   workflows remain future work.
 9. HAMS preserves explicit loose vertices and standalone wire edges with stable
    IDs and bounded reusable storage. The topology overlay presents those source
    vertices and wire edges for inspection.
@@ -512,14 +515,15 @@ Integrated authoring is already underway as part of the current 3D completion pa
 - Edge mode provides signed-factor Edge Slide for one compatible open edge-loop
   or closed edge-cycle selection through the shared modeling operator session.
 - Edge mode can bridge two selected compatible boundary edges from different
-  faces into one transactional quad while preserving source material,
-  smoothing, and endpoint UV data.
+  faces into one transactional quad, or two disjoint equal-length compatible
+  open boundary-edge chains into one quad per paired edge, while preserving
+  source material, smoothing, and endpoint UV data.
 - Edge mode can fill one selected closed boundary edge loop with one
   deterministic polygon through the same source/render/history transaction.
 - Branching or otherwise unsupported interior-edge cases, edge-loop domains,
   generalized Edge Extrude beyond the bounded boundary-edge cases, and general
-  loop-cut networks remain in progress or planned. Generalized edge-loop bridge
-  and split workflows remain future work.
+  loop-cut networks remain in progress or planned. Generalized closed-loop,
+  branching, and split bridge workflows remain future work.
 
 #### Loose-component and surface-connected editing
 

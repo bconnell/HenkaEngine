@@ -410,6 +410,16 @@ Other interior/manifold configurations, mixed metadata, non-quad faces, and mixe
 
 The shared Sandbox modeling session exposes this path through Preview, Cancel, and Apply for one edge or a bounded batch. The Authoring panel uses the shared amount control.
 
+### Boundary Edge Bridge
+
+Edge mode can bridge either two distinct compatible boundary edges or two
+disjoint, equal-length compatible open boundary-edge chains. The chain form
+creates one transactional quad per paired edge, uses deterministic shorter-endpoint
+pairing, and preserves source material, smoothing, and endpoint UV data. The
+Sandbox modeling session applies the operation through the authoritative
+source/render/history transaction and exposes the resulting edit through Undo
+and Redo.
+
 ## Loop Cut and Edge Slide
 
 ### Single-quad Loop Cut
@@ -607,7 +617,7 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - incompatible-normal fan handling;
 - generalized surface-connected Vertex/Edge Extrude beyond the bounded supported
   boundary-edge and compatible single-sided interior-edge cases;
-- broader weld/split/bridge workflows;
+- generalized closed-loop, branching, and broader weld/split/bridge workflows;
 - multi-face and general loop-cut networks;
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;

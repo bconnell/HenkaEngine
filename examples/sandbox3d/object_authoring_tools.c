@@ -4501,12 +4501,34 @@ henka_result sandbox3d_authoring_object_dissolve_selected_edge(
     return result;
 }
 
+static bool sandbox3d_authoring_edges_share_vertex(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_edge_id first_edge_id,
+    henka_authoring_edge_id second_edge_id)
+{
+    const henka_authoring_edge* first_edge = henka_authoring_mesh_get_edge(
+        mesh, first_edge_id);
+    const henka_authoring_edge* second_edge = henka_authoring_mesh_get_edge(
+        mesh, second_edge_id);
+    return first_edge != NULL && second_edge != NULL &&
+        (first_edge->vertices[0] == second_edge->vertices[0] ||
+         first_edge->vertices[0] == second_edge->vertices[1] ||
+         first_edge->vertices[1] == second_edge->vertices[0] ||
+         first_edge->vertices[1] == second_edge->vertices[1]);
+}
+
 henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
     sandbox3d_authoring_object* object)
 {
     const uint32_t* selected_ids;
     size_t selected_count = 0U;
     henka_authoring_mesh* candidate = NULL;
+    henka_authoring_edge_id* first_chain = NULL;
+    henka_authoring_edge_id* second_chain = NULL;
+    unsigned char* assigned = NULL;
+    size_t first_chain_count = 0U;
+    size_t second_chain_count = 0U;
+    size_t queue_index = 0U;
     henka_authoring_face_id bridge_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_modeling_report report = {0};
     henka_result result;
@@ -4516,19 +4538,82 @@ henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
-    if (selected_ids == NULL || selected_count != 2U)
+    if (selected_ids == NULL || selected_count < 2U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (selected_count == 2U)
+    {
+        result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    }
+    else if ((selected_count & 1U) != 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    else
+    {
+        size_t selected_index;
+        first_chain = (henka_authoring_edge_id*)henka_malloc(
+            selected_count * sizeof(*first_chain));
+        second_chain = (henka_authoring_edge_id*)henka_malloc(
+            selected_count * sizeof(*second_chain));
+        assigned = (unsigned char*)henka_calloc(selected_count, sizeof(*assigned));
+        if (first_chain == NULL || second_chain == NULL || assigned == NULL)
+        {
+            result = HENKA_ERROR_OUT_OF_MEMORY;
+            goto cleanup;
+        }
+        first_chain[first_chain_count++] = (henka_authoring_edge_id)selected_ids[0];
+        assigned[0] = 1U;
+        while (queue_index < first_chain_count)
+        {
+            const henka_authoring_edge_id current = first_chain[queue_index++];
+            for (selected_index = 0U; selected_index < selected_count; ++selected_index)
+            {
+                if (assigned[selected_index] == 0U &&
+                    sandbox3d_authoring_edges_share_vertex(
+                        object->mesh, current,
+                        (henka_authoring_edge_id)selected_ids[selected_index]))
+                {
+                    assigned[selected_index] = 1U;
+                    first_chain[first_chain_count++] =
+                        (henka_authoring_edge_id)selected_ids[selected_index];
+                }
+            }
+        }
+        for (selected_index = 0U; selected_index < selected_count; ++selected_index)
+        {
+            if (assigned[selected_index] == 0U)
+            {
+                second_chain[second_chain_count++] =
+                    (henka_authoring_edge_id)selected_ids[selected_index];
+            }
+        }
+        if (first_chain_count == 0U || second_chain_count == 0U)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    }
     if (result == HENKA_SUCCESS)
     {
-        result = henka_authoring_mesh_bridge_boundary_edges(
-            candidate,
-            (henka_authoring_edge_id)selected_ids[0],
-            (henka_authoring_edge_id)selected_ids[1],
-            &bridge_face_id,
-            &report);
+        if (selected_count == 2U)
+        {
+            result = henka_authoring_mesh_bridge_boundary_edges(
+                candidate,
+                (henka_authoring_edge_id)selected_ids[0],
+                (henka_authoring_edge_id)selected_ids[1],
+                &bridge_face_id,
+                &report);
+        }
+        else
+        {
+            result = henka_authoring_mesh_bridge_boundary_edge_chains(
+                candidate, first_chain, first_chain_count,
+                second_chain, second_chain_count,
+                &bridge_face_id, &report);
+        }
     }
     if (result == HENKA_SUCCESS)
     {
@@ -4539,6 +4624,10 @@ henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
     {
         henka_authoring_mesh_destroy(candidate);
     }
+cleanup:
+    henka_free(first_chain);
+    henka_free(second_chain);
+    henka_free(assigned);
     return result;
 }
 

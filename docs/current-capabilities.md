@@ -611,6 +611,8 @@ Available edge authoring includes:
 - bounded compatible interior-edge bevel for isolated two-quad patches,
   pairwise vertex-disjoint selections, and covered connected quad strips;
 - transactional fill for one selected closed boundary edge loop;
+- bounded bridge for two distinct compatible boundary edges or two disjoint,
+  equal-length compatible open boundary-edge chains;
 - bounded surface-connected extrusion for one open boundary edge or a
   pairwise vertex-disjoint batch on distinct faces;
 - bounded single-sided extrusion for one compatible interior edge shared by
@@ -740,14 +742,16 @@ For Edge Slide, the shared modeling operator session supports preview, numeric f
 Preview changes evaluated render state only. Authoritative source/history changes occur on Apply.
 
 The bounded bridge operation connects two distinct compatible boundary edges
-from different faces with one material- and smoothing-preserving quad through
-the same transactional source/render/history boundary.
+from different faces with one material- and smoothing-preserving quad, or two
+disjoint equal-length compatible open boundary-edge chains with one quad per
+paired edge, through the same transactional source/render/history boundary.
+Chain pairing is deterministic and preserves endpoint UV data.
 
 A selected closed boundary edge loop can also be filled with one deterministic
 polygon through the same source/render/history transaction. Boundary-only,
 simple, compatible loops are supported; open loops and incompatible metadata
-fail closed without source mutation. Branching or ambiguous loop-cut networks,
-generalized split operations, and generalized edge-loop bridge workflows remain
+fail closed without source mutation. Closed-loop and branching bridge domains,
+ambiguous loop-cut networks, and generalized split operations remain
 incomplete.
 
 See [authoring-mesh.md](authoring-mesh.md), [runtime-foundations.md](runtime-foundations.md), and [showcase-assets.md](showcase-assets.md).

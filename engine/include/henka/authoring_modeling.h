@@ -346,6 +346,22 @@ henka_result henka_authoring_mesh_bridge_boundary_edges(
     henka_authoring_face_id* out_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Bridges two distinct, equal-length open boundary edge chains with one
+ * deterministic quad per paired edge. Both chains must be simple, boundary-
+ * only, disjoint, hard/seam-free, and have matching material and smoothing
+ * metadata along their source faces. Endpoint pairing chooses the shorter
+ * geometric direction and preserves per-corner UVs. Closed loops, unequal or
+ * ambiguous chains, unsupported metadata, degenerate geometry, and capacity
+ * failures are rejected without changing the source mesh. */
+henka_result henka_authoring_mesh_bridge_boundary_edge_chains(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* first_edge_ids,
+    size_t first_edge_count,
+    const henka_authoring_edge_id* second_edge_ids,
+    size_t second_edge_count,
+    henka_authoring_face_id* out_first_face_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Fills one closed boundary edge loop with a deterministic polygon. The loop
  * must be simple, boundary-only, and fit the authoring face-corner limit;
  * material and smoothing metadata are inherited from its boundary faces and
