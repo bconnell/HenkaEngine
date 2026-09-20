@@ -271,6 +271,7 @@ henka_result sandbox3d_modeling_operator_begin(
          kind != SANDBOX3D_MODELING_OPERATOR_TRIANGULATE &&
          kind != SANDBOX3D_MODELING_OPERATOR_INSET &&
          kind != SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL &&
+         kind != SANDBOX3D_MODELING_OPERATOR_FLIP_FACE &&
          kind != SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE &&
          kind != SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_PROJECT &&
@@ -343,6 +344,11 @@ henka_result sandbox3d_modeling_operator_begin(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (kind == SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL &&
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count != 1U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (kind == SANDBOX3D_MODELING_OPERATOR_FLIP_FACE &&
         (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count != 1U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -648,6 +654,7 @@ henka_result sandbox3d_modeling_operator_preview(
          session->kind != SANDBOX3D_MODELING_OPERATOR_TRIANGULATE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_INSET &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL &&
+         session->kind != SANDBOX3D_MODELING_OPERATOR_FLIP_FACE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_PROJECT &&
@@ -690,6 +697,9 @@ henka_result sandbox3d_modeling_operator_preview(
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
              session->selection_count != 1U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL &&
+            (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
+             session->selection_count != 1U)) ||
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_FLIP_FACE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
              session->selection_count != 1U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE &&
@@ -870,6 +880,13 @@ henka_result sandbox3d_modeling_operator_preview(
             candidate,
             (henka_authoring_face_id)session->selection_ids[0U],
             applied_amount);
+    }
+    if (result == HENKA_SUCCESS &&
+        session->kind == SANDBOX3D_MODELING_OPERATOR_FLIP_FACE)
+    {
+        result = henka_authoring_mesh_flip_face(
+            candidate,
+            (henka_authoring_face_id)session->selection_ids[0U]);
     }
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE)
