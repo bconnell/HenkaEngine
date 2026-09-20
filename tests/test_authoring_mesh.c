@@ -4524,9 +4524,9 @@ static int test_boundary_edge_chain_extrude_operation(void)
         goto cleanup;
     }
     after = henka_authoring_mesh_get_counts(mesh);
-    if (!report.changed || report.created_vertices != 4U || report.created_edges != 4U ||
+    if (!report.changed || report.created_vertices != 4U || report.created_edges != 8U ||
         report.created_faces != 4U || after.vertices != before.vertices + 4U ||
-        after.edges != before.edges + 4U || after.faces != before.faces + 4U ||
+        after.edges != before.edges + 8U || after.faces != before.faces + 4U ||
         !henka_authoring_mesh_validate(mesh))
     {
         goto cleanup;
