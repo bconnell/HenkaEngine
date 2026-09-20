@@ -15898,7 +15898,7 @@ static henka_result sandbox3d_mcp_extrude_selected_faces(
     before_counts = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
     revision_before = sandbox3d_authoring_object_get_geometry_revision(object);
-    result = sandbox3d_authoring_object_extrude_selected_faces(object, distance);
+    result = sandbox3d_apply_authoring_face_region_extrude(state, distance);
     after_counts = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
     revision_after = sandbox3d_authoring_object_get_geometry_revision(object);

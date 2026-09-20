@@ -92,11 +92,15 @@ function Assert-McpSuccess($response, [int]$expected_id, [string]$label)
     {
         throw "$label returned an invalid JSON-RPC envelope: $($response.Raw)"
     }
-    if ($null -ne $response.Value.error)
+    if ($null -ne $response.Value.PSObject.Properties['error'] -and
+        $null -ne $response.Value.error)
     {
         throw "$label returned a JSON-RPC error: $($response.Raw)"
     }
-    if ($null -eq $response.Value.result -or $response.Value.result.isError)
+    if ($null -eq $response.Value.PSObject.Properties['result'] -or
+        $null -eq $response.Value.result -or
+        ($null -ne $response.Value.result.PSObject.Properties['isError'] -and
+         $response.Value.result.isError))
     {
         throw "$label returned a semantic MCP error: $($response.Raw)"
     }
