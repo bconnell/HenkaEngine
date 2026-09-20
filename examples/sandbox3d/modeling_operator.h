@@ -52,6 +52,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally removes one or more selected vertices through the
      * shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_DELETE_VERTICES,
+    /* Transactionally merges selected vertices at their center through the
+     * shared Preview/Cancel/Apply session. */
+    SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_CENTER,
     /* Transactionally subdivides one selected face through the shared
      * Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE,
