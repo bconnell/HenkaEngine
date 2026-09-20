@@ -55,6 +55,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally merges selected vertices at their center through the
      * shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_CENTER,
+    /* Transactionally merges selected vertices at the active vertex through
+     * the shared Preview/Cancel/Apply session. */
+    SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_ACTIVE,
     /* Transactionally subdivides one selected face through the shared
      * Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE,

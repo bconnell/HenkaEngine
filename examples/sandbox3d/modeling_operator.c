@@ -278,6 +278,7 @@ henka_result sandbox3d_modeling_operator_begin(
          kind != SANDBOX3D_MODELING_OPERATOR_DISSOLVE_VERTICES &&
          kind != SANDBOX3D_MODELING_OPERATOR_DELETE_VERTICES &&
          kind != SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_CENTER &&
+         kind != SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_ACTIVE &&
          kind != SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE &&
          kind != SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_PROJECT &&
@@ -385,6 +386,11 @@ henka_result sandbox3d_modeling_operator_begin(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (kind == SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_CENTER &&
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX || selected_count < 2U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (kind == SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_ACTIVE &&
         (selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX || selected_count < 2U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -699,6 +705,7 @@ henka_result sandbox3d_modeling_operator_preview(
          session->kind != SANDBOX3D_MODELING_OPERATOR_DISSOLVE_VERTICES &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_DELETE_VERTICES &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_CENTER &&
+         session->kind != SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_ACTIVE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_PROJECT &&
@@ -762,6 +769,9 @@ henka_result sandbox3d_modeling_operator_preview(
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
              session->selection_count == 0U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_CENTER &&
+            (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
+             session->selection_count < 2U)) ||
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_ACTIVE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
              session->selection_count < 2U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE &&
@@ -868,7 +878,8 @@ henka_result sandbox3d_modeling_operator_preview(
             session->source_snapshot, &candidate);
     }
     if (result == HENKA_SUCCESS &&
-        session->kind == SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_CENTER)
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_CENTER ||
+         session->kind == SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_ACTIVE))
     {
         if (session->selection_count > SIZE_MAX / sizeof(*merge_survivors))
         {
@@ -1029,6 +1040,20 @@ henka_result sandbox3d_modeling_operator_preview(
             session->selection_count,
             HENKA_AUTHORING_VERTEX_MERGE_CENTER,
             HENKA_AUTHORING_INVALID_ID,
+            merge_survivors,
+            session->selection_count,
+            &merge_survivor_count,
+            &report);
+    }
+    if (result == HENKA_SUCCESS &&
+        session->kind == SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_ACTIVE)
+    {
+        result = henka_authoring_mesh_merge_vertices(
+            candidate,
+            (const henka_authoring_vertex_id*)session->selection_ids,
+            session->selection_count,
+            HENKA_AUTHORING_VERTEX_MERGE_ACTIVE,
+            (henka_authoring_vertex_id)session->active_component_id,
             merge_survivors,
             session->selection_count,
             &merge_survivor_count,
