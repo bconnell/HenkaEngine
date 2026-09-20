@@ -4383,6 +4383,101 @@ cleanup:
     return result ? 1 : fail("transactional boundary edge batch extrude");
 }
 
+static int test_boundary_edge_chain_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
+    const henka_vec3 positions[6] = {
+        {-1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+        {-1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}};
+    const henka_authoring_vertex_id face_vertices[2][4] = {
+        {1U, 2U, 5U, 4U}, {2U, 3U, 6U, 5U}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_face_id face_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id selected_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id disconnected_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 6U; ++index)
+    {
+        henka_authoring_vertex_id ignored_vertex = HENKA_AUTHORING_INVALID_ID;
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){0.0f, 0.0f}, 0U,
+                &ignored_vertex) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 2U; ++index)
+    {
+        const henka_authoring_face* face;
+        if (henka_authoring_mesh_add_face(
+                mesh, face_vertices[index], 4U, (uint32_t)(index + 1U), true,
+                &face_ids[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        face = henka_authoring_mesh_get_face(mesh, face_ids[index]);
+        if (face == NULL || face->corner_count != 4U)
+        {
+            goto cleanup;
+        }
+        if (index == 0U)
+        {
+            selected_edges[0] = face->edges[3];
+            selected_edges[1] = face->edges[0];
+        }
+        else
+        {
+            disconnected_edges[1] = face->edges[2];
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    {
+        const henka_result chain_result = henka_authoring_mesh_extrude_boundary_edge_chain(
+            mesh, selected_edges, 2U, 0.5f, &report);
+        if (chain_result != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || report.created_vertices != 3U || report.created_edges != 6U ||
+        report.created_faces != 2U || after.vertices != before.vertices + 3U ||
+        after.edges != before.edges + 6U || after.faces != before.faces + 2U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    before = after;
+    disconnected_edges[0] = selected_edges[0];
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_extrude_boundary_edge_chain(
+            mesh, disconnected_edges, 2U, 0.5f, &report) == HENKA_SUCCESS ||
+        report.changed ||
+        (after = henka_authoring_mesh_get_counts(mesh),
+            memcmp(&before, &after, sizeof(before)) != 0) ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional boundary edge chain extrude");
+}
+
 static int test_logical_identity_reuse_and_history(void)
 {
     henka_authoring_mesh* mesh = NULL;
@@ -5114,6 +5209,7 @@ int main(void)
         test_vertex_extrude_boundary_fan_operation() &&
         test_loose_edge_extrude_operation() &&
         test_boundary_edge_extrude_operation() &&
+        test_boundary_edge_chain_extrude_operation() &&
         test_logical_identity_reuse_and_history() &&
         test_save_propagates_parent_directory_errors() &&
         test_persistence_versions_and_malformed() &&

@@ -508,7 +508,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
 #### Loose-component and surface-connected editing
 
 - Bounded surface-connected extrusion for one open boundary edge or a pairwise
-  batch on distinct faces is available through the shared modeling session and
+  batch on distinct faces, plus a transactional contiguous same-face boundary
+  edge-chain operation, is available through the shared modeling session and
   Authoring panel.
 - Homogeneous line/point evaluation and bounded triangle/wire/point renderer
   ownership are available.
@@ -529,8 +530,9 @@ Integrated authoring is already underway as part of the current 3D completion pa
    non-manifold or incompatible-normal fan handling, and broader vertex topology
    operations.
 2. Generalized surface-connected Edge Extrude beyond the bounded boundary-edge
-   cases, broader edge-set operations, weld/split/bridge workflows, general
-   loop-cut networks, and broader source export.
+   and contiguous boundary-chain cases, broader edge-set operations,
+   weld/split/bridge workflows, general loop-cut networks, and broader source
+   export.
 3. Broader automatic UV unwrap beyond planar charts, texture painting, rigging,
    skinning, and animation authoring.
 4. Complete scene/project serialization and wider adapter-based interchange

@@ -609,12 +609,49 @@ henka_result sandbox3d_modeling_operator_preview(
         }
         else
         {
-            result = henka_authoring_mesh_extrude_boundary_edges(
-                candidate,
-                (const henka_authoring_edge_id*)session->selection_ids,
-                session->selection_count,
-                applied_amount,
-                &report);
+            bool same_boundary_face = true;
+            henka_authoring_face_id boundary_face_id = HENKA_AUTHORING_INVALID_ID;
+            size_t selection_index;
+            for (selection_index = 0U;
+                 selection_index < session->selection_count;
+                 ++selection_index)
+            {
+                const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+                    session->source_snapshot,
+                    (henka_authoring_edge_id)session->selection_ids[selection_index]);
+                if (edge == NULL || edge->face_count != 1U)
+                {
+                    same_boundary_face = false;
+                    break;
+                }
+                if (boundary_face_id == HENKA_AUTHORING_INVALID_ID)
+                {
+                    boundary_face_id = edge->faces[0];
+                }
+                else if (boundary_face_id != edge->faces[0])
+                {
+                    same_boundary_face = false;
+                    break;
+                }
+            }
+            if (same_boundary_face)
+            {
+                result = henka_authoring_mesh_extrude_boundary_edge_chain(
+                    candidate,
+                    (const henka_authoring_edge_id*)session->selection_ids,
+                    session->selection_count,
+                    applied_amount,
+                    &report);
+            }
+            else
+            {
+                result = henka_authoring_mesh_extrude_boundary_edges(
+                    candidate,
+                    (const henka_authoring_edge_id*)session->selection_ids,
+                    session->selection_count,
+                    applied_amount,
+                    &report);
+            }
         }
     }
     if (result == HENKA_SUCCESS &&

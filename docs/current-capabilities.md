@@ -596,11 +596,14 @@ Available edge authoring includes:
 - bounded compatible interior-edge bevel for isolated two-quad patches,
   pairwise vertex-disjoint selections, and covered connected quad strips;
 - bounded surface-connected extrusion for one open boundary edge or a
-  pairwise vertex-disjoint batch on distinct faces.
+  pairwise vertex-disjoint batch on distinct faces;
+- transactional same-face extrusion for one contiguous boundary-edge chain.
 
 Surface-connected boundary-edge extrusion offsets each selected edge along its incident face normal, preserves the source face and selected hard-edge intent, and creates one connecting quad per edge transactionally.
 
-Interior/manifold edges and mixed, shared-endpoint, same-face, or otherwise unsupported batches remain rejected.
+Interior/manifold edges, mixed-face selections, disconnected chains, and
+otherwise unsupported batches remain rejected. A contiguous chain may wrap
+around a face boundary; a complete face boundary is treated as a closed chain.
 
 Interior bevel rejects:
 
