@@ -1540,6 +1540,44 @@ static henka_result sandbox3d_apply_authoring_merge_vertices_active(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_merge_vertices_distance(
+    sandbox3d_state* state)
+{
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        sandbox3d_authoring_object_get_selection_mode(state->authoring_object) !=
+            SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
+        sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object) < 2U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_DISTANCE);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator,
+            0.0f,
+            false,
+            false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_commit(
+            &state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static bool sandbox3d_modeling_operator_is_uv(
     sandbox3d_modeling_operator_kind kind)
 {
@@ -30140,7 +30178,7 @@ details_group_authoring:
                         "Merge Distance"))
                 {
                     const henka_result merge_result =
-                        sandbox3d_authoring_object_merge_selected_vertices_by_distance(state->authoring_object);
+                        sandbox3d_apply_authoring_merge_vertices_distance(state);
                     sandbox3d_set_status(state, merge_result != HENKA_SUCCESS,
                         merge_result == HENKA_SUCCESS ? "Selected vertices merged within the configured distance." :
                             "Distance merge rejected; source and selection retained.");
@@ -31031,7 +31069,7 @@ details_group_authoring:
                         "Merge Distance"))
                 {
                     const henka_result merge_result =
-                        sandbox3d_authoring_object_merge_selected_vertices_by_distance(state->authoring_object);
+                        sandbox3d_apply_authoring_merge_vertices_distance(state);
                     if (merge_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
