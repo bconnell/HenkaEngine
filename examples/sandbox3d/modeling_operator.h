@@ -43,6 +43,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally removes one selected edge and its incident faces through
      * the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_DELETE_EDGE,
+    /* Transactionally dissolves one or more selected vertices through the
+     * shared Preview/Cancel/Apply session. */
+    SANDBOX3D_MODELING_OPERATOR_DISSOLVE_VERTICES,
     /* Transactionally subdivides one selected face through the shared
      * Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE,
