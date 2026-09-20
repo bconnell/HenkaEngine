@@ -384,7 +384,9 @@ Bounded edge bevel currently supports:
 - same-face boundary batches with shared-endpoint corner caps;
 - one compatible interior edge in an isolated two-quad patch;
 - pairwise vertex-disjoint interior edges across isolated patches; and
-- a bounded connected quad-strip selection with disjoint edge endpoints.
+- a bounded connected quad-strip selection with disjoint edge endpoints;
+- one compatible three-edge branching interior fan around a valence-three
+  vertex, with a generated center cap.
 
 These forms share one selected-edge bevel contract and create interpolated cut vertices and quad bevel faces transactionally. The singular API remains as a compatibility wrapper.
 
@@ -399,8 +401,12 @@ Interior bevel rejects:
 - ambiguous endpoint fans.
 
 Boundary batch bevel rejects shared faces and unsupported endpoint sharing.
-Mixed selections, branching or unsupported connected interior domains, and
-broader interior edge-set bevel remain incomplete.
+The branching interior form is limited to three compatible non-hard edges in
+three matching quad faces around one valence-three vertex. It creates one
+center cap and publishes only after the updated faces, bevel quads, cap,
+metadata, UVs, and geometry validate together. Mixed selections, larger or
+ambiguous branching domains, and broader interior edge-set bevel remain
+incomplete.
 
 ### Surface-connected Edge Extrude
 

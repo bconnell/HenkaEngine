@@ -612,6 +612,8 @@ Available edge authoring includes:
 - bounded same-face boundary bevel with shared-endpoint corner caps;
 - bounded compatible interior-edge bevel for isolated two-quad patches,
   pairwise vertex-disjoint selections, and covered connected quad strips;
+- one compatible three-edge branching interior fan around a valence-three
+  vertex with a transactional center cap;
 - transactional fill for one selected closed boundary edge loop;
 - bounded bridge for two distinct compatible boundary edges or two disjoint,
   equal-length compatible open boundary-edge chains through the shared
@@ -649,9 +651,9 @@ Interior bevel rejects:
 - neighboring shared boundaries;
 - ambiguous endpoint fans.
 
-Mixed interior/boundary bevel, branching or otherwise unsupported connected
-interior domains, and broader edge topology operations remain outside the
-bounded foundational scope.
+Mixed interior/boundary bevel, branching domains beyond the bounded
+three-edge fan, otherwise unsupported connected interior domains, and broader
+edge topology operations remain outside the bounded foundational scope.
 
 The shared Sandbox modeling session and Authoring panel expose the bounded
 preview/cancel/apply path for face, boundary-edge, and compatible interior-edge

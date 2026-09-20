@@ -4385,6 +4385,636 @@ static henka_result modeling_bevel_boundary_edges_in_place(
     return HENKA_SUCCESS;
 }
 
+typedef struct modeling_branch_bevel_incidence
+{
+    henka_authoring_face_id face_id;
+    size_t corner;
+    bool starts_at_branch;
+    henka_authoring_vertex_id center_cut_id;
+    henka_authoring_vertex_id outer_cut_id;
+    henka_vec3 center_cut_position;
+    henka_vec3 outer_cut_position;
+    henka_vec2 center_cut_uv;
+    henka_vec2 outer_cut_uv;
+} modeling_branch_bevel_incidence;
+
+typedef struct modeling_branch_bevel_edge
+{
+    henka_authoring_edge_id edge_id;
+    henka_authoring_vertex_id outer_vertex_id;
+    modeling_branch_bevel_incidence incidences[2];
+} modeling_branch_bevel_edge;
+
+typedef struct modeling_branch_bevel_face
+{
+    henka_authoring_face_id face_id;
+    size_t branch_corner;
+    size_t outgoing_edge_index;
+    size_t incoming_edge_index;
+} modeling_branch_bevel_face;
+
+static int modeling_branch_bevel_find_edge_index(
+    const modeling_branch_bevel_edge* edges,
+    size_t edge_count,
+    henka_authoring_edge_id edge_id)
+{
+    size_t index;
+    for (index = 0U; index < edge_count; ++index)
+    {
+        if (edges[index].edge_id == edge_id) return (int)index;
+    }
+    return -1;
+}
+
+static int modeling_branch_bevel_find_face_index(
+    const modeling_branch_bevel_face* faces,
+    size_t face_count,
+    henka_authoring_face_id face_id)
+{
+    size_t index;
+    for (index = 0U; index < face_count; ++index)
+    {
+        if (faces[index].face_id == face_id) return (int)index;
+    }
+    return -1;
+}
+
+static int modeling_branch_bevel_find_incidence(
+    const modeling_branch_bevel_edge* edge,
+    henka_authoring_face_id face_id)
+{
+    if (edge->incidences[0].face_id == face_id) return 0;
+    if (edge->incidences[1].face_id == face_id) return 1;
+    return -1;
+}
+
+static bool modeling_bevel_is_branching_interior_candidate(
+    const henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_authoring_vertex_id* out_branch_vertex_id)
+{
+    const henka_authoring_edge* edges[3] = {NULL, NULL, NULL};
+    henka_authoring_vertex_id branch_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id outer_vertex_ids[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id face_ids[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    size_t face_count = 0U;
+    size_t edge_index;
+    size_t other_index;
+
+    if (out_branch_vertex_id != NULL)
+    {
+        *out_branch_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (mesh == NULL || edge_ids == NULL || edge_count != 3U)
+    {
+        return false;
+    }
+    for (edge_index = 0U; edge_index < 3U; ++edge_index)
+    {
+        edges[edge_index] = henka_authoring_mesh_get_edge(mesh, edge_ids[edge_index]);
+        if (edges[edge_index] == NULL || edges[edge_index]->face_count != 2U ||
+            edges[edge_index]->hard ||
+            edges[edge_index]->vertices[0] == edges[edge_index]->vertices[1])
+        {
+            return false;
+        }
+    }
+    for (edge_index = 0U; edge_index < 2U; ++edge_index)
+    {
+        const henka_authoring_vertex_id candidate = edges[0]->vertices[edge_index];
+        if ((candidate == edges[1]->vertices[0] || candidate == edges[1]->vertices[1]) &&
+            (candidate == edges[2]->vertices[0] || candidate == edges[2]->vertices[1]))
+        {
+            if (branch_vertex_id != HENKA_AUTHORING_INVALID_ID &&
+                branch_vertex_id != candidate)
+            {
+                return false;
+            }
+            branch_vertex_id = candidate;
+        }
+    }
+    if (branch_vertex_id == HENKA_AUTHORING_INVALID_ID ||
+        modeling_vertex_incident_face_count(mesh, branch_vertex_id) != 3U)
+    {
+        return false;
+    }
+    for (edge_index = 0U; edge_index < 3U; ++edge_index)
+    {
+        outer_vertex_ids[edge_index] = edges[edge_index]->vertices[0] == branch_vertex_id
+            ? edges[edge_index]->vertices[1] : edges[edge_index]->vertices[0];
+        if (outer_vertex_ids[edge_index] == branch_vertex_id ||
+            modeling_vertex_incident_face_count(mesh, outer_vertex_ids[edge_index]) != 2U)
+        {
+            return false;
+        }
+        for (other_index = 0U; other_index < edge_index; ++other_index)
+        {
+            if (outer_vertex_ids[other_index] == outer_vertex_ids[edge_index])
+            {
+                return false;
+            }
+        }
+        for (other_index = 0U; other_index < 2U; ++other_index)
+        {
+            const henka_authoring_face* face = henka_authoring_mesh_get_face(
+                mesh, edges[edge_index]->faces[other_index]);
+            size_t face_slot;
+            bool seen = false;
+            if (face == NULL || face->corner_count != 4U)
+            {
+                return false;
+            }
+            for (face_slot = 0U; face_slot < face_count; ++face_slot)
+            {
+                if (face_ids[face_slot] == face->id) seen = true;
+            }
+            if (!seen)
+            {
+                if (face_count >= 3U) return false;
+                face_ids[face_count++] = face->id;
+            }
+        }
+    }
+    if (face_count != 3U)
+    {
+        return false;
+    }
+    for (edge_index = 0U; edge_index < 3U; ++edge_index)
+    {
+        for (other_index = 0U; other_index < edge_index; ++other_index)
+        {
+            const henka_authoring_edge* first = edges[edge_index];
+            const henka_authoring_edge* second = edges[other_index];
+            const size_t shared_face_count =
+                (size_t)(first->faces[0] == second->faces[0]) +
+                (size_t)(first->faces[0] == second->faces[1]) +
+                (size_t)(first->faces[1] == second->faces[0]) +
+                (size_t)(first->faces[1] == second->faces[1]);
+            if (shared_face_count != 1U)
+            {
+                return false;
+            }
+        }
+    }
+    if (out_branch_vertex_id != NULL)
+    {
+        *out_branch_vertex_id = branch_vertex_id;
+    }
+    return true;
+}
+
+static henka_result modeling_bevel_branching_interior_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    float width,
+    henka_authoring_modeling_report* out_report)
+{
+    modeling_branch_bevel_edge edges[3] = {{0}};
+    modeling_branch_bevel_face faces[3] = {{0}};
+    henka_authoring_face_loop_update updates[3] = {{0}};
+    henka_authoring_vertex_id update_vertices[3][HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_vec2 update_uvs[3][HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_authoring_vertex_id cap_vertices[6] = {HENKA_AUTHORING_INVALID_ID};
+    henka_vec2 cap_uvs[6] = {{0.0f, 0.0f}};
+    henka_authoring_vertex_id branch_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id outer_vertex_ids[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    const henka_authoring_vertex* branch_vertex;
+    size_t face_count = 0U;
+    size_t edge_index;
+    size_t face_index;
+    size_t corner;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+
+    modeling_report_reset(out_report);
+    if (mesh == NULL || edge_ids == NULL || edge_count != 3U ||
+        !isfinite(width) || width <= 0.0f ||
+        !henka_authoring_mesh_validate(mesh) ||
+        !modeling_bevel_is_branching_interior_candidate(
+            mesh, edge_ids, edge_count, &branch_vertex_id))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    branch_vertex = henka_authoring_mesh_get_vertex(mesh, branch_vertex_id);
+    if (branch_vertex == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    {
+        const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
+        if (desc.max_vertices < before.vertices || desc.max_faces < before.faces ||
+            desc.max_edges < before.edges ||
+            desc.max_vertices - before.vertices < 12U ||
+            desc.max_faces - before.faces < 4U ||
+            desc.max_edges - before.edges < 12U)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+    }
+    for (edge_index = 0U; edge_index < 3U; ++edge_index)
+    {
+        const henka_authoring_edge* source_edge = henka_authoring_mesh_get_edge(
+            mesh, edge_ids[edge_index]);
+        if (source_edge == NULL)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        edges[edge_index].edge_id = source_edge->id;
+        edges[edge_index].outer_vertex_id = source_edge->vertices[0] == branch_vertex_id
+            ? source_edge->vertices[1] : source_edge->vertices[0];
+        outer_vertex_ids[edge_index] = edges[edge_index].outer_vertex_id;
+        for (face_index = 0U; face_index < 2U; ++face_index)
+        {
+            modeling_branch_bevel_incidence* incidence =
+                &edges[edge_index].incidences[face_index];
+            const henka_authoring_face* face = henka_authoring_mesh_get_face(
+                mesh, source_edge->faces[face_index]);
+            const henka_authoring_vertex* outer_vertex = henka_authoring_mesh_get_vertex(
+                mesh, edges[edge_index].outer_vertex_id);
+            size_t next_corner;
+            if (face == NULL || outer_vertex == NULL ||
+                !modeling_face_contains_edge(face, source_edge->id, &incidence->corner))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            next_corner = (incidence->corner + 1U) % face->corner_count;
+            incidence->face_id = face->id;
+            incidence->starts_at_branch = face->vertices[incidence->corner] == branch_vertex_id;
+            if (!incidence->starts_at_branch &&
+                face->vertices[next_corner] != branch_vertex_id)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            {
+                const size_t center_corner = incidence->starts_at_branch
+                    ? incidence->corner : next_corner;
+                const size_t outer_corner = incidence->starts_at_branch
+                    ? next_corner : incidence->corner;
+                const size_t center_neighbor_corner = incidence->starts_at_branch
+                    ? (center_corner + face->corner_count - 1U) % face->corner_count
+                    : (center_corner + 1U) % face->corner_count;
+                const size_t outer_neighbor_corner = incidence->starts_at_branch
+                    ? (outer_corner + 1U) % face->corner_count
+                    : (outer_corner + face->corner_count - 1U) % face->corner_count;
+                const henka_authoring_vertex* center = henka_authoring_mesh_get_vertex(
+                    mesh, face->vertices[center_corner]);
+                const henka_authoring_vertex* outer = henka_authoring_mesh_get_vertex(
+                    mesh, face->vertices[outer_corner]);
+                const henka_authoring_vertex* center_neighbor = henka_authoring_mesh_get_vertex(
+                    mesh, face->vertices[center_neighbor_corner]);
+                const henka_authoring_vertex* outer_neighbor = henka_authoring_mesh_get_vertex(
+                    mesh, face->vertices[outer_neighbor_corner]);
+                const henka_vec3 center_delta = center_neighbor != NULL && center != NULL
+                    ? henka_vec3_subtract(center_neighbor->position, center->position)
+                    : (henka_vec3){0.0f, 0.0f, 0.0f};
+                const henka_vec3 outer_delta = outer_neighbor != NULL && outer != NULL
+                    ? henka_vec3_subtract(outer_neighbor->position, outer->position)
+                    : (henka_vec3){0.0f, 0.0f, 0.0f};
+                const float center_length = henka_vec3_length(center_delta);
+                const float outer_length = henka_vec3_length(outer_delta);
+                const float center_ratio = center_length > 1.0e-7f
+                    ? width / center_length : 0.0f;
+                const float outer_ratio = outer_length > 1.0e-7f
+                    ? width / outer_length : 0.0f;
+                if (center == NULL || outer == NULL || center_neighbor == NULL ||
+                    outer_neighbor == NULL || !isfinite(center_length) ||
+                    !isfinite(outer_length) || center_length <= 1.0e-7f ||
+                    outer_length <= 1.0e-7f || !(width < center_length - 1.0e-5f) ||
+                    !(width < outer_length - 1.0e-5f))
+                {
+                    result = HENKA_ERROR_INVALID_ARGUMENT;
+                    goto cleanup;
+                }
+                incidence->center_cut_position = henka_vec3_add(
+                    center->position, henka_vec3_scale(center_delta, center_ratio));
+                incidence->outer_cut_position = henka_vec3_add(
+                    outer->position, henka_vec3_scale(outer_delta, outer_ratio));
+                incidence->center_cut_uv = (henka_vec2){
+                    face->uvs[center_corner].x +
+                        (face->uvs[center_neighbor_corner].x - face->uvs[center_corner].x) * center_ratio,
+                    face->uvs[center_corner].y +
+                        (face->uvs[center_neighbor_corner].y - face->uvs[center_corner].y) * center_ratio};
+                incidence->outer_cut_uv = (henka_vec2){
+                    face->uvs[outer_corner].x +
+                        (face->uvs[outer_neighbor_corner].x - face->uvs[outer_corner].x) * outer_ratio,
+                    face->uvs[outer_corner].y +
+                        (face->uvs[outer_neighbor_corner].y - face->uvs[outer_corner].y) * outer_ratio};
+                if (!modeling_finite_vec3(center->position) ||
+                    !modeling_finite_vec3(outer->position) ||
+                    !modeling_finite_scalar(incidence->center_cut_uv.x) ||
+                    !modeling_finite_scalar(incidence->center_cut_uv.y) ||
+                    !modeling_finite_scalar(incidence->outer_cut_uv.x) ||
+                    !modeling_finite_scalar(incidence->outer_cut_uv.y))
+                {
+                    result = HENKA_ERROR_INVALID_ARGUMENT;
+                    goto cleanup;
+                }
+            }
+            {
+                size_t prior;
+                bool seen = false;
+                for (prior = 0U; prior < face_count; ++prior)
+                {
+                    if (faces[prior].face_id == face->id) seen = true;
+                }
+                if (!seen)
+                {
+                    if (face_count >= 3U)
+                    {
+                        result = HENKA_ERROR_INVALID_ARGUMENT;
+                        goto cleanup;
+                    }
+                    faces[face_count++].face_id = face->id;
+                }
+            }
+        }
+        {
+            const henka_authoring_face* first_face = henka_authoring_mesh_get_face(
+                mesh, source_edge->faces[0]);
+            const henka_authoring_face* second_face = henka_authoring_mesh_get_face(
+                mesh, source_edge->faces[1]);
+            size_t first_corner;
+            size_t second_corner;
+            if (first_face == NULL || second_face == NULL ||
+                first_face->material_region != second_face->material_region ||
+                first_face->smooth != second_face->smooth ||
+                !modeling_face_contains_edge(first_face, source_edge->id, &first_corner) ||
+                !modeling_face_contains_edge(second_face, source_edge->id, &second_corner) ||
+                first_face->vertices[first_corner] !=
+                    second_face->vertices[(second_corner + 1U) % second_face->corner_count] ||
+                first_face->vertices[(first_corner + 1U) % first_face->corner_count] !=
+                    second_face->vertices[second_corner] ||
+                !modeling_uv_near(
+                    first_face->uvs[first_corner],
+                    second_face->uvs[(second_corner + 1U) % second_face->corner_count]) ||
+                !modeling_uv_near(
+                    first_face->uvs[(first_corner + 1U) % first_face->corner_count],
+                    second_face->uvs[second_corner]))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+        }
+    }
+    if (face_count != 3U)
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto cleanup;
+    }
+    for (face_index = 0U; face_index < face_count; ++face_index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            mesh, faces[face_index].face_id);
+        const int outgoing_edge_index = face != NULL &&
+            modeling_face_contains_vertex(face, branch_vertex_id, &faces[face_index].branch_corner)
+            ? modeling_branch_bevel_find_edge_index(
+                edges, edge_count, face->edges[faces[face_index].branch_corner]) : -1;
+        const int incoming_edge_index = face != NULL
+            ? modeling_branch_bevel_find_edge_index(
+                edges, edge_count,
+                face->edges[(faces[face_index].branch_corner + face->corner_count - 1U) %
+                    face->corner_count]) : -1;
+        if (face == NULL || outgoing_edge_index < 0 || incoming_edge_index < 0 ||
+            outgoing_edge_index == incoming_edge_index)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        faces[face_index].outgoing_edge_index = (size_t)outgoing_edge_index;
+        faces[face_index].incoming_edge_index = (size_t)incoming_edge_index;
+    }
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    if (result != HENKA_SUCCESS) goto cleanup;
+    for (edge_index = 0U; edge_index < edge_count; ++edge_index)
+    {
+        const henka_authoring_vertex* outer = henka_authoring_mesh_get_vertex(
+            mesh, edges[edge_index].outer_vertex_id);
+        if (outer == NULL)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        for (face_index = 0U; face_index < 2U; ++face_index)
+        {
+            modeling_branch_bevel_incidence* incidence =
+                &edges[edge_index].incidences[face_index];
+            result = henka_authoring_mesh_add_vertex(
+                candidate,
+                incidence->center_cut_position,
+                incidence->center_cut_uv, branch_vertex->material_region,
+                &incidence->center_cut_id);
+            if (result != HENKA_SUCCESS) goto cleanup;
+            result = henka_authoring_mesh_add_vertex(
+                candidate,
+                incidence->outer_cut_position,
+                incidence->outer_cut_uv, outer->material_region,
+                &incidence->outer_cut_id);
+            if (result != HENKA_SUCCESS) goto cleanup;
+        }
+    }
+    for (face_index = 0U; face_index < face_count; ++face_index)
+    {
+        const henka_authoring_face* source = henka_authoring_mesh_get_face(
+            mesh, faces[face_index].face_id);
+        const size_t branch_corner = faces[face_index].branch_corner;
+        const modeling_branch_bevel_edge* outgoing =
+            &edges[faces[face_index].outgoing_edge_index];
+        const modeling_branch_bevel_edge* incoming =
+            &edges[faces[face_index].incoming_edge_index];
+        const int outgoing_incidence = source != NULL
+            ? modeling_branch_bevel_find_incidence(outgoing, source->id) : -1;
+        const int incoming_incidence = source != NULL
+            ? modeling_branch_bevel_find_incidence(incoming, source->id) : -1;
+        size_t write = 0U;
+        size_t step;
+        if (source == NULL || outgoing_incidence < 0 || incoming_incidence < 0)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        update_vertices[face_index][write] =
+            outgoing->incidences[outgoing_incidence].center_cut_id;
+        update_uvs[face_index][write++] =
+            outgoing->incidences[outgoing_incidence].center_cut_uv;
+        for (step = 1U; step < source->corner_count; ++step)
+        {
+            const size_t source_corner = (branch_corner + step) % source->corner_count;
+            int source_edge_index = -1;
+            int source_incidence;
+            size_t selected_index;
+            for (selected_index = 0U; selected_index < edge_count; ++selected_index)
+            {
+                if (edges[selected_index].outer_vertex_id == source->vertices[source_corner])
+                {
+                    source_edge_index = (int)selected_index;
+                    break;
+                }
+            }
+            if (source_edge_index >= 0)
+            {
+                source_incidence = modeling_branch_bevel_find_incidence(
+                    &edges[source_edge_index], source->id);
+                if (source_incidence < 0)
+                {
+                    result = HENKA_ERROR_INVALID_ARGUMENT;
+                    goto cleanup;
+                }
+                update_vertices[face_index][write] =
+                    edges[source_edge_index].incidences[source_incidence].outer_cut_id;
+                update_uvs[face_index][write++] =
+                    edges[source_edge_index].incidences[source_incidence].outer_cut_uv;
+            }
+            else
+            {
+                update_vertices[face_index][write] = source->vertices[source_corner];
+                update_uvs[face_index][write++] = source->uvs[source_corner];
+            }
+        }
+        update_vertices[face_index][write] =
+            incoming->incidences[incoming_incidence].center_cut_id;
+        update_uvs[face_index][write++] =
+            incoming->incidences[incoming_incidence].center_cut_uv;
+        updates[face_index].face_id = source->id;
+        updates[face_index].vertices = update_vertices[face_index];
+        updates[face_index].uvs = update_uvs[face_index];
+        updates[face_index].corner_count = write;
+        updates[face_index].material_region = source->material_region;
+        updates[face_index].smooth = source->smooth;
+    }
+    result = henka_authoring_mesh_apply_face_loop_updates_internal(
+        candidate, updates, face_count);
+    if (result != HENKA_SUCCESS) goto cleanup;
+    for (edge_index = 0U; edge_index < edge_count; ++edge_index)
+    {
+        const modeling_branch_bevel_edge* edge = &edges[edge_index];
+        const modeling_branch_bevel_incidence* first = &edge->incidences[0];
+        const modeling_branch_bevel_incidence* second = &edge->incidences[1];
+        const henka_authoring_face* first_face = henka_authoring_mesh_get_face(
+            mesh, first->face_id);
+        const henka_authoring_vertex_id bevel_vertices[4] = {
+            first->starts_at_branch ? first->center_cut_id : first->outer_cut_id,
+            first->starts_at_branch ? first->outer_cut_id : first->center_cut_id,
+            second->starts_at_branch ? second->outer_cut_id : second->center_cut_id,
+            second->starts_at_branch ? second->center_cut_id : second->outer_cut_id};
+        const henka_vec2 bevel_uvs[4] = {
+            first->starts_at_branch ? first->center_cut_uv : first->outer_cut_uv,
+            first->starts_at_branch ? first->outer_cut_uv : first->center_cut_uv,
+            second->starts_at_branch ? second->outer_cut_uv : second->center_cut_uv,
+            second->starts_at_branch ? second->center_cut_uv : second->outer_cut_uv};
+        henka_authoring_face_id bevel_face_id = HENKA_AUTHORING_INVALID_ID;
+        if (first_face == NULL || henka_authoring_mesh_add_face(
+                candidate, bevel_vertices, 4U, first_face->material_region,
+                first_face->smooth, &bevel_face_id) != HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        for (corner = 0U; corner < 4U; ++corner)
+        {
+            result = henka_authoring_mesh_set_face_corner_uv(
+                candidate, bevel_face_id, corner, bevel_uvs[corner]);
+            if (result != HENKA_SUCCESS) goto cleanup;
+        }
+    }
+    {
+        size_t current_face_index = 0U;
+        size_t cap_count = 0U;
+        for (face_index = 0U; face_index < face_count; ++face_index)
+        {
+            const modeling_branch_bevel_face* face = &faces[current_face_index];
+            const modeling_branch_bevel_edge* outgoing =
+                &edges[face->outgoing_edge_index];
+            const modeling_branch_bevel_edge* incoming =
+                &edges[face->incoming_edge_index];
+            const int outgoing_incidence = modeling_branch_bevel_find_incidence(
+                outgoing, face->face_id);
+            const int incoming_incidence = modeling_branch_bevel_find_incidence(
+                incoming, face->face_id);
+            int next_face_index = -1;
+            size_t incidence_index;
+            if (outgoing_incidence < 0 || incoming_incidence < 0 || cap_count + 2U > 6U)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            cap_vertices[cap_count] = incoming->incidences[incoming_incidence].center_cut_id;
+            cap_uvs[cap_count++] = incoming->incidences[incoming_incidence].center_cut_uv;
+            cap_vertices[cap_count] = outgoing->incidences[outgoing_incidence].center_cut_id;
+            cap_uvs[cap_count++] = outgoing->incidences[outgoing_incidence].center_cut_uv;
+            for (incidence_index = 0U; incidence_index < 2U; ++incidence_index)
+            {
+                if (outgoing->incidences[incidence_index].face_id != face->face_id)
+                {
+                    next_face_index = modeling_branch_bevel_find_face_index(
+                        faces, face_count, outgoing->incidences[incidence_index].face_id);
+                    break;
+                }
+            }
+            if (next_face_index < 0)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            current_face_index = (size_t)next_face_index;
+        }
+        {
+            const henka_authoring_face* source = henka_authoring_mesh_get_face(
+                mesh, faces[0].face_id);
+            henka_authoring_face_id cap_face_id = HENKA_AUTHORING_INVALID_ID;
+            if (source == NULL || henka_authoring_mesh_add_face(
+                    candidate, cap_vertices, cap_count, source->material_region,
+                    source->smooth, &cap_face_id) != HENKA_SUCCESS)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            for (corner = 0U; corner < cap_count; ++corner)
+            {
+                result = henka_authoring_mesh_set_face_corner_uv(
+                    candidate, cap_face_id, corner, cap_uvs[corner]);
+                if (result != HENKA_SUCCESS) goto cleanup;
+            }
+        }
+    }
+    for (edge_index = 0U; edge_index < edge_count; ++edge_index)
+    {
+        result = henka_authoring_mesh_remove_vertex(candidate, outer_vertex_ids[edge_index]);
+        if (result != HENKA_SUCCESS) goto cleanup;
+    }
+    result = henka_authoring_mesh_remove_vertex(candidate, branch_vertex_id);
+    if (result != HENKA_SUCCESS) goto cleanup;
+    if (!henka_authoring_mesh_validate(candidate) ||
+        !modeling_face_geometry_is_valid(candidate))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(candidate);
+    result = henka_authoring_mesh_copy(mesh, candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        modeling_report_count_delta(&before, &after, out_report);
+    }
+
+cleanup:
+    henka_authoring_mesh_destroy(candidate);
+    return result;
+}
+
 henka_result henka_authoring_mesh_bevel_edges(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* edge_ids,
@@ -4411,6 +5041,7 @@ henka_result henka_authoring_mesh_bevel_edges(
     bool all_same_face = true;
     bool all_boundary = true;
     bool all_interior = true;
+    henka_authoring_vertex_id branch_vertex_id = HENKA_AUTHORING_INVALID_ID;
     henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
 
     modeling_report_reset(out_report);
@@ -4498,6 +5129,16 @@ henka_result henka_authoring_mesh_bevel_edges(
     {
         result = HENKA_ERROR_INVALID_ARGUMENT;
         goto cleanup;
+    }
+    if (all_interior)
+    {
+        if (modeling_bevel_is_branching_interior_candidate(
+                mesh, sorted_edges, edge_count, &branch_vertex_id))
+        {
+            result = modeling_bevel_branching_interior_edges(
+                mesh, sorted_edges, edge_count, width, out_report);
+            goto cleanup;
+        }
     }
     if (all_interior)
     {

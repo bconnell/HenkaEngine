@@ -420,12 +420,14 @@ henka_result henka_authoring_mesh_bevel_edge(
 
 /* Bevels a bounded selected edge set in one transaction. One compatible
  * interior edge, pairwise vertex-disjoint interior edges from isolated
- * two-quad patches, and a bounded connected quad-strip selection are supported.
+ * two-quad patches, a bounded connected quad-strip selection, and one
+ * compatible three-edge branching fan around a valence-three interior vertex
+ * are supported. The branching fan creates a validated center cap.
  * Boundary selections whose endpoints have one incident face are also
  * supported; boundary selections may be pairwise vertex-disjoint across
  * distinct faces or may belong to one face. The same-face path creates a
  * bounded inset center, side quads, and corner caps for selected shared
- * endpoints. Mixed interior/boundary selections, branching or unsupported
+ * endpoints. Mixed interior/boundary selections, unsupported branching or
  * connected interior domains, invalid widths, and capacity failures are
  * rejected without changing the source mesh. */
 henka_result henka_authoring_mesh_bevel_edges(
