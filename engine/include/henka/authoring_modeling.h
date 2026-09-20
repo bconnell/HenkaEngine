@@ -312,6 +312,19 @@ henka_result henka_authoring_mesh_dissolve_edge(
     henka_authoring_edge_id edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Bridges two distinct boundary edges from different faces with one
+ * deterministic quad. The source faces must agree on material and smoothing;
+ * endpoint pairing follows the shorter geometric pairing and the new face is
+ * oriented to the first source face. Existing edge hard/seam metadata and
+ * per-corner UVs are preserved. Unsupported, degenerate, non-manifold, and
+ * capacity-invalid requests fail without changing the source mesh. */
+henka_result henka_authoring_mesh_bridge_boundary_edges(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id first_edge_id,
+    henka_authoring_edge_id second_edge_id,
+    henka_authoring_face_id* out_face_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Deletes one selected edge and its incident face set, preserving vertices.
  * The operation rejects requests that would leave an empty or invalid source
  * mesh and never commits a partial candidate. */

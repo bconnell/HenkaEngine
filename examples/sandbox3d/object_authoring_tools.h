@@ -286,6 +286,10 @@ henka_result sandbox3d_authoring_object_select_edge_ring(
  * rejected until a stable batch remapping contract is available. */
 henka_result sandbox3d_authoring_object_dissolve_selected_edge(
     sandbox3d_authoring_object* object);
+/* Bridges exactly two selected compatible boundary edges through the
+ * authoritative source/render/bounds/physics/undo transaction. */
+henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
+    sandbox3d_authoring_object* object);
 /* Deletes one selected edge and its incident faces through the authoritative
  * source/render/bounds/physics/undo transaction. Multiple-edge selections are
  * rejected until a stable batch deletion contract is available. */

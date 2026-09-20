@@ -473,18 +473,22 @@ Integrated authoring is already underway as part of the current 3D completion pa
    persistence, material promotion, and
    supported PBR material-instance editing are available in the bounded
    workflow.
-8. HAMS preserves explicit loose vertices and standalone wire edges with stable
+8. The bounded bridge operation connects two distinct compatible boundary edges
+   from different faces with one transactional quad while preserving source
+   material, smoothing, and endpoint UV data. Generalized edge-loop bridge and
+   split workflows remain future work.
+9. HAMS preserves explicit loose vertices and standalone wire edges with stable
    IDs and bounded reusable storage. The topology overlay presents those source
    vertices and wire edges for inspection.
-9. The shared modeling-operator session and Authoring panel provide bounded
+10. The shared modeling-operator session and Authoring panel provide bounded
    explicit-axis extrusion for one or a bounded batch of selected loose
    vertices, or one standalone edge, with numeric Preview, Cancel, and
    transactional Apply.
-10. Homogeneous wire-only and isolated-vertex-only sources have bounded
+11. Homogeneous wire-only and isolated-vertex-only sources have bounded
     renderer-backed line and point evaluation. Mixed surface/wire/point sources
     use bounded multi-primitive renderer ownership without dropping valid loose
     components.
-11. glTF/GLB and OBJ import remain supported production boundaries with the
+12. glTF/GLB and OBJ import remain supported production boundaries with the
     documented interchange and authoring limitations.
 
 ### Current Development
@@ -501,9 +505,13 @@ Integrated authoring is already underway as part of the current 3D completion pa
   closed ring with Preview/Refresh and explicit Apply/Cancel publication.
 - Edge mode provides signed-factor Edge Slide for one compatible open edge-loop
   or closed edge-cycle selection through the shared modeling operator session.
+- Edge mode can bridge two selected compatible boundary edges from different
+  faces into one transactional quad while preserving source material,
+  smoothing, and endpoint UV data.
 - Branching or otherwise unsupported interior-edge cases, edge-loop domains,
   generalized Edge Extrude beyond the bounded boundary-edge cases, and general
-  loop-cut networks remain in progress or planned.
+  loop-cut networks remain in progress or planned. Generalized edge-loop bridge
+  and split workflows remain future work.
 
 #### Loose-component and surface-connected editing
 

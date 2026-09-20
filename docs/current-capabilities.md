@@ -720,7 +720,12 @@ For Edge Slide, the shared modeling operator session supports preview, numeric f
 
 Preview changes evaluated render state only. Authoritative source/history changes occur on Apply.
 
-Multiple cuts, broader interior-edge cases, and split/bridge workflows remain incomplete.
+The bounded bridge operation connects two distinct compatible boundary edges
+from different faces with one material- and smoothing-preserving quad through
+the same transactional source/render/history boundary.
+
+Multiple cuts, broader interior-edge cases, split operations, and generalized
+edge-loop bridge workflows remain incomplete.
 
 See [authoring-mesh.md](authoring-mesh.md), [runtime-foundations.md](runtime-foundations.md), and [showcase-assets.md](showcase-assets.md).
 
