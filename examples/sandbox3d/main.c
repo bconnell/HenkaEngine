@@ -1043,6 +1043,45 @@ static henka_result sandbox3d_apply_authoring_connect_vertices(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_face_region_extrude(
+    sandbox3d_state* state,
+    float amount)
+{
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        sandbox3d_authoring_object_get_selection_mode(state->authoring_object) !=
+            SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object) == 0U || !isfinite(amount) || amount == 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_EXTRUDE);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator,
+            amount,
+            false,
+            false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_commit(
+            &state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_apply_authoring_triangulate_face(
     sandbox3d_state* state)
 {
@@ -31276,8 +31315,8 @@ details_group_authoring:
                         "authoring_extrude_selected_faces",
                         (henka_ui_rect){row.x, row.y, 150.0f, 24.0f},
                         "Extrude Selection") &&
-                    sandbox3d_authoring_object_extrude_selected_faces(
-                        state->authoring_object, 0.18f) == HENKA_SUCCESS)
+                    sandbox3d_apply_authoring_face_region_extrude(
+                        state, 0.18f) == HENKA_SUCCESS)
                 {
                     const henka_authoring_mesh_counts counts =
                         henka_authoring_mesh_get_counts(
@@ -31290,7 +31329,10 @@ details_group_authoring:
                         counts.vertices,
                         counts.faces);
                     fflush(stdout);
-                    sandbox3d_set_status(state, false, "Selected faces extruded and evaluated into the scene.");
+                    sandbox3d_set_status(
+                        state,
+                        false,
+                        "Selected faces extruded transactionally and evaluated into the scene.");
                 }
             }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
