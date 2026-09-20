@@ -612,12 +612,21 @@ Available edge authoring includes:
 - transactional fill for one selected closed boundary edge loop;
 - bounded surface-connected extrusion for one open boundary edge or a
   pairwise vertex-disjoint batch on distinct faces;
+- bounded single-sided extrusion for one compatible interior edge shared by
+  two quads, with deterministic incident-face selection and transactional
+  preview/apply routing;
 - transactional same-face extrusion for one contiguous boundary-edge chain.
 
 Surface-connected boundary-edge extrusion offsets each selected edge along its incident face normal, preserves the source face and selected hard-edge intent, and creates one connecting quad per edge transactionally.
 
-Interior/manifold edges, mixed-face selections, disconnected chains, and
-otherwise unsupported batches remain rejected. A contiguous chain may wrap
+Compatible interior-edge extrusion selects the lower logical-ID incident quad,
+offsets that quad along its face normal, creates one connecting quad, and leaves
+the neighboring quad unchanged. Matching material/smoothing metadata and a
+non-hard, non-seamed source edge are required; preview, cancel, apply, undo,
+and redo use the existing authoring history boundary.
+
+Other interior/manifold configurations, mixed-face selections, disconnected
+chains, and otherwise unsupported batches remain rejected. A contiguous chain may wrap
 around a face boundary; a complete face boundary is treated as a closed chain.
 
 Interior bevel rejects:
@@ -633,7 +642,8 @@ interior domains, and broader edge topology operations remain outside the
 bounded foundational scope.
 
 The shared Sandbox modeling session and Authoring panel expose the bounded
-preview/cancel/apply path for face and boundary-edge extrusion.
+preview/cancel/apply path for face, boundary-edge, and compatible interior-edge
+extrusion.
 
 ### Scope boundary and later work
 

@@ -394,7 +394,7 @@ broader interior edge-set bevel remain incomplete.
 
 ### Surface-connected Edge Extrude
 
-The core API supports bounded surface-connected extrusion for one open boundary edge or a pairwise vertex-disjoint batch on distinct faces.
+The core API supports bounded surface-connected extrusion for one open boundary edge, a pairwise vertex-disjoint batch on distinct faces, and one compatible interior edge shared by two quads.
 
 The operation:
 
@@ -404,7 +404,9 @@ The operation:
 - preserves selected hard-edge intent;
 - publishes after topology and geometry validation.
 
-Interior/manifold edges and mixed, shared-endpoint, same-face, or otherwise unsupported batches remain unsupported.
+For the compatible interior case, the lower logical-ID incident quad is selected deterministically. That quad replaces the shared edge with an offset edge and receives one connecting quad; the neighboring quad remains unchanged. The source faces must be quads with matching material and smoothing metadata, and the source edge must not be hard or seamed. Per-corner UVs and face metadata are preserved on the selected quad and connecting quad.
+
+Other interior/manifold configurations, mixed metadata, non-quad faces, and mixed, shared-endpoint, same-face, or otherwise unsupported batches remain unsupported.
 
 The shared Sandbox modeling session exposes this path through Preview, Cancel, and Apply for one edge or a bounded batch. The Authoring panel uses the shared amount control.
 
@@ -598,7 +600,7 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - broader non-manifold vertex-fan handling;
 - incompatible-normal fan handling;
 - generalized surface-connected Vertex/Edge Extrude beyond the bounded supported
-  boundary-edge cases;
+  boundary-edge and compatible single-sided interior-edge cases;
 - broader weld/split/bridge workflows;
 - multi-face and general loop-cut networks;
 - branching and broader interior edge-set bevel;
@@ -612,4 +614,4 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - production showcase rebuild workflows;
 - package-level authoring ownership completion.
 
-The bounded fan extrusion remains limited to connected open fans. The loose-component and boundary-edge extrusion paths cover their documented domains only. glTF and KTX2 material ownership continues through the existing asset system.
+The bounded fan extrusion remains limited to connected open fans. The loose-component, boundary-edge, and compatible single-sided interior-edge extrusion paths cover their documented domains only. glTF and KTX2 material ownership continues through the existing asset system.
