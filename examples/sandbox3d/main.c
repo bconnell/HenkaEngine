@@ -1274,6 +1274,44 @@ static henka_result sandbox3d_apply_authoring_flip_face(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_delete_faces(
+    sandbox3d_state* state)
+{
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        sandbox3d_authoring_object_get_selection_mode(state->authoring_object) !=
+            SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object) == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_DELETE_FACES);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator,
+            0.0f,
+            false,
+            false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_commit(
+            &state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static bool sandbox3d_modeling_operator_is_uv(
     sandbox3d_modeling_operator_kind kind)
 {
@@ -1383,8 +1421,7 @@ static bool sandbox3d_apply_authoring_face_delete(
     {
         return false;
     }
-    delete_result = sandbox3d_authoring_object_delete_selected_faces(
-        state->authoring_object);
+    delete_result = sandbox3d_apply_authoring_delete_faces(state);
     printf(
         "Native authoring face delete request: name=%s result=%s selected_components=%zu.\n",
         display_name,

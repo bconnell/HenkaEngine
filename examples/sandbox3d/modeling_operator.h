@@ -37,6 +37,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally reverses one selected face winding through the shared
      * Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_FLIP_FACE,
+    /* Transactionally removes the selected faces while preserving at least
+     * one renderable face through the shared Preview/Cancel/Apply session. */
+    SANDBOX3D_MODELING_OPERATOR_DELETE_FACES,
     /* Transactionally subdivides one selected face through the shared
      * Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE,
