@@ -31,6 +31,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally insets one selected face through the shared
      * Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_INSET,
+    /* Transactionally moves one selected face along its evaluated normal
+     * through the shared Preview/Cancel/Apply session. */
+    SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL,
     /* Transactional bridge of two compatible boundary edges or two compatible
      * equal-length open boundary-edge chains. */
     SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE,

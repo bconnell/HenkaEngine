@@ -1159,6 +1159,45 @@ static henka_result sandbox3d_apply_authoring_inset_face(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_face_normal(
+    sandbox3d_state* state,
+    float distance)
+{
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        sandbox3d_authoring_object_get_selection_mode(state->authoring_object) !=
+            SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object) != 1U || !isfinite(distance))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator,
+            distance,
+            false,
+            false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_commit(
+            &state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static bool sandbox3d_modeling_operator_is_uv(
     sandbox3d_modeling_operator_kind kind)
 {
@@ -26513,9 +26552,7 @@ static void sandbox3d_draw_object_details_panel(
                 "N +"))
         {
             const henka_result normal_result =
-                sandbox3d_authoring_object_move_selected_face_normal(
-                    state->authoring_object,
-                    0.1f);
+                sandbox3d_apply_authoring_face_normal(state, 0.1f);
             printf(
                 "Native authoring face normal move: name=%s distance=0.1 result=%s direction=positive.\n",
                 display_name,
@@ -26544,9 +26581,7 @@ static void sandbox3d_draw_object_details_panel(
                 "N -"))
         {
             const henka_result normal_result =
-                sandbox3d_authoring_object_move_selected_face_normal(
-                    state->authoring_object,
-                    -0.1f);
+                sandbox3d_apply_authoring_face_normal(state, -0.1f);
             printf(
                 "Native authoring face normal move: name=%s distance=-0.1 result=%s direction=negative.\n",
                 display_name,
