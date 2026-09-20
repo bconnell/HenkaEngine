@@ -507,7 +507,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
   interior-edge bevel for isolated two-quad patches, pairwise independent
   selections, and covered connected quad strips are available.
 - One Loop Cut accepts a validated factor across a compatible open quad strip or
-  closed ring with Preview/Refresh and explicit Apply/Cancel publication.
+  closed ring, and uniformly spaced multi-cut accepts the same supported strip
+  and ring domains with Preview/Refresh and explicit Apply/Cancel publication.
 - Edge mode provides signed-factor Edge Slide for one compatible open edge-loop
   or closed edge-cycle selection through the shared modeling operator session.
 - Edge mode can bridge two selected compatible boundary edges from different

@@ -443,10 +443,19 @@ henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
     sandbox3d_authoring_object* object,
     size_t cut_count);
+/* Splits the compatible quad strip traversed from the selected face with
+ * uniformly spaced cuts. The candidate remains in Preview until the shared
+ * preview commit/cancel path publishes or discards it. */
+henka_result sandbox3d_authoring_object_preview_loop_cut_selected_quad_strip_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
     sandbox3d_authoring_object* object,
     float factor);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count);
+henka_result sandbox3d_authoring_object_loop_cut_selected_quad_strip_multi(
     sandbox3d_authoring_object* object,
     size_t cut_count);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face(

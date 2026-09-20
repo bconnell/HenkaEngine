@@ -4389,6 +4389,26 @@ static void henka_test_sandbox3d_object_authoring_quad_strip_loop_cut(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
     HENKA_TEST_ASSERT(counts.vertices == 12U && counts.edges == 17U && counts.faces == 6U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_preview_loop_cut_selected_quad_strip_multi(
+        object, 2U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 8U && counts.edges == 10U && counts.faces == 3U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_cancel_preview(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_loop_cut_selected_quad_strip_multi(
+        object, 2U) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 16U && counts.faces == 9U);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 8U && counts.edges == 10U && counts.faces == 3U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 16U && counts.faces == 9U);
 
     sandbox3d_authoring_object_destroy(object);
     henka_authoring_mesh_destroy(source);

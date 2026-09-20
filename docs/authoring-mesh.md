@@ -438,7 +438,7 @@ No partial traversal result is published.
 
 The same topology layer orders connected selected edge chains and cycles deterministically for Edge Slide.
 
-### Factor-controlled Loop Cut
+### Factor-controlled and uniformly spaced Loop Cut
 
 The editor Loop Cut operator accepts a validated user-entered factor and supports compatible open strips and closed rings.
 
@@ -450,9 +450,15 @@ The workflow provides:
 
 Preview changes evaluated render state only. Apply publishes the complete candidate through the transactional authoring path.
 
-The core API and editor also provide a bounded uniformly spaced multi-cut variant for one isolated boundary-only quad. It creates quad faces only and participates in preview, apply, cancel, and undo.
+The core API provides a bounded uniformly spaced multi-cut variant across a
+compatible open quad strip or closed quad ring. The Sandbox authoring path can
+choose the longest compatible strip from the selected quad, then routes the
+candidate through Preview, Apply, Cancel, and the existing undo/redo history.
+It creates quad faces only and preserves the source material, smoothing, and
+per-corner UV state.
 
-Broader multi-cut spacing, interior cases, and general loop-cut networks remain unfinished.
+Branching or ambiguous loop-cut networks and generalized split workflows remain
+unfinished.
 
 ### Edge Slide
 

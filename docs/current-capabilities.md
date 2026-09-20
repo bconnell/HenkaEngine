@@ -549,7 +549,8 @@ Available operations also include:
 - selected-face deletion;
 - transactional closed boundary-loop fill;
 - bounded single-quad face Loop Cut;
-- bounded uniformly spaced multi-cut for one isolated boundary-only quad;
+- bounded uniformly spaced multi-cut across compatible open quad strips and
+  closed rings through the native authoring and Sandbox paths;
 - planar UV projection;
 - bounded single-face UV transforms;
 - bounded UV-island scaling and packing from a selected seed face;
@@ -728,6 +729,8 @@ Available operations include:
 
 - bounded single-quad face Loop Cut;
 - one factor-controlled quad-strip Loop Cut across a compatible open strip or closed ring;
+- uniformly spaced multi-cut across a compatible open quad strip or closed ring,
+  with selected-face Sandbox Preview/Apply/Cancel and undo/redo routing;
 - bounded signed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle selection.
 
 For Loop Cut, the editor validates a user-entered factor in the open interval `(0, 1)`, supports Preview/Refresh plus Apply and Cancel, and commits the candidate through the transactional engine boundary.
@@ -743,8 +746,8 @@ the same transactional source/render/history boundary.
 A selected closed boundary edge loop can also be filled with one deterministic
 polygon through the same source/render/history transaction. Boundary-only,
 simple, compatible loops are supported; open loops and incompatible metadata
-fail closed without source mutation. Multiple cuts, broader interior-edge
-cases, split operations, and generalized edge-loop bridge workflows remain
+fail closed without source mutation. Branching or ambiguous loop-cut networks,
+generalized split operations, and generalized edge-loop bridge workflows remain
 incomplete.
 
 See [authoring-mesh.md](authoring-mesh.md), [runtime-foundations.md](runtime-foundations.md), and [showcase-assets.md](showcase-assets.md).

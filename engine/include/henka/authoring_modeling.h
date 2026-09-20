@@ -196,6 +196,20 @@ henka_result henka_authoring_mesh_loop_cut_quad_strip(
     bool* out_closed,
     henka_authoring_modeling_report* out_report);
 
+/* Splits every compatible quad in the ordered strip with uniformly spaced
+ * cuts. Open strips start at a boundary edge; closed rings use one cut vertex
+ * per traversed ring edge for each cut. The operation is one transactional
+ * candidate and rejects zero cuts, unsupported branches, metadata seams, and
+ * capacity-invalid requests without changing the source mesh. */
+henka_result henka_authoring_mesh_loop_cut_quad_strip_multi(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id start_edge_id,
+    size_t cut_count,
+    henka_authoring_face_id* out_last_face_id,
+    henka_authoring_edge_id* out_primary_cut_edge_id,
+    bool* out_closed,
+    henka_authoring_modeling_report* out_report);
+
 /* Extrudes one connected compatible vertex fan transactionally. For an open
  * boundary fan, the original vertex remains as the base, one offset vertex
  * replaces the selected fan corner, and two boundary side faces are created.
