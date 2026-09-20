@@ -457,8 +457,9 @@ Integrated authoring is already underway as part of the current 3D completion pa
 5. Published Vertex operations include Merge Center, Merge Active, Merge by
    Distance, Connect Vertices, Dissolve Vertex, Delete Vertex, and Vertex Bevel.
    Bounded Vertex Extrude is available for connected open boundary vertex fans,
-   including the one-face corner case. Closed, disconnected, loose-edge, and
-   incompatible-normal fan cases fail closed; generalized Vertex Extrude remains
+   including the one-face corner case, and for pairwise-distinct batches of
+   loose vertices. Closed, disconnected, loose-edge, and incompatible-normal
+   fan cases fail closed; generalized surface-connected Vertex Extrude remains
    future work.
 6. Non-destructive topology analysis and explicit transactional safe repair are
    available. Repair can remove enabled isolated vertices, exact
@@ -475,8 +476,9 @@ Integrated authoring is already underway as part of the current 3D completion pa
    IDs and bounded reusable storage. The topology overlay presents those source
    vertices and wire edges for inspection.
 9. The shared modeling-operator session and Authoring panel provide bounded
-   explicit-axis extrusion for one selected loose vertex or standalone edge
-   with numeric Preview, Cancel, and transactional Apply.
+   explicit-axis extrusion for one or a bounded batch of selected loose
+   vertices, or one standalone edge, with numeric Preview, Cancel, and
+   transactional Apply.
 10. Homogeneous wire-only and isolated-vertex-only sources have bounded
     renderer-backed line and point evaluation. Mixed surface/wire/point sources
     use bounded multi-primitive renderer ownership without dropping valid loose

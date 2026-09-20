@@ -213,6 +213,19 @@ henka_result henka_authoring_mesh_extrude_loose_vertex(
     henka_authoring_edge_id* out_new_edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Extrudes a pairwise distinct selection of loose vertices along one explicit
+ * direction. Each source vertex remains in place and receives one standalone
+ * wire edge to its metadata-inheriting offset vertex. The whole batch is
+ * transactional: invalid, connected, duplicate, or capacity-invalid input
+ * is rejected without changing the source mesh. */
+henka_result henka_authoring_mesh_extrude_loose_vertices(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t vertex_count,
+    henka_vec3 direction,
+    float distance,
+    henka_authoring_modeling_report* out_report);
+
 /* Extrudes one loose edge along an explicit direction into a parallel edge
  * and one quad face. The source endpoints remain in place and their
  * UV/material metadata is inherited by the new endpoints and face. The

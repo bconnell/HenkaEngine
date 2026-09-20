@@ -523,6 +523,7 @@ Available operations also include:
 - face extrude;
 - selected face-region extrusion with shared translated caps and transactional
   source-preserving behavior for isolated regions;
+- bounded batch extrusion for pairwise-distinct loose vertex selections;
 - inset;
 - planar bevel rings;
 - face subdivision;
@@ -551,9 +552,9 @@ and undo/redo history.
 The core authoring-mesh API also provides selected face-region extrusion. It
 averages the selected face normals, omits internal walls between adjacent
 selected faces, and preserves logical face, material, smoothing, UV, hard-edge,
-and seam state. The mesh operation is clone-validated and fail-closed; editor
-multi-face selection and preview/apply routing remains a separate integration
-boundary.
+and seam state. The mesh operation is clone-validated and fail-closed. The
+shared Sandbox modeling session routes selected face regions through preview,
+Apply/Cancel, and undo/redo using the same transaction boundary.
 
 ### HAMS persistence
 
@@ -647,7 +648,9 @@ The core authoring representation preserves explicit loose vertices and standalo
 
 The core modeling API also provides:
 
-- bounded explicit-direction loose-vertex extrusion that preserves the source vertex and creates one metadata-inheriting standalone wire edge transactionally;
+- bounded explicit-direction loose-vertex extrusion for one or a
+  pairwise-distinct batch that preserves each source vertex and creates one
+  metadata-inheriting standalone wire edge per selected vertex transactionally;
 - bounded loose-edge extrusion that creates one parallel edge and one quad face.
 
 Both reject unsupported source topology and invalid direction/distance inputs.
@@ -655,10 +658,10 @@ Both reject unsupported source topology and invalid direction/distance inputs.
 The topology overlay presents all authored source vertices and distinguishes loose vertices, boundary edges, and manifold edges with deterministic high-contrast markers.
 
 The shared Sandbox modeling-operator session and Authoring panel can preview,
-cancel, and apply extrusion for exactly one selected face, loose vertex, or
-standalone edge through core transactional operations. The same control routes
-one or a bounded pairwise batch of selected open boundary edges through
-face-normal surface-connected extrusion.
+cancel, and apply extrusion for one selected face, one or a bounded batch of
+loose vertices, or one standalone edge through core transactional operations.
+The same control routes one or a bounded pairwise batch of selected open
+boundary edges through face-normal surface-connected extrusion.
 
 ### Renderer-backed loose geometry
 

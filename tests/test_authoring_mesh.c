@@ -3894,6 +3894,80 @@ cleanup:
     return result ? 1 : fail("transactional loose vertex extrude");
 }
 
+static int test_loose_vertex_batch_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 16U, 4U, 4U};
+    const henka_vec3 direction = {0.0f, 0.0f, 2.0f};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id duplicate_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 3U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, (henka_vec3){(float)index, 0.0f, 0.0f},
+                (henka_vec2){(float)index * 0.25f, 0.5f},
+                (uint32_t)(index + 1U), &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    duplicate_ids[0] = vertices[0];
+    duplicate_ids[1] = vertices[0];
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_extrude_loose_vertices(
+            mesh, duplicate_ids, 2U, direction, 0.5f, &report) == HENKA_SUCCESS ||
+        report.changed ||
+        henka_authoring_mesh_get_counts(mesh).vertices != before.vertices ||
+        henka_authoring_mesh_get_counts(mesh).edges != before.edges ||
+        henka_authoring_mesh_get_counts(mesh).faces != before.faces ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_extrude_loose_vertices(
+            mesh, vertices, 3U, direction, 0.5f, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || report.created_vertices != 3U ||
+        report.created_edges != 3U || report.created_faces != 0U ||
+        after.vertices != before.vertices + 3U ||
+        after.edges != before.edges + 3U || after.faces != before.faces ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 3U; ++index)
+    {
+        const henka_authoring_vertex* source =
+            henka_authoring_mesh_get_vertex(mesh, vertices[index]);
+        if (source == NULL || henka_authoring_mesh_get_vertex_edge_count(
+                mesh, vertices[index]) != 1U)
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional loose vertex batch extrude");
+}
+
 static int test_vertex_extrude_boundary_fan_operation(void)
 {
     const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 4U};
