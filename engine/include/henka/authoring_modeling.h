@@ -311,14 +311,16 @@ henka_result henka_authoring_mesh_extrude_edge(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
-/* Extrudes a connected, pairwise vertex-disjoint set of compatible interior
- * edges transactionally. The bounded supported domain is a simple quad-strip
- * path whose selected edges are interior, non-hard, non-seamed, and share
- * material, smoothing, and UV continuity with their incident quads. Each
- * selected edge offsets the deterministically selected incident quad and adds
- * one connecting quad; the candidate is published only after the complete
- * set validates. Mixed, branching, disconnected, ambiguous, incompatible,
- * and capacity-invalid selections fail without changing the source mesh. */
+/* Extrudes a selected set of compatible interior edges transactionally. The
+ * bounded supported domains include a simple connected quad-strip path whose
+ * selected edges are interior, non-hard, non-seamed, and share material,
+ * smoothing, and UV continuity with their incident quads. The domains also
+ * include one compatible three-edge branching fan around a valence-three
+ * interior vertex; that selection is interpreted as the enclosed three-face
+ * region through the canonical face-region transaction. The candidate is
+ * published only after the complete set validates. Mixed, larger or ambiguous
+ * branching, disconnected, incompatible, and capacity-invalid selections
+ * fail without changing the source mesh. */
 henka_result henka_authoring_mesh_extrude_interior_edges(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* edge_ids,

@@ -2648,6 +2648,7 @@ static int test_branching_interior_edge_bevel_operation(void)
     const henka_authoring_vertex_id selected_pairs[3][2] = {
         {1U, 2U}, {1U, 3U}, {1U, 4U}};
     henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* extrusion_mesh = NULL;
     henka_authoring_edge_id selected_edges[3] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
         HENKA_AUTHORING_INVALID_ID};
@@ -2724,8 +2725,48 @@ static int test_branching_interior_edge_bevel_operation(void)
         goto cleanup;
     }
     before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_clone(mesh, &extrusion_mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        const henka_authoring_mesh_counts extrusion_before =
+            henka_authoring_mesh_get_counts(extrusion_mesh);
+        henka_authoring_mesh_counts extrusion_after;
+        report = (henka_authoring_modeling_report){0};
+        branch_result = henka_authoring_mesh_extrude_interior_edges(
+            extrusion_mesh, selected_edges, 3U, 0.0f, &report);
+        extrusion_after = henka_authoring_mesh_get_counts(extrusion_mesh);
+        if (branch_result != HENKA_ERROR_INVALID_ARGUMENT || report.changed ||
+            memcmp(&extrusion_before, &extrusion_after,
+                   sizeof(extrusion_before)) != 0 ||
+            !henka_authoring_mesh_validate(extrusion_mesh))
+        {
+            goto cleanup;
+        }
+        report = (henka_authoring_modeling_report){0};
+        branch_result = henka_authoring_mesh_extrude_interior_edges(
+            extrusion_mesh, selected_edges, 3U, 0.25f, &report);
+        if (branch_result != HENKA_SUCCESS || !report.changed ||
+            report.created_vertices != 7U || report.created_edges != 15U ||
+            report.created_faces != 9U ||
+            !henka_authoring_mesh_validate(extrusion_mesh))
+        {
+            goto cleanup;
+        }
+        extrusion_after = henka_authoring_mesh_get_counts(extrusion_mesh);
+        if (extrusion_after.vertices != extrusion_before.vertices + 7U ||
+            extrusion_after.edges != extrusion_before.edges + 15U ||
+            extrusion_after.faces != extrusion_before.faces + 9U)
+        {
+            goto cleanup;
+        }
+    }
+    henka_authoring_mesh_destroy(extrusion_mesh);
+    extrusion_mesh = NULL;
+    report = (henka_authoring_modeling_report){0};
     branch_result = henka_authoring_mesh_bevel_edges(
-            mesh, selected_edges, 3U, 2.0f, &report);
+        mesh, selected_edges, 3U, 2.0f, &report);
     if (branch_result == HENKA_SUCCESS ||
         report.changed)
     {
@@ -2777,6 +2818,7 @@ static int test_branching_interior_edge_bevel_operation(void)
     result = 1;
 
 cleanup:
+    henka_authoring_mesh_destroy(extrusion_mesh);
     henka_authoring_mesh_destroy(mesh);
     return result ? 1 : fail("branching interior edge bevel operation");
 }

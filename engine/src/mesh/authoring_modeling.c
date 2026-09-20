@@ -4568,6 +4568,48 @@ static bool modeling_bevel_is_branching_interior_candidate(
     return true;
 }
 
+static bool modeling_branching_interior_face_ids(
+    const henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    henka_authoring_face_id out_face_ids[3])
+{
+    size_t edge_index;
+    size_t face_count = 0U;
+
+    if (out_face_ids == NULL ||
+        !modeling_bevel_is_branching_interior_candidate(
+            mesh, edge_ids, 3U, NULL))
+    {
+        return false;
+    }
+    for (edge_index = 0U; edge_index < 3U; ++edge_index)
+    {
+        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+            mesh, edge_ids[edge_index]);
+        size_t face_index;
+        if (edge == NULL) return false;
+        for (face_index = 0U; face_index < 2U; ++face_index)
+        {
+            size_t prior;
+            bool seen = false;
+            for (prior = 0U; prior < face_count; ++prior)
+            {
+                if (out_face_ids[prior] == edge->faces[face_index])
+                {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen)
+            {
+                if (face_count >= 3U) return false;
+                out_face_ids[face_count++] = edge->faces[face_index];
+            }
+        }
+    }
+    return face_count == 3U;
+}
+
 static henka_result modeling_bevel_branching_interior_edges(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* edge_ids,
@@ -9014,6 +9056,18 @@ henka_result henka_authoring_mesh_extrude_interior_edges(
         !henka_authoring_mesh_validate(mesh))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (edge_count == 3U)
+    {
+        henka_authoring_face_id branching_faces[3] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+            HENKA_AUTHORING_INVALID_ID};
+        if (modeling_branching_interior_face_ids(
+                mesh, edge_ids, branching_faces))
+        {
+            return henka_authoring_mesh_extrude_face_region(
+                mesh, branching_faces, 3U, distance, out_report);
+        }
     }
     desc = henka_authoring_mesh_get_desc(mesh);
     if (edge_count > desc.max_edges ||

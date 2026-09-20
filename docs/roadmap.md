@@ -520,10 +520,15 @@ Integrated authoring is already underway as part of the current 3D completion pa
   source material, smoothing, and endpoint UV data.
 - Edge mode can fill one selected closed boundary edge loop with one
   deterministic polygon through the same source/render/history transaction.
-- Branching or otherwise unsupported interior-edge cases, edge-loop domains,
-  generalized Edge Extrude beyond the bounded boundary-edge cases, and general
-  loop-cut networks remain in progress or planned. Generalized closed-loop,
-  branching, and split bridge workflows remain future work.
+- One compatible three-edge branching interior bevel fan around a valence-three
+  vertex is available through the transactional bevel path. The same fan can
+  be extruded as its enclosed three-face region through the canonical
+  face-region transaction. Larger or ambiguous branching bevel/extrusion
+  domains, edge-loop domains, generalized Edge Extrude beyond the bounded
+  boundary-edge cases, and general loop-cut networks remain in progress or
+  planned.
+  Generalized closed-loop, branching, and split bridge workflows remain future
+  work.
 
 #### Loose-component and surface-connected editing
 

@@ -626,6 +626,9 @@ Available edge authoring includes:
 - bounded connected interior-edge extrusion for a simple, pairwise
   vertex-disjoint path across compatible quad strips, with deterministic
   path ordering and transactional preview/apply routing;
+- one compatible three-edge branching fan around a valence-three interior
+  vertex, routed as a canonical enclosed face-region extrusion with a
+  translated cap and boundary side faces;
 - transactional same-face extrusion for one contiguous boundary-edge chain.
 
 Surface-connected boundary-edge extrusion offsets each selected edge along its incident face normal, preserves the source face and selected hard-edge intent, and creates one connecting quad per edge transactionally.
@@ -633,14 +636,16 @@ Surface-connected boundary-edge extrusion offsets each selected edge along its i
 Compatible interior-edge extrusion selects the lower logical-ID incident quad,
 offsets that quad along its face normal, creates one connecting quad, and leaves
 the neighboring quad unchanged. The connected path form applies that same
-transactional step in deterministic path order. Matching material/smoothing
-metadata, continuous per-edge UVs, and non-hard, non-seamed source edges are
-required; preview, cancel, apply, undo, and redo use the existing authoring
-history boundary.
+transactional step in deterministic path order. The supported three-edge
+branching fan selects its enclosed three-face region and reuses the canonical
+face-region transaction. Matching material/smoothing metadata, continuous
+per-edge UVs, and non-hard, non-seamed source edges are required for the
+single-edge and simple-path forms; preview, cancel, apply, undo, and redo use
+the existing authoring history boundary.
 
 Other interior/manifold configurations, mixed-face selections, disconnected,
-cyclic, branching, shared-endpoint, and otherwise unsupported batches remain
-rejected. A contiguous chain may wrap
+cyclic, larger branching, shared-endpoint, and otherwise unsupported batches
+remain rejected. A contiguous chain may wrap
 around a face boundary; a complete face boundary is treated as a closed chain.
 
 Interior bevel rejects:
@@ -651,9 +656,9 @@ Interior bevel rejects:
 - neighboring shared boundaries;
 - ambiguous endpoint fans.
 
-Mixed interior/boundary bevel, branching domains beyond the bounded
-three-edge fan, otherwise unsupported connected interior domains, and broader
-edge topology operations remain outside the bounded foundational scope.
+Mixed interior/boundary bevel, branching bevel or extrusion domains beyond the
+bounded three-edge fan, otherwise unsupported connected interior domains, and
+broader edge topology operations remain outside the bounded foundational scope.
 
 The shared Sandbox modeling session and Authoring panel expose the bounded
 preview/cancel/apply path for face, boundary-edge, and compatible interior-edge
