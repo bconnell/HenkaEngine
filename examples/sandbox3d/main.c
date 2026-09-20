@@ -1005,6 +1005,32 @@ static henka_result sandbox3d_preview_authoring_extrude(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_vertex_fan(
+    sandbox3d_state* state,
+    float amount)
+{
+    char amount_text[32];
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        !isfinite(amount) || amount == 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    (void)snprintf(amount_text, sizeof(amount_text), "%.9g", amount);
+    result = sandbox3d_preview_authoring_extrude(state, amount_text);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_commit(
+            &state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_apply_authoring_connect_vertices(
     sandbox3d_state* state)
 {
@@ -30251,13 +30277,12 @@ details_group_authoring:
                         "Vertex Fan"))
                 {
                     const henka_result extrude_result =
-                        sandbox3d_authoring_object_extrude_selected_vertex(
-                            state->authoring_object, 0.25f);
+                        sandbox3d_apply_authoring_vertex_fan(state, 0.25f);
                     sandbox3d_set_status(
                         state, extrude_result != HENKA_SUCCESS,
                         extrude_result == HENKA_SUCCESS
-                            ? "Boundary vertex extruded transactionally."
-                            : "Vertex extrude rejected; select one connected open boundary fan.");
+                            ? "Selected vertex fan extruded transactionally."
+                            : "Vertex extrude rejected; select one supported connected vertex fan.");
                     if (extrude_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
                 }
             }
@@ -31150,14 +31175,13 @@ details_group_authoring:
                         "Vertex Fan"))
                 {
                     const henka_result extrude_result =
-                        sandbox3d_authoring_object_extrude_selected_vertex(
-                            state->authoring_object, 0.25f);
+                        sandbox3d_apply_authoring_vertex_fan(state, 0.25f);
                     if (extrude_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
-                        sandbox3d_set_status(state, false, "Boundary vertex extruded transactionally.");
+                        sandbox3d_set_status(state, false, "Selected vertex fan extruded transactionally.");
                     }
-                    else sandbox3d_set_status(state, true, "Vertex extrude rejected; select one connected open boundary fan.");
+                    else sandbox3d_set_status(state, true, "Vertex extrude rejected; select one supported connected vertex fan.");
                 }
             }
             if (state->authoring_object != NULL &&
