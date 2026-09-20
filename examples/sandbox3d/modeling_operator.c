@@ -116,7 +116,8 @@ henka_result sandbox3d_modeling_operator_begin(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE && selected_count != 1U)
+    if (kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+        selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE && selected_count != 1U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -430,6 +431,7 @@ henka_result sandbox3d_modeling_operator_preview(
              session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE &&
              session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+            session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE &&
             session->selection_count != 1U) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
             session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE &&
@@ -734,13 +736,22 @@ henka_result sandbox3d_modeling_operator_preview(
                 &extrude_result_face,
                 &report);
         }
-        else
+        else if (session->selection_count == 1U)
         {
             result = henka_authoring_mesh_extrude_face(
                 candidate,
                 (henka_authoring_face_id)session->selection_ids[0U],
                 applied_amount,
                 &extrude_result_face);
+        }
+        else
+        {
+            result = henka_authoring_mesh_extrude_face_region(
+                candidate,
+                (const henka_authoring_face_id*)session->selection_ids,
+                session->selection_count,
+                applied_amount,
+                &report);
         }
     }
     if (result == HENKA_SUCCESS)
