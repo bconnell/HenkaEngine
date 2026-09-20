@@ -3971,9 +3971,9 @@ static int test_vertex_extrude_operation(void)
             HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
         henka_authoring_vertex_id face_vertices[3];
         henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
-        henka_authoring_vertex_id closed_new_vertex_id = HENKA_AUTHORING_INVALID_ID;
-        henka_authoring_modeling_report closed_report = {0};
-        henka_authoring_modeling_report boundary_report = {0};
+            henka_authoring_vertex_id closed_new_vertex_id = HENKA_AUTHORING_INVALID_ID;
+            henka_authoring_modeling_report closed_report = {0};
+            henka_authoring_modeling_report boundary_report = {0};
         henka_authoring_mesh_counts closed_before;
         henka_authoring_mesh_counts closed_after;
         const henka_vec3 ring_positions[4] = {
@@ -4004,7 +4004,10 @@ static int test_vertex_extrude_operation(void)
             face_vertices[1] = ring_ids[index];
             face_vertices[2] = ring_ids[(index + 1U) % 4U];
             if (henka_authoring_mesh_add_face(
-                    closed_fan, face_vertices, 3U, 3U, true, &face_id) != HENKA_SUCCESS)
+                    closed_fan, face_vertices, 3U,
+                    index % 2U == 0U ? 3U : 4U,
+                    index % 2U == 0U,
+                    &face_id) != HENKA_SUCCESS)
             {
                 henka_authoring_mesh_destroy(closed_fan);
                 goto cleanup;
@@ -4037,6 +4040,10 @@ static int test_vertex_extrude_operation(void)
                 henka_authoring_mesh_get_vertex(closed_fan, closed_new_vertex_id);
             size_t face_slot;
             size_t active_face_count = 0U;
+            size_t material_three_faces = 0U;
+            size_t material_four_faces = 0U;
+            size_t smooth_faces = 0U;
+            size_t flat_faces = 0U;
             if (closed_new_vertex == NULL ||
                 fabsf(closed_new_vertex->position.z - 0.5f) > 0.0001f ||
                 closed_new_vertex->material_region != 3U ||
@@ -4057,8 +4064,8 @@ static int test_vertex_extrude_operation(void)
                     continue;
                 }
                 active_face = henka_authoring_mesh_get_face(closed_fan, active_face_id);
-                if (active_face == NULL || active_face->material_region != 3U ||
-                    !active_face->smooth)
+                if (active_face == NULL ||
+                    (active_face->material_region != 3U && active_face->material_region != 4U))
                 {
                     henka_authoring_mesh_destroy(closed_fan);
                     goto cleanup;
@@ -4075,9 +4082,14 @@ static int test_vertex_extrude_operation(void)
                         goto cleanup;
                     }
                 }
+                if (active_face->material_region == 3U) ++material_three_faces;
+                if (active_face->material_region == 4U) ++material_four_faces;
+                if (active_face->smooth) ++smooth_faces;
+                else ++flat_faces;
                 ++active_face_count;
             }
-            if (active_face_count != 4U)
+            if (active_face_count != 4U || material_three_faces != 2U ||
+                material_four_faces != 2U || smooth_faces != 2U || flat_faces != 2U)
             {
                 henka_authoring_mesh_destroy(closed_fan);
                 goto cleanup;

@@ -6311,8 +6311,6 @@ henka_result henka_authoring_mesh_extrude_vertex(
     size_t face_slot;
     size_t index;
     size_t corner;
-    uint32_t fan_material_region = 0U;
-    bool fan_smooth = false;
     henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
 
     if (out_new_vertex_id != NULL)
@@ -6509,17 +6507,6 @@ henka_result henka_authoring_mesh_extrude_vertex(
             mesh, face->edges[selected_corner]);
         henka_vec3 normal;
         if (face == NULL || previous_edge == NULL || next_edge == NULL)
-        {
-            result = HENKA_ERROR_INVALID_ARGUMENT;
-            goto cleanup;
-        }
-        if (index == 0U)
-        {
-            fan_material_region = face->material_region;
-            fan_smooth = face->smooth;
-        }
-        else if (boundary_count == 0U &&
-                 (face->material_region != fan_material_region || face->smooth != fan_smooth))
         {
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto cleanup;

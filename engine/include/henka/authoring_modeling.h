@@ -199,8 +199,9 @@ henka_result henka_authoring_mesh_loop_cut_quad_strip(
 /* Extrudes one connected compatible vertex fan transactionally. For an open
  * boundary fan, the original vertex remains as the base, one offset vertex
  * replaces the selected fan corner, and two boundary side faces are created.
- * For a homogeneous closed interior fan, the incident fan is replaced by an
- * offset cap and the original vertex remains as a valid loose vertex; this
+ * For a compatible closed interior fan, the incident fan is replaced by an
+ * offset cap and the original vertex remains as a valid loose vertex; each
+ * replacement face retains its source material and smoothing metadata. This
  * avoids publishing a non-manifold single-vertex side wall. A single-face
  * corner is the smallest supported open fan. Disconnected, loose-edge, and
  * incompatible-normal fans fail closed. */

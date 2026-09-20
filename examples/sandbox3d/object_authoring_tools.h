@@ -355,7 +355,8 @@ henka_result sandbox3d_authoring_object_bevel_selected_vertices(
     sandbox3d_authoring_object* object);
 /* Extrudes one selected connected open boundary vertex fan through the
  * authoritative source/render/bounds/physics/undo transaction. Closed,
- * disconnected, loose-edge, and incompatible-normal fans are rejected. */
+ * disconnected, loose-edge, and incompatible-normal fans are rejected; closed
+ * fan replacement preserves each source face's material and smoothing state. */
 henka_result sandbox3d_authoring_object_extrude_selected_vertex(
     sandbox3d_authoring_object* object,
     float distance);

@@ -4661,6 +4661,10 @@ static void henka_test_sandbox3d_object_authoring_closed_vertex_fan(void)
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
     henka_authoring_mesh_counts undone;
+    size_t material_three_faces = 0U;
+    size_t material_four_faces = 0U;
+    size_t smooth_faces = 0U;
+    size_t flat_faces = 0U;
     size_t index;
     henka_entity entity;
 
@@ -4688,7 +4692,9 @@ static void henka_test_sandbox3d_object_authoring_closed_vertex_fan(void)
         face_vertices[1] = ring_ids[index];
         face_vertices[2] = ring_ids[(index + 1U) % 4U];
         HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
-            source, face_vertices, 3U, 3U, true,
+            source, face_vertices, 3U,
+            index % 2U == 0U ? 3U : 4U,
+            index % 2U == 0U,
             &(henka_authoring_face_id){0U}) == HENKA_SUCCESS);
     }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
@@ -4713,6 +4719,26 @@ static void henka_test_sandbox3d_object_authoring_closed_vertex_fan(void)
         henka_authoring_mesh_validate(
             sandbox3d_authoring_object_get_mesh(object)) &&
         sandbox3d_authoring_object_get_active_component_id(object) == new_vertex_id);
+    for (index = 0U; index < desc.max_faces; ++index)
+    {
+        henka_authoring_face_id face_id;
+        const henka_authoring_face* face;
+        if (henka_authoring_mesh_get_face_id_at(
+                sandbox3d_authoring_object_get_mesh(object), index, &face_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        face = henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object), face_id);
+        HENKA_TEST_ASSERT(face != NULL &&
+            (face->material_region == 3U || face->material_region == 4U));
+        if (face->material_region == 3U) ++material_three_faces;
+        if (face->material_region == 4U) ++material_four_faces;
+        if (face->smooth) ++smooth_faces;
+        else ++flat_faces;
+    }
+    HENKA_TEST_ASSERT(material_three_faces == 2U && material_four_faces == 2U &&
+        smooth_faces == 2U && flat_faces == 2U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
     undone = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));

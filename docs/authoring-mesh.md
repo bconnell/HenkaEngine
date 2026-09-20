@@ -330,16 +330,17 @@ Connect splits one face between two non-adjacent corners. The original face ID i
 
 ### Vertex Extrude
 
-Bounded Vertex Extrude supports a connected open boundary vertex fan, including the one-face corner case.
+Bounded Vertex Extrude supports a connected open boundary vertex fan, including the one-face corner case, and a compatible closed interior fan.
 
 The operation:
 
 - creates one offset cap vertex;
 - replaces the incident fan;
 - creates two boundary side faces;
+- preserves per-face material and smoothing metadata for a closed-fan offset cap;
 - publishes through the shared source/render/bounds/collider/undo transaction.
 
-It rejects closed, disconnected, loose-edge, and incompatible-normal fans.
+It rejects disconnected, loose-edge, and incompatible-normal fans.
 
 ### Vertex Bevel
 
