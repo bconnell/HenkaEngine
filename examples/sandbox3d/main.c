@@ -29287,31 +29287,37 @@ details_group_authoring:
                             "Edge dissolve rejected; select one compatible interior edge.");
                     }
                 }
-                if (sandbox3d_authoring_object_get_selected_component_count(
-                        state->authoring_object) == 2U &&
-                    henka_ui_button(
-                        state->ui,
-                        "authoring_edge_bridge_top",
-                        (henka_ui_rect){row.x + 192.0f, row.y, 96.0f, 24.0f},
-                        "Bridge"))
                 {
-                    const henka_result bridge_result =
-                        sandbox3d_authoring_object_bridge_selected_boundary_edges(
+                    const size_t selected_edge_count =
+                        sandbox3d_authoring_object_get_selected_component_count(
                             state->authoring_object);
-                    if (bridge_result == HENKA_SUCCESS)
+                    if ((selected_edge_count == 2U ||
+                         (selected_edge_count >= 4U &&
+                          (selected_edge_count & 1U) == 0U)) &&
+                        henka_ui_button(
+                            state->ui,
+                            "authoring_edge_bridge_top",
+                            (henka_ui_rect){row.x + 192.0f, row.y, 96.0f, 24.0f},
+                            "Bridge"))
                     {
-                        sandbox3d_mark_generic_modeling_applied(state, entity);
-                        sandbox3d_set_status(
-                            state,
-                            false,
-                            "Selected boundary edges bridged into one quad.");
-                    }
-                    else
-                    {
-                        sandbox3d_set_status(
-                            state,
-                            true,
-                            "Edge bridge rejected; select two compatible boundary edges.");
+                        const henka_result bridge_result =
+                            sandbox3d_authoring_object_bridge_selected_boundary_edges(
+                                state->authoring_object);
+                        if (bridge_result == HENKA_SUCCESS)
+                        {
+                            sandbox3d_mark_generic_modeling_applied(state, entity);
+                            sandbox3d_set_status(
+                                state,
+                                false,
+                                "Selected boundary edges bridged transactionally.");
+                        }
+                        else
+                        {
+                            sandbox3d_set_status(
+                                state,
+                                true,
+                                "Edge bridge rejected; select two compatible boundary edges or two equal-length open chains.");
+                        }
                     }
                 }
                 if (sandbox3d_authoring_object_get_selected_component_count(
