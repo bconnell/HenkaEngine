@@ -325,6 +325,18 @@ henka_result henka_authoring_mesh_bridge_boundary_edges(
     henka_authoring_face_id* out_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Fills one closed boundary edge loop with a deterministic polygon. The loop
+ * must be simple, boundary-only, and fit the authoring face-corner limit;
+ * material and smoothing metadata are inherited from its boundary faces and
+ * per-corner UVs are copied from the first matching boundary corner. The
+ * candidate is published only after topology and geometry validation. */
+henka_result henka_authoring_mesh_fill_boundary_loop(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_authoring_face_id* out_face_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Deletes one selected edge and its incident face set, preserving vertices.
  * The operation rejects requests that would leave an empty or invalid source
  * mesh and never commits a partial candidate. */

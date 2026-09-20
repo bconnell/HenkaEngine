@@ -290,6 +290,10 @@ henka_result sandbox3d_authoring_object_dissolve_selected_edge(
  * authoritative source/render/bounds/physics/undo transaction. */
 henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
     sandbox3d_authoring_object* object);
+/* Fills one selected closed boundary edge loop through the authoritative
+ * source/render/bounds/physics/undo transaction. */
+henka_result sandbox3d_authoring_object_fill_selected_boundary_loop(
+    sandbox3d_authoring_object* object);
 /* Deletes one selected edge and its incident faces through the authoritative
  * source/render/bounds/physics/undo transaction. Multiple-edge selections are
  * rejected until a stable batch deletion contract is available. */

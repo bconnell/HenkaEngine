@@ -543,6 +543,7 @@ Available operations also include:
 - face subdivision;
 - deterministic planar face triangulation;
 - selected-face deletion;
+- transactional closed boundary-loop fill;
 - bounded single-quad face Loop Cut;
 - bounded uniformly spaced multi-cut for one isolated boundary-only quad;
 - planar UV projection;
@@ -604,6 +605,7 @@ Available edge authoring includes:
 - bounded same-face boundary bevel with shared-endpoint corner caps;
 - bounded compatible interior-edge bevel for isolated two-quad patches,
   pairwise vertex-disjoint selections, and covered connected quad strips;
+- transactional fill for one selected closed boundary edge loop;
 - bounded surface-connected extrusion for one open boundary edge or a
   pairwise vertex-disjoint batch on distinct faces;
 - transactional same-face extrusion for one contiguous boundary-edge chain.
@@ -724,8 +726,12 @@ The bounded bridge operation connects two distinct compatible boundary edges
 from different faces with one material- and smoothing-preserving quad through
 the same transactional source/render/history boundary.
 
-Multiple cuts, broader interior-edge cases, split operations, and generalized
-edge-loop bridge workflows remain incomplete.
+A selected closed boundary edge loop can also be filled with one deterministic
+polygon through the same source/render/history transaction. Boundary-only,
+simple, compatible loops are supported; open loops and incompatible metadata
+fail closed without source mutation. Multiple cuts, broader interior-edge
+cases, split operations, and generalized edge-loop bridge workflows remain
+incomplete.
 
 See [authoring-mesh.md](authoring-mesh.md), [runtime-foundations.md](runtime-foundations.md), and [showcase-assets.md](showcase-assets.md).
 
