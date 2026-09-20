@@ -503,7 +503,8 @@ Published Vertex operations include:
 - Merge Center
 - Merge Active
 - Merge by Distance
-- Connect Vertices
+- Connect Vertices, including the bounded two-vertex Preview/Cancel/Apply
+  operator path for non-adjacent corners on one face
 - Dissolve Vertex
 - Delete Vertex
 - Vertex Bevel
@@ -526,6 +527,11 @@ The connected boundary-chain form accepts a selected open or closed run of
 boundary vertices on one face and publishes the corresponding edge-chain
 extrusion transactionally. It does not broaden support to interior or branching
 vertex selections.
+
+The shared modeling-operator session also previews and applies Connect Vertices
+for exactly two non-adjacent vertices on one compatible face. Cancel leaves the
+committed source unchanged, and Apply uses the existing authoring undo/redo
+history boundary.
 
 Disconnected, loose-edge, and incompatible-normal fans fail closed. Closed
 interior fans retain mixed material and smoothing metadata on their replacement

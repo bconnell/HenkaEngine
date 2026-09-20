@@ -326,7 +326,7 @@ Dissolve supports boundary corner removal and unambiguous manifold triangle fans
 
 Delete removes selected vertices and their incident faces, then removes only newly orphaned vertices in the affected neighborhood.
 
-Connect splits one face between two non-adjacent corners. The original face ID is preserved. The new face receives a fresh logical ID in a reusable physical slot.
+Connect splits one face between two non-adjacent corners. The original face ID is preserved. The new face receives a fresh logical ID in a reusable physical slot. The shared Sandbox modeling-operator session exposes this bounded vertex selection through Preview, Cancel, Apply, and the existing undo/redo boundary without publishing the preview into the committed source.
 
 ### Vertex Extrude
 

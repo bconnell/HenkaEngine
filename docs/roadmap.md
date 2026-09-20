@@ -491,7 +491,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
 10. The shared modeling-operator session and Authoring panel provide bounded
    explicit-axis extrusion for one or a bounded batch of selected loose
    vertices, or one standalone edge, with numeric Preview, Cancel, and
-   transactional Apply.
+   transactional Apply. The session also routes the bounded two-vertex
+   Connect Vertices operation through Preview, Cancel, Apply, and undo/redo.
 11. Homogeneous wire-only and isolated-vertex-only sources have bounded
     renderer-backed line and point evaluation. Mixed surface/wire/point sources
     use bounded multi-primitive renderer ownership without dropping valid loose
