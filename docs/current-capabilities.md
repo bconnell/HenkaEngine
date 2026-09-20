@@ -509,12 +509,19 @@ Published Vertex operations include:
 - Vertex Bevel
 - bounded Vertex Extrude for a connected open boundary vertex fan, including the one-face corner case
 - bounded batch Vertex Extrude for pairwise fan-disjoint boundary vertices
+- bounded contiguous same-face boundary-vertex-chain extrusion, including a full
+  face boundary, routed through the transactional boundary-edge-chain operation
 
 Bounded Vertex Extrude preserves the base vertex, creates one offset cap vertex, replaces the incident fan, and creates the two boundary side faces transactionally.
 The batch form applies that same operation to selected vertices on disjoint
 face/edge neighborhoods in one candidate-first transaction. Mixed loose and
 surface selections, overlapping neighborhoods, and unsupported vertex fans fail
 closed.
+
+The connected boundary-chain form accepts a selected open or closed run of
+boundary vertices on one face and publishes the corresponding edge-chain
+extrusion transactionally. It does not broaden support to interior or branching
+vertex selections.
 
 Closed, disconnected, loose-edge, and incompatible-normal fans fail closed.
 
@@ -530,6 +537,7 @@ Available operations also include:
   source-preserving behavior for isolated regions;
 - bounded batch extrusion for pairwise-distinct loose vertex selections;
 - bounded batch extrusion for pairwise fan-disjoint boundary vertex selections;
+- bounded extrusion for contiguous same-face boundary-vertex chains;
 - inset;
 - planar bevel rings;
 - face subdivision;
@@ -668,8 +676,9 @@ The topology overlay presents all authored source vertices and distinguishes loo
 
 The shared Sandbox modeling-operator session and Authoring panel can preview,
 cancel, and apply extrusion for one selected face, one or a bounded batch of
-loose vertices, one or a bounded batch of compatible boundary vertices, or one
-standalone edge through core transactional operations.
+loose vertices, one or a bounded batch of compatible boundary vertices,
+including a contiguous same-face boundary-vertex chain, or one standalone edge
+through core transactional operations.
 The same control routes one or a bounded pairwise batch of selected open
 boundary edges through face-normal surface-connected extrusion.
 
@@ -679,7 +688,10 @@ boundary edges through face-normal surface-connected extrusion.
 - Mixed surface-plus-loose and no-face wire-plus-point sources use bounded renderer-backed multi-primitive ownership, preserving triangle, wire, and isolated-point parts instead of dropping or rejecting valid source geometry.
 - Vertex-mode controls can add a loose vertex from finite X/Y/Z coordinates or add a standalone edge from exactly two selected vertices through the same transactional source/render/history boundary.
 
-Broader loose-component editing and general surface-connected Vertex/Edge Extrude workflows remain unavailable. Branching, mixed, shared-endpoint, and broader connected edge domains remain outside the bounded boundary-edge path.
+Broader loose-component editing and general interior surface-connected
+Vertex/Edge Extrude workflows remain unavailable. Branching, mixed, and
+unsupported shared-endpoint domains remain outside the bounded boundary-chain
+path.
 
 ### Quad-strip traversal, Loop Cut, and Edge Slide
 

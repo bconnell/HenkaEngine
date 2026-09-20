@@ -24,6 +24,118 @@ static size_t sandbox3d_modeling_operator_selection_limit(
     }
 }
 
+static bool sandbox3d_modeling_operator_selected_vertex_contains(
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t vertex_count,
+    henka_authoring_vertex_id vertex_id)
+{
+    size_t index;
+
+    for (index = 0U; index < vertex_count; ++index)
+    {
+        if (vertex_ids[index] == vertex_id)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static henka_result sandbox3d_modeling_operator_collect_boundary_vertex_chain(
+    const henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t vertex_count,
+    henka_authoring_edge_id* out_edge_ids,
+    size_t edge_capacity,
+    size_t* out_edge_count)
+{
+    const henka_authoring_mesh_desc desc = mesh != NULL
+        ? henka_authoring_mesh_get_desc(mesh)
+        : (henka_authoring_mesh_desc){0};
+    size_t face_slot;
+
+    if (mesh == NULL || vertex_ids == NULL || vertex_count < 2U ||
+        out_edge_ids == NULL || out_edge_count == NULL ||
+        edge_capacity < vertex_count || !henka_authoring_mesh_validate(mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_edge_count = 0U;
+    for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
+    {
+        henka_authoring_face_id face_id;
+        const henka_authoring_face* face;
+        size_t selected_index;
+        size_t corner;
+        size_t edge_count = 0U;
+        bool all_in_face = true;
+
+        if (henka_authoring_mesh_get_face_id_at(mesh, face_slot, &face_id) != HENKA_SUCCESS ||
+            (face = henka_authoring_mesh_get_face(mesh, face_id)) == NULL)
+        {
+            continue;
+        }
+        for (selected_index = 0U; selected_index < vertex_count; ++selected_index)
+        {
+            size_t other_index;
+            bool in_face = false;
+            if (vertex_ids[selected_index] == HENKA_AUTHORING_INVALID_ID)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            for (other_index = 0U; other_index < selected_index; ++other_index)
+            {
+                if (vertex_ids[other_index] == vertex_ids[selected_index])
+                {
+                    return HENKA_ERROR_INVALID_ARGUMENT;
+                }
+            }
+            for (corner = 0U; corner < face->corner_count; ++corner)
+            {
+                if (face->vertices[corner] == vertex_ids[selected_index])
+                {
+                    in_face = true;
+                    break;
+                }
+            }
+            if (!in_face)
+            {
+                all_in_face = false;
+                break;
+            }
+        }
+        if (!all_in_face)
+        {
+            continue;
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+                mesh, face->edges[corner]);
+            if (edge == NULL || edge->face_count != 1U ||
+                !sandbox3d_modeling_operator_selected_vertex_contains(
+                    vertex_ids, vertex_count, edge->vertices[0]) ||
+                !sandbox3d_modeling_operator_selected_vertex_contains(
+                    vertex_ids, vertex_count, edge->vertices[1]))
+            {
+                continue;
+            }
+            if (edge_count >= edge_capacity)
+            {
+                return HENKA_ERROR_LIMIT;
+            }
+            out_edge_ids[edge_count++] = edge->id;
+        }
+        if (edge_count == vertex_count - 1U || edge_count == vertex_count)
+        {
+            *out_edge_count = edge_count;
+            return HENKA_SUCCESS;
+        }
+        *out_edge_count = 0U;
+    }
+    return HENKA_ERROR_INVALID_ARGUMENT;
+}
+
 static void sandbox3d_modeling_operator_release(
     sandbox3d_modeling_operator_session* session)
 {
@@ -393,6 +505,7 @@ henka_result sandbox3d_modeling_operator_preview(
     henka_authoring_vertex_id extrude_result_vertex = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_edge_id extrude_result_edge = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_face_id extrude_result_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id* boundary_chain_edges = NULL;
     henka_authoring_mesh_desc mesh_desc = {0};
     size_t affected_count = 0U;
     size_t bevel_result_count = 0U;
@@ -765,12 +878,44 @@ henka_result sandbox3d_modeling_operator_preview(
                 }
                 else if (all_surface)
                 {
-                    result = henka_authoring_mesh_extrude_boundary_vertices(
-                        candidate,
-                        (const henka_authoring_vertex_id*)session->selection_ids,
-                        session->selection_count,
-                        applied_amount,
-                        &report);
+                    size_t boundary_chain_edge_count = 0U;
+                    if (session->selection_count > SIZE_MAX / sizeof(*boundary_chain_edges))
+                    {
+                        result = HENKA_ERROR_LIMIT;
+                    }
+                    else
+                    {
+                        boundary_chain_edges = henka_malloc(
+                            session->selection_count * sizeof(*boundary_chain_edges));
+                        if (boundary_chain_edges == NULL)
+                        {
+                            result = HENKA_ERROR_OUT_OF_MEMORY;
+                        }
+                        else if (sandbox3d_modeling_operator_collect_boundary_vertex_chain(
+                            session->source_snapshot,
+                            (const henka_authoring_vertex_id*)session->selection_ids,
+                            session->selection_count,
+                            boundary_chain_edges,
+                            session->selection_count,
+                            &boundary_chain_edge_count) == HENKA_SUCCESS)
+                        {
+                            result = henka_authoring_mesh_extrude_boundary_edge_chain(
+                                candidate,
+                                boundary_chain_edges,
+                                boundary_chain_edge_count,
+                                applied_amount,
+                                &report);
+                        }
+                        else
+                        {
+                            result = henka_authoring_mesh_extrude_boundary_vertices(
+                                candidate,
+                                (const henka_authoring_vertex_id*)session->selection_ids,
+                                session->selection_count,
+                                applied_amount,
+                                &report);
+                        }
+                    }
                 }
                 else
                 {
@@ -843,6 +988,7 @@ henka_result sandbox3d_modeling_operator_preview(
         henka_authoring_mesh_destroy(candidate);
         henka_free(vertices);
         henka_free(bevel_result_vertices);
+        henka_free(boundary_chain_edges);
         return result;
     }
     session->amount = next_amount;
@@ -850,6 +996,7 @@ henka_result sandbox3d_modeling_operator_preview(
     session->state = SANDBOX3D_MODELING_OPERATOR_STATE_PREVIEW;
     henka_free(vertices);
     henka_free(bevel_result_vertices);
+    henka_free(boundary_chain_edges);
     return HENKA_SUCCESS;
 }
 
