@@ -1146,6 +1146,74 @@ static henka_result sandbox3d_apply_authoring_component_transform(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_proportional_move(
+    sandbox3d_state* state,
+    henka_vec3 offset,
+    size_t ring_count)
+{
+    sandbox3d_modeling_operator_axis axis = SANDBOX3D_MODELING_OPERATOR_AXIS_NONE;
+    float amount = 0.0f;
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        !isfinite(offset.x) || !isfinite(offset.y) || !isfinite(offset.z) ||
+        ring_count > 8U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (fabsf(offset.x) > 0.000001f &&
+        fabsf(offset.y) <= 0.000001f && fabsf(offset.z) <= 0.000001f)
+    {
+        axis = SANDBOX3D_MODELING_OPERATOR_AXIS_X;
+        amount = offset.x;
+    }
+    else if (fabsf(offset.y) > 0.000001f &&
+        fabsf(offset.x) <= 0.000001f && fabsf(offset.z) <= 0.000001f)
+    {
+        axis = SANDBOX3D_MODELING_OPERATOR_AXIS_Y;
+        amount = offset.y;
+    }
+    else if (fabsf(offset.z) > 0.000001f &&
+        fabsf(offset.x) <= 0.000001f && fabsf(offset.y) <= 0.000001f)
+    {
+        axis = SANDBOX3D_MODELING_OPERATOR_AXIS_Z;
+        amount = offset.z;
+    }
+    else
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_PROPORTIONAL_MOVE);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_set_axis(
+            &state->modeling_operator, axis);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_set_proportional_ring_count(
+            &state->modeling_operator, ring_count);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator, amount, false, false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_commit(&state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_apply_authoring_connect_vertices(
     sandbox3d_state* state)
 {
@@ -31601,8 +31669,8 @@ details_group_authoring:
                         "authoring_soft_move_x",
                         (henka_ui_rect){row.x, row.y, soft_button_width, 24.0f},
                         "Soft Move X+") &&
-                    sandbox3d_authoring_object_proportional_move_selected_components(
-                        state->authoring_object, (henka_vec3){0.08f, 0.0f, 0.0f}, 1U) == HENKA_SUCCESS)
+                    sandbox3d_apply_authoring_proportional_move(
+                        state, (henka_vec3){0.08f, 0.0f, 0.0f}, 1U) == HENKA_SUCCESS)
                 {
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     printf(
@@ -31616,8 +31684,8 @@ details_group_authoring:
                         "authoring_soft_move_y",
                         (henka_ui_rect){row.x + soft_button_width + soft_button_gap, row.y, soft_button_width, 24.0f},
                         "Soft Move Y+") &&
-                    sandbox3d_authoring_object_proportional_move_selected_components(
-                        state->authoring_object, (henka_vec3){0.0f, 0.08f, 0.0f}, 1U) == HENKA_SUCCESS)
+                    sandbox3d_apply_authoring_proportional_move(
+                        state, (henka_vec3){0.0f, 0.08f, 0.0f}, 1U) == HENKA_SUCCESS)
                 {
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     printf(
@@ -31631,8 +31699,8 @@ details_group_authoring:
                         "authoring_soft_move_z",
                         (henka_ui_rect){row.x + (soft_button_width + soft_button_gap) * 2.0f, row.y, soft_button_width, 24.0f},
                         "Soft Move Z+") &&
-                    sandbox3d_authoring_object_proportional_move_selected_components(
-                        state->authoring_object, (henka_vec3){0.0f, 0.0f, 0.08f}, 1U) == HENKA_SUCCESS)
+                    sandbox3d_apply_authoring_proportional_move(
+                        state, (henka_vec3){0.0f, 0.0f, 0.08f}, 1U) == HENKA_SUCCESS)
                 {
                     sandbox3d_mark_generic_modeling_applied(state, entity);
                     printf(

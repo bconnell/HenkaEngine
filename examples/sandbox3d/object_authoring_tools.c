@@ -4833,35 +4833,32 @@ henka_result sandbox3d_authoring_object_slide_selected_edge_loop(
     return result;
 }
 
-henka_result sandbox3d_authoring_object_proportional_move_selected_components(
-    sandbox3d_authoring_object* object,
+static henka_result sandbox3d_authoring_apply_proportional_move_candidate(
+    const henka_authoring_mesh* source,
+    henka_authoring_mesh* candidate,
+    sandbox3d_authoring_selection_mode selection_mode,
+    const uint32_t* selected_ids,
+    size_t selected_count,
     henka_vec3 offset,
     size_t ring_count)
 {
-    henka_authoring_mesh* candidate = NULL;
     uint32_t* selected_vertex_ids = NULL;
     uint16_t* distances = NULL;
     uint32_t* queue = NULL;
     size_t vertex_capacity;
     size_t vertex_array_capacity;
     size_t selected_vertex_count = 0U;
-    size_t selected_count = 0U;
-    const uint32_t* selected_ids;
     size_t selected_index;
     size_t queue_head = 0U;
     size_t queue_tail = 0U;
     henka_result result;
 
-    if (object == NULL || !sandbox3d_authoring_finite_vec3(offset) || ring_count > 8U)
+    if (source == NULL || candidate == NULL || selected_ids == NULL || selected_count == 0U ||
+        !sandbox3d_authoring_finite_vec3(offset) || ring_count > 8U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
-    if (selected_ids == NULL || selected_count == 0U)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    vertex_capacity = object->selected_vertex_max_id;
+    vertex_capacity = henka_authoring_mesh_get_desc(source).max_vertices;
     if (!henka_checked_size_add(vertex_capacity, 1U, &vertex_array_capacity) ||
         sandbox3d_authoring_allocate_id_scratch(vertex_capacity, &selected_vertex_ids) != HENKA_SUCCESS)
     {
@@ -4871,15 +4868,15 @@ henka_result sandbox3d_authoring_object_proportional_move_selected_components(
     {
         const henka_authoring_vertex_id* candidates = NULL;
         size_t candidate_count = 0U;
-        if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+        if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
         {
             candidates = &selected_ids[selected_index];
             candidate_count = 1U;
         }
-        else if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+        else if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
         {
             const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
-                object->mesh, (henka_authoring_edge_id)selected_ids[selected_index]);
+                source, (henka_authoring_edge_id)selected_ids[selected_index]);
             if (edge != NULL)
             {
                 candidates = edge->vertices;
@@ -4889,7 +4886,7 @@ henka_result sandbox3d_authoring_object_proportional_move_selected_components(
         else
         {
             const henka_authoring_face* face = henka_authoring_mesh_get_face(
-                object->mesh, (henka_authoring_face_id)selected_ids[selected_index]);
+                source, (henka_authoring_face_id)selected_ids[selected_index]);
             if (face != NULL)
             {
                 candidates = face->vertices;
@@ -4930,7 +4927,7 @@ henka_result sandbox3d_authoring_object_proportional_move_selected_components(
         const uint32_t vertex_id = selected_vertex_ids[selected_index];
         if (vertex_id == HENKA_AUTHORING_INVALID_ID ||
             (size_t)vertex_id > vertex_capacity ||
-            henka_authoring_mesh_get_vertex(object->mesh, (henka_authoring_vertex_id)vertex_id) == NULL)
+            henka_authoring_mesh_get_vertex(source, (henka_authoring_vertex_id)vertex_id) == NULL)
         {
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto proportional_move_cleanup;
@@ -4951,7 +4948,7 @@ henka_result sandbox3d_authoring_object_proportional_move_selected_components(
         const uint32_t vertex_id = queue[queue_head++];
         const uint16_t distance = distances[vertex_id];
         const size_t edge_count = henka_authoring_mesh_get_vertex_edge_count(
-            object->mesh, (henka_authoring_vertex_id)vertex_id);
+            source, (henka_authoring_vertex_id)vertex_id);
         size_t edge_index;
         if ((size_t)distance >= ring_count)
         {
@@ -4963,11 +4960,11 @@ henka_result sandbox3d_authoring_object_proportional_move_selected_components(
             const henka_authoring_edge* edge;
             uint32_t neighbor_id;
             if (henka_authoring_mesh_get_vertex_edge_at(
-                    object->mesh,
+                    source,
                     (henka_authoring_vertex_id)vertex_id,
                     edge_index,
                     &edge_id) != HENKA_SUCCESS ||
-                (edge = henka_authoring_mesh_get_edge(object->mesh, edge_id)) == NULL)
+                (edge = henka_authoring_mesh_get_edge(source, edge_id)) == NULL)
             {
                 continue;
             }
@@ -4988,52 +4985,101 @@ henka_result sandbox3d_authoring_object_proportional_move_selected_components(
         }
     }
 
+    result = HENKA_SUCCESS;
+    for (selected_index = 1U;
+         selected_index <= vertex_capacity;
+         ++selected_index)
+    {
+        const henka_authoring_vertex* vertex;
+        const float falloff_denominator = (float)(ring_count + 1U);
+        float falloff;
+        henka_vec3 position;
+        if (distances[selected_index] == UINT16_MAX ||
+            (size_t)distances[selected_index] > ring_count)
+        {
+            continue;
+        }
+        vertex = henka_authoring_mesh_get_vertex(candidate, (henka_authoring_vertex_id)selected_index);
+        if (vertex == NULL)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            break;
+        }
+        falloff = ((float)(ring_count + 1U) - (float)distances[selected_index]) /
+            falloff_denominator;
+        position = henka_vec3_add(vertex->position, henka_vec3_scale(offset, falloff));
+        result = henka_authoring_mesh_set_vertex_position(
+            candidate, vertex->id, position);
+        if (result != HENKA_SUCCESS)
+        {
+            break;
+        }
+    }
+proportional_move_cleanup:
+    henka_free(distances);
+    henka_free(queue);
+    henka_free(selected_vertex_ids);
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_apply_proportional_move_candidate(
+    const henka_authoring_mesh* source,
+    henka_authoring_mesh* candidate,
+    sandbox3d_authoring_selection_mode selection_mode,
+    const uint32_t* selected_ids,
+    size_t selected_count,
+    henka_vec3 offset,
+    size_t ring_count)
+{
+    return sandbox3d_authoring_apply_proportional_move_candidate(
+        source,
+        candidate,
+        selection_mode,
+        selected_ids,
+        selected_count,
+        offset,
+        ring_count);
+}
+
+henka_result sandbox3d_authoring_object_proportional_move_selected_components(
+    sandbox3d_authoring_object* object,
+    henka_vec3 offset,
+    size_t ring_count)
+{
+    const uint32_t* selected_ids;
+    size_t selected_count = 0U;
+    henka_authoring_mesh* candidate = NULL;
+    henka_result result;
+
+    if (object == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
+    if (selected_ids == NULL || selected_count == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        for (selected_index = 1U;
-             selected_index <= vertex_capacity;
-             ++selected_index)
-        {
-            const henka_authoring_vertex* vertex;
-            const float falloff_denominator = (float)(ring_count + 1U);
-            float falloff;
-            henka_vec3 position;
-            if (distances[selected_index] == UINT16_MAX ||
-                (size_t)distances[selected_index] > ring_count)
-            {
-                continue;
-            }
-            vertex = henka_authoring_mesh_get_vertex(candidate, (henka_authoring_vertex_id)selected_index);
-            if (vertex == NULL)
-            {
-                result = HENKA_ERROR_INVALID_ARGUMENT;
-                break;
-            }
-            falloff = ((float)(ring_count + 1U) - (float)distances[selected_index]) /
-                falloff_denominator;
-            position = henka_vec3_add(vertex->position, henka_vec3_scale(offset, falloff));
-            result = henka_authoring_mesh_set_vertex_position(
-                candidate, vertex->id, position);
-            if (result != HENKA_SUCCESS)
-            {
-                break;
-            }
-        }
+        result = sandbox3d_authoring_apply_proportional_move_candidate(
+            object->mesh,
+            candidate,
+            object->selection_mode,
+            selected_ids,
+            selected_count,
+            offset,
+            ring_count);
     }
     if (result == HENKA_SUCCESS)
     {
         result = sandbox3d_authoring_publish_candidate(object, candidate, true, object->selected_face);
     }
-
-proportional_move_cleanup:
     if (result != HENKA_SUCCESS)
     {
         henka_authoring_mesh_destroy(candidate);
     }
-    henka_free(distances);
-    henka_free(queue);
-    henka_free(selected_vertex_ids);
     return result;
 }
 

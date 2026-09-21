@@ -253,6 +253,7 @@ void sandbox3d_modeling_operator_reset(
     session->transform_pivot_mode = SANDBOX3D_AUTHORING_PIVOT_MEDIAN;
     session->transform_orientation_mode = SANDBOX3D_AUTHORING_ORIENTATION_LOCAL;
     session->transform_configured = false;
+    session->proportional_ring_count = 1U;
 }
 
 henka_result sandbox3d_modeling_operator_begin(
@@ -269,6 +270,7 @@ henka_result sandbox3d_modeling_operator_begin(
 
     if (session == NULL || object == NULL || session->active ||
         (kind != SANDBOX3D_MODELING_OPERATOR_MOVE &&
+         kind != SANDBOX3D_MODELING_OPERATOR_PROPORTIONAL_MOVE &&
          kind != SANDBOX3D_MODELING_OPERATOR_TRANSFORM &&
          kind != SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE &&
          kind != SANDBOX3D_MODELING_OPERATOR_BEVEL &&
@@ -488,6 +490,7 @@ henka_result sandbox3d_modeling_operator_begin(
     session->transform_pivot_mode = SANDBOX3D_AUTHORING_PIVOT_MEDIAN;
     session->transform_orientation_mode = SANDBOX3D_AUTHORING_ORIENTATION_LOCAL;
     session->transform_configured = false;
+    session->proportional_ring_count = 1U;
     return HENKA_SUCCESS;
 }
 
@@ -502,6 +505,21 @@ henka_result sandbox3d_modeling_operator_set_axis(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     session->axis = axis;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_modeling_operator_set_proportional_ring_count(
+    sandbox3d_modeling_operator_session* session,
+    size_t ring_count)
+{
+    if (session == NULL || !session->active ||
+        session->kind != SANDBOX3D_MODELING_OPERATOR_PROPORTIONAL_MOVE ||
+        session->state != SANDBOX3D_MODELING_OPERATOR_STATE_BEGIN ||
+        ring_count > 8U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    session->proportional_ring_count = ring_count;
     return HENKA_SUCCESS;
 }
 
@@ -750,6 +768,7 @@ henka_result sandbox3d_modeling_operator_preview(
 
     if (session == NULL || !session->active ||
         (session->kind != SANDBOX3D_MODELING_OPERATOR_MOVE &&
+         session->kind != SANDBOX3D_MODELING_OPERATOR_PROPORTIONAL_MOVE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_TRANSFORM &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_BEVEL &&
@@ -781,7 +800,8 @@ henka_result sandbox3d_modeling_operator_preview(
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE) ||
         session->source_snapshot == NULL || session->object == NULL ||
         session->selection_ids == NULL || session->selection_count == 0U ||
-        (session->kind == SANDBOX3D_MODELING_OPERATOR_MOVE &&
+        ((session->kind == SANDBOX3D_MODELING_OPERATOR_MOVE ||
+          session->kind == SANDBOX3D_MODELING_OPERATOR_PROPORTIONAL_MOVE) &&
             session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_NONE) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_TRANSFORM &&
             !session->transform_configured) ||
@@ -978,6 +998,31 @@ henka_result sandbox3d_modeling_operator_preview(
             session->transform_radians,
             session->transform_pivot_mode,
             session->transform_orientation_mode);
+    }
+    if (result == HENKA_SUCCESS &&
+        session->kind == SANDBOX3D_MODELING_OPERATOR_PROPORTIONAL_MOVE)
+    {
+        henka_vec3 proportional_offset = {0.0f, 0.0f, 0.0f};
+        if (session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_X)
+        {
+            proportional_offset.x = applied_amount;
+        }
+        else if (session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_Y)
+        {
+            proportional_offset.y = applied_amount;
+        }
+        else
+        {
+            proportional_offset.z = applied_amount;
+        }
+        result = sandbox3d_authoring_object_apply_proportional_move_candidate(
+            session->source_snapshot,
+            candidate,
+            session->selection_mode,
+            session->selection_ids,
+            session->selection_count,
+            proportional_offset,
+            session->proportional_ring_count);
     }
     if (result == HENKA_SUCCESS && session->kind == SANDBOX3D_MODELING_OPERATOR_MOVE)
     {

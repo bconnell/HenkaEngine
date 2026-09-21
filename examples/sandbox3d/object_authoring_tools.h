@@ -259,6 +259,14 @@ henka_result sandbox3d_authoring_object_proportional_move_selected_components(
     sandbox3d_authoring_object* object,
     henka_vec3 offset,
     size_t ring_count);
+henka_result sandbox3d_authoring_object_apply_proportional_move_candidate(
+    const henka_authoring_mesh* source,
+    henka_authoring_mesh* candidate,
+    sandbox3d_authoring_selection_mode selection_mode,
+    const uint32_t* selected_ids,
+    size_t selected_count,
+    henka_vec3 offset,
+    size_t ring_count);
 /* Adds one topology-adjacent ring to the current vertex, edge, or face
  * selection. The operation is bounded by the editor selection budget and
  * does not mutate mesh topology. */

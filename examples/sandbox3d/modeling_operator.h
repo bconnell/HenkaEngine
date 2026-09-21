@@ -13,6 +13,7 @@ typedef enum sandbox3d_modeling_operator_kind
 {
     SANDBOX3D_MODELING_OPERATOR_NONE = 0,
     SANDBOX3D_MODELING_OPERATOR_MOVE,
+    SANDBOX3D_MODELING_OPERATOR_PROPORTIONAL_MOVE,
     /* Transactional rotate/scale of the current component selection through
      * the shared candidate Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_TRANSFORM,
@@ -130,6 +131,7 @@ typedef struct sandbox3d_modeling_operator_session
     sandbox3d_authoring_pivot_mode transform_pivot_mode;
     sandbox3d_authoring_orientation_mode transform_orientation_mode;
     bool transform_configured;
+    size_t proportional_ring_count;
     bool numeric_active;
     char numeric_text[SANDBOX3D_MODELING_OPERATOR_NUMERIC_CAPACITY];
     size_t numeric_length;
@@ -144,6 +146,9 @@ henka_result sandbox3d_modeling_operator_begin(
 henka_result sandbox3d_modeling_operator_set_axis(
     sandbox3d_modeling_operator_session* session,
     sandbox3d_modeling_operator_axis axis);
+henka_result sandbox3d_modeling_operator_set_proportional_ring_count(
+    sandbox3d_modeling_operator_session* session,
+    size_t ring_count);
 henka_result sandbox3d_modeling_operator_set_transform(
     sandbox3d_modeling_operator_session* session,
     henka_vec3 scale,
