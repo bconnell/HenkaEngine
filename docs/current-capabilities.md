@@ -629,10 +629,11 @@ Available edge authoring includes:
 - bounded edge-loop/ring selection;
 - transactional single-edge dissolve for compatible interior edges;
 - single-edge delete of its incident face set;
-- transactional split of one, a bounded pairwise-disjoint batch, or a
-  contiguous same-face boundary-edge chain of face-backed boundary or interior
-  edges at a factor in (0,1), with interpolated per-corner UVs and preserved
-  hard/seam metadata through the Sandbox operator;
+- transactional split of one, a bounded pairwise-disjoint batch, a
+  contiguous same-face boundary-edge chain, or a bounded batch of independent
+  boundary-edge chains of face-backed boundary or interior edges at a factor in
+  (0,1), with interpolated per-corner UVs and preserved hard/seam metadata
+  through the Sandbox operator;
 - bounded standalone boundary-edge bevel;
 - bounded multi-edge boundary bevel across distinct faces;
 - bounded same-face boundary bevel with shared-endpoint corner caps;
@@ -669,11 +670,13 @@ per-edge UVs, and non-hard, non-seamed source edges are required for the
 single-edge and simple-path forms; preview, cancel, apply, undo, and redo use
 the existing authoring history boundary.
 
-Other interior/manifold configurations, mixed-face selections, disconnected,
-cyclic, larger branching, shared-endpoint, and otherwise unsupported batches
+Other interior/manifold configurations, mixed-face chains, disconnected
+components that cannot be partitioned into simple chains, cyclic branching,
+larger branching, shared-endpoint components, and otherwise unsupported batches
 remain rejected. Face-backed split supports pairwise-disjoint boundary or
-two-face interior batches and contiguous same-face boundary chains; broader
-branching and generalized split workflows remain rejected.
+two-face interior batches, contiguous same-face boundary chains, and bounded
+batches of independent boundary chains; broader branching and generalized
+split workflows remain rejected.
 
 Interior bevel rejects:
 

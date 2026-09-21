@@ -23,10 +23,10 @@ typedef enum sandbox3d_modeling_operator_kind
      * the shared candidate Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_TRANSFORM,
     SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE,
-    /* Transactionally splits one, a contiguous same-face boundary chain, or a
-     * bounded pairwise-disjoint selection of face-backed boundary or interior
-     * edges at a factor in (0,1) through the shared Preview/Cancel/Apply
-     * session. */
+    /* Transactionally splits one, a contiguous same-face boundary chain, a
+     * bounded batch of independent boundary chains, or a bounded
+     * pairwise-disjoint selection of face-backed boundary or interior edges at
+     * a factor in (0,1) through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_SPLIT_EDGE,
     SANDBOX3D_MODELING_OPERATOR_BEVEL,
     /* Extrusion of selected vertices, one selected face, or one loose edge.

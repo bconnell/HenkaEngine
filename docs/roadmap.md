@@ -516,9 +516,12 @@ Integrated authoring is already underway as part of the current 3D completion pa
   and ring domains with Preview/Refresh and explicit Apply/Cancel publication.
 - Edge mode provides signed-factor Edge Slide for one compatible open edge-loop
   or closed edge-cycle selection through the shared modeling operator session.
-- Edge mode can bridge two selected compatible boundary edges from different
-  faces into one transactional quad, or two disjoint equal-length compatible
-  open boundary-edge chains into one quad per paired edge, while preserving
+- Edge mode can split one, a contiguous same-face boundary chain, or a bounded
+  batch of independent boundary chains through the transactional source,
+  render, and history boundary. It can also bridge two selected compatible
+  boundary edges from different faces into one transactional quad, or two
+  disjoint equal-length compatible open boundary-edge chains into one quad per
+  paired edge, while preserving
   source material, smoothing, and endpoint UV data.
 - Edge mode can fill one selected closed boundary edge loop with one
   deterministic polygon through the same source/render/history transaction.

@@ -1129,7 +1129,7 @@ henka_result sandbox3d_modeling_operator_preview(
         if (result == HENKA_SUCCESS)
         {
             const henka_result chain_result =
-                henka_authoring_mesh_split_boundary_edge_chain(
+                henka_authoring_mesh_split_boundary_edge_chains(
                     candidate,
                     (const henka_authoring_edge_id*)session->selection_ids,
                     session->selection_count,
@@ -1145,19 +1145,41 @@ henka_result sandbox3d_modeling_operator_preview(
             else if (chain_result == HENKA_ERROR_INVALID_ARGUMENT ||
                      chain_result == HENKA_ERROR_LIMIT)
             {
-                result = henka_authoring_mesh_split_edges(
-                    candidate,
-                    (const henka_authoring_edge_id*)session->selection_ids,
-                    session->selection_count,
-                    applied_amount,
-                    split_vertex_ids,
-                    split_first_edges,
-                    split_second_edges,
-                    &report);
-                if (result == HENKA_ERROR_INVALID_ARGUMENT &&
-                    chain_result == HENKA_ERROR_LIMIT)
+                const henka_result single_chain_result =
+                    henka_authoring_mesh_split_boundary_edge_chain(
+                        candidate,
+                        (const henka_authoring_edge_id*)session->selection_ids,
+                        session->selection_count,
+                        applied_amount,
+                        split_vertex_ids,
+                        split_first_edges,
+                        split_second_edges,
+                        &report);
+                if (single_chain_result == HENKA_SUCCESS)
                 {
-                    result = chain_result;
+                    result = HENKA_SUCCESS;
+                }
+                else if (single_chain_result == HENKA_ERROR_INVALID_ARGUMENT ||
+                         single_chain_result == HENKA_ERROR_LIMIT)
+                {
+                    result = henka_authoring_mesh_split_edges(
+                        candidate,
+                        (const henka_authoring_edge_id*)session->selection_ids,
+                        session->selection_count,
+                        applied_amount,
+                        split_vertex_ids,
+                        split_first_edges,
+                        split_second_edges,
+                        &report);
+                    if (result == HENKA_ERROR_INVALID_ARGUMENT &&
+                        chain_result == HENKA_ERROR_LIMIT)
+                    {
+                        result = chain_result;
+                    }
+                }
+                else
+                {
+                    result = single_chain_result;
                 }
             }
             else

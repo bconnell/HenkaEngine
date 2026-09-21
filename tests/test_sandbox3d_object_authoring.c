@@ -7648,15 +7648,17 @@ static void henka_test_sandbox3d_modeling_operator_face_edge_split(void)
 static void henka_test_sandbox3d_authoring_face_edge_chain_split(void)
 {
     henka_engine_config config = {0};
-    const henka_authoring_mesh_desc desc = {12U, 16U, 8U, 8U};
+    const henka_authoring_mesh_desc desc = {24U, 32U, 16U, 8U};
     henka_engine* engine = NULL;
     henka_scene* scene = NULL;
     henka_authoring_mesh* source = NULL;
     sandbox3d_authoring_object* object = NULL;
-    henka_authoring_vertex_id vertices[4];
-    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
-    henka_authoring_edge_id edge_ids[2] = {
+    henka_authoring_vertex_id vertices[8];
+    henka_authoring_face_id face_ids[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id edge_ids[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
     henka_authoring_mesh_counts undo_counts;
@@ -7672,24 +7674,32 @@ static void henka_test_sandbox3d_authoring_face_edge_chain_split(void)
     entity = henka_scene_create_entity_named(scene, "Boundary Edge Chain Split");
     HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
-        source, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 2U,
-        &vertices[0]) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
-        source, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 2U,
-        &vertices[1]) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
-        source, (henka_vec3){2.0f, 2.0f, 0.0f}, (henka_vec2){1.0f, 1.0f}, 2U,
-        &vertices[2]) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
-        source, (henka_vec3){0.0f, 2.0f, 0.0f}, (henka_vec2){0.0f, 1.0f}, 2U,
-        &vertices[3]) == HENKA_SUCCESS);
+    {
+        const henka_vec3 positions[8] = {
+            {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+            {2.0f, 2.0f, 0.0f}, {0.0f, 2.0f, 0.0f},
+            {4.0f, 0.0f, 0.0f}, {6.0f, 0.0f, 0.0f},
+            {6.0f, 2.0f, 0.0f}, {4.0f, 2.0f, 0.0f}};
+        for (size_t index = 0U; index < 8U; ++index)
+        {
+            HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+                source, positions[index], (henka_vec2){0.0f, 0.0f}, 2U,
+                &vertices[index]) == HENKA_SUCCESS);
+        }
+    }
     HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
-        source, vertices, 4U, 3U, true, &face_id) == HENKA_SUCCESS);
-    face = henka_authoring_mesh_get_face(source, face_id);
+        source, (henka_authoring_vertex_id[]){vertices[0], vertices[1], vertices[2], vertices[3]},
+        4U, 3U, true, &face_ids[0]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+        source, (henka_authoring_vertex_id[]){vertices[4], vertices[5], vertices[6], vertices[7]},
+        4U, 4U, false, &face_ids[1]) == HENKA_SUCCESS);
+    face = henka_authoring_mesh_get_face(source, face_ids[0]);
     HENKA_TEST_ASSERT(face != NULL);
     edge_ids[0] = face->edges[0];
     edge_ids[1] = face->edges[1];
+    face = henka_authoring_mesh_get_face(source, face_ids[1]);
+    HENKA_TEST_ASSERT(face != NULL);
+    edge_ids[2] = face->edges[0];
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
         engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
     henka_authoring_mesh_destroy(source);
@@ -7701,6 +7711,8 @@ static void henka_test_sandbox3d_authoring_face_edge_chain_split(void)
         object, edge_ids[0], false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
         object, edge_ids[1], true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, edge_ids[2], true) == HENKA_SUCCESS);
     before = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_split_selected_edge(object, 0.5f) ==
@@ -7708,15 +7720,21 @@ static void henka_test_sandbox3d_authoring_face_edge_chain_split(void)
     after = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
     face = henka_authoring_mesh_get_face(
-        sandbox3d_authoring_object_get_mesh(object), face_id);
-    HENKA_TEST_ASSERT(after.vertices == before.vertices + 2U &&
-        after.edges == before.edges + 2U && after.faces == before.faces &&
-        face != NULL && face->corner_count == 6U &&
+        sandbox3d_authoring_object_get_mesh(object), face_ids[1]);
+    HENKA_TEST_ASSERT(after.vertices == before.vertices + 3U &&
+        after.edges == before.edges + 3U && after.faces == before.faces &&
+        face != NULL && face->corner_count == 5U &&
+        henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object), face_ids[0]) != NULL &&
+        henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object), face_ids[0])->corner_count == 6U &&
         henka_authoring_mesh_get_edge(
             sandbox3d_authoring_object_get_mesh(object), edge_ids[0]) == NULL &&
         henka_authoring_mesh_get_edge(
             sandbox3d_authoring_object_get_mesh(object), edge_ids[1]) == NULL &&
-        sandbox3d_authoring_object_get_selected_component_count(object) == 4U &&
+        henka_authoring_mesh_get_edge(
+            sandbox3d_authoring_object_get_mesh(object), edge_ids[2]) == NULL &&
+        sandbox3d_authoring_object_get_selected_component_count(object) == 6U &&
         henka_authoring_mesh_validate(
             sandbox3d_authoring_object_get_mesh(object)));
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
@@ -7735,7 +7753,7 @@ static void henka_test_sandbox3d_authoring_face_edge_chain_split(void)
 static void henka_test_sandbox3d_modeling_operator_face_edge_batch_split(void)
 {
     henka_engine_config config = {0};
-    const henka_authoring_mesh_desc desc = {16U, 16U, 8U, 8U};
+    const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 8U};
     const henka_vec3 positions[8] = {
         {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
         {2.0f, 2.0f, 0.0f}, {0.0f, 2.0f, 0.0f},
@@ -7752,8 +7770,9 @@ static void henka_test_sandbox3d_modeling_operator_face_edge_batch_split(void)
     henka_authoring_vertex_id vertices[8];
     henka_authoring_face_id faces[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
-    henka_authoring_edge_id edge_ids[2] = {
-        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id edge_ids[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts preview_counts;
     henka_authoring_mesh_counts after;
@@ -7781,7 +7800,8 @@ static void henka_test_sandbox3d_modeling_operator_face_edge_batch_split(void)
         source, (henka_authoring_vertex_id[]){vertices[4], vertices[5], vertices[6], vertices[7]},
         4U, 9U, false, &faces[1]) == HENKA_SUCCESS);
     edge_ids[0] = henka_authoring_mesh_get_face(source, faces[0])->edges[0];
-    edge_ids[1] = henka_authoring_mesh_get_face(source, faces[1])->edges[0];
+    edge_ids[1] = henka_authoring_mesh_get_face(source, faces[0])->edges[1];
+    edge_ids[2] = henka_authoring_mesh_get_face(source, faces[1])->edges[0];
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
         engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
     henka_authoring_mesh_destroy(source);
@@ -7793,9 +7813,11 @@ static void henka_test_sandbox3d_modeling_operator_face_edge_batch_split(void)
         object, edge_ids[0], false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
         object, edge_ids[1], true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, edge_ids[2], true) == HENKA_SUCCESS);
     before = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
-    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 3U);
 
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
         &session, object, SANDBOX3D_MODELING_OPERATOR_SPLIT_EDGE) == HENKA_SUCCESS);
@@ -7813,11 +7835,11 @@ static void henka_test_sandbox3d_modeling_operator_face_edge_batch_split(void)
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
     after = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
-    HENKA_TEST_ASSERT(after.vertices == before.vertices + 2U &&
-        after.edges == before.edges + 2U && after.faces == before.faces &&
+    HENKA_TEST_ASSERT(after.vertices == before.vertices + 3U &&
+        after.edges == before.edges + 3U && after.faces == before.faces &&
         henka_authoring_mesh_validate(
             sandbox3d_authoring_object_get_mesh(object)) &&
-        sandbox3d_authoring_object_get_selected_component_count(object) == 4U);
+        sandbox3d_authoring_object_get_selected_component_count(object) == 6U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object)).vertices == before.vertices);

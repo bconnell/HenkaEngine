@@ -4877,29 +4877,45 @@ henka_result sandbox3d_authoring_object_split_selected_edge(
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        const henka_result chain_result =
-            henka_authoring_mesh_split_boundary_edge_chain(
+        const henka_result chain_batch_result =
+            henka_authoring_mesh_split_boundary_edge_chains(
                 candidate, edge_ids, selected_count, factor, split_vertex_ids,
                 first_edge_ids, second_edge_ids, &report);
-        if (chain_result == HENKA_SUCCESS)
+        if (chain_batch_result == HENKA_SUCCESS)
         {
             result = HENKA_SUCCESS;
         }
-        else if (chain_result == HENKA_ERROR_INVALID_ARGUMENT ||
-                 chain_result == HENKA_ERROR_LIMIT)
+        else if (chain_batch_result == HENKA_ERROR_INVALID_ARGUMENT ||
+                 chain_batch_result == HENKA_ERROR_LIMIT)
         {
-            result = henka_authoring_mesh_split_edges(
-                candidate, edge_ids, selected_count, factor, split_vertex_ids,
-                first_edge_ids, second_edge_ids, &report);
-            if (result == HENKA_ERROR_INVALID_ARGUMENT &&
-                chain_result == HENKA_ERROR_LIMIT)
+            const henka_result chain_result =
+                henka_authoring_mesh_split_boundary_edge_chain(
+                    candidate, edge_ids, selected_count, factor,
+                    split_vertex_ids, first_edge_ids, second_edge_ids, &report);
+            if (chain_result == HENKA_SUCCESS)
+            {
+                result = HENKA_SUCCESS;
+            }
+            else if (chain_result == HENKA_ERROR_INVALID_ARGUMENT ||
+                     chain_result == HENKA_ERROR_LIMIT)
+            {
+                result = henka_authoring_mesh_split_edges(
+                    candidate, edge_ids, selected_count, factor,
+                    split_vertex_ids, first_edge_ids, second_edge_ids, &report);
+                if (result == HENKA_ERROR_INVALID_ARGUMENT &&
+                    chain_batch_result == HENKA_ERROR_LIMIT)
+                {
+                    result = chain_batch_result;
+                }
+            }
+            else
             {
                 result = chain_result;
             }
         }
         else
         {
-            result = chain_result;
+            result = chain_batch_result;
         }
     }
     if (result == HENKA_SUCCESS)

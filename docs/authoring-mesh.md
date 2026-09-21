@@ -102,8 +102,9 @@ Current operations include:
 - bounded edge bevel;
 - bounded loop-cut operations;
 - bounded split of one selected face-backed boundary or interior edge, a
-  pairwise-disjoint batch, or a contiguous same-face boundary-edge chain at a
-  factor in (0,1), preserving per-corner UVs and hard/seam metadata;
+  pairwise-disjoint batch, a contiguous same-face boundary-edge chain, or a
+  batch of independent boundary-edge chains at a factor in (0,1), preserving
+  per-corner UVs and hard/seam metadata;
 - bounded midpoint split of one selected standalone loose edge, preserving
   endpoint metadata and selecting the two replacement edges;
 - bounded vertex and edge extrusion paths described below.
@@ -578,8 +579,9 @@ replacement edges and restores the prior edge selection through undo/redo.
 ### Face-backed Edge Split
 
 The core modeling API supports splitting one selected face-backed boundary or
-interior edge at a factor strictly between zero and one, or a bounded batch of
-pairwise-disjoint face-backed edges. The new vertex interpolates position and
+interior edge at a factor strictly between zero and one, a bounded batch of
+pairwise-disjoint face-backed edges, one contiguous same-face boundary chain,
+or a bounded batch of independent boundary chains. The new vertex interpolates position and
 per-corner UV state. Each incident face receives the new corner, and the two
 replacement edges preserve the source hard-edge and seam intent. Boundary and
 two-face interior edges are supported; non-manifold edges, incompatible
@@ -591,9 +593,11 @@ The Sandbox Edge-mode operator exposes the same operation through Preview,
 Apply, Cancel, and undo/redo. Preview leaves the committed source unchanged;
 Apply selects the two replacement edges for each split. A selected contiguous
 boundary chain may share endpoints when all edges belong to one source face;
-otherwise batch selection remains limited to edges with disjoint endpoints and
-disjoint incident faces. Mixed-face, branched, cyclic, disconnected, or
-otherwise ambiguous selections are rejected.
+independent boundary chains may be selected together when their components do
+not share endpoints and each component belongs to one source face. Mixed-face
+chains, branched components, duplicate edges, and ambiguous shared-endpoint
+components are rejected. The existing pairwise-disjoint boundary or interior
+batch path remains available for selections outside this boundary-chain form.
 
 ### Sandbox loose-component session
 
