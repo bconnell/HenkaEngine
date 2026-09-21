@@ -1164,6 +1164,120 @@ cleanup:
     return result ? 1 : fail("triangulate face operation");
 }
 
+static int test_triangulate_faces_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
+    const henka_vec3 positions[10] = {
+        {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f}, {2.0f, 2.0f, 0.0f},
+        {1.0f, 0.75f, 0.0f}, {0.0f, 2.0f, 0.0f},
+        {5.0f, 0.0f, 0.0f}, {7.0f, 0.0f, 0.0f}, {7.0f, 2.0f, 0.0f},
+        {6.0f, 0.75f, 0.0f}, {5.0f, 2.0f, 0.0f}};
+    henka_authoring_vertex_id face_vertices[2][5];
+    const henka_vec2 face_uvs[5] = {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.375f}, {0.0f, 1.0f}};
+    const henka_authoring_face_id selected_faces[2] = {1U, 2U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertex_ids[10];
+    henka_authoring_modeling_report report;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    size_t index;
+    size_t corner;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 10U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){positions[index].x, positions[index].y},
+                7U, &vertex_ids[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 2U; ++index)
+    {
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        size_t vertex_offset = index * 5U;
+        for (corner = 0U; corner < 5U; ++corner)
+        {
+            face_vertices[index][corner] = vertex_ids[vertex_offset + corner];
+        }
+        if (henka_authoring_mesh_add_face(
+                mesh, face_vertices[index], 5U, 7U, true, &face_id) != HENKA_SUCCESS ||
+            face_id != selected_faces[index])
+        {
+            goto cleanup;
+        }
+        for (corner = 0U; corner < 5U; ++corner)
+        {
+            if (henka_authoring_mesh_set_face_corner_uv(
+                    mesh, face_id, corner, face_uvs[corner]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (before.vertices != 10U || before.edges != 10U || before.faces != 2U ||
+        henka_authoring_mesh_triangulate_faces(
+            mesh, selected_faces, 2U, &report) != HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 0U || report.created_edges != 4U ||
+        report.created_faces != 4U || report.removed_vertices != 0U ||
+        report.removed_edges != 0U || report.removed_faces != 0U ||
+        report.primary_face_id != selected_faces[0])
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != 10U || after.edges != 14U || after.faces != 6U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 2U; ++index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            mesh, selected_faces[index]);
+        if (face == NULL || face->corner_count != 3U || face->material_region != 7U ||
+            !face->smooth)
+        {
+            goto cleanup;
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            size_t source_corner;
+            for (source_corner = 0U; source_corner < 5U; ++source_corner)
+            {
+                if (face->vertices[corner] == face_vertices[index][source_corner]) break;
+            }
+            if (source_corner == 5U ||
+                face->uvs[corner].x != face_uvs[source_corner].x ||
+                face->uvs[corner].y != face_uvs[source_corner].y)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    before = after;
+    if (henka_authoring_mesh_triangulate_faces(
+            mesh, (const henka_authoring_face_id[]){selected_faces[0], selected_faces[0]},
+            2U, &report) != HENKA_ERROR_INVALID_ARGUMENT || report.changed ||
+        (after = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &after, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("triangulate faces operation");
+}
+
 static int test_face_region_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 8U};
@@ -8271,6 +8385,7 @@ int main(void)
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
         test_face_flip_batch_operation() &&
         test_face_region_extrude_operation() && test_triangulate_face_operation() &&
+        test_triangulate_faces_operation() &&
         test_vertex_merge_operations() &&
         test_vertex_merge_input_limits() &&
         test_vertex_smooth_operation() &&

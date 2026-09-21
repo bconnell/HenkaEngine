@@ -39,8 +39,8 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally connects two non-adjacent selected vertices on one
      * compatible face through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_CONNECT,
-    /* Transactionally triangulates one selected planar face through the shared
-     * Preview/Cancel/Apply session. */
+    /* Transactionally triangulates one or a bounded vertex-disjoint selected
+     * planar face selection through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_TRIANGULATE,
     /* Transactionally insets one selected face through the shared
      * Preview/Cancel/Apply session. */

@@ -542,7 +542,9 @@ for exactly two non-adjacent vertices on one compatible face. Cancel leaves the
 committed source unchanged, and Apply uses the existing authoring undo/redo
 history boundary. The selected-face triangulation control uses the same
 transactional operator route, including candidate preview, cancel, apply, and
-undo/redo preservation.
+undo/redo preservation. It accepts one or a bounded vertex-disjoint planar
+face selection; shared-vertex selections fail during Preview and leave the live
+mesh unchanged.
 
 Disconnected, loose-edge, and incompatible-normal fans fail closed. Closed
 interior fans retain mixed material and smoothing metadata on their replacement
@@ -572,7 +574,8 @@ Available operations also include:
 - inset;
 - planar bevel rings;
 - face subdivision;
-- deterministic planar face triangulation;
+- deterministic planar face triangulation for one or a bounded vertex-disjoint
+  face selection;
 - transactional deletion of a bounded selected-face set while preserving one
   renderable face;
 - transactional closed boundary-loop fill;

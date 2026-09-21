@@ -12258,3 +12258,110 @@ henka_result henka_authoring_mesh_triangulate_face(
     henka_authoring_mesh_destroy(candidate);
     return result;
 }
+
+henka_result henka_authoring_mesh_triangulate_faces(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_face_id* face_ids,
+    size_t face_count,
+    henka_authoring_modeling_report* out_report)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    const henka_authoring_mesh_desc desc = mesh != NULL
+        ? henka_authoring_mesh_get_desc(mesh) : (henka_authoring_mesh_desc){0};
+    size_t required_faces = 0U;
+    size_t index;
+    size_t other_index;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+    bool changed = false;
+
+    modeling_report_reset(out_report);
+    if (mesh == NULL || face_ids == NULL || face_count == 0U)
+    {
+        return result;
+    }
+    if (face_count > HENKA_AUTHORING_MESH_HARD_MAX_FACES)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    if (!henka_authoring_mesh_validate(mesh))
+    {
+        return result;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    for (index = 0U; index < face_count; ++index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, face_ids[index]);
+        if (face == NULL || face->vertices == NULL || face->corner_count < 3U)
+        {
+            return result;
+        }
+        if (face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        for (other_index = 0U; other_index < index; ++other_index)
+        {
+            const henka_authoring_face* other = henka_authoring_mesh_get_face(
+                mesh, face_ids[other_index]);
+            size_t face_corner;
+            size_t other_corner;
+            if (face_ids[other_index] == face_ids[index] || other == NULL)
+            {
+                return result;
+            }
+            for (face_corner = 0U; face_corner < face->corner_count; ++face_corner)
+            {
+                for (other_corner = 0U; other_corner < other->corner_count; ++other_corner)
+                {
+                    if (face->vertices[face_corner] == other->vertices[other_corner])
+                    {
+                        return result;
+                    }
+                }
+            }
+        }
+        if (face->corner_count > 3U)
+        {
+            const size_t additional_faces = face->corner_count - 3U;
+            if (required_faces > SIZE_MAX - additional_faces)
+            {
+                return HENKA_ERROR_LIMIT;
+            }
+            required_faces += additional_faces;
+        }
+    }
+    if (before.faces > desc.max_faces || required_faces > desc.max_faces - before.faces)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    for (index = 0U; result == HENKA_SUCCESS && index < face_count; ++index)
+    {
+        henka_authoring_modeling_report single_report = {0};
+        result = henka_authoring_mesh_triangulate_face(
+            candidate, face_ids[index], &single_report);
+        if (result == HENKA_SUCCESS && single_report.changed)
+        {
+            changed = true;
+        }
+    }
+    if (result == HENKA_SUCCESS &&
+        (!henka_authoring_mesh_validate(candidate) || !modeling_face_geometry_is_valid(candidate)))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS && changed)
+    {
+        after = henka_authoring_mesh_get_counts(candidate);
+        result = henka_authoring_mesh_copy(mesh, candidate);
+        if (result == HENKA_SUCCESS)
+        {
+            modeling_report_count_delta(&before, &after, out_report);
+            if (out_report != NULL) out_report->primary_face_id = face_ids[0U];
+        }
+    }
+    henka_authoring_mesh_destroy(candidate);
+    return result;
+}

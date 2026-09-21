@@ -125,6 +125,15 @@ henka_result henka_authoring_mesh_triangulate_face(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,
     henka_authoring_modeling_report* out_report);
+/* Triangulates a bounded unique selection of simple planar polygon faces
+ * transactionally. The selected faces must be vertex-disjoint so the result
+ * is independent of face iteration order. Invalid, duplicate, shared-vertex,
+ * non-planar, and capacity-invalid selections fail without changing source. */
+henka_result henka_authoring_mesh_triangulate_faces(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_face_id* face_ids,
+    size_t face_count,
+    henka_authoring_modeling_report* out_report);
 
 henka_result henka_authoring_mesh_merge_vertices(
     henka_authoring_mesh* mesh,

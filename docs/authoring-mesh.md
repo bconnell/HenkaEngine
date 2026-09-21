@@ -95,6 +95,8 @@ Current operations include:
 - duplicate;
 - face winding flip for one or a bounded unique face selection;
 - face-normal translation for one or a bounded vertex-disjoint face selection;
+- deterministic planar face triangulation for one or a bounded vertex-disjoint
+  face selection;
 - face extrude;
 - inset;
 - planar bevel ring;
@@ -144,6 +146,13 @@ Face flip preserves:
 
 The operation reverses only the ordered winding. Invalid or duplicate face
 selections leave the committed source unchanged.
+
+Planar face triangulation uses deterministic ear clipping and preserves the
+source face identity on the first triangle, with fresh identities for the
+additional triangles. The operation preserves material regions, smoothing,
+and per-corner UVs. The batch form accepts only vertex-disjoint planar faces;
+duplicate, shared-vertex, non-planar, invalid, and capacity-invalid selections
+fail without changing the committed source.
 
 ## UV operations
 

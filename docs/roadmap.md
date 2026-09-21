@@ -472,7 +472,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
    UV, material, smoothing, and non-manifold changes are rejected.
 7. Face winding flip for one or a bounded unique face selection, bounded
    vertex-disjoint face-normal translation, face extrude, inset, planar bevel
-   rings, face subdivision, deterministic planar face triangulation,
+   rings, face subdivision, deterministic planar face triangulation for one or
+   a bounded vertex-disjoint face selection,
    transactional selected-face deletion,
    planar UV projection, bounded per-face transforms,
    selected-island UV scaling/packing, deterministic all-island UV packing,

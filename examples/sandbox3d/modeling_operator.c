@@ -466,7 +466,7 @@ henka_result sandbox3d_modeling_operator_begin(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (kind == SANDBOX3D_MODELING_OPERATOR_TRIANGULATE &&
-        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count != 1U))
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count == 0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1034,7 +1034,7 @@ henka_result sandbox3d_modeling_operator_preview(
              session->selection_count != 2U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_TRIANGULATE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
-             session->selection_count != 1U)) ||
+             session->selection_count == 0U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_INSET &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
              session->selection_count != 1U)) ||
@@ -1412,9 +1412,10 @@ henka_result sandbox3d_modeling_operator_preview(
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_TRIANGULATE)
     {
-        result = henka_authoring_mesh_triangulate_face(
+        result = henka_authoring_mesh_triangulate_faces(
             candidate,
-            (henka_authoring_face_id)session->selection_ids[0U],
+            (const henka_authoring_face_id*)session->selection_ids,
+            session->selection_count,
             &report);
     }
     if (result == HENKA_SUCCESS &&
