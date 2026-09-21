@@ -471,8 +471,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
    metadata-preserving duplicate faces, and degenerate faces. Unsafe winding,
    UV, material, smoothing, and non-manifold changes are rejected.
 7. Face winding flip for one or a bounded unique face selection, bounded
-   vertex-disjoint face-normal translation, vertex-disjoint face inset, face extrude, planar bevel
-   rings, bounded vertex-disjoint face subdivision, deterministic planar face triangulation for one or
+   vertex-disjoint face-normal translation, vertex-disjoint face inset, face extrude, bounded
+   vertex-disjoint planar bevel rings, bounded vertex-disjoint face subdivision, deterministic planar face triangulation for one or
    a bounded vertex-disjoint face selection,
    transactional selected-face deletion,
    planar UV projection, bounded per-face transforms,

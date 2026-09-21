@@ -125,6 +125,17 @@ henka_result henka_authoring_mesh_bevel_face(
     henka_authoring_face_id face_id,
     float width,
     henka_authoring_face_id* out_face_id);
+/* Bevels a bounded unique selection of vertex-disjoint simple planar faces
+ * transactionally. Output face IDs correspond to input order. */
+henka_result henka_authoring_mesh_bevel_faces(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_face_id* face_ids,
+    size_t face_count,
+    float width,
+    henka_authoring_face_id* out_face_ids,
+    size_t out_face_capacity,
+    size_t* out_face_count,
+    henka_authoring_modeling_report* out_report);
 henka_result henka_authoring_mesh_subdivide_face(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,

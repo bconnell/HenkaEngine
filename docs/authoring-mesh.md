@@ -99,7 +99,7 @@ Current operations include:
   face selection;
 - face extrude;
 - bounded vertex-disjoint face inset;
-- planar bevel ring;
+- bounded vertex-disjoint planar face bevel rings;
 - bounded vertex-disjoint face subdivision;
 - transactional deletion of one or more selected faces while preserving at
   least one renderable face;
@@ -158,6 +158,12 @@ Face inset supports one or a bounded vertex-disjoint selection. Each selected
 face produces a deterministic inner face and surrounding ring on one candidate
 mesh. Shared-vertex, duplicate, invalid, and capacity-invalid selections fail
 without changing the committed topology or selection state.
+
+Face bevel supports one or a bounded vertex-disjoint selection of simple planar
+faces. Each selected face produces a deterministic planar bevel ring on one
+candidate mesh, and Apply selects the resulting bevel faces in Face mode.
+Shared-vertex, duplicate, invalid, and capacity-invalid selections fail without
+changing the committed topology or selection state.
 
 Face subdivision supports one or a bounded vertex-disjoint selection. Each
 selected face produces a center vertex, edge midpoints, and a quad fan on one
