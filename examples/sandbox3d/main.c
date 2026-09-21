@@ -1214,6 +1214,98 @@ static henka_result sandbox3d_apply_authoring_proportional_move(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_add_loose_vertex(
+    sandbox3d_state* state,
+    henka_vec3 position,
+    henka_vec2 uv,
+    uint32_t material_region,
+    henka_authoring_vertex_id* out_vertex_id)
+{
+    henka_result result;
+
+    if (out_vertex_id != NULL)
+    {
+        *out_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (state == NULL || state->authoring_object == NULL || out_vertex_id == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_ADD_LOOSE_VERTEX);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_set_loose_vertex(
+            &state->modeling_operator, position, uv, material_region);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator, 0.0f, false, false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        *out_vertex_id = (henka_authoring_vertex_id)
+            sandbox3d_modeling_operator_get_created_component_id(
+                &state->modeling_operator);
+        result = sandbox3d_modeling_operator_commit(&state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
+static henka_result sandbox3d_apply_authoring_add_loose_edge(
+    sandbox3d_state* state,
+    henka_authoring_vertex_id first,
+    henka_authoring_vertex_id second,
+    bool hard,
+    henka_authoring_edge_id* out_edge_id)
+{
+    henka_result result;
+
+    if (out_edge_id != NULL)
+    {
+        *out_edge_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (state == NULL || state->authoring_object == NULL || out_edge_id == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_ADD_LOOSE_EDGE);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_set_loose_edge(
+            &state->modeling_operator, first, second, hard);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator, 0.0f, false, false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        *out_edge_id = (henka_authoring_edge_id)
+            sandbox3d_modeling_operator_get_created_component_id(
+                &state->modeling_operator);
+        result = sandbox3d_modeling_operator_commit(&state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_apply_authoring_connect_vertices(
     sandbox3d_state* state)
 {
@@ -30611,8 +30703,8 @@ details_group_authoring:
                     }
                     else
                     {
-                        add_result = sandbox3d_authoring_object_add_loose_vertex(
-                            state->authoring_object,
+                        add_result = sandbox3d_apply_authoring_add_loose_vertex(
+                            state,
                             (henka_vec3){x, y, z},
                             (henka_vec2){0.0f, 0.0f},
                             0U,
@@ -30661,8 +30753,8 @@ details_group_authoring:
                         sandbox3d_authoring_object_get_selected_component_at(
                             state->authoring_object, 1U, &second_id) == HENKA_SUCCESS)
                     {
-                        add_result = sandbox3d_authoring_object_add_loose_edge(
-                            state->authoring_object,
+                        add_result = sandbox3d_apply_authoring_add_loose_edge(
+                            state,
                             (henka_authoring_vertex_id)first_id,
                             (henka_authoring_vertex_id)second_id,
                             false,

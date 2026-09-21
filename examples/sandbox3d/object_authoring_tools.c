@@ -3414,6 +3414,27 @@ henka_result sandbox3d_authoring_object_move_selected_components(
     return result;
 }
 
+henka_result sandbox3d_authoring_object_apply_add_loose_vertex_candidate(
+    henka_authoring_mesh* candidate,
+    henka_vec3 position,
+    henka_vec2 uv,
+    uint32_t material_region,
+    henka_authoring_vertex_id* out_vertex_id)
+{
+    if (out_vertex_id != NULL)
+    {
+        *out_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (candidate == NULL || out_vertex_id == NULL ||
+        !sandbox3d_authoring_finite_vec3(position) ||
+        !isfinite(uv.x) || !isfinite(uv.y))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_authoring_mesh_add_vertex(
+        candidate, position, uv, material_region, out_vertex_id);
+}
+
 henka_result sandbox3d_authoring_object_add_loose_vertex(
     sandbox3d_authoring_object* object,
     henka_vec3 position,
@@ -3429,9 +3450,7 @@ henka_result sandbox3d_authoring_object_add_loose_vertex(
     {
         *out_vertex_id = HENKA_AUTHORING_INVALID_ID;
     }
-    if (object == NULL || out_vertex_id == NULL ||
-        !sandbox3d_authoring_finite_vec3(position) ||
-        !isfinite(uv.x) || !isfinite(uv.y))
+    if (object == NULL || out_vertex_id == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -3439,7 +3458,7 @@ henka_result sandbox3d_authoring_object_add_loose_vertex(
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_authoring_mesh_add_vertex(
+        result = sandbox3d_authoring_object_apply_add_loose_vertex_candidate(
             candidate, position, uv, material_region, &vertex_id);
     }
     if (result == HENKA_SUCCESS)
@@ -3454,6 +3473,27 @@ henka_result sandbox3d_authoring_object_add_loose_vertex(
     }
     *out_vertex_id = vertex_id;
     return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_authoring_object_apply_add_loose_edge_candidate(
+    henka_authoring_mesh* candidate,
+    henka_authoring_vertex_id first,
+    henka_authoring_vertex_id second,
+    bool hard,
+    henka_authoring_edge_id* out_edge_id)
+{
+    if (out_edge_id != NULL)
+    {
+        *out_edge_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (candidate == NULL || out_edge_id == NULL ||
+        first == HENKA_AUTHORING_INVALID_ID ||
+        second == HENKA_AUTHORING_INVALID_ID || first == second)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_authoring_mesh_add_edge(
+        candidate, first, second, hard, out_edge_id);
 }
 
 henka_result sandbox3d_authoring_object_add_loose_edge(
@@ -3471,9 +3511,7 @@ henka_result sandbox3d_authoring_object_add_loose_edge(
     {
         *out_edge_id = HENKA_AUTHORING_INVALID_ID;
     }
-    if (object == NULL || out_edge_id == NULL ||
-        first == HENKA_AUTHORING_INVALID_ID ||
-        second == HENKA_AUTHORING_INVALID_ID || first == second)
+    if (object == NULL || out_edge_id == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -3481,7 +3519,7 @@ henka_result sandbox3d_authoring_object_add_loose_edge(
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_authoring_mesh_add_edge(
+        result = sandbox3d_authoring_object_apply_add_loose_edge_candidate(
             candidate, first, second, hard, &edge_id);
     }
     if (result == HENKA_SUCCESS)

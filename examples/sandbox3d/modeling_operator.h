@@ -14,6 +14,8 @@ typedef enum sandbox3d_modeling_operator_kind
     SANDBOX3D_MODELING_OPERATOR_NONE = 0,
     SANDBOX3D_MODELING_OPERATOR_MOVE,
     SANDBOX3D_MODELING_OPERATOR_PROPORTIONAL_MOVE,
+    SANDBOX3D_MODELING_OPERATOR_ADD_LOOSE_VERTEX,
+    SANDBOX3D_MODELING_OPERATOR_ADD_LOOSE_EDGE,
     /* Transactional rotate/scale of the current component selection through
      * the shared candidate Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_TRANSFORM,
@@ -132,6 +134,14 @@ typedef struct sandbox3d_modeling_operator_session
     sandbox3d_authoring_orientation_mode transform_orientation_mode;
     bool transform_configured;
     size_t proportional_ring_count;
+    henka_vec3 loose_vertex_position;
+    henka_vec2 loose_vertex_uv;
+    uint32_t loose_vertex_material_region;
+    henka_authoring_vertex_id loose_edge_first;
+    henka_authoring_vertex_id loose_edge_second;
+    bool loose_edge_hard;
+    bool loose_configured;
+    uint32_t created_component_id;
     bool numeric_active;
     char numeric_text[SANDBOX3D_MODELING_OPERATOR_NUMERIC_CAPACITY];
     size_t numeric_length;
@@ -149,6 +159,16 @@ henka_result sandbox3d_modeling_operator_set_axis(
 henka_result sandbox3d_modeling_operator_set_proportional_ring_count(
     sandbox3d_modeling_operator_session* session,
     size_t ring_count);
+henka_result sandbox3d_modeling_operator_set_loose_vertex(
+    sandbox3d_modeling_operator_session* session,
+    henka_vec3 position,
+    henka_vec2 uv,
+    uint32_t material_region);
+henka_result sandbox3d_modeling_operator_set_loose_edge(
+    sandbox3d_modeling_operator_session* session,
+    henka_authoring_vertex_id first,
+    henka_authoring_vertex_id second,
+    bool hard);
 henka_result sandbox3d_modeling_operator_set_transform(
     sandbox3d_modeling_operator_session* session,
     henka_vec3 scale,
@@ -175,6 +195,8 @@ henka_result sandbox3d_modeling_operator_preview(
     bool fine_active);
 henka_result sandbox3d_modeling_operator_commit(
     sandbox3d_modeling_operator_session* session);
+uint32_t sandbox3d_modeling_operator_get_created_component_id(
+    const sandbox3d_modeling_operator_session* session);
 henka_result sandbox3d_modeling_operator_cancel(
     sandbox3d_modeling_operator_session* session);
 

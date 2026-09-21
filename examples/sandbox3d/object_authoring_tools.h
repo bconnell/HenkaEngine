@@ -243,6 +243,18 @@ henka_result sandbox3d_authoring_object_add_loose_edge(
     henka_authoring_vertex_id second,
     bool hard,
     henka_authoring_edge_id* out_edge_id);
+henka_result sandbox3d_authoring_object_apply_add_loose_vertex_candidate(
+    henka_authoring_mesh* candidate,
+    henka_vec3 position,
+    henka_vec2 uv,
+    uint32_t material_region,
+    henka_authoring_vertex_id* out_vertex_id);
+henka_result sandbox3d_authoring_object_apply_add_loose_edge_candidate(
+    henka_authoring_mesh* candidate,
+    henka_authoring_vertex_id first,
+    henka_authoring_vertex_id second,
+    bool hard,
+    henka_authoring_edge_id* out_edge_id);
 /* Moves the active face selection along its evaluated local-space normal.
  * The shared face vertices are moved once through the normal transactional
  * source, preserving topology continuity while providing a direct profile
