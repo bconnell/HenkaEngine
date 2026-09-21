@@ -738,6 +738,20 @@ henka_result henka_authoring_mesh_slide_edge_loop(
     float factor,
     henka_authoring_modeling_report* out_report);
 
+/* Slides a bounded selection of pairwise vertex-disjoint compatible quad edge
+ * loops in one transaction. Each connected component must be an open chain or
+ * closed cycle of two-sided quads with matching material, smoothing, and UV
+ * continuity. All loops use the same signed factor and the candidate is
+ * published only after every component validates. Mixed, overlapping,
+ * boundary, hard/seamed, incompatible, and capacity-invalid selections fail
+ * without changing the source mesh. */
+henka_result henka_authoring_mesh_slide_edge_loops(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    float factor,
+    henka_authoring_modeling_report* out_report);
+
 henka_result henka_authoring_mesh_bevel_vertices(
     henka_authoring_mesh* mesh,
     const henka_authoring_vertex_id* vertex_ids,

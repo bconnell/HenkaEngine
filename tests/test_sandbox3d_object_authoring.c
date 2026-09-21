@@ -7798,6 +7798,109 @@ static void henka_test_sandbox3d_object_authoring_edge_loop_slide(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_batch_edge_loop_slide(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    const henka_authoring_mesh_desc desc = {64U, 128U, 32U, 8U};
+    henka_authoring_vertex_id first_vertices[12];
+    henka_authoring_vertex_id second_vertices[12];
+    henka_authoring_edge_id first_loop[3];
+    henka_authoring_edge_id second_loop[3];
+    henka_authoring_edge_id selected[6];
+    sandbox3d_modeling_operator_session session = {0};
+    henka_entity entity;
+    size_t index;
+
+    config.application_name = "Henka Batch Edge Loop Slide Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_make_quad_grid(source, 2U, 3U, first_vertices, 12U) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_make_quad_grid(source, 2U, 3U, second_vertices, 12U) ==
+        HENKA_SUCCESS);
+    for (index = 0U; index < 12U; ++index)
+    {
+        const henka_authoring_vertex* vertex =
+            henka_authoring_mesh_get_vertex(source, second_vertices[index]);
+        HENKA_TEST_ASSERT(vertex != NULL);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_set_vertex_position(
+            source, second_vertices[index],
+            (henka_vec3){vertex->position.x + 4.0f, vertex->position.y,
+                         vertex->position.z}) == HENKA_SUCCESS);
+    }
+    for (index = 0U; index < 3U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_test_find_edge_between_vertices(
+            source, first_vertices[1U + index * 3U],
+            first_vertices[4U + index * 3U], &first_loop[index]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_test_find_edge_between_vertices(
+            source, second_vertices[1U + index * 3U],
+            second_vertices[4U + index * 3U], &second_loop[index]) == HENKA_SUCCESS);
+        selected[index] = first_loop[index];
+        selected[3U + index] = second_loop[index];
+    }
+    entity = henka_scene_create_entity_named(scene, "Batch Edge Loop Slide Grid");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_replace_component_selection(
+        object, (const uint32_t*)selected, 6U, selected[0]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 6U);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.5f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    for (index = 0U; index < 4U; ++index)
+    {
+        const henka_authoring_vertex* first = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), first_vertices[1U + index * 3U]);
+        const henka_authoring_vertex* second = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), second_vertices[1U + index * 3U]);
+        HENKA_TEST_ASSERT(first != NULL && second != NULL);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(first->position.x, 1.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(second->position.x, 5.0f, 0.0001f);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.5f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    for (index = 0U; index < 4U; ++index)
+    {
+        const henka_authoring_vertex* first = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), first_vertices[1U + index * 3U]);
+        const henka_authoring_vertex* second = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), second_vertices[1U + index * 3U]);
+        HENKA_TEST_ASSERT(first != NULL && second != NULL);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(first->position.x, 1.5f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(second->position.x, 5.5f, 0.0001f);
+    }
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+
+    sandbox3d_modeling_operator_reset(&session);
+    henka_test_destroy_authoring_object(scene, entity, object);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_closed_quad_ring_loop_cut(void)
 {
     henka_engine_config config = {0};
@@ -10709,6 +10812,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_quad_strip_batch_loop_cut();
     henka_test_sandbox3d_object_authoring_closed_quad_ring_loop_cut();
     henka_test_sandbox3d_object_authoring_edge_loop_slide();
+    henka_test_sandbox3d_object_authoring_batch_edge_loop_slide();
     henka_test_sandbox3d_object_authoring_interior_edge_bevel();
     henka_test_sandbox3d_object_authoring_vertex_extrude();
     henka_test_sandbox3d_object_authoring_closed_vertex_fan();

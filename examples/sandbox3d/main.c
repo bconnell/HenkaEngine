@@ -29302,7 +29302,7 @@ details_group_authoring:
                             slide_result != HENKA_SUCCESS,
                             slide_result == HENKA_SUCCESS
                                 ? "Edge Slide preview ready; Apply or Cancel."
-                                : "Edge Slide rejected; use a factor between -1 and 1 and select one compatible edge loop or cycle.");
+                                : "Edge Slide rejected; use a factor between -1 and 1 and select one or more pairwise-disjoint compatible edge loops or cycles.");
                     }
                     if (state->modeling_operator.active &&
                         state->modeling_operator.kind == SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE &&

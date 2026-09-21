@@ -5459,7 +5459,7 @@ henka_result sandbox3d_authoring_object_slide_selected_edge_loop(
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_authoring_mesh_slide_edge_loop(
+        result = henka_authoring_mesh_slide_edge_loops(
             candidate,
             (const henka_authoring_edge_id*)selected_ids,
             selected_count,

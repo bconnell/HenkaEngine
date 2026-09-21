@@ -834,11 +834,14 @@ Available operations include:
 - a bounded pairwise-disjoint batch of uniformly spaced compatible quad strips,
   with multi-face selection and transactional Preview/Apply/Cancel plus
   undo/redo routing;
-- bounded signed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle selection.
+- bounded signed-factor Edge Slide for one or more pairwise vertex-disjoint
+  compatible open edge-loops or closed edge-cycles selected in one transaction.
 
 For Loop Cut, the editor validates a user-entered factor in the open interval `(0, 1)`, supports Preview/Refresh plus Apply and Cancel, and commits the candidate through the transactional engine boundary.
 
-For Edge Slide, the shared modeling operator session supports preview, numeric factors in `(-1, 1)`, cancel, and one transactional Apply while preserving topology.
+For Edge Slide, the shared modeling operator session supports preview, numeric
+factors in `(-1, 1)`, cancel, and one transactional Apply for the complete
+pairwise-disjoint selection while preserving topology.
 
 Preview changes evaluated render state only. Authoritative source/history changes occur on Apply.
 

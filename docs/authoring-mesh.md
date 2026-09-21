@@ -626,16 +626,21 @@ operations remain unfinished.
 
 ### Edge Slide
 
-Edge mode provides signed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle selection.
+Edge mode provides signed-factor Edge Slide for one or more pairwise
+vertex-disjoint compatible open edge-loops or closed edge-cycles selected in
+one transaction.
 
 The modeling session supports:
 
 - numeric factors in `(-1, 1)`;
 - Preview;
 - Cancel;
-- one transactional Apply.
+- one transactional Apply for the complete selection.
 
-The operation moves the loop toward deterministic adjacent sides while preserving topology and uses the shared source/render/bounds/collider/undo publication path.
+The operation moves every selected loop toward its deterministic adjacent side
+while preserving topology and uses the shared source/render/bounds/collider/
+undo publication path. Mixed, overlapping, boundary, hard/seamed, or
+metadata-incompatible loop selections fail without publishing a partial move.
 
 ### Cylindrical UV unwrap
 

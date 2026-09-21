@@ -1713,7 +1713,7 @@ henka_result sandbox3d_modeling_operator_preview(
     }
     if (result == HENKA_SUCCESS && session->kind == SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE)
     {
-        result = henka_authoring_mesh_slide_edge_loop(
+        result = henka_authoring_mesh_slide_edge_loops(
             candidate,
             (const henka_authoring_edge_id*)session->selection_ids,
             session->selection_count,

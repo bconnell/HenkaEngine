@@ -4030,6 +4030,174 @@ cleanup:
     return result ? 1 : fail("edge loop slide operation");
 }
 
+static int test_edge_loop_batch_slide_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 32U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[24];
+    henka_authoring_edge_id selected_edges[6] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id mixed_edges[7];
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts rejected;
+    henka_authoring_edge_id boundary_edge = HENKA_AUTHORING_INVALID_ID;
+    float selected_center_x[8];
+    size_t grid_index;
+    size_t row;
+    size_t column;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (grid_index = 0U; grid_index < 2U; ++grid_index)
+    {
+        for (row = 0U; row < 4U; ++row)
+        {
+            for (column = 0U; column < 3U; ++column)
+            {
+                const size_t vertex_index = grid_index * 12U + row * 3U + column;
+                if (henka_authoring_mesh_add_vertex(
+                        mesh,
+                        (henka_vec3){
+                            (float)column + (grid_index == 0U ? 0.0f : 4.0f),
+                            (float)row, 0.0f},
+                        (henka_vec2){(float)column / 2.0f, (float)row / 3.0f},
+                        0U, &vertices[vertex_index]) != HENKA_SUCCESS)
+                {
+                    goto cleanup;
+                }
+            }
+        }
+        for (row = 0U; row < 3U; ++row)
+        {
+            for (column = 0U; column < 2U; ++column)
+            {
+                const size_t base = grid_index * 12U + row * 3U + column;
+                const henka_authoring_vertex_id face_vertices[4] = {
+                    vertices[base], vertices[base + 1U],
+                    vertices[base + 4U], vertices[base + 3U]};
+                if (henka_authoring_mesh_add_face(
+                        mesh, face_vertices, 4U, 0U, true,
+                        &(henka_authoring_face_id){0U}) != HENKA_SUCCESS)
+                {
+                    goto cleanup;
+                }
+            }
+        }
+        for (row = 0U; row < 3U; ++row)
+        {
+            if (test_find_edge_between_vertices(
+                    mesh,
+                    vertices[grid_index * 12U + row * 3U + 1U],
+                    vertices[grid_index * 12U + (row + 1U) * 3U + 1U],
+                    &selected_edges[grid_index * 3U + row]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    for (size_t edge_index = 0U; edge_index < desc.max_edges; ++edge_index)
+    {
+        henka_authoring_edge_id edge_id;
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, edge_index, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge != NULL && edge->face_count == 1U)
+        {
+            boundary_edge = edge_id;
+            break;
+        }
+    }
+    if (boundary_edge == HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_slide_edge_loops(
+            mesh, selected_edges, 6U, 0.5f, &report) != HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 0U ||
+        report.created_edges != 0U || report.created_faces != 0U)
+    {
+        goto cleanup;
+    }
+    for (grid_index = 0U; grid_index < 2U; ++grid_index)
+    {
+        for (row = 0U; row < 4U; ++row)
+        {
+            const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+                mesh, vertices[grid_index * 12U + row * 3U + 1U]);
+            const float expected_x = (grid_index == 0U ? 1.0f : 5.0f) + 0.5f;
+            if (vertex == NULL || fabsf(vertex->position.x - expected_x) > 0.0001f ||
+                fabsf(vertex->position.y - (float)row) > 0.0001f)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (memcmp(&before, &after, sizeof(before)) != 0 ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (size_t edge_index = 0U; edge_index < 6U; ++edge_index)
+    {
+        mixed_edges[edge_index] = selected_edges[edge_index];
+    }
+    for (grid_index = 0U; grid_index < 2U; ++grid_index)
+    {
+        for (row = 0U; row < 4U; ++row)
+        {
+            const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+                mesh, vertices[grid_index * 12U + row * 3U + 1U]);
+            if (vertex == NULL)
+            {
+                goto cleanup;
+            }
+            selected_center_x[grid_index * 4U + row] = vertex->position.x;
+        }
+    }
+    mixed_edges[6] = boundary_edge;
+    before = after;
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_slide_edge_loops(
+            mesh, mixed_edges, 7U, 0.25f, &report) == HENKA_SUCCESS ||
+        report.changed ||
+        (rejected = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &rejected, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    for (grid_index = 0U; grid_index < 2U; ++grid_index)
+    {
+        for (row = 0U; row < 4U; ++row)
+        {
+            const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+                mesh, vertices[grid_index * 12U + row * 3U + 1U]);
+            if (vertex == NULL ||
+                fabsf(vertex->position.x - selected_center_x[grid_index * 4U + row]) >
+                    0.0001f)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("batch edge loop slide operation");
+}
+
 static int test_uv_authoring(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
@@ -9433,6 +9601,7 @@ int main(void)
         test_closed_quad_ring_multi_cut_operation() &&
         test_closed_quad_ring_loop_cut_operation() &&
         test_edge_loop_slide_operation() &&
+        test_edge_loop_batch_slide_operation() &&
         test_uv_authoring() &&
         test_uv_global_packing() &&
         test_uv_planar_unwrap() &&
