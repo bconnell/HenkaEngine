@@ -5230,8 +5230,10 @@ henka_result sandbox3d_authoring_object_delete_selected_edge(
 {
     const uint32_t* selected_ids;
     size_t selected_count = 0U;
+    henka_authoring_edge_id* edge_ids = NULL;
     henka_authoring_mesh* candidate = NULL;
     henka_authoring_modeling_report report = {0};
+    bool use_loose_batch = false;
     henka_result result;
 
     if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE)
@@ -5239,15 +5241,53 @@ henka_result sandbox3d_authoring_object_delete_selected_edge(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
-    if (selected_ids == NULL || selected_count != 1U)
+    if (selected_ids == NULL || selected_count == 0U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (selected_count == 1U)
+    {
+        const henka_authoring_edge* selected_edge = henka_authoring_mesh_get_edge(
+            object->mesh, (henka_authoring_edge_id)selected_ids[0]);
+        use_loose_batch = selected_edge != NULL && selected_edge->face_count == 0U;
+    }
+    else
+    {
+        use_loose_batch = true;
     }
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_authoring_mesh_delete_edge(
-            candidate, (henka_authoring_edge_id)selected_ids[0], &report);
+        if (use_loose_batch)
+        {
+            if (selected_count > SIZE_MAX / sizeof(*edge_ids))
+            {
+                result = HENKA_ERROR_LIMIT;
+            }
+            else
+            {
+                edge_ids = henka_malloc(selected_count * sizeof(*edge_ids));
+                if (edge_ids == NULL)
+                {
+                    result = HENKA_ERROR_OUT_OF_MEMORY;
+                }
+                else
+                {
+                    size_t index;
+                    for (index = 0U; index < selected_count; ++index)
+                    {
+                        edge_ids[index] = (henka_authoring_edge_id)selected_ids[index];
+                    }
+                    result = henka_authoring_mesh_delete_loose_edges(
+                        candidate, edge_ids, selected_count, &report);
+                }
+            }
+        }
+        else
+        {
+            result = henka_authoring_mesh_delete_edge(
+                candidate, (henka_authoring_edge_id)selected_ids[0], &report);
+        }
     }
     if (result == HENKA_SUCCESS)
     {
@@ -5258,6 +5298,7 @@ henka_result sandbox3d_authoring_object_delete_selected_edge(
     {
         henka_authoring_mesh_destroy(candidate);
     }
+    henka_free(edge_ids);
     return result;
 }
 

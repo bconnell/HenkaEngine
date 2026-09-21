@@ -29859,12 +29859,12 @@ details_group_authoring:
                                 &edge_topology_row) &&
                             edge_topology_row.width >= 290.0f &&
                             sandbox3d_authoring_object_get_selected_component_count(
-                                state->authoring_object) == 1U &&
+                                state->authoring_object) > 0U &&
                             henka_ui_button(
                                 state->ui,
                                 "authoring_edge_delete_priority",
                                 (henka_ui_rect){edge_topology_row.x, edge_topology_row.y, 96.0f, 24.0f},
-                                "Delete Edge"))
+                                "Delete Edges"))
                         {
                             const henka_result delete_result =
                                 sandbox3d_apply_authoring_delete_edge(state);
@@ -29874,14 +29874,14 @@ details_group_authoring:
                                 sandbox3d_set_status(
                                     state,
                                     false,
-                                    "Selected edge and incident faces deleted.");
+                                    "Selected edge(s) deleted; loose-edge vertices preserved.");
                             }
                             else
                             {
                                 sandbox3d_set_status(
                                     state,
                                     true,
-                                    "Edge delete rejected; source and selection retained.");
+                                    "Edge delete rejected; select one face-backed edge or disjoint standalone wire edges.");
                             }
                         }
                     }
@@ -30845,12 +30845,12 @@ details_group_authoring:
                         &row) &&
                     row.width >= 290.0f &&
                     sandbox3d_authoring_object_get_selected_component_count(
-                        state->authoring_object) == 1U &&
+                        state->authoring_object) > 0U &&
                     henka_ui_button(
                         state->ui,
                         "authoring_edge_delete_top",
                         (henka_ui_rect){row.x, row.y, 96.0f, 24.0f},
-                        "Delete Edge"))
+                        "Delete Edges"))
                 {
                     const henka_result delete_result =
                         sandbox3d_apply_authoring_delete_edge(state);
@@ -30860,14 +30860,14 @@ details_group_authoring:
                         sandbox3d_set_status(
                             state,
                             false,
-                            "Selected edge and incident faces deleted.");
+                            "Selected edge(s) deleted; loose-edge vertices preserved.");
                     }
                     else
                     {
                         sandbox3d_set_status(
                             state,
                             true,
-                            "Edge delete rejected; source and selection retained.");
+                            "Edge delete rejected; select one face-backed edge or disjoint standalone wire edges.");
                     }
                 }
                 if (sandbox3d_details_flow_next_row(
@@ -32267,12 +32267,12 @@ details_group_authoring:
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 290.0f &&
                 sandbox3d_authoring_object_get_selected_component_count(
-                    state->authoring_object) == 1U &&
+                    state->authoring_object) > 0U &&
                 henka_ui_button(
                     state->ui,
                     "authoring_edge_delete",
                     (henka_ui_rect){row.x, row.y, 96.0f, 24.0f},
-                    "Delete Edge"))
+                    "Delete Edges"))
             {
                 const henka_result delete_result =
                     sandbox3d_apply_authoring_delete_edge(state);
@@ -32282,14 +32282,14 @@ details_group_authoring:
                     sandbox3d_set_status(
                         state,
                         false,
-                        "Selected edge and incident faces deleted.");
+                        "Selected edge(s) deleted; loose-edge vertices preserved.");
                 }
                 else
                 {
                     sandbox3d_set_status(
                         state,
                         true,
-                        "Edge delete rejected; source and selection retained.");
+                        "Edge delete rejected; select one face-backed edge or disjoint standalone wire edges.");
                 }
             }
             if (state->authoring_object != NULL &&

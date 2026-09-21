@@ -543,6 +543,16 @@ henka_result henka_authoring_mesh_delete_edge(
     henka_authoring_edge_id edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Removes a bounded pairwise-disjoint set of standalone wire edges while
+ * preserving their vertices. Face-backed, duplicate, shared-endpoint, and
+ * invalid selections fail without changing the source mesh. The candidate is
+ * published only after the complete deletion set validates. */
+henka_result henka_authoring_mesh_delete_loose_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_authoring_modeling_report* out_report);
+
 /* Compatibility wrapper for the selected-edge bevel operation. It supports
  * one compatible boundary edge, or one isolated two-quad interior edge. */
 henka_result henka_authoring_mesh_bevel_edge(

@@ -4411,6 +4411,93 @@ cleanup:
     return result ? 1 : fail("transactional edge delete");
 }
 
+static int test_loose_edge_delete_batch_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {8U, 8U, 1U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[5] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id edge_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id shared_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 5U,
+            &vertices[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 5U,
+            &vertices[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){0.0f, 1.0f, 0.0f}, (henka_vec2){0.0f, 1.0f}, 5U,
+            &vertices[2]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){1.0f, 1.0f, 0.0f}, (henka_vec2){1.0f, 1.0f}, 5U,
+            &vertices[3]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){2.0f, 0.0f}, 5U,
+            &vertices[4]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(
+            mesh, vertices[0], vertices[1], true, &edge_ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(
+            mesh, vertices[2], vertices[3], true, &edge_ids[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(
+            mesh, vertices[0], vertices[4], true, &shared_edge_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_seam(mesh, edge_ids[0], true) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_seam(mesh, edge_ids[1], true) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_delete_loose_edges(
+            mesh, (henka_authoring_edge_id[]){edge_ids[0], edge_ids[0]}, 2U, &report) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed ||
+        (after = henka_authoring_mesh_get_counts(mesh), memcmp(&before, &after, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_delete_loose_edges(
+            mesh, (henka_authoring_edge_id[]){edge_ids[0], shared_edge_id}, 2U, &report) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed ||
+        (after = henka_authoring_mesh_get_counts(mesh), memcmp(&before, &after, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_delete_loose_edges(
+            mesh, edge_ids, 2U, &report) != HENKA_SUCCESS ||
+        !report.changed || report.removed_edges != 2U || report.removed_faces != 0U)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices || after.edges + 2U != before.edges ||
+        after.faces != before.faces || henka_authoring_mesh_get_edge(mesh, edge_ids[0]) != NULL ||
+        henka_authoring_mesh_get_edge(mesh, edge_ids[1]) != NULL ||
+        henka_authoring_mesh_get_edge(mesh, shared_edge_id) == NULL ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("loose edge delete batch");
+}
+
 static int test_vertex_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -7885,6 +7972,7 @@ int main(void)
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&
         test_edge_delete_operation() &&
+        test_loose_edge_delete_batch_operation() &&
         test_vertex_extrude_operation() &&
         test_interior_vertex_batch_extrude_operation() &&
         test_loose_vertex_extrude_operation() &&

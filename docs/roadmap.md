@@ -506,7 +506,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
 #### Edge topology and authoring UX
 
 - Bounded single-edge dissolve and single-edge deletion of an incident face set
-  are available within their supported domains.
+  are available within their supported domains. Standalone wire edges also
+  support bounded pairwise-disjoint batch deletion while preserving vertices.
 - Standalone boundary-edge bevel, bounded multi-edge boundary bevel,
   same-face boundary bevel with shared-endpoint corner caps, and compatible
   interior-edge bevel for isolated two-quad patches, pairwise independent

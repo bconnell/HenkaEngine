@@ -394,7 +394,10 @@ Successful Sandbox bevels replace Vertex selection with live cut vertices and us
 
 Transactional single-edge dissolve is available for compatible interior edges.
 
-Transactional single-edge delete removes the selected edge's incident face set while preserving vertices.
+Transactional edge delete supports one face-backed edge, removing its incident
+face set while preserving vertices, or a bounded pairwise-disjoint selection of
+standalone wire edges, removing only those edges while preserving their
+vertices.
 
 ### Edge Bevel
 
@@ -586,6 +589,16 @@ mismatched endpoint materials, shared endpoints, duplicate selections,
 degenerate source edges, and capacity exhaustion without publishing a partial
 mesh. The Sandbox selects all replacement edges and restores the prior edge
 selection through undo/redo.
+
+### Loose-edge Delete
+
+The core modeling API, object-authoring route, and shared modeling operator
+support deleting one or a bounded pairwise-disjoint selection of standalone wire
+edges. The operation preserves every loose-edge vertex and its remaining
+metadata, rejects face-backed, duplicate, shared-endpoint, invalid, or
+capacity-exhausting selections, and publishes the candidate only after the full
+deletion set validates. Preview, Apply, Cancel, undo, and redo use the same
+source/render/history transaction as the existing face-backed edge delete path.
 
 ### Face-backed Edge Split
 

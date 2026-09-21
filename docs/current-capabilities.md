@@ -628,7 +628,9 @@ Available edge authoring includes:
 
 - bounded edge-loop/ring selection;
 - transactional single-edge dissolve for compatible interior edges;
-- single-edge delete of its incident face set;
+- one face-backed edge delete of its incident face set, or a bounded
+  pairwise-disjoint batch delete of standalone wire edges that preserves their
+  vertices;
 - transactional split of one, a bounded pairwise-disjoint batch, a
   contiguous same-face boundary-edge chain, or a bounded batch of independent
   boundary-edge chains of face-backed boundary or interior edges at a factor in
@@ -744,6 +746,9 @@ The core modeling API also provides:
 - bounded standalone loose-edge midpoint splitting for one or a pairwise-
   disjoint batch, preserving endpoint UV/material data and hard/seam intent
   on every replacement edge;
+- bounded standalone loose-edge deletion for one or a pairwise-disjoint batch,
+  preserving the loose vertices and rejecting face-backed, duplicate, or
+  shared-endpoint selections;
 
 Both reject unsupported source topology and invalid direction/distance inputs.
 
