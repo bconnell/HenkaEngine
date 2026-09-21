@@ -7317,6 +7317,7 @@ static void henka_test_sandbox3d_authoring_loose_edge_split_persistence(void)
         source, source_edge, true) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
         engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    henka_authoring_mesh_destroy(source);
     source = NULL;
 
     sandbox3d_authoring_object_set_selection_mode(
