@@ -1128,15 +1128,42 @@ henka_result sandbox3d_modeling_operator_preview(
         session->split_configured = false;
         if (result == HENKA_SUCCESS)
         {
-            result = henka_authoring_mesh_split_edges(
-                candidate,
-                (const henka_authoring_edge_id*)session->selection_ids,
-                session->selection_count,
-                applied_amount,
-                split_vertex_ids,
-                split_first_edges,
-                split_second_edges,
-                &report);
+            const henka_result chain_result =
+                henka_authoring_mesh_split_boundary_edge_chain(
+                    candidate,
+                    (const henka_authoring_edge_id*)session->selection_ids,
+                    session->selection_count,
+                    applied_amount,
+                    split_vertex_ids,
+                    split_first_edges,
+                    split_second_edges,
+                    &report);
+            if (chain_result == HENKA_SUCCESS)
+            {
+                result = HENKA_SUCCESS;
+            }
+            else if (chain_result == HENKA_ERROR_INVALID_ARGUMENT ||
+                     chain_result == HENKA_ERROR_LIMIT)
+            {
+                result = henka_authoring_mesh_split_edges(
+                    candidate,
+                    (const henka_authoring_edge_id*)session->selection_ids,
+                    session->selection_count,
+                    applied_amount,
+                    split_vertex_ids,
+                    split_first_edges,
+                    split_second_edges,
+                    &report);
+                if (result == HENKA_ERROR_INVALID_ARGUMENT &&
+                    chain_result == HENKA_ERROR_LIMIT)
+                {
+                    result = chain_result;
+                }
+            }
+            else
+            {
+                result = chain_result;
+            }
             if (result == HENKA_SUCCESS)
             {
                 session->split_first_edge = split_first_edges[0U];

@@ -365,6 +365,21 @@ henka_result henka_authoring_mesh_split_edges(
     henka_authoring_edge_id* out_second_edge_ids,
     henka_authoring_modeling_report* out_report);
 
+/* Splits one simple contiguous boundary-edge chain belonging to one source
+ * face. Adjacent selected edges may share endpoints; each output array has
+ * edge_count entries and the complete chain remains candidate-first. Mixed
+ * faces, interior edges, branches, duplicate edges, and disconnected chains
+ * are rejected without changing the source mesh. */
+henka_result henka_authoring_mesh_split_boundary_edge_chain(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    float factor,
+    henka_authoring_vertex_id* out_split_vertex_ids,
+    henka_authoring_edge_id* out_first_edge_ids,
+    henka_authoring_edge_id* out_second_edge_ids,
+    henka_authoring_modeling_report* out_report);
+
 /* Extrudes one compatible edge transactionally. An open boundary edge moves
  * along its incident face normal and creates one connecting quad. An interior
  * edge is supported as a single-sided operation for one same-material,

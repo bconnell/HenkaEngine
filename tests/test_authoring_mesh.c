@@ -7451,6 +7451,91 @@ cleanup:
     return result ? 1 : fail("disjoint quad strip batch");
 }
 
+static int test_boundary_edge_chain_split_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 32U, 16U, 8U};
+    const henka_vec3 positions[4] = {
+        {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {2.0f, 2.0f, 0.0f}, {0.0f, 2.0f, 0.0f}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[4];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id edge_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id split_vertices[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id first_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id second_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts rejected;
+    const henka_authoring_face* face;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        return fail("boundary edge chain split setup");
+    }
+    for (size_t index = 0U; index < 4U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){0.0f, 0.0f}, 4U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, vertices, 4U, 8U, true, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    face = henka_authoring_mesh_get_face(mesh, face_id);
+    if (face == NULL)
+    {
+        goto cleanup;
+    }
+    edge_ids[0] = face->edges[0];
+    edge_ids[1] = face->edges[1];
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_split_boundary_edge_chain(
+            mesh, edge_ids, 2U, 0.5f, split_vertices, first_edges,
+            second_edges, &report) != HENKA_SUCCESS || !report.changed)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices + 2U || after.edges != before.edges + 2U ||
+        after.faces != before.faces || !henka_authoring_mesh_validate(mesh) ||
+        henka_authoring_mesh_get_vertex(mesh, split_vertices[0]) == NULL ||
+        henka_authoring_mesh_get_vertex(mesh, split_vertices[1]) == NULL ||
+        henka_authoring_mesh_get_edge(mesh, first_edges[0]) == NULL ||
+        henka_authoring_mesh_get_edge(mesh, second_edges[0]) == NULL ||
+        henka_authoring_mesh_get_edge(mesh, first_edges[1]) == NULL ||
+        henka_authoring_mesh_get_edge(mesh, second_edges[1]) == NULL)
+    {
+        goto cleanup;
+    }
+    before = after;
+    if (henka_authoring_mesh_split_boundary_edge_chain(
+            mesh, (henka_authoring_edge_id[]){edge_ids[0], edge_ids[0]}, 2U,
+            0.5f, split_vertices, first_edges, second_edges, NULL) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        (rejected = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &rejected, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("boundary edge chain split");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_extreme_bounds_remain_finite() &&
@@ -7502,6 +7587,7 @@ int main(void)
         test_interior_edge_split_operation() &&
         test_disjoint_face_edge_batch_split_operation() &&
         test_disjoint_quad_strip_loop_cut_batch_operation() &&
+        test_boundary_edge_chain_split_operation() &&
         test_boundary_edge_extrude_operation() &&
         test_interior_edge_extrude_operation() &&
         test_connected_interior_edge_extrude_operation() &&

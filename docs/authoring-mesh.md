@@ -101,9 +101,9 @@ Current operations include:
 - selected face-region extrusion with shared caps and transactional topology;
 - bounded edge bevel;
 - bounded loop-cut operations;
-- bounded split of one or a pairwise-disjoint batch of selected face-backed
-  boundary or interior edges at a factor in (0,1), preserving per-corner UVs
-  and hard/seam metadata;
+- bounded split of one selected face-backed boundary or interior edge, a
+  pairwise-disjoint batch, or a contiguous same-face boundary-edge chain at a
+  factor in (0,1), preserving per-corner UVs and hard/seam metadata;
 - bounded midpoint split of one selected standalone loose edge, preserving
   endpoint metadata and selecting the two replacement edges;
 - bounded vertex and edge extrusion paths described below.
@@ -589,9 +589,11 @@ mesh.
 
 The Sandbox Edge-mode operator exposes the same operation through Preview,
 Apply, Cancel, and undo/redo. Preview leaves the committed source unchanged;
-Apply selects the two replacement edges for each split. Batch selection is
-limited to edges with disjoint endpoints and disjoint incident faces; shared,
-cyclic, or otherwise ambiguous selections are rejected.
+Apply selects the two replacement edges for each split. A selected contiguous
+boundary chain may share endpoints when all edges belong to one source face;
+otherwise batch selection remains limited to edges with disjoint endpoints and
+disjoint incident faces. Mixed-face, branched, cyclic, disconnected, or
+otherwise ambiguous selections are rejected.
 
 ### Sandbox loose-component session
 
