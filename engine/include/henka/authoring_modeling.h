@@ -644,6 +644,20 @@ henka_result henka_authoring_mesh_fill_boundary_loop(
     size_t edge_count,
     henka_authoring_face_id* out_face_id,
     henka_authoring_modeling_report* out_report);
+/* Fills a bounded selection of independent closed boundary edge loops in one
+ * candidate-first transaction. Each selected edge must be a unique boundary
+ * edge; components must be simple closed loops of at least three edges and
+ * may not share vertices. Material, smoothing, and per-corner UV metadata are
+ * inherited by each new face. Ambiguous, mixed, branched, or capacity-invalid
+ * selections fail without changing the source mesh. */
+henka_result henka_authoring_mesh_fill_boundary_loops(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_authoring_face_id* out_face_ids,
+    size_t out_face_capacity,
+    size_t* out_face_count,
+    henka_authoring_modeling_report* out_report);
 
 /* Deletes one selected edge and its incident face set, preserving vertices.
  * The operation rejects requests that would leave an empty or invalid source

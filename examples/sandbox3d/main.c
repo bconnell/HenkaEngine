@@ -30969,14 +30969,14 @@ details_group_authoring:
                         sandbox3d_set_status(
                             state,
                             false,
-                            "Selected boundary loop filled with one face.");
+                            "Selected boundary loop set filled with new faces.");
                     }
                     else
                     {
                         sandbox3d_set_status(
                             state,
                             true,
-                            "Boundary fill rejected; select one closed boundary loop.");
+                            "Boundary fill rejected; select independent closed boundary loops.");
                     }
                 }
                 if (sandbox3d_details_flow_next_row(

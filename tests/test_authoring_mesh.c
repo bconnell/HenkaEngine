@@ -7702,6 +7702,114 @@ cleanup:
     return result ? 1 : fail("transactional boundary loop fill");
 }
 
+static int test_boundary_loop_batch_fill_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_edge_id hole_edges[8] = {0};
+    henka_authoring_edge_id duplicate_edges[8] = {0};
+    henka_authoring_face_id filled_faces[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id rejected_faces[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id capacity_face[1] = {HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts rejected;
+    const henka_authoring_face* first_hole;
+    const henka_authoring_face* second_hole;
+    size_t corner;
+    size_t filled_count = 0U;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_box(&desc, 2.0f, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    first_hole = henka_authoring_mesh_get_face(mesh, 1U);
+    second_hole = henka_authoring_mesh_get_face(mesh, 2U);
+    if (first_hole == NULL || second_hole == NULL ||
+        first_hole->corner_count != 4U || second_hole->corner_count != 4U)
+    {
+        goto cleanup;
+    }
+    for (corner = 0U; corner < 4U; ++corner)
+    {
+        hole_edges[corner] = first_hole->edges[corner];
+        hole_edges[corner + 4U] = second_hole->edges[corner];
+    }
+    if (henka_authoring_mesh_remove_face(mesh, first_hole->id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_remove_face(mesh, second_hole->id) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    memcpy(duplicate_edges, hole_edges, sizeof(hole_edges));
+    duplicate_edges[7] = duplicate_edges[0];
+    {
+        const henka_result duplicate_result = henka_authoring_mesh_fill_boundary_loops(
+            mesh, duplicate_edges, 8U, rejected_faces, 2U, &filled_count, &report);
+        if (duplicate_result != HENKA_ERROR_INVALID_ARGUMENT || filled_count != 0U ||
+            report.changed || rejected_faces[0] != HENKA_AUTHORING_INVALID_ID ||
+            rejected_faces[1] != HENKA_AUTHORING_INVALID_ID)
+        {
+            goto cleanup;
+        }
+    }
+    rejected = henka_authoring_mesh_get_counts(mesh);
+    if (memcmp(&before, &rejected, sizeof(before)) != 0)
+    {
+        goto cleanup;
+    }
+    filled_count = 0U;
+    report = (henka_authoring_modeling_report){0};
+    {
+        const henka_result capacity_result = henka_authoring_mesh_fill_boundary_loops(
+            mesh, hole_edges, 8U, capacity_face, 1U, &filled_count, &report);
+        if (capacity_result != HENKA_ERROR_LIMIT || filled_count != 0U || report.changed ||
+            capacity_face[0] != HENKA_AUTHORING_INVALID_ID)
+        {
+            goto cleanup;
+        }
+    }
+    filled_count = 0U;
+    report = (henka_authoring_modeling_report){0};
+    {
+        const henka_result success_result = henka_authoring_mesh_fill_boundary_loops(
+            mesh, hole_edges, 8U, filled_faces, 2U, &filled_count, &report);
+        if (success_result != HENKA_SUCCESS || filled_count != 2U || !report.changed ||
+            report.created_faces != 2U || report.created_edges != 0U ||
+            filled_faces[0] == HENKA_AUTHORING_INVALID_ID ||
+            filled_faces[1] == HENKA_AUTHORING_INVALID_ID ||
+            filled_faces[0] == filled_faces[1])
+        {
+            goto cleanup;
+        }
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices || after.edges != before.edges ||
+        after.faces != before.faces + 2U || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (corner = 0U; corner < 8U; ++corner)
+    {
+        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+            mesh, hole_edges[corner]);
+        if (edge == NULL || edge->face_count != 2U)
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional boundary loop batch fill");
+}
+
 static int test_logical_identity_reuse_and_history(void)
 {
     henka_authoring_mesh* mesh = NULL;
@@ -9363,6 +9471,7 @@ int main(void)
         test_boundary_edge_chain_bridge_operation() &&
         test_closed_boundary_loop_bridge_operation() &&
         test_boundary_loop_fill_operation() &&
+        test_boundary_loop_batch_fill_operation() &&
         test_logical_identity_reuse_and_history() &&
         test_save_propagates_parent_directory_errors() &&
         test_persistence_versions_and_malformed() &&

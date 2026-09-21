@@ -537,6 +537,18 @@ exposes the operation through the Edge-mode
 Preview/Apply/Cancel path and the authoritative source/render/history
 transaction, with Undo and Redo for the applied edit.
 
+### Boundary Loop Fill
+
+Edge mode can fill one or more independent selected closed boundary edge loops
+in one candidate-first transaction. Each selected edge must be a unique
+face-backed boundary edge. The selected edges are partitioned into simple
+closed cycles; shared-vertex, branched, mixed, duplicate, invalid, and
+capacity-insufficient selections fail without publishing a partial result.
+New faces inherit the source boundary metadata, and the Sandbox operator
+selects all newly filled faces after Apply. Preview, Cancel, Apply, Undo, and
+Redo use the shared authoring-object source/render/bounds/physics/history
+boundary.
+
 ## Loop Cut and Edge Slide
 
 ### Single-quad Loop Cut

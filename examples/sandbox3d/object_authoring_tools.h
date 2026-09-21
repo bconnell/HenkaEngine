@@ -352,8 +352,8 @@ henka_result sandbox3d_authoring_object_build_selected_boundary_bridge_candidate
     henka_authoring_mesh** out_candidate,
     henka_authoring_face_id* out_bridge_face_id,
     henka_authoring_modeling_report* out_report);
-/* Fills one selected closed boundary edge loop through the authoritative
- * source/render/bounds/physics/undo transaction. */
+/* Fills one or more independent selected closed boundary edge loops through
+ * the authoritative source/render/bounds/physics/undo transaction. */
 henka_result sandbox3d_authoring_object_fill_selected_boundary_loop(
     sandbox3d_authoring_object* object);
 /* Deletes one selected face-backed edge, or a bounded pairwise-disjoint set of

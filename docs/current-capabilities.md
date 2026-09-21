@@ -582,7 +582,7 @@ Available operations also include:
   face selection;
 - transactional deletion of a bounded selected-face set while preserving one
   renderable face;
-- transactional closed boundary-loop fill;
+- transactional fill for one or more independent closed boundary loops;
 - bounded single-quad face Loop Cut;
 - bounded vertex-disjoint batch Loop Cut for isolated quad-face selections;
 - bounded uniformly spaced multi-cut across compatible open quad strips and

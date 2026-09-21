@@ -5228,7 +5228,8 @@ henka_result sandbox3d_authoring_object_fill_selected_boundary_loop(
     const uint32_t* selected_ids;
     size_t selected_count = 0U;
     henka_authoring_mesh* candidate = NULL;
-    henka_authoring_face_id filled_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id* filled_face_ids = NULL;
+    size_t filled_face_count = 0U;
     henka_authoring_modeling_report report = {0};
     henka_result result;
 
@@ -5241,25 +5242,51 @@ henka_result sandbox3d_authoring_object_fill_selected_boundary_loop(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (selected_count > SIZE_MAX / sizeof(*filled_face_ids))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    filled_face_ids = henka_malloc(selected_count * sizeof(*filled_face_ids));
+    if (filled_face_ids == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_authoring_mesh_fill_boundary_loop(
+        result = henka_authoring_mesh_fill_boundary_loops(
             candidate,
             (const henka_authoring_edge_id*)selected_ids,
             selected_count,
-            &filled_face_id,
+            filled_face_ids,
+            selected_count,
+            &filled_face_count,
             &report);
     }
     if (result == HENKA_SUCCESS)
     {
         result = sandbox3d_authoring_publish_candidate(
-            object, candidate, true, filled_face_id);
+            object, candidate, true, filled_face_ids[0U]);
+        if (result == HENKA_SUCCESS)
+        {
+            candidate = NULL;
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        sandbox3d_authoring_object_set_selection_mode(
+            object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+        result = sandbox3d_authoring_object_replace_component_selection(
+            object,
+            (const uint32_t*)filled_face_ids,
+            filled_face_count,
+            filled_face_ids[0U]);
     }
     if (result != HENKA_SUCCESS)
     {
         henka_authoring_mesh_destroy(candidate);
     }
+    henka_free(filled_face_ids);
     return result;
 }
 
