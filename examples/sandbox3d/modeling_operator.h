@@ -42,8 +42,8 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally triangulates one or a bounded vertex-disjoint selected
      * planar face selection through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_TRIANGULATE,
-    /* Transactionally insets one selected face through the shared
-     * Preview/Cancel/Apply session. */
+    /* Transactionally insets one or a bounded vertex-disjoint face selection
+     * through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_INSET,
     /* Transactionally moves one or a bounded vertex-disjoint face selection
      * along evaluated normals through the shared Preview/Cancel/Apply session. */
@@ -159,6 +159,8 @@ typedef struct sandbox3d_modeling_operator_session
     henka_authoring_edge_id* split_second_edges;
     size_t split_result_count;
     bool split_configured;
+    henka_authoring_face_id* inset_result_faces;
+    size_t inset_result_count;
     uint32_t created_component_id;
     bool numeric_active;
     char numeric_text[SANDBOX3D_MODELING_OPERATOR_NUMERIC_CAPACITY];

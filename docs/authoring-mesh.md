@@ -98,7 +98,7 @@ Current operations include:
 - deterministic planar face triangulation for one or a bounded vertex-disjoint
   face selection;
 - face extrude;
-- inset;
+- bounded vertex-disjoint face inset;
 - planar bevel ring;
 - face subdivision;
 - transactional deletion of one or more selected faces while preserving at
@@ -153,6 +153,11 @@ additional triangles. The operation preserves material regions, smoothing,
 and per-corner UVs. The batch form accepts only vertex-disjoint planar faces;
 duplicate, shared-vertex, non-planar, invalid, and capacity-invalid selections
 fail without changing the committed source.
+
+Face inset supports one or a bounded vertex-disjoint selection. Each selected
+face produces a deterministic inner face and surrounding ring on one candidate
+mesh. Shared-vertex, duplicate, invalid, and capacity-invalid selections fail
+without changing the committed topology or selection state.
 
 ## UV operations
 

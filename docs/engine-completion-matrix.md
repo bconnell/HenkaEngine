@@ -87,6 +87,10 @@ The Sandbox triangulation operator supports one or a bounded vertex-disjoint
 planar face selection. Shared-vertex, duplicate, non-planar, invalid, and
 capacity-invalid selections fail during Preview without changing the live mesh.
 
+The Sandbox inset operator supports one or a bounded vertex-disjoint face
+selection. Shared-vertex selections fail during Preview without changing the
+live mesh.
+
 ## Renderer completion ledger
 
 This ledger makes the supported renderer boundary explicit without creating a

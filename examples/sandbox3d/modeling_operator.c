@@ -305,14 +305,17 @@ static void sandbox3d_modeling_operator_release(
     henka_free(session->split_vertex_ids);
     henka_free(session->split_first_edges);
     henka_free(session->split_second_edges);
+    henka_free(session->inset_result_faces);
     session->source_snapshot = NULL;
     session->selection_ids = NULL;
     session->split_vertex_ids = NULL;
     session->split_first_edges = NULL;
     session->split_second_edges = NULL;
+    session->inset_result_faces = NULL;
     session->selection_count = 0U;
     session->selection_capacity = 0U;
     session->split_result_count = 0U;
+    session->inset_result_count = 0U;
 }
 
 void sandbox3d_modeling_operator_reset(
@@ -471,7 +474,7 @@ henka_result sandbox3d_modeling_operator_begin(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (kind == SANDBOX3D_MODELING_OPERATOR_INSET &&
-        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count != 1U))
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count == 0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -630,6 +633,16 @@ henka_result sandbox3d_modeling_operator_begin(
         }
         result = sandbox3d_authoring_object_reserve_component_selection_capacity(
             object, selected_count * 2U);
+        if (result != HENKA_SUCCESS)
+        {
+            sandbox3d_modeling_operator_reset(session);
+            return result;
+        }
+    }
+    if (kind == SANDBOX3D_MODELING_OPERATOR_INSET)
+    {
+        result = sandbox3d_authoring_object_reserve_component_selection_capacity(
+            object, selected_count);
         if (result != HENKA_SUCCESS)
         {
             sandbox3d_modeling_operator_reset(session);
@@ -945,6 +958,7 @@ henka_result sandbox3d_modeling_operator_preview(
     henka_authoring_edge_id* split_first_edges = NULL;
     henka_authoring_edge_id* split_second_edges = NULL;
     henka_authoring_edge_id* boundary_chain_edges = NULL;
+    henka_authoring_face_id* inset_result_faces = NULL;
     henka_authoring_mesh_desc mesh_desc = {0};
     size_t affected_count = 0U;
     size_t merge_survivor_count = 0U;
@@ -1037,7 +1051,7 @@ henka_result sandbox3d_modeling_operator_preview(
              session->selection_count == 0U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_INSET &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
-             session->selection_count != 1U)) ||
+             session->selection_count == 0U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
              session->selection_count == 0U)) ||
@@ -1145,6 +1159,22 @@ henka_result sandbox3d_modeling_operator_preview(
         if (vertices == NULL)
         {
             return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+    }
+    if (session->kind == SANDBOX3D_MODELING_OPERATOR_INSET)
+    {
+        if (session->selection_count > SIZE_MAX / sizeof(*inset_result_faces))
+        {
+            result = HENKA_ERROR_LIMIT;
+        }
+        else
+        {
+            inset_result_faces = henka_malloc(
+                session->selection_count * sizeof(*inset_result_faces));
+            if (inset_result_faces == NULL)
+            {
+                result = HENKA_ERROR_OUT_OF_MEMORY;
+            }
         }
     }
     if (result == HENKA_SUCCESS && session->kind == SANDBOX3D_MODELING_OPERATOR_BEVEL &&
@@ -1421,12 +1451,15 @@ henka_result sandbox3d_modeling_operator_preview(
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_INSET)
     {
-        henka_authoring_face_id inset_face_id = HENKA_AUTHORING_INVALID_ID;
-        result = henka_authoring_mesh_inset_face(
+        result = henka_authoring_mesh_inset_faces(
             candidate,
-            (henka_authoring_face_id)session->selection_ids[0U],
+            (const henka_authoring_face_id*)session->selection_ids,
+            session->selection_count,
             applied_amount,
-            &inset_face_id);
+            inset_result_faces,
+            session->selection_count,
+            &session->inset_result_count,
+            &report);
     }
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL)
@@ -1984,6 +2017,7 @@ henka_result sandbox3d_modeling_operator_preview(
         henka_free(split_first_edges);
         henka_free(split_second_edges);
         henka_free(boundary_chain_edges);
+        henka_free(inset_result_faces);
         return result;
     }
     if (session->kind == SANDBOX3D_MODELING_OPERATOR_SPLIT_EDGE)
@@ -1999,6 +2033,12 @@ henka_result sandbox3d_modeling_operator_preview(
         split_first_edges = NULL;
         split_second_edges = NULL;
     }
+    if (session->kind == SANDBOX3D_MODELING_OPERATOR_INSET)
+    {
+        henka_free(session->inset_result_faces);
+        session->inset_result_faces = inset_result_faces;
+        inset_result_faces = NULL;
+    }
     session->amount = next_amount;
     ++session->preview_rebuild_count;
     session->state = SANDBOX3D_MODELING_OPERATOR_STATE_PREVIEW;
@@ -2009,6 +2049,7 @@ henka_result sandbox3d_modeling_operator_preview(
     henka_free(split_first_edges);
     henka_free(split_second_edges);
     henka_free(boundary_chain_edges);
+    henka_free(inset_result_faces);
     return HENKA_SUCCESS;
 }
 
@@ -2105,6 +2146,24 @@ henka_result sandbox3d_modeling_operator_commit(
         if (result != HENKA_SUCCESS)
         {
             henka_free(replacement_ids);
+            return result;
+        }
+    }
+    if (session->kind == SANDBOX3D_MODELING_OPERATOR_INSET)
+    {
+        if (session->inset_result_faces == NULL ||
+            session->inset_result_count != session->selection_count ||
+            session->inset_result_count == 0U)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = sandbox3d_authoring_object_replace_component_selection(
+            session->object,
+            (const uint32_t*)session->inset_result_faces,
+            session->inset_result_count,
+            session->inset_result_faces[0U]);
+        if (result != HENKA_SUCCESS)
+        {
             return result;
         }
     }
