@@ -600,6 +600,21 @@ The modeling session supports:
 
 The operation moves the loop toward deterministic adjacent sides while preserving topology and uses the shared source/render/bounds/collider/undo publication path.
 
+### Cylindrical UV unwrap
+
+The core authoring-mesh API and Sandbox Authoring panel provide a bounded
+cylindrical unwrap around the selected X, Y, or Z axis. The operation maps the
+angular coordinate to U, the axial coordinate to V, applies the requested
+unit-square padding, and marks the generated angular wrap boundary as a UV
+seam. It is intended for non-degenerate cylindrical side surfaces; input with
+no axial span or a vertex on the selected axis is rejected without changing
+the committed mesh.
+
+The operation is candidate-first and preserves topology, material regions,
+smoothing, and existing seam state outside the generated wrap boundary. The
+Sandbox routes it through Preview, Apply, Cancel, Undo, and Redo alongside the
+existing planar and island UV operations.
+
 ## Loose components
 
 The authoring representation supports explicit loose vertices and standalone wire edges with:
@@ -787,7 +802,8 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
   isolated multi-face and pairwise-disjoint quad-strip operations;
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;
-- broader automatic UV unwrap beyond the bounded planar-chart scope;
+- broader automatic UV unwrap beyond the bounded planar-chart and cylindrical
+  side-surface scope;
 - texture painting;
 - broader material authoring beyond current bounded material-instance editing;
 - full editor workflows for arbitrary authoring-file selection;

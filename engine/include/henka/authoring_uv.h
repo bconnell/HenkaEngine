@@ -53,6 +53,14 @@ henka_result henka_authoring_mesh_pack_uv_islands(
 henka_result henka_authoring_mesh_unwrap_planar_faces(
     henka_authoring_mesh* mesh,
     float padding);
+/* Unwraps the complete mesh with a bounded cylindrical chart around axis.
+ * The angular coordinate is normalized to U, the axial coordinate to V, and
+ * the generated wrap boundary is marked as a UV seam.  The candidate is
+ * published atomically; degenerate radial or axial input is rejected. */
+henka_result henka_authoring_mesh_unwrap_cylindrical_faces(
+    henka_authoring_mesh* mesh,
+    henka_authoring_uv_projection_axis axis,
+    float padding);
 bool henka_authoring_mesh_face_uvs_are_finite(
     const henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id);

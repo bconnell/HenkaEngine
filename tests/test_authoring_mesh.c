@@ -53,6 +53,10 @@ extern henka_result henka_authoring_mesh_split_loose_edges(
     henka_authoring_edge_id* out_first_edge_ids,
     henka_authoring_edge_id* out_second_edge_ids,
     henka_authoring_modeling_report* out_report);
+extern henka_result henka_authoring_mesh_unwrap_cylindrical_faces(
+    henka_authoring_mesh* mesh,
+    henka_authoring_uv_projection_axis axis,
+    float padding);
 static int fail(const char* message)
 {
     fprintf(stderr, "authoring mesh test failed: %s\n", message);
@@ -4433,6 +4437,132 @@ cleanup:
     return result ? 1 : fail("planar UV unwrap");
 }
 
+static int test_uv_cylindrical_unwrap(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 8U};
+    const henka_vec3 positions[8] = {
+        {1.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f},
+        {-1.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, -1.0f},
+        {1.0f, 2.0f, 0.0f},
+        {0.0f, 2.0f, 1.0f},
+        {-1.0f, 2.0f, 0.0f},
+        {0.0f, 2.0f, -1.0f}};
+    const henka_authoring_vertex_id faces[4][4] = {
+        {1U, 2U, 6U, 5U},
+        {2U, 3U, 7U, 6U},
+        {3U, 4U, 8U, 7U},
+        {4U, 1U, 5U, 8U}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* repeat = NULL;
+    henka_authoring_mesh* flat = NULL;
+    henka_authoring_face_id face_ids[4] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id vertex_id = HENKA_AUTHORING_INVALID_ID;
+    henka_vec2 before_invalid;
+    henka_vec2 after_invalid;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){4.0f, -2.0f}, 0U,
+                &vertex_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        if (henka_authoring_mesh_add_face(
+                mesh, faces[index], 4U, 0U, true, &face_ids[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_clone(mesh, &repeat) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_unwrap_cylindrical_faces(
+            mesh, HENKA_AUTHORING_UV_PROJECT_Y, 0.1f) != HENKA_SUCCESS ||
+        henka_authoring_mesh_unwrap_cylindrical_faces(
+            repeat, HENKA_AUTHORING_UV_PROJECT_Y, 0.1f) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh) ||
+        !henka_authoring_mesh_validate(repeat))
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        size_t corner;
+        for (corner = 0U; corner < 4U; ++corner)
+        {
+            henka_vec2 actual;
+            henka_vec2 expected;
+            if (henka_authoring_mesh_get_face_corner_uv(
+                    mesh, face_ids[index], corner, &actual) != HENKA_SUCCESS ||
+                henka_authoring_mesh_get_face_corner_uv(
+                    repeat, face_ids[index], corner, &expected) != HENKA_SUCCESS ||
+                actual.x < 0.099f || actual.x > 0.901f ||
+                actual.y < 0.099f || actual.y > 0.901f ||
+                fabsf(actual.x - expected.x) > 0.0001f ||
+                fabsf(actual.y - expected.y) > 0.0001f)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    if (henka_authoring_mesh_get_face(mesh, face_ids[2]) == NULL ||
+        !henka_authoring_mesh_edge_is_seam(
+            mesh, henka_authoring_mesh_get_face(mesh, face_ids[2])->edges[0U]))
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_create(&desc, &flat) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            flat, (henka_vec3){-1.0f, 0.0f, -1.0f},
+            (henka_vec2){3.0f, 3.0f}, 0U, &vertex_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            flat, (henka_vec3){1.0f, 0.0f, -1.0f},
+            (henka_vec2){3.0f, 3.0f}, 0U, &vertex_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            flat, (henka_vec3){1.0f, 0.0f, 1.0f},
+            (henka_vec2){3.0f, 3.0f}, 0U, &vertex_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            flat, (henka_vec3){-1.0f, 0.0f, 1.0f},
+            (henka_vec2){3.0f, 3.0f}, 0U, &vertex_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            flat, (henka_authoring_vertex_id[]){1U, 2U, 3U, 4U}, 4U, 0U, true,
+            &(henka_authoring_face_id){0U}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_corner_uv(flat, 1U, 0U, &before_invalid) !=
+            HENKA_SUCCESS ||
+        henka_authoring_mesh_unwrap_cylindrical_faces(
+            flat, HENKA_AUTHORING_UV_PROJECT_Y, 0.1f) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_authoring_mesh_get_face_corner_uv(flat, 1U, 0U, &after_invalid) !=
+            HENKA_SUCCESS ||
+        fabsf(before_invalid.x - after_invalid.x) > 0.0001f ||
+        fabsf(before_invalid.y - after_invalid.y) > 0.0001f ||
+        !henka_authoring_mesh_validate(flat))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(flat);
+    henka_authoring_mesh_destroy(repeat);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("cylindrical UV unwrap");
+}
+
 static int test_modeling_material_region_and_uv_continuity(void)
 {
     const char* path = "authoring_material_regions.hams";
@@ -8756,6 +8886,7 @@ int main(void)
         test_uv_authoring() &&
         test_uv_global_packing() &&
         test_uv_planar_unwrap() &&
+        test_uv_cylindrical_unwrap() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&

@@ -101,6 +101,9 @@ typedef enum sandbox3d_modeling_operator_kind
     SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL,
     /* Transactional dominant-axis unwrap of connected planar UV islands. */
     SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR,
+    /* Transactional cylindrical unwrap of the selected mesh around the
+     * configured operator axis. */
+    SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL,
     /* Transactionally toggles the explicit seam state of selected edges. */
     SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE
 } sandbox3d_modeling_operator_kind;

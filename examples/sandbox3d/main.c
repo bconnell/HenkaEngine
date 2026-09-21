@@ -1944,7 +1944,8 @@ static bool sandbox3d_modeling_operator_is_uv(
         kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM ||
         kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK ||
         kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL ||
-        kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR;
+        kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR ||
+        kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL;
 }
 
 static henka_result sandbox3d_apply_authoring_seam_toggle(
@@ -2007,7 +2008,9 @@ static henka_result sandbox3d_preview_authoring_uv(
         &state->modeling_operator,
         state->authoring_object,
         kind);
-    if (result == HENKA_SUCCESS && kind == SANDBOX3D_MODELING_OPERATOR_UV_PROJECT)
+    if (result == HENKA_SUCCESS &&
+        (kind == SANDBOX3D_MODELING_OPERATOR_UV_PROJECT ||
+         kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL))
     {
         result = sandbox3d_modeling_operator_set_axis(
             &state->modeling_operator,
@@ -2020,7 +2023,8 @@ static henka_result sandbox3d_preview_authoring_uv(
             (kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK ||
              kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK ||
              kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL ||
-             kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR) ? padding :
+             kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR ||
+             kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL) ? padding :
                 (kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ||
                  kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM) ? 0.5f : 0.0f,
             false,
@@ -32843,6 +32847,50 @@ details_group_authoring:
                         0.02f) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Planar UV unwrap preview ready; Apply or Cancel.");
+                }
+                if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                    row.width >= 290.0f)
+                {
+                    const float cylindrical_button_width = 94.0f;
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_unwrap_uv_cylindrical_x",
+                            (henka_ui_rect){row.x, row.y, cylindrical_button_width, 24.0f},
+                            "Cylindrical X") &&
+                        sandbox3d_preview_authoring_uv(
+                            state,
+                            SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL,
+                            SANDBOX3D_MODELING_OPERATOR_AXIS_X,
+                            0.02f) == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(state, false, "Cylindrical X UV unwrap preview ready; Apply or Cancel.");
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_unwrap_uv_cylindrical_y",
+                            (henka_ui_rect){row.x + 98.0f, row.y, cylindrical_button_width, 24.0f},
+                            "Cylindrical Y") &&
+                        sandbox3d_preview_authoring_uv(
+                            state,
+                            SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL,
+                            SANDBOX3D_MODELING_OPERATOR_AXIS_Y,
+                            0.02f) == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(state, false, "Cylindrical Y UV unwrap preview ready; Apply or Cancel.");
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_unwrap_uv_cylindrical_z",
+                            (henka_ui_rect){row.x + 196.0f, row.y, cylindrical_button_width, 24.0f},
+                            "Cylindrical Z") &&
+                        sandbox3d_preview_authoring_uv(
+                            state,
+                            SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL,
+                            SANDBOX3D_MODELING_OPERATOR_AXIS_Z,
+                            0.02f) == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(state, false, "Cylindrical Z UV unwrap preview ready; Apply or Cancel.");
+                    }
                 }
                 if (uv_preview_active &&
                     sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
