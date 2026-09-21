@@ -1443,6 +1443,79 @@ static int test_face_flip_operation(void)
     return result;
 }
 
+static int test_face_flip_batch_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* baseline = NULL;
+    henka_authoring_face_id face_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_face before_faces[2];
+    const henka_authoring_face* after_face;
+    size_t corner;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_box(&desc, 2.0f, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_id_at(mesh, 0U, &face_ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_id_at(mesh, 3U, &face_ids[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_clone(mesh, &baseline) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before_faces[0] = *henka_authoring_mesh_get_face(baseline, face_ids[0]);
+    before_faces[1] = *henka_authoring_mesh_get_face(baseline, face_ids[1]);
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_flip_faces(mesh, face_ids, 2U, &report) != HENKA_SUCCESS ||
+        !report.changed || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (memcmp(&before, &after, sizeof(before)) != 0)
+    {
+        goto cleanup;
+    }
+    for (size_t selected = 0U; selected < 2U; ++selected)
+    {
+        after_face = henka_authoring_mesh_get_face(mesh, face_ids[selected]);
+        if (after_face == NULL || after_face->corner_count != before_faces[selected].corner_count)
+        {
+            goto cleanup;
+        }
+        for (corner = 0U; corner < after_face->corner_count; ++corner)
+        {
+            const size_t source_corner = corner == 0U
+                ? 0U : after_face->corner_count - corner;
+            if (after_face->vertices[corner] != before_faces[selected].vertices[source_corner] ||
+                after_face->uvs[corner].x != before_faces[selected].uvs[source_corner].x ||
+                after_face->uvs[corner].y != before_faces[selected].uvs[source_corner].y ||
+                after_face->material_region != before_faces[selected].material_region ||
+                after_face->smooth != before_faces[selected].smooth)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_flip_faces(
+            baseline, (const henka_authoring_face_id[]){face_ids[0], face_ids[0]},
+            2U, &report) != HENKA_ERROR_INVALID_ARGUMENT || report.changed ||
+        memcmp(&before_faces[0], henka_authoring_mesh_get_face(baseline, face_ids[0]),
+            sizeof(before_faces[0])) != 0 || !henka_authoring_mesh_validate(baseline))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(baseline);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional face flip batch");
+}
+
 static int test_vertex_merge_operations(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
@@ -8196,6 +8269,7 @@ int main(void)
         test_history_create_output_fail_closed() &&
         test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
+        test_face_flip_batch_operation() &&
         test_face_region_extrude_operation() && test_triangulate_face_operation() &&
         test_vertex_merge_operations() &&
         test_vertex_merge_input_limits() &&

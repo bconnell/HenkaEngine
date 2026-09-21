@@ -561,7 +561,7 @@ Available operations also include:
 
 - plane/box creation;
 - duplicate;
-- face winding flip;
+- face winding flip for one or a bounded unique face selection;
 - face extrude;
 - selected face-region extrusion with shared translated caps and transactional
   source-preserving behavior for isolated regions;
@@ -572,7 +572,8 @@ Available operations also include:
 - planar bevel rings;
 - face subdivision;
 - deterministic planar face triangulation;
-- selected-face deletion;
+- transactional deletion of a bounded selected-face set while preserving one
+  renderable face;
 - transactional closed boundary-loop fill;
 - bounded single-quad face Loop Cut;
 - bounded uniformly spaced multi-cut across compatible open quad strips and

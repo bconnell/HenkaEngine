@@ -77,6 +77,14 @@ henka_result henka_authoring_mesh_duplicate_face(
 henka_result henka_authoring_mesh_flip_face(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id);
+/* Reverses a bounded unique selection of face windings while preserving face,
+ * vertex, material, smoothing, and per-corner UV metadata. Invalid or
+ * duplicate selections fail without changing the source mesh. */
+henka_result henka_authoring_mesh_flip_faces(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_face_id* face_ids,
+    size_t face_count,
+    henka_authoring_modeling_report* out_report);
 henka_result henka_authoring_mesh_extrude_face(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,

@@ -757,6 +757,7 @@ static void henka_test_sandbox3d_modeling_operator_flip_face(void)
     sandbox3d_authoring_object* object = NULL;
     sandbox3d_modeling_operator_session session = {0};
     henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id second_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_vertex_id before_vertices[4];
     henka_authoring_edge_id before_edges[4];
     henka_vec2 before_uvs[4];
@@ -773,10 +774,12 @@ static void henka_test_sandbox3d_modeling_operator_flip_face(void)
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     entity = henka_scene_create_entity_named(scene, "Flip Face Operator");
     HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
-    HENKA_TEST_ASSERT(henka_authoring_mesh_create_plane(
-        &desc, 2.0f, 2.0f, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create_box(
+        &desc, 2.0f, 2.0f, 2.0f, &source) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_id_at(
         source, 0U, &face_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_id_at(
+        source, 3U, &second_face_id) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
         engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
     henka_authoring_mesh_destroy(source);
@@ -836,6 +839,21 @@ static void henka_test_sandbox3d_modeling_operator_flip_face(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
         sandbox3d_authoring_object_get_mesh(object)));
+
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_clear_component_selection(object);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, face_id, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, second_face_id, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_FLIP_FACE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.0f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
 
     sandbox3d_modeling_operator_reset(&session);
     henka_test_destroy_authoring_object(scene, entity, object);

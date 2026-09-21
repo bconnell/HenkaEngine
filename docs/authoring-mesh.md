@@ -93,7 +93,7 @@ Current operations include:
 - plane creation;
 - box creation;
 - duplicate;
-- face winding flip;
+- face winding flip for one or a bounded unique face selection;
 - face extrude;
 - inset;
 - planar bevel ring;
@@ -128,9 +128,9 @@ complete candidate before publication, and preserves the source on invalid,
 capacity-invalid, or failed requests. The shared Sandbox modeling session
 routes the same transaction through Preview, Apply, Cancel, undo, and redo.
 
-The shared Sandbox modeling session also routes one selected face through the
-same preview, Apply, Cancel, and undo boundary as the vertex and edge
-extrusion paths.
+The shared Sandbox modeling session routes one or a bounded unique face
+selection through the same preview, Apply, Cancel, undo, and redo boundary as
+the vertex and edge extrusion paths.
 
 Face flip preserves:
 
@@ -141,7 +141,8 @@ Face flip preserves:
 - smoothing metadata;
 - per-corner UV correspondence.
 
-The operation reverses only the ordered winding.
+The operation reverses only the ordered winding. Invalid or duplicate face
+selections leave the committed source unchanged.
 
 ## UV operations
 
