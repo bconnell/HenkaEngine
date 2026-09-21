@@ -505,7 +505,14 @@ candidate through Preview, Apply, Cancel, and the existing undo/redo history.
 It creates quad faces only and preserves the source material, smoothing, and
 per-corner UV state.
 
-Branching or ambiguous loop-cut networks and generalized split workflows beyond
+The core API and Sandbox authoring path also support a bounded batch of
+pairwise-disjoint compatible quad strips. Multi-face selection supplies one
+deterministic strip start per selected quad, and the complete batch remains
+candidate-first: overlapping strips or unsupported selections fail without
+publishing partial topology. Preview, Apply, Cancel, Undo, and Redo use the
+same transaction boundary as the single-strip workflow.
+
+Branching, overlapping, or ambiguous loop-cut networks and generalized split workflows beyond
 the bounded face-backed boundary/interior batch and standalone loose-edge
 operations remain unfinished.
 

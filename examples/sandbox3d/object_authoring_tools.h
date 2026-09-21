@@ -530,6 +530,13 @@ henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_quad_strip_multi(
     sandbox3d_authoring_object* object,
     size_t cut_count);
+/* Applies uniformly spaced cuts to a bounded pairwise-disjoint selection of
+ * compatible quad strips. Each selected face supplies one deterministic strip
+ * start; the candidate remains in Preview until the shared preview
+ * commit/cancel path publishes or discards it. */
+henka_result sandbox3d_authoring_object_preview_loop_cut_selected_quad_strips_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
     sandbox3d_authoring_object* object,
     float factor);
@@ -537,6 +544,9 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face_multi(
     sandbox3d_authoring_object* object,
     size_t cut_count);
 henka_result sandbox3d_authoring_object_loop_cut_selected_quad_strip_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count);
+henka_result sandbox3d_authoring_object_loop_cut_selected_quad_strips_multi(
     sandbox3d_authoring_object* object,
     size_t cut_count);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face(

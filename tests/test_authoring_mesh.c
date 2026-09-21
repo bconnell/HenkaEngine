@@ -7361,6 +7361,96 @@ cleanup:
     return result ? 1 : fail("disjoint face edge batch split");
 }
 
+static int test_disjoint_quad_strip_loop_cut_batch_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 64U, 32U, 16U};
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {2.0f, 2.0f, 0.0f}, {0.0f, 2.0f, 0.0f},
+        {4.0f, 0.0f, 0.0f}, {6.0f, 0.0f, 0.0f},
+        {6.0f, 2.0f, 0.0f}, {4.0f, 2.0f, 0.0f}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[8];
+    henka_authoring_face_id faces[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id start_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id last_faces[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id primary_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    bool closed[2] = {true, true};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts rejected;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        return fail("quad strip batch setup");
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){0.0f, 0.0f}, 3U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, (henka_authoring_vertex_id[]){vertices[0], vertices[1], vertices[2], vertices[3]},
+            4U, 5U, true, &faces[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            mesh, (henka_authoring_vertex_id[]){vertices[4], vertices[5], vertices[6], vertices[7]},
+            4U, 6U, true, &faces[1]) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    start_edges[0] = henka_authoring_mesh_get_face(mesh, faces[0])->edges[0];
+    start_edges[1] = henka_authoring_mesh_get_face(mesh, faces[1])->edges[0];
+    before = henka_authoring_mesh_get_counts(mesh);
+    {
+        const henka_result batch_result = henka_authoring_mesh_loop_cut_quad_strips_multi(
+            mesh, start_edges, 2U, 2U, last_faces, primary_edges, closed,
+            &report);
+        if (batch_result != HENKA_SUCCESS || !report.changed ||
+        report.created_vertices != 8U || report.created_faces != 4U ||
+        closed[0] || closed[1] || last_faces[0] == HENKA_AUTHORING_INVALID_ID ||
+        last_faces[1] == HENKA_AUTHORING_INVALID_ID ||
+        primary_edges[0] == HENKA_AUTHORING_INVALID_ID ||
+        primary_edges[1] == HENKA_AUTHORING_INVALID_ID)
+        {
+            goto cleanup;
+        }
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices + 8U ||
+        after.faces != before.faces + 4U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    before = after;
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_loop_cut_quad_strips_multi(
+            mesh, (henka_authoring_edge_id[]){start_edges[0], start_edges[0]},
+            2U, 2U, last_faces, primary_edges, closed, &report) !=
+            HENKA_ERROR_INVALID_ARGUMENT || report.changed ||
+        (rejected = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &rejected, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("disjoint quad strip batch");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_extreme_bounds_remain_finite() &&
@@ -7411,6 +7501,7 @@ int main(void)
         test_face_edge_split_operation() &&
         test_interior_edge_split_operation() &&
         test_disjoint_face_edge_batch_split_operation() &&
+        test_disjoint_quad_strip_loop_cut_batch_operation() &&
         test_boundary_edge_extrude_operation() &&
         test_interior_edge_extrude_operation() &&
         test_connected_interior_edge_extrude_operation() &&

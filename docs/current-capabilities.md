@@ -777,6 +777,9 @@ Available operations include:
 - one factor-controlled quad-strip Loop Cut across a compatible open strip or closed ring;
 - uniformly spaced multi-cut across a compatible open quad strip or closed ring,
   with selected-face Sandbox Preview/Apply/Cancel and undo/redo routing;
+- a bounded pairwise-disjoint batch of uniformly spaced compatible quad strips,
+  with multi-face selection and transactional Preview/Apply/Cancel plus
+  undo/redo routing;
 - bounded signed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle selection.
 
 For Loop Cut, the editor validates a user-entered factor in the open interval `(0, 1)`, supports Preview/Refresh plus Apply and Cancel, and commits the candidate through the transactional engine boundary.
