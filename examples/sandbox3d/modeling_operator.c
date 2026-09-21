@@ -640,7 +640,7 @@ henka_result sandbox3d_modeling_operator_begin(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (kind == SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE &&
-        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX || selected_count != 1U))
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX || selected_count == 0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1096,6 +1096,7 @@ henka_result sandbox3d_modeling_operator_preview(
     henka_authoring_face_id* extrude_result_faces = NULL;
     henka_authoring_face_id* bevel_result_faces = NULL;
     henka_authoring_vertex_id* subdivide_result_vertices = NULL;
+    henka_authoring_face_id* rip_face_ids = NULL;
     henka_authoring_mesh_desc mesh_desc = {0};
     size_t affected_count = 0U;
     size_t merge_survivor_count = 0U;
@@ -1218,7 +1219,7 @@ henka_result sandbox3d_modeling_operator_preview(
              session->selection_count == 0U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
-             session->selection_count != 1U)) ||
+             session->selection_count == 0U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_CENTER &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
              session->selection_count < 2U)) ||
@@ -1370,7 +1371,8 @@ henka_result sandbox3d_modeling_operator_preview(
         }
     }
     if (result == HENKA_SUCCESS &&
-        session->kind == SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE)
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE ||
+         session->kind == SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE))
     {
         if (session->selection_count > SIZE_MAX / sizeof(*subdivide_result_vertices))
         {
@@ -1384,6 +1386,30 @@ henka_result sandbox3d_modeling_operator_preview(
             {
                 result = HENKA_ERROR_OUT_OF_MEMORY;
             }
+        }
+    }
+    if (result == HENKA_SUCCESS &&
+        session->kind == SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE)
+    {
+        if (session->selection_count > SIZE_MAX / sizeof(*rip_face_ids))
+        {
+            result = HENKA_ERROR_LIMIT;
+        }
+        else
+        {
+            rip_face_ids = henka_malloc(
+                session->selection_count * sizeof(*rip_face_ids));
+            if (rip_face_ids == NULL)
+            {
+                result = HENKA_ERROR_OUT_OF_MEMORY;
+            }
+        }
+        for (index = 0U; result == HENKA_SUCCESS && index < session->selection_count; ++index)
+        {
+            result = sandbox3d_modeling_operator_find_first_incident_face(
+                session->source_snapshot,
+                (henka_authoring_vertex_id)session->selection_ids[index],
+                &rip_face_ids[index]);
         }
     }
     if (result == HENKA_SUCCESS && session->kind == SANDBOX3D_MODELING_OPERATOR_BEVEL &&
@@ -1584,21 +1610,20 @@ henka_result sandbox3d_modeling_operator_preview(
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE)
     {
-        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
-        henka_authoring_vertex_id created_id = HENKA_AUTHORING_INVALID_ID;
-        result = sandbox3d_modeling_operator_find_first_incident_face(
-            session->source_snapshot,
-            (henka_authoring_vertex_id)session->selection_ids[0U],
-            &face_id);
+        size_t rip_result_count = 0U;
+        result = henka_authoring_mesh_rip_vertex_faces(
+            candidate,
+            (const henka_authoring_vertex_id*)session->selection_ids,
+            rip_face_ids,
+            session->selection_count,
+            subdivide_result_vertices,
+            session->selection_count,
+            &rip_result_count,
+            &report);
         if (result == HENKA_SUCCESS)
         {
-            result = henka_authoring_mesh_rip_vertex_face(
-                candidate,
-                (henka_authoring_vertex_id)session->selection_ids[0U],
-                face_id,
-                &created_id,
-                &report);
-            session->created_component_id = (uint32_t)created_id;
+            session->subdivide_result_count = rip_result_count;
+            session->created_component_id = (uint32_t)subdivide_result_vertices[0U];
         }
     }
     if (result == HENKA_SUCCESS &&
@@ -2292,6 +2317,7 @@ henka_result sandbox3d_modeling_operator_preview(
         henka_free(extrude_result_faces);
         henka_free(bevel_result_faces);
         henka_free(subdivide_result_vertices);
+        henka_free(rip_face_ids);
         return result;
     }
     if (session->kind == SANDBOX3D_MODELING_OPERATOR_SPLIT_EDGE)
@@ -2378,9 +2404,16 @@ henka_result sandbox3d_modeling_operator_preview(
         henka_free(extrude_result_faces);
         henka_free(bevel_result_faces);
         henka_free(subdivide_result_vertices);
+        henka_free(rip_face_ids);
         return result;
     }
     if (session->kind == SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE)
+    {
+        henka_free(session->subdivide_result_vertices);
+        session->subdivide_result_vertices = subdivide_result_vertices;
+        subdivide_result_vertices = NULL;
+    }
+    if (session->kind == SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE)
     {
         henka_free(session->subdivide_result_vertices);
         session->subdivide_result_vertices = subdivide_result_vertices;
@@ -2414,6 +2447,7 @@ henka_result sandbox3d_modeling_operator_preview(
     henka_free(inset_result_faces);
     henka_free(extrude_result_faces);
     henka_free(bevel_result_faces);
+    henka_free(rip_face_ids);
     return HENKA_SUCCESS;
 }
 
@@ -2547,11 +2581,20 @@ henka_result sandbox3d_modeling_operator_commit(
     }
     if (session->kind == SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE)
     {
+        if (session->subdivide_result_vertices == NULL ||
+            session->subdivide_result_count != session->selection_count ||
+            session->subdivide_result_count == 0U)
+        {
+            henka_free(replacement_ids);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        sandbox3d_authoring_object_set_selection_mode(
+            session->object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
         result = sandbox3d_authoring_object_replace_component_selection(
             session->object,
-            &session->created_component_id,
-            1U,
-            session->created_component_id);
+            (const uint32_t*)session->subdivide_result_vertices,
+            session->subdivide_result_count,
+            session->subdivide_result_vertices[0U]);
         if (result != HENKA_SUCCESS)
         {
             henka_free(replacement_ids);

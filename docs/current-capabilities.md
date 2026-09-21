@@ -516,9 +516,10 @@ Published Vertex operations include:
   per-corner UVs, material regions, and smoothing metadata remain unchanged
 - Dissolve Vertex
 - Delete Vertex
-- bounded Rip Face for one selected surface vertex and its lowest logical-ID
-  incident face; the new duplicate is selected through the transactional
-  Preview/Cancel/Apply and undo/redo path
+- bounded Rip Face(s) for one or more pairwise-compatible selected surface
+  vertices and each vertex's lowest logical-ID incident face; all new
+  duplicates are selected through the transactional Preview/Cancel/Apply and
+  undo/redo path
 - Vertex Bevel
 - bounded Vertex Extrude for a connected open boundary vertex fan, including the one-face corner case
 - bounded compatible closed interior vertex-fan offset/cap replacement with per-face material and smoothing preservation; the original selected vertex remains a valid loose vertex

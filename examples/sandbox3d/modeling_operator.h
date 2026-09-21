@@ -69,9 +69,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally removes one or more selected vertices through the
      * shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_DELETE_VERTICES,
-    /* Transactionally duplicates one selected surface vertex and assigns the
-     * lowest logical incident face to the duplicate through the shared
-     * Preview/Cancel/Apply session. */
+    /* Transactionally duplicates one or more pairwise-compatible selected
+     * surface vertices and assigns the lowest logical incident face to each
+     * duplicate through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE,
     /* Transactionally merges selected vertices at their center through the
      * shared Preview/Cancel/Apply session. */

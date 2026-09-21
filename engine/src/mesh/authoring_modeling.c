@@ -1598,6 +1598,120 @@ henka_result henka_authoring_mesh_rip_vertex_face(
     return result;
 }
 
+henka_result henka_authoring_mesh_rip_vertex_faces(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    const henka_authoring_face_id* face_ids,
+    size_t pair_count,
+    henka_authoring_vertex_id* out_new_vertex_ids,
+    size_t out_vertex_capacity,
+    size_t* out_vertex_count,
+    henka_authoring_modeling_report* out_report)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_modeling_report pair_report = {0};
+    size_t index;
+    henka_result result;
+
+    if (out_vertex_count != NULL) *out_vertex_count = 0U;
+    modeling_report_reset(out_report);
+    if (mesh == NULL || vertex_ids == NULL || face_ids == NULL ||
+        out_new_vertex_ids == NULL || out_vertex_count == NULL || pair_count == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (out_vertex_capacity < pair_count)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (index = 0U; index < out_vertex_capacity; ++index)
+    {
+        out_new_vertex_ids[index] = HENKA_AUTHORING_INVALID_ID;
+    }
+    for (index = 0U; index < pair_count; ++index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            mesh, face_ids[index]);
+        size_t corner;
+        size_t previous;
+
+        if (vertex_ids[index] == HENKA_AUTHORING_INVALID_ID ||
+            face_ids[index] == HENKA_AUTHORING_INVALID_ID ||
+            henka_authoring_mesh_get_vertex(mesh, vertex_ids[index]) == NULL ||
+            face == NULL || face->corner_count < 3U ||
+            !modeling_face_contains_vertex(face, vertex_ids[index], NULL))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        for (previous = 0U; previous < index; ++previous)
+        {
+            const henka_authoring_face* previous_face =
+                henka_authoring_mesh_get_face(mesh, face_ids[previous]);
+            if (vertex_ids[previous] == vertex_ids[index] ||
+                face_ids[previous] == face_ids[index] || previous_face == NULL)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            for (corner = 0U; corner < face->corner_count; ++corner)
+            {
+                size_t previous_corner;
+                for (previous_corner = 0U;
+                     previous_corner < previous_face->corner_count;
+                     ++previous_corner)
+                {
+                    if (face->vertices[corner] == previous_face->vertices[previous_corner])
+                    {
+                        return HENKA_ERROR_INVALID_ARGUMENT;
+                    }
+                }
+            }
+        }
+    }
+
+    before = henka_authoring_mesh_get_counts(mesh);
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    for (index = 0U; result == HENKA_SUCCESS && index < pair_count; ++index)
+    {
+        result = henka_authoring_mesh_rip_vertex_face(
+            candidate,
+            vertex_ids[index],
+            face_ids[index],
+            &out_new_vertex_ids[index],
+            &pair_report);
+    }
+    if (result == HENKA_SUCCESS &&
+        (!henka_authoring_mesh_validate(candidate) ||
+         !modeling_face_geometry_is_valid(candidate)))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        after = henka_authoring_mesh_get_counts(candidate);
+        result = henka_authoring_mesh_copy(mesh, candidate);
+        if (result == HENKA_SUCCESS)
+        {
+            *out_vertex_count = pair_count;
+            if (out_report != NULL)
+            {
+                modeling_report_count_delta(&before, &after, out_report);
+                out_report->primary_vertex_id = out_new_vertex_ids[0U];
+            }
+        }
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        for (index = 0U; index < out_vertex_capacity; ++index)
+        {
+            out_new_vertex_ids[index] = HENKA_AUTHORING_INVALID_ID;
+        }
+    }
+    henka_authoring_mesh_destroy(candidate);
+    return result;
+}
+
 henka_result henka_authoring_mesh_connect_vertices(
     henka_authoring_mesh* mesh,
     henka_authoring_vertex_id first_vertex_id,

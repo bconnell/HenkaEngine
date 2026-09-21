@@ -229,6 +229,23 @@ henka_result henka_authoring_mesh_rip_vertex_face(
     henka_authoring_vertex_id* out_new_vertex_id,
     henka_authoring_modeling_report* out_report);
 
+/* Separates a bounded pairwise vertex-disjoint set of selected surface
+ * vertices from one deterministic incident face each. The selected face for
+ * every vertex is supplied explicitly so callers can preserve an authored
+ * face-selection decision; duplicate vertices, duplicate faces, overlapping
+ * target faces, loose vertices, and capacity failure are rejected without
+ * changing the source mesh. All new vertex IDs are returned only after the
+ * complete candidate validates. */
+henka_result henka_authoring_mesh_rip_vertex_faces(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    const henka_authoring_face_id* face_ids,
+    size_t pair_count,
+    henka_authoring_vertex_id* out_new_vertex_ids,
+    size_t out_vertex_capacity,
+    size_t* out_vertex_count,
+    henka_authoring_modeling_report* out_report);
+
 henka_result henka_authoring_mesh_connect_vertices(
     henka_authoring_mesh* mesh,
     henka_authoring_vertex_id first_vertex_id,

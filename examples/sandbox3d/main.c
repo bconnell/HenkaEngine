@@ -1792,7 +1792,7 @@ static henka_result sandbox3d_apply_authoring_rip_vertex_face(
         sandbox3d_authoring_object_get_selection_mode(state->authoring_object) !=
             SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
         sandbox3d_authoring_object_get_selected_component_count(
-            state->authoring_object) != 1U)
+            state->authoring_object) == 0U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -31292,22 +31292,22 @@ details_group_authoring:
                 row.width >= 290.0f)
             {
                 const bool rip_enabled =
-                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) == 1U;
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) > 0U;
                 (void)henka_ui_label_colored(
                     state->ui, row.x, row.y + 5.0f, 0.85f,
-                    "Separate one face", HENKA_UI_COLOR_INFO);
+                    "Separate faces", HENKA_UI_COLOR_INFO);
                 if (rip_enabled && henka_ui_button(
                         state->ui, "authoring_rip_vertex_face_top",
                         (henka_ui_rect){row.x + 160.0f, row.y, 120.0f, 24.0f},
-                        "Rip Face") )
+                        "Rip Face(s)") )
                 {
                     const henka_result rip_result =
                         sandbox3d_apply_authoring_rip_vertex_face(state);
                     sandbox3d_set_status(
                         state, rip_result != HENKA_SUCCESS,
                         rip_result == HENKA_SUCCESS
-                            ? "Selected vertex separated from one incident face."
-                            : "Rip Face rejected; select one surface vertex with a valid incident face.");
+                            ? "Selected vertices separated from one incident face each."
+                            : "Rip Face rejected; select one or more compatible surface vertices.");
                     if (rip_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
@@ -32256,14 +32256,14 @@ details_group_authoring:
                 row.width >= 290.0f)
             {
                 const bool rip_enabled =
-                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) == 1U;
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) > 0U;
                 (void)henka_ui_label_colored(
                     state->ui, row.x, row.y + 5.0f, 0.85f,
-                    "Separate one face", HENKA_UI_COLOR_INFO);
+                    "Separate faces", HENKA_UI_COLOR_INFO);
                 if (rip_enabled && henka_ui_button(
                         state->ui, "authoring_rip_vertex_face",
                         (henka_ui_rect){row.x + 160.0f, row.y, 120.0f, 24.0f},
-                        "Rip Face") )
+                        "Rip Face(s)") )
                 {
                     const henka_result rip_result =
                         sandbox3d_apply_authoring_rip_vertex_face(state);
@@ -32272,13 +32272,13 @@ details_group_authoring:
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                         sandbox3d_set_status(
                             state, false,
-                            "Selected vertex separated from one incident face.");
+                            "Selected vertices separated from one incident face each.");
                     }
                     else
                     {
                         sandbox3d_set_status(
                             state, true,
-                            "Rip Face rejected; select one surface vertex with a valid incident face.");
+                            "Rip Face rejected; select one or more compatible surface vertices.");
                     }
                 }
             }

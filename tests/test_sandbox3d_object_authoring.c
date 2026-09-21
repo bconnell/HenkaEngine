@@ -8238,6 +8238,17 @@ static void henka_test_sandbox3d_modeling_operator_rip_vertex_face(void)
     henka_entity entity = HENKA_INVALID_ENTITY;
     uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
     uint32_t ripped_id;
+    henka_authoring_mesh* batch_source = NULL;
+    sandbox3d_authoring_object* batch_object = NULL;
+    sandbox3d_modeling_operator_session batch_session = {0};
+    henka_authoring_vertex_id batch_centers[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id batch_rings[2][4];
+    henka_authoring_mesh_counts batch_before;
+    henka_authoring_mesh_counts batch_after;
+    henka_entity batch_entity = HENKA_INVALID_ENTITY;
+    size_t batch_component;
+    size_t batch_index;
 
     config.application_name = "Henka Rip Vertex Face Operator Test";
     config.window_width = 320;
@@ -8299,6 +8310,91 @@ static void henka_test_sandbox3d_modeling_operator_rip_vertex_face(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object)).vertices == after.vertices);
+
+    batch_entity = henka_scene_create_entity_named(scene, "Batch Rip Vertex Face Operator");
+    HENKA_TEST_ASSERT(batch_entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(
+        &(henka_authoring_mesh_desc){16U, 32U, 16U, 16U}, &batch_source) == HENKA_SUCCESS);
+    memset(batch_rings, 0, sizeof(batch_rings));
+    for (batch_component = 0U; batch_component < 2U; ++batch_component)
+    {
+        const float origin_x = batch_component == 0U ? 0.0f : 4.0f;
+        const henka_vec3 ring_positions[4] = {
+            {origin_x + 1.0f, 0.0f, 0.0f}, {origin_x, 1.0f, 0.0f},
+            {origin_x - 1.0f, 0.0f, 0.0f}, {origin_x, -1.0f, 0.0f}};
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            batch_source, (henka_vec3){origin_x, 0.0f, 0.0f},
+            (henka_vec2){0.5f, 0.5f}, 7U, &batch_centers[batch_component]) == HENKA_SUCCESS);
+        for (batch_index = 0U; batch_index < 4U; ++batch_index)
+        {
+            HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+                batch_source, ring_positions[batch_index], (henka_vec2){0.0f, 0.0f}, 7U,
+                &batch_rings[batch_component][batch_index]) == HENKA_SUCCESS);
+        }
+        for (batch_index = 0U; batch_index < 4U; ++batch_index)
+        {
+            const henka_authoring_vertex_id face_vertices[3] = {
+                batch_centers[batch_component],
+                batch_rings[batch_component][batch_index],
+                batch_rings[batch_component][(batch_index + 1U) % 4U]};
+            HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+                batch_source, face_vertices, 3U, 7U, true,
+                &(henka_authoring_face_id){0U}) == HENKA_SUCCESS);
+        }
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, batch_entity, batch_source, 8U, &batch_object) == HENKA_SUCCESS);
+    henka_authoring_mesh_destroy(batch_source);
+    batch_source = NULL;
+    sandbox3d_authoring_object_set_selection_mode(
+        batch_object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        batch_object, batch_centers[0], false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        batch_object, batch_centers[1], true) == HENKA_SUCCESS);
+    batch_before = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(batch_object));
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &batch_session, batch_object,
+        SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &batch_session, 0.0f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(batch_object));
+    batch_after = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(batch_object));
+    HENKA_TEST_ASSERT(memcmp(&batch_before, &batch_after, sizeof(batch_before)) == 0);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&batch_session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &batch_session, batch_object,
+        SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &batch_session, 0.0f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&batch_session) == HENKA_SUCCESS);
+    batch_after = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(batch_object));
+    HENKA_TEST_ASSERT(batch_after.vertices == batch_before.vertices + 2U &&
+        batch_after.edges == batch_before.edges + 4U &&
+        batch_after.faces == batch_before.faces &&
+        henka_authoring_mesh_validate(
+            sandbox3d_authoring_object_get_mesh(batch_object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(batch_object) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        batch_object, 0U, &selected_id) == HENKA_SUCCESS &&
+        selected_id != HENKA_AUTHORING_INVALID_ID && selected_id != batch_centers[0] &&
+        selected_id != batch_centers[1]);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        batch_object, 1U, &ripped_id) == HENKA_SUCCESS &&
+        ripped_id != HENKA_AUTHORING_INVALID_ID && ripped_id != selected_id &&
+        ripped_id != batch_centers[0] && ripped_id != batch_centers[1]);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(batch_object) == HENKA_SUCCESS);
+    current = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(batch_object));
+    HENKA_TEST_ASSERT(memcmp(&batch_before, &current, sizeof(batch_before)) == 0);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(batch_object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(batch_object)).vertices == batch_after.vertices);
+    sandbox3d_authoring_object_destroy(batch_object);
+    batch_object = NULL;
 
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
         object, loose_vertex, false) == HENKA_SUCCESS);

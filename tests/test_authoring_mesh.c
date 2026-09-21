@@ -9196,6 +9196,99 @@ cleanup:
     return result ? 1 : fail("vertex face rip");
 }
 
+static int test_vertex_face_rip_batch_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 4U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[8] = {HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id faces[4] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id new_vertices[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id duplicate_vertices[2];
+    henka_authoring_vertex_id rejected_vertices[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts rejected;
+    size_t new_count = 0U;
+    size_t rejected_count = 0U;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 0.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f}, 1U, &vertices[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){1.0f, 0.0f, 0.0f},
+            (henka_vec2){1.0f, 0.0f}, 1U, &vertices[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 1.0f, 0.0f},
+            (henka_vec2){0.0f, 1.0f}, 1U, &vertices[2]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){-1.0f, 0.0f, 0.0f},
+            (henka_vec2){-1.0f, 0.0f}, 1U, &vertices[3]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 0.0f, 3.0f},
+            (henka_vec2){0.0f, 0.0f}, 2U, &vertices[4]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){1.0f, 0.0f, 3.0f},
+            (henka_vec2){1.0f, 0.0f}, 2U, &vertices[5]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 1.0f, 3.0f},
+            (henka_vec2){0.0f, 1.0f}, 2U, &vertices[6]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){-1.0f, 0.0f, 3.0f},
+            (henka_vec2){-1.0f, 0.0f}, 2U, &vertices[7]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(mesh,
+            (henka_authoring_vertex_id[]){vertices[0], vertices[1], vertices[2]},
+            3U, 3U, true, &faces[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(mesh,
+            (henka_authoring_vertex_id[]){vertices[0], vertices[2], vertices[3]},
+            3U, 3U, false, &faces[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(mesh,
+            (henka_authoring_vertex_id[]){vertices[4], vertices[5], vertices[6]},
+            3U, 4U, true, &faces[2]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(mesh,
+            (henka_authoring_vertex_id[]){vertices[4], vertices[6], vertices[7]},
+            3U, 4U, false, &faces[3]) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_rip_vertex_faces(
+            mesh, (henka_authoring_vertex_id[]){vertices[0], vertices[4]},
+            (henka_authoring_face_id[]){faces[0], faces[2]}, 2U,
+            new_vertices, 2U, &new_count, &report) != HENKA_SUCCESS ||
+        new_count != 2U || !report.changed || report.created_vertices != 2U ||
+        report.created_edges != 2U || new_vertices[0] == new_vertices[1] ||
+        new_vertices[0] == HENKA_AUTHORING_INVALID_ID ||
+        new_vertices[1] == HENKA_AUTHORING_INVALID_ID ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices + 2U ||
+        after.edges != before.edges + 2U || after.faces != before.faces)
+    {
+        goto cleanup;
+    }
+    duplicate_vertices[0] = vertices[0];
+    duplicate_vertices[1] = vertices[0];
+    before = after;
+    if (henka_authoring_mesh_rip_vertex_faces(
+            mesh, duplicate_vertices, faces + 1U, 2U,
+            rejected_vertices, 2U, &rejected_count, &report) !=
+            HENKA_ERROR_INVALID_ARGUMENT || rejected_count != 0U ||
+        rejected_vertices[0] != HENKA_AUTHORING_INVALID_ID ||
+        rejected_vertices[1] != HENKA_AUTHORING_INVALID_ID || report.changed ||
+        (rejected = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &rejected, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("vertex face rip batch");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_extreme_bounds_remain_finite() &&
@@ -9236,7 +9329,8 @@ int main(void)
         test_uv_global_packing() &&
         test_uv_planar_unwrap() &&
         test_uv_cylindrical_unwrap() &&
-        test_uv_spherical_unwrap() && test_vertex_face_rip_operation() && test_obj_export_round_trip() &&
+        test_uv_spherical_unwrap() && test_vertex_face_rip_operation() &&
+        test_vertex_face_rip_batch_operation() && test_obj_export_round_trip() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&

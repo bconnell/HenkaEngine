@@ -375,7 +375,7 @@ Delete removes selected vertices and their incident faces, then removes only new
 
 Connect splits one face between two non-adjacent corners. The original face ID is preserved. The new face receives a fresh logical ID in a reusable physical slot. The shared Sandbox modeling-operator session exposes this bounded vertex selection through Preview, Cancel, Apply, and the existing undo/redo boundary without publishing the preview into the committed source.
 
-### Rip one face corner
+### Rip face corners
 
 `henka_authoring_mesh_rip_vertex_face` separates exactly one incident face
 corner from a selected surface vertex. The operation duplicates the selected
@@ -386,11 +386,14 @@ are preserved. The candidate is validated before publication, so invalid,
 loose, unsupported, or capacity-invalid requests leave the committed mesh
 unchanged.
 
-The Sandbox exposes this bounded operation as `Rip Face` in Vertex mode. It
-requires exactly one selected surface vertex and uses the shared
-Preview/Cancel/Apply, selection, undo, and redo boundary. Apply selects the
-new duplicate vertex. Broader multi-face separation, arbitrary seam rip, and
-batch rip workflows remain outside this bounded operation.
+The Sandbox exposes this bounded operation as `Rip Face(s)` in Vertex mode. It
+accepts one or more selected surface vertices when the lowest logical incident
+face chosen for each vertex is pairwise vertex-disjoint. The shared
+Preview/Cancel/Apply, selection, undo, and redo boundary is used for the whole
+selection, and Apply selects all new duplicate vertices. The core API also
+accepts explicit vertex/face pairs for callers that need deterministic face
+selection. Overlapping or otherwise generalized seam-rip workflows remain
+outside this bounded operation.
 
 ### Smooth Vertices / Relax
 
