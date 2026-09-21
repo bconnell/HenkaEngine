@@ -580,6 +580,7 @@ Available operations also include:
   renderable face;
 - transactional closed boundary-loop fill;
 - bounded single-quad face Loop Cut;
+- bounded vertex-disjoint batch Loop Cut for isolated quad-face selections;
 - bounded uniformly spaced multi-cut across compatible open quad strips and
   closed rings through the native authoring and Sandbox paths;
 - planar UV projection;
@@ -804,6 +805,8 @@ The shared topology layer also orders connected selected edge chains and cycles 
 Available operations include:
 
 - bounded single-quad face Loop Cut;
+- one factor-controlled batch Loop Cut across a vertex-disjoint selection of
+  isolated quad faces, with candidate-first failure behavior;
 - one factor-controlled quad-strip Loop Cut across a compatible open strip or closed ring;
 - uniformly spaced multi-cut across a compatible open quad strip or closed ring,
   with selected-face Sandbox Preview/Apply/Cancel and undo/redo routing;

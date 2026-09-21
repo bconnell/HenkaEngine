@@ -3324,6 +3324,97 @@ cleanup:
     return result ? 1 : fail("quad strip loop cut operation");
 }
 
+static int test_multi_face_loop_cut_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 8U};
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+        {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+        {3.0f, 0.0f, 0.0f}, {4.0f, 0.0f, 0.0f},
+        {4.0f, 1.0f, 0.0f}, {3.0f, 1.0f, 0.0f}};
+    const henka_authoring_vertex_id faces[2][4] = {
+        {1U, 2U, 3U, 4U}, {5U, 6U, 7U, 8U}};
+    const henka_authoring_face_id selected_faces[2] = {1U, 2U};
+    const henka_authoring_face_id duplicate_faces[2] = {1U, 1U};
+    henka_authoring_face_id new_face_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts unchanged;
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    size_t result_count = 0U;
+    size_t index;
+    henka_result duplicate_result;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){(float)(index % 4U),
+                    (float)(index / 4U)}, 0U, &(henka_authoring_vertex_id){0U}) !=
+            HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 2U; ++index)
+    {
+        if (henka_authoring_mesh_add_face(
+                mesh, faces[index], 4U, 0U, true, &face_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    report = (henka_authoring_modeling_report){0};
+    unchanged = before;
+    duplicate_result = henka_authoring_mesh_loop_cut_faces(
+            mesh, duplicate_faces, 2U, 0U, 0.5f, new_face_ids, 2U,
+            &result_count, &report);
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (duplicate_result != HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed ||
+        memcmp(&unchanged, &after, sizeof(unchanged)) != 0)
+    {
+        goto cleanup;
+    }
+    report = (henka_authoring_modeling_report){0};
+    {
+        if (henka_authoring_mesh_loop_cut_faces(
+                mesh, selected_faces, 2U, 0U, 0.5f, new_face_ids, 2U,
+                &result_count, &report) != HENKA_SUCCESS ||
+            result_count != 2U || !report.changed || report.created_vertices != 4U ||
+            report.created_edges != 6U || report.created_faces != 2U ||
+            new_face_ids[0] == HENKA_AUTHORING_INVALID_ID ||
+            new_face_ids[1] == HENKA_AUTHORING_INVALID_ID ||
+            new_face_ids[0] == new_face_ids[1] ||
+            henka_authoring_mesh_get_face(mesh, new_face_ids[0]) == NULL ||
+            henka_authoring_mesh_get_face(mesh, new_face_ids[1]) == NULL)
+        {
+            goto cleanup;
+        }
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices + 4U ||
+        after.edges != before.edges + 6U ||
+        after.faces != before.faces + 2U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("multi-face loop cut operation");
+}
+
 static int test_closed_quad_ring_loop_cut_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -8589,6 +8680,7 @@ int main(void)
         test_branching_interior_edge_bevel_operation() &&
         test_boundary_edge_batch_extrude_operation() &&
         test_quad_strip_loop_cut_operation() &&
+        test_multi_face_loop_cut_operation() &&
         test_quad_strip_multi_cut_operation() &&
         test_closed_quad_ring_multi_cut_operation() &&
         test_closed_quad_ring_loop_cut_operation() &&

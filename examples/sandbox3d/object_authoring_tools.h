@@ -524,6 +524,13 @@ henka_result sandbox3d_authoring_object_bevel_selected_face(
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
     sandbox3d_authoring_object* object,
     float factor);
+/* Splits a selected set of isolated quad faces at one shared factor. The
+ * candidate remains in Preview until the normal commit/cancel path publishes
+ * or discards it; duplicate, shared-vertex, non-isolated, and capacity-invalid
+ * selections fail without changing the live object. */
+henka_result sandbox3d_authoring_object_preview_loop_cut_selected_faces_at_factor(
+    sandbox3d_authoring_object* object,
+    float factor);
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
     sandbox3d_authoring_object* object,
     size_t cut_count);
@@ -545,6 +552,9 @@ henka_result sandbox3d_authoring_object_preview_loop_cut_selected_quad_strips_mu
     sandbox3d_authoring_object* object,
     size_t cut_count);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
+    sandbox3d_authoring_object* object,
+    float factor);
+henka_result sandbox3d_authoring_object_loop_cut_selected_faces_at_factor(
     sandbox3d_authoring_object* object,
     float factor);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face_multi(

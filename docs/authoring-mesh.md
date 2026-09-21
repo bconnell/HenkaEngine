@@ -540,6 +540,20 @@ No partial traversal result is published.
 
 The same topology layer orders connected selected edge chains and cycles deterministically for Edge Slide.
 
+### Isolated multi-face Loop Cut
+
+The core modeling API and Sandbox authoring path support a bounded batch Loop
+Cut for a selected set of vertex-disjoint isolated quad faces. Each source
+face keeps its identity and receives one fresh second-face identity at the
+same validated edge factor. The operation is candidate-first and preserves
+material, smoothing, and per-corner UV data through the normal source/render,
+bounds, physics, and history transaction.
+
+Duplicate faces, shared vertices, non-isolated faces, non-quad faces, invalid
+factors, and insufficient capacity fail without publishing any part of the
+batch. Preview, Apply, Cancel, Undo, and Redo use the same authoring-object
+transaction boundary as the existing single-face and quad-strip operations.
+
 ### Factor-controlled and uniformly spaced Loop Cut
 
 The editor Loop Cut operator accepts a validated user-entered factor and supports compatible open strips and closed rings.
@@ -766,7 +780,8 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - generalized closed-loop, branching, and broader weld/split/bridge workflows
   beyond the bounded face-backed boundary/interior batch and standalone loose-edge
   operations;
-- multi-face and general loop-cut networks;
+- connected, branching, and general loop-cut networks beyond the bounded
+  isolated multi-face and pairwise-disjoint quad-strip operations;
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;
 - broader automatic UV unwrap beyond the bounded planar-chart scope;

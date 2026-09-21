@@ -248,6 +248,23 @@ henka_result henka_authoring_mesh_loop_cut_face_multi(
     henka_authoring_face_id* out_last_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Splits a bounded vertex-disjoint selection of isolated quad faces at the
+ * same edge fraction. Each selected face keeps its logical identity and the
+ * corresponding output entry receives the fresh second-face identity. The
+ * complete batch is candidate-first; duplicate, shared-vertex, non-isolated,
+ * invalid, and capacity-invalid selections fail without changing the source
+ * mesh. */
+henka_result henka_authoring_mesh_loop_cut_faces(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_face_id* face_ids,
+    size_t face_count,
+    size_t edge_offset,
+    float factor,
+    henka_authoring_face_id* out_new_face_ids,
+    size_t out_face_capacity,
+    size_t* out_face_count,
+    henka_authoring_modeling_report* out_report);
+
 /* Splits every compatible quad in the ordered strip. Open strips start at a
  * boundary edge; closed rings use one cut vertex per traversed ring edge.
  * Both forms create two quads per source face and publish one transactional
