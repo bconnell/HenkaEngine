@@ -3408,6 +3408,74 @@ static int test_multi_face_loop_cut_operation(void)
     {
         goto cleanup;
     }
+    {
+        const henka_authoring_mesh_desc limited_desc = {32U, 64U, 3U, 8U};
+        henka_authoring_mesh* limited_mesh = NULL;
+        henka_authoring_mesh_counts limited_before;
+        henka_authoring_mesh_counts limited_after;
+        henka_authoring_face_id limited_new_faces[2] = {1U, 2U};
+        henka_authoring_modeling_report limited_report = {0};
+        size_t limited_result_count = 99U;
+        bool limited_ok = true;
+
+        if (henka_authoring_mesh_create(&limited_desc, &limited_mesh) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (index = 0U; index < 8U; ++index)
+        {
+            if (henka_authoring_mesh_add_vertex(
+                    limited_mesh,
+                    positions[index],
+                    (henka_vec2){(float)(index % 4U), (float)(index / 4U)},
+                    0U,
+                    &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+            {
+                limited_ok = false;
+                break;
+            }
+        }
+        for (index = 0U; limited_ok && index < 2U; ++index)
+        {
+            if (henka_authoring_mesh_add_face(
+                    limited_mesh,
+                    faces[index],
+                    4U,
+                    0U,
+                    true,
+                    &face_id) != HENKA_SUCCESS)
+            {
+                limited_ok = false;
+            }
+        }
+        limited_before = henka_authoring_mesh_get_counts(limited_mesh);
+        if (limited_ok &&
+            (henka_authoring_mesh_loop_cut_faces(
+                 limited_mesh,
+                 selected_faces,
+                 2U,
+                 0U,
+                 0.5f,
+                 limited_new_faces,
+                 2U,
+                 &limited_result_count,
+                 &limited_report) != HENKA_ERROR_LIMIT ||
+             limited_result_count != 0U || limited_report.changed ||
+             limited_new_faces[0] != HENKA_AUTHORING_INVALID_ID ||
+             limited_new_faces[1] != HENKA_AUTHORING_INVALID_ID))
+        {
+            limited_ok = false;
+        }
+        limited_after = henka_authoring_mesh_get_counts(limited_mesh);
+        if (!limited_ok ||
+            memcmp(&limited_before, &limited_after, sizeof(limited_before)) != 0 ||
+            !henka_authoring_mesh_validate(limited_mesh))
+        {
+            henka_authoring_mesh_destroy(limited_mesh);
+            goto cleanup;
+        }
+        henka_authoring_mesh_destroy(limited_mesh);
+    }
     result = 1;
 
 cleanup:
