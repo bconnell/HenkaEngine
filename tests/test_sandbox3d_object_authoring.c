@@ -7276,6 +7276,92 @@ static void henka_test_sandbox3d_authoring_loose_edge_split(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_authoring_loose_edge_split_persistence(void)
+{
+    henka_engine_config config = {0};
+    const henka_authoring_mesh_desc desc = {8U, 8U, 4U, 8U};
+    const char* path = "build/test_tmp/authoring_loose_edge_split.hams";
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_vertex_id first = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id second = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id source_edge = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id selected_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_mesh_counts counts;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_mesh* render_mesh = NULL;
+    const henka_authoring_mesh* loaded_mesh;
+    const henka_authoring_vertex* midpoint;
+
+    config.application_name = "Henka Loose Edge Split Persistence Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Loose Edge Split Persistence");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 4U,
+        &first) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 4U,
+        &second) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_edge(
+        source, first, second, true, &source_edge) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_set_edge_seam(
+        source, source_edge, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    source = NULL;
+
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, source_edge, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_split_selected_loose_edge(
+        object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 0U, &selected_edges[0]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 1U, &selected_edges[1]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_save_source(object, path) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge(
+        sandbox3d_authoring_object_get_mesh(object), source_edge) != NULL);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_reload_source(object, path) == HENKA_SUCCESS);
+
+    loaded_mesh = sandbox3d_authoring_object_get_mesh(object);
+    HENKA_TEST_ASSERT(loaded_mesh != NULL && henka_authoring_mesh_validate(loaded_mesh));
+    counts = henka_authoring_mesh_get_counts(loaded_mesh);
+    HENKA_TEST_ASSERT(counts.vertices == 3U && counts.edges == 2U && counts.faces == 0U);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge(loaded_mesh, source_edge) == NULL);
+    midpoint = henka_authoring_mesh_get_vertex(loaded_mesh, 3U);
+    HENKA_TEST_ASSERT(midpoint != NULL);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(midpoint->position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(midpoint->uv.x, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge(loaded_mesh, selected_edges[0]) != NULL);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge(loaded_mesh, selected_edges[1]) != NULL);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge(loaded_mesh, selected_edges[0])->hard);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge(loaded_mesh, selected_edges[1])->hard);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_edge_is_seam(loaded_mesh, selected_edges[0]));
+    HENKA_TEST_ASSERT(henka_authoring_mesh_edge_is_seam(loaded_mesh, selected_edges[1]));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(render_mesh != NULL);
+
+    remove(path);
+    sandbox3d_authoring_object_destroy(object);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_modeling_operator_loose_components(void)
 {
     henka_engine_config config = {0};
@@ -8278,6 +8364,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_modeling_operator_proportional_move();
     henka_test_sandbox3d_modeling_operator_vertex_batch_extrude();
     henka_test_sandbox3d_authoring_loose_edge_split();
+    henka_test_sandbox3d_authoring_loose_edge_split_persistence();
     henka_test_sandbox3d_authoring_shading_boundaries();
     henka_test_sandbox3d_modeling_operator_loose_components();
     henka_test_sandbox3d_geometry_revision_exhaustion();
