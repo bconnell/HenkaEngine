@@ -13,6 +13,9 @@ typedef enum sandbox3d_modeling_operator_kind
 {
     SANDBOX3D_MODELING_OPERATOR_NONE = 0,
     SANDBOX3D_MODELING_OPERATOR_MOVE,
+    /* Transactional rotate/scale of the current component selection through
+     * the shared candidate Preview/Cancel/Apply session. */
+    SANDBOX3D_MODELING_OPERATOR_TRANSFORM,
     SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE,
     SANDBOX3D_MODELING_OPERATOR_BEVEL,
     /* Extrusion of one selected vertex, face, or loose edge. Loose components
@@ -121,6 +124,12 @@ typedef struct sandbox3d_modeling_operator_session
     henka_authoring_mesh* source_snapshot;
     float amount;
     size_t preview_rebuild_count;
+    henka_vec3 transform_scale;
+    henka_vec3 transform_axis;
+    float transform_radians;
+    sandbox3d_authoring_pivot_mode transform_pivot_mode;
+    sandbox3d_authoring_orientation_mode transform_orientation_mode;
+    bool transform_configured;
     bool numeric_active;
     char numeric_text[SANDBOX3D_MODELING_OPERATOR_NUMERIC_CAPACITY];
     size_t numeric_length;
@@ -135,6 +144,13 @@ henka_result sandbox3d_modeling_operator_begin(
 henka_result sandbox3d_modeling_operator_set_axis(
     sandbox3d_modeling_operator_session* session,
     sandbox3d_modeling_operator_axis axis);
+henka_result sandbox3d_modeling_operator_set_transform(
+    sandbox3d_modeling_operator_session* session,
+    henka_vec3 scale,
+    henka_vec3 axis,
+    float radians,
+    sandbox3d_authoring_pivot_mode pivot_mode,
+    sandbox3d_authoring_orientation_mode orientation_mode);
 henka_result sandbox3d_modeling_operator_numeric_begin(
     sandbox3d_modeling_operator_session* session);
 henka_result sandbox3d_modeling_operator_numeric_append(

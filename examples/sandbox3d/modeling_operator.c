@@ -247,6 +247,12 @@ void sandbox3d_modeling_operator_reset(
     session->kind = SANDBOX3D_MODELING_OPERATOR_NONE;
     session->axis = SANDBOX3D_MODELING_OPERATOR_AXIS_NONE;
     session->active_component_id = HENKA_AUTHORING_INVALID_ID;
+    session->transform_scale = (henka_vec3){1.0f, 1.0f, 1.0f};
+    session->transform_axis = (henka_vec3){0.0f, 1.0f, 0.0f};
+    session->transform_radians = 0.0f;
+    session->transform_pivot_mode = SANDBOX3D_AUTHORING_PIVOT_MEDIAN;
+    session->transform_orientation_mode = SANDBOX3D_AUTHORING_ORIENTATION_LOCAL;
+    session->transform_configured = false;
 }
 
 henka_result sandbox3d_modeling_operator_begin(
@@ -263,6 +269,7 @@ henka_result sandbox3d_modeling_operator_begin(
 
     if (session == NULL || object == NULL || session->active ||
         (kind != SANDBOX3D_MODELING_OPERATOR_MOVE &&
+         kind != SANDBOX3D_MODELING_OPERATOR_TRANSFORM &&
          kind != SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE &&
          kind != SANDBOX3D_MODELING_OPERATOR_BEVEL &&
          kind != SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
@@ -475,6 +482,12 @@ henka_result sandbox3d_modeling_operator_begin(
     session->selection_capacity = selected_count;
     session->amount = 0.0f;
     session->preview_rebuild_count = 0U;
+    session->transform_scale = (henka_vec3){1.0f, 1.0f, 1.0f};
+    session->transform_axis = (henka_vec3){0.0f, 1.0f, 0.0f};
+    session->transform_radians = 0.0f;
+    session->transform_pivot_mode = SANDBOX3D_AUTHORING_PIVOT_MEDIAN;
+    session->transform_orientation_mode = SANDBOX3D_AUTHORING_ORIENTATION_LOCAL;
+    session->transform_configured = false;
     return HENKA_SUCCESS;
 }
 
@@ -489,6 +502,40 @@ henka_result sandbox3d_modeling_operator_set_axis(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     session->axis = axis;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_modeling_operator_set_transform(
+    sandbox3d_modeling_operator_session* session,
+    henka_vec3 scale,
+    henka_vec3 axis,
+    float radians,
+    sandbox3d_authoring_pivot_mode pivot_mode,
+    sandbox3d_authoring_orientation_mode orientation_mode)
+{
+    if (session == NULL || !session->active ||
+        session->kind != SANDBOX3D_MODELING_OPERATOR_TRANSFORM ||
+        session->state != SANDBOX3D_MODELING_OPERATOR_STATE_BEGIN ||
+        !isfinite(scale.x) || !isfinite(scale.y) || !isfinite(scale.z) ||
+        scale.x <= 0.0f || scale.y <= 0.0f || scale.z <= 0.0f ||
+        scale.x > 4.0f || scale.y > 4.0f || scale.z > 4.0f ||
+        !isfinite(axis.x) || !isfinite(axis.y) || !isfinite(axis.z) ||
+        henka_vec3_length(axis) <= 0.000001f || !isfinite(radians) ||
+        pivot_mode < SANDBOX3D_AUTHORING_PIVOT_MEDIAN ||
+        pivot_mode > SANDBOX3D_AUTHORING_PIVOT_INDIVIDUAL ||
+        orientation_mode < SANDBOX3D_AUTHORING_ORIENTATION_WORLD ||
+        orientation_mode > SANDBOX3D_AUTHORING_ORIENTATION_NORMAL ||
+        (pivot_mode == SANDBOX3D_AUTHORING_PIVOT_INDIVIDUAL &&
+            session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    session->transform_scale = scale;
+    session->transform_axis = axis;
+    session->transform_radians = radians;
+    session->transform_pivot_mode = pivot_mode;
+    session->transform_orientation_mode = orientation_mode;
+    session->transform_configured = true;
     return HENKA_SUCCESS;
 }
 
@@ -703,6 +750,7 @@ henka_result sandbox3d_modeling_operator_preview(
 
     if (session == NULL || !session->active ||
         (session->kind != SANDBOX3D_MODELING_OPERATOR_MOVE &&
+         session->kind != SANDBOX3D_MODELING_OPERATOR_TRANSFORM &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_BEVEL &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
@@ -735,6 +783,8 @@ henka_result sandbox3d_modeling_operator_preview(
         session->selection_ids == NULL || session->selection_count == 0U ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_MOVE &&
             session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_NONE) ||
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_TRANSFORM &&
+            !session->transform_configured) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE &&
             session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_BEVEL &&
@@ -916,6 +966,18 @@ henka_result sandbox3d_modeling_operator_preview(
                 result = HENKA_ERROR_OUT_OF_MEMORY;
             }
         }
+    }
+    if (result == HENKA_SUCCESS &&
+        session->kind == SANDBOX3D_MODELING_OPERATOR_TRANSFORM)
+    {
+        result = sandbox3d_authoring_object_apply_component_transform_candidate(
+            session->object,
+            candidate,
+            session->transform_scale,
+            session->transform_axis,
+            session->transform_radians,
+            session->transform_pivot_mode,
+            session->transform_orientation_mode);
     }
     if (result == HENKA_SUCCESS && session->kind == SANDBOX3D_MODELING_OPERATOR_MOVE)
     {

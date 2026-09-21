@@ -1097,6 +1097,55 @@ static henka_result sandbox3d_apply_authoring_move(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_component_transform(
+    sandbox3d_state* state,
+    henka_vec3 scale,
+    henka_vec3 axis,
+    float radians,
+    sandbox3d_authoring_pivot_mode pivot_mode,
+    sandbox3d_authoring_orientation_mode orientation_mode)
+{
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_TRANSFORM);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_set_transform(
+            &state->modeling_operator,
+            scale,
+            axis,
+            radians,
+            pivot_mode,
+            orientation_mode);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator,
+            0.0f,
+            false,
+            false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_commit(
+            &state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_apply_authoring_connect_vertices(
     sandbox3d_state* state)
 {
@@ -29772,9 +29821,13 @@ details_group_authoring:
                         "Scale Selected"))
                 {
                     const henka_result scale_result =
-                        sandbox3d_authoring_object_scale_selected_components(
-                            state->authoring_object,
-                            (henka_vec3){1.08f, 1.08f, 1.08f});
+                        sandbox3d_apply_authoring_component_transform(
+                            state,
+                            (henka_vec3){1.08f, 1.08f, 1.08f},
+                            (henka_vec3){0.0f, 1.0f, 0.0f},
+                            0.0f,
+                            SANDBOX3D_AUTHORING_PIVOT_MEDIAN,
+                            SANDBOX3D_AUTHORING_ORIENTATION_LOCAL);
                     if (scale_result == HENKA_SUCCESS)
                     {
                         const henka_authoring_mesh_counts counts =
@@ -30240,8 +30293,9 @@ details_group_authoring:
                         (henka_ui_rect){row.x + selection_button_width + 6.0f, row.y, selection_button_width, 24.0f},
                         "Rotate"))
                 {
-                    const henka_result rotate_result = sandbox3d_authoring_object_rotate_selected_components(
-                        state->authoring_object,
+                    const henka_result rotate_result = sandbox3d_apply_authoring_component_transform(
+                        state,
+                        (henka_vec3){1.0f, 1.0f, 1.0f},
                         (henka_vec3){0.0f, 1.0f, 0.0f},
                         15.0f * HENKA_DEG_TO_RAD,
                         state->modeling_toolbar.pivot_mode,
@@ -30257,10 +30311,13 @@ details_group_authoring:
                         (henka_ui_rect){row.x + (selection_button_width + 6.0f) * 2.0f, row.y, selection_button_width, 24.0f},
                         "Scale"))
                 {
-                    const henka_result scale_result = sandbox3d_authoring_object_scale_selected_components_with_pivot(
-                        state->authoring_object,
+                    const henka_result scale_result = sandbox3d_apply_authoring_component_transform(
+                        state,
                         (henka_vec3){1.08f, 1.08f, 1.08f},
-                        state->modeling_toolbar.pivot_mode);
+                        (henka_vec3){0.0f, 1.0f, 0.0f},
+                        0.0f,
+                        state->modeling_toolbar.pivot_mode,
+                        state->modeling_toolbar.orientation_mode);
                     sandbox3d_set_status(
                         state, scale_result != HENKA_SUCCESS,
                         scale_result == HENKA_SUCCESS ? "Selected components scaled using the modeling toolbar pivot." :
@@ -31019,9 +31076,13 @@ details_group_authoring:
                         "Scale Selected"))
                 {
                     const henka_result scale_result =
-                        sandbox3d_authoring_object_scale_selected_components(
-                            state->authoring_object,
-                            (henka_vec3){1.08f, 1.08f, 1.08f});
+                        sandbox3d_apply_authoring_component_transform(
+                            state,
+                            (henka_vec3){1.08f, 1.08f, 1.08f},
+                            (henka_vec3){0.0f, 1.0f, 0.0f},
+                            0.0f,
+                            SANDBOX3D_AUTHORING_PIVOT_MEDIAN,
+                            SANDBOX3D_AUTHORING_ORIENTATION_LOCAL);
                     if (scale_result == HENKA_SUCCESS)
                     {
                         const henka_authoring_mesh_counts counts =
@@ -31126,8 +31187,9 @@ details_group_authoring:
                         (henka_ui_rect){row.x + selection_button_width + 6.0f, row.y, selection_button_width, 24.0f},
                         "Rotate"))
                 {
-                    const henka_result rotate_result = sandbox3d_authoring_object_rotate_selected_components(
-                        state->authoring_object,
+                    const henka_result rotate_result = sandbox3d_apply_authoring_component_transform(
+                        state,
+                        (henka_vec3){1.0f, 1.0f, 1.0f},
                         (henka_vec3){0.0f, 1.0f, 0.0f},
                         15.0f * HENKA_DEG_TO_RAD,
                         state->modeling_toolbar.pivot_mode,
@@ -31143,10 +31205,13 @@ details_group_authoring:
                         (henka_ui_rect){row.x + (selection_button_width + 6.0f) * 2.0f, row.y, selection_button_width, 24.0f},
                         "Scale"))
                 {
-                    const henka_result scale_result = sandbox3d_authoring_object_scale_selected_components_with_pivot(
-                        state->authoring_object,
+                    const henka_result scale_result = sandbox3d_apply_authoring_component_transform(
+                        state,
                         (henka_vec3){1.08f, 1.08f, 1.08f},
-                        state->modeling_toolbar.pivot_mode);
+                        (henka_vec3){0.0f, 1.0f, 0.0f},
+                        0.0f,
+                        state->modeling_toolbar.pivot_mode,
+                        state->modeling_toolbar.orientation_mode);
                     sandbox3d_set_status(
                         state, scale_result != HENKA_SUCCESS,
                         scale_result == HENKA_SUCCESS ? "Selected components scaled using the modeling toolbar pivot." :

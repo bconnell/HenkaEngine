@@ -5474,15 +5474,15 @@ static henka_vec3 sandbox3d_authoring_apply_component_transform(
     return henka_vec3_add(pivot, relative);
 }
 
-static henka_result sandbox3d_authoring_transform_selected_components(
-    sandbox3d_authoring_object* object,
+static henka_result sandbox3d_authoring_apply_component_transform_candidate(
+    const sandbox3d_authoring_object* object,
+    henka_authoring_mesh* candidate,
     henka_vec3 scale,
     henka_vec3 axis,
     float radians,
     sandbox3d_authoring_pivot_mode pivot_mode,
     sandbox3d_authoring_orientation_mode orientation_mode)
 {
-    henka_authoring_mesh* candidate = NULL;
     uint32_t* vertex_ids = NULL;
     size_t vertex_count = 0U;
     const uint32_t* selected_ids;
@@ -5493,7 +5493,7 @@ static henka_result sandbox3d_authoring_transform_selected_components(
     size_t index;
     henka_result result;
 
-    if (object == NULL || !sandbox3d_authoring_finite_vec3(scale) ||
+    if (object == NULL || candidate == NULL || !sandbox3d_authoring_finite_vec3(scale) ||
         scale.x <= 0.0f || scale.y <= 0.0f || scale.z <= 0.0f ||
         scale.x > 4.0f || scale.y > 4.0f || scale.z > 4.0f ||
         !isfinite(radians) || pivot_mode < SANDBOX3D_AUTHORING_PIVOT_MEDIAN ||
@@ -5532,8 +5532,8 @@ static henka_result sandbox3d_authoring_transform_selected_components(
             return result;
         }
     }
-    result = henka_authoring_mesh_clone(object->mesh, &candidate);
-    if (result == HENKA_SUCCESS && pivot_mode == SANDBOX3D_AUTHORING_PIVOT_INDIVIDUAL)
+    result = HENKA_SUCCESS;
+    if (pivot_mode == SANDBOX3D_AUTHORING_PIVOT_INDIVIDUAL)
     {
         for (index = 0U; index < selected_count && result == HENKA_SUCCESS; ++index)
         {
@@ -5592,7 +5592,7 @@ static henka_result sandbox3d_authoring_transform_selected_components(
             }
         }
     }
-    else if (result == HENKA_SUCCESS)
+    else
     {
         for (index = 0U; index < vertex_count && result == HENKA_SUCCESS; ++index)
         {
@@ -5610,15 +5610,65 @@ static henka_result sandbox3d_authoring_transform_selected_components(
                     vertex->position, pivot, scale, rotation));
         }
     }
+    henka_free(vertex_ids);
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_apply_component_transform_candidate(
+    const sandbox3d_authoring_object* object,
+    henka_authoring_mesh* candidate,
+    henka_vec3 scale,
+    henka_vec3 axis,
+    float radians,
+    sandbox3d_authoring_pivot_mode pivot_mode,
+    sandbox3d_authoring_orientation_mode orientation_mode)
+{
+    return sandbox3d_authoring_apply_component_transform_candidate(
+        object,
+        candidate,
+        scale,
+        axis,
+        radians,
+        pivot_mode,
+        orientation_mode);
+}
+
+static henka_result sandbox3d_authoring_transform_selected_components(
+    sandbox3d_authoring_object* object,
+    henka_vec3 scale,
+    henka_vec3 axis,
+    float radians,
+    sandbox3d_authoring_pivot_mode pivot_mode,
+    sandbox3d_authoring_orientation_mode orientation_mode)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_result result;
+
+    if (object == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        result = sandbox3d_authoring_publish_candidate(object, candidate, true, object->selected_face);
+        result = sandbox3d_authoring_apply_component_transform_candidate(
+            object,
+            candidate,
+            scale,
+            axis,
+            radians,
+            pivot_mode,
+            orientation_mode);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, object->selected_face);
     }
     if (result != HENKA_SUCCESS)
     {
         henka_authoring_mesh_destroy(candidate);
     }
-    henka_free(vertex_ids);
     return result;
 }
 

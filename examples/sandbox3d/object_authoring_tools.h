@@ -336,6 +336,17 @@ henka_result sandbox3d_authoring_object_rotate_selected_components(
     float radians,
     sandbox3d_authoring_pivot_mode pivot_mode,
     sandbox3d_authoring_orientation_mode orientation_mode);
+/* Applies the same validated component transform to an already-cloned
+ * candidate mesh. Modeling operators use this candidate-only boundary so
+ * preview and cancel never publish through the immediate mutation API. */
+henka_result sandbox3d_authoring_object_apply_component_transform_candidate(
+    const sandbox3d_authoring_object* object,
+    henka_authoring_mesh* candidate,
+    henka_vec3 scale,
+    henka_vec3 axis,
+    float radians,
+    sandbox3d_authoring_pivot_mode pivot_mode,
+    sandbox3d_authoring_orientation_mode orientation_mode);
 henka_result sandbox3d_authoring_object_transform_vertex_region(
     sandbox3d_authoring_object* object,
     const sandbox3d_authoring_region_transform* transform,
