@@ -4537,6 +4537,8 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     henka_bounds bounds;
     henka_transform project_transform = henka_transform_identity();
     henka_transform loaded_transform;
+    henka_model_data exported_obj = {0};
+    const char* exported_obj_path = "build/test_tmp/authoring_object_export.obj";
 
     config.application_name = "Henka Authoring Persistence Test";
     config.window_width = 320;
@@ -4559,6 +4561,12 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
         sandbox3d_authoring_object_get_active_component_id(object) == HENKA_AUTHORING_INVALID_ID);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_save_source(
         object, "build/test_tmp/authoring_object_empty.hams") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_save_obj(
+        object, exported_obj_path) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_model_data_load_obj(
+        exported_obj_path, &exported_obj) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(exported_obj.vertex_count > 0U && exported_obj.index_count > 0U);
+    henka_model_data_destroy(&exported_obj);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_reload_source(
         object, "build/test_tmp/authoring_object_empty.hams") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(
@@ -4832,6 +4840,7 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     sandbox3d_authoring_object_destroy(object);
     HENKA_TEST_ASSERT(henka_physics_body_destroy(physics_world, physics_body) == HENKA_SUCCESS);
     henka_physics_world_destroy(physics_world);
+    remove(exported_obj_path);
     HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &render_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(render_mesh == previous_mesh);
     HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, entity, &bounds) == HENKA_SUCCESS);

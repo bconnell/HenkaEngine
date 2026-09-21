@@ -203,9 +203,9 @@ panel also provides transactional planar-chart unwrap. It projects each
 seam-delimited planar island on its dominant geometric axis and packs the charts
 into a padded unit-square grid. Degenerate or non-planar islands are rejected
 without changing the source. Spherical unwrap maps normalized longitude and
-latitude for bounded non-degenerate ellipsoidal or spherical surfaces, uses a
-stable centered U value at poles, and marks the generated longitude boundary as
-a seam. Other automatic unwrap strategies remain outside this bounded scope.
+  latitude for bounded non-degenerate ellipsoidal or spherical surfaces, uses a
+  stable centered U value at poles, and marks the generated longitude boundary as
+  a seam. Other automatic unwrap strategies remain outside this bounded scope.
 
 ## Connected Sandbox workflow
 
@@ -764,6 +764,16 @@ HAMS v6 retains that loose-topology contract and adds one explicit seam byte to
 each modern active-edge record. The seam state is independent of hard-edge
 intent and is used as an island boundary by UV authoring and topology analysis.
 
+### OBJ source export
+
+`henka_authoring_mesh_save_obj` writes authored surface geometry and face-corner
+UVs through an atomic temporary-file replacement. Standalone face-less edges
+are emitted as OBJ `l` line records. Stable Henka IDs, material regions,
+hard-edge flags, seam flags, smoothing metadata, and loose vertices without an
+edge remain HAMS-only state. The Sandbox Object Details panel exposes separate
+Export HAMS and Export OBJ actions; OBJ export does not change the canonical
+HAMS source path.
+
 The loader accepts:
 
 - current HAMS v6;
@@ -807,13 +817,13 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
   isolated multi-face and pairwise-disjoint quad-strip operations;
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;
-- broader automatic UV unwrap beyond the bounded planar-chart and cylindrical
-  side-surface scope;
+- broader automatic UV unwrap beyond the bounded planar-chart, cylindrical
+  side-surface, and spherical/ellipsoidal surface projections;
 - texture painting;
 - broader material authoring beyond current bounded material-instance editing;
 - full editor workflows for arbitrary authoring-file selection;
 - complete scene/project serialization;
-- broader source export;
+- source export beyond HAMS and bounded OBJ geometry/UV output;
 - production showcase rebuild workflows;
 - package-level authoring ownership completion.
 

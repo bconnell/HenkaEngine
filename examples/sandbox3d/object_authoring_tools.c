@@ -8473,6 +8473,17 @@ henka_result sandbox3d_authoring_object_save_source(
     }
 }
 
+henka_result sandbox3d_authoring_object_save_obj(
+    const sandbox3d_authoring_object* object,
+    const char* path)
+{
+    if (object == NULL || path == NULL || path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_authoring_mesh_save_obj(object->mesh, path);
+}
+
 henka_result sandbox3d_authoring_object_reload_source(
     sandbox3d_authoring_object* object,
     const char* path)

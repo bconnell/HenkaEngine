@@ -4337,6 +4337,11 @@ static henka_result sandbox3d_resolve_authoring_export_path(
     const sandbox3d_state* state,
     henka_entity entity,
     char** out_path);
+static henka_result sandbox3d_resolve_authoring_obj_export_path(
+    henka_engine* engine,
+    const sandbox3d_state* state,
+    henka_entity entity,
+    char** out_path);
 
 static henka_result sandbox3d_save_showcase_provenance(
     const sandbox3d_state* state,
@@ -4575,39 +4580,80 @@ static void sandbox3d_draw_native_authoring_project_controls(
         state->native_authoring_export_control_reported = true;
         state->native_authoring_export_control_reported_y = export_row.y;
     }
-    if (henka_ui_button(
+    {
+        const float export_gap = 8.0f;
+        const float export_width = (export_row.width - export_gap) * 0.5f;
+        const bool export_hams_requested = export_width >= 96.0f && henka_ui_button(
             state->ui,
             "authoring_export_source",
-            (henka_ui_rect){export_row.x, export_row.y, export_row.width, 24.0f},
-            "Export Source"))
-    {
-        char* export_path = NULL;
-        henka_result export_result = sandbox3d_resolve_authoring_export_path(
-            engine,
-            state,
-            entity,
-            &export_path);
-        if (export_result == HENKA_SUCCESS)
+            (henka_ui_rect){export_row.x, export_row.y, export_width, 24.0f},
+            "Export HAMS");
+        const bool export_obj_requested = export_width >= 96.0f && henka_ui_button(
+            state->ui,
+            "authoring_export_obj",
+            (henka_ui_rect){export_row.x + export_width + export_gap, export_row.y, export_width, 24.0f},
+            "Export OBJ");
+
+        if (export_hams_requested)
         {
-            export_result = sandbox3d_authoring_object_save_source(
-                state->authoring_object,
-                export_path);
+            char* export_path = NULL;
+            henka_result export_result = sandbox3d_resolve_authoring_export_path(
+                engine,
+                state,
+                entity,
+                &export_path);
+            if (export_result == HENKA_SUCCESS)
+            {
+                export_result = sandbox3d_authoring_object_save_source(
+                    state->authoring_object,
+                    export_path);
+            }
+            printf(
+                "Native authoring source export: name=%s path=%s result=%s source_state=%s.\n",
+                display_name,
+                export_path != NULL ? export_path : "(unresolved)",
+                henka_result_to_string(export_result),
+                sandbox3d_showcase_provenance(state, entity));
+            fflush(stdout);
+            sandbox3d_set_statusf(
+                state,
+                export_result != HENKA_SUCCESS,
+                false,
+                export_result == HENKA_SUCCESS
+                    ? "Authoring HAMS source exported through the visible editor workflow."
+                    : "Authoring HAMS export failed; the current source was retained.");
+            henka_free(export_path);
         }
-        printf(
-            "Native authoring source export: name=%s path=%s result=%s source_state=%s.\n",
-            display_name,
-            export_path != NULL ? export_path : "(unresolved)",
-            henka_result_to_string(export_result),
-            sandbox3d_showcase_provenance(state, entity));
-        fflush(stdout);
-        sandbox3d_set_statusf(
-            state,
-            export_result != HENKA_SUCCESS,
-            false,
-            export_result == HENKA_SUCCESS
-                ? "Authoring source exported through the visible editor workflow."
-                : "Authoring source export failed; the current source was retained.");
-        henka_free(export_path);
+        if (export_obj_requested)
+        {
+            char* export_path = NULL;
+            henka_result export_result = sandbox3d_resolve_authoring_obj_export_path(
+                engine,
+                state,
+                entity,
+                &export_path);
+            if (export_result == HENKA_SUCCESS)
+            {
+                export_result = sandbox3d_authoring_object_save_obj(
+                    state->authoring_object,
+                    export_path);
+            }
+            printf(
+                "Native authoring OBJ export: name=%s path=%s result=%s source_state=%s.\n",
+                display_name,
+                export_path != NULL ? export_path : "(unresolved)",
+                henka_result_to_string(export_result),
+                sandbox3d_showcase_provenance(state, entity));
+            fflush(stdout);
+            sandbox3d_set_statusf(
+                state,
+                export_result != HENKA_SUCCESS,
+                false,
+                export_result == HENKA_SUCCESS
+                    ? "Authoring OBJ exported through the visible editor workflow."
+                    : "Authoring OBJ export failed; the current source was retained.");
+            henka_free(export_path);
+        }
     }
 }
 
@@ -11525,6 +11571,38 @@ static henka_result sandbox3d_resolve_authoring_export_path(
         henka_engine_get_user_data_base_path(engine),
         file_name,
         out_path);
+}
+
+static henka_result sandbox3d_resolve_authoring_obj_export_path(
+    henka_engine* engine,
+    const sandbox3d_state* state,
+    henka_entity entity,
+    char** out_path)
+{
+    char* path = NULL;
+    char* extension;
+    henka_result result;
+
+    if (out_path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_path = NULL;
+    result = sandbox3d_resolve_authoring_export_path(
+        engine, state, entity, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    extension = strrchr(path, '.');
+    if (extension == NULL || strcmp(extension, ".hams") != 0)
+    {
+        henka_free(path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    memcpy(extension, ".obj", sizeof(".obj"));
+    *out_path = path;
+    return HENKA_SUCCESS;
 }
 
 static henka_result sandbox3d_save_showcase_provenance(

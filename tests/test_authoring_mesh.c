@@ -61,6 +61,9 @@ extern henka_result henka_authoring_mesh_unwrap_spherical_faces(
     henka_authoring_mesh* mesh,
     henka_authoring_uv_projection_axis axis,
     float padding);
+extern henka_result henka_authoring_mesh_save_obj(
+    const henka_authoring_mesh* mesh,
+    const char* path);
 static int fail(const char* message)
 {
     fprintf(stderr, "authoring mesh test failed: %s\n", message);
@@ -8970,6 +8973,96 @@ cleanup:
     return result ? 1 : fail("boundary edge chain batch split");
 }
 
+static int test_obj_export_round_trip(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 32U, 32U, 8U};
+    const char* path = "henka_authoring_export.obj";
+    henka_authoring_vertex_id face_vertices[3] = {0U, 0U, 0U};
+    henka_authoring_vertex_id tombstone_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id vertex_ids[5] = {0U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id loose_edge_id = HENKA_AUTHORING_INVALID_ID;
+    FILE* file = NULL;
+    char contents[4096] = {0};
+    size_t read_count;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){-1.0f, -1.0f, 0.0f}, (henka_vec2){0.0f, 0.0f},
+            0U, &tombstone_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_remove_vertex(mesh, tombstone_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f},
+            0U, &vertex_ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f},
+            0U, &vertex_ids[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){0.0f, 1.0f, 0.0f}, (henka_vec2){0.0f, 1.0f},
+            0U, &vertex_ids[2]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f},
+            0U, &vertex_ids[3]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){3.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f},
+            0U, &vertex_ids[4]) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    face_vertices[0] = vertex_ids[0];
+    face_vertices[1] = vertex_ids[1];
+    face_vertices[2] = vertex_ids[2];
+    if (henka_authoring_mesh_add_face(
+            mesh, face_vertices, 3U, 0U, true, &face_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(
+            mesh, vertex_ids[3], vertex_ids[4], true, &loose_edge_id) != HENKA_SUCCESS ||
+        face_id == HENKA_AUTHORING_INVALID_ID ||
+        loose_edge_id == HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_set_face_corner_uv(
+            mesh, face_id, 0U, (henka_vec2){0.125f, 0.25f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_corner_uv(
+            mesh, face_id, 1U, (henka_vec2){0.875f, 0.25f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_corner_uv(
+            mesh, face_id, 2U, (henka_vec2){0.125f, 0.75f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_save_obj(mesh, path) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    file = test_open_file(path, "rb");
+    if (file == NULL ||
+        (read_count = fread(contents, 1U, sizeof(contents) - 1U, file)) == 0U ||
+        fclose(file) != 0)
+    {
+        if (file != NULL)
+        {
+            fclose(file);
+        }
+        file = NULL;
+        goto cleanup;
+    }
+    file = NULL;
+    contents[read_count] = '\0';
+    if (strstr(contents, "v 0 0 0\n") == NULL ||
+        strstr(contents, "vt 0.125 0.25\n") == NULL ||
+        strstr(contents, "f 1/1 2/2 3/3\n") == NULL ||
+        strstr(contents, "l 4 5\n") == NULL)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    if (file != NULL)
+    {
+        fclose(file);
+    }
+    remove(path);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("OBJ export round trip");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_extreme_bounds_remain_finite() &&
@@ -9010,7 +9103,7 @@ int main(void)
         test_uv_global_packing() &&
         test_uv_planar_unwrap() &&
         test_uv_cylindrical_unwrap() &&
-        test_uv_spherical_unwrap() &&
+        test_uv_spherical_unwrap() && test_obj_export_round_trip() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&

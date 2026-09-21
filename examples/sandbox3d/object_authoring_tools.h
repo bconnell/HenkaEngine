@@ -579,6 +579,12 @@ henka_result sandbox3d_authoring_object_pack_selected_face_uv(
 henka_result sandbox3d_authoring_object_save_source(
     const sandbox3d_authoring_object* object,
     const char* path);
+/* Exports the current authored geometry through the production OBJ writer.
+ * Unlike HAMS source persistence this does not change the object's canonical
+ * source path, because OBJ cannot carry Henka's complete authoring metadata. */
+henka_result sandbox3d_authoring_object_save_obj(
+    const sandbox3d_authoring_object* object,
+    const char* path);
 henka_result sandbox3d_authoring_object_reload_source(
     sandbox3d_authoring_object* object,
     const char* path);

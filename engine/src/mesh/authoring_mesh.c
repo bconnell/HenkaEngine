@@ -3593,6 +3593,162 @@ henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, co
     return ok ? HENKA_SUCCESS : HENKA_ERROR_ASSET_SOURCE;
 }
 
+static size_t authoring_obj_vertex_index(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id vertex_id)
+{
+    size_t slot;
+    size_t obj_index = 1U;
+    if (mesh == NULL || vertex_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return 0U;
+    }
+    for (slot = 0U; slot < mesh->desc.max_vertices; ++slot)
+    {
+        if (mesh->vertices[slot].active && mesh->vertices[slot].id == vertex_id)
+        {
+            return obj_index;
+        }
+        if (mesh->vertices[slot].active)
+        {
+            ++obj_index;
+        }
+    }
+    return 0U;
+}
+
+henka_result henka_authoring_mesh_save_obj(
+    const henka_authoring_mesh* mesh,
+    const char* path)
+{
+    FILE* file = NULL;
+    char* temporary_path = NULL;
+    size_t slot;
+    size_t uv_index = 1U;
+    bool ok = false;
+
+    if (mesh == NULL || path == NULL || path[0] == '\0' ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_path_ensure_parent_directory(path) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    if (!authoring_make_temporary_path(path, &temporary_path))
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    file = authoring_open_file(temporary_path, "wb");
+    if (file == NULL)
+    {
+        henka_free(temporary_path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    ok = fprintf(file, "# Henka authored OBJ export\n") >= 0;
+    for (slot = 0U; ok && slot < mesh->desc.max_vertices; ++slot)
+    {
+        const henka_authoring_vertex* vertex = &mesh->vertices[slot];
+        if (vertex->active)
+        {
+            ok = fprintf(
+                file,
+                "v %.9g %.9g %.9g\n",
+                (double)vertex->position.x,
+                (double)vertex->position.y,
+                (double)vertex->position.z) >= 0;
+        }
+    }
+    for (slot = 0U; ok && slot < mesh->desc.max_faces; ++slot)
+    {
+        const henka_authoring_face* face = &mesh->faces[slot];
+        size_t corner;
+        if (!face->active)
+        {
+            continue;
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            if (uv_index == SIZE_MAX)
+            {
+                ok = false;
+                break;
+            }
+            ok = fprintf(
+                file,
+                "vt %.9g %.9g\n",
+                (double)face->uvs[corner].x,
+                (double)face->uvs[corner].y) >= 0;
+            ++uv_index;
+        }
+    }
+    uv_index = 1U;
+    for (slot = 0U; ok && slot < mesh->desc.max_faces; ++slot)
+    {
+        const henka_authoring_face* face = &mesh->faces[slot];
+        size_t corner;
+        if (!face->active)
+        {
+            continue;
+        }
+        ok = fprintf(file, "f") >= 0;
+        for (corner = 0U; ok && corner < face->corner_count; ++corner)
+        {
+            const size_t vertex_index = authoring_obj_vertex_index(
+                mesh, face->vertices[corner]);
+            if (vertex_index == 0U || uv_index == SIZE_MAX)
+            {
+                ok = false;
+                break;
+            }
+            ok = fprintf(file, " %zu/%zu", vertex_index, uv_index) >= 0;
+            ++uv_index;
+        }
+        if (ok)
+        {
+            ok = fprintf(file, "\n") >= 0;
+        }
+    }
+    for (slot = 0U; ok && slot < mesh->desc.max_edges; ++slot)
+    {
+        const henka_authoring_edge* edge = &mesh->edges[slot];
+        const size_t first_index = edge->active && edge->face_count == 0U
+            ? authoring_obj_vertex_index(mesh, edge->vertices[0]) : 0U;
+        const size_t second_index = edge->active && edge->face_count == 0U
+            ? authoring_obj_vertex_index(mesh, edge->vertices[1]) : 0U;
+        if (edge->active && edge->face_count == 0U &&
+            (first_index == 0U || second_index == 0U ||
+             fprintf(file, "l %zu %zu\n", first_index, second_index) < 0))
+        {
+            ok = false;
+        }
+    }
+    ok = ok && fflush(file) == 0 && fclose(file) == 0;
+    file = NULL;
+    if (ok)
+    {
+#ifdef _WIN32
+        ok = MoveFileExA(
+            temporary_path,
+            path,
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+        ok = rename(temporary_path, path) == 0;
+#endif
+    }
+    if (!ok)
+    {
+        if (file != NULL)
+        {
+            fclose(file);
+        }
+        remove(temporary_path);
+    }
+    henka_free(temporary_path);
+    return ok ? HENKA_SUCCESS : HENKA_ERROR_ASSET_SOURCE;
+}
+
 henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const char* path)
 {
     FILE* file = NULL;

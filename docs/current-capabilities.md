@@ -627,6 +627,12 @@ HAMS v5 introduced persisted loose vertices and zero-face wire edges. HAMS v6
 extends that record format with explicit UV seam state. Legacy files are
 migrated in memory only and are not silently rewritten.
 
+Native authoring sources can also be exported as bounded OBJ geometry with
+face-corner UVs. OBJ export uses atomic replacement, emits standalone
+face-less edges as line records, and preserves the complete authoring metadata
+only in HAMS. The Sandbox exposes separate Export HAMS and Export OBJ actions;
+OBJ export does not change the canonical HAMS source path.
+
 ### Imported-object authoring
 
 Imported nontrivial objects can take the Make Editable path.
@@ -740,7 +746,7 @@ boundary:
 - rigging;
 - skinning;
 - animation authoring;
-- broader source export;
+- source export beyond HAMS and bounded OBJ geometry/UV output;
 - production-quality showcase anatomy/mechanical topology.
 
 ## Scripting / Behaviors
