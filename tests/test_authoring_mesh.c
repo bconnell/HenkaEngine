@@ -970,11 +970,14 @@ static int test_modeling_operations(void)
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_face_id inset_result_ids[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id subdivide_center_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_vertex_id center_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_mesh_counts counts;
     henka_authoring_modeling_report report = {0};
     size_t inset_result_count = 0U;
+    size_t subdivide_center_count = 0U;
     henka_result batch_result = HENKA_ERROR_INVALID_ARGUMENT;
     int result = 0;
 
@@ -1027,6 +1030,38 @@ static int test_modeling_operations(void)
             mesh, batch_face_ids, 2U, 0.5f,
             inset_result_ids, 2U, &inset_result_count, &report) != HENKA_ERROR_INVALID_ARGUMENT ||
         report.changed || henka_authoring_mesh_get_counts(mesh).vertices != 8U ||
+        henka_authoring_mesh_get_counts(mesh).faces != 6U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_box(&desc, 2.0f, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_id_at(mesh, 0U, &batch_face_ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_id_at(mesh, 1U, &batch_face_ids[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_subdivide_faces(
+            mesh, batch_face_ids, 2U, subdivide_center_ids, 2U,
+            &subdivide_center_count, &report) != HENKA_SUCCESS ||
+        !report.changed || subdivide_center_count != 2U ||
+        subdivide_center_ids[0] == HENKA_AUTHORING_INVALID_ID ||
+        subdivide_center_ids[1] == HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_get_counts(mesh).vertices != 18U ||
+        henka_authoring_mesh_get_counts(mesh).faces != 12U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_box(&desc, 2.0f, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_id_at(mesh, 0U, &batch_face_ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_id_at(mesh, 2U, &batch_face_ids[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_subdivide_faces(
+            mesh, batch_face_ids, 2U, subdivide_center_ids, 2U,
+            &subdivide_center_count, &report) != HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed || subdivide_center_count != 0U ||
+        henka_authoring_mesh_get_counts(mesh).vertices != 8U ||
         henka_authoring_mesh_get_counts(mesh).faces != 6U ||
         !henka_authoring_mesh_validate(mesh))
     {

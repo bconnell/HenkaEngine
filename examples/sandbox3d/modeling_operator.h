@@ -78,8 +78,8 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally merges selected vertices within the configured distance
      * through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_DISTANCE,
-    /* Transactionally subdivides one selected face through the shared
-     * Preview/Cancel/Apply session. */
+    /* Transactionally subdivides one or a bounded vertex-disjoint face
+     * selection through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE,
     /* Transactional bridge of two compatible boundary edges or two compatible
      * equal-length open boundary-edge chains. */
@@ -161,6 +161,8 @@ typedef struct sandbox3d_modeling_operator_session
     bool split_configured;
     henka_authoring_face_id* inset_result_faces;
     size_t inset_result_count;
+    henka_authoring_vertex_id* subdivide_result_vertices;
+    size_t subdivide_result_count;
     uint32_t created_component_id;
     bool numeric_active;
     char numeric_text[SANDBOX3D_MODELING_OPERATOR_NUMERIC_CAPACITY];

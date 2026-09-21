@@ -129,6 +129,16 @@ henka_result henka_authoring_mesh_subdivide_face(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,
     henka_authoring_vertex_id* out_center_vertex_id);
+/* Subdivides a bounded unique selection of vertex-disjoint faces
+ * transactionally. The output center IDs correspond to the input order. */
+henka_result henka_authoring_mesh_subdivide_faces(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_face_id* face_ids,
+    size_t face_count,
+    henka_authoring_vertex_id* out_center_vertex_ids,
+    size_t out_center_vertex_capacity,
+    size_t* out_center_vertex_count,
+    henka_authoring_modeling_report* out_report);
 /* Triangulates one simple planar polygon face with a deterministic ear-clipping
  * candidate. The source face identity is retained by the first triangle;
  * additional triangles receive fresh identities. Materials, smoothing, edge
