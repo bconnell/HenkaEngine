@@ -187,6 +187,12 @@ henka_result sandbox3d_authoring_object_shrink_component_selection(
     sandbox3d_authoring_object* object);
 size_t sandbox3d_authoring_object_get_selected_component_count(
     const sandbox3d_authoring_object* object);
+/* Reserves active-mode selection storage without changing the current
+ * selection. Operators use this before publishing a topology candidate when
+ * the result will select more components than the source. */
+henka_result sandbox3d_authoring_object_reserve_component_selection_capacity(
+    sandbox3d_authoring_object* object,
+    size_t required_count);
 /* Returns the most recently picked component in the active topology mode.
  * This is the edit target that receives the strongest viewport cue when a
  * multi-component selection is present. */
@@ -312,6 +318,14 @@ henka_result sandbox3d_authoring_object_dissolve_selected_edge(
  * edge selection; face-backed or capacity-invalid selections fail closed. */
 henka_result sandbox3d_authoring_object_split_selected_loose_edge(
     sandbox3d_authoring_object* object);
+/* Splits one selected face-backed boundary or interior edge at a factor
+ * strictly between zero and one through the authoritative source/render,
+ * bounds, physics, and undo transaction. The replacement edges become the
+ * new edge selection; standalone wire edges continue to use the dedicated
+ * midpoint operation above. */
+henka_result sandbox3d_authoring_object_split_selected_edge(
+    sandbox3d_authoring_object* object,
+    float factor);
 /* Bridges either two selected compatible boundary edges or two equal-length
  * selected open boundary chains through the authoritative
  * source/render/bounds/physics/undo transaction. */

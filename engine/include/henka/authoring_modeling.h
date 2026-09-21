@@ -308,6 +308,21 @@ henka_result henka_authoring_mesh_split_loose_edge(
     henka_authoring_edge_id* out_second_edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Splits one face-backed boundary or interior edge at a factor strictly
+ * between zero and one. The incident face loops gain one interpolated corner,
+ * the new vertex receives interpolated position/UV data, and both replacement
+ * edges preserve the source hard/seam intent. The candidate is published only
+ * after the complete topology and geometry validate; unsupported non-manifold,
+ * ambiguous, and capacity-invalid requests fail without source mutation. */
+henka_result henka_authoring_mesh_split_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id edge_id,
+    float factor,
+    henka_authoring_vertex_id* out_split_vertex_id,
+    henka_authoring_edge_id* out_first_edge_id,
+    henka_authoring_edge_id* out_second_edge_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Extrudes one compatible edge transactionally. An open boundary edge moves
  * along its incident face normal and creates one connecting quad. An interior
  * edge is supported as a single-sided operation for one same-material,

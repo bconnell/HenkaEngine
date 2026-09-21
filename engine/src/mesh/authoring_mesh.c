@@ -2053,10 +2053,45 @@ bool henka_authoring_mesh_edge_is_boundary(const henka_authoring_mesh* mesh, hen
 
 static henka_vec3 authoring_face_normal(const henka_authoring_mesh* mesh, const henka_authoring_face* face)
 {
-    const henka_vec3 a = authoring_vertex_const(mesh, face->vertices[0])->position;
-    const henka_vec3 b = authoring_vertex_const(mesh, face->vertices[1])->position;
-    const henka_vec3 c = authoring_vertex_const(mesh, face->vertices[2])->position;
-    return henka_vec3_normalize(henka_vec3_cross(henka_vec3_subtract(b, a), henka_vec3_subtract(c, a)));
+    const henka_authoring_vertex* first_vertex;
+    size_t second_corner;
+
+    if (mesh == NULL || face == NULL || face->corner_count < 3U)
+    {
+        return (henka_vec3){0.0f, 0.0f, 0.0f};
+    }
+    first_vertex = authoring_vertex_const(mesh, face->vertices[0]);
+    if (first_vertex == NULL)
+    {
+        return (henka_vec3){0.0f, 0.0f, 0.0f};
+    }
+    for (second_corner = 1U; second_corner + 1U < face->corner_count; ++second_corner)
+    {
+        const henka_authoring_vertex* second_vertex = authoring_vertex_const(
+            mesh, face->vertices[second_corner]);
+        size_t third_corner;
+        if (second_vertex == NULL)
+        {
+            continue;
+        }
+        for (third_corner = second_corner + 1U;
+             third_corner < face->corner_count;
+             ++third_corner)
+        {
+            const henka_authoring_vertex* third_vertex = authoring_vertex_const(
+                mesh, face->vertices[third_corner]);
+            const henka_vec3 normal = third_vertex == NULL
+                ? (henka_vec3){0.0f, 0.0f, 0.0f}
+                : henka_vec3_cross(
+                    henka_vec3_subtract(second_vertex->position, first_vertex->position),
+                    henka_vec3_subtract(third_vertex->position, first_vertex->position));
+            if (henka_vec3_length(normal) > 0.00001f)
+            {
+                return henka_vec3_normalize(normal);
+            }
+        }
+    }
+    return (henka_vec3){0.0f, 0.0f, 0.0f};
 }
 
 static bool authoring_face_has_hard_edge_at_vertex(

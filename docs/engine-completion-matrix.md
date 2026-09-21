@@ -72,6 +72,11 @@ from closing:
 | 2D | No dedicated production 2D renderer or complete 2D authoring surface yet | Roadmap and current-capabilities boundary; no material production implementation | No complete 2D persistence/package path exists | **Planned** | Dedicated first-class 2D work begins only after the current general 3D completion boundary closes. |
 | Animation and character production | No complete rigging, skinning, animation authoring, or runtime production workflow | Public headers and roadmap references are foundation hooks, not completion evidence | No complete persistence/editor/package chain exists | **Planned** | Requires a deliberate production asset and runtime animation campaign. |
 
+The Native modeling row's bounded split scope includes the face-backed
+boundary/interior edge split and the standalone loose-edge midpoint split.
+Both use candidate validation and routed Sandbox history; broader branching,
+batch, and ambiguous split domains remain outside that declared scope.
+
 ## Renderer completion ledger
 
 This ledger makes the supported renderer boundary explicit without creating a

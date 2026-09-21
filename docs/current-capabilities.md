@@ -458,6 +458,8 @@ history remain open.
 - Object, Vertex, Edge, and Face workflows are integrated into the Sandbox.
 - Component selection, connected selection, bounded edge-loop selection, normal/X-Ray box selection, one-ring soft movement, axis-constrained movement, visible authored-face surfaces, and topology feedback are available.
 - Box selection uses authored component identities and does not expose renderer triangulation as topology.
+- Edge-mode includes a transactional face-backed boundary/interior split with
+  Preview, Apply, Cancel, and replacement-edge selection.
 
 ### Authoring mesh contract
 
@@ -615,6 +617,9 @@ Available edge authoring includes:
 - bounded edge-loop/ring selection;
 - transactional single-edge dissolve for compatible interior edges;
 - single-edge delete of its incident face set;
+- transactional split of one face-backed boundary or interior edge at a
+  factor in (0,1), with interpolated per-corner UVs and preserved hard/seam
+  metadata through the Sandbox operator;
 - bounded standalone boundary-edge bevel;
 - bounded multi-edge boundary bevel across distinct faces;
 - bounded same-face boundary bevel with shared-endpoint corner caps;
@@ -653,7 +658,8 @@ the existing authoring history boundary.
 
 Other interior/manifold configurations, mixed-face selections, disconnected,
 cyclic, larger branching, shared-endpoint, and otherwise unsupported batches
-remain rejected. A contiguous chain may wrap
+remain rejected. Face-backed split is limited to one boundary or two-face
+interior edge; broader branching and batch split workflows remain rejected. A contiguous chain may wrap
 around a face boundary; a complete face boundary is treated as a closed chain.
 
 Interior bevel rejects:
@@ -679,7 +685,7 @@ listed above. The following later capabilities remain outside this campaign
 boundary:
 
 - broader non-manifold or incompatible-normal fan handling;
-- broader topology tooling;
+- broader topology tooling and generalized branching or batch split workflows;
 - broader automatic UV unwrap beyond planar charts;
 - texture painting;
 - rigging;

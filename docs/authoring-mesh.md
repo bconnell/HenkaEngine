@@ -101,6 +101,8 @@ Current operations include:
 - selected face-region extrusion with shared caps and transactional topology;
 - bounded edge bevel;
 - bounded loop-cut operations;
+- bounded split of one selected face-backed boundary or interior edge at a
+  factor in (0,1), preserving per-corner UVs and hard/seam metadata;
 - bounded midpoint split of one selected standalone loose edge, preserving
   endpoint metadata and selecting the two replacement edges;
 - bounded vertex and edge extrusion paths described below.
@@ -283,7 +285,7 @@ This persistence currently operates per authored object. Complete scene/project 
 
 ### Selection history
 
-The authoring bridge stores one bounded selected-face identity beside each mesh-history snapshot. The bounded loose-edge split additionally stores its component-mode selection snapshot so the original edge and the two replacement edges return through undo/redo.
+The authoring bridge stores one bounded selected-face identity beside each mesh-history snapshot. Face-backed and loose-edge splits additionally store their component-mode selection snapshots so the original edge and the two replacement edges return through undo/redo.
 
 - topology operations select their deterministic result;
 - undo/redo restores the matching prior or next face when it still exists;
@@ -488,7 +490,8 @@ It creates quad faces only and preserves the source material, smoothing, and
 per-corner UV state.
 
 Branching or ambiguous loop-cut networks and generalized split workflows beyond
-the standalone loose-edge midpoint operation remain unfinished.
+the bounded face-backed boundary/interior and standalone loose-edge operations
+remain unfinished.
 
 ### Edge Slide
 
@@ -548,6 +551,20 @@ the source hard-edge and seam intent. The operation rejects face-backed edges,
 mismatched endpoint materials, degenerate source edges, and capacity
 exhaustion without publishing a partial mesh. The Sandbox selects both
 replacement edges and restores the prior edge selection through undo/redo.
+
+### Face-backed Edge Split
+
+The core modeling API supports splitting one selected face-backed boundary or
+interior edge at a factor strictly between zero and one. The new vertex
+interpolates position and per-corner UV state. Each incident face receives the
+new corner, and the two replacement edges preserve the source hard-edge and
+seam intent. Boundary and two-face interior edges are supported; non-manifold
+edges, incompatible endpoint material regions, invalid factors, and capacity
+exhaustion fail closed without publishing a partial mesh.
+
+The Sandbox Edge-mode operator exposes the same operation through Preview,
+Apply, Cancel, and undo/redo. Preview leaves the committed source unchanged;
+Apply selects the two replacement edges.
 
 ### Sandbox loose-component session
 
@@ -649,7 +666,8 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
   closed-fan batch, boundary-edge, and compatible single-sided interior-edge
   cases;
 - generalized closed-loop, branching, and broader weld/split/bridge workflows
-  beyond the bounded standalone loose-edge midpoint operation;
+  beyond the bounded face-backed boundary/interior and standalone loose-edge
+  operations;
 - multi-face and general loop-cut networks;
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;

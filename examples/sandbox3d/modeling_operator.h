@@ -20,6 +20,10 @@ typedef enum sandbox3d_modeling_operator_kind
      * the shared candidate Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_TRANSFORM,
     SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE,
+    /* Transactionally splits one selected face-backed boundary or interior
+     * edge at a factor in (0,1) through the shared Preview/Cancel/Apply
+     * session. */
+    SANDBOX3D_MODELING_OPERATOR_SPLIT_EDGE,
     SANDBOX3D_MODELING_OPERATOR_BEVEL,
     /* Extrusion of selected vertices, one selected face, or one loose edge.
      * Loose components use the explicit operator axis; connected surface
@@ -141,6 +145,9 @@ typedef struct sandbox3d_modeling_operator_session
     henka_authoring_vertex_id loose_edge_second;
     bool loose_edge_hard;
     bool loose_configured;
+    henka_authoring_edge_id split_first_edge;
+    henka_authoring_edge_id split_second_edge;
+    bool split_configured;
     uint32_t created_component_id;
     bool numeric_active;
     char numeric_text[SANDBOX3D_MODELING_OPERATOR_NUMERIC_CAPACITY];
