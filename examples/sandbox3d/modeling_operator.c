@@ -879,6 +879,8 @@ henka_result sandbox3d_modeling_operator_preview(
     size_t index;
     float next_amount;
     float applied_amount;
+    bool use_loose_edge_batch = false;
+    bool use_face_edge_batch = false;
     henka_vec3 offset = {0.0f, 0.0f, 0.0f};
     henka_result result = HENKA_SUCCESS;
 
@@ -1390,25 +1392,58 @@ henka_result sandbox3d_modeling_operator_preview(
         session->kind == SANDBOX3D_MODELING_OPERATOR_DELETE_EDGE)
     {
         const henka_authoring_edge* selected_edge =
-            session->selection_count == 1U
-                ? henka_authoring_mesh_get_edge(
-                      candidate,
-                      (henka_authoring_edge_id)session->selection_ids[0U])
-                : NULL;
-        if (selected_edge != NULL && selected_edge->face_count != 0U)
+            henka_authoring_mesh_get_edge(
+                candidate,
+                (henka_authoring_edge_id)session->selection_ids[0U]);
+        if (selected_edge == NULL)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        else if (session->selection_count == 1U && selected_edge->face_count != 0U)
         {
             result = henka_authoring_mesh_delete_edge(
                 candidate,
                 (henka_authoring_edge_id)session->selection_ids[0U],
                 &report);
         }
-        else
+        else if (session->selection_count == 1U)
         {
             result = henka_authoring_mesh_delete_loose_edges(
                 candidate,
                 (const henka_authoring_edge_id*)session->selection_ids,
                 session->selection_count,
                 &report);
+        }
+        else
+        {
+            use_loose_edge_batch = selected_edge->face_count == 0U;
+            use_face_edge_batch = !use_loose_edge_batch;
+            for (index = 1U; index < session->selection_count; ++index)
+            {
+                const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+                    candidate,
+                    (henka_authoring_edge_id)session->selection_ids[index]);
+                if (edge == NULL || (edge->face_count == 0U) != use_loose_edge_batch ||
+                    (edge->face_count != 0U && edge->face_count > 2U))
+                {
+                    result = HENKA_ERROR_INVALID_ARGUMENT;
+                    break;
+                }
+            }
+            if (result == HENKA_SUCCESS)
+            {
+                result = use_face_edge_batch
+                    ? henka_authoring_mesh_delete_face_edges(
+                          candidate,
+                          (const henka_authoring_edge_id*)session->selection_ids,
+                          session->selection_count,
+                          &report)
+                    : henka_authoring_mesh_delete_loose_edges(
+                          candidate,
+                          (const henka_authoring_edge_id*)session->selection_ids,
+                          session->selection_count,
+                          &report);
+            }
         }
     }
     if (result == HENKA_SUCCESS &&

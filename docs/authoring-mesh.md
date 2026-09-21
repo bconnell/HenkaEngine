@@ -396,8 +396,10 @@ Transactional single-edge dissolve is available for compatible interior edges.
 
 Transactional edge delete supports one face-backed edge, removing its incident
 face set while preserving vertices, or a bounded pairwise-disjoint selection of
-standalone wire edges, removing only those edges while preserving their
-vertices.
+face-backed edges with disjoint endpoints and incident faces. Standalone wire
+edges also support a bounded pairwise-disjoint batch that removes only those
+edges while preserving their vertices. Mixed domains, overlapping face sets,
+duplicate edges, and shared endpoints fail closed.
 
 ### Edge Bevel
 

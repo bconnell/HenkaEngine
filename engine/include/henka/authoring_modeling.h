@@ -543,6 +543,17 @@ henka_result henka_authoring_mesh_delete_edge(
     henka_authoring_edge_id edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Removes a bounded pairwise-disjoint set of face-backed edges and their
+ * incident face sets while preserving vertices. Selected edges may not share
+ * endpoints or incident faces, and at least one renderable face must remain.
+ * Invalid, duplicate, overlapping, and capacity-exhausting requests fail
+ * without publishing a partial candidate. */
+henka_result henka_authoring_mesh_delete_face_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_authoring_modeling_report* out_report);
+
 /* Removes a bounded pairwise-disjoint set of standalone wire edges while
  * preserving their vertices. Face-backed, duplicate, shared-endpoint, and
  * invalid selections fail without changing the source mesh. The candidate is

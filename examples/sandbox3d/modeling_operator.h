@@ -55,8 +55,9 @@ typedef enum sandbox3d_modeling_operator_kind
      * one renderable face through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_DELETE_FACES,
     /* Transactionally removes one selected face-backed edge and its incident
-     * faces, or a bounded pairwise-disjoint set of standalone wire edges,
-     * through the shared Preview/Cancel/Apply session. */
+     * faces, or a bounded pairwise-disjoint set of face-backed edges or
+     * standalone wire edges, through the shared Preview/Cancel/Apply session.
+     * Mixed edge domains and overlapping face-backed selections are rejected. */
     SANDBOX3D_MODELING_OPERATOR_DELETE_EDGE,
     /* Transactionally dissolves one selected compatible interior edge through
      * the shared Preview/Cancel/Apply session. */

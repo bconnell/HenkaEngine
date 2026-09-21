@@ -352,8 +352,9 @@ henka_result sandbox3d_authoring_object_build_selected_boundary_bridge_candidate
 henka_result sandbox3d_authoring_object_fill_selected_boundary_loop(
     sandbox3d_authoring_object* object);
 /* Deletes one selected face-backed edge, or a bounded pairwise-disjoint set of
- * standalone wire edges, through the authoritative source/render/bounds/
- * physics/undo transaction. */
+ * face-backed edges or standalone wire edges, through the authoritative
+ * source/render/bounds/physics/undo transaction. Mixed edge domains and
+ * overlapping face-backed selections are rejected without publication. */
 henka_result sandbox3d_authoring_object_delete_selected_edge(
     sandbox3d_authoring_object* object);
 /* Bevels one selected compatible boundary/interior edge, or a bounded

@@ -629,8 +629,10 @@ Available edge authoring includes:
 - bounded edge-loop/ring selection;
 - transactional single-edge dissolve for compatible interior edges;
 - one face-backed edge delete of its incident face set, or a bounded
-  pairwise-disjoint batch delete of standalone wire edges that preserves their
-  vertices;
+  pairwise-disjoint batch delete of face-backed edges with disjoint endpoints
+  and incident faces;
+- a bounded pairwise-disjoint batch delete of standalone wire edges that
+  preserves their vertices;
 - transactional split of one, a bounded pairwise-disjoint batch, a
   contiguous same-face boundary-edge chain, or a bounded batch of independent
   boundary-edge chains of face-backed boundary or interior edges at a factor in

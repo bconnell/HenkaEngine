@@ -5234,6 +5234,7 @@ henka_result sandbox3d_authoring_object_delete_selected_edge(
     henka_authoring_mesh* candidate = NULL;
     henka_authoring_modeling_report report = {0};
     bool use_loose_batch = false;
+    bool use_face_batch = false;
     henka_result result;
 
     if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE)
@@ -5249,16 +5250,38 @@ henka_result sandbox3d_authoring_object_delete_selected_edge(
     {
         const henka_authoring_edge* selected_edge = henka_authoring_mesh_get_edge(
             object->mesh, (henka_authoring_edge_id)selected_ids[0]);
-        use_loose_batch = selected_edge != NULL && selected_edge->face_count == 0U;
+        if (selected_edge == NULL)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        use_loose_batch = selected_edge->face_count == 0U;
     }
     else
     {
-        use_loose_batch = true;
+        const henka_authoring_edge* first_edge = henka_authoring_mesh_get_edge(
+            object->mesh, (henka_authoring_edge_id)selected_ids[0]);
+        size_t index;
+        if (first_edge == NULL || (first_edge->face_count != 0U && first_edge->face_count > 2U))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        use_loose_batch = first_edge->face_count == 0U;
+        use_face_batch = !use_loose_batch;
+        for (index = 1U; index < selected_count; ++index)
+        {
+            const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+                object->mesh, (henka_authoring_edge_id)selected_ids[index]);
+            if (edge == NULL || (edge->face_count == 0U) != use_loose_batch ||
+                (edge->face_count != 0U && edge->face_count > 2U))
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
     }
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        if (use_loose_batch)
+        if (use_loose_batch || use_face_batch)
         {
             if (selected_count > SIZE_MAX / sizeof(*edge_ids))
             {
@@ -5278,8 +5301,11 @@ henka_result sandbox3d_authoring_object_delete_selected_edge(
                     {
                         edge_ids[index] = (henka_authoring_edge_id)selected_ids[index];
                     }
-                    result = henka_authoring_mesh_delete_loose_edges(
-                        candidate, edge_ids, selected_count, &report);
+                    result = use_face_batch
+                        ? henka_authoring_mesh_delete_face_edges(
+                              candidate, edge_ids, selected_count, &report)
+                        : henka_authoring_mesh_delete_loose_edges(
+                              candidate, edge_ids, selected_count, &report);
                 }
             }
         }

@@ -4498,6 +4498,96 @@ cleanup:
     return result ? 1 : fail("loose edge delete batch");
 }
 
+static int test_face_edge_delete_batch_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 24U, 8U, 8U};
+    const henka_vec3 positions[9] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+        {3.0f, 0.0f, 0.0f}, {4.0f, 0.0f, 0.0f}, {3.0f, 1.0f, 0.0f},
+        {6.0f, 0.0f, 0.0f}, {7.0f, 0.0f, 0.0f}, {6.0f, 1.0f, 0.0f}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[9] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id edge_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id shared_face_edge_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_modeling_report report = {0};
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 9U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh,
+                positions[index],
+                (henka_vec2){positions[index].x, positions[index].y},
+                4U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, (henka_authoring_vertex_id[]){vertices[0], vertices[1], vertices[2]},
+            3U, 4U, true, &face_id) != HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, vertices[0], vertices[1], &edge_ids[0]) !=
+            HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, vertices[1], vertices[2],
+                                        &shared_face_edge_ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            mesh, (henka_authoring_vertex_id[]){vertices[3], vertices[4], vertices[5]},
+            3U, 4U, true, &face_id) != HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, vertices[3], vertices[4], &edge_ids[1]) !=
+            HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            mesh, (henka_authoring_vertex_id[]){vertices[6], vertices[7], vertices[8]},
+            3U, 4U, true, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_delete_face_edges(
+            mesh, (henka_authoring_edge_id[]){edge_ids[0], shared_face_edge_ids[0]}, 2U,
+            &report) != HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed ||
+        (after = henka_authoring_mesh_get_counts(mesh), memcmp(&before, &after, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_delete_face_edges(
+            mesh, edge_ids, 2U, &report) != HENKA_SUCCESS ||
+        !report.changed || report.removed_faces != 2U)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices || after.faces + 2U != before.faces ||
+        henka_authoring_mesh_get_edge(mesh, edge_ids[0]) != NULL ||
+        henka_authoring_mesh_get_edge(mesh, edge_ids[1]) != NULL ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional face edge delete batch");
+}
+
 static int test_vertex_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -7973,6 +8063,7 @@ int main(void)
         test_edge_dissolve_operation() &&
         test_edge_delete_operation() &&
         test_loose_edge_delete_batch_operation() &&
+        test_face_edge_delete_batch_operation() &&
         test_vertex_extrude_operation() &&
         test_interior_vertex_batch_extrude_operation() &&
         test_loose_vertex_extrude_operation() &&
