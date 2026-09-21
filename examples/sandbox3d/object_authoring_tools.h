@@ -447,6 +447,16 @@ henka_result sandbox3d_authoring_object_flip_selected_face(
 henka_result sandbox3d_authoring_object_set_selected_face_material_region(
     sandbox3d_authoring_object* object,
     uint32_t material_region);
+/* Applies one smooth/flat shading state to every selected face through the
+ * canonical source/render/bounds/physics/history transaction. */
+henka_result sandbox3d_authoring_object_set_selected_faces_smoothing(
+    sandbox3d_authoring_object* object,
+    bool smooth);
+/* Applies one hard/soft shading boundary state to every selected edge through
+ * the canonical source/render/bounds/physics/history transaction. */
+henka_result sandbox3d_authoring_object_set_selected_edges_hard(
+    sandbox3d_authoring_object* object,
+    bool hard);
 /* Extrudes every selected face as one bounded topology transaction.  The
  * selected faces are validated before any candidate is published; on failure
  * the source, evaluated mesh, bounds, physics, selection, and history remain
