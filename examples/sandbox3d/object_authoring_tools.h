@@ -313,9 +313,9 @@ henka_result sandbox3d_authoring_object_select_edge_loop(
  * fails without replacing the prior selection. */
 henka_result sandbox3d_authoring_object_select_edge_ring(
     sandbox3d_authoring_object* object);
-/* Dissolves one selected compatible interior edge through the authoritative
- * source/render/bounds/physics/undo transaction. Multiple-edge selections are
- * rejected until a stable batch remapping contract is available. */
+/* Dissolves one selected compatible interior edge, or a bounded
+ * pairwise-disjoint selection of compatible interior edges, through the
+ * authoritative source/render/bounds/physics/undo transaction. */
 henka_result sandbox3d_authoring_object_dissolve_selected_edge(
     sandbox3d_authoring_object* object);
 /* Splits one or a bounded pairwise-disjoint selection of standalone wire

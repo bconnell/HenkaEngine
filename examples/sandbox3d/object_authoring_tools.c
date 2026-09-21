@@ -4697,15 +4697,21 @@ henka_result sandbox3d_authoring_object_dissolve_selected_edge(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
-    if (selected_ids == NULL || selected_count != 1U)
+    if (selected_ids == NULL || selected_count == 0U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_authoring_mesh_dissolve_edge(
-            candidate, (henka_authoring_edge_id)selected_ids[0], &report);
+        result = selected_count == 1U
+            ? henka_authoring_mesh_dissolve_edge(
+                  candidate, (henka_authoring_edge_id)selected_ids[0], &report)
+            : henka_authoring_mesh_dissolve_edges(
+                  candidate,
+                  (const henka_authoring_edge_id*)selected_ids,
+                  selected_count,
+                  &report);
     }
     if (result == HENKA_SUCCESS)
     {

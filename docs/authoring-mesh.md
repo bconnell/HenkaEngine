@@ -392,7 +392,10 @@ Successful Sandbox bevels replace Vertex selection with live cut vertices and us
 
 ### Dissolve and delete
 
-Transactional single-edge dissolve is available for compatible interior edges.
+Transactional dissolve is available for one compatible interior edge or a
+bounded pairwise-disjoint selection of compatible interior edges. Selected
+edges may not share endpoints or incident faces; hard, seamed, metadata-
+discontinuous, and otherwise incompatible selections fail closed.
 
 Transactional edge delete supports one face-backed edge, removing its incident
 face set while preserving vertices, or a bounded pairwise-disjoint selection of

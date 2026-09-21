@@ -5516,6 +5516,106 @@ static void henka_test_sandbox3d_object_authoring_edge_dissolve(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_edge_dissolve_batch(void)
+{
+    const henka_vec3 positions[12] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {2.0f, 1.0f, 0.0f},
+        {5.0f, 0.0f, 0.0f}, {6.0f, 0.0f, 0.0f}, {7.0f, 0.0f, 0.0f},
+        {5.0f, 1.0f, 0.0f}, {6.0f, 1.0f, 0.0f}, {7.0f, 1.0f, 0.0f}};
+    const size_t face_indices[4][4] = {
+        {0U, 1U, 4U, 3U}, {1U, 2U, 5U, 4U},
+        {6U, 7U, 10U, 9U}, {7U, 8U, 11U, 10U}};
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_mesh_desc desc = {16U, 24U, 8U, 8U};
+    henka_authoring_vertex_id vertices[12];
+    henka_authoring_edge_id edge_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_entity entity;
+    size_t index;
+
+    config.application_name = "Henka Edge Dissolve Batch Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Edge Dissolve Batch Grid");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    for (index = 0U; index < 12U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, positions[index], (henka_vec2){positions[index].x, positions[index].y},
+            4U, &vertices[index]) == HENKA_SUCCESS);
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        henka_authoring_vertex_id face[4];
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        size_t corner;
+        for (corner = 0U; corner < 4U; ++corner)
+        {
+            face[corner] = vertices[face_indices[index][corner]];
+        }
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+            source, face, 4U, 4U, true, &face_id) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(source));
+    HENKA_TEST_ASSERT(henka_test_find_edge_between_vertices(
+        source, vertices[1], vertices[4], &edge_ids[0]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_find_edge_between_vertices(
+        source, vertices[7], vertices[10], &edge_ids[1]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, edge_ids[0], false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, edge_ids[1], true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_dissolve_selected_edge(object) == HENKA_SUCCESS);
+    {
+        const henka_authoring_mesh_counts counts = henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(counts.vertices == 12U && counts.edges == 12U && counts.faces == 2U);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, edge_ids[0], false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, edge_ids[1], true) == HENKA_SUCCESS);
+    {
+        sandbox3d_modeling_operator_session session = {0};
+        HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+            &session, object, SANDBOX3D_MODELING_OPERATOR_DISSOLVE_EDGE) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+            &session, 0.0f, false, false) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    }
+    {
+        const henka_authoring_mesh_counts counts = henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(counts.vertices == 12U && counts.edges == 12U && counts.faces == 2U);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_edge_delete(void)
 {
     henka_engine_config config = {0};
@@ -9232,6 +9332,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_closed_boundary_loop_bridge();
     henka_test_sandbox3d_object_authoring_boundary_loop_fill();
     henka_test_sandbox3d_object_authoring_edge_dissolve();
+    henka_test_sandbox3d_object_authoring_edge_dissolve_batch();
     henka_test_sandbox3d_object_authoring_edge_delete();
     henka_test_sandbox3d_object_authoring_loose_edge_delete_batch();
     henka_test_sandbox3d_object_authoring_face_edge_delete_batch();

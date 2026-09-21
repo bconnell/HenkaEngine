@@ -492,6 +492,17 @@ henka_result henka_authoring_mesh_dissolve_edge(
     henka_authoring_edge_id edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Dissolves a bounded pairwise-disjoint set of compatible interior edges.
+ * Selected edges must each have two compatible incident faces and may not
+ * share endpoints or incident faces. Invalid, duplicate, overlapping,
+ * hard/seamed, material-discontinuous, and capacity-invalid selections fail
+ * without publishing a partial candidate. */
+henka_result henka_authoring_mesh_dissolve_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_authoring_modeling_report* out_report);
+
 /* Bridges two distinct boundary edges from different faces with one
  * deterministic quad. The source faces must agree on material and smoothing;
  * endpoint pairing follows the shorter geometric pairing and the new face is

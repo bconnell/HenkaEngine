@@ -59,8 +59,9 @@ typedef enum sandbox3d_modeling_operator_kind
      * standalone wire edges, through the shared Preview/Cancel/Apply session.
      * Mixed edge domains and overlapping face-backed selections are rejected. */
     SANDBOX3D_MODELING_OPERATOR_DELETE_EDGE,
-    /* Transactionally dissolves one selected compatible interior edge through
-     * the shared Preview/Cancel/Apply session. */
+    /* Transactionally dissolves one or a bounded pairwise-disjoint selection
+     * of compatible interior edges through the shared Preview/Cancel/Apply
+     * session. */
     SANDBOX3D_MODELING_OPERATOR_DISSOLVE_EDGE,
     /* Transactionally dissolves one or more selected vertices through the
      * shared Preview/Cancel/Apply session. */

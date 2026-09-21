@@ -4358,6 +4358,98 @@ cleanup:
     return result ? 1 : fail("transactional edge dissolve");
 }
 
+static int test_disjoint_edge_dissolve_batch_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 24U, 8U, 8U};
+    const henka_vec3 positions[12] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {2.0f, 1.0f, 0.0f},
+        {5.0f, 0.0f, 0.0f}, {6.0f, 0.0f, 0.0f}, {7.0f, 0.0f, 0.0f},
+        {5.0f, 1.0f, 0.0f}, {6.0f, 1.0f, 0.0f}, {7.0f, 1.0f, 0.0f}};
+    const henka_authoring_vertex_id face_vertices[4][4] = {
+        {1U, 2U, 5U, 4U}, {2U, 3U, 6U, 5U},
+        {7U, 8U, 11U, 10U}, {8U, 9U, 12U, 11U}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* baseline = NULL;
+    henka_authoring_vertex_id vertices[12];
+    henka_authoring_edge_id edge_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts unchanged;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 12U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){positions[index].x, positions[index].y},
+                3U, &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        henka_authoring_vertex_id face[4];
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        size_t corner;
+        for (corner = 0U; corner < 4U; ++corner)
+        {
+            face[corner] = vertices[face_vertices[index][corner] - 1U];
+        }
+        if (henka_authoring_mesh_add_face(mesh, face, 4U, 3U, true, &face_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (!henka_authoring_mesh_validate(mesh) ||
+        test_find_edge_between_vertices(mesh, vertices[1], vertices[4], &edge_ids[0]) != HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, vertices[7], vertices[10], &edge_ids[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_clone(mesh, &baseline) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_dissolve_edges(
+            mesh, edge_ids, 2U, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || before.vertices != after.vertices ||
+        before.faces != after.faces + 2U || before.edges != after.edges + 2U ||
+        henka_authoring_mesh_get_edge(mesh, edge_ids[0]) != NULL ||
+        henka_authoring_mesh_get_edge(mesh, edge_ids[1]) != NULL ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    unchanged = henka_authoring_mesh_get_counts(baseline);
+    if (henka_authoring_mesh_dissolve_edges(
+            baseline, (const henka_authoring_edge_id[]){edge_ids[0], edge_ids[0]},
+            2U, &report) != HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed ||
+        (before = henka_authoring_mesh_get_counts(baseline),
+         before.vertices != unchanged.vertices || before.edges != unchanged.edges ||
+         before.faces != unchanged.faces) ||
+        !henka_authoring_mesh_validate(baseline))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(baseline);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional disjoint edge dissolve batch");
+}
+
 static int test_edge_delete_operation(void)
 {
     const henka_authoring_mesh_desc desc = {128U, 256U, 128U, 8U};
@@ -8061,6 +8153,7 @@ int main(void)
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&
+        test_disjoint_edge_dissolve_batch_operation() &&
         test_edge_delete_operation() &&
         test_loose_edge_delete_batch_operation() &&
         test_face_edge_delete_batch_operation() &&

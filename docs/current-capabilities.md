@@ -627,7 +627,8 @@ The bounded native authoring workflow also includes:
 Available edge authoring includes:
 
 - bounded edge-loop/ring selection;
-- transactional single-edge dissolve for compatible interior edges;
+- transactional single-edge dissolve and a bounded pairwise-disjoint batch
+  dissolve for compatible interior edges;
 - one face-backed edge delete of its incident face set, or a bounded
   pairwise-disjoint batch delete of face-backed edges with disjoint endpoints
   and incident faces;

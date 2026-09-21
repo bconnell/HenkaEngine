@@ -505,7 +505,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
 
 #### Edge topology and authoring UX
 
-- Bounded single-edge dissolve and single-edge deletion of an incident face set
+- Bounded single-edge and pairwise-disjoint batch dissolve, plus single-edge
+  deletion of an incident face set
   are available within their supported domains. Face-backed edges also support
   bounded pairwise-disjoint batch deletion when endpoints and incident faces
   are disjoint. Standalone wire edges support bounded pairwise-disjoint batch
