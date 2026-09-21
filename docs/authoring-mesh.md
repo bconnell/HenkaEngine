@@ -98,6 +98,8 @@ Current operations include:
 - inset;
 - planar bevel ring;
 - face subdivision;
+- transactional deletion of one or more selected faces while preserving at
+  least one renderable face;
 - selected face-region extrusion with shared caps and transactional topology;
 - bounded edge bevel;
 - bounded loop-cut operations;
@@ -120,6 +122,11 @@ per-corner UVs, hard-edge intent, and seam intent are preserved. Duplicate,
 invalid, unsupported, or failed selections leave the source unchanged. The
 current public boundary is the authoring-mesh API; editor multi-face selection
 and preview/apply routing remains a later integration boundary.
+
+Selected-face deletion accepts a bounded unique face-ID set, validates the
+complete candidate before publication, and preserves the source on invalid,
+capacity-invalid, or failed requests. The shared Sandbox modeling session
+routes the same transaction through Preview, Apply, Cancel, undo, and redo.
 
 The shared Sandbox modeling session also routes one selected face through the
 same preview, Apply, Cancel, and undo boundary as the vertex and edge

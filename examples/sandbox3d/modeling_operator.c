@@ -1372,21 +1372,11 @@ henka_result sandbox3d_modeling_operator_preview(
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_DELETE_FACES)
     {
-        const henka_authoring_mesh_counts candidate_counts =
-            henka_authoring_mesh_get_counts(candidate);
-        if (session->selection_count >= candidate_counts.faces)
-        {
-            result = HENKA_ERROR_INVALID_ARGUMENT;
-        }
-        else
-        {
-            for (index = 0U; index < session->selection_count && result == HENKA_SUCCESS; ++index)
-            {
-                result = henka_authoring_mesh_remove_face(
-                    candidate,
-                    (henka_authoring_face_id)session->selection_ids[index]);
-            }
-        }
+        result = henka_authoring_mesh_delete_faces(
+            candidate,
+            (const henka_authoring_face_id*)session->selection_ids,
+            session->selection_count,
+            &report);
     }
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_DELETE_EDGE)

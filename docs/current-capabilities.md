@@ -473,6 +473,8 @@ The authoring mesh API provides:
 - smoothing and hard-edge intent;
 - fail-closed polygon validation;
 - deterministic caller-owned triangulation;
+- transactional batch deletion of selected faces while preserving at least one
+  renderable face;
 - bounded shared undo/redo.
 
 ### Topology analysis and safe repair

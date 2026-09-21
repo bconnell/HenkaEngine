@@ -910,6 +910,21 @@ static void henka_test_sandbox3d_modeling_operator_delete_faces(void)
 
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
     sandbox3d_authoring_object_clear_component_selection(object);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, 2U, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_DELETE_FACES) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.0f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).faces == before.faces - 2U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).faces == before.faces);
+    sandbox3d_authoring_object_clear_component_selection(object);
     for (face_id = 1U; face_id <= before.faces; ++face_id)
     {
         HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(

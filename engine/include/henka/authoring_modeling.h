@@ -554,6 +554,16 @@ henka_result henka_authoring_mesh_delete_edge(
     henka_authoring_edge_id edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Removes a bounded selection of faces while preserving at least one
+ * renderable face. Duplicate, invalid, and capacity-invalid selections fail
+ * without changing the source mesh; the complete deletion publishes only
+ * after the candidate validates. */
+henka_result henka_authoring_mesh_delete_faces(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_face_id* face_ids,
+    size_t face_count,
+    henka_authoring_modeling_report* out_report);
+
 /* Removes a bounded pairwise-disjoint set of face-backed edges and their
  * incident face sets while preserving vertices. Selected edges may not share
  * endpoints or incident faces, and at least one renderable face must remain.

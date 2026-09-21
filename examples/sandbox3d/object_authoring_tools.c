@@ -7079,8 +7079,6 @@ henka_result sandbox3d_authoring_object_delete_selected_faces(
     henka_authoring_mesh* candidate = NULL;
     const uint32_t* selected_ids;
     size_t selected_count = 0U;
-    size_t index;
-    henka_authoring_mesh_counts counts;
     henka_result result;
 
     if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE)
@@ -7088,30 +7086,18 @@ henka_result sandbox3d_authoring_object_delete_selected_faces(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
-    counts = henka_authoring_mesh_get_counts(object->mesh);
-    if (selected_ids == NULL || selected_count == 0U || selected_count >= counts.faces)
+    if (selected_ids == NULL || selected_count == 0U)
     {
-        /* Keep at least one renderable face so bounds, picking, and the
-         * evaluated scene mesh remain well-defined. */
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    for (index = 0U; index < selected_count; ++index)
-    {
-        if (henka_authoring_mesh_get_face(
-                object->mesh, (henka_authoring_face_id)selected_ids[index]) == NULL)
-        {
-            return HENKA_ERROR_INVALID_ARGUMENT;
-        }
-    }
-
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        for (index = 0U; index < selected_count && result == HENKA_SUCCESS; ++index)
-        {
-            result = henka_authoring_mesh_remove_face(
-                candidate, (henka_authoring_face_id)selected_ids[index]);
-        }
+        result = henka_authoring_mesh_delete_faces(
+            candidate,
+            (const henka_authoring_face_id*)selected_ids,
+            selected_count,
+            NULL);
     }
     if (result == HENKA_SUCCESS)
     {
