@@ -552,6 +552,7 @@ typedef struct sandbox3d_state
     bool native_authoring_export_control_reported;
     float native_authoring_export_control_reported_y;
     bool native_authoring_material_control_reported;
+    float native_authoring_material_control_reported_y;
     bool native_authoring_material_editor_reported;
     bool native_authoring_material_optical_reported;
     float native_authoring_material_optical_reported_y;
@@ -14393,6 +14394,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_export_control_reported = false;
     state->native_authoring_export_control_reported_y = 0.0f;
     state->native_authoring_material_control_reported = false;
+    state->native_authoring_material_control_reported_y = -FLT_MAX;
     state->native_authoring_material_editor_reported = false;
     state->native_authoring_material_optical_reported = false;
     state->native_authoring_material_optical_reported_y = -FLT_MAX;
@@ -17006,6 +17008,7 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
             state->native_authoring_project_controls_reported_entity = HENKA_INVALID_ENTITY;
             state->native_authoring_export_control_reported = false;
             state->native_authoring_material_control_reported = false;
+            state->native_authoring_material_control_reported_y = -FLT_MAX;
             state->native_authoring_material_editor_reported = false;
             state->native_authoring_material_optical_reported = false;
             state->native_authoring_material_optical_reported_y = -FLT_MAX;
@@ -28595,7 +28598,10 @@ details_group_authoring:
                 }
                 if (!native_material_owned)
                 {
-                    if (!state->native_authoring_material_control_reported)
+                    if (!state->native_authoring_material_control_reported ||
+                        fabsf(
+                            row.y - state->native_authoring_material_control_reported_y) >
+                            0.5f)
                     {
                         printf(
                             "Native authoring material control: name=%s own_x=%.1f own_y=%.1f width=100.0 height=24.0 owned=0.\n",
@@ -28604,6 +28610,7 @@ details_group_authoring:
                             row.y);
                         fflush(stdout);
                         state->native_authoring_material_control_reported = true;
+                        state->native_authoring_material_control_reported_y = row.y;
                     }
                     if (henka_ui_button(
                             state->ui,
