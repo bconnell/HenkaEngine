@@ -9063,6 +9063,139 @@ cleanup:
     return result ? 1 : fail("OBJ export round trip");
 }
 
+static int test_vertex_face_rip_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 4U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[4] = {0U};
+    henka_authoring_vertex_id new_vertex = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id faces[2] = {HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts rejected;
+    const henka_authoring_face* face;
+    const henka_authoring_face* other_face;
+    const henka_authoring_vertex* source;
+    const henka_authoring_vertex* separated;
+    henka_authoring_edge_id source_edges[2];
+    henka_vec3 source_position;
+    henka_vec2 source_uv;
+    uint32_t source_material;
+    bool other_has_new = false;
+    bool other_has_source = false;
+    size_t corner;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 0.0f, 0.0f},
+            (henka_vec2){0.25f, 0.5f}, 7U, &vertices[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){1.0f, 0.0f, 0.0f},
+            (henka_vec2){1.0f, 0.0f}, 7U, &vertices[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 1.0f, 0.0f},
+            (henka_vec2){0.0f, 1.0f}, 7U, &vertices[2]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){-1.0f, 0.0f, 0.0f},
+            (henka_vec2){-1.0f, 0.0f}, 7U, &vertices[3]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(mesh,
+            (henka_authoring_vertex_id[]){vertices[0], vertices[1], vertices[2]},
+            3U, 11U, true, &faces[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(mesh,
+            (henka_authoring_vertex_id[]){vertices[0], vertices[2], vertices[3]},
+            3U, 13U, false, &faces[1]) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    face = henka_authoring_mesh_get_face(mesh, faces[0]);
+    if (face == NULL || henka_authoring_mesh_set_face_corner_uv(
+            mesh, faces[0], 0U, (henka_vec2){0.125f, 0.875f}) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    face = henka_authoring_mesh_get_face(mesh, faces[0]);
+    if (face == NULL)
+    {
+        goto cleanup;
+    }
+    source_edges[0] = face->edges[0];
+    source_edges[1] = face->edges[2];
+    if (henka_authoring_mesh_set_edge_hard(mesh, source_edges[0], true) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_seam(mesh, source_edges[0], true) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_hard(mesh, source_edges[1], true) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_seam(mesh, source_edges[1], true) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    source = henka_authoring_mesh_get_vertex(mesh, vertices[0]);
+    source_position = source->position;
+    source_uv = source->uv;
+    source_material = source->material_region;
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (source == NULL || henka_authoring_mesh_rip_vertex_face(
+            mesh, vertices[0], faces[0], &new_vertex, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    face = henka_authoring_mesh_get_face(mesh, faces[0]);
+    other_face = henka_authoring_mesh_get_face(mesh, faces[1]);
+    separated = henka_authoring_mesh_get_vertex(mesh, new_vertex);
+    if (after.vertices != before.vertices + 1U || after.edges != before.edges + 1U ||
+        after.faces != before.faces || separated == NULL || face == NULL || other_face == NULL ||
+        !report.changed || report.created_vertices != 1U || report.created_edges != 1U ||
+        separated->position.x != source_position.x || separated->position.y != source_position.y ||
+        separated->position.z != source_position.z || separated->uv.x != source_uv.x ||
+        separated->uv.y != source_uv.y || separated->material_region != source_material ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (corner = 0U; corner < face->corner_count; ++corner)
+    {
+        if (face->vertices[corner] == vertices[0] || face->vertices[corner] == new_vertex)
+        {
+            if (face->vertices[corner] != new_vertex ||
+                face->uvs[corner].x != 0.125f || face->uvs[corner].y != 0.875f)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    for (corner = 0U; corner < other_face->corner_count; ++corner)
+    {
+        other_has_new = other_has_new || other_face->vertices[corner] == new_vertex;
+        other_has_source = other_has_source || other_face->vertices[corner] == vertices[0];
+    }
+    if (other_has_new || !other_has_source)
+    {
+        goto cleanup;
+    }
+    face = henka_authoring_mesh_get_face(mesh, faces[0]);
+    for (corner = 0U; corner < 2U; ++corner)
+    {
+        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+            mesh, face->edges[corner == 0U ? 0U : 2U]);
+        if (edge == NULL || !edge->hard || !edge->seam)
+        {
+            goto cleanup;
+        }
+    }
+    before = after;
+    if (henka_authoring_mesh_rip_vertex_face(
+            mesh, vertices[0], HENKA_AUTHORING_INVALID_ID, &new_vertex, &report) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        (rejected = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &rejected, sizeof(before)) != 0) ||
+        new_vertex != HENKA_AUTHORING_INVALID_ID || report.changed)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("vertex face rip");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_extreme_bounds_remain_finite() &&
@@ -9103,7 +9236,7 @@ int main(void)
         test_uv_global_packing() &&
         test_uv_planar_unwrap() &&
         test_uv_cylindrical_unwrap() &&
-        test_uv_spherical_unwrap() && test_obj_export_round_trip() &&
+        test_uv_spherical_unwrap() && test_vertex_face_rip_operation() && test_obj_export_round_trip() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&

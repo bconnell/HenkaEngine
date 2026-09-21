@@ -216,6 +216,19 @@ henka_result henka_authoring_mesh_delete_vertices(
     size_t vertex_count,
     henka_authoring_modeling_report* out_report);
 
+/* Separates one selected surface vertex from one of its incident faces by
+ * creating a colocated vertex for that face corner. The complete candidate is
+ * validated before publication; the source vertex, face metadata, corner UVs,
+ * and hard/seam intent on the separated boundary are preserved. A face that
+ * does not contain the selected vertex, a loose vertex, and capacity failure
+ * are rejected without changing the source mesh. */
+henka_result henka_authoring_mesh_rip_vertex_face(
+    henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id vertex_id,
+    henka_authoring_face_id face_id,
+    henka_authoring_vertex_id* out_new_vertex_id,
+    henka_authoring_modeling_report* out_report);
+
 henka_result henka_authoring_mesh_connect_vertices(
     henka_authoring_mesh* mesh,
     henka_authoring_vertex_id first_vertex_id,
