@@ -10942,6 +10942,7 @@ henka_result henka_authoring_mesh_extrude_interior_edges(
     size_t start = SIZE_MAX;
     size_t current;
     size_t previous = SIZE_MAX;
+    bool pairwise_disjoint = true;
     henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
 
     modeling_report_reset(out_report);
@@ -11083,6 +11084,7 @@ henka_result henka_authoring_mesh_extrude_interior_edges(
             }
             if (shared_face_count == 1U)
             {
+                pairwise_disjoint = false;
                 ++degrees[index];
                 ++degrees[other_index];
                 if (degrees[index] > 2U || degrees[other_index] > 2U)
@@ -11092,6 +11094,50 @@ henka_result henka_authoring_mesh_extrude_interior_edges(
                 }
             }
         }
+    }
+    if (pairwise_disjoint)
+    {
+        result = henka_authoring_mesh_clone(mesh, &candidate);
+        if (result != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (index = 0U; index < edge_count; ++index)
+        {
+            henka_authoring_modeling_report step_report = {0};
+            result = henka_authoring_mesh_extrude_edge(
+                candidate, ordered_edge_ids[index], distance,
+                &(henka_authoring_edge_id){HENKA_AUTHORING_INVALID_ID},
+                &(henka_authoring_face_id){HENKA_AUTHORING_INVALID_ID},
+                &step_report);
+            if (result != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+            if (index == 0U)
+            {
+                first_report = step_report;
+            }
+        }
+        if (!henka_authoring_mesh_validate(candidate) ||
+            !modeling_face_geometry_is_valid(candidate))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        after = henka_authoring_mesh_get_counts(candidate);
+        result = henka_authoring_mesh_copy(mesh, candidate);
+        if (result == HENKA_SUCCESS)
+        {
+            modeling_report_count_delta(&before, &after, out_report);
+            if (out_report != NULL)
+            {
+                out_report->primary_vertex_id = first_report.primary_vertex_id;
+                out_report->primary_edge_id = first_report.primary_edge_id;
+                out_report->primary_face_id = first_report.primary_face_id;
+            }
+        }
+        goto cleanup;
     }
     for (index = 0U; index < edge_count; ++index)
     {

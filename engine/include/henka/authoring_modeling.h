@@ -480,7 +480,8 @@ henka_result henka_authoring_mesh_extrude_edge(
     henka_authoring_modeling_report* out_report);
 
 /* Extrudes a selected set of compatible interior edges transactionally. The
- * bounded supported domains include a simple connected quad-strip path whose
+ * bounded supported domains include a pairwise-disjoint set of independent
+ * compatible interior edges and a simple connected quad-strip path whose
  * selected edges are interior, non-hard, non-seamed, and share material,
  * smoothing, and UV continuity with their incident quads. The domains also
  * include one compatible three-edge branching fan around a valence-three
