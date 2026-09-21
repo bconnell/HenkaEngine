@@ -101,6 +101,8 @@ Current operations include:
 - selected face-region extrusion with shared caps and transactional topology;
 - bounded edge bevel;
 - bounded loop-cut operations;
+- bounded midpoint split of one selected standalone loose edge, preserving
+  endpoint metadata and selecting the two replacement edges;
 - bounded vertex and edge extrusion paths described below.
 
 Each operation works on a clone and publishes only a validated result. Capacity, topology, geometry, or non-manifold rejection preserves the committed source.
@@ -281,7 +283,7 @@ This persistence currently operates per authored object. Complete scene/project 
 
 ### Selection history
 
-The authoring bridge stores one bounded selected-face identity beside each mesh-history snapshot.
+The authoring bridge stores one bounded selected-face identity beside each mesh-history snapshot. The bounded loose-edge split additionally stores its component-mode selection snapshot so the original edge and the two replacement edges return through undo/redo.
 
 - topology operations select their deterministic result;
 - undo/redo restores the matching prior or next face when it still exists;
@@ -485,8 +487,8 @@ candidate through Preview, Apply, Cancel, and the existing undo/redo history.
 It creates quad faces only and preserves the source material, smoothing, and
 per-corner UV state.
 
-Branching or ambiguous loop-cut networks and generalized split workflows remain
-unfinished.
+Branching or ambiguous loop-cut networks and generalized split workflows beyond
+the standalone loose-edge midpoint operation remain unfinished.
 
 ### Edge Slide
 
@@ -536,6 +538,16 @@ It:
 - preserves source-edge hard intent.
 
 It rejects face-backed edges, mismatched endpoint materials, degenerate offsets, and capacity exhaustion.
+
+### Loose-edge Split
+
+The core modeling API and Sandbox Edge-mode path support splitting one selected
+standalone wire edge at its midpoint. The new vertex interpolates endpoint UVs,
+inherits the endpoint material region, and the two replacement edges preserve
+the source hard-edge and seam intent. The operation rejects face-backed edges,
+mismatched endpoint materials, degenerate source edges, and capacity
+exhaustion without publishing a partial mesh. The Sandbox selects both
+replacement edges and restores the prior edge selection through undo/redo.
 
 ### Sandbox loose-component session
 
@@ -636,7 +648,8 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - generalized surface-connected Vertex/Edge Extrude beyond the bounded open-fan,
   closed-fan batch, boundary-edge, and compatible single-sided interior-edge
   cases;
-- generalized closed-loop, branching, and broader weld/split/bridge workflows;
+- generalized closed-loop, branching, and broader weld/split/bridge workflows
+  beyond the bounded standalone loose-edge midpoint operation;
 - multi-face and general loop-cut networks;
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;

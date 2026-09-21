@@ -294,6 +294,20 @@ henka_result henka_authoring_mesh_extrude_loose_edge(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Splits one standalone wire edge at its midpoint. The source edge must have
+ * no incident faces. The new midpoint inherits the endpoint material region
+ * and interpolated UV; both replacement edges inherit hard-edge and seam
+ * intent. The operation is candidate-first and rejects face-backed,
+ * mismatched-material, degenerate, and capacity-invalid requests without
+ * changing the source mesh. */
+henka_result henka_authoring_mesh_split_loose_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id edge_id,
+    henka_authoring_vertex_id* out_split_vertex_id,
+    henka_authoring_edge_id* out_first_edge_id,
+    henka_authoring_edge_id* out_second_edge_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Extrudes one compatible edge transactionally. An open boundary edge moves
  * along its incident face normal and creates one connecting quad. An interior
  * edge is supported as a single-sided operation for one same-material,

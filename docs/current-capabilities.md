@@ -776,8 +776,8 @@ A selected closed boundary edge loop can also be filled with one deterministic
 polygon through the same source/render/history transaction. Boundary-only,
 simple, compatible loops are supported; open loops and incompatible metadata
  fail closed without source mutation. Branching bridge domains,
- ambiguous loop-cut networks, and generalized split operations remain
-incomplete.
+ ambiguous loop-cut networks, and generalized split operations beyond the
+ standalone loose-edge midpoint path remain incomplete.
 
 See [authoring-mesh.md](authoring-mesh.md), [runtime-foundations.md](runtime-foundations.md), and [showcase-assets.md](showcase-assets.md).
 

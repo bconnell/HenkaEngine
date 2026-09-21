@@ -1724,6 +1724,22 @@ static henka_result sandbox3d_apply_authoring_dissolve_edge(
     return result;
 }
 
+static henka_result sandbox3d_apply_authoring_split_loose_edge(
+    sandbox3d_state* state)
+{
+    if (state == NULL || state->authoring_object == NULL ||
+        sandbox3d_authoring_object_get_selection_mode(state->authoring_object) !=
+            SANDBOX3D_AUTHORING_SELECTION_EDGE ||
+        sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object) != 1U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    return sandbox3d_authoring_object_split_selected_loose_edge(
+        state->authoring_object);
+}
+
 static henka_result sandbox3d_apply_authoring_dissolve_vertices(
     sandbox3d_state* state)
 {
@@ -11703,7 +11719,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
     printf("  Select an authored scene object and open Object Details > Audio to edit its persisted clip path, enabled, looping, and spatial settings; Preview and Stop Preview use the real scene entity and manager-owned Audio asset.\n");
-    printf("  Select the editable Ground Plane or an explicit reference asset, open Object Details > Authoring, and choose Make Editable when available; the generic component Move, selected-vertex/loose Vertex/Edge Extrude, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide/Bridge/Fill Boundary/Hard Edges/Soft Edges, and Face Bevel/Extrude/Extrude Selection/Subdivide/Smooth Faces/Flat Faces controls are the user-facing modeling path. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge. The same Vertex-mode amount control routes compatible single or multi-vertex boundary and interior fan selections through transactional surface extrusion, while the Edge-mode amount control routes one open boundary edge or compatible boundary-edge selections on one face or distinct faces through face-normal surface-connected Edge Extrude. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources remain explicit editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
+    printf("  Select the editable Ground Plane or an explicit reference asset, open Object Details > Authoring, and choose Make Editable when available; the generic component Move, selected-vertex/loose Vertex/Edge Extrude, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide/Bridge/Fill Boundary/Split Loose Edge/Hard Edges/Soft Edges, and Face Bevel/Extrude/Extrude Selection/Subdivide/Smooth Faces/Flat Faces controls are the user-facing modeling path. Split Loose Edge is bounded to one selected standalone wire edge and inserts a midpoint while selecting the two replacement edges. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge. The same Vertex-mode amount control routes compatible single or multi-vertex boundary and interior fan selections through transactional surface extrusion, while the Edge-mode amount control routes one open boundary edge or compatible boundary-edge selections on one face or distinct faces through face-normal surface-connected Edge Extrude. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources remain explicit editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Tools panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Tools provides Build, Game, and World work contexts plus saved/custom workspace layouts; topology edits mark the workspace Custom.\n");
@@ -30343,6 +30359,39 @@ details_group_authoring:
                                 true,
                                 "Edge bridge rejected; select two compatible boundary edges or two equal-length open chains.");
                         }
+                    }
+                }
+                if (sandbox3d_authoring_object_get_selected_component_count(
+                        state->authoring_object) == 1U &&
+                    sandbox3d_details_flow_next_row(
+                        state,
+                        flow_desc.bounds,
+                        28.0f,
+                        1U,
+                        &row) &&
+                    row.width >= 290.0f &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_edge_split_loose_top",
+                        (henka_ui_rect){row.x, row.y, 128.0f, 24.0f},
+                        "Split Loose Edge"))
+                {
+                    const henka_result split_result =
+                        sandbox3d_apply_authoring_split_loose_edge(state);
+                    if (split_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Loose edge split at its midpoint; new edges selected.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Loose-edge split rejected; select one standalone wire edge.");
                     }
                 }
                 if (sandbox3d_authoring_object_get_selected_component_count(

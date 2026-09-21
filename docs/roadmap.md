@@ -484,7 +484,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
     per paired edge, using deterministic open-chain endpoint or closed-loop
     cyclic pairing. A selected closed boundary edge loop can also be filled
     transactionally with one metadata-compatible polygon. Branching bridge and
-    generalized split workflows remain future work.
+    generalized split workflows beyond the bounded standalone loose-edge
+    midpoint operation remain future work.
 9. HAMS preserves explicit loose vertices and standalone wire edges with stable
    IDs and bounded reusable storage. The topology overlay presents those source
    vertices and wire edges for inspection.

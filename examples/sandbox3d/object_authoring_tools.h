@@ -306,6 +306,12 @@ henka_result sandbox3d_authoring_object_select_edge_ring(
  * rejected until a stable batch remapping contract is available. */
 henka_result sandbox3d_authoring_object_dissolve_selected_edge(
     sandbox3d_authoring_object* object);
+/* Splits one selected standalone wire edge at its midpoint through the
+ * authoritative source/render/bounds/physics/undo transaction. The two
+ * replacement edges inherit the source hard/seam state and become the new
+ * edge selection; face-backed or capacity-invalid selections fail closed. */
+henka_result sandbox3d_authoring_object_split_selected_loose_edge(
+    sandbox3d_authoring_object* object);
 /* Bridges either two selected compatible boundary edges or two equal-length
  * selected open boundary chains through the authoritative
  * source/render/bounds/physics/undo transaction. */
