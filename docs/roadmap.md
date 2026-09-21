@@ -470,9 +470,10 @@ Integrated authoring is already underway as part of the current 3D completion pa
    available. Repair can remove enabled isolated vertices, exact
    metadata-preserving duplicate faces, and degenerate faces. Unsafe winding,
    UV, material, smoothing, and non-manifold changes are rejected.
-7. Face winding flip for one or a bounded unique face selection, face extrude,
-   inset, planar bevel rings, face subdivision, deterministic planar face
-   triangulation, transactional selected-face deletion,
+7. Face winding flip for one or a bounded unique face selection, bounded
+   vertex-disjoint face-normal translation, face extrude, inset, planar bevel
+   rings, face subdivision, deterministic planar face triangulation,
+   transactional selected-face deletion,
    planar UV projection, bounded per-face transforms,
    selected-island UV scaling/packing, deterministic all-island UV packing,
    planar-chart UV unwrap, seam detection, Make Editable, HAMS

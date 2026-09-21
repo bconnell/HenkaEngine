@@ -79,6 +79,10 @@ forms, plus pairwise-disjoint face-backed edge-delete batches. All use candidate
 Sandbox history; broader branching and ambiguous split domains remain outside
 that declared scope.
 
+The Sandbox face-normal operator supports one or a bounded vertex-disjoint
+face selection. Shared-vertex selections fail during Preview so the result is
+independent of face iteration order and the live mesh remains unchanged.
+
 ## Renderer completion ledger
 
 This ledger makes the supported renderer boundary explicit without creating a

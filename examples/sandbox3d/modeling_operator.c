@@ -124,6 +124,80 @@ static henka_result sandbox3d_modeling_operator_apply_face_normal(
     return HENKA_SUCCESS;
 }
 
+static bool sandbox3d_modeling_operator_faces_share_vertex(
+    const henka_authoring_face* first,
+    const henka_authoring_face* second)
+{
+    size_t first_corner;
+    size_t second_corner;
+
+    if (first == NULL || second == NULL)
+    {
+        return true;
+    }
+    for (first_corner = 0U; first_corner < first->corner_count; ++first_corner)
+    {
+        for (second_corner = 0U; second_corner < second->corner_count; ++second_corner)
+        {
+            if (first->vertices[first_corner] == second->vertices[second_corner])
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static henka_result sandbox3d_modeling_operator_apply_face_normals(
+    const henka_authoring_mesh* source,
+    henka_authoring_mesh* candidate,
+    const henka_authoring_face_id* face_ids,
+    size_t face_count,
+    float distance)
+{
+    size_t index;
+    size_t other_index;
+
+    if (source == NULL || candidate == NULL || face_ids == NULL || face_count == 0U ||
+        !isfinite(distance))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (face_count > HENKA_AUTHORING_MESH_HARD_MAX_FACES)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (index = 0U; index < face_count; ++index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            source, face_ids[index]);
+        if (face == NULL || face->vertices == NULL || face->corner_count < 3U)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        for (other_index = 0U; other_index < index; ++other_index)
+        {
+            const henka_authoring_face* other = henka_authoring_mesh_get_face(
+                source, face_ids[other_index]);
+            if (face_ids[index] == face_ids[other_index] ||
+                sandbox3d_modeling_operator_faces_share_vertex(face, other))
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+    }
+    for (index = 0U; index < face_count; ++index)
+    {
+        const henka_result result = sandbox3d_modeling_operator_apply_face_normal(
+            source, candidate, face_ids[index], distance);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_modeling_operator_collect_boundary_vertex_chain(
     const henka_authoring_mesh* mesh,
     const henka_authoring_vertex_id* vertex_ids,
@@ -402,7 +476,7 @@ henka_result sandbox3d_modeling_operator_begin(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (kind == SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL &&
-        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count != 1U))
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count == 0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -966,7 +1040,7 @@ henka_result sandbox3d_modeling_operator_preview(
              session->selection_count != 1U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
-             session->selection_count != 1U)) ||
+             session->selection_count == 0U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_FLIP_FACE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
              session->selection_count == 0U)) ||
@@ -1356,10 +1430,11 @@ henka_result sandbox3d_modeling_operator_preview(
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL)
     {
-        result = sandbox3d_modeling_operator_apply_face_normal(
+        result = sandbox3d_modeling_operator_apply_face_normals(
             session->source_snapshot,
             candidate,
-            (henka_authoring_face_id)session->selection_ids[0U],
+            (const henka_authoring_face_id*)session->selection_ids,
+            session->selection_count,
             applied_amount);
     }
     if (result == HENKA_SUCCESS &&

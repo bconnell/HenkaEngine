@@ -94,6 +94,7 @@ Current operations include:
 - box creation;
 - duplicate;
 - face winding flip for one or a bounded unique face selection;
+- face-normal translation for one or a bounded vertex-disjoint face selection;
 - face extrude;
 - inset;
 - planar bevel ring;

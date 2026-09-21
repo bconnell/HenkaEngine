@@ -668,6 +668,127 @@ static void henka_test_sandbox3d_modeling_operator_face_normal(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_modeling_operator_face_normal_batch(void)
+{
+    henka_engine_config config = {0};
+    const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 8U};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    sandbox3d_modeling_operator_session session = {0};
+    henka_authoring_face_id face_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id adjacent_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id vertex_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_vec3 before_positions[2];
+    henka_vec3 after_positions[2];
+    henka_entity entity = HENKA_INVALID_ENTITY;
+
+    config.application_name = "Henka Batch Face Normal Operator Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Batch Face Normal Operator");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create_box(
+        &desc, 2.0f, 2.0f, 2.0f, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_id_at(
+        source, 0U, &face_ids[0]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_id_at(
+        source, 1U, &face_ids[1]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_id_at(
+        source, 2U, &adjacent_face_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+    for (size_t index = 0U; index < 2U; ++index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object), face_ids[index]);
+        HENKA_TEST_ASSERT(face != NULL && face->corner_count == 4U);
+        vertex_ids[index] = face->vertices[0U];
+        before_positions[index] = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), vertex_ids[index])->position;
+    }
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, face_ids[0], false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, face_ids[1], true) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.25f, false, false) == HENKA_SUCCESS);
+    for (size_t index = 0U; index < 2U; ++index)
+    {
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            henka_authoring_mesh_get_vertex(
+                sandbox3d_authoring_object_get_mesh(object), vertex_ids[index])->position.x,
+            before_positions[index].x,
+            0.0001f);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.25f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    for (size_t index = 0U; index < 2U; ++index)
+    {
+        after_positions[index] = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), vertex_ids[index])->position;
+        HENKA_TEST_ASSERT(henka_vec3_length(henka_vec3_subtract(
+            after_positions[index], before_positions[index])) > 0.1f);
+    }
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    for (size_t index = 0U; index < 2U; ++index)
+    {
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            henka_authoring_mesh_get_vertex(
+                sandbox3d_authoring_object_get_mesh(object), vertex_ids[index])->position.x,
+            before_positions[index].x,
+            0.0001f);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_clear_component_selection(object);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, face_ids[0], false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, adjacent_face_id, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.25f, false, false) == HENKA_ERROR_INVALID_ARGUMENT);
+    for (size_t index = 0U; index < 2U; ++index)
+    {
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            henka_authoring_mesh_get_vertex(
+                sandbox3d_authoring_object_get_mesh(object), vertex_ids[index])->position.x,
+            before_positions[index].x,
+            0.0001f);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
+
+    sandbox3d_modeling_operator_reset(&session);
+    henka_test_destroy_authoring_object(scene, entity, object);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_modeling_operator_subdivide_face(void)
 {
     henka_engine_config config = {0};
@@ -9316,6 +9437,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_modeling_operator_triangulate_face();
     henka_test_sandbox3d_modeling_operator_inset_face();
     henka_test_sandbox3d_modeling_operator_face_normal();
+    henka_test_sandbox3d_modeling_operator_face_normal_batch();
     henka_test_sandbox3d_modeling_operator_subdivide_face();
     henka_test_sandbox3d_modeling_operator_flip_face();
     henka_test_sandbox3d_modeling_operator_delete_faces();

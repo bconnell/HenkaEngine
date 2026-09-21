@@ -562,6 +562,7 @@ Available operations also include:
 - plane/box creation;
 - duplicate;
 - face winding flip for one or a bounded unique face selection;
+- face-normal translation for one or a bounded vertex-disjoint face selection;
 - face extrude;
 - selected face-region extrusion with shared translated caps and transactional
   source-preserving behavior for isolated regions;

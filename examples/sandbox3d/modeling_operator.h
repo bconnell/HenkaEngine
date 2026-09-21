@@ -45,8 +45,8 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally insets one selected face through the shared
      * Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_INSET,
-    /* Transactionally moves one selected face along its evaluated normal
-     * through the shared Preview/Cancel/Apply session. */
+    /* Transactionally moves one or a bounded vertex-disjoint face selection
+     * along evaluated normals through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL,
     /* Transactionally reverses one selected face winding through the shared
      * Preview/Cancel/Apply session. */
