@@ -101,8 +101,9 @@ Current operations include:
 - selected face-region extrusion with shared caps and transactional topology;
 - bounded edge bevel;
 - bounded loop-cut operations;
-- bounded split of one selected face-backed boundary or interior edge at a
-  factor in (0,1), preserving per-corner UVs and hard/seam metadata;
+- bounded split of one or a pairwise-disjoint batch of selected face-backed
+  boundary or interior edges at a factor in (0,1), preserving per-corner UVs
+  and hard/seam metadata;
 - bounded midpoint split of one selected standalone loose edge, preserving
   endpoint metadata and selecting the two replacement edges;
 - bounded vertex and edge extrusion paths described below.
@@ -505,8 +506,8 @@ It creates quad faces only and preserves the source material, smoothing, and
 per-corner UV state.
 
 Branching or ambiguous loop-cut networks and generalized split workflows beyond
-the bounded face-backed boundary/interior and standalone loose-edge operations
-remain unfinished.
+the bounded face-backed boundary/interior batch and standalone loose-edge
+operations remain unfinished.
 
 ### Edge Slide
 
@@ -570,16 +571,20 @@ replacement edges and restores the prior edge selection through undo/redo.
 ### Face-backed Edge Split
 
 The core modeling API supports splitting one selected face-backed boundary or
-interior edge at a factor strictly between zero and one. The new vertex
-interpolates position and per-corner UV state. Each incident face receives the
-new corner, and the two replacement edges preserve the source hard-edge and
-seam intent. Boundary and two-face interior edges are supported; non-manifold
-edges, incompatible endpoint material regions, invalid factors, and capacity
-exhaustion fail closed without publishing a partial mesh.
+interior edge at a factor strictly between zero and one, or a bounded batch of
+pairwise-disjoint face-backed edges. The new vertex interpolates position and
+per-corner UV state. Each incident face receives the new corner, and the two
+replacement edges preserve the source hard-edge and seam intent. Boundary and
+two-face interior edges are supported; non-manifold edges, incompatible
+endpoint material regions, invalid factors, overlapping or duplicate batch
+selections, and capacity exhaustion fail closed without publishing a partial
+mesh.
 
 The Sandbox Edge-mode operator exposes the same operation through Preview,
 Apply, Cancel, and undo/redo. Preview leaves the committed source unchanged;
-Apply selects the two replacement edges.
+Apply selects the two replacement edges for each split. Batch selection is
+limited to edges with disjoint endpoints and disjoint incident faces; shared,
+cyclic, or otherwise ambiguous selections are rejected.
 
 ### Sandbox loose-component session
 
@@ -681,7 +686,7 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
   closed-fan batch, boundary-edge, and compatible single-sided interior-edge
   cases;
 - generalized closed-loop, branching, and broader weld/split/bridge workflows
-  beyond the bounded face-backed boundary/interior and standalone loose-edge
+  beyond the bounded face-backed boundary/interior batch and standalone loose-edge
   operations;
 - multi-face and general loop-cut networks;
 - branching and broader interior edge-set bevel;

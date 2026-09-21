@@ -23,9 +23,9 @@ typedef enum sandbox3d_modeling_operator_kind
      * the shared candidate Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_TRANSFORM,
     SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE,
-    /* Transactionally splits one selected face-backed boundary or interior
-     * edge at a factor in (0,1) through the shared Preview/Cancel/Apply
-     * session. */
+    /* Transactionally splits one or a bounded pairwise-disjoint selection of
+     * face-backed boundary or interior edges at a factor in (0,1) through the
+     * shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_SPLIT_EDGE,
     SANDBOX3D_MODELING_OPERATOR_BEVEL,
     /* Extrusion of selected vertices, one selected face, or one loose edge.
@@ -150,6 +150,10 @@ typedef struct sandbox3d_modeling_operator_session
     bool loose_configured;
     henka_authoring_edge_id split_first_edge;
     henka_authoring_edge_id split_second_edge;
+    henka_authoring_vertex_id* split_vertex_ids;
+    henka_authoring_edge_id* split_first_edges;
+    henka_authoring_edge_id* split_second_edges;
+    size_t split_result_count;
     bool split_configured;
     uint32_t created_component_id;
     bool numeric_active;

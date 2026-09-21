@@ -324,11 +324,12 @@ henka_result sandbox3d_authoring_object_dissolve_selected_edge(
  * edge selection; face-backed or capacity-invalid selections fail closed. */
 henka_result sandbox3d_authoring_object_split_selected_loose_edge(
     sandbox3d_authoring_object* object);
-/* Splits one selected face-backed boundary or interior edge at a factor
- * strictly between zero and one through the authoritative source/render,
- * bounds, physics, and undo transaction. The replacement edges become the
- * new edge selection; standalone wire edges continue to use the dedicated
- * midpoint operation above. */
+/* Splits one or a bounded pairwise-disjoint selection of selected face-backed
+ * boundary or interior edges at a factor strictly between zero and one
+ * through the authoritative source/render, bounds, physics, and undo
+ * transaction. The replacement edges become the new edge selection;
+ * standalone wire edges continue to use the dedicated midpoint operation
+ * above. */
 henka_result sandbox3d_authoring_object_split_selected_edge(
     sandbox3d_authoring_object* object,
     float factor);

@@ -337,6 +337,20 @@ henka_result henka_authoring_mesh_split_edge(
     henka_authoring_edge_id* out_second_edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Splits a bounded batch of pairwise-disjoint face-backed edges. Each selected
+ * edge must have one or two incident faces; selected edges may not share
+ * endpoints or incident faces. The candidate is published only after every
+ * split validates, and all output arrays have edge_count entries. */
+henka_result henka_authoring_mesh_split_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    float factor,
+    henka_authoring_vertex_id* out_split_vertex_ids,
+    henka_authoring_edge_id* out_first_edge_ids,
+    henka_authoring_edge_id* out_second_edge_ids,
+    henka_authoring_modeling_report* out_report);
+
 /* Extrudes one compatible edge transactionally. An open boundary edge moves
  * along its incident face normal and creates one connecting quad. An interior
  * edge is supported as a single-sided operation for one same-material,

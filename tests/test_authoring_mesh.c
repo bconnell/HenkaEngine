@@ -27,6 +27,15 @@ extern henka_result henka_authoring_mesh_split_edge(
     henka_authoring_edge_id* out_first_edge_id,
     henka_authoring_edge_id* out_second_edge_id,
     henka_authoring_modeling_report* out_report);
+extern henka_result henka_authoring_mesh_split_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    float factor,
+    henka_authoring_vertex_id* out_split_vertex_ids,
+    henka_authoring_edge_id* out_first_edge_ids,
+    henka_authoring_edge_id* out_second_edge_ids,
+    henka_authoring_modeling_report* out_report);
 static int fail(const char* message)
 {
     fprintf(stderr, "authoring mesh test failed: %s\n", message);
@@ -7226,6 +7235,132 @@ cleanup:
     return result ? 1 : fail("interior edge split");
 }
 
+static int test_disjoint_face_edge_batch_split_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 24U, 8U, 5U};
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {2.0f, 2.0f, 0.0f}, {0.0f, 2.0f, 0.0f},
+        {4.0f, 0.0f, 0.0f}, {6.0f, 0.0f, 0.0f},
+        {6.0f, 2.0f, 0.0f}, {4.0f, 2.0f, 0.0f}};
+    const henka_vec2 uvs[8] = {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f},
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[8];
+    henka_authoring_face_id faces[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id edge_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id split_vertices[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id first_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id second_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts rejected;
+    const henka_authoring_face* face;
+    const henka_authoring_vertex* vertex;
+    const henka_authoring_edge* first_edge;
+    const henka_authoring_edge* second_edge;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        return fail("batch face edge split setup");
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], uvs[index], 2U, &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, (henka_authoring_vertex_id[]){vertices[0], vertices[1], vertices[2], vertices[3]},
+            4U, 7U, true, &faces[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            mesh, (henka_authoring_vertex_id[]){vertices[4], vertices[5], vertices[6], vertices[7]},
+            4U, 9U, false, &faces[1]) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    face = henka_authoring_mesh_get_face(mesh, faces[0]);
+    if (face == NULL)
+    {
+        goto cleanup;
+    }
+    edge_ids[0] = face->edges[0];
+    face = henka_authoring_mesh_get_face(mesh, faces[1]);
+    if (face == NULL)
+    {
+        goto cleanup;
+    }
+    edge_ids[1] = face->edges[0];
+    if (henka_authoring_mesh_set_edge_hard(mesh, edge_ids[0], true) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_seam(mesh, edge_ids[0], true) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_hard(mesh, edge_ids[1], true) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_seam(mesh, edge_ids[1], true) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    face = henka_authoring_mesh_get_face(mesh, faces[0]);
+    if (face == NULL || henka_authoring_mesh_split_edges(
+            mesh, (henka_authoring_edge_id[]){edge_ids[0], face->edges[1]}, 2U, 0.5f,
+            split_vertices, first_edges, second_edges, &report) != HENKA_ERROR_INVALID_ARGUMENT ||
+        (rejected = henka_authoring_mesh_get_counts(mesh),
+         rejected.vertices != 8U || rejected.edges != 8U || rejected.faces != 2U))
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_split_edges(
+            mesh, edge_ids, 2U, 0.5f, split_vertices, first_edges, second_edges,
+            &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    for (index = 0U; index < 2U; ++index)
+    {
+        vertex = henka_authoring_mesh_get_vertex(mesh, split_vertices[index]);
+        first_edge = henka_authoring_mesh_get_edge(mesh, first_edges[index]);
+        second_edge = henka_authoring_mesh_get_edge(mesh, second_edges[index]);
+        if (vertex == NULL || fabsf(vertex->position.x - (index == 0U ? 1.0f : 5.0f)) > 0.0001f ||
+            first_edge == NULL || second_edge == NULL || !first_edge->hard || !second_edge->hard ||
+            !henka_authoring_mesh_edge_is_seam(mesh, first_edges[index]) ||
+            !henka_authoring_mesh_edge_is_seam(mesh, second_edges[index]))
+        {
+            goto cleanup;
+        }
+    }
+    if (after.vertices != before.vertices + 2U || after.edges != before.edges + 2U ||
+        after.faces != before.faces || !report.changed || report.created_vertices != 2U ||
+        report.created_edges != 2U || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    before = after;
+    if (henka_authoring_mesh_split_edges(
+            mesh, (henka_authoring_edge_id[]){first_edges[0], first_edges[0]}, 2U, 0.5f,
+            split_vertices, first_edges, second_edges, NULL) != HENKA_ERROR_INVALID_ARGUMENT ||
+        (rejected = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &rejected, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("disjoint face edge batch split");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_extreme_bounds_remain_finite() &&
@@ -7275,6 +7410,7 @@ int main(void)
         test_loose_edge_split_operation() &&
         test_face_edge_split_operation() &&
         test_interior_edge_split_operation() &&
+        test_disjoint_face_edge_batch_split_operation() &&
         test_boundary_edge_extrude_operation() &&
         test_interior_edge_extrude_operation() &&
         test_connected_interior_edge_extrude_operation() &&
