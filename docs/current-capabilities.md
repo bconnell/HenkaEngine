@@ -645,8 +645,9 @@ Available edge authoring includes:
 - bounded bridge for two distinct compatible boundary edges or two disjoint,
   equal-length compatible open boundary-edge chains through the shared
   Edge-mode Preview/Apply/Cancel transaction;
-- bounded surface-connected extrusion for one open boundary edge or a
-  pairwise vertex-disjoint batch on distinct faces;
+- bounded surface-connected extrusion for one open boundary edge, one
+  contiguous boundary-edge chain, or a batch of independent boundary-edge
+  chains, plus a pairwise vertex-disjoint batch on distinct faces;
 - bounded single-sided extrusion for one compatible interior edge shared by
   two quads, with deterministic incident-face selection and transactional
   preview/apply routing;
@@ -656,9 +657,14 @@ Available edge authoring includes:
 - one compatible three-edge branching fan around a valence-three interior
   vertex, routed as a canonical enclosed face-region extrusion with a
   translated cap and boundary side faces;
-- transactional same-face extrusion for one contiguous boundary-edge chain.
+- transactional same-face extrusion for one contiguous boundary-edge chain or
+  a bounded batch of independent boundary-edge chains.
 
-Surface-connected boundary-edge extrusion offsets each selected edge along its incident face normal, preserves the source face and selected hard-edge intent, and creates one connecting quad per edge transactionally.
+Surface-connected boundary-edge extrusion offsets each selected edge along its
+incident face normal, preserves the source face and selected hard-edge intent,
+and creates one connecting quad per edge transactionally. Independent selected
+components are partitioned into simple boundary chains and published together
+through the same candidate-first transaction.
 
 Compatible interior-edge extrusion selects the lower logical-ID incident quad,
 offsets that quad along its face normal, creates one connecting quad, and leaves

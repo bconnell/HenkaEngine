@@ -431,7 +431,7 @@ incomplete.
 
 ### Surface-connected Edge Extrude
 
-The core API supports bounded surface-connected extrusion for one open boundary edge, a pairwise vertex-disjoint batch on distinct faces, one compatible interior edge shared by two quads, a simple connected interior-edge path across compatible quad strips, and one compatible three-edge branching fan around a valence-three interior vertex.
+The core API supports bounded surface-connected extrusion for one open boundary edge, a contiguous boundary-edge chain, a batch of independent boundary-edge chains, a pairwise vertex-disjoint batch on distinct faces, one compatible interior edge shared by two quads, a simple connected interior-edge path across compatible quad strips, and one compatible three-edge branching fan around a valence-three interior vertex.
 
 The operation:
 
@@ -441,11 +441,20 @@ The operation:
 - preserves selected hard-edge intent;
 - publishes after topology and geometry validation.
 
+Boundary chains are partitioned by endpoint connectivity. Each connected
+component must belong to one boundary face and be an open chain or a simple
+closed loop; independent components are applied together through one
+candidate-first transaction and may belong to different faces.
+
 For the compatible interior cases, the lower logical-ID incident quad is selected deterministically for each edge. That quad replaces the shared edge with an offset edge and receives one connecting quad; the neighboring quad remains unchanged. The source faces must be quads with matching material and smoothing metadata, and the source edges must not be hard or seamed. Per-corner UVs and face metadata are preserved on the selected quads and connecting quads. A connected path must be simple, pairwise vertex-disjoint, and have exactly two path endpoints; cyclic and unsupported branching selections are rejected as ambiguous. The supported three-edge branch fan is interpreted as its enclosed three-face region and uses the canonical face-region extrusion transaction, preserving the selected faces as the base when the region is closed and creating one translated cap plus boundary side faces.
 
 Other interior/manifold configurations, mixed metadata, non-quad faces, and mixed, shared-endpoint, disconnected, cyclic, larger branching, or otherwise unsupported batches remain unsupported.
 
-The shared Sandbox modeling session exposes this path through Preview, Cancel, and Apply for one edge or a bounded compatible interior path. The Authoring panel uses the shared amount control, and applied edits use the existing Undo/Redo history boundary.
+The shared Sandbox modeling session exposes this path through Preview, Cancel,
+and Apply for one edge, a contiguous chain, a bounded batch of independent
+boundary chains, or a compatible interior path. The Authoring panel uses the
+shared amount control, and applied edits use the existing Undo/Redo history
+boundary.
 
 ### Boundary Edge Bridge
 

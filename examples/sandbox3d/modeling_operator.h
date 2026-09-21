@@ -33,8 +33,8 @@ typedef enum sandbox3d_modeling_operator_kind
      * Loose components use the explicit operator axis; connected surface
      * components use their authoring-mesh normal contract. */
     SANDBOX3D_MODELING_OPERATOR_EXTRUDE,
-    /* Surface-connected extrusion of one or a bounded batch of selected open
-     * boundary edges. */
+    /* Surface-connected extrusion of one open boundary edge, a contiguous
+     * boundary-edge chain, or a bounded batch of independent chains. */
     SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE,
     /* Transactionally connects two non-adjacent selected vertices on one
      * compatible face through the shared Preview/Cancel/Apply session. */

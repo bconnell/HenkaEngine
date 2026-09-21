@@ -1559,23 +1559,36 @@ henka_result sandbox3d_modeling_operator_preview(
                     applied_amount,
                     &report);
             }
-            else if (same_boundary_face)
-            {
-                result = henka_authoring_mesh_extrude_boundary_edge_chain(
-                    candidate,
-                    (const henka_authoring_edge_id*)session->selection_ids,
-                    session->selection_count,
-                    applied_amount,
-                    &report);
-            }
             else
             {
-                result = henka_authoring_mesh_extrude_boundary_edges(
+                result = henka_authoring_mesh_extrude_boundary_edge_chains(
                     candidate,
                     (const henka_authoring_edge_id*)session->selection_ids,
                     session->selection_count,
                     applied_amount,
                     &report);
+                if (result == HENKA_ERROR_INVALID_ARGUMENT ||
+                    result == HENKA_ERROR_LIMIT)
+                {
+                    if (same_boundary_face)
+                    {
+                        result = henka_authoring_mesh_extrude_boundary_edge_chain(
+                            candidate,
+                            (const henka_authoring_edge_id*)session->selection_ids,
+                            session->selection_count,
+                            applied_amount,
+                            &report);
+                    }
+                    else
+                    {
+                        result = henka_authoring_mesh_extrude_boundary_edges(
+                            candidate,
+                            (const henka_authoring_edge_id*)session->selection_ids,
+                            session->selection_count,
+                            applied_amount,
+                            &report);
+                    }
+                }
             }
         }
     }

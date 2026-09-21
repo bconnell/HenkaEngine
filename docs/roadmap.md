@@ -530,17 +530,18 @@ Integrated authoring is already underway as part of the current 3D completion pa
   be extruded as its enclosed three-face region through the canonical
   face-region transaction. Larger or ambiguous branching bevel/extrusion
   domains, edge-loop domains, generalized Edge Extrude beyond the bounded
-  boundary-edge cases, and general loop-cut networks remain in progress or
+  single-edge, contiguous-chain, and independent-chain boundary cases, and
+  general loop-cut networks remain in progress or
   planned.
   Generalized closed-loop, branching, and split bridge workflows remain future
   work.
 
 #### Loose-component and surface-connected editing
 
-- Bounded surface-connected extrusion for one open boundary edge or a pairwise
-  batch on distinct faces, plus a transactional contiguous same-face boundary
-  edge-chain operation, is available through the shared modeling session and
-  Authoring panel.
+- Bounded surface-connected extrusion for one open boundary edge, a pairwise
+  batch on distinct faces, a contiguous same-face boundary edge-chain
+  operation, or a batch of independent boundary edge chains is available
+  through the shared modeling session and Authoring panel.
 - Homogeneous line/point evaluation and bounded triangle/wire/point renderer
   ownership are available.
 - Broader loose-component selection and editing workflows remain in progress.
@@ -559,8 +560,9 @@ Integrated authoring is already underway as part of the current 3D completion pa
 1. Generalized Vertex Extrude beyond connected open boundary fans and the
    bounded compatible closed-fan cap replacement, broader non-manifold or
    incompatible-normal fan handling, and broader vertex topology operations.
-2. Generalized surface-connected Edge Extrude beyond the bounded boundary-edge
-   and contiguous boundary-chain cases, broader edge-set operations,
+2. Generalized surface-connected Edge Extrude beyond the bounded boundary-edge,
+   contiguous boundary-chain, and independent boundary-chain cases, broader
+   edge-set operations,
    weld/split/bridge workflows, general loop-cut networks, and broader source
    export.
 3. Broader automatic UV unwrap beyond planar charts, texture painting, rigging,

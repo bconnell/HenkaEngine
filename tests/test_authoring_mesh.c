@@ -5932,6 +5932,94 @@ cleanup:
     return result ? 1 : fail("transactional boundary edge chain extrude");
 }
 
+static int test_boundary_edge_chain_batch_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {2.0f, 2.0f, 0.0f}, {0.0f, 2.0f, 0.0f},
+        {4.0f, 0.0f, 0.0f}, {6.0f, 0.0f, 0.0f},
+        {6.0f, 2.0f, 0.0f}, {4.0f, 2.0f, 0.0f}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[8];
+    henka_authoring_face_id faces[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id edge_ids[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts rejected;
+    const henka_authoring_face* face;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        return fail("boundary edge chain batch extrude setup");
+    }
+    for (size_t index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){0.0f, 0.0f}, 4U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, (henka_authoring_vertex_id[]){vertices[0], vertices[1], vertices[2], vertices[3]},
+            4U, 8U, true, &faces[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            mesh, (henka_authoring_vertex_id[]){vertices[4], vertices[5], vertices[6], vertices[7]},
+            4U, 9U, false, &faces[1]) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    face = henka_authoring_mesh_get_face(mesh, faces[0]);
+    if (face == NULL)
+    {
+        goto cleanup;
+    }
+    edge_ids[0] = face->edges[0];
+    edge_ids[1] = face->edges[1];
+    face = henka_authoring_mesh_get_face(mesh, faces[1]);
+    if (face == NULL)
+    {
+        goto cleanup;
+    }
+    edge_ids[2] = face->edges[0];
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_extrude_boundary_edge_chains(
+            mesh, edge_ids, 3U, 0.5f, &report) != HENKA_SUCCESS ||
+        !report.changed)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices + 5U || after.edges != before.edges + 8U ||
+        after.faces != before.faces + 3U || report.created_vertices != 5U ||
+        report.created_edges != 8U || report.created_faces != 3U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    before = after;
+    if (henka_authoring_mesh_extrude_boundary_edge_chains(
+            mesh, (henka_authoring_edge_id[]){edge_ids[0], edge_ids[0]}, 2U,
+            0.5f, NULL) != HENKA_ERROR_INVALID_ARGUMENT ||
+        (rejected = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &rejected, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("boundary edge chain batch extrude");
+}
+
 static int test_boundary_edge_bridge_operation(void)
 {
     const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 8U};
@@ -7708,6 +7796,7 @@ int main(void)
         test_interior_edge_extrude_operation() &&
         test_connected_interior_edge_extrude_operation() &&
         test_boundary_edge_chain_extrude_operation() &&
+        test_boundary_edge_chain_batch_extrude_operation() &&
         test_boundary_edge_bridge_operation() &&
         test_boundary_edge_chain_bridge_operation() &&
         test_closed_boundary_loop_bridge_operation() &&

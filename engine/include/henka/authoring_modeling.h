@@ -457,6 +457,18 @@ henka_result henka_authoring_mesh_extrude_boundary_edge_chain(
     float distance,
     henka_authoring_modeling_report* out_report);
 
+/* Extrudes a bounded batch of independent contiguous boundary-edge chains.
+ * Each connected selected component must belong to one face and may be open
+ * or a simple closed boundary loop. Components must not share endpoints;
+ * mixed-face chains, branches, interior edges, duplicates, and unsupported
+ * topology fail without changing the source mesh. */
+henka_result henka_authoring_mesh_extrude_boundary_edge_chains(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    float distance,
+    henka_authoring_modeling_report* out_report);
+
 /* Dissolves one compatible interior edge into its two adjacent face loops.
  * Boundary, hard, UV-seamed, material-discontinuous, and capacity-invalid
  * requests are rejected without changing the source mesh. */
