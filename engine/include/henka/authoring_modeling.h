@@ -139,6 +139,20 @@ henka_result henka_authoring_mesh_merge_vertices_by_distance(
     size_t* out_survivor_count,
     henka_authoring_modeling_report* out_report);
 
+/* Smooths selected vertices toward the average position of their current
+ * topological neighbors. All targets are calculated from the source before
+ * any position is changed, so a multi-vertex selection is deterministic.
+ * factor is constrained to [0,1]; topology, per-vertex UV/material metadata,
+ * and all logical component identities are preserved. A loose vertex without
+ * an incident edge is rejected. The candidate is published only after the
+ * complete mesh validates. */
+henka_result henka_authoring_mesh_smooth_vertices(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t vertex_count,
+    float factor,
+    henka_authoring_modeling_report* out_report);
+
 henka_result henka_authoring_mesh_dissolve_vertices(
     henka_authoring_mesh* mesh,
     const henka_authoring_vertex_id* vertex_ids,

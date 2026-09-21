@@ -102,6 +102,12 @@ contracts, unit tests, or reference fixtures alone do not close a user-facing
 renderer area when packaged behavior or human visual inspection remains part
 of the declared scope.
 
+The bounded Modeling / Content Authoring scope also includes selected-vertex
+Smooth Vertices / Relax through the native core, direct-object route, shared
+Preview/Cancel/Apply operator, and undo/redo path. Boundary-constrained,
+curvature-preserving, sculpting, and broader non-destructive smoothing remain
+outside that declared scope.
+
 ## Completion interpretation
 
 The matrix separates a real production foundation from a completed user-facing

@@ -1552,6 +1552,70 @@ cleanup:
     return result ? 1 : fail("vertex merge input limits");
 }
 
+static int test_vertex_smooth_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_modeling_report report;
+    henka_authoring_mesh_counts before;
+    const henka_authoring_vertex* vertex;
+    const henka_authoring_face* face;
+    henka_vec2 original_uv;
+    uint32_t original_material;
+    bool original_smooth;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    vertex = henka_authoring_mesh_get_vertex(mesh, 1U);
+    face = henka_authoring_mesh_get_face(mesh, 1U);
+    if (vertex == NULL || face == NULL)
+    {
+        goto cleanup;
+    }
+    original_uv = vertex->uv;
+    original_material = vertex->material_region;
+    original_smooth = face->smooth;
+    before = henka_authoring_mesh_get_counts(mesh);
+
+    if (henka_authoring_mesh_smooth_vertices(
+            mesh, (const henka_authoring_vertex_id[]){1U}, 1U, 0.5f, &report) != HENKA_SUCCESS ||
+        !report.changed || henka_authoring_mesh_get_counts(mesh).vertices != before.vertices ||
+        henka_authoring_mesh_get_counts(mesh).edges != before.edges ||
+        henka_authoring_mesh_get_counts(mesh).faces != before.faces ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    vertex = henka_authoring_mesh_get_vertex(mesh, 1U);
+    face = henka_authoring_mesh_get_face(mesh, 1U);
+    if (vertex == NULL || face == NULL ||
+        fabsf(vertex->position.x + 0.5f) > 0.0001f || fabsf(vertex->position.y) > 0.0001f ||
+        fabsf(vertex->position.z + 0.5f) > 0.0001f ||
+        vertex->uv.x != original_uv.x || vertex->uv.y != original_uv.y ||
+        vertex->material_region != original_material || face->smooth != original_smooth)
+    {
+        goto cleanup;
+    }
+
+    if (henka_authoring_mesh_smooth_vertices(
+            mesh, (const henka_authoring_vertex_id[]){1U, 1U}, 2U, 0.5f, &report) == HENKA_SUCCESS ||
+        henka_authoring_mesh_smooth_vertices(mesh, (const henka_authoring_vertex_id[]){1U}, 1U, -0.1f, &report) == HENKA_SUCCESS ||
+        henka_authoring_mesh_smooth_vertices(mesh, (const henka_authoring_vertex_id[]){1U}, 1U, 1.1f, &report) == HENKA_SUCCESS ||
+        henka_authoring_mesh_smooth_vertices(mesh, (const henka_authoring_vertex_id[]){999U}, 1U, 0.5f, &report) == HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("vertex smooth operation");
+}
+
 static int test_vertex_topology_operations(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
@@ -7178,6 +7242,7 @@ int main(void)
         test_face_region_extrude_operation() && test_triangulate_face_operation() &&
         test_vertex_merge_operations() &&
         test_vertex_merge_input_limits() &&
+        test_vertex_smooth_operation() &&
         test_vertex_topology_operations() && test_vertex_bevel_operations() &&
         test_history_rejects_foreign_mesh() &&
         test_history_accepts_same_lineage_clone() &&

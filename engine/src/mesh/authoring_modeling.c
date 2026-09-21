@@ -1217,6 +1217,127 @@ static void modeling_report_count_delta(
     report->removed_faces = before->faces > after->faces ? before->faces - after->faces : 0U;
 }
 
+henka_result henka_authoring_mesh_smooth_vertices(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t vertex_count,
+    float factor,
+    henka_authoring_modeling_report* out_report)
+{
+    henka_authoring_vertex_id* sorted = NULL;
+    henka_vec3* targets = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+    size_t index;
+
+    modeling_report_reset(out_report);
+    if (mesh == NULL || !isfinite(factor) || factor < 0.0f || factor > 1.0f ||
+        !modeling_sorted_unique_vertex_ids(mesh, vertex_ids, vertex_count, &sorted))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (factor == 0.0f)
+    {
+        henka_free(sorted);
+        return HENKA_SUCCESS;
+    }
+    if (vertex_count > SIZE_MAX / sizeof(*targets))
+    {
+        henka_free(sorted);
+        return HENKA_ERROR_LIMIT;
+    }
+    targets = henka_malloc(vertex_count * sizeof(*targets));
+    if (targets == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
+    /* Calculate every target from the unchanged source mesh. This prevents a
+     * multi-vertex selection from depending on iteration order. */
+    for (index = 0U; index < vertex_count; ++index)
+    {
+        const henka_authoring_vertex* source_vertex =
+            henka_authoring_mesh_get_vertex(mesh, sorted[index]);
+        const size_t edge_count = henka_authoring_mesh_get_vertex_edge_count(
+            mesh, sorted[index]);
+        double sum_x = 0.0;
+        double sum_y = 0.0;
+        double sum_z = 0.0;
+        size_t edge_index;
+
+        if (source_vertex == NULL || edge_count == 0U)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        for (edge_index = 0U; edge_index < edge_count; ++edge_index)
+        {
+            henka_authoring_edge_id edge_id;
+            const henka_authoring_edge* edge;
+            const henka_authoring_vertex* neighbor;
+            henka_authoring_vertex_id neighbor_id;
+            if (henka_authoring_mesh_get_vertex_edge_at(
+                    mesh, sorted[index], edge_index, &edge_id) != HENKA_SUCCESS ||
+                (edge = henka_authoring_mesh_get_edge(mesh, edge_id)) == NULL)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            neighbor_id = edge->vertices[0] == sorted[index]
+                ? edge->vertices[1] : edge->vertices[0];
+            neighbor = henka_authoring_mesh_get_vertex(mesh, neighbor_id);
+            if (neighbor == NULL || !modeling_finite_vec3(neighbor->position))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            sum_x += (double)neighbor->position.x;
+            sum_y += (double)neighbor->position.y;
+            sum_z += (double)neighbor->position.z;
+        }
+        targets[index].x = source_vertex->position.x * (1.0f - factor) +
+            (float)(sum_x / (double)edge_count) * factor;
+        targets[index].y = source_vertex->position.y * (1.0f - factor) +
+            (float)(sum_y / (double)edge_count) * factor;
+        targets[index].z = source_vertex->position.z * (1.0f - factor) +
+            (float)(sum_z / (double)edge_count) * factor;
+        if (!modeling_finite_vec3(targets[index]))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+    }
+
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    for (index = 0U; result == HENKA_SUCCESS && index < vertex_count; ++index)
+    {
+        result = henka_authoring_mesh_set_vertex_position(
+            candidate, sorted[index], targets[index]);
+    }
+    if (result == HENKA_SUCCESS &&
+        (!henka_authoring_mesh_validate(candidate) ||
+         !modeling_face_geometry_is_valid(candidate)))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_copy(mesh, candidate);
+        if (result == HENKA_SUCCESS && out_report != NULL)
+        {
+            out_report->changed = true;
+            out_report->primary_vertex_id = sorted[0];
+        }
+    }
+
+cleanup:
+    henka_authoring_mesh_destroy(candidate);
+    henka_free(targets);
+    henka_free(sorted);
+    return result;
+}
+
 henka_result henka_authoring_mesh_dissolve_vertices(
     henka_authoring_mesh* mesh,
     const henka_authoring_vertex_id* vertex_ids,

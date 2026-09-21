@@ -425,6 +425,8 @@ try {
 
     Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
     Start-Sleep -Milliseconds 450
+    $initialPickX = [double]($viewportX + $viewportWidth * 0.5)
+    $initialPickY = [double]($viewportY + $viewportHeight * 0.5)
 
     $modeEvidence = @(
         @{ Name = "vertex"; Label = "Vertex"; Code = 0; Pattern = ("Native authoring Vertex selection control: name=" + [Regex]::Escape($authoringName) + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=88.0 height=24.0\.') },
@@ -456,13 +458,91 @@ try {
         Save-ProbeWindowScreenshot `
             -Handle $capturedProcess.Process.MainWindowHandle `
             -Path (Join-Path $runtimeDirectory ($mode.Name + "-mode-normal-distance.png"))
+
+        if ($mode.Name -eq "vertex") {
+            $pickedCount = Get-LogMatchCount `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring component picked: name=" + [Regex]::Escape($authoringName) + ' .* mode=vertex .* selected=1')
+            Send-HenkaAutomationClick `
+                -EventPath $automationInputPath `
+                -X $initialPickX `
+                -Y $initialPickY
+            if (-not (Wait-LogMatchCountIncrease `
+                    -Path $stdoutPath `
+                    -InitialCount $pickedCount `
+                    -Pattern ("Native authoring component picked: name=" + [Regex]::Escape($authoringName) + ' .* mode=vertex .* selected=1') `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The visible editor did not pick one real source vertex for Smooth Vertices."
+            }
+            $smoothControls = Get-LastMatch `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring smooth controls: name=" + [Regex]::Escape($authoringName) + ' smooth_x=(?<x>[-0-9.]+) smooth_y=(?<y>[-0-9.]+) width=90.0 height=24.0\.')
+            $smoothPreviewCount = Get-LogMatchCount `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring smooth preview: name=" + [Regex]::Escape($authoringName) + ' .* result=success')
+            Send-HenkaAutomationClick `
+                -EventPath $automationInputPath `
+                -X ([double]$smoothControls.Groups["x"].Value + 12.0) `
+                -Y ([double]$smoothControls.Groups["y"].Value + 12.0)
+            if (-not (Wait-LogMatchCountIncrease `
+                    -Path $stdoutPath `
+                    -InitialCount $smoothPreviewCount `
+                    -Pattern ("Native authoring smooth preview: name=" + [Regex]::Escape($authoringName) + ' .* result=success') `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The visible Smooth Vertices Preview did not publish a successful candidate."
+            }
+            for ($smoothScrollAttempt = 0; $smoothScrollAttempt -lt 8; ++$smoothScrollAttempt) {
+                if ((Get-LogMatchCount `
+                        -Path $stdoutPath `
+                        -Pattern ("Native authoring smooth transaction: name=" + [Regex]::Escape($authoringName) + ' apply_x=')) -gt 0) {
+                    break
+                }
+                Send-HenkaAutomationScroll `
+                    -EventPath $automationInputPath `
+                    -X 1040.0 `
+                    -Y 350.0 `
+                    -WheelDelta -1.0
+                Start-Sleep -Milliseconds 250
+            }
+            $smoothTransaction = Get-LastMatch `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring smooth transaction: name=" + [Regex]::Escape($authoringName) + ' apply_x=(?<x>[-0-9.]+) cancel_x=(?<cancel>[-0-9.]+) y=(?<y>[-0-9.]+) width=120.0 height=24.0\.')
+            $smoothApplyCount = Get-LogMatchCount `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring smooth apply: name=" + [Regex]::Escape($authoringName) + ' result=success')
+            $smoothApplyX = [double]$smoothTransaction.Groups["x"].Value + 40.0
+            $smoothApplyY = [double]$smoothTransaction.Groups["y"].Value + 12.0
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("move {0} {1}" -f `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyX), `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyY)) `
+                -SettleMilliseconds 300
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("button left down {0} {1}" -f `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyX), `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyY)) `
+                -SettleMilliseconds 300
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("button left up {0} {1}" -f `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyX), `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyY)) `
+                -SettleMilliseconds 300
+            if (-not (Wait-LogMatchCountIncrease `
+                    -Path $stdoutPath `
+                    -InitialCount $smoothApplyCount `
+                    -Pattern ("Native authoring smooth apply: name=" + [Regex]::Escape($authoringName) + ' result=success') `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The visible Smooth Vertices Apply did not commit successfully."
+            }
+        }
     }
 
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "after-frame-before-pick.png")
-    $initialPickX = [double]($viewportX + $viewportWidth * 0.5)
-    $initialPickY = [double]($viewportY + $viewportHeight * 0.5)
     Send-HenkaAutomationEvent `
         -EventPath $automationInputPath `
         -EventLine ("move {0} {1}" -f `

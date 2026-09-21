@@ -507,6 +507,10 @@ Published Vertex operations include:
 - Merge by Distance
 - Connect Vertices, including the bounded two-vertex Preview/Cancel/Apply
   operator path for non-adjacent corners on one face
+- Smooth Vertices / Relax through the bounded Preview/Cancel/Apply operator;
+  selected vertices move toward the simultaneous average of their topological
+  neighbors with factor `[0,1]`, while topology, stable component identities,
+  per-corner UVs, material regions, and smoothing metadata remain unchanged
 - Dissolve Vertex
 - Delete Vertex
 - Vertex Bevel
@@ -540,6 +544,13 @@ undo/redo preservation.
 Disconnected, loose-edge, and incompatible-normal fans fail closed. Closed
 interior fans retain mixed material and smoothing metadata on their replacement
 faces.
+
+Smooth Vertices / Relax is a bounded position-only operation. It evaluates all
+ selected targets from the unchanged source before publishing one validated
+ candidate, rejects duplicate or invalid selections and loose vertices without
+ incident edges, and participates in the direct-object and shared operator
+ undo/redo paths. It does not currently provide boundary constraints, corner
+ pinning, curvature-preserving smoothing, or a sculpting brush workflow.
 
 ### General transactional operations
 

@@ -277,6 +277,12 @@ henka_result sandbox3d_authoring_object_proportional_move_selected_components(
     sandbox3d_authoring_object* object,
     henka_vec3 offset,
     size_t ring_count);
+/* Smooths the selected vertices toward their topological-neighbor average
+ * through the authoritative source/render/bounds/physics/undo transaction.
+ * Only vertex-mode selections are accepted; factor is constrained to [0,1]. */
+henka_result sandbox3d_authoring_object_smooth_selected_vertices(
+    sandbox3d_authoring_object* object,
+    float factor);
 henka_result sandbox3d_authoring_object_apply_proportional_move_candidate(
     const henka_authoring_mesh* source,
     henka_authoring_mesh* candidate,

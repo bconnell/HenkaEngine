@@ -14,6 +14,9 @@ typedef enum sandbox3d_modeling_operator_kind
     SANDBOX3D_MODELING_OPERATOR_NONE = 0,
     SANDBOX3D_MODELING_OPERATOR_MOVE,
     SANDBOX3D_MODELING_OPERATOR_PROPORTIONAL_MOVE,
+    /* Transactionally relaxes selected vertices toward their topological
+     * neighbor average through Preview/Cancel/Apply. */
+    SANDBOX3D_MODELING_OPERATOR_SMOOTH_VERTICES,
     SANDBOX3D_MODELING_OPERATOR_ADD_LOOSE_VERTEX,
     SANDBOX3D_MODELING_OPERATOR_ADD_LOOSE_EDGE,
     /* Transactional rotate/scale of the current component selection through

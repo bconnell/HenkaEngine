@@ -448,6 +448,7 @@ typedef struct sandbox3d_state
     char native_authoring_loop_cut_cuts[16];
     char native_authoring_edge_slide_factor[16];
     char native_authoring_edge_split_factor[16];
+    char native_authoring_vertex_smooth_factor[16];
     char native_authoring_extrude_amount[16];
     char native_authoring_loose_vertex_x[16];
     char native_authoring_loose_vertex_y[16];
@@ -563,6 +564,8 @@ typedef struct sandbox3d_state
     float native_authoring_material_subsurface_tint_reported_y;
     bool native_authoring_material_history_reported;
     float native_authoring_material_history_reported_y;
+    bool native_authoring_smooth_controls_reported;
+    float native_authoring_smooth_controls_reported_y;
     bool native_authored_showcase_control_reported;
     henka_terrain_world* terrain_world;
     henka_terrain_storage* terrain_storage;
@@ -5582,6 +5585,30 @@ static bool sandbox3d_parse_edge_split_factor(
     factor = strtof(text, &end);
     if (errno == ERANGE || end == NULL || *end != '\0' ||
         !isfinite(factor) || factor <= 0.0f || factor >= 1.0f)
+    {
+        return false;
+    }
+
+    *out_factor = factor;
+    return true;
+}
+
+static bool sandbox3d_parse_vertex_smooth_factor(
+    const char* text,
+    float* out_factor)
+{
+    char* end = NULL;
+    float factor;
+
+    if (text == NULL || out_factor == NULL || text[0] == '\0')
+    {
+        return false;
+    }
+
+    errno = 0;
+    factor = strtof(text, &end);
+    if (errno == ERANGE || end == NULL || *end != '\0' ||
+        !isfinite(factor) || factor < 0.0f || factor > 1.0f)
     {
         return false;
     }
@@ -11745,7 +11772,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
     printf("  Select an authored scene object and open Object Details > Audio to edit its persisted clip path, enabled, looping, and spatial settings; Preview and Stop Preview use the real scene entity and manager-owned Audio asset.\n");
-    printf("  Select the editable Ground Plane or an explicit reference asset, open Object Details > Authoring, and choose Make Editable when available; the generic component Move, selected-vertex/loose Vertex/Edge Extrude, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide/Split Edge/Bridge/Fill Boundary/Split Loose Edge/Hard Edges/Soft Edges, and Face Bevel/Extrude/Extrude Selection/Subdivide/Smooth Faces/Flat Faces controls are the user-facing modeling path. Split Edge handles one selected face-backed boundary or interior edge through the shared Preview/Apply/Cancel operator and selects the two replacement edges; Split Loose Edge remains bounded to one selected standalone wire edge and inserts a midpoint while selecting the two replacement edges. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge. The same Vertex-mode amount control routes compatible single or multi-vertex boundary and interior fan selections through transactional surface extrusion, while the Edge-mode amount control routes one open boundary edge or compatible boundary-edge selections on one face or distinct faces through face-normal surface-connected Edge Extrude. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources remain explicit editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
+    printf("  Select the editable Ground Plane or an explicit reference asset, open Object Details > Authoring, and choose Make Editable when available; the generic component Move, selected-vertex/loose Vertex/Edge Extrude, selected-vertex Smooth Vertices/Relax, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide/Split Edge/Bridge/Fill Boundary/Split Loose Edge/Hard Edges/Soft Edges, and Face Bevel/Extrude/Extrude Selection/Subdivide/Smooth Faces/Flat Faces controls are the user-facing modeling path. Smooth Vertices/Relax uses a bounded factor in [0,1] through the shared Preview/Apply/Cancel operator and moves selected vertices toward the simultaneous average of their topological neighbors while preserving topology and per-component metadata. Split Edge handles one selected face-backed boundary or interior edge through the shared Preview/Apply/Cancel operator and selects the two replacement edges; Split Loose Edge remains bounded to one selected standalone wire edge and inserts a midpoint while selecting the two replacement edges. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge. The same Vertex-mode amount control routes compatible single or multi-vertex boundary and interior fan selections through transactional surface extrusion, while the Edge-mode amount control routes one open boundary edge or compatible boundary-edge selections on one face or distinct faces through face-normal surface-connected Edge Extrude. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources remain explicit editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Tools panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Tools provides Build, Game, and World work contexts plus saved/custom workspace layouts; topology edits mark the workspace Custom.\n");
@@ -14429,6 +14456,8 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_material_subsurface_tint_reported_y = -FLT_MAX;
     state->native_authoring_material_history_reported = false;
     state->native_authoring_material_history_reported_y = -FLT_MAX;
+    state->native_authoring_smooth_controls_reported = false;
+    state->native_authoring_smooth_controls_reported_y = -FLT_MAX;
     for (int terrain_layer_index = 0;
          terrain_layer_index < (int)HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
          ++terrain_layer_index)
@@ -20915,6 +20944,8 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
     henka_vec2 mouse_delta;
     bool preview_rejected = false;
     bool numeric_input_rejected = false;
+    bool confirm_requested;
+    bool ui_owns_mouse;
     const char* text_input;
     size_t text_input_size;
     float delta;
@@ -20925,6 +20956,17 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
     {
         return false;
     }
+
+    ui_owns_mouse = state->ui != NULL &&
+        henka_ui_is_visible(state->ui) &&
+        henka_ui_get_wants_mouse(state->ui);
+    confirm_requested = henka_input_action_was_pressed(
+        engine,
+        HENKA_INPUT_ACTION_CONFIRM_TRANSFORM) &&
+        (!henka_input_was_mouse_button_pressed(
+            engine,
+            HENKA_MOUSE_BUTTON_LEFT) ||
+         !ui_owns_mouse);
 
     object = state->authoring_object;
     if (!state->modeling_operator.active)
@@ -21100,8 +21142,7 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
                     henka_result_to_string(result));
             }
         }
-        if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONFIRM_TRANSFORM) &&
-            !numeric_input_rejected)
+        if (confirm_requested && !numeric_input_rejected)
         {
             if (henka_input_was_key_pressed(engine, HENKA_KEY_ENTER))
             {
@@ -21157,7 +21198,7 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
         return true;
     }
 
-    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONFIRM_TRANSFORM))
+    if (confirm_requested)
     {
         const henka_entity committed_entity =
             sandbox3d_authoring_object_get_entity(
@@ -29497,6 +29538,194 @@ details_group_authoring:
                         display_name);
                     fflush(stdout);
                     sandbox3d_set_status(state, false, "Authoring Face selection mode active; Ctrl-click adds components.");
+                }
+                if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                    selected_component_count > 0U &&
+                    sandbox3d_details_flow_next_row(
+                        state,
+                        flow_desc.bounds,
+                        28.0f,
+                        1U,
+                        &row) &&
+                    row.width >= 290.0f)
+                {
+                    float smooth_factor = 0.0f;
+                    bool smooth_factor_changed = false;
+                    const bool smooth_preview_active =
+                        state->modeling_operator.active &&
+                        state->modeling_operator.kind ==
+                            SANDBOX3D_MODELING_OPERATOR_SMOOTH_VERTICES &&
+                        sandbox3d_authoring_object_has_preview(
+                            state->authoring_object);
+                    if (!state->native_authoring_smooth_controls_reported ||
+                        fabsf(
+                            row.y -
+                            state->native_authoring_smooth_controls_reported_y) >
+                            0.5f)
+                    {
+                        printf(
+                            "Native authoring smooth controls: name=%s smooth_x=%.1f smooth_y=%.1f width=90.0 height=24.0.\n",
+                            display_name,
+                            row.x + 130.0f,
+                            row.y);
+                        fflush(stdout);
+                        state->native_authoring_smooth_controls_reported = true;
+                        state->native_authoring_smooth_controls_reported_y = row.y;
+                    }
+                    (void)henka_ui_label(
+                        state->ui, row.x, row.y + 7.0f, 0.8f, "Smooth");
+                    (void)henka_ui_text_field(
+                        state->ui,
+                        "authoring_vertex_smooth_factor_top",
+                        (henka_ui_rect){row.x + 52.0f, row.y, 72.0f, 24.0f},
+                        state->native_authoring_vertex_smooth_factor,
+                        sizeof(state->native_authoring_vertex_smooth_factor),
+                        &smooth_factor_changed);
+                    (void)smooth_factor_changed;
+                    if (!smooth_preview_active &&
+                        henka_ui_button(
+                            state->ui,
+                            "authoring_vertex_smooth_preview_top",
+                            (henka_ui_rect){row.x + 130.0f, row.y, 90.0f, 24.0f},
+                            "Preview"))
+                    {
+                        const bool factor_valid =
+                            sandbox3d_parse_vertex_smooth_factor(
+                                state->native_authoring_vertex_smooth_factor,
+                                &smooth_factor);
+                        henka_result smooth_result = factor_valid
+                            ? HENKA_SUCCESS
+                            : HENKA_ERROR_INVALID_ARGUMENT;
+                        if (smooth_result == HENKA_SUCCESS &&
+                            state->modeling_operator.active)
+                        {
+                            smooth_result = state->modeling_operator.kind ==
+                                SANDBOX3D_MODELING_OPERATOR_SMOOTH_VERTICES
+                                ? sandbox3d_modeling_operator_cancel(
+                                    &state->modeling_operator)
+                                : HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        if (smooth_result == HENKA_SUCCESS)
+                        {
+                            smooth_result = sandbox3d_modeling_operator_begin(
+                                &state->modeling_operator,
+                                state->authoring_object,
+                                SANDBOX3D_MODELING_OPERATOR_SMOOTH_VERTICES);
+                        }
+                        if (smooth_result == HENKA_SUCCESS)
+                        {
+                            smooth_result =
+                                sandbox3d_modeling_operator_numeric_begin(
+                                    &state->modeling_operator);
+                        }
+                        if (smooth_result == HENKA_SUCCESS)
+                        {
+                            smooth_result =
+                                sandbox3d_modeling_operator_numeric_append(
+                                    &state->modeling_operator,
+                                    state->native_authoring_vertex_smooth_factor,
+                                    strlen(
+                                        state->native_authoring_vertex_smooth_factor));
+                        }
+                        if (smooth_result == HENKA_SUCCESS)
+                        {
+                            smooth_result =
+                                sandbox3d_modeling_operator_numeric_commit(
+                                    &state->modeling_operator);
+                        }
+                        if (smooth_result != HENKA_SUCCESS &&
+                            state->modeling_operator.active)
+                        {
+                            (void)sandbox3d_modeling_operator_cancel(
+                                &state->modeling_operator);
+                        }
+                        sandbox3d_set_status(
+                            state,
+                            smooth_result != HENKA_SUCCESS,
+                            smooth_result == HENKA_SUCCESS
+                                ? "Smooth Vertices preview ready; Apply or Cancel."
+                                : "Smooth Vertices rejected; use a factor from 0 to 1 and select connected vertices.");
+                        printf(
+                            "Native authoring smooth preview: name=%s factor=%.6f result=%s selected=%zu.\n",
+                            display_name,
+                            smooth_factor,
+                            henka_result_to_string(smooth_result),
+                            sandbox3d_authoring_object_get_selected_component_count(
+                                state->authoring_object));
+                        fflush(stdout);
+                    }
+                    if (state->modeling_operator.active &&
+                        state->modeling_operator.kind ==
+                            SANDBOX3D_MODELING_OPERATOR_SMOOTH_VERTICES &&
+                        sandbox3d_authoring_object_has_preview(
+                            state->authoring_object))
+                    {
+                        const float smooth_action_gap = 6.0f;
+                        const float smooth_apply_width = 120.0f;
+                        const float smooth_cancel_width = 126.0f;
+                        printf(
+                            "Native authoring smooth transaction: name=%s apply_x=%.1f cancel_x=%.1f y=%.1f width=120.0 height=24.0.\n",
+                            display_name,
+                            row.x + 130.0f,
+                            row.x + 130.0f + smooth_apply_width + smooth_action_gap,
+                            row.y);
+                        fflush(stdout);
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_vertex_smooth_apply_top",
+                                (henka_ui_rect){
+                                    row.x + 130.0f,
+                                    row.y,
+                                    smooth_apply_width,
+                                    24.0f},
+                                "Apply"))
+                        {
+                            const henka_result apply_result =
+                                sandbox3d_modeling_operator_commit(
+                                    &state->modeling_operator);
+                            sandbox3d_set_status(
+                                state,
+                                apply_result != HENKA_SUCCESS,
+                                apply_result == HENKA_SUCCESS
+                                    ? "Smooth Vertices applied transactionally."
+                                    : "Smooth Vertices could not be applied; source retained.");
+                            if (apply_result == HENKA_SUCCESS)
+                            {
+                                sandbox3d_mark_generic_modeling_applied(
+                                    state, entity);
+                            }
+                            printf(
+                                "Native authoring smooth apply: name=%s result=%s.\n",
+                                display_name,
+                                henka_result_to_string(apply_result));
+                            fflush(stdout);
+                        }
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_vertex_smooth_cancel_top",
+                                (henka_ui_rect){
+                                    row.x + 130.0f + smooth_apply_width + smooth_action_gap,
+                                    row.y,
+                                    smooth_cancel_width,
+                                    24.0f},
+                                "Cancel"))
+                        {
+                            const henka_result cancel_result =
+                                sandbox3d_modeling_operator_cancel(
+                                    &state->modeling_operator);
+                            sandbox3d_set_status(
+                                state,
+                                cancel_result != HENKA_SUCCESS,
+                                cancel_result == HENKA_SUCCESS
+                                    ? "Smooth Vertices canceled; source retained."
+                                    : "Smooth Vertices cancellation failed; inspect the authoring state.");
+                            printf(
+                                "Native authoring smooth cancel: name=%s result=%s.\n",
+                                display_name,
+                                henka_result_to_string(cancel_result));
+                            fflush(stdout);
+                        }
+                    }
                 }
                 henka_ui_rect edge_seam_row;
 
@@ -41971,6 +42200,11 @@ int main(int argc, char** argv)
     (void)snprintf(
         state.native_authoring_edge_split_factor,
         sizeof(state.native_authoring_edge_split_factor),
+        "%s",
+        "0.5");
+    (void)snprintf(
+        state.native_authoring_vertex_smooth_factor,
+        sizeof(state.native_authoring_vertex_smooth_factor),
         "%s",
         "0.5");
     (void)snprintf(

@@ -332,6 +332,21 @@ Delete removes selected vertices and their incident faces, then removes only new
 
 Connect splits one face between two non-adjacent corners. The original face ID is preserved. The new face receives a fresh logical ID in a reusable physical slot. The shared Sandbox modeling-operator session exposes this bounded vertex selection through Preview, Cancel, Apply, and the existing undo/redo boundary without publishing the preview into the committed source.
 
+### Smooth Vertices / Relax
+
+`henka_authoring_mesh_smooth_vertices` moves selected connected vertices toward
+the simultaneous average of their current topological neighbors. The factor is
+finite and bounded to `[0,1]`; factor `0` is an intentional no-op and factor
+`1` reaches the neighbor average.
+
+The operation evaluates every target from the unchanged source before changing
+any position, then validates and publishes one candidate. It preserves stable
+component identities, topology, per-corner UVs, material regions, smoothing,
+and hard-edge/seam metadata. Duplicate or invalid selections and loose
+vertices without incident edges fail closed without partial publication. The
+Sandbox exposes the same operation through Vertex mode with Preview, Cancel,
+Apply, and the existing direct-object undo/redo boundary.
+
 ### Vertex Extrude
 
 Bounded Vertex Extrude supports a connected open boundary vertex fan, including the one-face corner case, and a compatible closed interior fan.
