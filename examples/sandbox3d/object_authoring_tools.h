@@ -213,6 +213,11 @@ henka_result sandbox3d_authoring_object_replace_component_selection(
     const uint32_t* component_ids,
     size_t component_count,
     uint32_t active_component_id);
+/* Records the current component selection in the active authoring-history
+ * slot after an operator has published replacement components, so Undo/Redo
+ * restores both topology and the user-facing selection state. */
+henka_result sandbox3d_authoring_object_record_current_selection(
+    sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_select_matching_components(
     sandbox3d_authoring_object* object,
     const sandbox3d_authoring_selection_query* query);

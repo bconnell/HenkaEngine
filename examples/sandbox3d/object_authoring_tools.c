@@ -2787,6 +2787,9 @@ henka_result sandbox3d_authoring_object_commit_preview(
     henka_mesh* previous_render_mesh;
     sandbox3d_authoring_face_selection_plan selection_plan = {0};
     uint64_t next_geometry_revision = 0U;
+    const henka_authoring_face_id selected_before = object != NULL
+        ? object->selected_face
+        : HENKA_AUTHORING_INVALID_ID;
     const bool allow_selection_fallback = object != NULL &&
         (object->selected_face != HENKA_AUTHORING_INVALID_ID ||
          object->selected_face_count > 0U ||
@@ -2795,6 +2798,7 @@ henka_result sandbox3d_authoring_object_commit_preview(
         object->preview_selected_face != HENKA_AUTHORING_INVALID_ID
         ? object->preview_selected_face
         : object != NULL ? object->selected_face : HENKA_AUTHORING_INVALID_ID;
+    bool selection_history_ready = false;
     henka_result result;
 
     if (object == NULL || !object->preview_active ||
@@ -2814,6 +2818,16 @@ henka_result sandbox3d_authoring_object_commit_preview(
         selected_after,
         allow_selection_fallback,
         &selection_plan);
+    if (result == HENKA_SUCCESS)
+    {
+        if (object->component_selection_history != NULL &&
+            object->selection_history_cursor < object->selection_history_capacity)
+        {
+            result = sandbox3d_authoring_capture_component_selection_history_slot(
+                object, object->selection_history_cursor);
+            selection_history_ready = result == HENKA_SUCCESS;
+        }
+    }
     if (result == HENKA_SUCCESS)
     {
         result = henka_authoring_mesh_history_checkpoint(
@@ -2851,6 +2865,11 @@ henka_result sandbox3d_authoring_object_commit_preview(
     }
     henka_authoring_mesh_destroy(previous_mesh);
     henka_mesh_destroy(previous_render_mesh);
+    if (selection_history_ready)
+    {
+        sandbox3d_authoring_commit_selection_history(
+            object, selected_before, object->selected_face);
+    }
     return HENKA_SUCCESS;
 }
 
@@ -3213,6 +3232,18 @@ henka_result sandbox3d_authoring_object_replace_component_selection(
     }
     return sandbox3d_authoring_replace_current_selection(
         object, component_ids, component_count, active_component_id);
+}
+
+henka_result sandbox3d_authoring_object_record_current_selection(
+    sandbox3d_authoring_object* object)
+{
+    if (object == NULL || object->component_selection_history == NULL ||
+        object->selection_history_cursor >= object->selection_history_capacity)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_authoring_capture_component_selection_history_slot(
+        object, object->selection_history_cursor);
 }
 
 static henka_vec3 sandbox3d_authoring_transform_point(

@@ -307,6 +307,7 @@ static void sandbox3d_modeling_operator_release(
     henka_free(session->split_second_edges);
     henka_free(session->inset_result_faces);
     henka_free(session->bevel_result_faces);
+    henka_free(session->bevel_result_vertices);
     henka_free(session->subdivide_result_vertices);
     session->source_snapshot = NULL;
     session->selection_ids = NULL;
@@ -315,12 +316,14 @@ static void sandbox3d_modeling_operator_release(
     session->split_second_edges = NULL;
     session->inset_result_faces = NULL;
     session->bevel_result_faces = NULL;
+    session->bevel_result_vertices = NULL;
     session->subdivide_result_vertices = NULL;
     session->selection_count = 0U;
     session->selection_capacity = 0U;
     session->split_result_count = 0U;
     session->inset_result_count = 0U;
     session->bevel_result_count = 0U;
+    session->bevel_result_vertex_count = 0U;
     session->subdivide_result_count = 0U;
 }
 
@@ -2104,6 +2107,14 @@ henka_result sandbox3d_modeling_operator_preview(
         session->bevel_result_faces = bevel_result_faces;
         bevel_result_faces = NULL;
     }
+    if (session->kind == SANDBOX3D_MODELING_OPERATOR_BEVEL &&
+        session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+    {
+        henka_free(session->bevel_result_vertices);
+        session->bevel_result_vertices = bevel_result_vertices;
+        session->bevel_result_vertex_count = bevel_result_count;
+        bevel_result_vertices = NULL;
+    }
     session->amount = next_amount;
     ++session->preview_rebuild_count;
     session->state = SANDBOX3D_MODELING_OPERATOR_STATE_PREVIEW;
@@ -2224,6 +2235,14 @@ henka_result sandbox3d_modeling_operator_commit(
         henka_free(replacement_ids);
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (session->kind == SANDBOX3D_MODELING_OPERATOR_BEVEL &&
+        session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+        (session->bevel_result_vertices == NULL ||
+         session->bevel_result_vertex_count == 0U))
+    {
+        henka_free(replacement_ids);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     result = sandbox3d_authoring_object_commit_preview(session->object);
     if (result != HENKA_SUCCESS)
     {
@@ -2275,6 +2294,34 @@ henka_result sandbox3d_modeling_operator_commit(
             (const uint32_t*)session->bevel_result_faces,
             session->bevel_result_count,
             session->bevel_result_faces[0U]);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(replacement_ids);
+            return result;
+        }
+    }
+    if (session->kind == SANDBOX3D_MODELING_OPERATOR_BEVEL &&
+        session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+    {
+        result = sandbox3d_authoring_object_replace_component_selection(
+            session->object,
+            (const uint32_t*)session->bevel_result_vertices,
+            session->bevel_result_vertex_count,
+            session->bevel_result_vertices[0U]);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(replacement_ids);
+            return result;
+        }
+    }
+    if (session->kind == SANDBOX3D_MODELING_OPERATOR_SPLIT_EDGE ||
+        session->kind == SANDBOX3D_MODELING_OPERATOR_INSET ||
+        session->kind == SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE ||
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_BEVEL &&
+         (session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
+          session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)))
+    {
+        result = sandbox3d_authoring_object_record_current_selection(session->object);
         if (result != HENKA_SUCCESS)
         {
             henka_free(replacement_ids);

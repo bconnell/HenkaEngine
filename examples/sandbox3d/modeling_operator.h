@@ -163,6 +163,8 @@ typedef struct sandbox3d_modeling_operator_session
     size_t inset_result_count;
     henka_authoring_face_id* bevel_result_faces;
     size_t bevel_result_count;
+    henka_authoring_vertex_id* bevel_result_vertices;
+    size_t bevel_result_vertex_count;
     henka_authoring_vertex_id* subdivide_result_vertices;
     size_t subdivide_result_count;
     uint32_t created_component_id;

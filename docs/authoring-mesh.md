@@ -421,7 +421,7 @@ Vertex Bevel is an atomic multi-selection operation. It uses a deterministic edg
 - creates same-material interior caps with deterministic planar UVs;
 - leaves normal boundary vertices open.
 
-Successful Sandbox bevels replace Vertex selection with live cut vertices and use the standard history/render/bounds/collider transaction.
+Successful Sandbox bevels replace Vertex selection with live cut vertices and use the standard history/render/bounds/collider transaction. The modeling operator routes Vertex Bevel through Preview, Cancel, Apply, Undo, and Redo while restoring the live cut-vertex selection with the corresponding topology state.
 
 ## Edge modeling
 
