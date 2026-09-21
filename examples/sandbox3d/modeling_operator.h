@@ -21,9 +21,9 @@ typedef enum sandbox3d_modeling_operator_kind
     SANDBOX3D_MODELING_OPERATOR_TRANSFORM,
     SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE,
     SANDBOX3D_MODELING_OPERATOR_BEVEL,
-    /* Extrusion of one selected vertex, face, or loose edge. Loose components
-     * use the explicit operator axis; connected surface components use their
-     * authoring-mesh normal contract. */
+    /* Extrusion of selected vertices, one selected face, or one loose edge.
+     * Loose components use the explicit operator axis; connected surface
+     * components use their authoring-mesh normal contract. */
     SANDBOX3D_MODELING_OPERATOR_EXTRUDE,
     /* Surface-connected extrusion of one or a bounded batch of selected open
      * boundary edges. */

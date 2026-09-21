@@ -907,7 +907,7 @@ static sandbox3d_modeling_operator_kind sandbox3d_authoring_extrude_operator_kin
     }
     if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
     {
-        return selected_count == 1U
+        return selected_count > 0U
             ? SANDBOX3D_MODELING_OPERATOR_EXTRUDE
             : SANDBOX3D_MODELING_OPERATOR_NONE;
     }
@@ -958,9 +958,6 @@ static henka_result sandbox3d_preview_authoring_extrude(
         (selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
          selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE &&
          selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE) ||
-        (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
-         sandbox3d_authoring_object_get_selected_component_count(
-             state->authoring_object) != 1U) ||
         (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
          sandbox3d_authoring_object_get_selected_component_count(
              state->authoring_object) != 1U) ||
@@ -11706,7 +11703,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
     printf("  Select an authored scene object and open Object Details > Audio to edit its persisted clip path, enabled, looping, and spatial settings; Preview and Stop Preview use the real scene entity and manager-owned Audio asset.\n");
-    printf("  Select the editable Ground Plane or an explicit reference asset, open Object Details > Authoring, and choose Make Editable when available; the generic component Move, bounded loose Vertex/Edge Extrude, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide/Bridge/Fill Boundary, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge. The same Vertex-mode amount control routes contiguous same-face boundary-vertex selections through transactional boundary-chain extrusion, while the Edge-mode amount control routes one open boundary edge or a bounded boundary-edge selection on one face or distinct faces through face-normal surface-connected Edge Extrude; generalized interior surface-connected Vertex/Edge Extrude remains unfinished. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources remain explicit editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
+    printf("  Select the editable Ground Plane or an explicit reference asset, open Object Details > Authoring, and choose Make Editable when available; the generic component Move, selected-vertex/loose Vertex/Edge Extrude, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide/Bridge/Fill Boundary, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge. The same Vertex-mode amount control routes compatible single or multi-vertex boundary and interior fan selections through transactional surface extrusion, while the Edge-mode amount control routes one open boundary edge or compatible boundary-edge selections on one face or distinct faces through face-normal surface-connected Edge Extrude. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources remain explicit editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Tools panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Tools provides Build, Game, and World work contexts plus saved/custom workspace layouts; topology edits mark the workspace Custom.\n");
@@ -30587,22 +30584,22 @@ details_group_authoring:
                 row.width >= 290.0f)
             {
                 const bool extrude_enabled =
-                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) == 1U;
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) > 0U;
                 (void)henka_ui_label_colored(
                     state->ui, row.x, row.y + 5.0f, 0.85f,
-                    "Extrude (vertex fan)", HENKA_UI_COLOR_INFO);
+                    "Extrude (selected vertices)", HENKA_UI_COLOR_INFO);
                 if (extrude_enabled && henka_ui_button(
                         state->ui, "authoring_extrude_vertex_top",
                         (henka_ui_rect){row.x + 160.0f, row.y, 120.0f, 24.0f},
-                        "Vertex Fan"))
+                        "Vertex Extrude"))
                 {
                     const henka_result extrude_result =
                         sandbox3d_apply_authoring_vertex_fan(state, 0.25f);
                     sandbox3d_set_status(
                         state, extrude_result != HENKA_SUCCESS,
                         extrude_result == HENKA_SUCCESS
-                            ? "Selected vertex fan extruded transactionally."
-                            : "Vertex extrude rejected; select one supported connected vertex fan.");
+                            ? "Selected vertices extruded transactionally."
+                            : "Vertex extrude rejected; select compatible connected vertices.");
                     if (extrude_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
                 }
             }
@@ -31493,14 +31490,14 @@ details_group_authoring:
                 row.width >= 290.0f)
             {
                 const bool extrude_enabled =
-                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) == 1U;
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) > 0U;
                 (void)henka_ui_label_colored(
                     state->ui, row.x, row.y + 5.0f, 0.85f,
-                    "Extrude (vertex fan)", HENKA_UI_COLOR_INFO);
+                    "Extrude (selected vertices)", HENKA_UI_COLOR_INFO);
                 if (extrude_enabled && henka_ui_button(
                         state->ui, "authoring_extrude_vertex",
                         (henka_ui_rect){row.x + 160.0f, row.y, 120.0f, 24.0f},
-                        "Vertex Fan"))
+                        "Vertex Extrude"))
                 {
                     const henka_result extrude_result =
                         sandbox3d_apply_authoring_vertex_fan(state, 0.25f);
@@ -31509,7 +31506,7 @@ details_group_authoring:
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                         sandbox3d_set_status(state, false, "Selected vertex fan extruded transactionally.");
                     }
-                    else sandbox3d_set_status(state, true, "Vertex extrude rejected; select one supported connected vertex fan.");
+                    else sandbox3d_set_status(state, true, "Vertex extrude rejected; select compatible connected vertices.");
                 }
             }
             if (state->authoring_object != NULL &&
