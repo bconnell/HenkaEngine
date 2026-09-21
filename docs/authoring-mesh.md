@@ -553,6 +553,9 @@ Duplicate faces, shared vertices, non-isolated faces, non-quad faces, invalid
 factors, and insufficient capacity fail without publishing any part of the
 batch. Preview, Apply, Cancel, Undo, and Redo use the same authoring-object
 transaction boundary as the existing single-face and quad-strip operations.
+When more than one face is selected in the Sandbox Authoring panel, the
+factor-controlled Loop Cut control routes this bounded isolated-face batch
+operation before attempting any connected quad-strip route.
 
 ### Factor-controlled and uniformly spaced Loop Cut
 

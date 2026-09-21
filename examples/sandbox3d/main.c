@@ -30115,24 +30115,41 @@ details_group_authoring:
                     const bool batch_selected =
                         sandbox3d_authoring_object_get_selected_component_count(
                             state->authoring_object) > 1U;
-                    const henka_result cut_result = count_valid && loop_cut_count > 1U
-                        ? (batch_selected
+                    bool isolated_face_batch_preview = false;
+                    henka_result cut_result = HENKA_ERROR_INVALID_ARGUMENT;
+                    if (count_valid && loop_cut_count > 1U)
+                    {
+                        cut_result = batch_selected
                             ? sandbox3d_authoring_object_preview_loop_cut_selected_quad_strips_multi(
                                 state->authoring_object,
                                 loop_cut_count)
                             : sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
                                 state->authoring_object,
-                                loop_cut_count))
-                        : factor_valid
-                        ? sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
-                            state->authoring_object,
-                            loop_cut_factor)
-                        : HENKA_ERROR_INVALID_ARGUMENT;
+                                loop_cut_count);
+                    }
+                    else if (factor_valid)
+                    {
+                        if (batch_selected)
+                        {
+                            cut_result = sandbox3d_authoring_object_preview_loop_cut_selected_faces_at_factor(
+                                state->authoring_object,
+                                loop_cut_factor);
+                            isolated_face_batch_preview = cut_result == HENKA_SUCCESS;
+                        }
+                        else
+                        {
+                            cut_result = sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
+                                state->authoring_object,
+                                loop_cut_factor);
+                        }
+                    }
                     sandbox3d_set_status(
                         state,
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
-                            ? (loop_cut_count > 1U
+                            ? (isolated_face_batch_preview
+                                ? "Isolated multi-face Loop Cut preview ready; Apply or Cancel."
+                                : loop_cut_count > 1U
                                 ? (batch_selected
                                     ? "Multi-strip batch preview ready; Apply or Cancel."
                                     : "Multi-cut preview ready; Apply or Cancel.")
@@ -30141,6 +30158,8 @@ details_group_authoring:
                                 ? (batch_selected
                                     ? "Selected quad strips must be pairwise-disjoint."
                                     : "Multi-cut needs an isolated boundary quad.")
+                                : batch_selected
+                                ? "Selected faces must be vertex-disjoint isolated quads."
                                 : "Loop Cut needs a factor between 0 and 1 and a compatible quad strip."));
                 }
             }
@@ -31427,24 +31446,41 @@ details_group_authoring:
                     const bool batch_selected =
                         sandbox3d_authoring_object_get_selected_component_count(
                             state->authoring_object) > 1U;
-                    const henka_result cut_result = count_valid && loop_cut_count > 1U
-                        ? (batch_selected
+                    bool isolated_face_batch_preview = false;
+                    henka_result cut_result = HENKA_ERROR_INVALID_ARGUMENT;
+                    if (count_valid && loop_cut_count > 1U)
+                    {
+                        cut_result = batch_selected
                             ? sandbox3d_authoring_object_preview_loop_cut_selected_quad_strips_multi(
                                 state->authoring_object,
                                 loop_cut_count)
                             : sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
                                 state->authoring_object,
-                                loop_cut_count))
-                        : factor_valid
-                        ? sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
-                            state->authoring_object,
-                            loop_cut_factor)
-                        : HENKA_ERROR_INVALID_ARGUMENT;
+                                loop_cut_count);
+                    }
+                    else if (factor_valid)
+                    {
+                        if (batch_selected)
+                        {
+                            cut_result = sandbox3d_authoring_object_preview_loop_cut_selected_faces_at_factor(
+                                state->authoring_object,
+                                loop_cut_factor);
+                            isolated_face_batch_preview = cut_result == HENKA_SUCCESS;
+                        }
+                        else
+                        {
+                            cut_result = sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
+                                state->authoring_object,
+                                loop_cut_factor);
+                        }
+                    }
                     sandbox3d_set_status(
                         state,
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
-                            ? (loop_cut_count > 1U
+                            ? (isolated_face_batch_preview
+                                ? "Isolated multi-face Loop Cut preview ready; Apply or Cancel."
+                                : loop_cut_count > 1U
                                 ? (batch_selected
                                     ? "Multi-strip batch preview ready; Apply or Cancel."
                                     : "Multi-cut preview ready; Apply or Cancel.")
@@ -31453,6 +31489,8 @@ details_group_authoring:
                                 ? (batch_selected
                                     ? "Selected quad strips must be pairwise-disjoint."
                                     : "Multi-cut needs an isolated boundary quad.")
+                                : batch_selected
+                                ? "Selected faces must be vertex-disjoint isolated quads."
                                 : "Loop Cut needs a factor between 0 and 1 and a compatible quad strip."));
                 }
             }
