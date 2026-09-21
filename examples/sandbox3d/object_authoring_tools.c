@@ -1740,6 +1740,7 @@ static henka_result sandbox3d_authoring_restore_selection_history(
         {
             return result;
         }
+        return HENKA_SUCCESS;
     }
     if (object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE)
     {

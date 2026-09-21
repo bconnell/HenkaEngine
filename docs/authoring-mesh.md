@@ -123,8 +123,9 @@ its source faces as the base; a region connected to unselected surface moves
 its source face identities to the translated cap. Material regions, smoothing,
 per-corner UVs, hard-edge intent, and seam intent are preserved. Duplicate,
 invalid, unsupported, or failed selections leave the source unchanged. The
-current public boundary is the authoring-mesh API; editor multi-face selection
-and preview/apply routing remains a later integration boundary.
+Sandbox editor routes the selected face region through the shared Preview,
+Cancel, Apply, undo, and redo transaction, while the authoring-mesh API
+remains the topology authority.
 
 Selected-face deletion accepts a bounded unique face-ID set, validates the
 complete candidate before publication, and preserves the source on invalid,
