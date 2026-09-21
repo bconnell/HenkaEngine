@@ -7369,15 +7369,19 @@ static void henka_test_sandbox3d_authoring_shading_boundaries(void)
 static void henka_test_sandbox3d_authoring_loose_edge_split(void)
 {
     henka_engine_config config = {0};
-    const henka_authoring_mesh_desc desc = {8U, 8U, 4U, 8U};
+    const henka_authoring_mesh_desc desc = {12U, 12U, 4U, 8U};
     henka_engine* engine = NULL;
     henka_scene* scene = NULL;
     henka_authoring_mesh* source = NULL;
     sandbox3d_authoring_object* object = NULL;
     henka_authoring_vertex_id first = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_vertex_id second = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id third = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id fourth = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_edge_id source_edge = HENKA_AUTHORING_INVALID_ID;
-    henka_authoring_edge_id selected_edges[2] = {
+    henka_authoring_edge_id second_source_edge = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id selected_edges[4] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
@@ -7398,9 +7402,18 @@ static void henka_test_sandbox3d_authoring_loose_edge_split(void)
     HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
         source, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 4U,
         &second) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){0.0f, 2.0f, 0.0f}, (henka_vec2){0.0f, 1.0f}, 4U,
+        &third) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){2.0f, 2.0f, 0.0f}, (henka_vec2){1.0f, 1.0f}, 4U,
+        &fourth) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_add_edge(
         source, first, second, true, &source_edge) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_set_edge_seam(source, source_edge, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_edge(
+        source, third, fourth, true, &second_source_edge) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_set_edge_seam(source, second_source_edge, true) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
         engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
     henka_authoring_mesh_destroy(source);
@@ -7410,44 +7423,63 @@ static void henka_test_sandbox3d_authoring_loose_edge_split(void)
         object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
         object, source_edge, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, second_source_edge, true) == HENKA_SUCCESS);
     before = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_split_selected_loose_edge(object) == HENKA_SUCCESS);
     after = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
-    HENKA_TEST_ASSERT(after.vertices == before.vertices + 1U &&
-        after.edges == before.edges + 1U && after.faces == before.faces &&
+    HENKA_TEST_ASSERT(after.vertices == before.vertices + 2U &&
+        after.edges == before.edges + 2U && after.faces == before.faces &&
         henka_authoring_mesh_get_edge(
             sandbox3d_authoring_object_get_mesh(object), source_edge) == NULL &&
+        henka_authoring_mesh_get_edge(
+            sandbox3d_authoring_object_get_mesh(object), second_source_edge) == NULL &&
         henka_authoring_mesh_validate(
             sandbox3d_authoring_object_get_mesh(object)));
-    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 4U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
         object, 0U, &selected_edges[0]) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
         object, 1U, &selected_edges[1]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 2U, &selected_edges[2]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 3U, &selected_edges[3]) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(selected_edges[0] < selected_edges[1] &&
+        selected_edges[1] < selected_edges[2] && selected_edges[2] < selected_edges[3] &&
         henka_authoring_mesh_get_edge_face_count(
             sandbox3d_authoring_object_get_mesh(object), selected_edges[0]) == 0U);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge(
         sandbox3d_authoring_object_get_mesh(object), selected_edges[0])->hard &&
         henka_authoring_mesh_get_edge(
             sandbox3d_authoring_object_get_mesh(object), selected_edges[1])->hard &&
+        henka_authoring_mesh_get_edge(
+            sandbox3d_authoring_object_get_mesh(object), selected_edges[2])->hard &&
+        henka_authoring_mesh_get_edge(
+            sandbox3d_authoring_object_get_mesh(object), selected_edges[3])->hard &&
         henka_authoring_mesh_edge_is_seam(
             sandbox3d_authoring_object_get_mesh(object), selected_edges[0]) &&
         henka_authoring_mesh_edge_is_seam(
-            sandbox3d_authoring_object_get_mesh(object), selected_edges[1]));
+            sandbox3d_authoring_object_get_mesh(object), selected_edges[1]) &&
+        henka_authoring_mesh_edge_is_seam(
+            sandbox3d_authoring_object_get_mesh(object), selected_edges[2]) &&
+        henka_authoring_mesh_edge_is_seam(
+            sandbox3d_authoring_object_get_mesh(object), selected_edges[3]));
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == selected_edges[0]);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object)).vertices == before.vertices &&
         henka_authoring_mesh_get_edge(
             sandbox3d_authoring_object_get_mesh(object), source_edge) != NULL &&
-        sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+        henka_authoring_mesh_get_edge(
+            sandbox3d_authoring_object_get_mesh(object), second_source_edge) != NULL &&
+        sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object)).vertices == after.vertices &&
-        sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
+        sandbox3d_authoring_object_get_selected_component_count(object) == 4U);
 
     sandbox3d_authoring_object_destroy(object);
     henka_scene_destroy(scene);

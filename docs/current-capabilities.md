@@ -741,6 +741,9 @@ The core modeling API also provides:
   pairwise-distinct batch that preserves each source vertex and creates one
   metadata-inheriting standalone wire edge per selected vertex transactionally;
 - bounded loose-edge extrusion that creates one parallel edge and one quad face.
+- bounded standalone loose-edge midpoint splitting for one or a pairwise-
+  disjoint batch, preserving endpoint UV/material data and hard/seam intent
+  on every replacement edge;
 
 Both reject unsupported source topology and invalid direction/distance inputs.
 
@@ -750,7 +753,8 @@ The shared Sandbox modeling-operator session and Authoring panel can preview,
 cancel, and apply extrusion for one selected face, one or a bounded batch of
 loose vertices, one or a bounded batch of compatible boundary vertices,
 including a contiguous same-face boundary-vertex chain, or one standalone edge
-through core transactional operations.
+through core transactional operations. The Edge-mode loose split control also
+accepts one or a bounded pairwise-disjoint batch of standalone wire edges.
 The same control routes one open boundary edge, a contiguous same-face
 boundary-edge chain including a full face boundary, or a bounded pairwise
 batch of selected open boundary edges through face-normal surface-connected

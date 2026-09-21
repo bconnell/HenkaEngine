@@ -336,6 +336,21 @@ henka_result henka_authoring_mesh_split_loose_edge(
     henka_authoring_edge_id* out_second_edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Splits a bounded batch of pairwise-disjoint standalone wire edges at their
+ * midpoints. Each midpoint inherits the endpoint material region and
+ * interpolated UV; replacement edges inherit hard-edge and seam intent. The
+ * candidate is published only after every split validates, and face-backed,
+ * duplicate, shared-endpoint, mismatched-material, and capacity-invalid
+ * requests fail without changing the source mesh. */
+henka_result henka_authoring_mesh_split_loose_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_authoring_vertex_id* out_split_vertex_ids,
+    henka_authoring_edge_id* out_first_edge_ids,
+    henka_authoring_edge_id* out_second_edge_ids,
+    henka_authoring_modeling_report* out_report);
+
 /* Splits one face-backed boundary or interior edge at a factor strictly
  * between zero and one. The incident face loops gain one interpolated corner,
  * the new vertex receives interpolated position/UV data, and both replacement

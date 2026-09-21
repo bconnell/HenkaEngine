@@ -45,6 +45,14 @@ extern henka_result henka_authoring_mesh_split_boundary_edge_chains(
     henka_authoring_edge_id* out_first_edge_ids,
     henka_authoring_edge_id* out_second_edge_ids,
     henka_authoring_modeling_report* out_report);
+extern henka_result henka_authoring_mesh_split_loose_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_authoring_vertex_id* out_split_vertex_ids,
+    henka_authoring_edge_id* out_first_edge_ids,
+    henka_authoring_edge_id* out_second_edge_ids,
+    henka_authoring_modeling_report* out_report);
 static int fail(const char* message)
 {
     fprintf(stderr, "authoring mesh test failed: %s\n", message);
@@ -5255,6 +5263,104 @@ cleanup:
     return result ? 1 : fail("loose edge split operation");
 }
 
+static int test_loose_edge_split_batch_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 16U, 4U, 8U};
+    const henka_vec3 positions[6] = {
+        {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {0.0f, 2.0f, 0.0f}, {2.0f, 2.0f, 0.0f},
+        {0.0f, 4.0f, 0.0f}, {2.0f, 4.0f, 0.0f}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[6];
+    henka_authoring_edge_id edge_ids[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id split_vertices[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id first_edges[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id second_edges[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts rejected;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        return fail("loose edge split batch setup");
+    }
+    for (size_t index = 0U; index < 6U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){(float)index, 0.0f}, 7U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (size_t index = 0U; index < 3U; ++index)
+    {
+        if (henka_authoring_mesh_add_edge(
+                mesh, vertices[index * 2U], vertices[index * 2U + 1U], true,
+                &edge_ids[index]) != HENKA_SUCCESS ||
+            henka_authoring_mesh_set_edge_seam(mesh, edge_ids[index], true) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_split_loose_edges(
+            mesh, edge_ids, 3U, split_vertices, first_edges, second_edges, &report) !=
+            HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 3U || report.created_edges != 3U)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices + 3U || after.edges != before.edges + 3U ||
+        after.faces != before.faces || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (size_t index = 0U; index < 3U; ++index)
+    {
+        const henka_authoring_vertex* split =
+            henka_authoring_mesh_get_vertex(mesh, split_vertices[index]);
+        const henka_authoring_edge* first =
+            henka_authoring_mesh_get_edge(mesh, first_edges[index]);
+        const henka_authoring_edge* second =
+            henka_authoring_mesh_get_edge(mesh, second_edges[index]);
+        if (split == NULL || first == NULL || second == NULL ||
+            !first->hard || !second->hard ||
+            !henka_authoring_mesh_edge_is_seam(mesh, first->id) ||
+            !henka_authoring_mesh_edge_is_seam(mesh, second->id) ||
+            henka_authoring_mesh_get_edge_face_count(mesh, first->id) != 0U ||
+            henka_authoring_mesh_get_edge_face_count(mesh, second->id) != 0U)
+        {
+            goto cleanup;
+        }
+    }
+    before = after;
+    if (henka_authoring_mesh_split_loose_edges(
+            mesh, (henka_authoring_edge_id[]){first_edges[0], first_edges[0]}, 2U,
+            split_vertices, first_edges, second_edges, NULL) != HENKA_ERROR_INVALID_ARGUMENT ||
+        (rejected = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &rejected, sizeof(before)) != 0))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("loose edge split batch");
+}
+
 static int test_boundary_edge_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 8U};
@@ -7786,6 +7892,7 @@ int main(void)
         test_vertex_extrude_boundary_fan_operation() &&
         test_loose_edge_extrude_operation() &&
         test_loose_edge_split_operation() &&
+        test_loose_edge_split_batch_operation() &&
         test_face_edge_split_operation() &&
         test_interior_edge_split_operation() &&
         test_disjoint_face_edge_batch_split_operation() &&

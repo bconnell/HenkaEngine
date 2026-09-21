@@ -578,12 +578,14 @@ It rejects face-backed edges, mismatched endpoint materials, degenerate offsets,
 ### Loose-edge Split
 
 The core modeling API and Sandbox Edge-mode path support splitting one selected
-standalone wire edge at its midpoint. The new vertex interpolates endpoint UVs,
-inherits the endpoint material region, and the two replacement edges preserve
-the source hard-edge and seam intent. The operation rejects face-backed edges,
-mismatched endpoint materials, degenerate source edges, and capacity
-exhaustion without publishing a partial mesh. The Sandbox selects both
-replacement edges and restores the prior edge selection through undo/redo.
+standalone wire edge, or a bounded pairwise-disjoint batch of standalone wire
+edges, at each midpoint. Each new vertex interpolates endpoint UVs and inherits
+the endpoint material region. Each pair of replacement edges preserves the
+source hard-edge and seam intent. The operation rejects face-backed edges,
+mismatched endpoint materials, shared endpoints, duplicate selections,
+degenerate source edges, and capacity exhaustion without publishing a partial
+mesh. The Sandbox selects all replacement edges and restores the prior edge
+selection through undo/redo.
 
 ### Face-backed Edge Split
 
