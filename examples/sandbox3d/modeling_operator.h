@@ -104,6 +104,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactional cylindrical unwrap of the selected mesh around the
      * configured operator axis. */
     SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL,
+    /* Transactional spherical unwrap of the selected mesh around the
+     * configured operator axis. */
+    SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_SPHERICAL,
     /* Transactionally toggles the explicit seam state of selected edges. */
     SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE
 } sandbox3d_modeling_operator_kind;

@@ -472,6 +472,7 @@ henka_result sandbox3d_modeling_operator_begin(
          kind != SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL &&
+         kind != SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_SPHERICAL &&
          kind != SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -628,9 +629,10 @@ henka_result sandbox3d_modeling_operator_begin(
          kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ||
           kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM ||
           kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK ||
-          kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL ||
-          kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR ||
-          kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL) &&
+         kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL ||
+         kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR ||
+         kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL ||
+         kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_SPHERICAL) &&
         (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count != 1U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -1089,6 +1091,7 @@ henka_result sandbox3d_modeling_operator_preview(
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL &&
+         session->kind != SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_SPHERICAL &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_UV_SEAM_TOGGLE) ||
          session->source_snapshot == NULL || session->object == NULL ||
          (((session->kind != SANDBOX3D_MODELING_OPERATOR_ADD_LOOSE_VERTEX &&
@@ -1185,11 +1188,13 @@ henka_result sandbox3d_modeling_operator_preview(
           session->kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK ||
           session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL ||
           session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR ||
-          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL) &&
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL ||
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_SPHERICAL) &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
              session->selection_count != 1U)) ||
         ((session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PROJECT ||
-          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL) &&
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL ||
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_SPHERICAL) &&
             session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_NONE) ||
         !isfinite(delta) ||
         !isfinite(session->amount))
@@ -1227,7 +1232,9 @@ henka_result sandbox3d_modeling_operator_preview(
         ((session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK ||
           session->kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_PACK ||
           session->kind == SANDBOX3D_MODELING_OPERATOR_UV_PACK_ALL ||
-          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR) &&
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_PLANAR ||
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL ||
+          session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_SPHERICAL) &&
             (applied_amount < 0.0f || applied_amount >= 0.5f)) ||
         ((session->kind == SANDBOX3D_MODELING_OPERATOR_UV_TRANSFORM ||
           session->kind == SANDBOX3D_MODELING_OPERATOR_UV_ISLAND_TRANSFORM) &&
@@ -1985,6 +1992,15 @@ henka_result sandbox3d_modeling_operator_preview(
         session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_CYLINDRICAL)
     {
         result = henka_authoring_mesh_unwrap_cylindrical_faces(
+            candidate,
+            (henka_authoring_uv_projection_axis)(session->axis -
+                SANDBOX3D_MODELING_OPERATOR_AXIS_X),
+            applied_amount);
+    }
+    if (result == HENKA_SUCCESS &&
+        session->kind == SANDBOX3D_MODELING_OPERATOR_UV_UNWRAP_SPHERICAL)
+    {
+        result = henka_authoring_mesh_unwrap_spherical_faces(
             candidate,
             (henka_authoring_uv_projection_axis)(session->axis -
                 SANDBOX3D_MODELING_OPERATOR_AXIS_X),

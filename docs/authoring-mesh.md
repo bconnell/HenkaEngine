@@ -182,6 +182,9 @@ without changing the committed topology or selection state.
 - bounded scaling and packing of the complete UV island containing a selected face;
 - deterministic bounded packing of every UV island into the unit square;
 - deterministic planar-chart unwrap for connected planar UV islands;
+- deterministic spherical unwrap for bounded ellipsoidal or spherical surfaces
+  around the selected X, Y, or Z axis, with centered pole UVs and generated
+  longitude-wrap seams;
 - finite-value validation;
 - seam detection from shared topology and explicit edge seam metadata.
 
@@ -199,8 +202,10 @@ the explicit seam state is persisted through HAMS v6. The Sandbox Face-mode
 panel also provides transactional planar-chart unwrap. It projects each
 seam-delimited planar island on its dominant geometric axis and packs the charts
 into a padded unit-square grid. Degenerate or non-planar islands are rejected
-without changing the source; broader automatic unwrap strategies remain
-outside this bounded scope.
+without changing the source. Spherical unwrap maps normalized longitude and
+latitude for bounded non-degenerate ellipsoidal or spherical surfaces, uses a
+stable centered U value at poles, and marks the generated longitude boundary as
+a seam. Other automatic unwrap strategies remain outside this bounded scope.
 
 ## Connected Sandbox workflow
 

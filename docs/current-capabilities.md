@@ -590,6 +590,9 @@ Available operations also include:
 - deterministic planar-chart unwrap for connected planar UV islands;
 - deterministic cylindrical unwrap for bounded non-degenerate side surfaces
   around the selected X, Y, or Z axis, including generated wrap seams;
+- deterministic spherical unwrap for bounded non-degenerate ellipsoidal or
+  spherical surfaces around the selected X, Y, or Z axis, including centered
+  pole UVs and generated longitude-wrap seams;
 - seam detection;
 - transactional Toggle UV Seam for selected Edge-mode components.
 
@@ -598,9 +601,12 @@ single-face transforms, selected-island scaling/packing, all-island packing,
 and planar-chart unwrap through the modeling transaction path. Cylindrical
 unwrap is available for bounded non-degenerate side surfaces and maps angular
 and axial coordinates around the selected axis while marking the generated
-wrap boundary as a seam. All-island packing uses the selected Face as its
-authoring context and lays out every seam-delimited island in a deterministic
-padded grid while preserving each island's relative proportions.
+wrap boundary as a seam. Spherical unwrap is available for bounded
+non-degenerate ellipsoidal or spherical surfaces and maps normalized longitude
+and latitude around the selected axis, using centered pole UVs and marking the
+generated longitude boundary as a seam. All-island packing uses the selected
+Face as its authoring context and lays out every seam-delimited island in a
+deterministic padded grid while preserving each island's relative proportions.
 Planar-chart unwrap projects each seam-delimited planar island on its dominant
 geometric axis before packing it; degenerate or non-planar islands fail closed
 without source mutation. The Edge-mode seam control also uses this path and
@@ -728,8 +734,8 @@ boundary:
 
 - broader non-manifold or incompatible-normal fan handling;
 - broader topology tooling and generalized branching or batch split workflows;
-- broader automatic UV unwrap beyond bounded planar charts and cylindrical
-  side surfaces;
+- broader automatic UV unwrap beyond bounded planar charts, cylindrical side
+  surfaces, and spherical/ellipsoidal surfaces;
 - texture painting;
 - rigging;
 - skinning;
@@ -1114,8 +1120,8 @@ Major open areas include:
 - hierarchy and prefab authoring;
 - animation and rigging;
 - texture painting;
-- broader automatic UV unwrap beyond bounded planar charts and cylindrical
-  side surfaces;
+- broader automatic UV unwrap beyond bounded planar charts, cylindrical side
+  surfaces, and spherical/ellipsoidal surfaces;
 - complete scene serialization;
 - remaining renderer and Terrain visual validation.
 

@@ -61,6 +61,14 @@ henka_result henka_authoring_mesh_unwrap_cylindrical_faces(
     henka_authoring_mesh* mesh,
     henka_authoring_uv_projection_axis axis,
     float padding);
+/* Unwraps a bounded ellipsoidal/spherical surface around axis using longitude
+ * for U and latitude for V.  Pole vertices receive a stable centered U value,
+ * and the generated longitude wrap boundary is marked as a UV seam.  The
+ * candidate is published atomically; degenerate bounds are rejected. */
+henka_result henka_authoring_mesh_unwrap_spherical_faces(
+    henka_authoring_mesh* mesh,
+    henka_authoring_uv_projection_axis axis,
+    float padding);
 bool henka_authoring_mesh_face_uvs_are_finite(
     const henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id);

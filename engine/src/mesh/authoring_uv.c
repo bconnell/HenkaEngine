@@ -1308,6 +1308,168 @@ henka_result henka_authoring_mesh_unwrap_cylindrical_faces(
     return result;
 }
 
+henka_result henka_authoring_mesh_unwrap_spherical_faces(
+    henka_authoring_mesh* mesh,
+    henka_authoring_uv_projection_axis axis,
+    float padding)
+{
+    const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
+    henka_authoring_mesh* candidate = NULL;
+    henka_vec3 center;
+    henka_vec3 extents;
+    const float half_pi = 1.57079632679489661923f;
+    const float two_pi = 6.28318530717958647692f;
+    henka_result result;
+    size_t face_slot;
+
+    if (mesh == NULL || axis > HENKA_AUTHORING_UV_PROJECT_Z ||
+        !isfinite(padding) || padding < 0.0f || padding >= 0.5f ||
+        !henka_authoring_mesh_validate(mesh) ||
+        henka_authoring_mesh_get_bounds(mesh, &center, &extents) != HENKA_SUCCESS ||
+        !isfinite(center.x) || !isfinite(center.y) || !isfinite(center.z) ||
+        !isfinite(extents.x) || !isfinite(extents.y) || !isfinite(extents.z) ||
+        extents.x <= 0.000001f || extents.y <= 0.000001f || extents.z <= 0.000001f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    for (face_slot = 0U; result == HENKA_SUCCESS && face_slot < desc.max_faces;
+         ++face_slot)
+    {
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_face* face;
+        size_t corner;
+        if (henka_authoring_mesh_get_face_id_at(candidate, face_slot, &face_id) !=
+            HENKA_SUCCESS)
+        {
+            continue;
+        }
+        face = henka_authoring_mesh_get_face(candidate, face_id);
+        if (face == NULL || face->vertices == NULL || face->uvs == NULL ||
+            face->edges == NULL || face->corner_count < 3U)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            break;
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+                candidate, face->vertices[corner]);
+            henka_vec3 relative;
+            float axial;
+            float radial_first;
+            float radial_second;
+            float axial_extent = 0.0f;
+            float radial_first_extent = 0.0f;
+            float radial_second_extent = 0.0f;
+            float normalized_axial;
+            float normalized_radial_first;
+            float normalized_radial_second;
+            float normalized_length;
+            float latitude;
+            float angle;
+            henka_vec2 uv;
+            if (vertex == NULL)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                break;
+            }
+            relative = (henka_vec3){
+                vertex->position.x - center.x,
+                vertex->position.y - center.y,
+                vertex->position.z - center.z};
+            if (!uv_cylindrical_components(
+                    relative, axis, &axial, &radial_first, &radial_second))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                break;
+            }
+            switch (axis)
+            {
+            case HENKA_AUTHORING_UV_PROJECT_X:
+                axial_extent = extents.x;
+                radial_first_extent = extents.y;
+                radial_second_extent = extents.z;
+                break;
+            case HENKA_AUTHORING_UV_PROJECT_Y:
+                axial_extent = extents.y;
+                radial_first_extent = extents.x;
+                radial_second_extent = extents.z;
+                break;
+            case HENKA_AUTHORING_UV_PROJECT_Z:
+                axial_extent = extents.z;
+                radial_first_extent = extents.x;
+                radial_second_extent = extents.y;
+                break;
+            default:
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                break;
+            }
+            if (result != HENKA_SUCCESS)
+            {
+                break;
+            }
+            normalized_axial = axial / axial_extent;
+            normalized_radial_first = radial_first / radial_first_extent;
+            normalized_radial_second = radial_second / radial_second_extent;
+            normalized_length = sqrtf(
+                normalized_axial * normalized_axial +
+                normalized_radial_first * normalized_radial_first +
+                normalized_radial_second * normalized_radial_second);
+            if (!isfinite(normalized_length) || normalized_length <= 0.000001f)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                break;
+            }
+            latitude = normalized_axial / normalized_length;
+            if (latitude < -1.0f) latitude = -1.0f;
+            if (latitude > 1.0f) latitude = 1.0f;
+            angle = atan2f(normalized_radial_second, normalized_radial_first);
+            uv = (henka_vec2){
+                padding + ((angle + 3.14159265358979323846f) / two_pi) *
+                    (1.0f - 2.0f * padding),
+                padding + ((asinf(latitude) + half_pi) / 3.14159265358979323846f) *
+                    (1.0f - 2.0f * padding)};
+            if (normalized_radial_first * normalized_radial_first +
+                    normalized_radial_second * normalized_radial_second <=
+                0.000001f)
+            {
+                uv.x = padding + 0.5f * (1.0f - 2.0f * padding);
+            }
+            if (!uv_finite_vec2(uv) ||
+                henka_authoring_mesh_set_face_corner_uv(
+                    candidate, face_id, corner, uv) != HENKA_SUCCESS)
+            {
+                result = HENKA_ERROR_NUMERIC_RANGE;
+                break;
+            }
+        }
+        for (corner = 0U; result == HENKA_SUCCESS && corner < face->corner_count;
+             ++corner)
+        {
+            const henka_vec2 first = face->uvs[corner];
+            const henka_vec2 second = face->uvs[(corner + 1U) % face->corner_count];
+            if (fabsf(first.x - second.x) > 0.5f &&
+                henka_authoring_mesh_set_edge_seam(
+                    candidate, face->edges[corner], true) != HENKA_SUCCESS)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+    }
+    if (result == HENKA_SUCCESS && !henka_authoring_mesh_validate(candidate))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = uv_commit(mesh, candidate);
+        candidate = NULL;
+    }
+    henka_authoring_mesh_destroy(candidate);
+    return result;
+}
+
 bool henka_authoring_mesh_faces_share_uv_seam(
     const henka_authoring_mesh* mesh,
     henka_authoring_face_id first_face_id,
