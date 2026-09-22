@@ -538,9 +538,10 @@ Integrated authoring is already underway as part of the current 3D completion pa
 - Edge mode can fill one selected closed boundary edge loop with one
   deterministic polygon through the same source/render/history transaction.
 - One compatible three-edge branching interior bevel fan around a valence-three
-  vertex is available through the transactional bevel path. The same fan can
-  be extruded as its enclosed three-face region through the canonical
-  face-region transaction. Compatible simple connected interior-edge paths and
+  vertex is available through the transactional bevel path. Complete closed
+  interior edge fans around an interior vertex can be extruded as their
+  enclosed face region through the canonical face-region transaction. Compatible
+  simple connected interior-edge paths and
   bounded batches of independent simple paths are also available through the
   shared transactional route. A compatible closed interior edge cycle that
   exactly bounds one source face, or encloses a unique smaller connected face
@@ -548,7 +549,7 @@ Integrated authoring is already underway as part of the current 3D completion pa
   transaction. Larger or ambiguous branching bevel/extrusion domains, other
   cyclic edge-loop domains, generalized Edge Extrude beyond the bounded
   single-edge, contiguous-chain, independent-chain boundary, simple-path, and
-  uniquely enclosed closed-cycle cases, and general
+  uniquely enclosed closed-cycle, complete closed-fan, and general
   loop-cut networks remain in progress or
   planned.
   Generalized closed-loop, branching, and split bridge workflows remain future

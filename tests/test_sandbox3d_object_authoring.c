@@ -3858,6 +3858,85 @@ static void henka_test_sandbox3d_modeling_operator_multi_face_closed_interior_ed
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_modeling_operator_generalized_closed_interior_edge_fan_extrude(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    sandbox3d_modeling_operator_session session = {0};
+    const size_t edge_vertices[4][2] = {{7U, 12U}, {12U, 13U}, {12U, 17U}, {11U, 12U}};
+    henka_authoring_vertex_id vertices[25];
+    henka_authoring_edge_id selected_edges[4];
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_entity entity;
+    size_t index;
+
+    config.application_name = "Henka Generalized Closed Interior Edge Fan Extrude Operator Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Generalized Closed Interior Edge Fan Source");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(
+        &(henka_authoring_mesh_desc){96U, 192U, 96U, 8U}, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_make_quad_grid(source, 4U, 4U, vertices, 25U) == HENKA_SUCCESS);
+    for (index = 0U; index < 4U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_test_find_edge_between_vertices(
+            source, (henka_authoring_vertex_id)edge_vertices[index][0],
+            (henka_authoring_vertex_id)edge_vertices[index][1], &selected_edges[index]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge(source, selected_edges[index])->face_count == 2U);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    for (index = 0U; index < 4U; ++index)
+    {
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, selected_edges[index], index != 0U) == HENKA_SUCCESS);
+    }
+    before = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.25f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices && after.edges == before.edges &&
+        after.faces == before.faces);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!sandbox3d_authoring_object_has_preview(object));
+
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.25f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices + 9U &&
+        after.edges == before.edges + 16U && after.faces == before.faces + 8U &&
+        henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices && after.edges == before.edges &&
+        after.faces == before.faces);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices + 9U &&
+        after.edges == before.edges + 16U && after.faces == before.faces + 8U &&
+        henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_modeling_operator_boundary_edge_chain_extrude(void)
 {
     henka_engine_config config = {0};
@@ -11679,6 +11758,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_modeling_operator_interior_edge_extrude();
     henka_test_sandbox3d_modeling_operator_closed_interior_edge_loop_extrude();
     henka_test_sandbox3d_modeling_operator_multi_face_closed_interior_edge_loop_extrude();
+    henka_test_sandbox3d_modeling_operator_generalized_closed_interior_edge_fan_extrude();
     henka_test_sandbox3d_modeling_operator_boundary_edge_chain_extrude();
     henka_test_sandbox3d_modeling_operator_closed_boundary_edge_chain_extrude();
     henka_test_sandbox3d_modeling_operator_multi_boundary_edge_extrude();

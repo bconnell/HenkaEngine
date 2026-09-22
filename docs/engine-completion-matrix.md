@@ -83,6 +83,11 @@ The selected cycle must be connected, degree-two at every selected vertex, and
 made of compatible two-face edges. Equal-sized, non-separating, and otherwise
 ambiguous cyclic domains remain outside that declared boundary and fail closed.
 
+The same bounded Edge Extrude scope includes a complete closed interior edge
+fan when every selected edge shares one interior vertex, all of that vertex's
+incident edges are selected, and the selected edges bound one compatible quad
+face fan. Incomplete or ambiguous branching fans fail closed.
+
 The Native modeling row's bounded split/delete scope includes the face-backed
 boundary/interior edge split, its pairwise-disjoint batch form, and the
 standalone loose-edge midpoint split and pairwise-disjoint split/delete batch

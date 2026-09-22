@@ -696,9 +696,9 @@ Available edge authoring includes:
   cycle exactly bounds one source face, or when a connected degree-two cycle
   encloses a unique smaller connected face region, routed through the
   canonical face-extrusion transaction;
-- one compatible three-edge branching fan around a valence-three interior
-  vertex, routed as a canonical enclosed face-region extrusion with a
-  translated cap and boundary side faces;
+- one compatible complete closed interior edge fan around an interior vertex,
+  routed as a canonical enclosed face-region extrusion with a translated cap
+  and boundary side faces;
 - transactional same-face extrusion for one contiguous boundary-edge chain or
   a bounded batch of independent boundary-edge chains.
 
@@ -713,9 +713,9 @@ offsets that quad along its face normal, creates one connecting quad, and leaves
 the neighboring quad unchanged. Pairwise-disjoint selections apply those
 independent transactions through one validated candidate. The connected path
 form and the bounded independent path batch apply the same transactional step in
-deterministic path order. The supported three-edge
-branching fan selects its enclosed three-face region and reuses the canonical
-face-region transaction. Matching material/smoothing metadata, continuous
+deterministic path order. The complete closed interior edge fan selects its
+enclosed face region and reuses the canonical face-region transaction. Matching
+material/smoothing metadata, continuous
 per-edge UVs, and non-hard, non-seamed source edges are required for the
 single-edge, simple-path, and closed-cycle forms; preview, cancel, apply, undo, and redo use
 the existing authoring history boundary. A closed interior cycle must be
@@ -724,8 +724,8 @@ two-face edges, and separate a unique smaller connected face region.
 
 Other interior/manifold configurations, mixed-face chains, disconnected
 components beyond independent compatible edges and simple paths, equal-sized,
-non-separating, or otherwise ambiguous cyclic domains, larger branching,
-shared-endpoint components, and otherwise unsupported batches remain rejected.
+non-separating, incomplete or otherwise ambiguous cyclic/fan domains, mixed
+branching, shared-endpoint components, and otherwise unsupported batches remain rejected.
 Face-backed split supports pairwise-disjoint boundary or
 two-face interior batches, contiguous same-face boundary chains, and bounded
 batches of independent boundary chains; broader branching and generalized

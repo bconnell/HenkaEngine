@@ -519,7 +519,7 @@ incomplete.
 
 ### Surface-connected Edge Extrude
 
-The core API supports bounded surface-connected extrusion for one open boundary edge, a contiguous boundary-edge chain, a batch of independent boundary-edge chains, a pairwise vertex-disjoint batch on distinct faces, one compatible interior edge shared by two quads, a pairwise-disjoint batch of compatible interior edges, a simple connected interior-edge path across compatible quad strips, a batch of independent simple connected interior-edge paths, one compatible closed interior edge cycle that exactly bounds one source face, one compatible connected closed interior edge cycle that encloses a unique smaller connected face region, and one compatible three-edge branching fan around a valence-three interior vertex.
+The core API supports bounded surface-connected extrusion for one open boundary edge, a contiguous boundary-edge chain, a batch of independent boundary-edge chains, a pairwise vertex-disjoint batch on distinct faces, one compatible interior edge shared by two quads, a pairwise-disjoint batch of compatible interior edges, a simple connected interior-edge path across compatible quad strips, a batch of independent simple connected interior-edge paths, one compatible closed interior edge cycle that exactly bounds one source face, one compatible connected closed interior edge cycle that encloses a unique smaller connected face region, and one compatible complete closed interior edge fan around an interior vertex.
 
 The operation:
 
@@ -534,14 +534,14 @@ component must belong to one boundary face and be an open chain or a simple
 closed loop; independent components are applied together through one
 candidate-first transaction and may belong to different faces.
 
-For the compatible interior cases, the lower logical-ID incident quad is selected deterministically for each edge. That quad replaces the shared edge with an offset edge and receives one connecting quad; the neighboring quad remains unchanged. The source faces must be quads with matching material and smoothing metadata, and the source edges must not be hard or seamed. Per-corner UVs and face metadata are preserved on the selected quads and connecting quads. Pairwise-disjoint selections and independent simple paths publish all transactions through one candidate-first commit. Each connected path must be simple, pairwise vertex-disjoint, and have exactly two path endpoints. A closed cycle is accepted when every selected edge is a compatible two-face edge, the cycle is one connected degree-two loop, and it either bounds one source face or separates a unique smaller connected face region; the accepted region uses the canonical face extrusion transaction. Equal-sized, non-separating, overlapping, or otherwise ambiguous cycles are rejected as unsupported. The supported three-edge branch fan is interpreted as its enclosed three-face region and uses the canonical face-region extrusion transaction, preserving the selected faces as the base when the region is closed and creating one translated cap plus boundary side faces.
+For the compatible interior cases, the lower logical-ID incident quad is selected deterministically for each edge. That quad replaces the shared edge with an offset edge and receives one connecting quad; the neighboring quad remains unchanged. The source faces must be quads with matching material and smoothing metadata, and the source edges must not be hard or seamed. Per-corner UVs and face metadata are preserved on the selected quads and connecting quads. Pairwise-disjoint selections and independent simple paths publish all transactions through one candidate-first commit. Each connected path must be simple, pairwise vertex-disjoint, and have exactly two path endpoints. A closed cycle is accepted when every selected edge is a compatible two-face edge, the cycle is one connected degree-two loop, and it either bounds one source face or separates a unique smaller connected face region; the accepted region uses the canonical face extrusion transaction. A complete closed interior edge fan is accepted when every selected edge shares one interior vertex, all of that vertex's incident edges are selected, and the selected edges bound one compatible quad face fan; it uses the same canonical face-region transaction. Equal-sized, non-separating, incomplete, overlapping, or otherwise ambiguous cycles and fans are rejected as unsupported.
 
 Other interior/manifold configurations, mixed metadata, non-quad faces, mixed/shared-endpoint selections, cyclic domains outside the documented single-face-bounded or uniquely enclosed form, larger branching, and otherwise unsupported batches remain unsupported. Disconnected selections are supported as independent compatible edges and simple connected paths; broader disconnected interior components remain unsupported.
 
 The shared Sandbox modeling session exposes this path through Preview, Cancel,
 and Apply for one edge, a contiguous chain, a compatible closed interior edge
 cycle, a compatible closed cycle enclosing a unique smaller connected face
-region, a bounded batch of independent boundary chains, or a compatible
+region, a complete closed interior edge fan, a bounded batch of independent boundary chains, or a compatible
 interior path. The Authoring panel uses the
 shared amount control, and applied edits use the existing Undo/Redo history
 boundary.
@@ -872,7 +872,7 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - incompatible-normal fan handling;
 - generalized surface-connected Vertex/Edge Extrude beyond the bounded open-fan,
   closed-fan batch, boundary-edge, pairwise-disjoint compatible interior-edge,
-  simple-path, and uniquely enclosed closed-cycle cases;
+  simple-path, uniquely enclosed closed-cycle, and complete closed-fan cases;
 - generalized closed-loop, branching, and broader weld/split/bridge workflows
   beyond the bounded face-backed boundary/interior batch and standalone loose-edge
   operations;

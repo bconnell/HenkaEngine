@@ -8612,6 +8612,96 @@ cleanup:
     return result ? 1 : fail(failure);
 }
 
+static int test_generalized_closed_interior_edge_fan_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {96U, 192U, 96U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertex_ids[25];
+    henka_authoring_edge_id edge_ids[4] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    const size_t edge_vertices[4][2] = {
+        {7U, 12U}, {12U, 13U}, {12U, 17U}, {11U, 12U}};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_modeling_report report = {0};
+    henka_result operation_result;
+    size_t row;
+    size_t column;
+    size_t index;
+    const char* failure = "transactional generalized closed interior edge fan extrude";
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (row = 0U; row < 5U; ++row)
+    {
+        for (column = 0U; column < 5U; ++column)
+        {
+            const size_t vertex_index = row * 5U + column;
+            if (henka_authoring_mesh_add_vertex(
+                    mesh, (henka_vec3){(float)column, 0.0f, (float)row},
+                    (henka_vec2){(float)column, (float)row}, 9U,
+                    &vertex_ids[vertex_index]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    for (row = 0U; row < 4U; ++row)
+    {
+        for (column = 0U; column < 4U; ++column)
+        {
+            const henka_authoring_vertex_id face_vertices[4] = {
+                vertex_ids[row * 5U + column],
+                vertex_ids[row * 5U + column + 1U],
+                vertex_ids[(row + 1U) * 5U + column + 1U],
+                vertex_ids[(row + 1U) * 5U + column]};
+            henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+            if (henka_authoring_mesh_add_face(
+                    mesh, face_vertices, 4U, 9U, true, &face_id) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        const henka_authoring_edge* edge;
+        if (test_find_edge_between_vertices(
+                mesh, (henka_authoring_vertex_id)edge_vertices[index][0],
+                (henka_authoring_vertex_id)edge_vertices[index][1],
+                &edge_ids[index]) != HENKA_SUCCESS ||
+            (edge = henka_authoring_mesh_get_edge(mesh, edge_ids[index])) == NULL ||
+            edge->face_count != 2U || edge->hard || edge->seam)
+        {
+            failure = "generalized closed interior edge fan fixture is not interior";
+            goto cleanup;
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    operation_result = henka_authoring_mesh_extrude_interior_edges(
+        mesh, edge_ids, 4U, 0.25f, &report);
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (operation_result != HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 9U ||
+        report.created_edges != 16U || report.created_faces != 8U ||
+        after.vertices != before.vertices + 9U ||
+        after.edges != before.edges + 16U || after.faces != before.faces + 8U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        failure = "generalized closed interior edge fan did not publish a valid region";
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail(failure);
+}
+
 static int test_boundary_edge_batch_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -11285,6 +11375,7 @@ int main(void)
         test_multi_path_interior_edge_extrude_operation() &&
         test_closed_interior_edge_loop_extrude_operation() &&
         test_multi_face_closed_interior_edge_loop_extrude_operation() &&
+        test_generalized_closed_interior_edge_fan_extrude_operation() &&
         test_boundary_edge_chain_extrude_operation() &&
         test_boundary_edge_chain_batch_extrude_operation() &&
         test_boundary_edge_bridge_operation() &&

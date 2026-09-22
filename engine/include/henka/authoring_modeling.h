@@ -575,9 +575,9 @@ henka_result henka_authoring_mesh_extrude_edge(
  * encloses a unique smaller connected face region. Selected edges are
  * interior, non-hard, non-seamed, and share
  * material, smoothing, and UV continuity with their incident quads. The
- * domains also include one compatible three-edge branching fan around a
- * valence-three interior vertex; that selection is interpreted as the enclosed
- * three-face region through the canonical face-region transaction. The
+ * domains also include one compatible complete closed interior edge fan around
+ * an interior vertex; that selection is interpreted as the enclosed face
+ * region through the canonical face-region transaction. The
  * candidate is published only after the complete set validates. Mixed,
  * other cyclic, larger or ambiguous branching, incompatible, and
  * capacity-invalid selections fail without changing the source mesh. */
