@@ -172,14 +172,15 @@ candidate mesh. Apply selects the resulting center vertices in Vertex mode.
 Shared-vertex, duplicate, invalid, and capacity-invalid selections fail
 without changing the committed topology or selection state.
 
-Face poke supports one selected simple convex planar polygon. It adds one
-center vertex and replaces the polygon with a triangle fan on one candidate
-mesh while preserving the source face identity, material region, smoothing,
-and per-corner UV data. Apply selects the new center vertex in Vertex mode.
-Non-planar, concave, self-intersecting, degenerate, invalid, and
-capacity-invalid faces fail without changing the committed topology or
-selection state. Broader multi-face poke and non-convex fan construction remain
-outside this bounded operation.
+Face poke supports one or a bounded selection of vertex-disjoint simple convex
+planar polygons. It adds one center vertex for each selected face and replaces
+each polygon with a triangle fan on one candidate mesh while preserving the
+source face identity, material region, smoothing, and per-corner UV data. Apply
+selects the resulting center vertices in input selection order in Vertex mode.
+Duplicate, shared-vertex, non-planar, concave, self-intersecting, degenerate,
+invalid, and capacity-invalid selections fail without changing the committed
+topology or selection state. Broader connected or non-convex fan construction
+remains outside this bounded operation.
 
 ## UV operations
 
@@ -304,7 +305,7 @@ Face mode exposes:
 - Inset;
 - Bevel;
 - Subdivide;
-- Poke Face;
+- Poke Face(s);
 - Project UV;
 - Pack UV;
 - Undo;

@@ -358,7 +358,6 @@ static void henka_test_sandbox3d_object_authoring_triangulate_face(void)
     henka_authoring_mesh_counts after;
     henka_entity entity = HENKA_INVALID_ENTITY;
     size_t index;
-
     config.application_name = "Henka Triangulate Face Authoring Test";
     config.window_width = 320;
     config.window_height = 240;
@@ -474,7 +473,6 @@ static void henka_test_sandbox3d_modeling_operator_triangulate_face(void)
     henka_authoring_mesh_counts after;
     henka_entity entity = HENKA_INVALID_ENTITY;
     size_t index;
-
     config.application_name = "Henka Triangulate Face Operator Test";
     config.window_width = 320;
     config.window_height = 240;
@@ -662,21 +660,28 @@ static void henka_test_sandbox3d_modeling_operator_triangulate_faces(void)
     henka_engine_destroy(engine);
 }
 
-static void henka_test_sandbox3d_modeling_operator_poke_face(void)
+static void henka_test_sandbox3d_modeling_operator_poke_faces(void)
 {
     henka_engine_config config = {0};
     const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 8U};
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {2.0f, 2.0f, 0.0f}, {0.0f, 2.0f, 0.0f},
+        {4.0f, 0.0f, 0.0f}, {6.0f, 0.0f, 0.0f},
+        {6.0f, 2.0f, 0.0f}, {4.0f, 2.0f, 0.0f}};
     henka_engine* engine = NULL;
     henka_scene* scene = NULL;
     henka_authoring_mesh* source = NULL;
     sandbox3d_authoring_object* object = NULL;
     sandbox3d_modeling_operator_session session = {0};
-    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id vertices[8];
+    henka_authoring_face_id face_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
     henka_entity entity = HENKA_INVALID_ENTITY;
-
-    config.application_name = "Henka Poke Face Operator Test";
+    size_t index;
+    config.application_name = "Henka Poke Faces Operator Test";
     config.window_width = 320;
     config.window_height = 240;
     config.enable_vsync = false;
@@ -684,10 +689,23 @@ static void henka_test_sandbox3d_modeling_operator_poke_face(void)
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     entity = henka_scene_create_entity_named(scene, "Poke Face Operator");
     HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
-    HENKA_TEST_ASSERT(henka_authoring_mesh_create_plane(
-        &desc, 2.0f, 2.0f, &source) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_id_at(
-        source, 0U, &face_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    for (index = 0U; index < 8U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, positions[index], (henka_vec2){positions[index].x, positions[index].y},
+            11U, &vertices[index]) == HENKA_SUCCESS);
+    }
+    {
+        const henka_authoring_vertex_id first_face[4] = {
+            vertices[0], vertices[1], vertices[2], vertices[3]};
+        const henka_authoring_vertex_id second_face[4] = {
+            vertices[4], vertices[5], vertices[6], vertices[7]};
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+            source, first_face, 4U, 11U, true, &face_ids[0]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+            source, second_face, 4U, 11U, true, &face_ids[1]) == HENKA_SUCCESS);
+    }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
         engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
     henka_authoring_mesh_destroy(source);
@@ -695,7 +713,9 @@ static void henka_test_sandbox3d_modeling_operator_poke_face(void)
     sandbox3d_authoring_object_set_selection_mode(
         object, SANDBOX3D_AUTHORING_SELECTION_FACE);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
-        object, face_id, false) == HENKA_SUCCESS);
+        object, face_ids[0], false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, face_ids[1], true) == HENKA_SUCCESS);
     before = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
 
@@ -724,15 +744,28 @@ static void henka_test_sandbox3d_modeling_operator_poke_face(void)
         HENKA_SUCCESS);
     after = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
-    HENKA_TEST_ASSERT(after.vertices == before.vertices + 1U);
-    HENKA_TEST_ASSERT(after.edges == before.edges + 4U);
-    HENKA_TEST_ASSERT(after.faces == before.faces + 3U);
+    HENKA_TEST_ASSERT(after.vertices == before.vertices + 2U);
+    HENKA_TEST_ASSERT(after.edges == before.edges + 8U);
+    HENKA_TEST_ASSERT(after.faces == before.faces + 6U);
     HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
         sandbox3d_authoring_object_get_mesh(object)));
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selection_mode(object) ==
         SANDBOX3D_AUTHORING_SELECTION_VERTEX);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(
-        object) == 1U);
+        object) == 2U);
+    {
+        uint32_t selected_ids[2] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        for (index = 0U;
+             index < sandbox3d_authoring_object_get_selected_component_count(object);
+             ++index)
+        {
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+                object, index, &selected_ids[index]) == HENKA_SUCCESS);
+        }
+        HENKA_TEST_ASSERT(selected_ids[0] == before.vertices + 1U &&
+            selected_ids[1] == before.vertices + 2U);
+    }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object)).faces == before.faces);
@@ -11175,7 +11208,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_poke_face();
     henka_test_sandbox3d_modeling_operator_triangulate_face();
     henka_test_sandbox3d_modeling_operator_triangulate_faces();
-    henka_test_sandbox3d_modeling_operator_poke_face();
+    henka_test_sandbox3d_modeling_operator_poke_faces();
     henka_test_sandbox3d_modeling_operator_inset_face();
     henka_test_sandbox3d_modeling_operator_inset_faces();
     henka_test_sandbox3d_modeling_operator_face_normal();

@@ -86,8 +86,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally subdivides one or a bounded vertex-disjoint face
      * selection through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE,
-    /* Transactionally adds a center vertex and triangle fan to one selected
-     * simple planar face through the shared Preview/Cancel/Apply session. */
+    /* Transactionally adds center vertices and triangle fans to one or a
+     * bounded vertex-disjoint selection of simple planar faces through the
+     * shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_POKE,
     /* Transactional bridge of two compatible boundary edges, two compatible
      * equal-length boundary-edge chains, or a bounded batch of chain pairs. */

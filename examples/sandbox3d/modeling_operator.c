@@ -669,7 +669,7 @@ henka_result sandbox3d_modeling_operator_begin(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (kind == SANDBOX3D_MODELING_OPERATOR_POKE &&
-        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count != 1U))
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE || selected_count == 0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1246,7 +1246,7 @@ henka_result sandbox3d_modeling_operator_preview(
              session->selection_count == 0U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_POKE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
-             session->selection_count != 1U)) ||
+             session->selection_count == 0U)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE &&
             (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE ||
              session->selection_count < 2U ||
@@ -1927,15 +1927,14 @@ henka_result sandbox3d_modeling_operator_preview(
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_POKE)
     {
-        result = henka_authoring_mesh_poke_face(
+        result = henka_authoring_mesh_poke_faces(
             candidate,
-            (henka_authoring_face_id)session->selection_ids[0U],
-            &subdivide_result_vertices[0U],
+            (const henka_authoring_face_id*)session->selection_ids,
+            session->selection_count,
+            subdivide_result_vertices,
+            session->selection_count,
+            &session->subdivide_result_count,
             &report);
-        if (result == HENKA_SUCCESS)
-        {
-            session->subdivide_result_count = 1U;
-        }
     }
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE)
