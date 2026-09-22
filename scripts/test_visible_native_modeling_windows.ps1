@@ -301,12 +301,17 @@ try {
 
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
+    # This is the bounded exception for the real visible-authoring gate:
+    # PrintWindow and the native UI interaction proof require a visible,
+    # non-minimized render surface. Ordinary automated validation keeps
+    # the shared default minimized/background-safe policy.
     $capturedProcess = Start-HenkaCapturedProcess `
         -FilePath $runtimeExecutable `
         -Arguments @() `
         -WorkingDirectory $runtimeDirectory `
         -StdoutPath $stdoutPath `
-        -StderrPath $stderrPath
+        -StderrPath $stderrPath `
+        -StartMinimized:$false
 
     # Debug OpenGL startup on slower integrated GPUs can finish engine
     # creation near the existing timeout and still need a bounded first frame
