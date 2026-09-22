@@ -76,6 +76,11 @@ The Native modeling row's bounded boundary-fill scope includes one or more
 independent simple closed boundary loops. Shared, branched, mixed, duplicate,
 invalid, and capacity-insufficient selections fail without partial publication.
 
+The Native modeling row's bounded Edge Extrude scope also includes one
+compatible closed interior edge cycle when the complete two-face cycle exactly
+encloses one source face. Other cyclic interior domains remain outside that
+declared boundary and fail closed.
+
 The Native modeling row's bounded split/delete scope includes the face-backed
 boundary/interior edge split, its pairwise-disjoint batch form, and the
 standalone loose-edge midpoint split and pairwise-disjoint split/delete batch

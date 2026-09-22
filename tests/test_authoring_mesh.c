@@ -8312,6 +8312,185 @@ cleanup:
     return result ? 1 : fail("transactional multi-path interior edge extrude");
 }
 
+static int test_closed_interior_edge_loop_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 32U, 8U};
+    const henka_vec3 positions[16] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {3.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f},
+        {2.0f, 1.0f, 0.0f}, {3.0f, 1.0f, 0.0f}, {0.0f, 2.0f, 0.0f},
+        {1.0f, 2.0f, 0.0f}, {2.0f, 2.0f, 0.0f}, {3.0f, 2.0f, 0.0f},
+        {0.0f, 3.0f, 0.0f}, {1.0f, 3.0f, 0.0f}, {2.0f, 3.0f, 0.0f},
+        {3.0f, 3.0f, 0.0f}};
+    const henka_authoring_vertex_id faces[9][4] = {
+        {1U, 2U, 6U, 5U}, {2U, 3U, 7U, 6U}, {3U, 4U, 8U, 7U},
+        {5U, 6U, 10U, 9U}, {6U, 7U, 11U, 10U}, {7U, 8U, 12U, 11U},
+        {9U, 10U, 14U, 13U}, {10U, 11U, 15U, 14U}, {11U, 12U, 16U, 15U}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_edge_id edge_ids[4] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_result operation_result;
+    size_t index;
+    char failure_buffer[128];
+    const char* failure = "transactional closed interior edge loop extrude";
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 16U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){0.0f, 0.0f}, 0U,
+                &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 9U; ++index)
+    {
+        if (henka_authoring_mesh_add_face(
+                mesh, faces[index], 4U, 7U, true,
+                &(henka_authoring_face_id){HENKA_AUTHORING_INVALID_ID}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (test_find_edge_between_vertices(mesh, 6U, 7U, &edge_ids[0]) != HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, 7U, 11U, &edge_ids[1]) != HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, 11U, 10U, &edge_ids[2]) != HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, 10U, 6U, &edge_ids[3]) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    operation_result = henka_authoring_mesh_extrude_interior_edges(
+        mesh, edge_ids, 4U, 0.5f, &report);
+    if (operation_result != HENKA_SUCCESS)
+    {
+        failure = "closed interior edge loop returned an error";
+        goto cleanup;
+    }
+    if (!report.changed)
+    {
+        failure = "closed interior edge loop did not report a change";
+        goto cleanup;
+    }
+    if (report.created_vertices != 4U)
+    {
+        failure = "closed interior edge loop vertex report mismatch";
+        goto cleanup;
+    }
+    if (report.created_edges != 8U)
+    {
+        failure = "closed interior edge loop edge report mismatch";
+        goto cleanup;
+    }
+    if (report.created_faces != 4U)
+    {
+        (void)snprintf(failure_buffer, sizeof(failure_buffer),
+            "closed interior edge loop face report mismatch: %zu",
+            report.created_faces);
+        failure = failure_buffer;
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices + 4U ||
+            after.edges != before.edges + 8U || after.faces != before.faces + 4U)
+    {
+        failure = "closed interior edge loop count mismatch";
+        goto cleanup;
+    }
+    if (report.primary_face_id == HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_get_face(mesh, report.primary_face_id) == NULL ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        failure = "closed interior edge loop invalid result";
+        goto cleanup;
+    }
+    {
+        const henka_authoring_face* new_face =
+            henka_authoring_mesh_get_face(mesh, report.primary_face_id);
+        if (new_face == NULL || new_face->corner_count != 4U ||
+            new_face->material_region != 7U || !new_face->smooth)
+        {
+            failure = "closed interior edge loop did not preserve face metadata";
+            goto cleanup;
+        }
+    }
+
+    {
+        const henka_authoring_mesh_desc limited_desc = {19U, 128U, 32U, 8U};
+        henka_authoring_mesh* limited_mesh = NULL;
+        henka_authoring_edge_id limited_edge_ids[4] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        henka_authoring_mesh_counts limited_before;
+        henka_authoring_mesh_counts limited_after;
+        henka_authoring_modeling_report limited_report = {0};
+
+        if (henka_authoring_mesh_create(&limited_desc, &limited_mesh) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (index = 0U; index < 16U; ++index)
+        {
+            if (henka_authoring_mesh_add_vertex(
+                    limited_mesh, positions[index], (henka_vec2){0.0f, 0.0f}, 0U,
+                    &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+            {
+                henka_authoring_mesh_destroy(limited_mesh);
+                goto cleanup;
+            }
+        }
+        for (index = 0U; index < 9U; ++index)
+        {
+            if (henka_authoring_mesh_add_face(
+                    limited_mesh, faces[index], 4U, 7U, true,
+                    &(henka_authoring_face_id){HENKA_AUTHORING_INVALID_ID}) != HENKA_SUCCESS)
+            {
+                henka_authoring_mesh_destroy(limited_mesh);
+                goto cleanup;
+            }
+        }
+        if (test_find_edge_between_vertices(limited_mesh, 6U, 7U, &limited_edge_ids[0]) != HENKA_SUCCESS ||
+            test_find_edge_between_vertices(limited_mesh, 7U, 11U, &limited_edge_ids[1]) != HENKA_SUCCESS ||
+            test_find_edge_between_vertices(limited_mesh, 11U, 10U, &limited_edge_ids[2]) != HENKA_SUCCESS ||
+            test_find_edge_between_vertices(limited_mesh, 10U, 6U, &limited_edge_ids[3]) != HENKA_SUCCESS ||
+            !henka_authoring_mesh_validate(limited_mesh))
+        {
+            henka_authoring_mesh_destroy(limited_mesh);
+            goto cleanup;
+        }
+        limited_before = henka_authoring_mesh_get_counts(limited_mesh);
+        operation_result = henka_authoring_mesh_extrude_interior_edges(
+            limited_mesh, limited_edge_ids, 4U, 0.5f, &limited_report);
+        limited_after = henka_authoring_mesh_get_counts(limited_mesh);
+        if (operation_result != HENKA_ERROR_LIMIT || limited_report.changed ||
+            limited_after.vertices != limited_before.vertices ||
+            limited_after.edges != limited_before.edges ||
+            limited_after.faces != limited_before.faces ||
+            !henka_authoring_mesh_validate(limited_mesh))
+        {
+            failure = "closed interior edge loop capacity failure published a partial result";
+            henka_authoring_mesh_destroy(limited_mesh);
+            goto cleanup;
+        }
+        henka_authoring_mesh_destroy(limited_mesh);
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail(failure);
+}
+
 static int test_boundary_edge_batch_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -10983,6 +11162,7 @@ int main(void)
         test_connected_interior_edge_extrude_operation() &&
         test_disjoint_interior_edge_extrude_operation() &&
         test_multi_path_interior_edge_extrude_operation() &&
+        test_closed_interior_edge_loop_extrude_operation() &&
         test_boundary_edge_chain_extrude_operation() &&
         test_boundary_edge_chain_batch_extrude_operation() &&
         test_boundary_edge_bridge_operation() &&

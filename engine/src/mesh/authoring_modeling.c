@@ -12465,6 +12465,88 @@ henka_result henka_authoring_mesh_extrude_interior_edges(
                 mesh, branching_faces, 3U, distance, out_report);
         }
     }
+    if (edge_count >= 3U)
+    {
+        const henka_authoring_edge* first_edge =
+            henka_authoring_mesh_get_edge(mesh, edge_ids[0U]);
+        bool closed_loop = first_edge != NULL && first_edge->face_count == 2U;
+        size_t candidate_face_index;
+
+        for (index = 0U; closed_loop && index < edge_count; ++index)
+        {
+            for (other_index = 0U; other_index < index; ++other_index)
+            {
+                if (edge_ids[other_index] == edge_ids[index])
+                {
+                    closed_loop = false;
+                    break;
+                }
+            }
+        }
+        for (candidate_face_index = 0U;
+             closed_loop && candidate_face_index < 2U;
+             ++candidate_face_index)
+        {
+            const henka_authoring_face_id candidate_face_id =
+                first_edge->faces[candidate_face_index];
+            bool all_edges_bound = true;
+            const henka_authoring_face* loop_face;
+
+            for (index = 1U; index < edge_count; ++index)
+            {
+                const henka_authoring_edge* edge =
+                    henka_authoring_mesh_get_edge(mesh, edge_ids[index]);
+                if (edge == NULL || edge->face_count != 2U ||
+                    (edge->faces[0] != candidate_face_id &&
+                     edge->faces[1] != candidate_face_id))
+                {
+                    all_edges_bound = false;
+                    break;
+                }
+            }
+            loop_face = henka_authoring_mesh_get_face(mesh, candidate_face_id);
+            if (!all_edges_bound || loop_face == NULL ||
+                loop_face->corner_count != edge_count)
+            {
+                continue;
+            }
+            for (index = 0U; index < loop_face->corner_count; ++index)
+            {
+                bool selected = false;
+                for (other_index = 0U; other_index < edge_count; ++other_index)
+                {
+                    if (loop_face->edges[index] == edge_ids[other_index])
+                    {
+                        selected = true;
+                        break;
+                    }
+                }
+                if (!selected)
+                {
+                    all_edges_bound = false;
+                    break;
+                }
+            }
+            if (all_edges_bound)
+            {
+                before = henka_authoring_mesh_get_counts(mesh);
+                henka_authoring_face_id new_face_id =
+                    HENKA_AUTHORING_INVALID_ID;
+                henka_result loop_result = henka_authoring_mesh_extrude_face(
+                    mesh, candidate_face_id, distance, &new_face_id);
+                if (loop_result == HENKA_SUCCESS)
+                {
+                    after = henka_authoring_mesh_get_counts(mesh);
+                    modeling_report_count_delta(&before, &after, out_report);
+                    if (out_report != NULL)
+                    {
+                        out_report->primary_face_id = new_face_id;
+                    }
+                }
+                return loop_result;
+            }
+        }
+    }
     desc = henka_authoring_mesh_get_desc(mesh);
     if (edge_count > desc.max_edges ||
         !henka_checked_size_multiply(edge_count, sizeof(*ordered_edge_ids), &edge_bytes) ||
