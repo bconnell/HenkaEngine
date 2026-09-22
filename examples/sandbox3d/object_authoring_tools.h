@@ -339,9 +339,10 @@ henka_result sandbox3d_authoring_object_split_selected_loose_edge(
 henka_result sandbox3d_authoring_object_split_selected_edge(
     sandbox3d_authoring_object* object,
     float factor);
-/* Bridges either two selected compatible boundary edges or two equal-length
- * selected open boundary chains through the authoritative
- * source/render/bounds/physics/undo transaction. */
+/* Bridges two selected compatible boundary edges, two equal-length selected
+ * boundary chains, or a bounded even selection of independent compatible
+ * boundary-chain pairs through the authoritative source/render/bounds/
+ * physics/undo transaction. */
 henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
     sandbox3d_authoring_object* object);
 /* Builds, but does not publish, the selected boundary-edge bridge candidate.

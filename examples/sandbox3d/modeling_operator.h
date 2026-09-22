@@ -85,8 +85,8 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally subdivides one or a bounded vertex-disjoint face
      * selection through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE,
-    /* Transactional bridge of two compatible boundary edges or two compatible
-     * equal-length open boundary-edge chains. */
+    /* Transactional bridge of two compatible boundary edges, two compatible
+     * equal-length boundary-edge chains, or a bounded batch of chain pairs. */
     SANDBOX3D_MODELING_OPERATOR_EDGE_BRIDGE,
     /* Transactionally fills one or more independent selected closed boundary
      * edge loops through the shared Preview/Cancel/Apply session. */

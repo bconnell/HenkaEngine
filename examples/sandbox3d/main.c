@@ -30815,7 +30815,7 @@ details_group_authoring:
                             sandbox3d_set_status(
                                 state,
                                 true,
-                                "Edge bridge rejected; select two compatible boundary edges or two equal-length open chains.");
+                                "Edge bridge rejected; select two or more compatible boundary edges/chains in an even pairing.");
                         }
                     }
                 }

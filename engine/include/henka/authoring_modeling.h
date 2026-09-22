@@ -633,6 +633,22 @@ henka_result henka_authoring_mesh_bridge_boundary_edge_chains(
     henka_authoring_face_id* out_first_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Bridges a bounded even selection of independent boundary-edge chains as
+ * deterministic pairs. Each connected component must be a simple boundary
+ * chain or loop; components are paired in first-seen input order and each
+ * pair must have equal length and compatible material, smoothing, and UV
+ * metadata. The complete candidate is published only after every pair
+ * validates. Odd, branched, duplicate, mixed, incompatible, or
+ * capacity-invalid selections fail without changing the source mesh. */
+henka_result henka_authoring_mesh_bridge_boundary_edge_chain_pairs(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_authoring_face_id* out_face_ids,
+    size_t out_face_capacity,
+    size_t* out_face_count,
+    henka_authoring_modeling_report* out_report);
+
 /* Fills one closed boundary edge loop with a deterministic polygon. The loop
  * must be simple, boundary-only, and fit the authoring face-corner limit;
  * material and smoothing metadata are inherited from its boundary faces and

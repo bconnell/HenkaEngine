@@ -484,10 +484,11 @@ Integrated authoring is already underway as part of the current 3D completion pa
 8. The bounded bridge operation connects two distinct compatible boundary edges
    from different faces with one transactional quad while preserving source
    material, smoothing, and endpoint UV data. It also connects two disjoint,
-    equal-length compatible boundary-edge chains with one transactional quad
-    per paired edge, using deterministic open-chain endpoint or closed-loop
-    cyclic pairing. A selected closed boundary edge loop can also be filled
-    transactionally with one metadata-compatible polygon. Branching bridge and
+   equal-length compatible boundary-edge chains, or a bounded even selection
+   of independent compatible chain pairs, with one transactional quad per
+   paired edge, using deterministic open-chain endpoint or closed-loop cyclic
+   pairing. A selected closed boundary edge loop can also be filled
+   transactionally with one metadata-compatible polygon. Branching bridge and
    generalized split workflows beyond the bounded standalone loose-edge
    midpoint and pairwise-disjoint batch operations remain future work.
 9. HAMS preserves explicit loose vertices and standalone wire edges with stable
@@ -529,9 +530,10 @@ Integrated authoring is already underway as part of the current 3D completion pa
 - Edge mode can split one, a contiguous same-face boundary chain, or a bounded
   batch of independent boundary chains through the transactional source,
   render, and history boundary. It can also bridge two selected compatible
-  boundary edges from different faces into one transactional quad, or two
-  disjoint equal-length compatible open boundary-edge chains into one quad per
-  paired edge, while preserving
+  boundary edges from different faces into one transactional quad, two
+  disjoint equal-length compatible boundary-edge chains, or a bounded even
+  batch of independent compatible chain pairs into one quad per paired edge,
+  while preserving
   source material, smoothing, and endpoint UV data.
 - Edge mode can fill one selected closed boundary edge loop with one
   deterministic polygon through the same source/render/history transaction.

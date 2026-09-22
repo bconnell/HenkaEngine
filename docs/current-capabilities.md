@@ -675,9 +675,10 @@ Available edge authoring includes:
 - one compatible three-edge branching interior fan around a valence-three
   vertex with a transactional center cap;
 - transactional fill for one selected closed boundary edge loop;
-- bounded bridge for two distinct compatible boundary edges or two disjoint,
-  equal-length compatible open boundary-edge chains through the shared
-  Edge-mode Preview/Apply/Cancel transaction;
+- bounded bridge for two distinct compatible boundary edges, two disjoint
+  equal-length compatible boundary-edge chains, or an even batch of
+  independent compatible chain pairs through the shared Edge-mode
+  Preview/Apply/Cancel transaction;
 - bounded surface-connected extrusion for one open boundary edge, one
   contiguous boundary-edge chain, or a batch of independent boundary-edge
   chains, plus a pairwise vertex-disjoint batch on distinct faces;
@@ -846,11 +847,12 @@ pairwise-disjoint selection while preserving topology.
 Preview changes evaluated render state only. Authoritative source/history changes occur on Apply.
 
 The bounded bridge operation connects two distinct compatible boundary edges
-from different faces with one material- and smoothing-preserving quad, or two
+from different faces with one material- and smoothing-preserving quad, two
 disjoint equal-length compatible boundary-edge chains with one quad per paired
-edge, through the same transactional source/render/history boundary. Both
-chains may be open or simple closed loops; pairing is deterministic and
-preserves endpoint UV data.
+edge, or a bounded even selection of independent compatible chain pairs. Each
+pair may contain open chains or simple closed loops; pairing is deterministic
+and preserves endpoint UV data through the same transactional
+source/render/history boundary.
 
 A selected closed boundary edge loop can also be filled with one deterministic
 polygon through the same source/render/history transaction. Boundary-only,
