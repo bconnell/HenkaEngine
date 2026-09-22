@@ -818,10 +818,13 @@ extrusion.
 - Mixed surface-plus-loose and no-face wire-plus-point sources use bounded renderer-backed multi-primitive ownership, preserving triangle, wire, and isolated-point parts instead of dropping or rejecting valid source geometry.
 - Vertex-mode controls can add a loose vertex from finite X/Y/Z coordinates or add a standalone edge from exactly two selected vertices through the same transactional source/render/history boundary.
 
-Broader loose-component editing and general interior surface-connected
-Vertex/Edge Extrude workflows beyond the bounded compatible closed-fan batch
-replacement remain unavailable. Branching, mixed, and unsupported
-shared-endpoint domains remain outside the bounded boundary-chain path.
+Broader loose-component editing and general interior surface-connected Vertex
+Extrude workflows remain unavailable. The supported Edge Extrude boundary is
+limited to compatible single edges, pairwise-disjoint edges, simple connected
+paths and independent path batches, boundary chains, the uniquely enclosed
+closed-cycle form, and the documented three-edge branching fan. Branching,
+mixed, equal-sized, non-separating, and unsupported shared-endpoint domains
+remain outside those bounded paths.
 
 ### Quad-strip traversal, Loop Cut, and Edge Slide
 

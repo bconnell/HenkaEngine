@@ -892,7 +892,8 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 
 The bounded fan extrusion remains limited to connected open fans and pairwise
 fan-disjoint compatible closed interior fans. The loose-component,
-boundary-edge, pairwise-disjoint compatible interior-edge, and compatible
-single-sided interior-edge extrusion paths cover their documented domains only.
-glTF and KTX2 material ownership continues
+boundary-edge, pairwise-disjoint compatible interior-edge, simple connected
+interior-path, independent interior-path batch, uniquely enclosed closed-cycle,
+branching-fan, and compatible single-sided interior-edge extrusion paths cover
+their documented domains only. glTF and KTX2 material ownership continues
 through the existing asset system.
