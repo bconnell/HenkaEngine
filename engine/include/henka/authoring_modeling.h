@@ -140,6 +140,15 @@ henka_result henka_authoring_mesh_subdivide_face(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,
     henka_authoring_vertex_id* out_center_vertex_id);
+/* Pokes one simple convex planar polygon by adding a center vertex and a
+ * triangle fan. The source face identity is retained by the first triangle;
+ * material, smoothing, and per-corner UVs are preserved. The candidate is
+ * published only after complete topology and geometry validation. */
+henka_result henka_authoring_mesh_poke_face(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id,
+    henka_authoring_vertex_id* out_center_vertex_id,
+    henka_authoring_modeling_report* out_report);
 /* Subdivides a bounded unique selection of vertex-disjoint faces
  * transactionally. The output center IDs correspond to the input order. */
 henka_result henka_authoring_mesh_subdivide_faces(

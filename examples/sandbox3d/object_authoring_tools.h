@@ -572,6 +572,11 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_subdivide_selected_face(
     sandbox3d_authoring_object* object);
+/* Pokes the selected simple planar polygon through the canonical candidate,
+ * evaluated render, bounds, physics, selection, and history transaction. The
+ * bounded operation adds one center vertex and a triangle fan. */
+henka_result sandbox3d_authoring_object_poke_selected_face(
+    sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_project_selected_face_uv(
     sandbox3d_authoring_object* object,
     henka_authoring_uv_projection_axis axis);

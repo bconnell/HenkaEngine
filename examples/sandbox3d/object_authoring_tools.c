@@ -8373,6 +8373,44 @@ henka_result sandbox3d_authoring_object_subdivide_selected_face(
     return result;
 }
 
+henka_result sandbox3d_authoring_object_poke_selected_face(
+    sandbox3d_authoring_object* object)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_vertex_id center_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report;
+    henka_result result;
+    if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        object->mesh == NULL || object->selected_face == HENKA_AUTHORING_INVALID_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_poke_face(
+            candidate, object->selected_face, &center_vertex_id, &report);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, object->selected_face);
+        if (result == HENKA_SUCCESS)
+        {
+            (void)center_vertex_id;
+        }
+        else
+        {
+            henka_authoring_mesh_destroy(candidate);
+        }
+    }
+    else
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
 henka_result sandbox3d_authoring_object_project_selected_face_uv(
     sandbox3d_authoring_object* object,
     henka_authoring_uv_projection_axis axis)
