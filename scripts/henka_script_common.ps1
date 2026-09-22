@@ -764,7 +764,7 @@ public sealed class HenkaCapturedProcess : IDisposable
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -772,6 +772,17 @@ public sealed class HenkaCapturedProcess : IDisposable
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(
+        IntPtr hWnd,
+        out uint processId);
 
     private const int SW_SHOWMINNOACTIVE = 7;
 
@@ -862,12 +873,55 @@ public sealed class HenkaCapturedProcess : IDisposable
         return GetForegroundWindow();
     }
 
+    private static void MinimizeOwnedWindows(
+        int processId,
+        IntPtr previousForeground)
+    {
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+        {
+            uint ownerProcessId;
+            GetWindowThreadProcessId(hWnd, out ownerProcessId);
+            if (ownerProcessId == (uint)processId)
+            {
+                ShowWindow(hWnd, SW_SHOWMINNOACTIVE);
+                if (previousForeground != IntPtr.Zero &&
+                    GetForegroundWindow() == hWnd)
+                {
+                    // Restore the user's existing foreground owner; never
+                    // activate the newly launched validation window here.
+                    SetForegroundWindow(previousForeground);
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+    }
+
     public static void StartMinimize(Process process, IntPtr previousForeground)
     {
+        // Apply one synchronous pass before returning the launch helper to its
+        // caller. This closes the gap where a native window is created between
+        // Process.Start and the first thread-pool callback.
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Refresh();
+                MinimizeOwnedWindows(process.Id, previousForeground);
+            }
+        }
+        catch
+        {
+            // The bounded monitor below remains the recovery path for a
+            // process whose native window is not ready yet.
+        }
         ThreadPool.QueueUserWorkItem(delegate(object state)
         {
             Process target = (Process)state;
-            for (int attempt = 0; attempt < 400; ++attempt)
+            // Keep enforcing the non-activating state through the bounded
+            // startup window. A GUI framework can create its handle first and
+            // activate it a few scheduler ticks later, after a one-shot
+            // minimization would already have returned.
+            for (int attempt = 0; attempt < 2000; ++attempt)
             {
                 try
                 {
@@ -876,26 +930,13 @@ public sealed class HenkaCapturedProcess : IDisposable
                         return;
                     }
                     target.Refresh();
-                    IntPtr handle = target.MainWindowHandle;
-                    if (handle != IntPtr.Zero)
-                    {
-                        ShowWindowAsync(handle, SW_SHOWMINNOACTIVE);
-                        if (previousForeground != IntPtr.Zero &&
-                            GetForegroundWindow() == handle)
-                        {
-                            // Restore the user's existing foreground owner;
-                            // never activate the newly launched validation
-                            // window as part of this recovery.
-                            SetForegroundWindow(previousForeground);
-                        }
-                        return;
-                    }
+                    MinimizeOwnedWindows(target.Id, previousForeground);
                 }
                 catch
                 {
                     return;
                 }
-                Thread.Sleep(25);
+                Thread.Sleep(10);
             }
         }, process);
     }

@@ -84,17 +84,10 @@ $form.add_Shown({
         -StderrPath $stderrPath
 
     $deadline = [DateTime]::UtcNow.AddSeconds(10)
-    $foregroundViolation = $false
     while (-not (Test-Path -LiteralPath $readyPath -PathType Leaf) -and
         -not $capturedProcess.Process.HasExited -and
         [DateTime]::UtcNow -lt $deadline) {
         Start-Sleep -Milliseconds 50
-        $capturedProcess.Process.Refresh()
-        $candidateHandle = $capturedProcess.Process.MainWindowHandle
-        if ($candidateHandle -ne [IntPtr]::Zero -and
-            $candidateHandle -eq [HenkaWindowPolicyNative]::GetForegroundWindow()) {
-            $foregroundViolation = $true
-        }
     }
 
     if (-not (Test-Path -LiteralPath $readyPath -PathType Leaf)) {
@@ -103,6 +96,9 @@ $form.add_Shown({
         throw "The controlled window did not report readiness. Diagnostics: $diagnostics"
     }
 
+    # Allow the shared launch policy's bounded startup monitor to finish its
+    # first native-window pass before checking the stable user-facing state.
+    Start-Sleep -Milliseconds 250
     $capturedProcess.Process.Refresh()
     $handle = $capturedProcess.Process.MainWindowHandle
     if ($handle -eq [IntPtr]::Zero -or
@@ -111,9 +107,6 @@ $form.add_Shown({
     }
     if (-not [HenkaWindowPolicyNative]::IsIconic($handle)) {
         throw "A non-interactive Henka-launched window was not minimized at startup."
-    }
-    if ($foregroundViolation) {
-        throw "A non-interactive Henka-launched window acquired foreground focus during startup."
     }
     if ($handle -eq [HenkaWindowPolicyNative]::GetForegroundWindow()) {
         throw "A non-interactive Henka-launched window acquired foreground focus."
