@@ -6464,6 +6464,214 @@ cleanup:
     return result ? 1 : fail("transactional loose edge batch extrude");
 }
 
+static int test_loose_edge_extrude_batch_rejection_coverage(void)
+{
+    const henka_vec3 direction = {0.0f, 1.0f, 0.0f};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_modeling_report report;
+    henka_authoring_vertex_id vertices[4] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id edge_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id rejected_edge = HENKA_AUTHORING_INVALID_ID;
+    int result = 0;
+
+    /* Pairwise-disjointness: two otherwise valid loose edges may not share an
+     * endpoint because one source vertex cannot be duplicated safely by the
+     * pairwise candidate construction. */
+    if (henka_authoring_mesh_create(
+            &(henka_authoring_mesh_desc){8U, 8U, 2U, 8U}, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 7U,
+            &vertices[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 7U,
+            &vertices[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){2.0f, 0.0f}, 7U,
+            &vertices[2]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(mesh, vertices[0], vertices[1], true,
+                                      &edge_ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(mesh, vertices[1], vertices[2], true,
+                                      &edge_ids[1]) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    report = (henka_authoring_modeling_report){0};
+    report.changed = true;
+    if (henka_authoring_mesh_extrude_loose_edges(
+            mesh, edge_ids, 2U, direction, 0.5f, &report) != HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed || report.created_vertices != 0U || report.removed_vertices != 0U ||
+        report.created_edges != 0U || report.removed_edges != 0U ||
+        report.created_faces != 0U || report.removed_faces != 0U ||
+        (after = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &after, sizeof(before)) != 0) ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    /* Endpoint material regions are part of the source-edge contract. */
+    if (henka_authoring_mesh_create(
+            &(henka_authoring_mesh_desc){8U, 8U, 2U, 8U}, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 7U,
+            &vertices[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 7U,
+            &vertices[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){2.0f, 0.0f}, 9U,
+            &vertices[2]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){3.0f, 0.0f, 0.0f}, (henka_vec2){3.0f, 0.0f}, 9U,
+            &vertices[3]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(mesh, vertices[0], vertices[1], true,
+                                      &edge_ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(mesh, vertices[2], vertices[3], true,
+                                      &edge_ids[1]) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    report = (henka_authoring_modeling_report){0};
+    report.changed = true;
+    if (henka_authoring_mesh_extrude_loose_edges(
+            mesh, edge_ids, 2U, direction, 0.5f, &report) != HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed || report.created_vertices != 0U || report.removed_vertices != 0U ||
+        report.created_edges != 0U || report.removed_edges != 0U ||
+        report.created_faces != 0U || report.removed_faces != 0U ||
+        (after = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &after, sizeof(before)) != 0) ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    /* A face-backed edge is not a standalone wire edge and must fail closed. */
+    if (henka_authoring_mesh_create(
+            &(henka_authoring_mesh_desc){8U, 8U, 2U, 8U}, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 7U,
+            &vertices[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 7U,
+            &vertices[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){0.0f, 1.0f, 0.0f}, (henka_vec2){0.0f, 1.0f}, 7U,
+            &vertices[2]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(mesh, vertices[0], vertices[1], true,
+                                      &rejected_edge) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            mesh, vertices, 3U, 7U, true, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    report = (henka_authoring_modeling_report){0};
+    report.changed = true;
+    if (henka_authoring_mesh_extrude_loose_edges(
+            mesh, &rejected_edge, 1U, direction, 0.5f, &report) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed || report.created_vertices != 0U || report.removed_vertices != 0U ||
+        report.created_edges != 0U || report.removed_edges != 0U ||
+        report.created_faces != 0U || report.removed_faces != 0U ||
+        (after = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &after, sizeof(before)) != 0) ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    /* Invalid IDs exercise the missing-source path. A same-vertex edge is
+     * rejected by the public constructor, so that impossible internal state is
+     * covered at the construction boundary rather than fabricated in a test. */
+    if (henka_authoring_mesh_create(
+            &(henka_authoring_mesh_desc){4U, 4U, 1U, 4U}, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 7U,
+            &vertices[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(mesh, vertices[0], vertices[0], true,
+                                      &rejected_edge) != HENKA_ERROR_INVALID_ARGUMENT ||
+        rejected_edge != HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    report = (henka_authoring_modeling_report){0};
+    report.changed = true;
+    rejected_edge = HENKA_AUTHORING_INVALID_ID;
+    if (henka_authoring_mesh_extrude_loose_edges(
+            mesh, &rejected_edge, 1U, direction, 0.5f, &report) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed || report.created_vertices != 0U || report.removed_vertices != 0U ||
+        report.created_edges != 0U || report.removed_edges != 0U ||
+        report.created_faces != 0U || report.removed_faces != 0U ||
+        (after = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &after, sizeof(before)) != 0) ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    /* Capacity preflight must reject before cloning or publishing any source
+     * mutation. Four new vertices are required for this two-edge batch, while
+     * the source already occupies the complete vertex budget. */
+    if (henka_authoring_mesh_create(
+            &(henka_authoring_mesh_desc){4U, 8U, 2U, 8U}, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 7U,
+            &vertices[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 7U,
+            &vertices[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){2.0f, 0.0f}, 7U,
+            &vertices[2]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh, (henka_vec3){3.0f, 0.0f, 0.0f}, (henka_vec2){3.0f, 0.0f}, 7U,
+            &vertices[3]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(mesh, vertices[0], vertices[1], true,
+                                      &edge_ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(mesh, vertices[2], vertices[3], true,
+                                      &edge_ids[1]) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    report = (henka_authoring_modeling_report){0};
+    report.changed = true;
+    if (henka_authoring_mesh_extrude_loose_edges(
+            mesh, edge_ids, 2U, direction, 0.5f, &report) != HENKA_ERROR_LIMIT ||
+        report.changed || report.created_vertices != 0U || report.removed_vertices != 0U ||
+        report.created_edges != 0U || report.removed_edges != 0U ||
+        report.created_faces != 0U || report.removed_faces != 0U ||
+        (after = henka_authoring_mesh_get_counts(mesh),
+         memcmp(&before, &after, sizeof(before)) != 0) ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("loose edge batch rejection coverage");
+}
+
 static int test_loose_edge_split_operation(void)
 {
     const henka_authoring_mesh_desc desc = {8U, 8U, 4U, 8U};
@@ -9925,6 +10133,7 @@ int main(void)
         test_vertex_extrude_boundary_fan_operation() &&
         test_loose_edge_extrude_operation() &&
         test_loose_edge_extrude_batch_operation() &&
+        test_loose_edge_extrude_batch_rejection_coverage() &&
         test_loose_edge_split_operation() &&
         test_loose_edge_split_batch_operation() &&
         test_face_edge_split_operation() &&
