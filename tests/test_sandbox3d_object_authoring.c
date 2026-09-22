@@ -10171,8 +10171,20 @@ static void henka_test_sandbox3d_modeling_operator_loose_edge_batch_extrude(void
         after.edges == before.edges + 6U && after.faces == before.faces + 2U &&
         henka_authoring_mesh_validate(
             sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
+    {
+        uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+            object, 0U, &selected_id) == HENKA_SUCCESS &&
+            (selected_id == edge_ids[0] || selected_id == edge_ids[1]));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+            object, 1U, &selected_id) == HENKA_SUCCESS &&
+            (selected_id == edge_ids[0] || selected_id == edge_ids[1]));
+    }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
     sandbox3d_modeling_operator_reset(&session);
     sandbox3d_authoring_object_destroy(object);
     henka_authoring_mesh_destroy(source);
