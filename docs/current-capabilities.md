@@ -461,6 +461,10 @@ history remain open.
 - Edge-mode includes a transactional face-backed boundary/interior split for
   one or a bounded pairwise-disjoint batch of edges, with Preview, Apply,
   Cancel, and replacement-edge selection.
+- Edge-mode also includes a bounded compatible interior-triangle edge flip
+  that replaces one diagonal with the opposite diagonal through candidate-first
+  Preview, Cancel, Apply, and replacement-edge selection, with Undo/Redo on the
+  direct-object and shared operator routes.
 
 ### Authoring mesh contract
 
@@ -568,6 +572,7 @@ Available operations also include:
 - plane/box creation;
 - duplicate;
 - face winding flip for one or a bounded unique face selection;
+- bounded compatible interior-triangle edge flip;
 - face-normal translation for one or a bounded vertex-disjoint face selection;
 - face extrude;
 - selected face-region extrusion with shared translated caps and transactional

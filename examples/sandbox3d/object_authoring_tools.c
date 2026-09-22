@@ -4757,6 +4757,98 @@ henka_result sandbox3d_authoring_object_dissolve_selected_edge(
     return result;
 }
 
+henka_result sandbox3d_authoring_object_flip_selected_edge(
+    sandbox3d_authoring_object* object)
+{
+    const uint32_t* selected_ids;
+    size_t selected_count = 0U;
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_modeling_report report = {0};
+    sandbox3d_authoring_component_selection_snapshot after_snapshot = {0};
+    henka_authoring_edge_id new_edge_id = HENKA_AUTHORING_INVALID_ID;
+    bool published = false;
+    henka_result result;
+
+    if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
+    if (selected_ids == NULL || selected_count != 1U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    {
+        const henka_authoring_edge* selected_edge = henka_authoring_mesh_get_edge(
+            object->mesh, (henka_authoring_edge_id)selected_ids[0]);
+        if (selected_edge == NULL || selected_edge->face_count != 2U ||
+            selected_edge->hard || selected_edge->seam)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    result = sandbox3d_authoring_capture_component_selection_history_slot(
+        object, object->selection_history_cursor);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_flip_edge(
+            candidate, (henka_authoring_edge_id)selected_ids[0], &new_edge_id, &report);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_selection_reserve_ids(
+            &object->selected_edges,
+            &object->selected_edge_capacity,
+            1U,
+            object->selected_edge_max_id);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        after_snapshot.ids = henka_malloc(sizeof(*after_snapshot.ids));
+        if (after_snapshot.ids == NULL)
+        {
+            result = HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        else
+        {
+            after_snapshot.mode = SANDBOX3D_AUTHORING_SELECTION_EDGE;
+            after_snapshot.active_component_id = new_edge_id;
+            after_snapshot.ids[0] = new_edge_id;
+            after_snapshot.count = 1U;
+            after_snapshot.valid = true;
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, HENKA_AUTHORING_INVALID_ID);
+        published = result == HENKA_SUCCESS;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_replace_current_selection(
+            object, after_snapshot.ids, 1U, new_edge_id);
+        if (result == HENKA_SUCCESS)
+        {
+            sandbox3d_authoring_destroy_component_selection_snapshot(
+                &object->component_selection_history[object->selection_history_cursor]);
+            object->component_selection_history[object->selection_history_cursor] = after_snapshot;
+            after_snapshot.ids = NULL;
+        }
+    }
+    if (result != HENKA_SUCCESS && !published)
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    sandbox3d_authoring_destroy_component_selection_snapshot(&after_snapshot);
+    return result;
+}
+
 henka_result sandbox3d_authoring_object_split_selected_loose_edge(
     sandbox3d_authoring_object* object)
 {

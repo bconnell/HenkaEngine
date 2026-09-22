@@ -281,6 +281,17 @@ henka_result henka_authoring_mesh_connect_vertices(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Flips one compatible interior edge shared by two triangles. The old
+ * diagonal is replaced by the opposite diagonal in one candidate-first
+ * transaction. Material, smoothing, winding, and per-corner UV state are
+ * preserved; hard/seamed, non-triangle, incompatible, degenerate, and
+ * capacity-invalid requests fail without publishing a partial mesh. */
+henka_result henka_authoring_mesh_flip_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id edge_id,
+    henka_authoring_edge_id* out_new_edge_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Splits one isolated quad face into two quads at a bounded edge fraction.
  * All four source edges must be boundary edges so the operation cannot leave
  * a T-junction in neighboring topology. */

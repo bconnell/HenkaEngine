@@ -67,6 +67,9 @@ typedef enum sandbox3d_modeling_operator_kind
      * of compatible interior edges through the shared Preview/Cancel/Apply
      * session. */
     SANDBOX3D_MODELING_OPERATOR_DISSOLVE_EDGE,
+    /* Transactionally flips one compatible interior triangle edge through the
+     * shared Preview/Cancel/Apply session. */
+    SANDBOX3D_MODELING_OPERATOR_FLIP_EDGE,
     /* Transactionally dissolves one or more selected vertices through the
      * shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_DISSOLVE_VERTICES,

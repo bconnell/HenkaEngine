@@ -2865,6 +2865,249 @@ cleanup:
     return result ? 1 : fail("vertex topology operations");
 }
 
+static int test_interior_triangle_edge_flip_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* seam_mesh = NULL;
+    henka_authoring_edge_id interior_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id new_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id boundary_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id incident_face_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id opposite_vertices[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_mesh_counts rejected;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_vertex_id old_endpoints[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_triangulate_face(mesh, 1U, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (size_t slot = 0U; slot < desc.max_edges; ++slot)
+    {
+        henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, slot, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge == NULL) goto cleanup;
+        if (edge->face_count == 2U && interior_edge_id == HENKA_AUTHORING_INVALID_ID)
+        {
+            interior_edge_id = edge_id;
+            old_endpoints[0] = edge->vertices[0];
+            old_endpoints[1] = edge->vertices[1];
+            incident_face_ids[0] = edge->faces[0];
+            incident_face_ids[1] = edge->faces[1];
+        }
+        if (edge->face_count == 1U && boundary_edge_id == HENKA_AUTHORING_INVALID_ID)
+        {
+            boundary_edge_id = edge_id;
+        }
+    }
+    if (interior_edge_id == HENKA_AUTHORING_INVALID_ID ||
+        boundary_edge_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    for (size_t face_index = 0U; face_index < 2U; ++face_index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            mesh, incident_face_ids[face_index]);
+        if (face == NULL || face->corner_count != 3U ||
+            henka_authoring_mesh_set_face_material_region(
+                mesh, incident_face_ids[face_index], 13U) != HENKA_SUCCESS ||
+            henka_authoring_mesh_set_face_smoothing(
+                mesh, incident_face_ids[face_index], false) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (size_t corner = 0U; corner < 3U; ++corner)
+        {
+            const henka_authoring_vertex_id vertex_id = face->vertices[corner];
+            const henka_vec2 uv = vertex_id == old_endpoints[0]
+                ? (henka_vec2){0.0f, 0.0f}
+                : vertex_id == old_endpoints[1]
+                    ? (henka_vec2){1.0f, 0.0f}
+                    : face_index == 0U
+                        ? (henka_vec2){0.0f, 1.0f}
+                        : (henka_vec2){1.0f, 1.0f};
+            if (vertex_id != old_endpoints[0] && vertex_id != old_endpoints[1])
+            {
+                opposite_vertices[face_index] = vertex_id;
+            }
+            if (henka_authoring_mesh_set_face_corner_uv(
+                    mesh, incident_face_ids[face_index], corner, uv) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    if (opposite_vertices[0] == HENKA_AUTHORING_INVALID_ID ||
+        opposite_vertices[1] == HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_flip_edge(
+            mesh, interior_edge_id, &new_edge_id, &report) != HENKA_SUCCESS ||
+        !report.changed || new_edge_id == HENKA_AUTHORING_INVALID_ID ||
+        new_edge_id == interior_edge_id ||
+        henka_authoring_mesh_get_edge(mesh, interior_edge_id) != NULL ||
+        henka_authoring_mesh_get_edge(mesh, new_edge_id) == NULL ||
+        henka_authoring_mesh_get_edge(mesh, new_edge_id)->face_count != 2U ||
+        henka_authoring_mesh_get_edge(mesh, new_edge_id)->vertices[0] == old_endpoints[0] ||
+        henka_authoring_mesh_get_edge(mesh, new_edge_id)->vertices[0] == old_endpoints[1] ||
+        henka_authoring_mesh_get_edge(mesh, new_edge_id)->vertices[1] == old_endpoints[0] ||
+        henka_authoring_mesh_get_edge(mesh, new_edge_id)->vertices[1] == old_endpoints[1] ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (memcmp(&before, &after, sizeof(before)) != 0)
+    {
+        goto cleanup;
+    }
+    for (size_t slot = 0U; slot < desc.max_faces; ++slot)
+    {
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_face* face;
+        if (henka_authoring_mesh_get_face_id_at(mesh, slot, &face_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        face = henka_authoring_mesh_get_face(mesh, face_id);
+        if (face == NULL || face->corner_count != 3U) goto cleanup;
+    }
+    for (size_t face_index = 0U; face_index < 2U; ++face_index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            mesh, incident_face_ids[face_index]);
+        if (face == NULL || face->material_region != 13U || face->smooth)
+        {
+            goto cleanup;
+        }
+        for (size_t corner = 0U; corner < 3U; ++corner)
+        {
+            const henka_authoring_vertex_id vertex_id = face->vertices[corner];
+            const henka_vec2 expected_uv = vertex_id == old_endpoints[0]
+                ? (henka_vec2){0.0f, 0.0f}
+                : vertex_id == old_endpoints[1]
+                    ? (henka_vec2){1.0f, 0.0f}
+                    : vertex_id == opposite_vertices[0]
+                        ? (henka_vec2){0.0f, 1.0f}
+                        : vertex_id == opposite_vertices[1]
+                            ? (henka_vec2){1.0f, 1.0f}
+                            : (henka_vec2){NAN, NAN};
+            if (!isfinite(expected_uv.x) || !isfinite(expected_uv.y) ||
+                fabsf(face->uvs[corner].x - expected_uv.x) > 0.0001f ||
+                fabsf(face->uvs[corner].y - expected_uv.y) > 0.0001f)
+            {
+                goto cleanup;
+            }
+        }
+    }
+
+    before = after;
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_flip_edge(mesh, boundary_edge_id, &new_edge_id, &report) == HENKA_SUCCESS ||
+        report.changed ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    rejected = henka_authoring_mesh_get_counts(mesh);
+    if (memcmp(&before, &rejected, sizeof(before)) != 0)
+    {
+        goto cleanup;
+    }
+    {
+        henka_authoring_edge_id seam_edge_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_edge_id seam_new_edge_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_mesh_counts seam_before;
+        henka_authoring_mesh_counts seam_after;
+        bool seam_uv_changed = false;
+        if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &seam_mesh) != HENKA_SUCCESS ||
+            henka_authoring_mesh_triangulate_face(seam_mesh, 1U, &report) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (size_t slot = 0U; slot < desc.max_edges; ++slot)
+        {
+            henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+            const henka_authoring_edge* edge;
+            if (henka_authoring_mesh_get_edge_id_at(seam_mesh, slot, &edge_id) != HENKA_SUCCESS)
+            {
+                continue;
+            }
+            edge = henka_authoring_mesh_get_edge(seam_mesh, edge_id);
+            if (edge != NULL && edge->face_count == 2U)
+            {
+                seam_edge_id = edge_id;
+                break;
+            }
+        }
+        if (seam_edge_id == HENKA_AUTHORING_INVALID_ID)
+        {
+            goto cleanup;
+        }
+        {
+            const henka_authoring_edge* seam_edge = henka_authoring_mesh_get_edge(
+                seam_mesh, seam_edge_id);
+            const henka_authoring_face_id seam_face_id = seam_edge->faces[1];
+            const henka_authoring_face* seam_face = henka_authoring_mesh_get_face(
+                seam_mesh, seam_face_id);
+            for (size_t corner = 0U; corner < 3U; ++corner)
+            {
+                if (seam_face->vertices[corner] == seam_edge->vertices[0])
+                {
+                    if (henka_authoring_mesh_set_face_corner_uv(
+                            seam_mesh, seam_face_id, corner, (henka_vec2){9.0f, 9.0f}) !=
+                        HENKA_SUCCESS)
+                    {
+                        goto cleanup;
+                    }
+                    seam_uv_changed = true;
+                    break;
+                }
+            }
+        }
+        if (!seam_uv_changed)
+        {
+            goto cleanup;
+        }
+        seam_before = henka_authoring_mesh_get_counts(seam_mesh);
+        report = (henka_authoring_modeling_report){0};
+        if (henka_authoring_mesh_flip_edge(
+                seam_mesh, seam_edge_id, &seam_new_edge_id, &report) == HENKA_SUCCESS ||
+            report.changed ||
+            !henka_authoring_mesh_validate(seam_mesh))
+        {
+            goto cleanup;
+        }
+        seam_after = henka_authoring_mesh_get_counts(seam_mesh);
+        if (memcmp(&seam_before, &seam_after, sizeof(seam_before)) != 0)
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(seam_mesh);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("interior triangle edge flip operation");
+}
+
 static int test_vertex_bevel_operations(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
@@ -11405,7 +11648,9 @@ int main(void)
         test_vertex_merge_operations() &&
         test_vertex_merge_input_limits() &&
         test_vertex_smooth_operation() &&
-        test_vertex_topology_operations() && test_vertex_bevel_operations() &&
+        test_vertex_topology_operations() &&
+        test_interior_triangle_edge_flip_operation() &&
+        test_vertex_bevel_operations() &&
         test_history_rejects_foreign_mesh() &&
         test_history_accepts_same_lineage_clone() &&
         test_boundary_edge_bevel_operation() && test_boundary_edge_batch_bevel_operation() &&

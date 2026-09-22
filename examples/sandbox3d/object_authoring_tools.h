@@ -323,6 +323,12 @@ henka_result sandbox3d_authoring_object_select_edge_ring(
  * authoritative source/render/bounds/physics/undo transaction. */
 henka_result sandbox3d_authoring_object_dissolve_selected_edge(
     sandbox3d_authoring_object* object);
+/* Flips one selected compatible interior triangle edge through the
+ * authoritative source/render/bounds/physics/undo transaction. The
+ * replacement diagonal becomes the selected edge; boundary, hard, seamed,
+ * non-triangle, incompatible-material, and ambiguous edges fail closed. */
+henka_result sandbox3d_authoring_object_flip_selected_edge(
+    sandbox3d_authoring_object* object);
 /* Splits one or a bounded pairwise-disjoint selection of standalone wire
  * edges at their midpoints through the authoritative
  * source/render/bounds/physics/undo transaction. Replacement edges inherit

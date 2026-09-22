@@ -484,6 +484,22 @@ edges also support a bounded pairwise-disjoint batch that removes only those
 edges while preserving their vertices. Mixed domains, overlapping face sets,
 duplicate edges, and shared endpoints fail closed.
 
+### Interior Triangle Edge Flip
+
+The authoring mesh can replace one compatible interior diagonal shared by two
+triangles with the opposite diagonal through a candidate-first transaction. The
+operation preserves the two face identities, material-region and smoothing
+metadata, per-corner UV data, and validated winding. Boundary edges, hard or
+seamed edges, UV-discontinuous pairs, non-triangle faces,
+metadata-discontinuous pairs, an existing opposite diagonal, and
+capacity-invalid or otherwise ambiguous requests fail without publishing a
+partial mesh.
+
+The Sandbox routes this operation through the shared Edge-mode
+Preview/Cancel/Apply session and the direct authoring-object path. Apply
+selects the replacement edge, and both routes use the existing authoring
+Undo/Redo history boundary.
+
 ### Edge Bevel
 
 Bounded edge bevel currently supports:
