@@ -690,6 +690,8 @@ Available edge authoring includes:
 - bounded connected interior-edge extrusion for a simple, pairwise
   vertex-disjoint path across compatible quad strips, with deterministic
   path ordering and transactional preview/apply routing;
+- bounded batch extrusion for independent simple connected interior-edge
+  paths across compatible quad strips, with one candidate-first commit;
 - one compatible three-edge branching fan around a valence-three interior
   vertex, routed as a canonical enclosed face-region extrusion with a
   translated cap and boundary side faces;
@@ -706,7 +708,8 @@ Compatible interior-edge extrusion selects the lower logical-ID incident quad,
 offsets that quad along its face normal, creates one connecting quad, and leaves
 the neighboring quad unchanged. Pairwise-disjoint selections apply those
 independent transactions through one validated candidate. The connected path
-form applies the same transactional step in deterministic path order. The supported three-edge
+form and the bounded independent path batch apply the same transactional step in
+deterministic path order. The supported three-edge
 branching fan selects its enclosed three-face region and reuses the canonical
 face-region transaction. Matching material/smoothing metadata, continuous
 per-edge UVs, and non-hard, non-seamed source edges are required for the
@@ -714,7 +717,7 @@ single-edge and simple-path forms; preview, cancel, apply, undo, and redo use
 the existing authoring history boundary.
 
 Other interior/manifold configurations, mixed-face chains, disconnected
-components beyond pairwise-disjoint compatible interior edges, cyclic branching,
+components beyond independent compatible edges and simple paths, cyclic branching,
 larger branching, shared-endpoint components, and otherwise unsupported batches
 remain rejected. Face-backed split supports pairwise-disjoint boundary or
 two-face interior batches, contiguous same-face boundary chains, and bounded

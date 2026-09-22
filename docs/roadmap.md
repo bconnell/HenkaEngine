@@ -540,10 +540,12 @@ Integrated authoring is already underway as part of the current 3D completion pa
 - One compatible three-edge branching interior bevel fan around a valence-three
   vertex is available through the transactional bevel path. The same fan can
   be extruded as its enclosed three-face region through the canonical
-  face-region transaction. Larger or ambiguous branching bevel/extrusion
+  face-region transaction. Compatible simple connected interior-edge paths and
+  bounded batches of independent simple paths are also available through the
+  shared transactional route. Larger or ambiguous branching bevel/extrusion
   domains, edge-loop domains, generalized Edge Extrude beyond the bounded
-  single-edge, contiguous-chain, and independent-chain boundary cases, and
-  general loop-cut networks remain in progress or
+  single-edge, contiguous-chain, independent-chain boundary, and simple-path
+  cases, and general loop-cut networks remain in progress or
   planned.
   Generalized closed-loop, branching, and split bridge workflows remain future
   work.

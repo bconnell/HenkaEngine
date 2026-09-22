@@ -7098,6 +7098,78 @@ cleanup:
     return result ? 1 : fail("transactional disjoint interior edge extrude");
 }
 
+static int test_multi_path_interior_edge_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 32U, 8U};
+    const henka_vec3 positions[16] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {3.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f},
+        {2.0f, 1.0f, 0.0f}, {3.0f, 1.0f, 0.0f},
+        {5.0f, 0.0f, 0.0f}, {6.0f, 0.0f, 0.0f}, {7.0f, 0.0f, 0.0f},
+        {8.0f, 0.0f, 0.0f}, {5.0f, 1.0f, 0.0f}, {6.0f, 1.0f, 0.0f},
+        {7.0f, 1.0f, 0.0f}, {8.0f, 1.0f, 0.0f}};
+    const henka_authoring_vertex_id faces[6][4] = {
+        {1U, 2U, 6U, 5U}, {2U, 3U, 7U, 6U}, {3U, 4U, 8U, 7U},
+        {9U, 10U, 14U, 13U}, {10U, 11U, 15U, 14U}, {11U, 12U, 16U, 15U}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_edge_id edge_ids[4] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 16U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], (henka_vec2){0.0f, 0.0f}, 0U,
+                &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 6U; ++index)
+    {
+        if (henka_authoring_mesh_add_face(
+                mesh, faces[index], 4U, 0U, true,
+                &(henka_authoring_face_id){HENKA_AUTHORING_INVALID_ID}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (test_find_edge_between_vertices(mesh, 2U, 6U, &edge_ids[0]) != HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, 3U, 7U, &edge_ids[1]) != HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, 10U, 14U, &edge_ids[2]) != HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, 11U, 15U, &edge_ids[3]) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_extrude_interior_edges(
+            mesh, edge_ids, 4U, 0.5f, &report) != HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 8U ||
+        report.created_edges != 12U || report.created_faces != 4U ||
+        (after = henka_authoring_mesh_get_counts(mesh),
+            after.vertices != before.vertices + 8U ||
+            after.edges != before.edges + 12U || after.faces != before.faces + 4U) ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional multi-path interior edge extrude");
+}
+
 static int test_boundary_edge_batch_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -9764,6 +9836,7 @@ int main(void)
         test_interior_edge_extrude_operation() &&
         test_connected_interior_edge_extrude_operation() &&
         test_disjoint_interior_edge_extrude_operation() &&
+        test_multi_path_interior_edge_extrude_operation() &&
         test_boundary_edge_chain_extrude_operation() &&
         test_boundary_edge_chain_batch_extrude_operation() &&
         test_boundary_edge_bridge_operation() &&
