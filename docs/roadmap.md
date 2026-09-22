@@ -559,6 +559,8 @@ Integrated authoring is already underway as part of the current 3D completion pa
 - Standalone wire-edge midpoint splitting supports one edge or a bounded
   pairwise-disjoint batch through the shared source, render, selection-history,
   undo, and redo boundary.
+- Standalone wire-edge extrusion supports one or a bounded pairwise-disjoint
+  batch through the same transactional operator boundary.
 - Homogeneous line/point evaluation and bounded triangle/wire/point renderer
   ownership are available.
 - Broader loose-component selection and editing workflows remain in progress.

@@ -420,6 +420,19 @@ henka_result henka_authoring_mesh_extrude_loose_edge(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Extrudes a bounded pairwise-disjoint selection of standalone wire edges
+ * along one explicit direction. Each source edge remains in place and gains
+ * one parallel edge plus one quad face. The whole batch is candidate-first:
+ * duplicate, shared-endpoint, face-backed, mismatched-material, degenerate,
+ * and capacity-invalid input is rejected without changing the source mesh. */
+henka_result henka_authoring_mesh_extrude_loose_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_vec3 direction,
+    float distance,
+    henka_authoring_modeling_report* out_report);
+
 /* Splits one standalone wire edge at its midpoint. The source edge must have
  * no incident faces. The new midpoint inherits the endpoint material region
  * and interpolated UV; both replacement edges inherit hard-edge and seam

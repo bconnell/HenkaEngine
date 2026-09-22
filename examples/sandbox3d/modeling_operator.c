@@ -583,7 +583,7 @@ henka_result sandbox3d_modeling_operator_begin(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
-        selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE && selected_count != 1U)
+        selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE && selected_count == 0U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1184,7 +1184,7 @@ henka_result sandbox3d_modeling_operator_preview(
              session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
             session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE &&
-            session->selection_count != 1U) ||
+            session->selection_count == 0U) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
             session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE &&
             session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_NONE) ||
@@ -2295,14 +2295,27 @@ henka_result sandbox3d_modeling_operator_preview(
         }
         else if (session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
         {
-            result = henka_authoring_mesh_extrude_loose_edge(
-                candidate,
-                (henka_authoring_edge_id)session->selection_ids[0U],
-                direction,
-                applied_amount,
-                &extrude_result_edge,
-                &extrude_result_face,
-                &report);
+            if (session->selection_count == 1U)
+            {
+                result = henka_authoring_mesh_extrude_loose_edge(
+                    candidate,
+                    (henka_authoring_edge_id)session->selection_ids[0U],
+                    direction,
+                    applied_amount,
+                    &extrude_result_edge,
+                    &extrude_result_face,
+                    &report);
+            }
+            else
+            {
+                result = henka_authoring_mesh_extrude_loose_edges(
+                    candidate,
+                    (const henka_authoring_edge_id*)session->selection_ids,
+                    session->selection_count,
+                    direction,
+                    applied_amount,
+                    &report);
+            }
         }
         else if (session->selection_count == 1U)
         {

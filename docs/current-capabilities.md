@@ -781,7 +781,8 @@ The core modeling API also provides:
 - bounded explicit-direction loose-vertex extrusion for one or a
   pairwise-distinct batch that preserves each source vertex and creates one
   metadata-inheriting standalone wire edge per selected vertex transactionally;
-- bounded loose-edge extrusion that creates one parallel edge and one quad face.
+- bounded loose-edge extrusion for one or a pairwise-disjoint batch that creates
+  one parallel edge and one quad face per selected source edge transactionally;
 - bounded standalone loose-edge midpoint splitting for one or a pairwise-
   disjoint batch, preserving endpoint UV/material data and hard/seam intent
   on every replacement edge;

@@ -683,14 +683,18 @@ It rejects zero directions, zero distances, connected vertices, invalid geometry
 
 ### Loose-edge Extrude
 
-The core modeling API also supports bounded explicit-direction loose-edge extrusion.
+The core modeling API supports bounded explicit-direction loose-edge extrusion for
+one or a pairwise-disjoint batch of standalone wire edges.
 
 It:
 
-- creates a parallel edge;
-- creates one quad face;
+- creates one parallel edge and one quad face per selected source edge;
 - inherits endpoint UV/material metadata;
 - preserves source-edge hard intent.
+
+The complete selection is evaluated against the original mesh and published as
+one validated candidate. The Sandbox Edge-mode operator routes the operation
+through Preview, Apply, Cancel, Undo, and Redo.
 
 It rejects face-backed edges, mismatched endpoint materials, degenerate offsets, and capacity exhaustion.
 

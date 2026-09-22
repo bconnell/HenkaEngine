@@ -6364,6 +6364,106 @@ cleanup:
     return result ? 1 : fail("transactional loose edge extrude");
 }
 
+static int test_loose_edge_extrude_batch_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {12U, 12U, 4U, 16U};
+    const henka_vec3 direction = {0.0f, 2.0f, 0.0f};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[6] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id edge_ids[3] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    const henka_authoring_edge* new_edge;
+    const henka_authoring_face* new_face;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 6U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh,
+                (henka_vec3){(float)(index % 2U), 0.0f, (float)(index / 2U)},
+                (henka_vec2){(float)(index % 2U), (float)(index / 2U)},
+                9U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_edge(mesh, vertices[0], vertices[1], true,
+                                      &edge_ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(mesh, vertices[2], vertices[3], true,
+                                      &edge_ids[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(mesh, vertices[4], vertices[5], true,
+                                      &edge_ids[2]) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_extrude_loose_edges(
+            mesh, (const henka_authoring_edge_id[]){edge_ids[0], edge_ids[0]},
+            2U, direction, 0.5f, &report) != HENKA_ERROR_INVALID_ARGUMENT ||
+        report.changed)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (memcmp(&before, &after, sizeof(before)) != 0 ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    report = (henka_authoring_modeling_report){0};
+    if (henka_authoring_mesh_extrude_loose_edges(
+            mesh, edge_ids, 3U, direction, 0.5f, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || report.created_vertices != 6U ||
+        report.created_edges != 9U || report.created_faces != 3U ||
+        after.vertices != before.vertices + 6U ||
+        after.edges != before.edges + 9U || after.faces != before.faces + 3U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 3U; ++index)
+    {
+        henka_authoring_edge_id new_edge_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+        if (henka_authoring_mesh_get_edge_id_at(
+                mesh, before.edges + index, &new_edge_id) != HENKA_SUCCESS ||
+            henka_authoring_mesh_get_face_id_at(
+                mesh, before.faces + index, &new_face_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        new_edge = henka_authoring_mesh_get_edge(mesh, new_edge_id);
+        new_face = henka_authoring_mesh_get_face(mesh, new_face_id);
+        if (new_edge == NULL || new_face == NULL ||
+            new_edge->face_count != 1U || new_face->corner_count != 4U)
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional loose edge batch extrude");
+}
+
 static int test_loose_edge_split_operation(void)
 {
     const henka_authoring_mesh_desc desc = {8U, 8U, 4U, 8U};
@@ -9824,6 +9924,7 @@ int main(void)
         test_boundary_vertex_batch_extrude_operation() &&
         test_vertex_extrude_boundary_fan_operation() &&
         test_loose_edge_extrude_operation() &&
+        test_loose_edge_extrude_batch_operation() &&
         test_loose_edge_split_operation() &&
         test_loose_edge_split_batch_operation() &&
         test_face_edge_split_operation() &&
