@@ -149,9 +149,11 @@ henka_result henka_authoring_mesh_poke_face(
     henka_authoring_face_id face_id,
     henka_authoring_vertex_id* out_center_vertex_id,
     henka_authoring_modeling_report* out_report);
-/* Pokes a bounded vertex-disjoint selection of simple convex planar polygons
- * as one candidate-first transaction. The input face order is retained in
- * the output center IDs; each source face identity is preserved. */
+/* Pokes a bounded selection of simple convex planar polygons as one
+ * candidate-first transaction. Selected polygons may be disconnected or may
+ * share complete existing edges; vertex-only contact, duplicate, invalid, and
+ * ambiguous selections fail closed. The input face order is retained in the
+ * output center IDs; each source face identity is preserved. */
 henka_result henka_authoring_mesh_poke_faces(
     henka_authoring_mesh* mesh,
     const henka_authoring_face_id* face_ids,

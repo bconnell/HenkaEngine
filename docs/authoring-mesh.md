@@ -101,6 +101,7 @@ Current operations include:
 - bounded vertex-disjoint face inset;
 - bounded vertex-disjoint planar face bevel rings;
 - bounded vertex-disjoint face subdivision;
+- bounded convex planar face poke for one or a connected/disconnected selection;
 - transactional deletion of one or more selected faces while preserving at
   least one renderable face;
 - selected face-region extrusion with shared caps and transactional topology;
@@ -172,15 +173,15 @@ candidate mesh. Apply selects the resulting center vertices in Vertex mode.
 Shared-vertex, duplicate, invalid, and capacity-invalid selections fail
 without changing the committed topology or selection state.
 
-Face poke supports one or a bounded selection of vertex-disjoint simple convex
-planar polygons. It adds one center vertex for each selected face and replaces
-each polygon with a triangle fan on one candidate mesh while preserving the
-source face identity, material region, smoothing, and per-corner UV data. Apply
-selects the resulting center vertices in input selection order in Vertex mode.
-Duplicate, shared-vertex, non-planar, concave, self-intersecting, degenerate,
-invalid, and capacity-invalid selections fail without changing the committed
-topology or selection state. Broader connected or non-convex fan construction
-remains outside this bounded operation.
+Face poke supports one or a bounded selection of simple convex planar polygons.
+Selected polygons may be disconnected or may share complete existing edges. The
+operation adds one center vertex for each selected face and replaces each
+polygon with a triangle fan on one candidate mesh while preserving the source
+face identity, material region, smoothing, and per-corner UV data. Apply selects
+the resulting center vertices in input selection order in Vertex mode.
+Duplicate, vertex-only shared contact, non-planar, concave, self-intersecting,
+degenerate, invalid, and capacity-invalid selections fail without changing the
+committed topology or selection state.
 
 ## UV operations
 
