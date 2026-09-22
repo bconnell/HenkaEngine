@@ -750,7 +750,9 @@ function Initialize-HenkaCapturedProcessType {
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 public sealed class HenkaCapturedProcess : IDisposable
 {
@@ -759,6 +761,19 @@ public sealed class HenkaCapturedProcess : IDisposable
     private readonly StreamWriter stdoutWriter;
     private readonly StreamWriter stderrWriter;
     private bool disposed;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    private const int SW_SHOWMINNOACTIVE = 7;
 
     public Process Process { get; private set; }
 
@@ -780,7 +795,8 @@ public sealed class HenkaCapturedProcess : IDisposable
         string workingDirectory,
         string stdoutPath,
         string stderrPath,
-        bool createNoWindow)
+        bool createNoWindow,
+        bool startMinimized)
     {
         ProcessStartInfo startInfo = new ProcessStartInfo();
         startInfo.FileName = filePath;
@@ -788,6 +804,17 @@ public sealed class HenkaCapturedProcess : IDisposable
         startInfo.WorkingDirectory = workingDirectory;
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = createNoWindow;
+        if (!createNoWindow && startMinimized)
+        {
+            // Validation may need a native window for PrintWindow or an
+            // event-driven UI path, but it must not take ownership of the
+            // user's typing focus merely by being launched.
+            // Native GUI frameworks can ignore a minimized startup hint while
+            // creating their first window. Hidden startup prevents a transient
+            // foreground activation; StartMinimize then exposes it minimized
+            // without activation once the real window exists.
+            startInfo.WindowStyle = ProcessWindowStyle.Hidden;
+        }
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
 
@@ -810,6 +837,10 @@ public sealed class HenkaCapturedProcess : IDisposable
             {
                 throw new InvalidOperationException("The process did not start.");
             }
+            if (!createNoWindow && startMinimized)
+            {
+                StartMinimize(process, GetForegroundWindow());
+            }
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             return capture;
@@ -819,6 +850,54 @@ public sealed class HenkaCapturedProcess : IDisposable
             capture.Dispose();
             throw;
         }
+    }
+
+    public static void StartMinimize(Process process)
+    {
+        StartMinimize(process, GetForegroundWindow());
+    }
+
+    public static IntPtr CurrentForegroundWindow()
+    {
+        return GetForegroundWindow();
+    }
+
+    public static void StartMinimize(Process process, IntPtr previousForeground)
+    {
+        ThreadPool.QueueUserWorkItem(delegate(object state)
+        {
+            Process target = (Process)state;
+            for (int attempt = 0; attempt < 400; ++attempt)
+            {
+                try
+                {
+                    if (target.HasExited)
+                    {
+                        return;
+                    }
+                    target.Refresh();
+                    IntPtr handle = target.MainWindowHandle;
+                    if (handle != IntPtr.Zero)
+                    {
+                        ShowWindowAsync(handle, SW_SHOWMINNOACTIVE);
+                        if (previousForeground != IntPtr.Zero &&
+                            GetForegroundWindow() == handle)
+                        {
+                            // Restore the user's existing foreground owner;
+                            // never activate the newly launched validation
+                            // window as part of this recovery.
+                            SetForegroundWindow(previousForeground);
+                        }
+                        return;
+                    }
+                }
+                catch
+                {
+                    return;
+                }
+                Thread.Sleep(25);
+            }
+        }, process);
     }
 
     private void OnOutputDataReceived(object sender, DataReceivedEventArgs eventArgs)
@@ -918,7 +997,11 @@ function Start-HenkaProcess {
         [Parameter(Mandatory = $true)]
         [string]$WorkingDirectory,
 
-        [switch]$CreateNoWindow
+        [switch]$CreateNoWindow,
+
+        # Native validation windows start minimized unless a caller explicitly
+        # opts out for a bounded foreground interaction test.
+        [bool]$StartMinimized = $true
     )
 
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -927,12 +1010,29 @@ function Start-HenkaProcess {
     $startInfo.WorkingDirectory = $WorkingDirectory
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = [bool]$CreateNoWindow
+    if (-not $CreateNoWindow -and $StartMinimized) {
+        # See the captured-process path: hidden creation avoids a transient
+        # foreground activation, then the shared callback exposes the window
+        # minimized without activation when its native handle exists.
+        $startInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+    }
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
+    if (-not $CreateNoWindow -and $StartMinimized) {
+        Initialize-HenkaCapturedProcessType
+    }
+    $previousForeground = if (-not $CreateNoWindow -and $StartMinimized) {
+        [HenkaCapturedProcess]::CurrentForegroundWindow()
+    } else {
+        [IntPtr]::Zero
+    }
     if (-not $process.Start()) {
         $process.Dispose()
         throw "The process did not start: $FilePath"
+    }
+    if (-not $CreateNoWindow -and $StartMinimized) {
+        [HenkaCapturedProcess]::StartMinimize($process, $previousForeground)
     }
     return $process
 }
@@ -953,7 +1053,11 @@ function Start-HenkaCapturedProcess {
         [Parameter(Mandatory = $true)]
         [string]$StderrPath,
 
-        [switch]$CreateNoWindow
+        [switch]$CreateNoWindow,
+
+        # Native validation windows start minimized unless a caller explicitly
+        # opts out for a bounded foreground interaction test.
+        [bool]$StartMinimized = $true
     )
 
     Initialize-HenkaCapturedProcessType
@@ -972,7 +1076,8 @@ function Start-HenkaCapturedProcess {
         $WorkingDirectory,
         $StdoutPath,
         $StderrPath,
-        [bool]$CreateNoWindow)
+        [bool]$CreateNoWindow,
+        $StartMinimized)
 }
 
 function Close-HenkaCapturedProcess {

@@ -119,6 +119,10 @@ jobs:
         shell: powershell
         run: .\scripts\test_exact_candidate_validation_windows.ps1
 
+      - name: Check automated window focus policy
+        shell: powershell
+        run: .\scripts\test_henka_process_window_policy_windows.ps1
+
       - name: Build Debug
         shell: powershell
         run: .\scripts\build_windows.ps1 -Configuration Debug
