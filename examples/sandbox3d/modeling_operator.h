@@ -35,8 +35,9 @@ typedef enum sandbox3d_modeling_operator_kind
      * normal contract. */
     SANDBOX3D_MODELING_OPERATOR_EXTRUDE,
     /* Surface-connected extrusion of one open boundary edge, a contiguous
-     * boundary-edge chain, a compatible closed interior edge cycle, or a
-     * bounded batch of independent chains. */
+     * boundary-edge chain, a compatible closed interior edge cycle, including
+     * a cycle enclosing a unique smaller connected face region, or a bounded
+     * batch of independent chains. */
     SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE,
     /* Transactionally connects two non-adjacent selected vertices on one
      * compatible face through the shared Preview/Cancel/Apply session. */

@@ -693,8 +693,9 @@ Available edge authoring includes:
 - bounded batch extrusion for independent simple connected interior-edge
   paths across compatible quad strips, with one candidate-first commit;
 - bounded compatible closed interior-edge-cycle extrusion when the complete
-  cycle exactly bounds one source face, routed through the canonical face
-  extrusion transaction;
+  cycle exactly bounds one source face, or when a connected degree-two cycle
+  encloses a unique smaller connected face region, routed through the
+  canonical face-extrusion transaction;
 - one compatible three-edge branching fan around a valence-three interior
   vertex, routed as a canonical enclosed face-region extrusion with a
   translated cap and boundary side faces;
@@ -716,13 +717,16 @@ deterministic path order. The supported three-edge
 branching fan selects its enclosed three-face region and reuses the canonical
 face-region transaction. Matching material/smoothing metadata, continuous
 per-edge UVs, and non-hard, non-seamed source edges are required for the
-single-edge and simple-path forms; preview, cancel, apply, undo, and redo use
-the existing authoring history boundary.
+single-edge, simple-path, and closed-cycle forms; preview, cancel, apply, undo, and redo use
+the existing authoring history boundary. A closed interior cycle must be
+connected, have degree two at every selected boundary vertex, use compatible
+two-face edges, and separate a unique smaller connected face region.
 
 Other interior/manifold configurations, mixed-face chains, disconnected
-components beyond independent compatible edges and simple paths, other cyclic
-domains, larger branching, shared-endpoint components, and otherwise unsupported
-batches remain rejected. Face-backed split supports pairwise-disjoint boundary or
+components beyond independent compatible edges and simple paths, equal-sized,
+non-separating, or otherwise ambiguous cyclic domains, larger branching,
+shared-endpoint components, and otherwise unsupported batches remain rejected.
+Face-backed split supports pairwise-disjoint boundary or
 two-face interior batches, contiguous same-face boundary chains, and bounded
 batches of independent boundary chains; broader branching and generalized
 split workflows remain rejected.

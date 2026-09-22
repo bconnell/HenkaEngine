@@ -543,11 +543,12 @@ Integrated authoring is already underway as part of the current 3D completion pa
   face-region transaction. Compatible simple connected interior-edge paths and
   bounded batches of independent simple paths are also available through the
   shared transactional route. A compatible closed interior edge cycle that
-  exactly bounds one source face is also available through the same
-  candidate-first face-extrusion transaction. Larger or ambiguous branching
-  bevel/extrusion domains, other cyclic edge-loop domains, generalized Edge
-  Extrude beyond the bounded single-edge, contiguous-chain, independent-chain
-  boundary, simple-path, and single-face-bounded-cycle cases, and general
+  exactly bounds one source face, or encloses a unique smaller connected face
+  region, is also available through the same candidate-first face-extrusion
+  transaction. Larger or ambiguous branching bevel/extrusion domains, other
+  cyclic edge-loop domains, generalized Edge Extrude beyond the bounded
+  single-edge, contiguous-chain, independent-chain boundary, simple-path, and
+  uniquely enclosed closed-cycle cases, and general
   loop-cut networks remain in progress or
   planned.
   Generalized closed-loop, branching, and split bridge workflows remain future

@@ -77,9 +77,11 @@ independent simple closed boundary loops. Shared, branched, mixed, duplicate,
 invalid, and capacity-insufficient selections fail without partial publication.
 
 The Native modeling row's bounded Edge Extrude scope also includes one
-compatible closed interior edge cycle when the complete two-face cycle exactly
-encloses one source face. Other cyclic interior domains remain outside that
-declared boundary and fail closed.
+compatible closed interior edge cycle when the complete cycle either exactly
+encloses one source face or separates a unique smaller connected face region.
+The selected cycle must be connected, degree-two at every selected vertex, and
+made of compatible two-face edges. Equal-sized, non-separating, and otherwise
+ambiguous cyclic domains remain outside that declared boundary and fail closed.
 
 The Native modeling row's bounded split/delete scope includes the face-backed
 boundary/interior edge split, its pairwise-disjoint batch form, and the
