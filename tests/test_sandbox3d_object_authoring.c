@@ -1091,8 +1091,11 @@ static void henka_test_sandbox3d_modeling_operator_inset_faces(void)
     for (index = 0U; index < first_face_vertex_count; ++index)
     {
         first_face_vertices[index] = vertices[index];
-        second_face_vertices[index] = vertices[index + 4U];
     }
+    second_face_vertices[0] = vertices[1];
+    second_face_vertices[1] = vertices[4];
+    second_face_vertices[2] = vertices[7];
+    second_face_vertices[3] = vertices[2];
     shared_face_vertices[0] = vertices[0];
     shared_face_vertices[1] = vertices[8];
     shared_face_vertices[2] = vertices[9];
@@ -1614,6 +1617,7 @@ static void henka_test_sandbox3d_modeling_operator_bevel_faces(void)
     sandbox3d_modeling_operator_session session = {0};
     henka_authoring_face_id face_ids[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id vertex_only_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
     henka_entity entity = HENKA_INVALID_ENTITY;
@@ -1629,7 +1633,24 @@ static void henka_test_sandbox3d_modeling_operator_bevel_faces(void)
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_id_at(
         source, 0U, &face_ids[0]) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_id_at(
-        source, 1U, &face_ids[1]) == HENKA_SUCCESS);
+        source, 2U, &face_ids[1]) == HENKA_SUCCESS);
+    {
+        henka_authoring_vertex_id extra_vertices[2] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        henka_authoring_vertex_id vertex_only_face_vertices[3] = {
+            5U, HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, (henka_vec3){-1.0f, -1.0f, 2.0f}, (henka_vec2){0.0f, 0.0f},
+            0U, &extra_vertices[0]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, (henka_vec3){-2.0f, -1.0f, 1.0f}, (henka_vec2){1.0f, 0.0f},
+            0U, &extra_vertices[1]) == HENKA_SUCCESS);
+        vertex_only_face_vertices[1] = extra_vertices[0];
+        vertex_only_face_vertices[2] = extra_vertices[1];
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+            source, vertex_only_face_vertices, 3U, 0U, false,
+            &vertex_only_face_id) == HENKA_SUCCESS);
+    }
     HENKA_TEST_ASSERT(henka_test_create_authoring_object_from_source(
         engine, scene, source, "Batch Bevel Faces Operator", &entity, &object) == HENKA_SUCCESS);
     henka_authoring_mesh_destroy(source);
@@ -1676,7 +1697,7 @@ static void henka_test_sandbox3d_modeling_operator_bevel_faces(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
         object, face_ids[0], false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
-        object, 3U, true) == HENKA_SUCCESS);
+        object, vertex_only_face_id, true) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
         &session, object, SANDBOX3D_MODELING_OPERATOR_BEVEL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(

@@ -575,9 +575,9 @@ Available operations also include:
 - bounded batch extrusion for pairwise-distinct loose vertex selections;
 - bounded batch extrusion for pairwise fan-disjoint boundary vertex selections;
 - bounded extrusion for contiguous same-face boundary-vertex chains;
-- bounded vertex-disjoint face inset;
-- bounded vertex-disjoint planar face bevel rings;
-- bounded vertex-disjoint face subdivision;
+- bounded disconnected or full-edge-connected face inset;
+- bounded disconnected or full-edge-connected planar face bevel rings;
+- bounded disconnected or full-edge-connected face subdivision;
 - deterministic planar face triangulation for one or a bounded vertex-disjoint
   face selection;
 - transactional deletion of a bounded selected-face set while preserving one

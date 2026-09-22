@@ -108,9 +108,9 @@ henka_result henka_authoring_mesh_inset_face(
     float factor,
     henka_authoring_face_id* out_face_id);
 /* Insets a bounded unique selection of simple planar faces transactionally.
- * Selected faces must be vertex-disjoint so the result is independent of face
- * iteration order. Invalid, duplicate, shared-vertex, and capacity-invalid
- * selections fail without changing the source mesh. */
+ * Selected faces may be disconnected or may share exactly one complete
+ * existing edge. Vertex-only, ambiguous multi-edge, duplicate, invalid, and
+ * capacity-invalid selections fail without changing the source mesh. */
 henka_result henka_authoring_mesh_inset_faces(
     henka_authoring_mesh* mesh,
     const henka_authoring_face_id* face_ids,
@@ -125,8 +125,11 @@ henka_result henka_authoring_mesh_bevel_face(
     henka_authoring_face_id face_id,
     float width,
     henka_authoring_face_id* out_face_id);
-/* Bevels a bounded unique selection of vertex-disjoint simple planar faces
- * transactionally. Output face IDs correspond to input order. */
+/* Bevels a bounded unique selection of simple planar faces transactionally.
+ * Selected faces may be disconnected or may share exactly one complete
+ * existing edge. Output face IDs correspond to input order. Vertex-only,
+ * ambiguous multi-edge, duplicate, invalid, and capacity-invalid selections
+ * fail without changing the source mesh. */
 henka_result henka_authoring_mesh_bevel_faces(
     henka_authoring_mesh* mesh,
     const henka_authoring_face_id* face_ids,

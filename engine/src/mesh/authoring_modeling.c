@@ -13351,6 +13351,38 @@ henka_result henka_authoring_mesh_extrude_boundary_edge_chains(
     return result;
 }
 
+static size_t modeling_face_shared_edge_count(
+    const henka_authoring_face* first,
+    const henka_authoring_face* second)
+{
+    size_t first_corner;
+    size_t shared_edges = 0U;
+    if (first == NULL || second == NULL)
+    {
+        return 0U;
+    }
+    for (first_corner = 0U; first_corner < first->corner_count; ++first_corner)
+    {
+        const henka_authoring_vertex_id first_start = first->vertices[first_corner];
+        const henka_authoring_vertex_id first_end =
+            first->vertices[(first_corner + 1U) % first->corner_count];
+        size_t second_corner;
+        for (second_corner = 0U; second_corner < second->corner_count; ++second_corner)
+        {
+            const henka_authoring_vertex_id second_start = second->vertices[second_corner];
+            const henka_authoring_vertex_id second_end =
+                second->vertices[(second_corner + 1U) % second->corner_count];
+            if ((first_start == second_start && first_end == second_end) ||
+                (first_start == second_end && first_end == second_start))
+            {
+                shared_edges += 1U;
+                break;
+            }
+        }
+    }
+    return shared_edges;
+}
+
 static henka_result modeling_inset_candidate(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,
@@ -13523,14 +13555,23 @@ henka_result henka_authoring_mesh_inset_faces(
             {
                 return HENKA_ERROR_INVALID_ARGUMENT;
             }
-            for (corner = 0U; corner < face->corner_count; ++corner)
             {
-                for (other_corner = 0U; other_corner < other->corner_count; ++other_corner)
+                const size_t shared_edges = modeling_face_shared_edge_count(face, other);
+                bool shared_vertex = false;
+                for (corner = 0U; corner < face->corner_count && !shared_vertex; ++corner)
                 {
-                    if (face->vertices[corner] == other->vertices[other_corner])
+                    for (other_corner = 0U; other_corner < other->corner_count; ++other_corner)
                     {
-                        return HENKA_ERROR_INVALID_ARGUMENT;
+                        if (face->vertices[corner] == other->vertices[other_corner])
+                        {
+                            shared_vertex = true;
+                            break;
+                        }
                     }
+                }
+                if (shared_vertex && shared_edges != 1U)
+                {
+                    return HENKA_ERROR_INVALID_ARGUMENT;
                 }
             }
         }
@@ -13672,14 +13713,23 @@ henka_result henka_authoring_mesh_bevel_faces(
             {
                 return HENKA_ERROR_INVALID_ARGUMENT;
             }
-            for (corner = 0U; corner < face->corner_count; ++corner)
             {
-                for (other_corner = 0U; other_corner < other->corner_count; ++other_corner)
+                const size_t shared_edges = modeling_face_shared_edge_count(face, other);
+                bool shared_vertex = false;
+                for (corner = 0U; corner < face->corner_count && !shared_vertex; ++corner)
                 {
-                    if (face->vertices[corner] == other->vertices[other_corner])
+                    for (other_corner = 0U; other_corner < other->corner_count; ++other_corner)
                     {
-                        return HENKA_ERROR_INVALID_ARGUMENT;
+                        if (face->vertices[corner] == other->vertices[other_corner])
+                        {
+                            shared_vertex = true;
+                            break;
+                        }
                     }
+                }
+                if (shared_vertex && shared_edges != 1U)
+                {
+                    return HENKA_ERROR_INVALID_ARGUMENT;
                 }
             }
         }

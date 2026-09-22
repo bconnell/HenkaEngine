@@ -43,8 +43,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally triangulates one or a bounded vertex-disjoint selected
      * planar face selection through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_TRIANGULATE,
-    /* Transactionally insets one or a bounded vertex-disjoint face selection
-     * through the shared Preview/Cancel/Apply session. */
+    /* Transactionally insets one or a bounded disconnected or full-edge-
+     * connected face selection through the shared Preview/Cancel/Apply
+     * session. */
     SANDBOX3D_MODELING_OPERATOR_INSET,
     /* Transactionally moves one or a bounded vertex-disjoint face selection
      * along evaluated normals through the shared Preview/Cancel/Apply session. */

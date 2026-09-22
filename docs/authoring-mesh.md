@@ -98,8 +98,8 @@ Current operations include:
 - deterministic planar face triangulation for one or a bounded vertex-disjoint
   face selection;
 - face extrude;
-- bounded vertex-disjoint face inset;
-- bounded vertex-disjoint planar face bevel rings;
+- bounded disconnected or full-edge-connected face inset;
+- bounded disconnected or full-edge-connected planar face bevel rings;
 - bounded face subdivision for disconnected or full-edge-connected selections;
 - bounded convex planar face poke for one or a connected/disconnected selection;
 - transactional deletion of one or more selected faces while preserving at
@@ -156,16 +156,20 @@ and per-corner UVs. The batch form accepts only vertex-disjoint planar faces;
 duplicate, shared-vertex, non-planar, invalid, and capacity-invalid selections
 fail without changing the committed source.
 
-Face inset supports one or a bounded vertex-disjoint selection. Each selected
-face produces a deterministic inner face and surrounding ring on one candidate
-mesh. Shared-vertex, duplicate, invalid, and capacity-invalid selections fail
-without changing the committed topology or selection state.
+Face inset supports one or a bounded selection of simple planar faces. The
+selection may be disconnected or may contain faces sharing exactly one
+complete existing edge. Each selected face produces a deterministic inner
+face and surrounding ring on one candidate mesh. Vertex-only contact,
+ambiguous multi-edge sharing, duplicate, invalid, and capacity-invalid
+selections fail without changing the committed topology or selection state.
 
-Face bevel supports one or a bounded vertex-disjoint selection of simple planar
-faces. Each selected face produces a deterministic planar bevel ring on one
-candidate mesh, and Apply selects the resulting bevel faces in Face mode.
-Shared-vertex, duplicate, invalid, and capacity-invalid selections fail without
-changing the committed topology or selection state.
+Face bevel supports one or a bounded selection of simple planar faces. The
+selection may be disconnected or may contain faces sharing exactly one
+complete existing edge. Each selected face produces a deterministic planar
+bevel ring on one candidate mesh, and Apply selects the resulting bevel faces
+in Face mode. Vertex-only contact, ambiguous multi-edge sharing, duplicate,
+invalid, and capacity-invalid selections fail without changing the committed
+topology or selection state.
 
 Face subdivision supports one or a bounded selection of simple planar faces.
 Disconnected faces and faces sharing complete existing edges are applied through
