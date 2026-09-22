@@ -83,8 +83,9 @@ typedef enum sandbox3d_modeling_operator_kind
     /* Transactionally merges selected vertices within the configured distance
      * through the shared Preview/Cancel/Apply session. */
     SANDBOX3D_MODELING_OPERATOR_MERGE_VERTICES_DISTANCE,
-    /* Transactionally subdivides one or a bounded vertex-disjoint face
-     * selection through the shared Preview/Cancel/Apply session. */
+    /* Transactionally subdivides one or a bounded face selection through the
+     * shared Preview/Cancel/Apply session. Complete shared edges are supported;
+     * vertex-only contact remains rejected. */
     SANDBOX3D_MODELING_OPERATOR_SUBDIVIDE,
     /* Transactionally adds center vertices and triangle fans to one or a
      * bounded selection of simple planar faces through the shared

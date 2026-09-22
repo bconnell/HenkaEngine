@@ -100,7 +100,7 @@ Current operations include:
 - face extrude;
 - bounded vertex-disjoint face inset;
 - bounded vertex-disjoint planar face bevel rings;
-- bounded vertex-disjoint face subdivision;
+- bounded face subdivision for disconnected or full-edge-connected selections;
 - bounded convex planar face poke for one or a connected/disconnected selection;
 - transactional deletion of one or more selected faces while preserving at
   least one renderable face;
@@ -167,10 +167,13 @@ candidate mesh, and Apply selects the resulting bevel faces in Face mode.
 Shared-vertex, duplicate, invalid, and capacity-invalid selections fail without
 changing the committed topology or selection state.
 
-Face subdivision supports one or a bounded vertex-disjoint selection. Each
-selected face produces a center vertex, edge midpoints, and a quad fan on one
-candidate mesh. Apply selects the resulting center vertices in Vertex mode.
-Shared-vertex, duplicate, invalid, and capacity-invalid selections fail
+Face subdivision supports one or a bounded selection of simple planar faces.
+Disconnected faces and faces sharing complete existing edges are applied through
+one candidate-first transaction. Each selected face produces a center vertex,
+edge midpoints, and a quad fan; a midpoint on a shared edge is reused while
+per-face corner UVs and material/smoothing metadata remain authored on the
+resulting faces. Apply selects the resulting center vertices in Vertex mode.
+Vertex-only contact, duplicate, invalid, and capacity-invalid selections fail
 without changing the committed topology or selection state.
 
 Face poke supports one or a bounded selection of simple convex planar polygons.

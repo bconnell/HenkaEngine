@@ -162,8 +162,11 @@ henka_result henka_authoring_mesh_poke_faces(
     size_t out_center_vertex_capacity,
     size_t* out_center_vertex_count,
     henka_authoring_modeling_report* out_report);
-/* Subdivides a bounded unique selection of vertex-disjoint faces
- * transactionally. The output center IDs correspond to the input order. */
+/* Subdivides a bounded unique selection of simple planar faces transactionally.
+ * Disconnected faces and faces sharing complete existing edges are supported;
+ * vertex-only contact, duplicate, invalid, and capacity-invalid selections
+ * fail without changing the source. Output center IDs correspond to input
+ * order. */
 henka_result henka_authoring_mesh_subdivide_faces(
     henka_authoring_mesh* mesh,
     const henka_authoring_face_id* face_ids,
