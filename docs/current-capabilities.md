@@ -524,17 +524,17 @@ Published Vertex operations include:
 - bounded Vertex Extrude for a connected open boundary vertex fan, including the one-face corner case
 - bounded compatible closed interior vertex-fan offset/cap replacement with per-face material and smoothing preservation; the original selected vertex remains a valid loose vertex
 - bounded batch Vertex Extrude for pairwise fan-disjoint boundary vertices
-- bounded batch Vertex Extrude for pairwise fan-disjoint compatible closed interior fans
+- bounded batch Vertex Extrude for pairwise fan-disjoint or connected compatible closed interior fans
 - bounded contiguous same-face boundary-vertex-chain extrusion, including a full
   face boundary, routed through the transactional boundary-edge-chain operation
 
 Bounded open-fan Vertex Extrude preserves the base vertex, creates one offset cap vertex, replaces the incident fan, and creates the two boundary side faces transactionally.
 For a compatible closed interior fan, it replaces the incident fan with an offset cap, preserves each source face's material and smoothing state, and preserves the original selected vertex as a valid loose vertex; it does not publish a non-manifold single-vertex side wall.
 The closed-fan batch form applies that same operation to selected vertices on
-pairwise disjoint face neighborhoods in one candidate-first transaction. The
-original selected vertices remain valid loose vertices. Mixed loose and
-surface selections, overlapping neighborhoods, duplicate selections, and
-unsupported vertex fans fail closed.
+pairwise disjoint or connected compatible face neighborhoods in one
+candidate-first transaction. The original selected vertices remain valid loose
+vertices. Mixed loose and surface selections, duplicate selections, and
+unsupported mixed or non-manifold neighborhoods fail closed.
 
 The connected boundary-chain form accepts a selected open or closed run of
 boundary vertices on one face and publishes the corresponding edge-chain
@@ -818,8 +818,9 @@ extrusion.
 - Mixed surface-plus-loose and no-face wire-plus-point sources use bounded renderer-backed multi-primitive ownership, preserving triangle, wire, and isolated-point parts instead of dropping or rejecting valid source geometry.
 - Vertex-mode controls can add a loose vertex from finite X/Y/Z coordinates or add a standalone edge from exactly two selected vertices through the same transactional source/render/history boundary.
 
-Broader loose-component editing and general interior surface-connected Vertex
-Extrude workflows remain unavailable. The supported Edge Extrude boundary is
+Broader loose-component editing and interior surface-connected Vertex Extrude
+beyond compatible connected or fan-disjoint closed-fan regions remain
+unavailable. The supported Edge Extrude boundary is
 limited to compatible single edges, pairwise-disjoint edges, simple connected
 paths and independent path batches, boundary chains, the uniquely enclosed
 closed-cycle form, and the documented three-edge branching fan. Branching,

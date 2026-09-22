@@ -10123,7 +10123,6 @@ henka_result henka_authoring_mesh_extrude_interior_vertices(
         const henka_authoring_vertex_id vertex_id = sorted[index];
         const size_t edge_count = henka_authoring_mesh_get_vertex_edge_count(mesh, vertex_id);
         size_t edge_index;
-        size_t other;
         if (edge_count < 3U)
         {
             result = HENKA_ERROR_INVALID_ARGUMENT;
@@ -10140,31 +10139,6 @@ henka_result henka_authoring_mesh_extrude_interior_vertices(
             {
                 result = HENKA_ERROR_INVALID_ARGUMENT;
                 goto cleanup;
-            }
-        }
-        for (other = 0U; other < index; ++other)
-        {
-            size_t face_slot;
-            for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
-            {
-                henka_authoring_face_id face_id;
-                const henka_authoring_face* face;
-                if (henka_authoring_mesh_get_face_id_at(mesh, face_slot, &face_id) != HENKA_SUCCESS)
-                {
-                    continue;
-                }
-                face = henka_authoring_mesh_get_face(mesh, face_id);
-                if (face == NULL)
-                {
-                    result = HENKA_ERROR_INVALID_ARGUMENT;
-                    goto cleanup;
-                }
-                if (modeling_face_contains_vertex(face, vertex_id, NULL) &&
-                    modeling_face_contains_vertex(face, sorted[other], NULL))
-                {
-                    result = HENKA_ERROR_INVALID_ARGUMENT;
-                    goto cleanup;
-                }
             }
         }
     }

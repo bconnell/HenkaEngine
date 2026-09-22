@@ -6979,6 +6979,91 @@ cleanup:
     return result ? 1 : fail("transactional interior vertex batch extrude");
 }
 
+static int test_connected_interior_vertex_region_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 16U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[4][4] = {{0}};
+    henka_authoring_vertex_id selected[2] = {HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_vertex_id face_vertices[4];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_modeling_report report = {0};
+    size_t row;
+    size_t column;
+    size_t slot;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (row = 0U; row < 4U; ++row)
+    {
+        for (column = 0U; column < 4U; ++column)
+        {
+            if (henka_authoring_mesh_add_vertex(
+                    mesh, (henka_vec3){(float)column, (float)row, 0.0f},
+                    (henka_vec2){(float)column / 3.0f, (float)row / 3.0f},
+                    13U, &vertices[row][column]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    for (row = 0U; row < 3U; ++row)
+    {
+        for (column = 0U; column < 3U; ++column)
+        {
+            face_vertices[0] = vertices[row][column];
+            face_vertices[1] = vertices[row][column + 1U];
+            face_vertices[2] = vertices[row + 1U][column + 1U];
+            face_vertices[3] = vertices[row + 1U][column];
+            if (henka_authoring_mesh_add_face(
+                    mesh, face_vertices, 4U, 13U, true, &face_id) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    selected[0] = vertices[1][1];
+    selected[1] = vertices[1][2];
+    if (!henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_extrude_interior_vertices(
+            mesh, selected, 2U, 0.5f, &report) != HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 2U ||
+        (after = henka_authoring_mesh_get_counts(mesh)).vertices != before.vertices + 2U ||
+        after.faces != before.faces || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (slot = 0U; slot < desc.max_faces; ++slot)
+    {
+        henka_authoring_face_id active_face_id;
+        const henka_authoring_face* active_face;
+        if (henka_authoring_mesh_get_face_id_at(mesh, slot, &active_face_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        active_face = henka_authoring_mesh_get_face(mesh, active_face_id);
+        if (active_face == NULL || active_face->material_region != 13U || !active_face->smooth)
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional connected interior vertex region extrude");
+}
+
 static int test_boundary_vertex_batch_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {16U, 32U, 16U, 4U};
@@ -11354,6 +11439,7 @@ int main(void)
         test_face_edge_delete_batch_operation() &&
         test_vertex_extrude_operation() &&
         test_interior_vertex_batch_extrude_operation() &&
+        test_connected_interior_vertex_region_extrude_operation() &&
         test_loose_vertex_extrude_operation() &&
         test_boundary_vertex_batch_extrude_operation() &&
         test_vertex_extrude_boundary_fan_operation() &&

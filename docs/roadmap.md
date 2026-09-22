@@ -458,14 +458,15 @@ Integrated authoring is already underway as part of the current 3D completion pa
    Distance, Connect Vertices, Dissolve Vertex, Delete Vertex, and Vertex Bevel.
    Bounded Vertex Extrude is available for connected open boundary vertex fans,
    including the one-face corner case, compatible closed interior vertex-fan
-   offset/cap replacement, pairwise fan-disjoint boundary-vertex batches,
+   offset/cap replacement, compatible connected closed interior vertex-fan
+   regions, pairwise fan-disjoint boundary-vertex batches,
    contiguous same-face boundary-vertex chains, and pairwise-distinct batches
    of loose vertices. The closed-fan operation preserves the original selected
    vertex as a loose vertex rather than publishing a non-manifold side wall.
-   Disconnected, loose-edge, overlapping, branching, mixed-metadata, and
+   Disconnected, loose-edge, disconnected-overlapping, branching, mixed-metadata, and
    incompatible-normal fan cases fail closed; compatible closed fans preserve
-   per-face material and smoothing metadata; generalized interior
-   surface-connected Vertex Extrude remains future work.
+   per-face material and smoothing metadata; broader interior surface-connected
+   Vertex Extrude remains future work.
 6. Non-destructive topology analysis and explicit transactional safe repair are
    available. Repair can remove enabled isolated vertices, exact
    metadata-preserving duplicate faces, and degenerate faces. Unsafe winding,

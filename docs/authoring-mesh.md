@@ -431,7 +431,7 @@ Apply, and the existing direct-object undo/redo boundary.
 
 ### Vertex Extrude
 
-Bounded Vertex Extrude supports a connected open boundary vertex fan, including the one-face corner case, and a compatible closed interior fan.
+Bounded Vertex Extrude supports a connected open boundary vertex fan, including the one-face corner case, a compatible closed interior fan, and a batch of compatible closed interior fans. The batch includes connected selected interior vertex regions whose incident face neighborhoods overlap.
 
 The operation:
 
@@ -444,12 +444,12 @@ The operation:
 It rejects disconnected, loose-edge, and incompatible-normal fans.
 
 Batch Vertex Extrude also supports pairwise fan-disjoint compatible closed
-interior vertices. Each selected fan is evaluated from the original source,
-then the complete batch is published as one candidate; the original selected
-vertices remain valid loose vertices and each replacement cap preserves its
-source face material, smoothing, and corner UV state. Duplicate selections,
-overlapping fan neighborhoods, open or loose vertices, unsupported fans, and
-capacity exhaustion fail without changing the committed source. The Sandbox
+interior vertices and connected compatible interior vertex regions. Each
+selected fan is evaluated on one candidate; the original selected vertices
+remain valid loose vertices and each replacement cap preserves its source face
+material, smoothing, and corner UV state. Duplicate selections, unsupported
+mixed or non-manifold neighborhoods, open or loose vertices, and capacity
+exhaustion fail without changing the committed source. The Sandbox
 routes the batch through Preview, Cancel, Apply, and the existing Undo/Redo
 history boundary.
 
@@ -871,7 +871,8 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - broader non-manifold vertex-fan handling;
 - incompatible-normal fan handling;
 - generalized surface-connected Vertex/Edge Extrude beyond the bounded open-fan,
-  closed-fan batch, boundary-edge, pairwise-disjoint compatible interior-edge,
+  connected or fan-disjoint compatible closed-fan, boundary-edge,
+  pairwise-disjoint compatible interior-edge,
   simple-path, uniquely enclosed closed-cycle, and complete closed-fan cases;
 - generalized closed-loop, branching, and broader weld/split/bridge workflows
   beyond the bounded face-backed boundary/interior batch and standalone loose-edge
@@ -890,8 +891,8 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - production showcase rebuild workflows;
 - package-level authoring ownership completion.
 
-The bounded fan extrusion remains limited to connected open fans and pairwise
-fan-disjoint compatible closed interior fans. The loose-component,
+The bounded fan extrusion remains limited to connected open fans and compatible
+closed interior fan regions, including pairwise fan-disjoint batches. The loose-component,
 boundary-edge, pairwise-disjoint compatible interior-edge, simple connected
 interior-path, independent interior-path batch, uniquely enclosed closed-cycle,
 branching-fan, and compatible single-sided interior-edge extrusion paths cover
