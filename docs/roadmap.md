@@ -551,7 +551,7 @@ Integrated authoring is already underway as part of the current 3D completion pa
   cyclic edge-loop domains, generalized Edge Extrude beyond the bounded
   single-edge, contiguous-chain, independent-chain boundary, simple-path, and
   uniquely enclosed closed-cycle, complete closed-fan, and general
-  loop-cut networks remain in progress or
+  branching, face-overlapping, and general loop-cut networks remain in progress or
   planned.
   Generalized closed-loop, branching, and split bridge workflows remain future
   work.
@@ -588,7 +588,7 @@ Integrated authoring is already underway as part of the current 3D completion pa
 2. Generalized surface-connected Edge Extrude beyond the bounded boundary-edge,
    contiguous boundary-chain, and independent boundary-chain cases, broader
    edge-set operations,
-   weld/split/bridge workflows, general loop-cut networks, and broader source
+   weld/split/bridge workflows, face-overlapping and general loop-cut networks, and broader source
    export.
 3. Broader automatic UV unwrap beyond planar charts, texture painting, rigging,
    skinning, and animation authoring.

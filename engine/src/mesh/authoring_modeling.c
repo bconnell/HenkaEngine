@@ -3102,22 +3102,11 @@ henka_result henka_authoring_mesh_loop_cut_quad_strips_multi(
                 {
                     const henka_authoring_face* second_face = henka_authoring_mesh_get_face(
                         mesh, steps[other][second_step].face_id);
-                    if (second_face == NULL || second_face->corner_count != 4U)
+                    if (second_face == NULL || second_face->corner_count != 4U ||
+                        first_face->id == second_face->id)
                     {
                         result = HENKA_ERROR_INVALID_ARGUMENT;
                         goto cleanup;
-                    }
-                    for (size_t first_corner = 0U; first_corner < 4U; ++first_corner)
-                    {
-                        for (size_t second_corner = 0U; second_corner < 4U; ++second_corner)
-                        {
-                            if (first_face->vertices[first_corner] ==
-                                second_face->vertices[second_corner])
-                            {
-                                result = HENKA_ERROR_INVALID_ARGUMENT;
-                                goto cleanup;
-                            }
-                        }
                     }
                 }
             }

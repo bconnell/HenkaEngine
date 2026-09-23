@@ -361,10 +361,10 @@ henka_result henka_authoring_mesh_loop_cut_quad_strip_multi(
     bool* out_closed,
     henka_authoring_modeling_report* out_report);
 
-/* Splits a bounded batch of pairwise-disjoint compatible quad strips with
- * uniformly spaced cuts. Each start edge identifies one open strip or closed
- * ring; strips may not share faces or vertices. The complete batch is
- * candidate-first and publishes only after every strip validates. */
+/* Splits a bounded batch of compatible quad strips with uniformly spaced
+ * cuts. Each start edge identifies one open strip or closed ring; connected
+ * strips may share vertices, but may not cover the same face. The complete
+ * batch is candidate-first and publishes only after every strip validates. */
 henka_result henka_authoring_mesh_loop_cut_quad_strips_multi(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* start_edge_ids,

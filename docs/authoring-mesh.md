@@ -652,15 +652,17 @@ It creates quad faces only and preserves the source material, smoothing, and
 per-corner UV state.
 
 The core API and Sandbox authoring path also support a bounded batch of
-pairwise-disjoint compatible quad strips. Multi-face selection supplies one
-deterministic strip start per selected quad, and the complete batch remains
-candidate-first: overlapping strips or unsupported selections fail without
-publishing partial topology. Preview, Apply, Cancel, Undo, and Redo use the
-same transaction boundary as the single-strip workflow.
+face-disjoint compatible quad strips. Multi-face selection supplies one
+deterministic strip start per selected quad, and connected strips may share
+vertices when their traversed face regions remain disjoint. The complete
+batch remains candidate-first: face-overlapping strips or unsupported
+selections fail without publishing partial topology. Preview, Apply, Cancel,
+Undo, and Redo use the same transaction boundary as the single-strip
+workflow.
 
-Branching, overlapping, or ambiguous loop-cut networks and generalized split workflows beyond
-the bounded face-backed boundary/interior batch and standalone loose-edge
-operations remain unfinished.
+Branching, face-overlapping, or ambiguous loop-cut networks and generalized
+split workflows beyond the bounded face-backed boundary/interior batch and
+standalone loose-edge operations remain unfinished.
 
 ### Edge Slide
 
@@ -893,8 +895,8 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - generalized closed-loop, branching, and broader weld/split/bridge workflows
   beyond the bounded face-backed boundary/interior batch and standalone loose-edge
   operations;
-- connected, branching, and general loop-cut networks beyond the bounded
-  isolated multi-face and pairwise-disjoint quad-strip operations;
+- branching, face-overlapping, and general loop-cut networks beyond the
+  bounded isolated multi-face and face-disjoint quad-strip operations;
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;
 - broader automatic UV unwrap beyond the bounded planar-chart, cylindrical

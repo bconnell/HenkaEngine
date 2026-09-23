@@ -8809,6 +8809,98 @@ static void henka_test_sandbox3d_object_authoring_quad_strip_batch_loop_cut(void
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_connected_quad_strip_batch_loop_cut(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    const henka_authoring_mesh_desc desc = {64U, 128U, 32U, 16U};
+    const henka_vec3 positions[9] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {2.0f, 1.0f, 0.0f},
+        {0.0f, 2.0f, 0.0f}, {1.0f, 2.0f, 0.0f}, {2.0f, 2.0f, 0.0f}};
+    const size_t face_indices[4][4] = {
+        {0U, 1U, 4U, 3U}, {1U, 2U, 5U, 4U},
+        {3U, 4U, 7U, 6U}, {4U, 5U, 8U, 7U}};
+    henka_authoring_vertex_id vertices[9];
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts counts;
+    henka_entity entity;
+    size_t index;
+
+    config.application_name = "Henka Connected Quad Strip Batch Loop Cut Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Connected Quad Strip Batch Loop Cut");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    for (index = 0U; index < 9U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, positions[index],
+            (henka_vec2){positions[index].x / 2.0f, positions[index].y / 2.0f},
+            17U, &vertices[index]) == HENKA_SUCCESS);
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        const henka_authoring_vertex_id face_vertices[4] = {
+            vertices[face_indices[index][0U]], vertices[face_indices[index][1U]],
+            vertices[face_indices[index][2U]], vertices[face_indices[index][3U]]};
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+            source, face_vertices, 4U, 17U, true,
+            &(henka_authoring_face_id){0U}) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 2U, true) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
+    before = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_preview_loop_cut_selected_quad_strips_multi(object, 2U) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(memcmp(&before, &counts, sizeof(before)) == 0);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_cancel_preview(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_preview_loop_cut_selected_quad_strips_multi(object, 2U) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_commit_preview(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == before.vertices + 12U &&
+        counts.faces == before.faces + 8U &&
+        henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(memcmp(&before, &counts, sizeof(before)) == 0);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == before.vertices + 12U &&
+        counts.faces == before.faces + 8U &&
+        henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_edge_loop_slide(void)
 {
     henka_engine_config config = {0};
@@ -12047,6 +12139,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_multi_face_loop_cut();
     henka_test_sandbox3d_object_authoring_quad_strip_loop_cut();
     henka_test_sandbox3d_object_authoring_quad_strip_batch_loop_cut();
+    henka_test_sandbox3d_object_authoring_connected_quad_strip_batch_loop_cut();
     henka_test_sandbox3d_object_authoring_closed_quad_ring_loop_cut();
     henka_test_sandbox3d_object_authoring_edge_loop_slide();
     henka_test_sandbox3d_object_authoring_batch_edge_loop_slide();
