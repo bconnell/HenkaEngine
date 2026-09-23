@@ -352,8 +352,11 @@ henka_result henka_assets_enforce_texture_residency_budget(
     size_t max_evictions,
     size_t* out_evicted_textures);
 /* Mesh loads require an initialized empty output slot. The returned mesh is
- * borrowed and manager-owned; rejected or failed loads preserve a non-empty
- * caller slot and leave an empty slot empty. */
+ * borrowed and manager-owned. A cached source failure uses a path-specific
+ * diagnostic mesh object rather than the manager's shared fallback object, so
+ * the borrowed identity remains stable if a later retry recovers the source.
+ * Rejected hard failures preserve a non-empty caller slot and leave an empty
+ * slot empty. */
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 /* Reimports a previously loaded manager-owned mesh transactionally. The
@@ -564,9 +567,12 @@ henka_result henka_assets_retry_failed_texture_with_descriptor(
     henka_texture** out_texture);
 
 /*
- * Retries only a cached source-failure fallback entry from a previous failed
- * OBJ load. Allocation and renderer failures are not cached as fallbacks.
- * The fallback entry remains intact when the replacement load fails.
+ * Retries only a cached source-failure fallback mesh entry. OBJ and glTF
+ * fallback entries own path-specific diagnostic mesh objects. A failed retry
+ * leaves that object and its metadata unchanged and leaves out_mesh null.
+ * Success replaces the payload in place, preserving the borrowed mesh pointer
+ * for scenes and other existing consumers. Allocation and renderer failures
+ * are not cached as successful recoveries.
  */
 henka_result henka_assets_retry_failed_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_retry_failed_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);

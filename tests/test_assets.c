@@ -1167,7 +1167,7 @@ static void henka_test_mesh_reimport_preserves_identity_and_transactionality(voi
     retried_mesh = NULL;
     HENKA_TEST_ASSERT(henka_assets_retry_failed_obj_mesh(
         manager, fallback_obj_path, &retried_mesh) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(retried_mesh != NULL && retried_mesh != fallback_obj_mesh);
+    HENKA_TEST_ASSERT(retried_mesh == fallback_obj_mesh);
     HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
         manager, retried_mesh, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback && metadata.reload_supported);
@@ -1185,7 +1185,7 @@ static void henka_test_mesh_reimport_preserves_identity_and_transactionality(voi
     retried_mesh = NULL;
     HENKA_TEST_ASSERT(henka_assets_retry_failed_gltf_mesh(
         manager, fallback_gltf_path, &retried_mesh) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(retried_mesh != NULL && retried_mesh != fallback_gltf_mesh);
+    HENKA_TEST_ASSERT(retried_mesh == fallback_gltf_mesh);
     HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
         manager, retried_mesh, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback && metadata.reload_supported);
@@ -1198,6 +1198,175 @@ static void henka_test_mesh_reimport_preserves_identity_and_transactionality(voi
     henka_engine_destroy(engine);
 }
 
+static void henka_test_mesh_fallback_retry_preserves_cached_identity(void)
+{
+    static const char* obj_initial =
+        "v 0 0 0\n"
+        "v 1 0 0\n"
+        "v 0 1 0\n"
+        "f 1 2 3\n";
+    static const char* obj_updated =
+        "v 0 0 0\n"
+        "v 1 0 0\n"
+        "v 0 1 0\n"
+        "f 1 2 3\n"
+        "f 1 3 2\n";
+    static const char* gltf_initial =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
+    static const char* gltf_updated =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}},"
+        "{\"attributes\":{\"POSITION\":0}}]}]}";
+    const char* obj_path = "build/test_tmp/mesh-fallback-identity.obj";
+    const char* obj_peer_path = "build/test_tmp/mesh-fallback-identity-peer.obj";
+    const char* gltf_path = "build/test_tmp/mesh-fallback-identity.gltf";
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_asset_manager* manager;
+    henka_scene* scene = NULL;
+    henka_entity obj_entity;
+    henka_entity gltf_entity;
+    henka_mesh* shared_fallback;
+    henka_mesh* obj_mesh = NULL;
+    henka_mesh* obj_again = NULL;
+    henka_mesh* obj_peer = NULL;
+    henka_mesh* gltf_mesh = NULL;
+    henka_mesh* retried = NULL;
+    henka_mesh* reloaded = NULL;
+    henka_mesh* scene_mesh = NULL;
+    henka_asset_metadata metadata;
+
+    config.application_name = "Henka Mesh Fallback Identity Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    manager = henka_engine_get_asset_manager(engine);
+    HENKA_TEST_ASSERT(manager != NULL);
+    shared_fallback = henka_assets_get_fallback_mesh(manager);
+    HENKA_TEST_ASSERT(shared_fallback != NULL);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+
+    (void)remove(obj_path);
+    (void)remove(obj_peer_path);
+    (void)remove(gltf_path);
+
+    HENKA_TEST_ASSERT(henka_assets_load_obj_mesh(
+        manager, obj_path, &obj_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(obj_mesh != NULL && obj_mesh != shared_fallback);
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
+        manager, obj_mesh, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback && metadata.reload_supported);
+    HENKA_TEST_ASSERT(strcmp(metadata.source_path, obj_path) == 0);
+
+    HENKA_TEST_ASSERT(henka_assets_load_obj_mesh(
+        manager, "./build/test_tmp/mesh-fallback-identity.obj", &obj_again) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(obj_again == obj_mesh);
+
+    HENKA_TEST_ASSERT(henka_assets_load_obj_mesh(
+        manager, obj_peer_path, &obj_peer) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(obj_peer != NULL && obj_peer != obj_mesh && obj_peer != shared_fallback);
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
+        manager, obj_peer, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback);
+    HENKA_TEST_ASSERT(strcmp(metadata.source_path, obj_peer_path) == 0);
+
+    obj_entity = henka_scene_create_entity_named(scene, "Recovered OBJ");
+    HENKA_TEST_ASSERT(obj_entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(
+        scene, obj_entity, obj_mesh) == HENKA_SUCCESS);
+
+    retried = (henka_mesh*)1;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_obj_mesh(
+        manager, obj_path, &retried) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(retried == NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
+        manager, obj_mesh, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, obj_entity, &scene_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_mesh == obj_mesh);
+
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        obj_path, obj_initial, strlen(obj_initial)));
+    retried = NULL;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_obj_mesh(
+        manager, obj_path, &retried) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(retried == obj_mesh);
+    HENKA_TEST_ASSERT(obj_mesh->vertex_count == 3);
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
+        manager, obj_mesh, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback && metadata.reload_supported);
+    HENKA_TEST_ASSERT(strcmp(metadata.source_path, obj_path) == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, obj_entity, &scene_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_mesh == obj_mesh && scene_mesh->vertex_count == 3);
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
+        manager, obj_peer, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback);
+
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        obj_path, obj_updated, strlen(obj_updated)));
+    reloaded = NULL;
+    HENKA_TEST_ASSERT(henka_assets_reload_obj_mesh(
+        manager, obj_path, &reloaded) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded == obj_mesh && obj_mesh->vertex_count == 6);
+
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_mesh(
+        manager, gltf_path, &gltf_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(gltf_mesh != NULL && gltf_mesh != shared_fallback &&
+        gltf_mesh != obj_peer && gltf_mesh != obj_mesh);
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
+        manager, gltf_mesh, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback);
+    HENKA_TEST_ASSERT(strcmp(metadata.source_path, gltf_path) == 0);
+
+    gltf_entity = henka_scene_create_entity_named(scene, "Recovered glTF");
+    HENKA_TEST_ASSERT(gltf_entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(
+        scene, gltf_entity, gltf_mesh) == HENKA_SUCCESS);
+
+    retried = (henka_mesh*)1;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_gltf_mesh(
+        manager, gltf_path, &retried) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(retried == NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
+        manager, gltf_mesh, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback);
+
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        gltf_path, gltf_initial, strlen(gltf_initial)));
+    retried = NULL;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_gltf_mesh(
+        manager, gltf_path, &retried) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(retried == gltf_mesh && gltf_mesh->vertex_count == 3);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, gltf_entity, &scene_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_mesh == gltf_mesh && scene_mesh->vertex_count == 3);
+
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        gltf_path, gltf_updated, strlen(gltf_updated)));
+    reloaded = NULL;
+    HENKA_TEST_ASSERT(henka_assets_reload_gltf_mesh(
+        manager, gltf_path, &reloaded) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded == gltf_mesh && gltf_mesh->vertex_count == 6);
+
+    (void)remove(obj_path);
+    (void)remove(obj_peer_path);
+    (void)remove(gltf_path);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
 static void henka_test_texture_reimport_preserves_identity_and_transactionality(void)
 {
     static const unsigned char bmp_initial[] =
@@ -1803,6 +1972,7 @@ void henka_test_assets(void)
     henka_test_mesh_loader_preserves_nonempty_output();
     henka_test_mesh_source_failure_requires_fallback();
     henka_test_mesh_reimport_preserves_identity_and_transactionality();
+    henka_test_mesh_fallback_retry_preserves_cached_identity();
     henka_test_texture_reimport_preserves_identity_and_transactionality();
     henka_test_descriptor_texture_fallback_retry_preserves_identity();
     henka_test_material_dependency_reimport_refreshes_real_scene_bindings();
