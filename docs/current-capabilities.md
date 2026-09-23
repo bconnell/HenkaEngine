@@ -852,10 +852,11 @@ Available operations include:
 - one factor-controlled quad-strip Loop Cut across a compatible open strip or closed ring;
 - uniformly spaced multi-cut across a compatible open quad strip or closed ring,
   with selected-face Sandbox Preview/Apply/Cancel and undo/redo routing;
-- a bounded face-disjoint batch of uniformly spaced compatible quad strips,
-  including vertex-connected strips whose traversed face regions remain
-  disjoint, with multi-face selection and transactional Preview/Apply/Cancel
-  plus undo/redo routing;
+- a bounded batch of uniformly spaced compatible quad strips, including
+  vertex-connected strips and compatible strips that intersect through shared
+  quad faces; canonical start-edge ordering makes the batch selection-order
+  independent, and multi-face selection retains transactional
+  Preview/Apply/Cancel plus undo/redo routing;
 - bounded signed-factor Edge Slide for one or more pairwise vertex-disjoint
   compatible open edge-loops or closed edge-cycles selected in one transaction.
 
@@ -879,8 +880,9 @@ A selected closed boundary edge loop can also be filled with one deterministic
 polygon through the same source/render/history transaction. Boundary-only,
 simple, compatible loops are supported; open loops and incompatible metadata
  fail closed without source mutation. Branching bridge domains,
- face-overlapping, branching, or ambiguous loop-cut networks, and generalized split operations beyond the
- standalone loose-edge midpoint path remain incomplete.
+ general branching, consumed-seed, duplicate-traversal, or otherwise ambiguous
+ loop-cut networks, and generalized split operations beyond the standalone
+ loose-edge midpoint path remain incomplete.
 
 See [authoring-mesh.md](authoring-mesh.md), [runtime-foundations.md](runtime-foundations.md), and [showcase-assets.md](showcase-assets.md).
 

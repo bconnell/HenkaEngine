@@ -11131,20 +11131,41 @@ static int test_connected_quad_strip_loop_cut_batch_operation(void)
         {0U, 1U, 4U, 3U}, {1U, 2U, 5U, 4U},
         {3U, 4U, 7U, 6U}, {4U, 5U, 8U, 7U}};
     henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* overlap_forward = NULL;
+    henka_authoring_mesh* overlap_reverse = NULL;
+    henka_authoring_mesh* consumed_network = NULL;
     henka_authoring_vertex_id vertices[9];
     henka_authoring_edge_id start_edges[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_edge_id overlapping_start_edges[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id reverse_start_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id consumed_start_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_face_id last_faces[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_edge_id primary_edges[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id overlap_forward_last[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id overlap_reverse_last[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id overlap_forward_primary[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id overlap_reverse_primary[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_modeling_report report = {0};
+    henka_authoring_modeling_report overlap_forward_report = {0};
+    henka_authoring_modeling_report overlap_reverse_report = {0};
+    henka_authoring_modeling_report consumed_report = {0};
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
-    henka_authoring_mesh_counts rejected;
+    henka_authoring_mesh_counts overlap_forward_counts;
+    henka_authoring_mesh_counts overlap_reverse_counts;
     bool closed[2] = {false, false};
+    bool overlap_forward_closed[2] = {false, false};
+    bool overlap_reverse_closed[2] = {false, false};
     size_t index;
     int result = 0;
 
@@ -11176,20 +11197,89 @@ static int test_connected_quad_strip_loop_cut_batch_operation(void)
     }
     if (test_find_edge_between_vertices(mesh, vertices[0], vertices[3], &start_edges[0]) != HENKA_SUCCESS ||
         test_find_edge_between_vertices(mesh, vertices[3], vertices[6], &start_edges[1]) != HENKA_SUCCESS ||
-        test_find_edge_between_vertices(mesh, vertices[0], vertices[1], &overlapping_start_edges[1]) != HENKA_SUCCESS)
+        test_find_edge_between_vertices(mesh, vertices[0], vertices[1], &overlapping_start_edges[1]) != HENKA_SUCCESS ||
+        test_find_edge_between_vertices(mesh, vertices[6], vertices[7], &consumed_start_edges[1]) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
     overlapping_start_edges[0] = start_edges[0];
+    consumed_start_edges[0] = overlapping_start_edges[1];
+    reverse_start_edges[0] = overlapping_start_edges[1];
+    reverse_start_edges[1] = overlapping_start_edges[0];
     before = henka_authoring_mesh_get_counts(mesh);
-    if (henka_authoring_mesh_loop_cut_quad_strips_multi(
-            mesh, overlapping_start_edges, 2U, 1U, last_faces, primary_edges,
-            closed, &report) != HENKA_ERROR_INVALID_ARGUMENT || report.changed ||
-        (rejected = henka_authoring_mesh_get_counts(mesh),
-         memcmp(&before, &rejected, sizeof(before)) != 0))
+
+    if (henka_authoring_mesh_clone(mesh, &overlap_forward) != HENKA_SUCCESS ||
+        henka_authoring_mesh_clone(mesh, &overlap_reverse) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
+    if (henka_authoring_mesh_loop_cut_quad_strips_multi(
+            overlap_forward, overlapping_start_edges, 2U, 1U,
+            overlap_forward_last, overlap_forward_primary, overlap_forward_closed,
+            &overlap_forward_report) != HENKA_SUCCESS ||
+        !overlap_forward_report.changed ||
+        henka_authoring_mesh_loop_cut_quad_strips_multi(
+            overlap_reverse, reverse_start_edges, 2U, 1U,
+            overlap_reverse_last, overlap_reverse_primary, overlap_reverse_closed,
+            &overlap_reverse_report) != HENKA_SUCCESS ||
+        !overlap_reverse_report.changed)
+    {
+        goto cleanup;
+    }
+    overlap_forward_counts = henka_authoring_mesh_get_counts(overlap_forward);
+    overlap_reverse_counts = henka_authoring_mesh_get_counts(overlap_reverse);
+    if (overlap_forward_counts.vertices <= before.vertices ||
+        overlap_forward_counts.faces <= before.faces ||
+        memcmp(&overlap_forward_counts, &overlap_reverse_counts,
+               sizeof(overlap_forward_counts)) != 0 ||
+        overlap_forward_report.created_vertices != overlap_reverse_report.created_vertices ||
+        overlap_forward_report.created_edges != overlap_reverse_report.created_edges ||
+        overlap_forward_report.created_faces != overlap_reverse_report.created_faces ||
+        overlap_forward_last[0] != overlap_reverse_last[1] ||
+        overlap_forward_last[1] != overlap_reverse_last[0] ||
+        overlap_forward_primary[0] != overlap_reverse_primary[1] ||
+        overlap_forward_primary[1] != overlap_reverse_primary[0] ||
+        overlap_forward_closed[0] != overlap_reverse_closed[1] ||
+        overlap_forward_closed[1] != overlap_reverse_closed[0] ||
+        !henka_authoring_mesh_validate(overlap_forward) ||
+        !henka_authoring_mesh_validate(overlap_reverse))
+    {
+        goto cleanup;
+    }
+
+    if (henka_authoring_mesh_clone(mesh, &consumed_network) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        henka_authoring_face_id consumed_last[2] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        henka_authoring_edge_id consumed_primary[2] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        bool consumed_closed[2] = {false, false};
+        const henka_authoring_mesh_counts consumed_before =
+            henka_authoring_mesh_get_counts(consumed_network);
+        henka_authoring_mesh_counts consumed_after;
+        if (henka_authoring_mesh_loop_cut_quad_strips_multi(
+                consumed_network, consumed_start_edges, 2U, 1U,
+                consumed_last, consumed_primary, consumed_closed,
+                &consumed_report) != HENKA_ERROR_INVALID_ARGUMENT ||
+            consumed_report.changed)
+        {
+            goto cleanup;
+        }
+        consumed_after = henka_authoring_mesh_get_counts(consumed_network);
+        if (memcmp(&consumed_before, &consumed_after, sizeof(consumed_before)) != 0 ||
+            consumed_last[0] != HENKA_AUTHORING_INVALID_ID ||
+            consumed_last[1] != HENKA_AUTHORING_INVALID_ID ||
+            consumed_primary[0] != HENKA_AUTHORING_INVALID_ID ||
+            consumed_primary[1] != HENKA_AUTHORING_INVALID_ID ||
+            !henka_authoring_mesh_validate(consumed_network))
+        {
+            goto cleanup;
+        }
+    }
+
     if (henka_authoring_mesh_loop_cut_quad_strips_multi(
             mesh, start_edges, 2U, 1U, last_faces, primary_edges, closed,
             &report) != HENKA_SUCCESS || !report.changed || closed[0] || closed[1] ||
@@ -11223,6 +11313,9 @@ static int test_connected_quad_strip_loop_cut_batch_operation(void)
     result = 1;
 
 cleanup:
+    henka_authoring_mesh_destroy(consumed_network);
+    henka_authoring_mesh_destroy(overlap_reverse);
+    henka_authoring_mesh_destroy(overlap_forward);
     henka_authoring_mesh_destroy(mesh);
     return result ? 1 : fail("connected quad strip batch");
 }

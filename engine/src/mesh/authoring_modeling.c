@@ -3001,9 +3001,7 @@ henka_result henka_authoring_mesh_loop_cut_quad_strips_multi(
     henka_authoring_modeling_report* out_report)
 {
     henka_authoring_mesh* candidate = NULL;
-    henka_authoring_quad_strip_step** steps = NULL;
-    size_t* step_counts = NULL;
-    bool* strip_closed = NULL;
+    size_t* execution_order = NULL;
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
     henka_authoring_mesh_desc desc;
@@ -3020,9 +3018,7 @@ henka_result henka_authoring_mesh_loop_cut_quad_strips_multi(
     }
     desc = henka_authoring_mesh_get_desc(mesh);
     if (strip_count > desc.max_faces ||
-        strip_count > SIZE_MAX / sizeof(*steps) ||
-        strip_count > SIZE_MAX / sizeof(*step_counts) ||
-        strip_count > SIZE_MAX / sizeof(*strip_closed))
+        strip_count > SIZE_MAX / sizeof(*execution_order))
     {
         return HENKA_ERROR_LIMIT;
     }
@@ -3032,25 +3028,20 @@ henka_result henka_authoring_mesh_loop_cut_quad_strips_multi(
         out_primary_cut_edge_ids[index] = HENKA_AUTHORING_INVALID_ID;
         out_closed[index] = false;
     }
-    steps = (henka_authoring_quad_strip_step**)henka_calloc(
-        strip_count, sizeof(*steps));
-    step_counts = (size_t*)henka_calloc(strip_count, sizeof(*step_counts));
-    strip_closed = (bool*)henka_calloc(strip_count, sizeof(*strip_closed));
-    if (steps == NULL || step_counts == NULL || strip_closed == NULL)
+    execution_order = (size_t*)henka_malloc(strip_count * sizeof(*execution_order));
+    if (execution_order == NULL)
     {
-        result = HENKA_ERROR_OUT_OF_MEMORY;
-        goto cleanup;
+        return HENKA_ERROR_OUT_OF_MEMORY;
     }
     for (index = 0U; index < strip_count; ++index)
     {
-        size_t bytes;
         size_t query_count = 0U;
+        bool query_closed = false;
         if (start_edge_ids[index] == HENKA_AUTHORING_INVALID_ID ||
             henka_authoring_topology_walk_quad_strip(
                 mesh, start_edge_ids[index], NULL, 0U,
-                &query_count, &strip_closed[index]) != HENKA_SUCCESS ||
-            query_count == 0U ||
-            (index > 0U && start_edge_ids[index] == start_edge_ids[index - 1U]))
+                &query_count, &query_closed) != HENKA_SUCCESS ||
+            query_count == 0U)
         {
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto cleanup;
@@ -3063,55 +3054,21 @@ henka_result henka_authoring_mesh_loop_cut_quad_strips_multi(
                 goto cleanup;
             }
         }
-        if (!henka_checked_size_multiply(
-                query_count, sizeof(*steps[index]), &bytes))
-        {
-            result = HENKA_ERROR_LIMIT;
-            goto cleanup;
-        }
-        steps[index] = (henka_authoring_quad_strip_step*)henka_malloc(bytes);
-        if (steps[index] == NULL)
-        {
-            result = HENKA_ERROR_OUT_OF_MEMORY;
-            goto cleanup;
-        }
-        result = henka_authoring_topology_walk_quad_strip(
-            mesh, start_edge_ids[index], steps[index], query_count,
-            &step_counts[index], &strip_closed[index]);
-        if (result != HENKA_SUCCESS || step_counts[index] != query_count)
-        {
-            result = HENKA_ERROR_INVALID_ARGUMENT;
-            goto cleanup;
-        }
+        execution_order[index] = index;
     }
-    for (index = 0U; index < strip_count; ++index)
+    for (index = 1U; index < strip_count; ++index)
     {
-        for (size_t other = index + 1U; other < strip_count; ++other)
+        const size_t key = execution_order[index];
+        size_t position = index;
+        while (position > 0U &&
+               start_edge_ids[execution_order[position - 1U]] > start_edge_ids[key])
         {
-            for (size_t first_step = 0U; first_step < step_counts[index]; ++first_step)
-            {
-                const henka_authoring_face* first_face = henka_authoring_mesh_get_face(
-                    mesh, steps[index][first_step].face_id);
-                if (first_face == NULL || first_face->corner_count != 4U)
-                {
-                    result = HENKA_ERROR_INVALID_ARGUMENT;
-                    goto cleanup;
-                }
-                for (size_t second_step = 0U;
-                     second_step < step_counts[other]; ++second_step)
-                {
-                    const henka_authoring_face* second_face = henka_authoring_mesh_get_face(
-                        mesh, steps[other][second_step].face_id);
-                    if (second_face == NULL || second_face->corner_count != 4U ||
-                        first_face->id == second_face->id)
-                    {
-                        result = HENKA_ERROR_INVALID_ARGUMENT;
-                        goto cleanup;
-                    }
-                }
-            }
+            execution_order[position] = execution_order[position - 1U];
+            --position;
         }
+        execution_order[position] = key;
     }
+
     before = henka_authoring_mesh_get_counts(mesh);
     result = henka_authoring_mesh_clone(mesh, &candidate);
     if (result != HENKA_SUCCESS)
@@ -3120,17 +3077,19 @@ henka_result henka_authoring_mesh_loop_cut_quad_strips_multi(
     }
     for (index = 0U; index < strip_count; ++index)
     {
+        const size_t strip_index = execution_order[index];
         henka_authoring_modeling_report local_report = {0};
         result = henka_authoring_mesh_loop_cut_quad_strip_multi(
-            candidate, start_edge_ids[index], cut_count,
-            &out_last_face_ids[index], &out_primary_cut_edge_ids[index],
-            &out_closed[index], &local_report);
+            candidate, start_edge_ids[strip_index], cut_count,
+            &out_last_face_ids[strip_index], &out_primary_cut_edge_ids[strip_index],
+            &out_closed[strip_index], &local_report);
         if (result != HENKA_SUCCESS)
         {
             goto cleanup;
         }
     }
-    if (!henka_authoring_mesh_validate(candidate))
+    if (!henka_authoring_mesh_validate(candidate) ||
+        !modeling_face_geometry_is_valid(candidate))
     {
         result = HENKA_ERROR_INVALID_ARGUMENT;
         goto cleanup;
@@ -3142,8 +3101,9 @@ henka_result henka_authoring_mesh_loop_cut_quad_strips_multi(
         modeling_report_count_delta(&before, &after, out_report);
         if (out_report != NULL)
         {
-            out_report->primary_face_id = out_last_face_ids[0U];
-            out_report->primary_edge_id = out_primary_cut_edge_ids[0U];
+            const size_t primary_index = execution_order[0U];
+            out_report->primary_face_id = out_last_face_ids[primary_index];
+            out_report->primary_edge_id = out_primary_cut_edge_ids[primary_index];
         }
     }
 
@@ -3157,16 +3117,7 @@ cleanup:
             out_closed[index] = false;
         }
     }
-    if (steps != NULL)
-    {
-        for (index = 0U; index < strip_count; ++index)
-        {
-            henka_free(steps[index]);
-        }
-    }
-    henka_free(steps);
-    henka_free(step_counts);
-    henka_free(strip_closed);
+    henka_free(execution_order);
     henka_authoring_mesh_destroy(candidate);
     return result;
 }
