@@ -552,10 +552,11 @@ henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_quad_strip_multi(
     sandbox3d_authoring_object* object,
     size_t cut_count);
-/* Applies uniformly spaced cuts to a bounded face-disjoint selection of
- * compatible quad strips. Connected strips may share vertices when their
- * traversed face regions remain disjoint. Each selected face supplies one
- * deterministic strip start; the candidate remains in Preview until the
+/* Applies uniformly spaced cuts to a bounded selection of compatible quad
+ * strips. Connected strips may share vertices, and compatible strips may
+ * intersect through shared quad faces. Each selected face supplies one
+ * deterministic strip start; canonical start-edge ordering makes the result
+ * selection-order independent. The candidate remains in Preview until the
  * shared preview commit/cancel path publishes or discards it. */
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_quad_strips_multi(
     sandbox3d_authoring_object* object,
