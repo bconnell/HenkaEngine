@@ -162,7 +162,8 @@ if (-not [string]::IsNullOrWhiteSpace([string]$env:GITHUB_PATH)) {
 }
 
 foreach ($target in $TargetDirectory) {
-    Install-SoftwareOpenGLRuntime -SourceDirectory $driverDirectory -DestinationDirectory $target
+    $resolvedTarget = Resolve-HenkaRepositoryPath -RepoRoot $repoRoot -Path $target
+    Install-SoftwareOpenGLRuntime -SourceDirectory $driverDirectory -DestinationDirectory $resolvedTarget
 }
 
 Write-Host "[pass] Pinned Mesa3D llvmpipe runtime is ready: $driverDirectory"

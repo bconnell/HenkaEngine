@@ -9,6 +9,32 @@ function Get-HenkaRepoRoot {
     return (Resolve-Path (Join-Path $ScriptDirectory "..")).Path
 }
 
+function Resolve-HenkaRepositoryPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw "Henka repository path cannot be empty."
+    }
+
+    $root = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/')
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
+    $resolved = [System.IO.Path]::GetFullPath((Join-Path $root $Path))
+    $rootPrefix = $root + [System.IO.Path]::DirectorySeparatorChar
+    $insideRoot = $resolved.Equals($root, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $resolved.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+    if (-not $insideRoot) {
+        throw "Relative Henka repository path escapes the repository root: $Path"
+    }
+
+    return $resolved
+}
+
 function Write-HenkaGeneratedRootMarker {
     param(
         [Parameter(Mandatory = $true)] [string]$RepoRoot,
