@@ -362,9 +362,11 @@ henka_result henka_authoring_mesh_loop_cut_quad_strip_multi(
     henka_authoring_modeling_report* out_report);
 
 /* Splits a bounded batch of compatible quad strips with uniformly spaced
- * cuts. Each start edge identifies one open strip or closed ring; connected
- * strips may share vertices, but may not cover the same face. The complete
- * batch is candidate-first and publishes only after every strip validates. */
+ * cuts. Each start edge identifies one open strip or closed ring. Connected
+ * strips may share vertices, and compatible strips may intersect through
+ * shared quad faces. Execution is canonicalized by stable start-edge ID and
+ * remains candidate-first; a network that consumes a later start edge or
+ * produces an unsupported traversal fails without publishing partial topology. */
 henka_result henka_authoring_mesh_loop_cut_quad_strips_multi(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* start_edge_ids,
