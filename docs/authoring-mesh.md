@@ -652,17 +652,21 @@ It creates quad faces only and preserves the source material, smoothing, and
 per-corner UV state.
 
 The core API and Sandbox authoring path also support a bounded batch of
-face-disjoint compatible quad strips. Multi-face selection supplies one
-deterministic strip start per selected quad, and connected strips may share
-vertices when their traversed face regions remain disjoint. The complete
-batch remains candidate-first: face-overlapping strips or unsupported
-selections fail without publishing partial topology. Preview, Apply, Cancel,
-Undo, and Redo use the same transaction boundary as the single-strip
-workflow.
+compatible quad strips. Multi-face selection supplies one deterministic strip
+start per selected quad. Connected strips may share vertices, and compatible
+strips may intersect through shared quad faces. The batch is executed in
+stable start-edge-ID order on one candidate mesh, so input/selection ordering
+does not change the resulting topology. Each later strip is re-walked against
+the already-updated candidate. If a prior cut consumes a later start edge or
+leaves a non-quad or otherwise ambiguous traversal, the complete batch fails
+without publishing partial topology. Preview, Apply, Cancel, Undo, and Redo
+use the same transaction boundary as the single-strip workflow.
 
-Branching, face-overlapping, or ambiguous loop-cut networks and generalized
-split workflows beyond the bounded face-backed boundary/interior batch and
-standalone loose-edge operations remain unfinished.
+General branching networks, duplicate traversals from opposite strip ends,
+networks whose canonical execution consumes a later strip seed, and other
+ambiguous loop-cut domains remain unsupported. Generalized split workflows
+beyond the bounded face-backed boundary/interior batch and standalone
+loose-edge operations also remain unfinished.
 
 ### Edge Slide
 
@@ -895,8 +899,9 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 - generalized closed-loop, branching, and broader weld/split/bridge workflows
   beyond the bounded face-backed boundary/interior batch and standalone loose-edge
   operations;
-- branching, face-overlapping, and general loop-cut networks beyond the
-  bounded isolated multi-face and face-disjoint quad-strip operations;
+- general branching, consumed-seed, duplicate-traversal, and otherwise
+  ambiguous loop-cut networks beyond the bounded compatible intersecting
+  quad-strip operations;
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;
 - broader automatic UV unwrap beyond the bounded planar-chart, cylindrical
