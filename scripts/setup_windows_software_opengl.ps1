@@ -64,7 +64,7 @@ function Get-SevenZipPath {
         }
     }
 
-    return Get-PinnedSevenZipExtractor
+    return (Get-PinnedSevenZipExtractor)
 }
 
 function Expand-PinnedMesaArchive {
