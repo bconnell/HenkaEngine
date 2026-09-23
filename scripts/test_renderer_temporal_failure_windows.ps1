@@ -3,6 +3,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 function Get-FunctionBody {
     param(
@@ -75,7 +76,7 @@ function Test-TemporalFailureContract {
 
 $rendererPath = Join-Path $RepositoryRoot 'engine/src/renderer/renderer_opengl.c'
 $renderer = Get-Content -LiteralPath $rendererPath -Raw
-$missing = Test-TemporalFailureContract -Source $renderer
+$missing = @(Test-TemporalFailureContract -Source $renderer)
 if ($missing.Count -gt 0) {
     throw "Renderer temporal failure contract failed: $($missing -join ', ')"
 }
@@ -88,7 +89,7 @@ if ($negativeCreate -eq $createBody) {
     throw 'Renderer temporal failure negative control could not remove the failure transition.'
 }
 $negativeRenderer = $renderer.Replace($createBody, $negativeCreate)
-$negativeMissing = Test-TemporalFailureContract -Source $negativeRenderer
+$negativeMissing = @(Test-TemporalFailureContract -Source $negativeRenderer)
 if ($negativeMissing.Count -eq 0) {
     throw 'Renderer temporal failure negative control unexpectedly passed.'
 }
@@ -101,7 +102,7 @@ if ($negativeFailure -eq $failureBody) {
     throw 'Renderer temporal failure state negative control could not remove invalidation.'
 }
 $negativeFailureRenderer = $renderer.Replace($failureBody, $negativeFailure)
-$negativeFailureMissing = Test-TemporalFailureContract -Source $negativeFailureRenderer
+$negativeFailureMissing = @(Test-TemporalFailureContract -Source $negativeFailureRenderer)
 if ($negativeFailureMissing.Count -eq 0) {
     throw 'Renderer temporal failure state negative control unexpectedly passed.'
 }
@@ -112,7 +113,7 @@ $negativeErrorDrain = $renderer.Replace(
 if ($negativeErrorDrain -eq $renderer) {
     throw 'Renderer temporal error-drain negative control could not remove the second error read.'
 }
-$negativeErrorDrainMissing = Test-TemporalFailureContract -Source $negativeErrorDrain
+$negativeErrorDrainMissing = @(Test-TemporalFailureContract -Source $negativeErrorDrain)
 if ($negativeErrorDrainMissing.Count -eq 0) {
     throw 'Renderer temporal error-drain negative control unexpectedly passed.'
 }
