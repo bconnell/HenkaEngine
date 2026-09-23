@@ -32,7 +32,57 @@ function Get-SevenZipPath {
         }
     }
 
-    throw "7-Zip was not found on the hosted Windows runner; cannot extract the pinned Mesa runtime."
+    return ""
+}
+
+function Get-WindowsTarPath {
+    $command = Get-Command tar.exe -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    $systemTar = Join-Path $env:SystemRoot "System32\tar.exe"
+    if (Test-Path -LiteralPath $systemTar -PathType Leaf) {
+        return $systemTar
+    }
+
+    return ""
+}
+
+function Expand-PinnedMesaArchive {
+    param(
+        [Parameter(Mandatory = $true)][string]$ArchivePath,
+        [Parameter(Mandatory = $true)][string]$DestinationDirectory
+    )
+
+    $sevenZip = Get-SevenZipPath
+    $windowsTar = Get-WindowsTarPath
+    if ([string]::IsNullOrWhiteSpace($sevenZip) -and
+        [string]::IsNullOrWhiteSpace($windowsTar)) {
+        throw "Neither 7-Zip nor the built-in Windows tar extractor is available; cannot extract the pinned Mesa runtime."
+    }
+
+    if (Test-Path -LiteralPath $DestinationDirectory) {
+        Remove-Item -LiteralPath $DestinationDirectory -Recurse -Force
+    }
+    [System.IO.Directory]::CreateDirectory($DestinationDirectory) | Out-Null
+
+    try {
+        if (-not [string]::IsNullOrWhiteSpace($sevenZip)) {
+            Write-Host "Extracting pinned Mesa runtime with 7-Zip: $sevenZip"
+            & $sevenZip x $ArchivePath "-o$DestinationDirectory" -y | Out-Host
+        } else {
+            Write-Host "Extracting pinned Mesa runtime with built-in Windows tar: $windowsTar"
+            & $windowsTar -xf $ArchivePath -C $DestinationDirectory
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Pinned Mesa3D runtime extraction failed with exit code $LASTEXITCODE."
+        }
+    }
+    catch {
+        Remove-Item -LiteralPath $DestinationDirectory -Recurse -Force -ErrorAction SilentlyContinue
+        throw
+    }
 }
 
 function Install-SoftwareOpenGLRuntime {
@@ -51,7 +101,7 @@ function Install-SoftwareOpenGLRuntime {
     foreach ($dll in $dlls) {
         Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $destination $dll.Name) -Force
     }
-    Write-Host "Installed CI-only Mesa OpenGL runtime into $destination"
+    Write-Host "Installed app-local Mesa OpenGL runtime into $destination"
 }
 
 [System.IO.Directory]::CreateDirectory($cacheRoot) | Out-Null
@@ -74,12 +124,7 @@ if (Test-Path -LiteralPath $extractRoot -PathType Container) {
         Select-Object -ExpandProperty DirectoryName)
 }
 if ($driverDirectories.Count -eq 0) {
-    $sevenZip = Get-SevenZipPath
-    [System.IO.Directory]::CreateDirectory($extractRoot) | Out-Null
-    & $sevenZip x $archivePath "-o$extractRoot" -y | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "Pinned Mesa3D runtime extraction failed with exit code $LASTEXITCODE."
-    }
+    Expand-PinnedMesaArchive -ArchivePath $archivePath -DestinationDirectory $extractRoot
     $driverDirectories = @(Get-ChildItem -LiteralPath $extractRoot -Recurse -Filter "opengl32.dll" -File |
         Where-Object {
             $_.FullName -match '(?i)(^|[\\/])x64([\\/]|$)' -and
@@ -92,7 +137,7 @@ if ($driverDirectories.Count -ne 1) {
 }
 $driverDirectory = [System.IO.Path]::GetFullPath($driverDirectories[0])
 
-# This is intentionally an app-local CI dependency. It never changes the host
+# This is intentionally an app-local validation dependency. It never changes the host
 # OpenGL registration or the shipped Henka package contents.
 $env:HENKA_CI_SOFTWARE_OPENGL_ROOT = $driverDirectory
 $env:GALLIUM_DRIVER = "llvmpipe"
