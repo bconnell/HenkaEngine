@@ -15,6 +15,38 @@ $archivePath = Join-Path $cacheRoot $archiveName
 $extractRoot = Join-Path $cacheRoot "extracted"
 $downloadUri = "https://github.com/pal1000/mesa-dist-win/releases/download/26.1.7/$archiveName"
 $expectedSha256 = "c6e90c3117233b66f7816df05026a5fb0f88eaf7829bd07a1724b981487ec0bb"
+$sevenZipBootstrapVersion = "26.03"
+$sevenZipBootstrapUri = "https://github.com/ip7z/7zip/releases/download/$sevenZipBootstrapVersion/7zr.exe"
+$sevenZipBootstrapSha256 = "ad4c82fadcbdf93c03b4fc440f300509c7d60c5c2f4d183e35d9d70d6957037d"
+$sevenZipBootstrapRoot = Join-Path $cacheRoot ("tools\7zip-" + $sevenZipBootstrapVersion)
+$sevenZipBootstrapPath = Join-Path $sevenZipBootstrapRoot "7zr.exe"
+
+function Get-PinnedSevenZipExtractor {
+    [System.IO.Directory]::CreateDirectory($sevenZipBootstrapRoot) | Out-Null
+
+    $needsDownload = -not (Test-Path -LiteralPath $sevenZipBootstrapPath -PathType Leaf)
+    if (-not $needsDownload) {
+        $cachedHash = (Get-FileHash -LiteralPath $sevenZipBootstrapPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($cachedHash -ne $sevenZipBootstrapSha256) {
+            Write-Warning "Cached 7zr.exe hash does not match the pinned 7-Zip $sevenZipBootstrapVersion extractor; refreshing it."
+            Remove-Item -LiteralPath $sevenZipBootstrapPath -Force
+            $needsDownload = $true
+        }
+    }
+
+    if ($needsDownload) {
+        Write-Host "Downloading pinned standalone 7-Zip extractor: $sevenZipBootstrapUri"
+        Invoke-WebRequest -Uri $sevenZipBootstrapUri -OutFile $sevenZipBootstrapPath -UseBasicParsing
+    }
+
+    $actualHash = (Get-FileHash -LiteralPath $sevenZipBootstrapPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $sevenZipBootstrapSha256) {
+        Remove-Item -LiteralPath $sevenZipBootstrapPath -Force -ErrorAction SilentlyContinue
+        throw "Pinned 7zr.exe hash mismatch. Expected $sevenZipBootstrapSha256, got $actualHash."
+    }
+
+    return $sevenZipBootstrapPath
+}
 
 function Get-SevenZipPath {
     $command = Get-Command 7z.exe -ErrorAction SilentlyContinue
@@ -32,21 +64,7 @@ function Get-SevenZipPath {
         }
     }
 
-    return ""
-}
-
-function Get-WindowsTarPath {
-    $command = Get-Command tar.exe -ErrorAction SilentlyContinue
-    if ($null -ne $command) {
-        return $command.Source
-    }
-
-    $systemTar = Join-Path $env:SystemRoot "System32\tar.exe"
-    if (Test-Path -LiteralPath $systemTar -PathType Leaf) {
-        return $systemTar
-    }
-
-    return ""
+    return Get-PinnedSevenZipExtractor
 }
 
 function Expand-PinnedMesaArchive {
@@ -56,10 +74,9 @@ function Expand-PinnedMesaArchive {
     )
 
     $sevenZip = Get-SevenZipPath
-    $windowsTar = Get-WindowsTarPath
-    if ([string]::IsNullOrWhiteSpace($sevenZip) -and
-        [string]::IsNullOrWhiteSpace($windowsTar)) {
-        throw "Neither 7-Zip nor the built-in Windows tar extractor is available; cannot extract the pinned Mesa runtime."
+    if ([string]::IsNullOrWhiteSpace($sevenZip) -or
+        -not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) {
+        throw "A verified 7-Zip extractor is required to extract the pinned Mesa runtime."
     }
 
     if (Test-Path -LiteralPath $DestinationDirectory) {
@@ -68,13 +85,8 @@ function Expand-PinnedMesaArchive {
     [System.IO.Directory]::CreateDirectory($DestinationDirectory) | Out-Null
 
     try {
-        if (-not [string]::IsNullOrWhiteSpace($sevenZip)) {
-            Write-Host "Extracting pinned Mesa runtime with 7-Zip: $sevenZip"
-            & $sevenZip x $ArchivePath "-o$DestinationDirectory" -y | Out-Host
-        } else {
-            Write-Host "Extracting pinned Mesa runtime with built-in Windows tar: $windowsTar"
-            & $windowsTar -xf $ArchivePath -C $DestinationDirectory
-        }
+        Write-Host "Extracting pinned Mesa runtime with verified 7-Zip: $sevenZip"
+        & $sevenZip x $ArchivePath "-o$DestinationDirectory" -y | Out-Host
         if ($LASTEXITCODE -ne 0) {
             throw "Pinned Mesa3D runtime extraction failed with exit code $LASTEXITCODE."
         }
