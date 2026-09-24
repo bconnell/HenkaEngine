@@ -486,6 +486,10 @@ static henka_result henka_scene_document_validate_object(
             object->name,
             HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES,
             true) ||
+        !henka_scene_document_string_is_valid(
+            object->tag,
+            HENKA_SCENE_DOCUMENT_MAX_TAG_BYTES,
+            true) ||
         !henka_scene_document_valid_transform(&object->transform))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -1866,6 +1870,7 @@ static bool henka_scene_document_payload_size(
     {
         const henka_scene_document_object* object = &storage->objects[index];
         const size_t name_length = strlen(object->name);
+        const size_t tag_length = strlen(object->tag);
         const size_t source_path_length = strlen(object->source.path);
         const size_t material_path_length = strlen(object->renderer.material_path);
         const size_t prompt_length = strlen(object->interaction.prompt);
@@ -1879,7 +1884,8 @@ static bool henka_scene_document_payload_size(
             object->renderer.transmission_texture_path,
             object->renderer.thickness_texture_path};
         size_t texture_identity_bytes = sizeof(uint32_t);
-        if (name_length > UINT16_MAX || source_path_length > UINT16_MAX ||
+        if (name_length > UINT16_MAX || tag_length > UINT16_MAX ||
+            source_path_length > UINT16_MAX ||
             material_path_length > UINT16_MAX || prompt_length > UINT16_MAX ||
             audio_path_length > UINT16_MAX)
         {
@@ -1907,7 +1913,8 @@ static bool henka_scene_document_payload_size(
                 texture_identity_bytes +
                 4U + 2U + prompt_length +
                 4U + 4U + 12U + 4U + 8U + 12U + 4U + 20U + 4U + 4U +
-                2U + audio_path_length + 4U + 16U + 4U + 40U))
+                2U + audio_path_length + 4U + 16U + 4U + 40U +
+                2U + tag_length))
         {
             return false;
         }
@@ -2216,6 +2223,9 @@ static void henka_scene_document_encode_object(
     henka_scene_document_writer_float(writer, object->character_controller.slope_limit_degrees);
     henka_scene_document_writer_u32(writer, object->character_controller.layer);
     henka_scene_document_writer_u32(writer, object->character_controller.mask);
+    /* v17 appends tag identity so every v1-v16 field retains its historical
+     * byte position and migration remains additive. */
+    henka_scene_document_writer_string(writer, object->tag);
 }
 
 static void henka_scene_document_encode_environment(
@@ -2707,7 +2717,7 @@ static bool henka_scene_document_decode_object(
     {
         return false;
     }
-    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    if (format_version >= HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V16)
     {
         uint32_t override_flag;
         if (!henka_scene_document_reader_u32(reader, &override_flag) ||
@@ -2956,6 +2966,14 @@ static bool henka_scene_document_decode_object(
                 reader, &object->character_controller.layer) ||
             !henka_scene_document_reader_u32(
                 reader, &object->character_controller.mask)))
+    {
+        return false;
+    }
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION &&
+        !henka_scene_document_reader_string(
+            reader,
+            object->tag,
+            sizeof(object->tag)))
     {
         return false;
     }
@@ -3255,6 +3273,7 @@ henka_result henka_scene_document_load_file(
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V13 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V14 &&
             format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V15 &&
+            format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V16 &&
             format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
