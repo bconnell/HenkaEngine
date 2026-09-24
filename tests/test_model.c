@@ -1551,10 +1551,57 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.indices != NULL);
     HENKA_TEST_ASSERT(model.vertex_count == 6U);
     HENKA_TEST_ASSERT(model.index_count == 6U);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].normal.y, -1.0f, 0.0001);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].uv.x, 1.0f, 0.0001);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].color.x, 1.0f, 0.0001);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].color.w, 1.0f, 0.0001);
+    {
+        bool found_lower_left = false;
+        bool found_lower_right = false;
+        bool found_upper_right = false;
+        bool found_upper_left = false;
+        size_t vertex_index;
+
+        for (vertex_index = 0U; vertex_index < model.vertex_count; ++vertex_index)
+        {
+            const henka_model_vertex* vertex = &model.vertices[vertex_index];
+
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->normal.y, -1.0f, 0.0001);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->color.x, 1.0f, 0.0001);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->color.w, 1.0f, 0.0001);
+
+            if (fabsf(vertex->position.x + 0.5f) < 0.0001f &&
+                fabsf(vertex->position.z + 0.5f) < 0.0001f)
+            {
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.x, 0.0f, 0.0001);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.y, 0.0f, 0.0001);
+                found_lower_left = true;
+            }
+            else if (fabsf(vertex->position.x - 0.5f) < 0.0001f &&
+                     fabsf(vertex->position.z + 0.5f) < 0.0001f)
+            {
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.x, 1.0f, 0.0001);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.y, 0.0f, 0.0001);
+                found_lower_right = true;
+            }
+            else if (fabsf(vertex->position.x - 0.5f) < 0.0001f &&
+                     fabsf(vertex->position.z - 0.5f) < 0.0001f)
+            {
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.x, 1.0f, 0.0001);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.y, 1.0f, 0.0001);
+                found_upper_right = true;
+            }
+            else if (fabsf(vertex->position.x + 0.5f) < 0.0001f &&
+                     fabsf(vertex->position.z - 0.5f) < 0.0001f)
+            {
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.x, 0.0f, 0.0001);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.y, 1.0f, 0.0001);
+                found_upper_left = true;
+            }
+        }
+
+        HENKA_TEST_ASSERT(
+            found_lower_left &&
+            found_lower_right &&
+            found_upper_right &&
+            found_upper_left);
+    }
     henka_model_data_destroy(&model);
 
     model.vertices = NULL;
