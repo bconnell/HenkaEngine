@@ -22,6 +22,12 @@ typedef enum henka_network_channel
     HENKA_NETWORK_CHANNEL_SNAPSHOT = 2
 } henka_network_channel;
 
+/*
+ * Message types have one canonical wire channel. The codec rejects known
+ * message values carried on the wrong channel instead of passing semantically
+ * malformed packets to application dispatch.
+ */
+
 typedef enum henka_network_message_type
 {
     HENKA_NETWORK_MESSAGE_CONNECT = 1,

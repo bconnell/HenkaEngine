@@ -1000,6 +1000,8 @@ A dedicated 2D renderer, sprites, texture regions, layered depth, parallax, spri
 - Edit persistence
 - Graceful shutdown
 - Bounded relevance-filtered reconnect/late-join selection
+- Canonical protocol channel/type pairing enforced by the packet codec before
+  application dispatch
 
 ### Remaining work
 

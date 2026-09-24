@@ -106,6 +106,45 @@ static int test_codec_rejects_malformed_input(void)
     {
         return 0;
     }
+
+    packet_size = 99U;
+    if (henka_network_message_encode(
+            HENKA_NETWORK_CHANNEL_CONTROL,
+            HENKA_NETWORK_MESSAGE_SNAPSHOT_REQUEST,
+            NULL,
+            0U,
+            packet,
+            sizeof(packet),
+            &packet_size) != HENKA_ERROR_INVALID_ARGUMENT ||
+        packet_size != 0U)
+    {
+        return 0;
+    }
+
+    if (henka_network_message_encode(
+            HENKA_NETWORK_CHANNEL_SNAPSHOT,
+            HENKA_NETWORK_MESSAGE_SNAPSHOT_REQUEST,
+            NULL,
+            0U,
+            packet,
+            sizeof(packet),
+            &packet_size) != HENKA_SUCCESS)
+    {
+        return 0;
+    }
+    packet[6] = (uint8_t)HENKA_NETWORK_CHANNEL_CONTROL;
+    memset(&view, 0xA5, sizeof(view));
+    if (henka_network_message_decode(
+            packet,
+            packet_size,
+            &view) != HENKA_ERROR_INVALID_ARGUMENT ||
+        view.channel != HENKA_NETWORK_CHANNEL_CONTROL ||
+        view.type != 0 ||
+        view.payload != NULL ||
+        view.payload_size != 0U)
+    {
+        return 0;
+    }
     return 1;
 }
 

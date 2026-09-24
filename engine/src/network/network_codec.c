@@ -60,6 +60,35 @@ bool henka_network_message_type_is_valid(henka_network_message_type type)
     }
 }
 
+static bool henka_network_message_channel_matches(
+    henka_network_channel channel,
+    henka_network_message_type type)
+{
+    switch (type)
+    {
+        case HENKA_NETWORK_MESSAGE_CONNECT:
+        case HENKA_NETWORK_MESSAGE_DISCONNECT:
+        case HENKA_NETWORK_MESSAGE_PING:
+        case HENKA_NETWORK_MESSAGE_TERRAIN_SESSION_REQUEST:
+            return channel == HENKA_NETWORK_CHANNEL_CONTROL;
+
+        case HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REQUEST:
+        case HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_ACCEPTED:
+        case HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REJECTED:
+        case HENKA_NETWORK_MESSAGE_TERRAIN_DELTA:
+        case HENKA_NETWORK_MESSAGE_TERRAIN_RECOVERY_REQUEST:
+            return channel == HENKA_NETWORK_CHANNEL_TERRAIN;
+
+        case HENKA_NETWORK_MESSAGE_SNAPSHOT_FRAGMENT:
+        case HENKA_NETWORK_MESSAGE_SNAPSHOT_REQUEST:
+        case HENKA_NETWORK_MESSAGE_SNAPSHOT_FAILED:
+            return channel == HENKA_NETWORK_CHANNEL_SNAPSHOT;
+
+        default:
+            return false;
+    }
+}
+
 bool henka_network_message_payload_is_valid(
     henka_network_message_type type,
     size_t payload_size)
@@ -90,6 +119,7 @@ henka_result henka_network_message_encode(
     *out_size = 0U;
     if (!henka_network_channel_is_valid(channel) ||
         !henka_network_message_type_is_valid(type) ||
+        !henka_network_message_channel_matches(channel, type) ||
         (payload == NULL && payload_size > 0U) ||
         !henka_network_message_payload_is_valid(type, payload_size) ||
         payload_size > UINT32_MAX)
@@ -146,6 +176,7 @@ henka_result henka_network_message_decode(
     payload_size = henka_network_read_u32_le(buffer + 8U);
     if (!henka_network_channel_is_valid(channel) ||
         !henka_network_message_type_is_valid(type) ||
+        !henka_network_message_channel_matches(channel, type) ||
         !henka_network_message_payload_is_valid(type, payload_size) ||
         payload_size > buffer_size - HENKA_NETWORK_PROTOCOL_HEADER_BYTES ||
         HENKA_NETWORK_PROTOCOL_HEADER_BYTES + (size_t)payload_size != buffer_size)
