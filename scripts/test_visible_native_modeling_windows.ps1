@@ -752,20 +752,23 @@ try {
         throw "The visible Base Color texture picker did not start."
     }
 
+    # Use the checked-in color texture that normal product startup loads.
+    # Arbitrary manager rows can be semantic/runtime textures that are valid
+    # assets but intentionally unsuitable as a Base Color source.
     $assetRowPattern =
-        'Material texture picker asset row: entity=\d+ slot=Base Color path=(?<path>.+?) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26\.0\.'
+        'Material texture picker asset row: entity=\d+ slot=Base Color path=assets/textures/cube_albedo\.png x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26\.0\.'
     if (-not (Wait-FileContains `
             -Path $stdoutPath `
             -Pattern $assetRowPattern `
             -TimeoutMilliseconds 5000)) {
-        throw "The visible material texture picker did not publish manager texture rows."
+        throw "The visible material texture picker did not publish the packaged cube_albedo.png candidate."
     }
     $assetRow = Get-LastMatch `
         -Path $stdoutPath `
         -Pattern $assetRowPattern
     $pickerSelectCount = Get-LogMatchCount `
         -Path $stdoutPath `
-        -Pattern 'Material texture picker: action=select entity=\d+ slot=Base Color path=.+\.'
+        -Pattern 'Material texture picker: action=select entity=\d+ slot=Base Color path=assets/textures/cube_albedo\.png\.'
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ([double]$assetRow.Groups["x"].Value + 18.0) `
@@ -773,7 +776,7 @@ try {
     if (-not (Wait-LogMatchCountIncrease `
             -Path $stdoutPath `
             -InitialCount $pickerSelectCount `
-            -Pattern 'Material texture picker: action=select entity=\d+ slot=Base Color path=.+\.' `
+            -Pattern 'Material texture picker: action=select entity=\d+ slot=Base Color path=assets/textures/cube_albedo\.png\.' `
             -TimeoutMilliseconds 5000)) {
         throw "The visible material texture picker did not select a manager-owned texture candidate."
     }
@@ -796,7 +799,7 @@ try {
 
     $pickerApplyCount = Get-LogMatchCount `
         -Path $stdoutPath `
-        -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=success\.'
+        -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=HENKA_SUCCESS\.'
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ([double]$pickerActions.Groups["apply"].Value +
@@ -805,7 +808,7 @@ try {
     if (-not (Wait-LogMatchCountIncrease `
             -Path $stdoutPath `
             -InitialCount $pickerApplyCount `
-            -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=success\.' `
+            -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=HENKA_SUCCESS\.' `
             -TimeoutMilliseconds 5000)) {
         throw "The visible material texture picker did not apply the selected manager-owned texture."
     }
