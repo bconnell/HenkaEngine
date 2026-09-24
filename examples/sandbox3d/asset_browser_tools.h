@@ -32,6 +32,13 @@ size_t sandbox3d_asset_browser_collect_page(
     sandbox3d_asset_browser_item* out_items,
     size_t capacity);
 
+bool sandbox3d_asset_browser_can_retry(
+    const henka_asset_metadata* metadata);
+
+henka_result sandbox3d_asset_browser_retry(
+    henka_asset_manager* manager,
+    const henka_asset_metadata* metadata);
+
 typedef struct sandbox3d_texture_slot_display
 {
     bool assigned;
