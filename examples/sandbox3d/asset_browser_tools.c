@@ -222,11 +222,18 @@ static henka_texture_usage sandbox3d_material_texture_slot_usage(
     }
 }
 
-static const char* sandbox3d_material_texture_slot_label(
+const char* sandbox3d_material_texture_slot_label(
     henka_material_texture_slot slot)
 {
+    if (!sandbox3d_material_texture_slot_is_instance_slot(slot))
+    {
+        return "Unknown";
+    }
+
     switch (slot)
     {
+        case HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR:
+            return "Base Color";
         case HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS:
             return "Thickness";
         case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
@@ -235,6 +242,36 @@ static const char* sandbox3d_material_texture_slot_label(
             return sandbox3d_asset_browser_usage_label(
                 sandbox3d_material_texture_slot_usage(slot));
     }
+}
+
+void sandbox3d_material_texture_pick_reset(
+    sandbox3d_material_texture_pick* pick)
+{
+    if (pick == NULL)
+    {
+        return;
+    }
+    memset(pick, 0, sizeof(*pick));
+    pick->entity = HENKA_INVALID_ENTITY;
+    pick->slot = HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR;
+}
+
+henka_result sandbox3d_material_texture_pick_begin(
+    sandbox3d_material_texture_pick* pick,
+    henka_entity entity,
+    henka_material_texture_slot slot)
+{
+    if (pick == NULL || entity == HENKA_INVALID_ENTITY ||
+        !sandbox3d_material_texture_slot_is_instance_slot(slot))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    sandbox3d_material_texture_pick_reset(pick);
+    pick->active = true;
+    pick->entity = entity;
+    pick->slot = slot;
+    return HENKA_SUCCESS;
 }
 
 static bool sandbox3d_asset_browser_type_matches(

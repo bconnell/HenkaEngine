@@ -590,6 +590,7 @@ typedef struct sandbox3d_state
     const henka_material_asset* asset_browser_selected_material;
     const henka_prefab* asset_browser_selected_prefab;
     bool asset_browser_selection_valid;
+    sandbox3d_material_texture_pick material_texture_pick;
     henka_material_instance_parameter material_editor_parameter;
     unsigned int material_editor_component;
     bool marker_material_instance_valid;
@@ -11964,7 +11965,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Ctrl+M maximizes the focused or hovered workspace section; press it again to restore the section.\n");
     printf("  Open Native Panel Test from the Tools QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
-    printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
+    printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Choose beside a texture slot opens Utility > Assets for that exact entity and slot; selecting a manager-owned texture does not mutate the material until Apply, while Clear and Inherit remain explicit transactional actions.\n");
     printf("  Select an authored scene object and open Object Details > Audio to edit its persisted clip path, enabled, looping, and spatial settings; Preview and Stop Preview use the real scene entity and manager-owned Audio asset.\n");
     printf("  Select the editable Ground Plane or an explicit reference asset, open Object Details > Authoring, and choose Make Editable when available; the generic component Move, selected-vertex/loose Vertex/Edge Extrude, selected-vertex Smooth Vertices/Relax, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide/Split Edge/Bridge/Fill Boundary/Split Loose Edges/Hard Edges/Soft Edges, and Face Bevel/Extrude/Extrude Selection/Subdivide/Smooth Faces/Flat Faces controls are the user-facing modeling path. Smooth Vertices/Relax uses a bounded factor in [0,1] through the shared Preview/Apply/Cancel operator and moves selected vertices toward the simultaneous average of their topological neighbors while preserving topology and per-component metadata. Face-backed Split Edge handles one, a contiguous same-face boundary-edge chain, or a bounded batch of independent boundary chains and pairwise-disjoint boundary or two-face interior edges through the shared Preview/Apply/Cancel operator and selects the replacement edges; mixed-face, branched, duplicate, disconnected, or ambiguous selections fail closed. Split Loose Edges handles one or a bounded pairwise-disjoint selection of standalone wire edges, inserts a midpoint in each selected edge, and selects all replacement edges. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge. The same Vertex-mode amount control routes compatible single or multi-vertex boundary and interior fan selections through transactional surface extrusion, while the Edge-mode amount control routes one open boundary edge, a contiguous boundary-edge chain, or a bounded batch of independent boundary-edge chains through face-normal surface-connected Edge Extrude, with the existing distinct-face pairwise boundary fallback. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources remain explicit editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Face-mode Poke Face(s) adds one center vertex and triangle fan to one or a bounded selection of simple convex planar faces; disconnected faces and faces sharing complete edges are supported, while vertex-only contact is rejected. The operation uses the same Preview/Apply/Cancel and history path.\n");
@@ -28144,7 +28145,7 @@ details_group_materials:
                 {
                     sandbox3d_texture_slot_display slot_display;
                     char slot_value[160];
-                    char assign_id[64];
+                    char choose_id[64];
                     char clear_id[64];
                     char restore_id[64];
                     const bool editable =
@@ -28195,28 +28196,43 @@ details_group_materials:
                     }
                     sandbox3d_draw_value_row(
                         state->ui, row.x, row.y, row.width, texture_slot_labels[texture_slot_index], slot_value);
-                    snprintf(assign_id, sizeof(assign_id), "material_slot_assign_%zu", texture_slot_index);
+                    snprintf(choose_id, sizeof(choose_id), "material_slot_choose_%zu", texture_slot_index);
                     snprintf(clear_id, sizeof(clear_id), "material_slot_clear_%zu", texture_slot_index);
                     snprintf(restore_id, sizeof(restore_id), "material_slot_restore_%zu", texture_slot_index);
-                    if (row.width >= 220.0f && editable && state->asset_browser_selected_texture != NULL &&
+                    if (row.width >= 220.0f && editable &&
                         henka_ui_button(
                             state->ui,
-                            assign_id,
+                            choose_id,
                             (henka_ui_rect){row.x + row.width - 228.0f, row.y, 70.0f, 24.0f},
-                            "Assign"))
+                            "Choose"))
                     {
-                        if (sandbox3d_apply_texture_to_material_binding(
-                                engine,
-                                state,
-                                material_view.editor_binding,
-                                texture_slots[texture_slot_index],
-                                state->asset_browser_selected_texture) == HENKA_SUCCESS)
+                        if (sandbox3d_material_texture_pick_begin(
+                                &state->material_texture_pick,
+                                material_view.editor_binding->entity,
+                                texture_slots[texture_slot_index]) == HENKA_SUCCESS)
                         {
-                            sandbox3d_set_status(state, false, "Texture assigned to the editable material instance.");
+                            state->asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
+                            state->asset_browser_page = 0U;
+                            state->asset_browser_selection_valid = false;
+                            state->asset_browser_selected_texture = NULL;
+                            state->asset_browser_selected_material = NULL;
+                            state->asset_browser_selected_prefab = NULL;
+                            sandbox3d_set_active_utility(
+                                state, SANDBOX3D_UTILITY_ASSETS);
+                            sandbox3d_set_statusf(
+                                state,
+                                false,
+                                false,
+                                "Choose a manager texture for %s.",
+                                sandbox3d_material_texture_slot_label(
+                                    texture_slots[texture_slot_index]));
                         }
                         else
                         {
-                            sandbox3d_set_status(state, true, "Texture assignment rejected; the instance was preserved.");
+                            sandbox3d_set_status(
+                                state,
+                                true,
+                                "Texture picker could not start; the material instance was preserved.");
                         }
                     }
                     if (row.width >= 220.0f && editable && overridden &&
@@ -35074,6 +35090,8 @@ static void sandbox3d_draw_utility_panel(
             }
             if (henka_ui_tab(state->ui, "asset_browser_materials", (henka_ui_rect){x_left + 74.0f, y_start + 20.0f, 76.0f, 24.0f}, "Materials", state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL))
             {
+                sandbox3d_material_texture_pick_reset(
+                    &state->material_texture_pick);
                 state->asset_browser_type = HENKA_ASSET_TYPE_MATERIAL;
                 state->asset_browser_page = 0U;
                 state->asset_browser_selection_valid = false;
@@ -35083,6 +35101,8 @@ static void sandbox3d_draw_utility_panel(
             }
             if (henka_ui_tab(state->ui, "asset_browser_meshes", (henka_ui_rect){x_left + 156.0f, y_start + 20.0f, 60.0f, 24.0f}, "Meshes", state->asset_browser_type == HENKA_ASSET_TYPE_MESH))
             {
+                sandbox3d_material_texture_pick_reset(
+                    &state->material_texture_pick);
                 state->asset_browser_type = HENKA_ASSET_TYPE_MESH;
                 state->asset_browser_page = 0U;
                 state->asset_browser_selection_valid = false;
@@ -35092,6 +35112,8 @@ static void sandbox3d_draw_utility_panel(
             }
             if (henka_ui_tab(state->ui, "asset_browser_prefabs", (henka_ui_rect){x_left + 222.0f, y_start + 20.0f, 70.0f, 24.0f}, "Prefabs", state->asset_browser_type == HENKA_ASSET_TYPE_PREFAB))
             {
+                sandbox3d_material_texture_pick_reset(
+                    &state->material_texture_pick);
                 state->asset_browser_type = HENKA_ASSET_TYPE_PREFAB;
                 state->asset_browser_page = 0U;
                 state->asset_browser_selection_valid = false;
@@ -35230,6 +35252,123 @@ static void sandbox3d_draw_utility_panel(
             {
                 henka_ui_label(state->ui, x_left, y_start + 278.0f, 1.0f, "Select a manager-known asset.");
             }
+            if (state->material_texture_pick.active)
+            {
+                const henka_entity selected_entity =
+                    sandbox3d_get_real_selected_entity(state);
+                sandbox3d_material_editor_binding* texture_binding =
+                    sandbox3d_find_material_binding(
+                        state,
+                        state->material_texture_pick.entity);
+
+                if (state->asset_browser_type != HENKA_ASSET_TYPE_TEXTURE ||
+                    state->scene == NULL ||
+                    !henka_scene_is_entity_valid(
+                        state->scene,
+                        state->material_texture_pick.entity) ||
+                    selected_entity != state->material_texture_pick.entity ||
+                    texture_binding == NULL ||
+                    !texture_binding->valid)
+                {
+                    sandbox3d_material_texture_pick_reset(
+                        &state->material_texture_pick);
+                    sandbox3d_set_status(
+                        state,
+                        true,
+                        "Texture picker cancelled because its material target changed.");
+                }
+                else
+                {
+                    char picker_text[96];
+                    henka_ui_rect picker_buttons[2];
+                    size_t picker_button_count = 0U;
+                    const char* picker_button_labels[2] = {"Apply", "Cancel"};
+
+                    snprintf(
+                        picker_text,
+                        sizeof(picker_text),
+                        "Target: %s",
+                        sandbox3d_material_texture_slot_label(
+                            state->material_texture_pick.slot));
+                    henka_ui_label_colored(
+                        state->ui,
+                        x_left,
+                        y_start + 330.0f,
+                        1.0f,
+                        picker_text,
+                        HENKA_UI_COLOR_INFO);
+
+                    if (sandbox3d_editor_layout_text_control_row(
+                            (henka_ui_rect){
+                                x_left,
+                                y_start + 350.0f,
+                                panel_bounds.width - 28.0f,
+                                24.0f},
+                            picker_button_labels,
+                            2U,
+                            1.0f,
+                            12.0f,
+                            8.0f,
+                            picker_buttons,
+                            2U,
+                            &picker_button_count) != HENKA_SUCCESS)
+                    {
+                        picker_button_count = 0U;
+                    }
+
+                    if (picker_button_count == 2U &&
+                        state->asset_browser_selected_texture != NULL &&
+                        henka_ui_primary_button(
+                            state->ui,
+                            "asset_browser_apply_texture_pick",
+                            picker_buttons[0],
+                            "Apply"))
+                    {
+                        if (sandbox3d_apply_texture_to_material_binding(
+                                engine,
+                                state,
+                                texture_binding,
+                                state->material_texture_pick.slot,
+                                state->asset_browser_selected_texture) ==
+                            HENKA_SUCCESS)
+                        {
+                            sandbox3d_material_texture_pick_reset(
+                                &state->material_texture_pick);
+                            sandbox3d_set_active_utility(
+                                state, SANDBOX3D_UTILITY_NONE);
+                            sandbox3d_set_status(
+                                state,
+                                false,
+                                "Texture assigned transactionally to the selected material slot.");
+                        }
+                        else
+                        {
+                            sandbox3d_set_status(
+                                state,
+                                true,
+                                "Texture assignment rejected; the material instance and picker were preserved.");
+                        }
+                    }
+
+                    if (picker_button_count == 2U &&
+                        henka_ui_button(
+                            state->ui,
+                            "asset_browser_cancel_texture_pick",
+                            picker_buttons[1],
+                            "Cancel"))
+                    {
+                        sandbox3d_material_texture_pick_reset(
+                            &state->material_texture_pick);
+                        sandbox3d_set_active_utility(
+                            state, SANDBOX3D_UTILITY_NONE);
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Texture assignment cancelled.");
+                    }
+                }
+            }
+
             if (state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL &&
                 state->asset_browser_selected_material != NULL)
             {

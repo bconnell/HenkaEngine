@@ -219,6 +219,85 @@ static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
     HENKA_TEST_ASSERT(instance.material.thickness_texture == &data_texture);
 }
 
+static void henka_test_sandbox3d_material_texture_picker_state(void)
+{
+    sandbox3d_material_texture_pick pick;
+
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_material_texture_slot_label(HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR),
+        "Base Color") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_material_texture_slot_label(HENKA_MATERIAL_TEXTURE_SLOT_NORMAL),
+        "Normal") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_material_texture_slot_label(HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS),
+        "Metal/Rough") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_material_texture_slot_label(HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION),
+        "Occlusion") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_material_texture_slot_label(HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE),
+        "Emissive") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_material_texture_slot_label(HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS),
+        "Thickness") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_material_texture_slot_label(HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION),
+        "Transmission") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_material_texture_slot_label((henka_material_texture_slot)99),
+        "Unknown") == 0);
+
+    memset(&pick, 0xA5, sizeof(pick));
+    sandbox3d_material_texture_pick_reset(&pick);
+    HENKA_TEST_ASSERT(!pick.active);
+    HENKA_TEST_ASSERT(pick.entity == HENKA_INVALID_ENTITY);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_material_texture_pick_begin(
+            NULL,
+            (henka_entity)1U,
+            HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(
+        sandbox3d_material_texture_pick_begin(
+            &pick,
+            HENKA_INVALID_ENTITY,
+            HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(
+        sandbox3d_material_texture_pick_begin(
+            &pick,
+            (henka_entity)1U,
+            (henka_material_texture_slot)99) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(!pick.active);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_material_texture_pick_begin(
+            &pick,
+            (henka_entity)42U,
+            HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR) ==
+            HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(pick.active);
+    HENKA_TEST_ASSERT(pick.entity == (henka_entity)42U);
+    HENKA_TEST_ASSERT(pick.slot == HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_material_texture_pick_begin(
+            &pick,
+            (henka_entity)77U,
+            HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION) ==
+            HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(pick.active);
+    HENKA_TEST_ASSERT(pick.entity == (henka_entity)77U);
+    HENKA_TEST_ASSERT(pick.slot == HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION);
+
+    sandbox3d_material_texture_pick_reset(&pick);
+    HENKA_TEST_ASSERT(!pick.active);
+    HENKA_TEST_ASSERT(pick.entity == HENKA_INVALID_ENTITY);
+}
+
 static void henka_test_sandbox3d_terrain_layer_display(void)
 {
     henka_texture_info base;
@@ -351,6 +430,7 @@ void henka_test_sandbox3d_asset_browser(void)
     henka_test_sandbox3d_asset_browser_collection();
     henka_test_sandbox3d_asset_browser_paging();
     henka_test_sandbox3d_asset_browser_texture_and_assignment();
+    henka_test_sandbox3d_material_texture_picker_state();
     henka_test_sandbox3d_terrain_layer_display();
     henka_test_sandbox3d_material_asset_application();
 }

@@ -393,8 +393,8 @@ The asset pipeline has a manager-owned metadata, dependency, import, fallback, a
 
 ### Current development
 
-1. Strengthen asset cache ownership, identity, retry, metadata, and failure-output contracts.
-2. Expand texture/material assignment and material-editing usability while preserving manager ownership and transactional updates.
+1. Continue strengthening asset cache ownership, identity, retry, metadata, and failure-output contracts on the published path-specific mesh fallback/retry identity boundary.
+2. Continue texture/material assignment and material-editing usability on the existing manager-owned transactional path. Object Details now starts an explicit slot-targeted texture picker in Utility > Assets; texture selection remains non-mutating until Apply, and Clear/Inherit remain explicit transactional actions.
 3. Improve external project configuration and asset-root guidance across the validated templates.
 
 ### Future work
