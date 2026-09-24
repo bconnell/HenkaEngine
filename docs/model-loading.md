@@ -92,7 +92,7 @@ The OBJ loader accepts:
 - texture coordinates;
 - normals;
 - computed face normals when normals are absent;
-- triangle, quad, and bounded n-gon faces through fan triangulation;
+- triangle, quad, and bounded simple n-gon faces through deterministic ear-clipping triangulation, including concave polygons;
 - positive and negative position, texture-coordinate, and normal indices;
 - `o`, `g`, `s`, `mtllib`, and `usemtl` records as non-render statements;
 - cached mesh loading through the asset manager;
@@ -332,7 +332,6 @@ Malformed faces, empty meshes, invalid indexes, non-finite values, degenerate tr
 Current model/import gaps include:
 
 - MTL material import;
-- concave OBJ polygon correction beyond fan triangulation;
 - skeletal animation;
 - skinning;
 - morph targets;

@@ -893,6 +893,134 @@ static henka_result henka_append_triangle(
     return henka_obj_index_array_push(indices, base_index + 2U);
 }
 
+static void henka_obj_project_position(
+    henka_vec3 position,
+    int dropped_axis,
+    float* out_x,
+    float* out_y)
+{
+    if (dropped_axis == 0)
+    {
+        *out_x = position.y;
+        *out_y = position.z;
+    }
+    else if (dropped_axis == 1)
+    {
+        *out_x = position.x;
+        *out_y = position.z;
+    }
+    else
+    {
+        *out_x = position.x;
+        *out_y = position.y;
+    }
+}
+
+static float henka_obj_projected_cross(
+    const henka_model_vertex* a,
+    const henka_model_vertex* b,
+    const henka_model_vertex* c,
+    int dropped_axis)
+{
+    float ax;
+    float ay;
+    float bx;
+    float by;
+    float cx;
+    float cy;
+
+    henka_obj_project_position(a->position, dropped_axis, &ax, &ay);
+    henka_obj_project_position(b->position, dropped_axis, &bx, &by);
+    henka_obj_project_position(c->position, dropped_axis, &cx, &cy);
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+}
+
+static bool henka_obj_projected_point_in_triangle(
+    const henka_model_vertex* point,
+    const henka_model_vertex* a,
+    const henka_model_vertex* b,
+    const henka_model_vertex* c,
+    int dropped_axis,
+    float orientation)
+{
+    const float epsilon = 0.0000001f;
+    const float ab = orientation *
+        henka_obj_projected_cross(a, b, point, dropped_axis);
+    const float bc = orientation *
+        henka_obj_projected_cross(b, c, point, dropped_axis);
+    const float ca = orientation *
+        henka_obj_projected_cross(c, a, point, dropped_axis);
+    return ab >= -epsilon && bc >= -epsilon && ca >= -epsilon;
+}
+
+static bool henka_obj_face_projection(
+    const henka_model_vertex* vertices,
+    int vertex_count,
+    int* out_dropped_axis,
+    float* out_orientation)
+{
+    const float epsilon = 0.0000001f;
+    henka_vec3 normal = {0.0f, 0.0f, 0.0f};
+    float abs_x;
+    float abs_y;
+    float abs_z;
+    float area = 0.0f;
+    int dropped_axis;
+    int index;
+
+    if (vertices == NULL || vertex_count < 3 ||
+        out_dropped_axis == NULL || out_orientation == NULL)
+    {
+        return false;
+    }
+
+    for (index = 0; index < vertex_count; ++index)
+    {
+        const henka_vec3 current = vertices[index].position;
+        const henka_vec3 next = vertices[(index + 1) % vertex_count].position;
+        normal.x += (current.y - next.y) * (current.z + next.z);
+        normal.y += (current.z - next.z) * (current.x + next.x);
+        normal.z += (current.x - next.x) * (current.y + next.y);
+    }
+
+    abs_x = fabsf(normal.x);
+    abs_y = fabsf(normal.y);
+    abs_z = fabsf(normal.z);
+    if (abs_x <= epsilon && abs_y <= epsilon && abs_z <= epsilon)
+    {
+        return false;
+    }
+    dropped_axis = abs_x >= abs_y && abs_x >= abs_z ? 0 :
+        (abs_y >= abs_z ? 1 : 2);
+
+    for (index = 0; index < vertex_count; ++index)
+    {
+        float current_x;
+        float current_y;
+        float next_x;
+        float next_y;
+        henka_obj_project_position(
+            vertices[index].position,
+            dropped_axis,
+            &current_x,
+            &current_y);
+        henka_obj_project_position(
+            vertices[(index + 1) % vertex_count].position,
+            dropped_axis,
+            &next_x,
+            &next_y);
+        area += current_x * next_y - next_x * current_y;
+    }
+    if (!isfinite(area) || fabsf(area) <= epsilon)
+    {
+        return false;
+    }
+
+    *out_dropped_axis = dropped_axis;
+    *out_orientation = area > 0.0f ? 1.0f : -1.0f;
+    return true;
+}
+
 static henka_result henka_emit_face(
     const henka_obj_face* face,
     const henka_obj_vec3_array* positions,
@@ -902,40 +1030,138 @@ static henka_result henka_emit_face(
     henka_obj_vertex_array* vertices,
     henka_obj_index_array* indices)
 {
+    const float epsilon = 0.0000001f;
     henka_model_vertex face_vertices[HENKA_OBJ_MAX_FACE_VERTICES];
+    int remaining[HENKA_OBJ_MAX_FACE_VERTICES];
+    int remaining_count;
+    int dropped_axis;
+    float orientation;
     henka_result result;
-    int triangle_index;
+    int index;
 
-    result = henka_build_face_vertices(face, positions, texcoords, normals, context, face_vertices);
+    result = henka_build_face_vertices(
+        face, positions, texcoords, normals, context, face_vertices);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
-
-    for (triangle_index = 1; triangle_index + 1 < face->count; ++triangle_index)
+    if (!henka_obj_face_projection(
+            face_vertices,
+            face->count,
+            &dropped_axis,
+            &orientation))
     {
-        if (henka_obj_triangle_is_degenerate(
-                &face_vertices[0],
-                &face_vertices[triangle_index],
-                &face_vertices[triangle_index + 1]))
+        henka_obj_set_error(
+            context,
+            "face projection is degenerate and cannot be triangulated");
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    remaining_count = face->count;
+    for (index = 0; index < remaining_count; ++index)
+    {
+        remaining[index] = index;
+    }
+
+    while (remaining_count > 3)
+    {
+        bool found_ear = false;
+        int ear_index;
+
+        for (ear_index = 0; ear_index < remaining_count; ++ear_index)
         {
-            henka_obj_set_error(context, "face triangulation produced a degenerate triangle");
-            return HENKA_ERROR_UNKNOWN;
+            const int previous_position =
+                (ear_index + remaining_count - 1) % remaining_count;
+            const int next_position = (ear_index + 1) % remaining_count;
+            const int previous_index = remaining[previous_position];
+            const int current_index = remaining[ear_index];
+            const int next_index = remaining[next_position];
+            const henka_model_vertex* a = &face_vertices[previous_index];
+            const henka_model_vertex* b = &face_vertices[current_index];
+            const henka_model_vertex* c = &face_vertices[next_index];
+            const float projected_cross = orientation *
+                henka_obj_projected_cross(a, b, c, dropped_axis);
+            bool contains_vertex = false;
+            int test_position;
+
+            if (projected_cross <= epsilon ||
+                henka_obj_triangle_is_degenerate(a, b, c))
+            {
+                continue;
+            }
+
+            for (test_position = 0;
+                 test_position < remaining_count;
+                 ++test_position)
+            {
+                const int test_index = remaining[test_position];
+                if (test_index == previous_index ||
+                    test_index == current_index ||
+                    test_index == next_index)
+                {
+                    continue;
+                }
+                if (henka_obj_projected_point_in_triangle(
+                        &face_vertices[test_index],
+                        a,
+                        b,
+                        c,
+                        dropped_axis,
+                        orientation))
+                {
+                    contains_vertex = true;
+                    break;
+                }
+            }
+            if (contains_vertex)
+            {
+                continue;
+            }
+
+            result = henka_append_triangle(vertices, indices, a, b, c);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+
+            for (test_position = ear_index;
+                 test_position + 1 < remaining_count;
+                 ++test_position)
+            {
+                remaining[test_position] = remaining[test_position + 1];
+            }
+            --remaining_count;
+            found_ear = true;
+            break;
         }
 
-        result = henka_append_triangle(
-            vertices,
-            indices,
-            &face_vertices[0],
-            &face_vertices[triangle_index],
-            &face_vertices[triangle_index + 1]);
-        if (result != HENKA_SUCCESS)
+        if (!found_ear)
         {
-            return result;
+            henka_obj_set_error(
+                context,
+                "face is non-simple or cannot be triangulated safely");
+            return HENKA_ERROR_UNKNOWN;
         }
     }
 
-    return HENKA_SUCCESS;
+    if (remaining_count != 3 ||
+        henka_obj_triangle_is_degenerate(
+            &face_vertices[remaining[0]],
+            &face_vertices[remaining[1]],
+            &face_vertices[remaining[2]]))
+    {
+        henka_obj_set_error(
+            context,
+            "face triangulation produced a degenerate triangle");
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    return henka_append_triangle(
+        vertices,
+        indices,
+        &face_vertices[remaining[0]],
+        &face_vertices[remaining[1]],
+        &face_vertices[remaining[2]]);
 }
 henka_result henka_model_data_load_obj_from_memory(const char* source, const char* label, henka_model_data* out_model)
 {
