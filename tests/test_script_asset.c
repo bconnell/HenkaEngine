@@ -109,6 +109,7 @@ static void test_asset_path_and_source_rejection(void)
         "../scripts/mixed.lua",
         3U);
     henka_script_behavior_asset* asset = NULL;
+    henka_script_behavior_desc runtime_desc;
 
     assert(henka_script_behavior_asset_create(
                "tests/fixtures", &behavior, 1U, true, 64U, &asset) != HENKA_SUCCESS);
@@ -120,6 +121,29 @@ static void test_asset_path_and_source_rejection(void)
     behavior = make_behavior(HENKA_SCRIPT_LANGUAGE_LUA, "scripts/missing.lua", 5U);
     assert(henka_script_behavior_asset_create(
                "tests/fixtures", &behavior, 1U, true, 64U, &asset) == HENKA_ERROR_ASSET_SOURCE);
+    assert(asset == NULL);
+
+    behavior = make_behavior(
+        HENKA_SCRIPT_LANGUAGE_HENKASCRIPT,
+        "scripts/mixed.hks",
+        6U);
+    assert(henka_script_behavior_asset_create(
+               "tests/fixtures", &behavior, 1U, true, 0U, &asset) == HENKA_SUCCESS);
+    assert(asset != NULL);
+    assert(henka_script_behavior_asset_get_runtime_desc(
+               asset, &runtime_desc) == HENKA_SUCCESS);
+    assert(runtime_desc.instruction_budget ==
+        HENKA_SCRIPT_DEFAULT_BEHAVIOR_INSTRUCTION_BUDGET);
+    henka_script_behavior_asset_destroy(asset);
+    asset = NULL;
+
+    assert(henka_script_behavior_asset_create(
+               "tests/fixtures",
+               &behavior,
+               1U,
+               true,
+               HENKA_SCRIPT_MAX_BEHAVIOR_INSTRUCTION_BUDGET + 1U,
+               &asset) == HENKA_ERROR_INVALID_ARGUMENT);
     assert(asset == NULL);
 }
 

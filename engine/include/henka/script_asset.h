@@ -42,7 +42,10 @@ henka_result henka_script_asset_save_source_document(
     henka_script_source_document* document);
 
 /* Loads one persisted Scene Document behavior source from a confined project
- * path and owns the selected bounded language backend until destruction. */
+ * path and owns the selected bounded language backend until destruction.
+ * instruction_budget follows the runtime contract: zero selects the default
+ * budget and values above HENKA_SCRIPT_MAX_BEHAVIOR_INSTRUCTION_BUDGET are
+ * rejected before source/backend construction. */
 henka_result henka_script_behavior_asset_create(
     const char* project_root,
     const henka_scene_document_behavior* behavior,

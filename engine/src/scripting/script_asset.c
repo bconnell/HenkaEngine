@@ -519,6 +519,7 @@ henka_result henka_script_behavior_asset_create_with_diagnostic(
 #endif
     char* source = NULL;
     size_t source_size = 0U;
+    uint32_t effective_instruction_budget;
     henka_result result;
     memset(&hks_diagnostic, 0, sizeof(hks_diagnostic));
 #if HENKA_ENABLE_LUA
@@ -539,7 +540,7 @@ henka_result henka_script_behavior_asset_create_with_diagnostic(
     if (project_root == NULL || behavior == NULL ||
         behavior->id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ||
         behavior->asset_path[0] == '\0' || entity_id == 0U ||
-        instruction_budget == 0U ||
+        instruction_budget > HENKA_SCRIPT_MAX_BEHAVIOR_INSTRUCTION_BUDGET ||
 #if !HENKA_ENABLE_LUA
         behavior->language == HENKA_SCRIPT_LANGUAGE_LUA ||
 #endif
@@ -552,6 +553,9 @@ henka_result henka_script_behavior_asset_create_with_diagnostic(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    effective_instruction_budget = instruction_budget == 0U
+        ? HENKA_SCRIPT_DEFAULT_BEHAVIOR_INSTRUCTION_BUDGET
+        : instruction_budget;
     result = henka_script_asset_read_source(
         project_root,
         behavior->asset_path,
@@ -621,7 +625,7 @@ henka_result henka_script_behavior_asset_create_with_diagnostic(
     asset->runtime_desc.entity_id = entity_id;
     asset->runtime_desc.language = behavior->language;
     asset->runtime_desc.enabled = enabled;
-    asset->runtime_desc.instruction_budget = instruction_budget;
+    asset->runtime_desc.instruction_budget = effective_instruction_budget;
     asset->runtime_desc.user_data = asset->backend;
     *out_asset = asset;
     if (out_diagnostic != NULL)

@@ -213,7 +213,7 @@ The shared scripting foundation includes:
 - a bounded behavior-state store with explicit sidecar save/load;
 - mixed-language `OnEvent` routing.
 
-Persisted `.lua` and `.hks` attachments can be loaded through a bounded, confined-path asset loader and assembled into a mixed-language behavior runtime by persistent Scene Document object identity.
+Persisted `.lua` and `.hks` attachments can be loaded through a bounded, confined-path asset loader and assembled into a mixed-language behavior runtime by persistent Scene Document object identity. Behavior-asset construction enforces the same bounded instruction-budget contract as the runtime: zero selects the default and over-limit budgets fail before backend construction.
 
 The Sandbox Play session owns that runtime for isolated Create/Start/Update/OnEvent/Stop dispatch.
 
