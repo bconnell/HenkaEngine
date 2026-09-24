@@ -766,6 +766,101 @@ try {
         -XGroup "x" -YGroup "y" `
         -FailureMessage "The post-reload visible edit did not commit successfully."
 
+    # Exercise the real slot-targeted material picker after the modeling
+    # workflow is complete so its panel transition cannot affect later edits.
+    $detailsGeometry = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern 'Workspace UI geometry: .*object_details=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)\.'
+    $detailsX = [double]::Parse(
+        $detailsGeometry.Groups["x"].Value,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $detailsY = [double]::Parse(
+        $detailsGeometry.Groups["y"].Value,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $detailsWidth = [double]::Parse(
+        $detailsGeometry.Groups["width"].Value,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $detailsHeight = [double]::Parse(
+        $detailsGeometry.Groups["height"].Value,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $pickerControlPattern =
+        'Material texture picker control: entity=\d+ slot=Base Color choose_x=(?<x>[-0-9.]+) choose_y=(?<y>[-0-9.]+) width=70\.0 height=24\.0\.'
+    for ($pickerScrollAttempt = 0; $pickerScrollAttempt -lt 24; ++$pickerScrollAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta 1.0
+        Start-Sleep -Milliseconds 120
+    }
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern $pickerControlPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible editor did not expose the Base Color texture picker control."
+    }
+    $pickerControl = Get-LastMatch -Path $stdoutPath -Pattern $pickerControlPattern
+    $pickerBeginCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$pickerControl.Groups["x"].Value + 35.0) `
+        -Y ([double]$pickerControl.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerBeginCount `
+            -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible Base Color texture picker did not start."
+    }
+
+    $assetRow = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker asset row: entity=\d+ slot=Base Color path=(?<path>.+?) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26\.0\.'
+    $pickerSelectCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=select entity=\d+ slot=Base Color path=.+\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$assetRow.Groups["x"].Value + 18.0) `
+        -Y ([double]$assetRow.Groups["y"].Value + 13.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerSelectCount `
+            -Pattern 'Material texture picker: action=select entity=\d+ slot=Base Color path=.+\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible material texture picker did not select a manager-owned texture candidate."
+    }
+
+    $pickerActions = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker actions: entity=\d+ slot=Base Color apply_x=(?<apply>[-0-9.]+) cancel_x=(?<cancel>[-0-9.]+) y=(?<y>[-0-9.]+) apply_width=(?<applyWidth>[-0-9.]+) cancel_width=(?<cancelWidth>[-0-9.]+) height=24\.0\.'
+    Start-Sleep -Milliseconds 250
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "material-texture-picker-selected.png")
+
+    $pickerApplyCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=success\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$pickerActions.Groups["apply"].Value +
+            [double]$pickerActions.Groups["applyWidth"].Value * 0.5) `
+        -Y ([double]$pickerActions.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerApplyCount `
+            -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=success\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible material texture picker did not apply the selected manager-owned texture."
+    }
+    Start-Sleep -Milliseconds 250
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "material-texture-picker-applied.png")
+
     $manifest = Join-Path $runtimeDirectory ("user\saves\$assetName.asset")
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
         throw "The visible authoring workflow did not leave a persisted manifest."
@@ -782,7 +877,7 @@ try {
         }
     }
 
-    Write-Output "[pass] Product-native generic modeling workflow: clean startup, new asset, component pick, extrude, inset, material ownership, save, close, reopen, and re-edit completed."
+    Write-Output "[pass] Product-native generic modeling workflow: clean startup, new asset, component pick, extrude, inset, material ownership, save, close, reopen, re-edit, and slot-targeted texture picker Apply completed."
     Write-Output "[pass] Evidence scope: PRODUCT_NATIVE_GENERIC; showcase/reference fixtures were not loaded."
     Write-Output "[pass] Runtime evidence retained: $runtimeDirectory"
 }

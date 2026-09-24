@@ -28196,6 +28196,23 @@ details_group_materials:
                     }
                     sandbox3d_draw_value_row(
                         state->ui, row.x, row.y, row.width, texture_slot_labels[texture_slot_index], slot_value);
+                    if (editable && texture_slot_index == 0U)
+                    {
+                        static henka_entity reported_picker_entity = HENKA_INVALID_ENTITY;
+                        static float reported_picker_y = -FLT_MAX;
+                        if (reported_picker_entity != entity ||
+                            fabsf(reported_picker_y - row.y) > 0.5f)
+                        {
+                            printf(
+                                "Material texture picker control: entity=%u slot=Base Color choose_x=%.1f choose_y=%.1f width=70.0 height=24.0.\n",
+                                (unsigned int)entity,
+                                row.x + row.width - 228.0f,
+                                row.y);
+                            fflush(stdout);
+                            reported_picker_entity = entity;
+                            reported_picker_y = row.y;
+                        }
+                    }
                     snprintf(choose_id, sizeof(choose_id), "material_slot_choose_%zu", texture_slot_index);
                     snprintf(clear_id, sizeof(clear_id), "material_slot_clear_%zu", texture_slot_index);
                     snprintf(restore_id, sizeof(restore_id), "material_slot_restore_%zu", texture_slot_index);
@@ -28219,6 +28236,12 @@ details_group_materials:
                             state->asset_browser_selected_prefab = NULL;
                             sandbox3d_set_active_utility(
                                 state, SANDBOX3D_UTILITY_ASSETS);
+                            printf(
+                                "Material texture picker: action=begin entity=%u slot=%s.\n",
+                                (unsigned int)material_view.editor_binding->entity,
+                                sandbox3d_material_texture_slot_label(
+                                    texture_slots[texture_slot_index]));
+                            fflush(stdout);
                             sandbox3d_set_statusf(
                                 state,
                                 false,
@@ -35139,6 +35162,36 @@ static void sandbox3d_draw_utility_panel(
                 32U);
             snprintf(row_value, sizeof(row_value), "%s | %zu known | page %zu/%zu", type_label, sandbox3d_asset_browser_collect(assets, state->asset_browser_type, NULL, 0U), page_count == 0U ? 0U : state->asset_browser_page + 1U, page_count);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 50.0f, panel_bounds.width - 28.0f, "Source", row_value);
+            if (state->material_texture_pick.active &&
+                state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE)
+            {
+                static henka_entity reported_asset_entity = HENKA_INVALID_ENTITY;
+                static int reported_asset_slot = -1;
+                static size_t reported_asset_page = (size_t)-1;
+                if (reported_asset_entity != state->material_texture_pick.entity ||
+                    reported_asset_slot != (int)state->material_texture_pick.slot ||
+                    reported_asset_page != state->asset_browser_page)
+                {
+                    for (item_index = 0U; item_index < item_count; ++item_index)
+                    {
+                        printf(
+                            "Material texture picker asset row: entity=%u slot=%s path=%s x=%.1f y=%.1f width=%.1f height=26.0.\n",
+                            (unsigned int)state->material_texture_pick.entity,
+                            sandbox3d_material_texture_slot_label(
+                                state->material_texture_pick.slot),
+                            items[item_index].metadata.source_path != NULL
+                                ? items[item_index].metadata.source_path
+                                : "(unnamed asset)",
+                            x_left,
+                            y_start + 78.0f + (float)item_index * 30.0f,
+                            panel_bounds.width - 28.0f);
+                    }
+                    fflush(stdout);
+                    reported_asset_entity = state->material_texture_pick.entity;
+                    reported_asset_slot = (int)state->material_texture_pick.slot;
+                    reported_asset_page = state->asset_browser_page;
+                }
+            }
             for (item_index = 0U; item_index < item_count; ++item_index)
             {
                 char item_id[64];
@@ -35164,6 +35217,16 @@ static void sandbox3d_draw_utility_panel(
                         if (henka_assets_load_texture(henka_engine_get_asset_manager(engine), items[item_index].metadata.source_path, &selected_texture) == HENKA_SUCCESS)
                         {
                             state->asset_browser_selected_texture = selected_texture;
+                            if (state->material_texture_pick.active)
+                            {
+                                printf(
+                                    "Material texture picker: action=select entity=%u slot=%s path=%s.\n",
+                                    (unsigned int)state->material_texture_pick.entity,
+                                    sandbox3d_material_texture_slot_label(
+                                        state->material_texture_pick.slot),
+                                    items[item_index].metadata.source_path);
+                                fflush(stdout);
+                            }
                             sandbox3d_set_statusf(state, false, false, "Selected manager texture: %s", items[item_index].metadata.source_path);
                         }
                         else
@@ -35317,6 +35380,35 @@ static void sandbox3d_draw_utility_panel(
                     }
 
                     if (picker_button_count == 2U &&
+                        state->asset_browser_selected_texture != NULL)
+                    {
+                        static henka_entity reported_action_entity = HENKA_INVALID_ENTITY;
+                        static int reported_action_slot = -1;
+                        static size_t reported_action_metadata_index = (size_t)-1;
+                        if (reported_action_entity != state->material_texture_pick.entity ||
+                            reported_action_slot != (int)state->material_texture_pick.slot ||
+                            reported_action_metadata_index !=
+                                state->asset_browser_selected_metadata_index)
+                        {
+                            printf(
+                                "Material texture picker actions: entity=%u slot=%s apply_x=%.1f cancel_x=%.1f y=%.1f apply_width=%.1f cancel_width=%.1f height=24.0.\n",
+                                (unsigned int)state->material_texture_pick.entity,
+                                sandbox3d_material_texture_slot_label(
+                                    state->material_texture_pick.slot),
+                                picker_buttons[0].x,
+                                picker_buttons[1].x,
+                                picker_buttons[0].y,
+                                picker_buttons[0].width,
+                                picker_buttons[1].width);
+                            fflush(stdout);
+                            reported_action_entity = state->material_texture_pick.entity;
+                            reported_action_slot = (int)state->material_texture_pick.slot;
+                            reported_action_metadata_index =
+                                state->asset_browser_selected_metadata_index;
+                        }
+                    }
+
+                    if (picker_button_count == 2U &&
                         state->asset_browser_selected_texture != NULL &&
                         henka_ui_primary_button(
                             state->ui,
@@ -35332,6 +35424,12 @@ static void sandbox3d_draw_utility_panel(
                                 state->asset_browser_selected_texture) ==
                             HENKA_SUCCESS)
                         {
+                            printf(
+                                "Material texture picker: action=apply entity=%u slot=%s result=success.\n",
+                                (unsigned int)state->material_texture_pick.entity,
+                                sandbox3d_material_texture_slot_label(
+                                    state->material_texture_pick.slot));
+                            fflush(stdout);
                             sandbox3d_material_texture_pick_reset(
                                 &state->material_texture_pick);
                             sandbox3d_set_active_utility(
@@ -35357,6 +35455,12 @@ static void sandbox3d_draw_utility_panel(
                             picker_buttons[1],
                             "Cancel"))
                     {
+                        printf(
+                            "Material texture picker: action=cancel reason=user entity=%u slot=%s.\n",
+                            (unsigned int)state->material_texture_pick.entity,
+                            sandbox3d_material_texture_slot_label(
+                                state->material_texture_pick.slot));
+                        fflush(stdout);
                         sandbox3d_material_texture_pick_reset(
                             &state->material_texture_pick);
                         sandbox3d_set_active_utility(
