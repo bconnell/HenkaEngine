@@ -6031,8 +6031,7 @@ henka_result henka_assets_retry_failed_texture_with_descriptor(
 
     if (!entry->metadata.fallback)
     {
-        *out_texture = entry->texture;
-        return HENKA_SUCCESS;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     resolved_path = NULL;
@@ -6132,8 +6131,7 @@ henka_result henka_assets_retry_failed_obj_mesh(
 
     if (!entry->metadata.fallback)
     {
-        *out_mesh = entry->mesh;
-        return HENKA_SUCCESS;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (!entry->owns_mesh || entry->mesh == manager->fallback_mesh ||
         entry->source_path == NULL)
@@ -6192,7 +6190,7 @@ henka_result henka_assets_retry_failed_gltf_mesh(
     entry = henka_asset_manager_find_mesh_entry(manager, key);
     henka_free(key);
     if (entry == NULL || entry->mesh == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
-    if (!entry->metadata.fallback) { *out_mesh = entry->mesh; return HENKA_SUCCESS; }
+    if (!entry->metadata.fallback) return HENKA_ERROR_INVALID_ARGUMENT;
     if (!entry->owns_mesh || entry->mesh == manager->fallback_mesh || entry->source_path == NULL)
         return HENKA_ERROR_INVALID_ARGUMENT;
     result = henka_assets_resolve_path(henka_engine_get_asset_base_path(manager->engine), entry->source_path, &resolved_path);
