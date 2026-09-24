@@ -683,91 +683,10 @@ try {
         throw "The visible material ownership action did not commit successfully."
     }
 
-    $projectControls = Get-LastMatch `
-        -Path $stdoutPath `
-        -Pattern ("Native authoring project controls: name=" + [Regex]::Escape($authoringName) + ' save_x=(?<saveX>[-0-9.]+) save_y=(?<saveY>[-0-9.]+) reload_x=(?<reloadX>[-0-9.]+) reload_y=(?<reloadY>[-0-9.]+) width=(?<width>[-0-9.]+) height=24.0\.')
-    Send-HenkaAutomationClick `
-        -EventPath $automationInputPath `
-        -X ([double]$projectControls.Groups["saveX"].Value + 24.0) `
-        -Y ([double]$projectControls.Groups["saveY"].Value + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project request: save=1 reload=0 result=success" -TimeoutMilliseconds 8000)) {
-        throw "The visible native project save did not complete."
-    }
-
-    # Save the document through its visible asset-level control after the
-    # source/project save. This is the persistence boundary used to reopen the
-    # complete asset, not the Object Details source reload control.
-    $assetActionY = [double]($nativeActionY + 88.0)
-    $saveAssetX = [double]($panelX + 14.0 + $primitiveActionWidth * 0.5)
-    Send-HenkaAutomationClick `
-        -EventPath $automationInputPath `
-        -X $saveAssetX `
-        -Y ($assetActionY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=.* action=saved parts=1" -TimeoutMilliseconds 8000)) {
-        throw "The visible native asset save did not complete."
-    }
-
-    $closeAssetX = [double]($panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth * 0.5)
-    Send-HenkaAutomationClick `
-        -EventPath $automationInputPath `
-        -X $closeAssetX `
-        -Y ($assetActionY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=.* action=closed parts=1" -TimeoutMilliseconds 8000)) {
-        throw "The visible native asset close did not complete."
-    }
-
-    # Reopen through the visible Open Asset control, then make a second visible
-    # component edit. The save/reload boundary is therefore exercised before
-    # the final edit, not only at process shutdown.
-    $openX = [double]($panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth * 0.5)
-    $openY = [double]($nativeActionY + 115.0)
-    Send-HenkaAutomationClick -EventPath $automationInputPath -X $openX -Y $openY
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=.* action=opened parts=1" -TimeoutMilliseconds 8000)) {
-        throw "The visible native asset reopen did not complete."
-    }
-    $reopenedDisclosure = Get-LastMatch `
-        -Path $stdoutPath `
-        -Pattern ("Native authoring disclosure: name=" + [Regex]::Escape($authoringName) + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=0\.')
-    Click-LoggedControl `
-        -LogPath $stdoutPath `
-        -EventPath $automationInputPath `
-        -Pattern ("Native authoring disclosure: name=" + [Regex]::Escape($authoringName) + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=0\.') `
-        -XGroup "x" -YGroup "y" -XOffset 100.0 -YOffset 14.0
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern ("Native authoring disclosure: name=" + [Regex]::Escape($authoringName) + ' .* expanded=1\.') -TimeoutMilliseconds 5000)) {
-        throw "The visible native authoring disclosure did not expand after reopen."
-    }
-    Click-LoggedControl `
-        -LogPath $stdoutPath `
-        -EventPath $automationInputPath `
-        -Pattern ("Native authoring face controls: name=" + [Regex]::Escape($authoringName) + ' face_x=(?<x>[-0-9.]+) face_y=(?<y>[-0-9.]+) width=88.0 height=24.0\.') `
-        -XGroup "x" -YGroup "y"
-    Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
-    Start-Sleep -Milliseconds 450
-    $reopenedPickPattern = "Native authoring component picked: name=" + [Regex]::Escape($authoringName) + ' .* mode=face .* selected=1'
-    $reopenedPicked = $false
-    for ($xStep = 5; $xStep -le 6 -and -not $reopenedPicked; $xStep += 1) {
-        for ($yStep = 3; $yStep -le 4 -and -not $reopenedPicked; $yStep += 1) {
-            $reopenedPickCount = Get-LogMatchCount -Path $stdoutPath -Pattern $reopenedPickPattern
-            $reopenedPickX = [double]($viewportX + $viewportWidth * ([double]$xStep / 10.0))
-            $reopenedPickY = [double]($viewportY + $viewportHeight * ([double]$yStep / 10.0))
-            Send-HenkaAutomationClick -EventPath $automationInputPath -X $reopenedPickX -Y $reopenedPickY
-            $reopenedPicked = Wait-LogMatchCountIncrease `
-                -Path $stdoutPath `
-                -InitialCount $reopenedPickCount `
-                -Pattern $reopenedPickPattern `
-                -TimeoutMilliseconds 750
-        }
-    }
-    if (-not $reopenedPicked) {
-        throw "The visible reopened asset did not produce a fresh selected face before re-edit."
-    }
-    Invoke-VisibleFaceExtrude `
-        -Pattern 'Native authoring face edit tools: name=(?<name>.+?) extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width=' `
-        -XGroup "x" -YGroup "y" `
-        -FailureMessage "The post-reload visible edit did not commit successfully."
-
-    # Exercise the real slot-targeted material picker after the modeling
-    # workflow is complete so its panel transition cannot affect later edits.
+    # Exercise the real slot-targeted material picker immediately after Own
+    # Material establishes the manager-backed editable instance. The existing
+    # save/close/open/re-edit sequence then validates that this material state
+    # survives the normal authored-asset persistence boundary.
     $detailsGeometry = Get-LastMatch `
         -Path $stdoutPath `
         -Pattern 'Workspace UI geometry: .*details=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)\.'
@@ -894,6 +813,89 @@ try {
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "material-texture-picker-applied.png")
+
+    $projectControls = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern ("Native authoring project controls: name=" + [Regex]::Escape($authoringName) + ' save_x=(?<saveX>[-0-9.]+) save_y=(?<saveY>[-0-9.]+) reload_x=(?<reloadX>[-0-9.]+) reload_y=(?<reloadY>[-0-9.]+) width=(?<width>[-0-9.]+) height=24.0\.')
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$projectControls.Groups["saveX"].Value + 24.0) `
+        -Y ([double]$projectControls.Groups["saveY"].Value + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project request: save=1 reload=0 result=success" -TimeoutMilliseconds 8000)) {
+        throw "The visible native project save did not complete."
+    }
+
+    # Save the document through its visible asset-level control after the
+    # source/project save. This is the persistence boundary used to reopen the
+    # complete asset, not the Object Details source reload control.
+    $assetActionY = [double]($nativeActionY + 88.0)
+    $saveAssetX = [double]($panelX + 14.0 + $primitiveActionWidth * 0.5)
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X $saveAssetX `
+        -Y ($assetActionY + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=.* action=saved parts=1" -TimeoutMilliseconds 8000)) {
+        throw "The visible native asset save did not complete."
+    }
+
+    $closeAssetX = [double]($panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth * 0.5)
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X $closeAssetX `
+        -Y ($assetActionY + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=.* action=closed parts=1" -TimeoutMilliseconds 8000)) {
+        throw "The visible native asset close did not complete."
+    }
+
+    # Reopen through the visible Open Asset control, then make a second visible
+    # component edit. The save/reload boundary is therefore exercised before
+    # the final edit, not only at process shutdown.
+    $openX = [double]($panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth * 0.5)
+    $openY = [double]($nativeActionY + 115.0)
+    Send-HenkaAutomationClick -EventPath $automationInputPath -X $openX -Y $openY
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=.* action=opened parts=1" -TimeoutMilliseconds 8000)) {
+        throw "The visible native asset reopen did not complete."
+    }
+    $reopenedDisclosure = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern ("Native authoring disclosure: name=" + [Regex]::Escape($authoringName) + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=0\.')
+    Click-LoggedControl `
+        -LogPath $stdoutPath `
+        -EventPath $automationInputPath `
+        -Pattern ("Native authoring disclosure: name=" + [Regex]::Escape($authoringName) + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=0\.') `
+        -XGroup "x" -YGroup "y" -XOffset 100.0 -YOffset 14.0
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern ("Native authoring disclosure: name=" + [Regex]::Escape($authoringName) + ' .* expanded=1\.') -TimeoutMilliseconds 5000)) {
+        throw "The visible native authoring disclosure did not expand after reopen."
+    }
+    Click-LoggedControl `
+        -LogPath $stdoutPath `
+        -EventPath $automationInputPath `
+        -Pattern ("Native authoring face controls: name=" + [Regex]::Escape($authoringName) + ' face_x=(?<x>[-0-9.]+) face_y=(?<y>[-0-9.]+) width=88.0 height=24.0\.') `
+        -XGroup "x" -YGroup "y"
+    Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
+    Start-Sleep -Milliseconds 450
+    $reopenedPickPattern = "Native authoring component picked: name=" + [Regex]::Escape($authoringName) + ' .* mode=face .* selected=1'
+    $reopenedPicked = $false
+    for ($xStep = 5; $xStep -le 6 -and -not $reopenedPicked; $xStep += 1) {
+        for ($yStep = 3; $yStep -le 4 -and -not $reopenedPicked; $yStep += 1) {
+            $reopenedPickCount = Get-LogMatchCount -Path $stdoutPath -Pattern $reopenedPickPattern
+            $reopenedPickX = [double]($viewportX + $viewportWidth * ([double]$xStep / 10.0))
+            $reopenedPickY = [double]($viewportY + $viewportHeight * ([double]$yStep / 10.0))
+            Send-HenkaAutomationClick -EventPath $automationInputPath -X $reopenedPickX -Y $reopenedPickY
+            $reopenedPicked = Wait-LogMatchCountIncrease `
+                -Path $stdoutPath `
+                -InitialCount $reopenedPickCount `
+                -Pattern $reopenedPickPattern `
+                -TimeoutMilliseconds 750
+        }
+    }
+    if (-not $reopenedPicked) {
+        throw "The visible reopened asset did not produce a fresh selected face before re-edit."
+    }
+    Invoke-VisibleFaceExtrude `
+        -Pattern 'Native authoring face edit tools: name=(?<name>.+?) extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width=' `
+        -XGroup "x" -YGroup "y" `
+        -FailureMessage "The post-reload visible edit did not commit successfully."
 
     $manifest = Join-Path $runtimeDirectory ("user\saves\$assetName.asset")
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
