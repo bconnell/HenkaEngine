@@ -35080,7 +35080,19 @@ static void sandbox3d_draw_utility_panel(
         {
             sandbox3d_asset_browser_item items[32];
             const char* type_label;
-            const size_t asset_page_size = 6U;
+            const bool texture_pick_active =
+                state->material_texture_pick.active &&
+                state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE;
+            const float asset_panel_bottom =
+                panel_bounds.y + panel_bounds.height - 6.0f;
+            const float picker_action_y =
+                asset_panel_bottom - 24.0f;
+            const float picker_navigation_y =
+                picker_action_y - 30.0f;
+            const float picker_row_start_y =
+                y_start + 24.0f;
+            const float picker_row_stride = 30.0f;
+            size_t asset_page_size = 6U;
             size_t item_count;
             size_t item_index;
             size_t page_count;
@@ -35101,48 +35113,77 @@ static void sandbox3d_draw_utility_panel(
             {
                 type_label = "Textures";
             }
-            sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Manager asset browser");
-            if (henka_ui_tab(state->ui, "asset_browser_textures", (henka_ui_rect){x_left, y_start + 20.0f, 68.0f, 24.0f}, "Textures", state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE))
+            if (!texture_pick_active)
             {
-                state->asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
-                state->asset_browser_page = 0U;
-                state->asset_browser_selection_valid = false;
-                state->asset_browser_selected_texture = NULL;
-                state->asset_browser_selected_material = NULL;
-                state->asset_browser_selected_prefab = NULL;
+                sandbox3d_draw_section_heading(
+                    state->ui,
+                    x_left,
+                    y_start,
+                    "Manager asset browser");
+                if (henka_ui_tab(state->ui, "asset_browser_textures", (henka_ui_rect){x_left, y_start + 20.0f, 68.0f, 24.0f}, "Textures", state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE))
+                {
+                    state->asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
+                    state->asset_browser_page = 0U;
+                    state->asset_browser_selection_valid = false;
+                    state->asset_browser_selected_texture = NULL;
+                    state->asset_browser_selected_material = NULL;
+                    state->asset_browser_selected_prefab = NULL;
+                }
+                if (henka_ui_tab(state->ui, "asset_browser_materials", (henka_ui_rect){x_left + 74.0f, y_start + 20.0f, 76.0f, 24.0f}, "Materials", state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL))
+                {
+                    sandbox3d_material_texture_pick_reset(
+                        &state->material_texture_pick);
+                    state->asset_browser_type = HENKA_ASSET_TYPE_MATERIAL;
+                    state->asset_browser_page = 0U;
+                    state->asset_browser_selection_valid = false;
+                    state->asset_browser_selected_texture = NULL;
+                    state->asset_browser_selected_material = NULL;
+                    state->asset_browser_selected_prefab = NULL;
+                }
+                if (henka_ui_tab(state->ui, "asset_browser_meshes", (henka_ui_rect){x_left + 156.0f, y_start + 20.0f, 60.0f, 24.0f}, "Meshes", state->asset_browser_type == HENKA_ASSET_TYPE_MESH))
+                {
+                    sandbox3d_material_texture_pick_reset(
+                        &state->material_texture_pick);
+                    state->asset_browser_type = HENKA_ASSET_TYPE_MESH;
+                    state->asset_browser_page = 0U;
+                    state->asset_browser_selection_valid = false;
+                    state->asset_browser_selected_texture = NULL;
+                    state->asset_browser_selected_material = NULL;
+                    state->asset_browser_selected_prefab = NULL;
+                }
+                if (henka_ui_tab(state->ui, "asset_browser_prefabs", (henka_ui_rect){x_left + 222.0f, y_start + 20.0f, 70.0f, 24.0f}, "Prefabs", state->asset_browser_type == HENKA_ASSET_TYPE_PREFAB))
+                {
+                    sandbox3d_material_texture_pick_reset(
+                        &state->material_texture_pick);
+                    state->asset_browser_type = HENKA_ASSET_TYPE_PREFAB;
+                    state->asset_browser_page = 0U;
+                    state->asset_browser_selection_valid = false;
+                    state->asset_browser_selected_texture = NULL;
+                    state->asset_browser_selected_material = NULL;
+                    state->asset_browser_selected_prefab = NULL;
+                }
             }
-            if (henka_ui_tab(state->ui, "asset_browser_materials", (henka_ui_rect){x_left + 74.0f, y_start + 20.0f, 76.0f, 24.0f}, "Materials", state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL))
+            else
             {
-                sandbox3d_material_texture_pick_reset(
-                    &state->material_texture_pick);
-                state->asset_browser_type = HENKA_ASSET_TYPE_MATERIAL;
-                state->asset_browser_page = 0U;
-                state->asset_browser_selection_valid = false;
-                state->asset_browser_selected_texture = NULL;
-                state->asset_browser_selected_material = NULL;
-                state->asset_browser_selected_prefab = NULL;
-            }
-            if (henka_ui_tab(state->ui, "asset_browser_meshes", (henka_ui_rect){x_left + 156.0f, y_start + 20.0f, 60.0f, 24.0f}, "Meshes", state->asset_browser_type == HENKA_ASSET_TYPE_MESH))
-            {
-                sandbox3d_material_texture_pick_reset(
-                    &state->material_texture_pick);
-                state->asset_browser_type = HENKA_ASSET_TYPE_MESH;
-                state->asset_browser_page = 0U;
-                state->asset_browser_selection_valid = false;
-                state->asset_browser_selected_texture = NULL;
-                state->asset_browser_selected_material = NULL;
-                state->asset_browser_selected_prefab = NULL;
-            }
-            if (henka_ui_tab(state->ui, "asset_browser_prefabs", (henka_ui_rect){x_left + 222.0f, y_start + 20.0f, 70.0f, 24.0f}, "Prefabs", state->asset_browser_type == HENKA_ASSET_TYPE_PREFAB))
-            {
-                sandbox3d_material_texture_pick_reset(
-                    &state->material_texture_pick);
-                state->asset_browser_type = HENKA_ASSET_TYPE_PREFAB;
-                state->asset_browser_page = 0U;
-                state->asset_browser_selection_valid = false;
-                state->asset_browser_selected_texture = NULL;
-                state->asset_browser_selected_material = NULL;
-                state->asset_browser_selected_prefab = NULL;
+                const float picker_row_space =
+                    picker_navigation_y - picker_row_start_y;
+                if (picker_row_space >= 26.0f)
+                {
+                    asset_page_size =
+                        (size_t)(picker_row_space / picker_row_stride);
+                    if (asset_page_size < 1U)
+                    {
+                        asset_page_size = 1U;
+                    }
+                    else if (asset_page_size > 6U)
+                    {
+                        asset_page_size = 6U;
+                    }
+                }
+                else
+                {
+                    asset_page_size = 1U;
+                }
             }
             page_count = sandbox3d_asset_browser_page_count(assets, state->asset_browser_type, asset_page_size);
             if (page_count == 0U)
@@ -35160,8 +35201,32 @@ static void sandbox3d_draw_utility_panel(
                 asset_page_size,
                 items,
                 32U);
-            snprintf(row_value, sizeof(row_value), "%s | %zu known | page %zu/%zu", type_label, sandbox3d_asset_browser_collect(assets, state->asset_browser_type, NULL, 0U), page_count == 0U ? 0U : state->asset_browser_page + 1U, page_count);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 50.0f, panel_bounds.width - 28.0f, "Source", row_value);
+            if (texture_pick_active)
+            {
+                snprintf(
+                    row_value,
+                    sizeof(row_value),
+                    "Choose %s | %zu known | page %zu/%zu",
+                    sandbox3d_material_texture_slot_label(
+                        state->material_texture_pick.slot),
+                    sandbox3d_asset_browser_collect(
+                        assets,
+                        state->asset_browser_type,
+                        NULL,
+                        0U),
+                    page_count == 0U ? 0U : state->asset_browser_page + 1U,
+                    page_count);
+                sandbox3d_draw_section_heading(
+                    state->ui,
+                    x_left,
+                    y_start,
+                    row_value);
+            }
+            else
+            {
+                snprintf(row_value, sizeof(row_value), "%s | %zu known | page %zu/%zu", type_label, sandbox3d_asset_browser_collect(assets, state->asset_browser_type, NULL, 0U), page_count == 0U ? 0U : state->asset_browser_page + 1U, page_count);
+                sandbox3d_draw_value_row(state->ui, x_left, y_start + 50.0f, panel_bounds.width - 28.0f, "Source", row_value);
+            }
             if (state->material_texture_pick.active &&
                 state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE)
             {
@@ -35183,7 +35248,11 @@ static void sandbox3d_draw_utility_panel(
                                 ? items[item_index].metadata.source_path
                                 : "(unnamed asset)",
                             x_left,
-                            y_start + 78.0f + (float)item_index * 30.0f,
+                            texture_pick_active
+                                ? picker_row_start_y +
+                                    (float)item_index * picker_row_stride
+                                : y_start + 78.0f +
+                                    (float)item_index * 30.0f,
                             panel_bounds.width - 28.0f);
                     }
                     fflush(stdout);
@@ -35202,7 +35271,15 @@ static void sandbox3d_draw_utility_panel(
                 if (henka_ui_selectable(
                         state->ui,
                         item_id,
-                        (henka_ui_rect){x_left, y_start + 78.0f + (float)item_index * 30.0f, panel_bounds.width - 28.0f, 26.0f},
+                        (henka_ui_rect){
+                            x_left,
+                            texture_pick_active
+                                ? picker_row_start_y +
+                                    (float)item_index * picker_row_stride
+                                : y_start + 78.0f +
+                                    (float)item_index * 30.0f,
+                            panel_bounds.width - 28.0f,
+                            26.0f},
                         display_name != NULL ? display_name : "(unnamed asset)",
                         state->asset_browser_selection_valid && state->asset_browser_selected_metadata_index == items[item_index].metadata_index))
                 {
@@ -35291,29 +35368,52 @@ static void sandbox3d_draw_utility_panel(
                     }
                 }
             }
-            if (henka_ui_button(state->ui, "asset_browser_prev", (henka_ui_rect){x_left, y_start + 252.0f, 82.0f, 24.0f}, "Prev") &&
+            if (henka_ui_button(
+                    state->ui,
+                    "asset_browser_prev",
+                    (henka_ui_rect){
+                        x_left,
+                        texture_pick_active
+                            ? picker_navigation_y
+                            : y_start + 252.0f,
+                        82.0f,
+                        24.0f},
+                    "Prev") &&
                 state->asset_browser_page > 0U)
             {
                 --state->asset_browser_page;
             }
-            if (henka_ui_button(state->ui, "asset_browser_next", (henka_ui_rect){x_left + 88.0f, y_start + 252.0f, 82.0f, 24.0f}, "Next") &&
+            if (henka_ui_button(
+                    state->ui,
+                    "asset_browser_next",
+                    (henka_ui_rect){
+                        x_left + 88.0f,
+                        texture_pick_active
+                            ? picker_navigation_y
+                            : y_start + 252.0f,
+                        82.0f,
+                        24.0f},
+                    "Next") &&
                 state->asset_browser_page + 1U < page_count)
             {
                 ++state->asset_browser_page;
             }
-            if (state->asset_browser_selection_valid)
+            if (!texture_pick_active)
             {
-                henka_asset_metadata selected_metadata;
-                if (henka_assets_get_metadata_at_index(assets, state->asset_browser_selected_metadata_index, &selected_metadata) == HENKA_SUCCESS)
+                if (state->asset_browser_selection_valid)
                 {
-                    sandbox3d_draw_value_row(state->ui, x_left, y_start + 278.0f, panel_bounds.width - 28.0f, "Selected", selected_metadata.source_path != NULL ? selected_metadata.source_path : "(unnamed asset)");
-                    snprintf(row_value, sizeof(row_value), "%s%s", selected_metadata.loaded ? "Loaded" : "Unavailable", selected_metadata.fallback ? " / fallback" : "");
-                    sandbox3d_draw_value_row(state->ui, x_left, y_start + 304.0f, panel_bounds.width - 28.0f, "State", row_value);
+                    henka_asset_metadata selected_metadata;
+                    if (henka_assets_get_metadata_at_index(assets, state->asset_browser_selected_metadata_index, &selected_metadata) == HENKA_SUCCESS)
+                    {
+                        sandbox3d_draw_value_row(state->ui, x_left, y_start + 278.0f, panel_bounds.width - 28.0f, "Selected", selected_metadata.source_path != NULL ? selected_metadata.source_path : "(unnamed asset)");
+                        snprintf(row_value, sizeof(row_value), "%s%s", selected_metadata.loaded ? "Loaded" : "Unavailable", selected_metadata.fallback ? " / fallback" : "");
+                        sandbox3d_draw_value_row(state->ui, x_left, y_start + 304.0f, panel_bounds.width - 28.0f, "State", row_value);
+                    }
                 }
-            }
-            else
-            {
-                henka_ui_label(state->ui, x_left, y_start + 278.0f, 1.0f, "Select a manager-known asset.");
+                else
+                {
+                    henka_ui_label(state->ui, x_left, y_start + 278.0f, 1.0f, "Select a manager-known asset.");
+                }
             }
             if (state->material_texture_pick.active)
             {
@@ -35342,29 +35442,14 @@ static void sandbox3d_draw_utility_panel(
                 }
                 else
                 {
-                    char picker_text[96];
                     henka_ui_rect picker_buttons[2];
                     size_t picker_button_count = 0U;
                     const char* picker_button_labels[2] = {"Apply", "Cancel"};
 
-                    snprintf(
-                        picker_text,
-                        sizeof(picker_text),
-                        "Target: %s",
-                        sandbox3d_material_texture_slot_label(
-                            state->material_texture_pick.slot));
-                    henka_ui_label_colored(
-                        state->ui,
-                        x_left,
-                        y_start + 330.0f,
-                        1.0f,
-                        picker_text,
-                        HENKA_UI_COLOR_INFO);
-
                     if (sandbox3d_editor_layout_text_control_row(
                             (henka_ui_rect){
                                 x_left,
-                                y_start + 350.0f,
+                                picker_action_y,
                                 panel_bounds.width - 28.0f,
                                 24.0f},
                             picker_button_labels,
