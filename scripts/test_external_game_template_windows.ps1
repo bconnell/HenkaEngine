@@ -114,7 +114,10 @@ function Remove-GeneratedValidationTree {
     $parentPath = [System.IO.Path]::GetFullPath($validationParent)
     $stableRoot = [System.IO.Path]::Combine($parentPath, "external_game_minimal")
     $stableSource = [System.IO.Path]::Combine($stableRoot, "external_game_minimal_src")
-    if ($fullPath -ne $stableRoot -and $fullPath -ne $stableSource -and
+    $stableForeignWorkingDirectory = [System.IO.Path]::Combine($stableRoot, "foreign_cwd")
+    if ($fullPath -ne $stableRoot -and
+        $fullPath -ne $stableSource -and
+        $fullPath -ne $stableForeignWorkingDirectory -and
         -not ($fullPath.StartsWith($parentPath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -and
             [System.IO.Path]::GetFileName($fullPath) -match '^ext_[0-9]{8}_[0-9]{6}$')) {
         throw "Refusing to remove a non-owned external-template generated path: $fullPath"
@@ -192,9 +195,7 @@ if ($result.Stdout -notmatch "External game template initialized\." -or
     throw "The external game template public-API workflow did not complete its expected checks."
 }
 
-if (Test-Path -LiteralPath $foreignWorkingDirectory) {
-    Remove-Item -LiteralPath $foreignWorkingDirectory -Recurse -Force
-}
+Remove-GeneratedValidationTree -Path $foreignWorkingDirectory
 [System.IO.Directory]::CreateDirectory($foreignWorkingDirectory) | Out-Null
 $assetRootResult = Invoke-HenkaNativeCapture `
     -FilePath $templateExe `

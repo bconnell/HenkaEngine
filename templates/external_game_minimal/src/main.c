@@ -1384,7 +1384,9 @@ cleanup:
     henka_scene_destroy(source_scene);
     (void)remove(relative_path);
     return success;
-}static bool external_asset_root_workflow(void)
+}
+
+static bool external_asset_root_workflow(void)
 {
     static const char* fixture_path = "assets/audio/henka_audio_fixture.wav";
     henka_engine_config config = {0};
