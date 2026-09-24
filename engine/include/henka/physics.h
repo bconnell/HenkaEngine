@@ -246,6 +246,22 @@ henka_result henka_physics_world_step_fixed(henka_physics_world* world);
 henka_result henka_physics_world_reset(henka_physics_world* world);
 const henka_physics_contact* henka_physics_world_get_contacts(const henka_physics_world* world, size_t* out_count);
 const henka_physics_event* henka_physics_world_get_events(const henka_physics_world* world, size_t* out_count);
+/*
+ * Reports every live body whose collider overlaps the query sphere using the
+ * same narrowphase geometry as simulation. Triggers participate. layer_mask
+ * filters body collider layers. With out_bodies == NULL and capacity == 0,
+ * the call is count-only. If capacity is insufficient, HENKA_ERROR_LIMIT is
+ * returned, out_count reports the required capacity, and out_bodies is left
+ * unchanged.
+ */
+henka_result henka_physics_world_overlap_sphere(
+    const henka_physics_world* world,
+    henka_vec3 center,
+    float radius,
+    uint32_t layer_mask,
+    henka_physics_body_id* out_bodies,
+    size_t capacity,
+    size_t* out_count);
 henka_result henka_physics_world_raycast(const henka_physics_world* world, henka_ray ray, float max_distance, uint32_t layer_mask, henka_physics_raycast_hit* out_hit);
 size_t henka_physics_world_get_debug_shape_count(const henka_physics_world* world);
 henka_result henka_physics_world_get_debug_shape(const henka_physics_world* world, size_t index, henka_physics_debug_shape* out_shape);

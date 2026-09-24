@@ -4775,6 +4775,130 @@ static bool henka_physics_raycast_triangle_mesh(
     return true;
 }
 
+static henka_result henka_physics_scan_sphere_overlaps(
+    const henka_physics_world* world,
+    const henka_physics_body_state* query,
+    uint32_t layer_mask,
+    henka_physics_body_id* out_bodies,
+    size_t capacity,
+    size_t* out_count)
+{
+    size_t count = 0U;
+    size_t index;
+
+    for (index = 0U; index < world->body_capacity; ++index)
+    {
+        henka_physics_contact contact;
+        henka_physics_contact_status status;
+
+        if (!world->bodies[index].active ||
+            (world->bodies[index].state.collider.layer & layer_mask) == 0U)
+        {
+            continue;
+        }
+
+        status = henka_physics_detect_contact(
+            query,
+            &world->bodies[index].state,
+            &contact);
+        if (status == HENKA_PHYSICS_CONTACT_NUMERIC_FAILURE)
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        if (status != HENKA_PHYSICS_CONTACT_FOUND)
+        {
+            continue;
+        }
+
+        if (out_bodies != NULL)
+        {
+            if (count >= capacity)
+            {
+                return HENKA_ERROR_LIMIT;
+            }
+            out_bodies[count] = world->bodies[index].state.id;
+        }
+        ++count;
+    }
+
+    *out_count = count;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_physics_world_overlap_sphere(
+    const henka_physics_world* world,
+    henka_vec3 center,
+    float radius,
+    uint32_t layer_mask,
+    henka_physics_body_id* out_bodies,
+    size_t capacity,
+    size_t* out_count)
+{
+    henka_physics_body_state query;
+    henka_result result;
+    size_t required_count = 0U;
+    size_t written_count = 0U;
+
+    if (out_count != NULL)
+    {
+        *out_count = 0U;
+    }
+    if (world == NULL ||
+        out_count == NULL ||
+        !henka_physics_is_finite_vec3(center) ||
+        !isfinite(radius) ||
+        radius <= 0.0f ||
+        (out_bodies == NULL && capacity != 0U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    memset(&query, 0, sizeof(query));
+    query.id = HENKA_INVALID_PHYSICS_BODY_ID;
+    query.type = HENKA_PHYSICS_BODY_STATIC;
+    query.transform = henka_transform_identity();
+    query.transform.position = center;
+    query.initial_transform = query.transform;
+    query.material = henka_physics_material_default();
+    query.collider = henka_physics_collider_sphere(radius);
+    query.collider.layer = HENKA_PHYSICS_ALL_LAYERS;
+    query.collider.mask = HENKA_PHYSICS_ALL_LAYERS;
+
+    result = henka_physics_scan_sphere_overlaps(
+        world, &query, layer_mask, NULL, 0U, &required_count);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    *out_count = required_count;
+    if (out_bodies == NULL)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (capacity < required_count)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    result = henka_physics_scan_sphere_overlaps(
+        world,
+        &query,
+        layer_mask,
+        out_bodies,
+        capacity,
+        &written_count);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (written_count != required_count)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_physics_world_raycast(const henka_physics_world* world, henka_ray ray, float max_distance, uint32_t layer_mask, henka_physics_raycast_hit* out_hit)
 {
     size_t index;
