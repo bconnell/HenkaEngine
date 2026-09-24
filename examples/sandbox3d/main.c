@@ -35456,7 +35456,7 @@ static void sandbox3d_draw_utility_panel(
                         {
                             henka_result retry_result =
                                 sandbox3d_asset_browser_retry(
-                                    assets,
+                                    henka_engine_get_asset_manager(engine),
                                     &selected_metadata);
                             henka_asset_metadata refreshed_metadata;
 
