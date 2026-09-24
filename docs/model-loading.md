@@ -127,7 +127,7 @@ The bounded glTF path supports:
 
 ### Geometry and buffers
 
-- triangle primitives;
+- triangle-list, triangle-strip, and triangle-fan primitives, normalized to the engine triangle-list model;
 - glTF JSON with embedded data-URI buffers;
 - GLB version 2 JSON/BIN containers;
 - confined external `.bin` buffers for file loads;
@@ -305,7 +305,7 @@ Scene data stays CPU-owned until manager/renderer instantiation publishes depend
 
 Instantiation applies the first active glTF camera and publishes active punctual lights into the runtime scene. The runtime currently supports a bounded four-local-light list. Instantiation builds imported entities and Scene-wide camera/light bindings in an independent candidate, then publishes the complete candidate. If a valid active scene would exceed the local-light capacity or any candidate mutation fails, instantiation returns the error before changing the target scene or its revision watermarks.
 
-A valid scene may contain cameras, lights, and nodes without mesh buffers. Mesh-bearing scenes require valid bounded buffers, accessors, and triangle primitives.
+A valid scene may contain cameras, lights, and nodes without mesh buffers. Mesh-bearing scenes require valid bounded buffers and accessors. Triangle-list, triangle-strip, and triangle-fan primitives are normalized to the same triangle-list runtime representation; point and line modes remain unsupported.
 
 `henka_model_scene_data_set_active_scene` selects another validated scene before instantiation. `henka_assets_set_gltf_scene_active_scene` provides the manager-owned equivalent. Invalid indexes leave the current selection unchanged.
 
