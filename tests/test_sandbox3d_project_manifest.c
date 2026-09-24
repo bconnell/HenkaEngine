@@ -4,6 +4,7 @@
 
 #if defined(_WIN32)
 #include <direct.h>
+#include <windows.h>
 #else
 #include <sys/stat.h>
 #include <unistd.h>
@@ -966,6 +967,130 @@ cleanup:
     return success;
 }
 
+
+static int test_save_rolls_back_scene_when_manifest_publish_fails(void)
+{
+#if defined(_WIN32)
+    const char* project_root =
+        "build/test_tmp/project_save_publish_rollback_root";
+    const char* scene_path = "rollback_scene.hscene";
+    const char* scene_file_path =
+        "build/test_tmp/project_save_publish_rollback_root/rollback_scene.hscene";
+    const char* manifest_path =
+        "build/test_tmp/project_save_publish_rollback_root/henka.project";
+    const char* existing_scene_contents = "previous scene generation\n";
+    const char* existing_manifest_contents =
+        "schema_version=1\nstartup_scene=rollback_scene.hscene\n";
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_camera camera;
+    henka_result save_result = HENKA_ERROR_UNKNOWN;
+    FILE* file = NULL;
+    char observed_scene[
+        sizeof("previous scene generation\n")] = {0};
+    char observed_manifest[
+        sizeof("schema_version=1\nstartup_scene=rollback_scene.hscene\n")] = {0};
+    int manifest_read_only = 0;
+    int success = 0;
+
+    if (!test_ensure_directory("build/test_tmp") ||
+        !test_ensure_directory(project_root))
+    {
+        goto cleanup;
+    }
+    (void)remove(scene_file_path);
+    (void)remove(manifest_path);
+    if (!test_write_file(scene_file_path, existing_scene_contents) ||
+        !test_write_file(manifest_path, existing_manifest_contents))
+    {
+        goto cleanup;
+    }
+
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        1.0f,
+        0.1f,
+        100.0f);
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+            scene, "Rollback Publication Object")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create(
+            scene, scene_path, &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, entity, &document_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    if (!SetFileAttributesA(manifest_path, FILE_ATTRIBUTE_READONLY))
+    {
+        goto cleanup;
+    }
+    manifest_read_only = 1;
+    save_result = sandbox3d_game_authoring_save(authoring, project_root);
+    if (!SetFileAttributesA(manifest_path, FILE_ATTRIBUTE_NORMAL))
+    {
+        goto cleanup;
+    }
+    manifest_read_only = 0;
+    if (save_result == HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    if (fopen_s(&file, scene_file_path, "rb") != 0 || file == NULL ||
+        fread(observed_scene, 1U, sizeof(observed_scene) - 1U, file) !=
+            sizeof(observed_scene) - 1U)
+    {
+        goto cleanup;
+    }
+    fclose(file);
+    file = NULL;
+    if (fopen_s(&file, manifest_path, "rb") != 0 || file == NULL ||
+        fread(observed_manifest, 1U, sizeof(observed_manifest) - 1U, file) !=
+            sizeof(observed_manifest) - 1U)
+    {
+        goto cleanup;
+    }
+    fclose(file);
+    file = NULL;
+
+    if (memcmp(
+            observed_scene,
+            existing_scene_contents,
+            sizeof(observed_scene) - 1U) != 0 ||
+        memcmp(
+            observed_manifest,
+            existing_manifest_contents,
+            sizeof(observed_manifest) - 1U) != 0)
+    {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    if (file != NULL)
+    {
+        fclose(file);
+    }
+    if (manifest_read_only)
+    {
+        (void)SetFileAttributesA(manifest_path, FILE_ATTRIBUTE_NORMAL);
+    }
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove(scene_file_path);
+    (void)remove(manifest_path);
+    (void)remove(project_root);
+    return success;
+#else
+    return 1;
+#endif
+}
+
 static int test_project_reopen_cycle(void)
 {
     const char* project_root = "build/test_tmp/project_reopen_root";
@@ -1621,6 +1746,11 @@ int main(void)
     if (!test_save_rejects_scene_stage_failure_without_manifest_mutation())
     {
         fprintf(stderr, "project save partially mutated files on scene staging failure\n");
+        goto cleanup;
+    }
+    if (!test_save_rolls_back_scene_when_manifest_publish_fails())
+    {
+        fprintf(stderr, "project save did not restore scene bytes after manifest publication failure\n");
         goto cleanup;
     }
 

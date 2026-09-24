@@ -5309,14 +5309,19 @@ henka_result sandbox3d_game_authoring_save(
         if (result != HENKA_SUCCESS && (scene_published || manifest_published))
         {
             /*
-             * Publication is process-transactional: any second-file failure
-             * restores the exact pre-save bytes (or absence) of both project
-             * files before returning the original save failure.
+             * Publication is process-transactional. Restore only files that
+             * actually advanced; an unpublished destination is already the
+             * authoritative pre-save state and may be the reason publication
+             * failed (for example, a read-only manifest).
              */
-            rollback_result = sandbox3d_game_authoring_restore_snapshot(
-                scene_path,
-                &scene_snapshot);
-            if (sandbox3d_game_authoring_restore_snapshot(
+            if (scene_published)
+            {
+                rollback_result = sandbox3d_game_authoring_restore_snapshot(
+                    scene_path,
+                    &scene_snapshot);
+            }
+            if (manifest_published &&
+                sandbox3d_game_authoring_restore_snapshot(
                     manifest_path,
                     &manifest_snapshot) != HENKA_SUCCESS)
             {
