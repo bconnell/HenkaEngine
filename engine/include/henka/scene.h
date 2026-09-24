@@ -153,6 +153,10 @@ typedef struct henka_scene_entity_presentation_update
     henka_material material;
     bool apply_renderer_enabled;
     bool renderer_enabled;
+    /* Appended for source compatibility with positional initializers. When
+     * apply_tag is false, the existing runtime tag is preserved. */
+    bool apply_tag;
+    const char* tag;
 } henka_scene_entity_presentation_update;
 
 typedef enum henka_scene_environment_mode
@@ -457,8 +461,9 @@ henka_result henka_scene_set_entity_selection_owner(
     henka_entity entity,
     henka_entity owner);
 henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity entity, henka_transform transform);
-/* Applies name, transform, visibility, renderer enablement, interaction, and
- * optionally inline material state as one preflighted scene transaction. */
+/* Applies name, transform, visibility, renderer enablement, interaction,
+ * optional tag mutation, and optional inline material state as one
+ * preflighted scene transaction. */
 henka_result henka_scene_apply_entity_presentation(
     henka_scene* scene,
     henka_entity entity,

@@ -531,6 +531,8 @@ static void henka_test_presentation_update_compatibility(void)
     entity = henka_scene_create_entity_named(scene, "Presentation Compatibility");
     HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(henka_scene_set_entity_renderer_enabled(scene, entity, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_tag(
+        scene, entity, "preserved-legacy-tag") == HENKA_SUCCESS);
     legacy_update = (henka_scene_entity_presentation_update){
         "Presentation Compatibility Updated",
         henka_transform_identity(),
@@ -544,6 +546,22 @@ static void henka_test_presentation_update_compatibility(void)
         henka_scene_get_entity_name(scene, entity),
         "Presentation Compatibility Updated") == 0);
     HENKA_TEST_ASSERT(!henka_scene_is_entity_renderer_enabled(scene, entity));
+    HENKA_TEST_ASSERT(strcmp(
+        henka_scene_get_entity_tag(scene, entity),
+        "preserved-legacy-tag") == 0);
+    {
+        const uint64_t revision_before = henka_scene_get_render_revision(scene);
+        henka_scene_entity_presentation_update tag_update = legacy_update;
+        tag_update.apply_tag = true;
+        tag_update.tag = "updated-transaction-tag";
+        HENKA_TEST_ASSERT(henka_scene_apply_entity_presentation(
+            scene, entity, &tag_update) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(strcmp(
+            henka_scene_get_entity_tag(scene, entity),
+            "updated-transaction-tag") == 0);
+        HENKA_TEST_ASSERT(
+            henka_scene_get_render_revision(scene) == revision_before);
+    }
     henka_scene_destroy(scene);
 }
 

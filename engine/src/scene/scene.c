@@ -1181,9 +1181,11 @@ henka_result henka_scene_apply_entity_presentation(
     henka_transform local_transform;
     henka_bounds world_bounds;
     char* new_name = NULL;
+    char* new_tag = NULL;
     char* new_prompt = NULL;
     char* new_material_name = NULL;
     bool name_changed;
+    bool tag_changed;
     bool transform_changed;
     bool visible_changed;
     bool renderer_enabled_changed;
@@ -1209,6 +1211,8 @@ henka_result henka_scene_apply_entity_presentation(
     name_changed = !henka_scene_presentation_text_equal(
         record->name,
         update->name);
+    tag_changed = update->apply_tag &&
+        !henka_scene_presentation_text_equal(record->tag, update->tag);
     transform_changed = !henka_scene_presentation_transform_equal(
         record->transform,
         sanitized_transform);
@@ -1276,6 +1280,15 @@ henka_result henka_scene_apply_entity_presentation(
             return result;
         }
     }
+    if (tag_changed)
+    {
+        result = henka_scene_duplicate_text(update->tag, &new_tag);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(new_name);
+            return result;
+        }
+    }
     if (interaction_changed)
     {
         result = henka_scene_duplicate_text(
@@ -1283,6 +1296,7 @@ henka_result henka_scene_apply_entity_presentation(
             &new_prompt);
         if (result != HENKA_SUCCESS)
         {
+            henka_free(new_tag);
             henka_free(new_name);
             return result;
         }
@@ -1296,6 +1310,7 @@ henka_result henka_scene_apply_entity_presentation(
         if (result != HENKA_SUCCESS)
         {
             henka_free(new_prompt);
+            henka_free(new_tag);
             henka_free(new_name);
             return result;
         }
@@ -1308,6 +1323,12 @@ henka_result henka_scene_apply_entity_presentation(
         henka_free(record->name);
         record->name = new_name;
         new_name = NULL;
+    }
+    if (tag_changed)
+    {
+        henka_free(record->tag);
+        record->tag = new_tag;
+        new_tag = NULL;
     }
     if (transform_changed)
     {
@@ -1356,6 +1377,7 @@ henka_result henka_scene_apply_entity_presentation(
 
     henka_free(new_material_name);
     henka_free(new_prompt);
+    henka_free(new_tag);
     henka_free(new_name);
     return HENKA_SUCCESS;
 }
@@ -1368,9 +1390,11 @@ typedef struct henka_prepared_entity_presentation
     henka_transform sanitized_transform;
     henka_transform local_transform;
     char* new_name;
+    char* new_tag;
     char* new_prompt;
     char* new_material_name;
     bool name_changed;
+    bool tag_changed;
     bool transform_changed;
     bool visible_changed;
     bool renderer_enabled_changed;
@@ -1393,6 +1417,7 @@ static void henka_scene_discard_prepared_entity_presentations(
     for (index = 0U; index < count; ++index)
     {
         henka_free(prepared[index].new_name);
+        henka_free(prepared[index].new_tag);
         henka_free(prepared[index].new_prompt);
         henka_free(prepared[index].new_material_name);
     }
@@ -1473,6 +1498,10 @@ static henka_result henka_scene_apply_entity_presentation_batch_internal(
         prepared[index].name_changed = !henka_scene_presentation_text_equal(
             record->name,
             updates[index].name);
+        prepared[index].tag_changed = updates[index].apply_tag &&
+            !henka_scene_presentation_text_equal(
+                record->tag,
+                updates[index].tag);
         prepared[index].transform_changed =
             !henka_scene_presentation_transform_equal(
                 record->transform,
@@ -1569,6 +1598,16 @@ static henka_result henka_scene_apply_entity_presentation_batch_internal(
                 goto prepare_failed;
             }
         }
+        if (prepared[index].tag_changed)
+        {
+            result = henka_scene_duplicate_text(
+                updates[index].tag,
+                &prepared[index].new_tag);
+            if (result != HENKA_SUCCESS)
+            {
+                goto prepare_failed;
+            }
+        }
         if (prepared[index].interaction_changed)
         {
             result = henka_scene_duplicate_text(
@@ -1612,6 +1651,12 @@ static henka_result henka_scene_apply_entity_presentation_batch_internal(
             henka_free(record->name);
             record->name = item->new_name;
             item->new_name = NULL;
+        }
+        if (item->tag_changed)
+        {
+            henka_free(record->tag);
+            record->tag = item->new_tag;
+            item->new_tag = NULL;
         }
         if (item->transform_changed)
         {
