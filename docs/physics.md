@@ -39,9 +39,10 @@ The public physics API provides:
 - collision and trigger enter, stay, and exit events
 - raycasts against every supported collider shape, including bounded heightfield
   traversal and bounded triangle-mesh traversal
-- bounded sphere-overlap queries against every supported collider shape, with
-  caller-controlled layer filtering, trigger participation, count-only
-  discovery, and fail-closed capacity reporting without partial output
+- bounded sphere, axis-aligned box, and upright-capsule overlap queries against
+  every supported collider shape, with caller-controlled layer filtering,
+  trigger participation, count-only discovery, and fail-closed capacity
+  reporting without partial output
 - optional links from physics bodies to real scene entities. The link is
   borrowed, but the body keeps the scene storage valid until the body or its
   world is destroyed. Destroying the scene first retires its entity data

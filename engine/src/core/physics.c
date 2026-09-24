@@ -4775,7 +4775,7 @@ static bool henka_physics_raycast_triangle_mesh(
     return true;
 }
 
-static henka_result henka_physics_scan_sphere_overlaps(
+static henka_result henka_physics_scan_query_overlaps(
     const henka_physics_world* world,
     const henka_physics_body_state* query,
     uint32_t layer_mask,
@@ -4825,10 +4825,10 @@ static henka_result henka_physics_scan_sphere_overlaps(
     return HENKA_SUCCESS;
 }
 
-henka_result henka_physics_world_overlap_sphere(
+static henka_result henka_physics_world_overlap_collider(
     const henka_physics_world* world,
     henka_vec3 center,
-    float radius,
+    henka_physics_collider_desc collider,
     uint32_t layer_mask,
     henka_physics_body_id* out_bodies,
     size_t capacity,
@@ -4846,8 +4846,7 @@ henka_result henka_physics_world_overlap_sphere(
     if (world == NULL ||
         out_count == NULL ||
         !henka_physics_is_finite_vec3(center) ||
-        !isfinite(radius) ||
-        radius <= 0.0f ||
+        !henka_physics_collider_valid(collider) ||
         (out_bodies == NULL && capacity != 0U))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -4860,11 +4859,11 @@ henka_result henka_physics_world_overlap_sphere(
     query.transform.position = center;
     query.initial_transform = query.transform;
     query.material = henka_physics_material_default();
-    query.collider = henka_physics_collider_sphere(radius);
+    query.collider = collider;
     query.collider.layer = HENKA_PHYSICS_ALL_LAYERS;
     query.collider.mask = HENKA_PHYSICS_ALL_LAYERS;
 
-    result = henka_physics_scan_sphere_overlaps(
+    result = henka_physics_scan_query_overlaps(
         world, &query, layer_mask, NULL, 0U, &required_count);
     if (result != HENKA_SUCCESS)
     {
@@ -4881,7 +4880,7 @@ henka_result henka_physics_world_overlap_sphere(
         return HENKA_ERROR_LIMIT;
     }
 
-    result = henka_physics_scan_sphere_overlaps(
+    result = henka_physics_scan_query_overlaps(
         world,
         &query,
         layer_mask,
@@ -4897,6 +4896,64 @@ henka_result henka_physics_world_overlap_sphere(
         return HENKA_ERROR_UNKNOWN;
     }
     return HENKA_SUCCESS;
+}
+
+henka_result henka_physics_world_overlap_sphere(
+    const henka_physics_world* world,
+    henka_vec3 center,
+    float radius,
+    uint32_t layer_mask,
+    henka_physics_body_id* out_bodies,
+    size_t capacity,
+    size_t* out_count)
+{
+    return henka_physics_world_overlap_collider(
+        world,
+        center,
+        henka_physics_collider_sphere(radius),
+        layer_mask,
+        out_bodies,
+        capacity,
+        out_count);
+}
+
+henka_result henka_physics_world_overlap_box(
+    const henka_physics_world* world,
+    henka_vec3 center,
+    henka_vec3 half_extents,
+    uint32_t layer_mask,
+    henka_physics_body_id* out_bodies,
+    size_t capacity,
+    size_t* out_count)
+{
+    return henka_physics_world_overlap_collider(
+        world,
+        center,
+        henka_physics_collider_box(half_extents),
+        layer_mask,
+        out_bodies,
+        capacity,
+        out_count);
+}
+
+henka_result henka_physics_world_overlap_capsule(
+    const henka_physics_world* world,
+    henka_vec3 center,
+    float radius,
+    float half_height,
+    uint32_t layer_mask,
+    henka_physics_body_id* out_bodies,
+    size_t capacity,
+    size_t* out_count)
+{
+    return henka_physics_world_overlap_collider(
+        world,
+        center,
+        henka_physics_collider_capsule(radius, half_height),
+        layer_mask,
+        out_bodies,
+        capacity,
+        out_count);
 }
 
 henka_result henka_physics_world_raycast(const henka_physics_world* world, henka_ray ray, float max_distance, uint32_t layer_mask, henka_physics_raycast_hit* out_hit)

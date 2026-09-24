@@ -2733,6 +2733,123 @@ static void henka_test_physics_sphere_overlap_query(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_physics_box_and_capsule_overlap_queries(void)
+{
+    henka_physics_world* world = NULL;
+    henka_physics_body_desc desc;
+    henka_physics_body_id sphere = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id box = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id capsule = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id plane = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_id results[4] = {0U, 0U, 0U, 0U};
+    size_t count = 0U;
+    size_t index;
+    bool found_sphere = false;
+    bool found_plane = false;
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_sphere(0.25f),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    desc.collider.layer = 1U;
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world, &desc, &sphere) == HENKA_SUCCESS);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_box((henka_vec3){0.25f, 0.25f, 0.25f}),
+        (henka_vec3){1.2f, 0.0f, 0.0f});
+    desc.collider.layer = 2U;
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world, &desc, &box) == HENKA_SUCCESS);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_capsule(0.2f, 0.3f),
+        (henka_vec3){0.0f, 0.0f, 1.3f});
+    desc.collider.layer = 4U;
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world, &desc, &capsule) == HENKA_SUCCESS);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_plane(
+            (henka_vec3){0.0f, 1.0f, 0.0f},
+            0.0f),
+        (henka_vec3){0.0f, -0.6f, 0.0f});
+    desc.collider.layer = 8U;
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world, &desc, &plane) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_physics_world_overlap_box(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f},
+        (henka_vec3){0.7f, 0.7f, 0.7f},
+        HENKA_PHYSICS_ALL_LAYERS,
+        results,
+        4U,
+        &count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(count == 2U);
+    for (index = 0U; index < count; ++index)
+    {
+        found_sphere = found_sphere || results[index] == sphere;
+        found_plane = found_plane || results[index] == plane;
+        HENKA_TEST_ASSERT(results[index] != box);
+        HENKA_TEST_ASSERT(results[index] != capsule);
+    }
+    HENKA_TEST_ASSERT(found_sphere && found_plane);
+
+    memset(results, 0, sizeof(results));
+    count = 0U;
+    HENKA_TEST_ASSERT(henka_physics_world_overlap_capsule(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f},
+        0.4f,
+        0.5f,
+        HENKA_PHYSICS_ALL_LAYERS,
+        results,
+        4U,
+        &count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(count == 2U);
+    found_sphere = false;
+    found_plane = false;
+    for (index = 0U; index < count; ++index)
+    {
+        found_sphere = found_sphere || results[index] == sphere;
+        found_plane = found_plane || results[index] == plane;
+        HENKA_TEST_ASSERT(results[index] != box);
+        HENKA_TEST_ASSERT(results[index] != capsule);
+    }
+    HENKA_TEST_ASSERT(found_sphere && found_plane);
+
+    count = 99U;
+    HENKA_TEST_ASSERT(henka_physics_world_overlap_box(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f},
+        (henka_vec3){0.0f, 1.0f, 1.0f},
+        HENKA_PHYSICS_ALL_LAYERS,
+        NULL,
+        0U,
+        &count) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(count == 0U);
+
+    count = 99U;
+    HENKA_TEST_ASSERT(henka_physics_world_overlap_capsule(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f},
+        0.4f,
+        -0.1f,
+        HENKA_PHYSICS_ALL_LAYERS,
+        NULL,
+        0U,
+        &count) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(count == 0U);
+
+    henka_physics_world_destroy(world);
+}
+
 void henka_test_physics(void)
 {
     HENKA_TEST_ASSERT(strcmp(henka_physics_body_type_get_label(HENKA_PHYSICS_BODY_DYNAMIC), "Dynamic") == 0);
@@ -2779,5 +2896,6 @@ void henka_test_physics(void)
     henka_test_physics_numeric_failures();
     henka_test_physics_query_and_accumulator_hardening();
     henka_test_physics_sphere_overlap_query();
+    henka_test_physics_box_and_capsule_overlap_queries();
     henka_test_physics_capacity_growth();
 }

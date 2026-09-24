@@ -262,6 +262,23 @@ henka_result henka_physics_world_overlap_sphere(
     henka_physics_body_id* out_bodies,
     size_t capacity,
     size_t* out_count);
+henka_result henka_physics_world_overlap_box(
+    const henka_physics_world* world,
+    henka_vec3 center,
+    henka_vec3 half_extents,
+    uint32_t layer_mask,
+    henka_physics_body_id* out_bodies,
+    size_t capacity,
+    size_t* out_count);
+henka_result henka_physics_world_overlap_capsule(
+    const henka_physics_world* world,
+    henka_vec3 center,
+    float radius,
+    float half_height,
+    uint32_t layer_mask,
+    henka_physics_body_id* out_bodies,
+    size_t capacity,
+    size_t* out_count);
 henka_result henka_physics_world_raycast(const henka_physics_world* world, henka_ray ray, float max_distance, uint32_t layer_mask, henka_physics_raycast_hit* out_hit);
 size_t henka_physics_world_get_debug_shape_count(const henka_physics_world* world);
 henka_result henka_physics_world_get_debug_shape(const henka_physics_world* world, size_t index, henka_physics_debug_shape* out_shape);

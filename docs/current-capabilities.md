@@ -930,8 +930,9 @@ and kinematic bodies with:
 - friction;
 - restitution;
 - trigger events;
-- bounded sphere-overlap queries with layer filtering, trigger participation,
-  count-only discovery, and fail-closed insufficient-capacity reporting;
+- bounded sphere, axis-aligned box, and upright-capsule overlap queries with
+  layer filtering, trigger participation, count-only discovery, and
+  fail-closed insufficient-capacity reporting;
 - raycasts.
 
 Sandbox Physics QA and selected-body activation are available. The packaged
