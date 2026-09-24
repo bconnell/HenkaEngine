@@ -790,7 +790,7 @@ try {
             -EventPath $automationInputPath `
             -X ($detailsX + $detailsWidth * 0.5) `
             -Y ($detailsY + $detailsHeight * 0.5) `
-            -WheelDelta 1.0
+            -WheelDelta -1.0
         Start-Sleep -Milliseconds 120
     }
     if (-not (Wait-FileContains `
