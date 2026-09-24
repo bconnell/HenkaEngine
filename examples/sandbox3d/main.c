@@ -35590,20 +35590,22 @@ static void sandbox3d_draw_utility_panel(
                             picker_buttons[0],
                             "Apply"))
                     {
-                        if (sandbox3d_apply_texture_to_material_binding(
+                        const henka_result texture_apply_result =
+                            sandbox3d_apply_texture_to_material_binding(
                                 engine,
                                 state,
                                 texture_binding,
                                 state->material_texture_pick.slot,
-                                state->asset_browser_selected_texture) ==
-                            HENKA_SUCCESS)
+                                state->asset_browser_selected_texture);
+                        printf(
+                            "Material texture picker: action=apply entity=%u slot=%s result=%s.\n",
+                            (unsigned int)state->material_texture_pick.entity,
+                            sandbox3d_material_texture_slot_label(
+                                state->material_texture_pick.slot),
+                            henka_result_to_string(texture_apply_result));
+                        fflush(stdout);
+                        if (texture_apply_result == HENKA_SUCCESS)
                         {
-                            printf(
-                                "Material texture picker: action=apply entity=%u slot=%s result=success.\n",
-                                (unsigned int)state->material_texture_pick.entity,
-                                sandbox3d_material_texture_slot_label(
-                                    state->material_texture_pick.slot));
-                            fflush(stdout);
                             sandbox3d_material_texture_pick_reset(
                                 &state->material_texture_pick);
                             sandbox3d_set_active_utility(
