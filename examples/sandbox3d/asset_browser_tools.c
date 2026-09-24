@@ -277,6 +277,10 @@ henka_result sandbox3d_format_material_dependency_summary(
 {
     size_t index;
     size_t offset;
+    size_t core_count = 0U;
+    size_t terrain_count = 0U;
+    size_t volume_count = 0U;
+    size_t other_count = 0U;
     int written;
 
     if (out_summary != NULL && out_summary_capacity > 0U)
@@ -288,6 +292,56 @@ henka_result sandbox3d_format_material_dependency_summary(
         dependencies->dependency_count > HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < dependencies->dependency_count; ++index)
+    {
+        const henka_material_texture_slot slot =
+            dependencies->dependencies[index].slot;
+        if (slot >= HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR &&
+            slot <= HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE)
+        {
+            ++core_count;
+        }
+        else if (slot >= HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR &&
+                 slot <= HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_METALLIC_ROUGHNESS)
+        {
+            ++terrain_count;
+        }
+        else if (slot == HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS ||
+                 slot == HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION)
+        {
+            ++volume_count;
+        }
+        else
+        {
+            ++other_count;
+        }
+    }
+
+    /*
+     * Non-terrain materials have at most seven currently supported semantic
+     * texture slots, so keep those exact and readable. Terrain definitions
+     * can expose all 19 dependency edges; summarize their groups instead of
+     * overflowing the compact Assets panel with an unreadable one-line list.
+     */
+    if (terrain_count > 0U || other_count > 0U)
+    {
+        written = snprintf(
+            out_summary,
+            out_summary_capacity,
+            "%zu textures | core %zu | terrain %zu | volume %zu%s",
+            dependencies->dependency_count,
+            core_count,
+            terrain_count,
+            volume_count,
+            other_count > 0U ? " | other" : "");
+        if (written < 0 || (size_t)written >= out_summary_capacity)
+        {
+            out_summary[0] = '\0';
+            return HENKA_ERROR_LIMIT;
+        }
+        return HENKA_SUCCESS;
     }
 
     written = snprintf(
