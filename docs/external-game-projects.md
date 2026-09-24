@@ -61,6 +61,13 @@ cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
 
 The template builds a real external executable using Henka's public API.
 
+When `henka_engine_config.asset_base_path` is left unset, Henka resolves
+relative asset paths from the executable base directory rather than the
+process working directory. The Windows external-template validator launches a
+dedicated smoke mode from a separate empty working directory and loads the
+packaged `assets/audio/henka_audio_fixture.wav` through the public asset
+manager to keep that relocatable package contract executable.
+
 The consuming game owns its own window, scene, camera, assets, and presentation policy.
 
 ## Current public API coverage

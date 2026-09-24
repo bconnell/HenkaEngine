@@ -1384,8 +1384,75 @@ cleanup:
     henka_scene_destroy(source_scene);
     (void)remove(relative_path);
     return success;
-}int main(void)
+}static bool external_asset_root_workflow(void)
 {
+    static const char* fixture_path = "assets/audio/henka_audio_fixture.wav";
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_asset_manager* assets = NULL;
+    henka_audio_clip* clip = NULL;
+    henka_asset_metadata metadata = {0};
+    const char* asset_base_path;
+    henka_result result;
+    bool success = false;
+
+    config.application_name = "Henka External Asset Root Consumer";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.package_mode = HENKA_PACKAGE_MODE_DEVELOPMENT;
+
+    result = henka_engine_create(&config, &engine);
+    if (result != HENKA_SUCCESS || engine == NULL)
+    {
+        goto cleanup;
+    }
+
+    asset_base_path = henka_engine_get_asset_base_path(engine);
+    assets = henka_engine_get_asset_manager(engine);
+    if (asset_base_path == NULL || asset_base_path[0] == '\0' || assets == NULL)
+    {
+        goto cleanup;
+    }
+
+    result = henka_assets_load_audio_clip(assets, fixture_path, &clip);
+    if (result != HENKA_SUCCESS || clip == NULL)
+    {
+        goto cleanup;
+    }
+    result = henka_assets_get_audio_metadata(assets, clip, &metadata);
+    if (result != HENKA_SUCCESS ||
+        metadata.type != HENKA_ASSET_TYPE_AUDIO ||
+        !metadata.loaded ||
+        metadata.fallback ||
+        metadata.source_path == NULL ||
+        strcmp(metadata.source_path, fixture_path) != 0)
+    {
+        goto cleanup;
+    }
+
+    success = true;
+    printf(
+        "External executable-relative asset root passed: base=%s asset=%s.\n",
+        asset_base_path,
+        metadata.source_path);
+
+cleanup:
+    henka_engine_destroy(engine);
+    return success;
+}
+
+int main(int argc, char** argv)
+{
+    if (argc == 2 && strcmp(argv[1], "--asset-root-smoke") == 0)
+    {
+        return external_asset_root_workflow() ? 0 : 1;
+    }
+    if (argc != 1)
+    {
+        fprintf(stderr, "Usage: external_game_minimal [--asset-root-smoke]\n");
+        return 2;
+    }
+
     if (!external_terrain_workflow() ||
         !external_graphical_terrain_workflow() ||
         !external_audio_workflow() ||

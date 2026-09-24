@@ -63,6 +63,7 @@ $validationParent = Join-Path $repoRoot "build\tv"
 $validationRoot = Join-Path $validationParent "external_game_minimal"
 $validationSource = Join-Path $validationRoot "external_game_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_game_minimal_build"
+$foreignWorkingDirectory = Join-Path $validationRoot "foreign_cwd"
 $cmake = Get-HenkaCMakePath
 $configureArguments = @(
     "-S", $validationSource,
@@ -191,6 +192,21 @@ if ($result.Stdout -notmatch "External game template initialized\." -or
     throw "The external game template public-API workflow did not complete its expected checks."
 }
 
+if (Test-Path -LiteralPath $foreignWorkingDirectory) {
+    Remove-Item -LiteralPath $foreignWorkingDirectory -Recurse -Force
+}
+[System.IO.Directory]::CreateDirectory($foreignWorkingDirectory) | Out-Null
+$assetRootResult = Invoke-HenkaNativeCapture `
+    -FilePath $templateExe `
+    -Arguments @("--asset-root-smoke") `
+    -WorkingDirectory $foreignWorkingDirectory `
+    -Label "Run external executable-relative asset-root smoke test" `
+    -TimeoutMilliseconds 30000
+if ($assetRootResult.Stdout -notmatch
+        "External executable-relative asset root passed: base=.+ asset=assets/audio/henka_audio_fixture\.wav\.") {
+    throw "The external game template did not resolve packaged assets independently of the process working directory."
+}
+
 Write-HenkaGeneratedRootMarker `
     -RepoRoot $repoRoot `
     -Path $validationRoot `
@@ -201,3 +217,4 @@ Write-HenkaGeneratedRootMarker `
     -CleanupCondition "retained_for_reuse" | Out-Null
 
 Write-Host "[pass] External game template configured, built, and ran successfully."
+Write-Host "[pass] Executable-relative packaged asset root remained valid from a foreign working directory."
