@@ -785,18 +785,36 @@ try {
         [Globalization.CultureInfo]::InvariantCulture)
     $pickerControlPattern =
         'Material texture picker control: entity=\d+ slot=Base Color choose_x=(?<x>[-0-9.]+) choose_y=(?<y>[-0-9.]+) width=70\.0 height=24\.0\.'
-    for ($pickerScrollAttempt = 0; $pickerScrollAttempt -lt 24; ++$pickerScrollAttempt) {
+    $pickerControlFound = (Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern $pickerControlPattern) -gt 0
+    # Prior modeling/reopen steps legitimately leave Object Details at
+    # different scroll offsets. Search to one bounded end, then reverse across
+    # the panel rather than assuming the picker is always above or below the
+    # current viewport.
+    for ($pickerScrollAttempt = 0; $pickerScrollAttempt -lt 48 -and -not $pickerControlFound; ++$pickerScrollAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta 1.0
+        Start-Sleep -Milliseconds 100
+        $pickerControlFound = (Get-LogMatchCount `
+            -Path $stdoutPath `
+            -Pattern $pickerControlPattern) -gt 0
+    }
+    for ($pickerScrollAttempt = 0; $pickerScrollAttempt -lt 96 -and -not $pickerControlFound; ++$pickerScrollAttempt) {
         Send-HenkaAutomationScroll `
             -EventPath $automationInputPath `
             -X ($detailsX + $detailsWidth * 0.5) `
             -Y ($detailsY + $detailsHeight * 0.5) `
             -WheelDelta -1.0
-        Start-Sleep -Milliseconds 120
-    }
-    if (-not (Wait-FileContains `
+        Start-Sleep -Milliseconds 100
+        $pickerControlFound = (Get-LogMatchCount `
             -Path $stdoutPath `
-            -Pattern $pickerControlPattern `
-            -TimeoutMilliseconds 5000)) {
+            -Pattern $pickerControlPattern) -gt 0
+    }
+    if (-not $pickerControlFound) {
         throw "The visible editor did not expose the Base Color texture picker control."
     }
     $pickerControl = Get-LastMatch -Path $stdoutPath -Pattern $pickerControlPattern
