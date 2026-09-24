@@ -754,14 +754,43 @@ try {
 
     # Use the checked-in color texture that normal product startup loads.
     # Arbitrary manager rows can be semantic/runtime textures that are valid
-    # assets but intentionally unsuitable as a Base Color source.
+    # assets but intentionally unsuitable as a Base Color source. The asset
+    # browser is paged, so search its real Next control instead of assuming
+    # this candidate is always on the first page.
     $assetRowPattern =
         'Material texture picker asset row: entity=\d+ slot=Base Color path=assets/textures/cube_albedo\.png x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26\.0\.'
-    if (-not (Wait-FileContains `
+    $assetCandidateFound = (Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern $assetRowPattern) -gt 0
+    if (-not $assetCandidateFound) {
+        $utilityGeometry = Get-LastMatch `
             -Path $stdoutPath `
-            -Pattern $assetRowPattern `
-            -TimeoutMilliseconds 5000)) {
-        throw "The visible material texture picker did not publish the packaged cube_albedo.png candidate."
+            -Pattern 'Workspace UI geometry: .*utility=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)'
+        $utilityX = [double]::Parse(
+            $utilityGeometry.Groups["x"].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $utilityY = [double]::Parse(
+            $utilityGeometry.Groups["y"].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $utilityHeight = [double]::Parse(
+            $utilityGeometry.Groups["height"].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $pickerNextX = $utilityX + 14.0 + 88.0 + 41.0
+        $pickerNextY = $utilityY + $utilityHeight - 48.0
+
+        for ($pickerPageAttempt = 0; $pickerPageAttempt -lt 32 -and -not $assetCandidateFound; ++$pickerPageAttempt) {
+            Send-HenkaAutomationClick `
+                -EventPath $automationInputPath `
+                -X $pickerNextX `
+                -Y $pickerNextY
+            Start-Sleep -Milliseconds 150
+            $assetCandidateFound = (Get-LogMatchCount `
+                -Path $stdoutPath `
+                -Pattern $assetRowPattern) -gt 0
+        }
+    }
+    if (-not $assetCandidateFound) {
+        throw "The visible material texture picker did not publish the packaged cube_albedo.png candidate on any bounded asset page."
     }
     $assetRow = Get-LastMatch `
         -Path $stdoutPath `
