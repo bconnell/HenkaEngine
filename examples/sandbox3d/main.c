@@ -35476,12 +35476,29 @@ static void sandbox3d_draw_utility_panel(
             if (state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL &&
                 state->asset_browser_selected_material != NULL)
             {
+                henka_material_dependency_info dependencies = {0};
+                char dependency_summary[160];
+
+                if (henka_assets_get_material_asset_dependencies(
+                        state->asset_browser_selected_material,
+                        &dependencies) != HENKA_SUCCESS ||
+                    sandbox3d_format_material_dependency_summary(
+                        &dependencies,
+                        dependency_summary,
+                        sizeof(dependency_summary)) != HENKA_SUCCESS)
+                {
+                    snprintf(
+                        dependency_summary,
+                        sizeof(dependency_summary),
+                        "%s",
+                        "Manager-owned definition; dependencies unavailable.");
+                }
                 henka_ui_label(
                     state->ui,
                     x_left,
                     y_start + 330.0f,
                     1.0f,
-                    "Manager-owned definition; apply an editable scene instance.");
+                    dependency_summary);
                 if (henka_ui_button(
                         state->ui,
                         "asset_browser_apply_material_instance",

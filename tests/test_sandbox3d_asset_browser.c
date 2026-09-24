@@ -219,6 +219,52 @@ static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
     HENKA_TEST_ASSERT(instance.material.thickness_texture == &data_texture);
 }
 
+static void henka_test_sandbox3d_material_dependency_summary(void)
+{
+    henka_material_dependency_info dependencies;
+    char summary[128];
+    char small[8];
+
+    memset(&dependencies, 0, sizeof(dependencies));
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_material_dependency_summary(
+            &dependencies,
+            summary,
+            sizeof(summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(summary, "0 textures") == 0);
+
+    dependencies.dependency_count = 3U;
+    dependencies.dependencies[0].slot = HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR;
+    dependencies.dependencies[1].slot = HENKA_MATERIAL_TEXTURE_SLOT_NORMAL;
+    dependencies.dependencies[2].slot = HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION;
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_material_dependency_summary(
+            &dependencies,
+            summary,
+            sizeof(summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        summary,
+        "3 textures: Base Color, Normal, Transmission") == 0);
+
+    memset(small, 'x', sizeof(small));
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_material_dependency_summary(
+            &dependencies,
+            small,
+            sizeof(small)) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(small[0] == '\0');
+
+    dependencies.dependency_count =
+        HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES + 1U;
+    summary[0] = 'x';
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_material_dependency_summary(
+            &dependencies,
+            summary,
+            sizeof(summary)) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(summary[0] == '\0');
+}
+
 static void henka_test_sandbox3d_material_texture_picker_state(void)
 {
     sandbox3d_material_texture_pick pick;
@@ -430,6 +476,7 @@ void henka_test_sandbox3d_asset_browser(void)
     henka_test_sandbox3d_asset_browser_collection();
     henka_test_sandbox3d_asset_browser_paging();
     henka_test_sandbox3d_asset_browser_texture_and_assignment();
+    henka_test_sandbox3d_material_dependency_summary();
     henka_test_sandbox3d_material_texture_picker_state();
     henka_test_sandbox3d_terrain_layer_display();
     henka_test_sandbox3d_material_asset_application();

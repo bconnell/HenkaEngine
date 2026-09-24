@@ -244,6 +244,60 @@ const char* sandbox3d_material_texture_slot_label(
     }
 }
 
+henka_result sandbox3d_format_material_dependency_summary(
+    const henka_material_dependency_info* dependencies,
+    char* out_summary,
+    size_t out_summary_capacity)
+{
+    size_t index;
+    size_t offset;
+    int written;
+
+    if (out_summary != NULL && out_summary_capacity > 0U)
+    {
+        out_summary[0] = '\0';
+    }
+    if (dependencies == NULL || out_summary == NULL ||
+        out_summary_capacity == 0U ||
+        dependencies->dependency_count > HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    written = snprintf(
+        out_summary,
+        out_summary_capacity,
+        "%zu texture%s",
+        dependencies->dependency_count,
+        dependencies->dependency_count == 1U ? "" : "s");
+    if (written < 0 || (size_t)written >= out_summary_capacity)
+    {
+        out_summary[0] = '\0';
+        return HENKA_ERROR_LIMIT;
+    }
+    offset = (size_t)written;
+
+    for (index = 0U; index < dependencies->dependency_count; ++index)
+    {
+        const char* label = sandbox3d_material_texture_slot_label(
+            dependencies->dependencies[index].slot);
+        written = snprintf(
+            out_summary + offset,
+            out_summary_capacity - offset,
+            "%s%s",
+            index == 0U ? ": " : ", ",
+            label);
+        if (written < 0 || (size_t)written >= out_summary_capacity - offset)
+        {
+            out_summary[0] = '\0';
+            return HENKA_ERROR_LIMIT;
+        }
+        offset += (size_t)written;
+    }
+
+    return HENKA_SUCCESS;
+}
+
 void sandbox3d_material_texture_pick_reset(
     sandbox3d_material_texture_pick* pick)
 {

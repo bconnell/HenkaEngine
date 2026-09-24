@@ -56,6 +56,11 @@ const char* sandbox3d_texture_usage_label(henka_texture_usage usage);
 const char* sandbox3d_material_texture_slot_label(
     henka_material_texture_slot slot);
 
+henka_result sandbox3d_format_material_dependency_summary(
+    const henka_material_dependency_info* dependencies,
+    char* out_summary,
+    size_t out_summary_capacity);
+
 void sandbox3d_material_texture_pick_reset(
     sandbox3d_material_texture_pick* pick);
 
