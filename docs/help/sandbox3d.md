@@ -129,6 +129,11 @@ If the target selection changes while the picker is open, Henka cancels the
 pending assignment instead of applying the texture to a stale or different
 object.
 
+Selecting a manager-owned material in `Utility > Assets > Materials` also
+shows a compact dependency summary for its current semantic texture edges,
+including the non-instance terrain layer slots. The summary is inspection-only;
+the manager-owned material definition remains the authority.
+
 ### Asset fallback recovery
 
 `Utility > Assets` marks manager-known source failures as unavailable fallback

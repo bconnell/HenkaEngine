@@ -286,6 +286,70 @@ static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
     HENKA_TEST_ASSERT(instance.material.thickness_texture == &data_texture);
 }
 
+static void henka_test_sandbox3d_material_dependency_summary(void)
+{
+    henka_material_dependency_info dependencies;
+    char summary[128];
+    char small[8];
+
+    memset(&dependencies, 0, sizeof(dependencies));
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_material_dependency_summary(
+            &dependencies,
+            summary,
+            sizeof(summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(summary, "0 textures") == 0);
+
+    dependencies.dependency_count = 3U;
+    dependencies.dependencies[0].slot = HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR;
+    dependencies.dependencies[1].slot = HENKA_MATERIAL_TEXTURE_SLOT_NORMAL;
+    dependencies.dependencies[2].slot = HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION;
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_material_dependency_summary(
+            &dependencies,
+            summary,
+            sizeof(summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        summary,
+        "3 textures: Base Color, Normal, Transmission") == 0);
+
+    memset(&dependencies, 0, sizeof(dependencies));
+    dependencies.dependency_count = HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES;
+    for (size_t dependency_index = 0U;
+         dependency_index < dependencies.dependency_count;
+         ++dependency_index)
+    {
+        dependencies.dependencies[dependency_index].slot =
+            (henka_material_texture_slot)dependency_index;
+    }
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_material_dependency_summary(
+            &dependencies,
+            summary,
+            sizeof(summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        summary,
+        "19 textures | core 5 | terrain 12 | volume 2") == 0);
+
+    memset(small, 'x', sizeof(small));
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_material_dependency_summary(
+            &dependencies,
+            small,
+            sizeof(small)) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(small[0] == '\0');
+
+    dependencies.dependency_count =
+        HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES + 1U;
+    summary[0] = 'x';
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_material_dependency_summary(
+            &dependencies,
+            summary,
+            sizeof(summary)) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(summary[0] == '\0');
+}
+
 static void henka_test_sandbox3d_material_texture_picker_state(void)
 {
     sandbox3d_material_texture_pick pick;
@@ -311,6 +375,10 @@ static void henka_test_sandbox3d_material_texture_picker_state(void)
     HENKA_TEST_ASSERT(strcmp(
         sandbox3d_material_texture_slot_label(HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION),
         "Transmission") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_material_texture_slot_label(
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_METALLIC_ROUGHNESS),
+        "Layer3 Metal/Rough") == 0);
     HENKA_TEST_ASSERT(strcmp(
         sandbox3d_material_texture_slot_label((henka_material_texture_slot)99),
         "Unknown") == 0);
@@ -498,6 +566,7 @@ void henka_test_sandbox3d_asset_browser(void)
     henka_test_sandbox3d_asset_browser_retry_policy();
     henka_test_sandbox3d_asset_browser_paging();
     henka_test_sandbox3d_asset_browser_texture_and_assignment();
+    henka_test_sandbox3d_material_dependency_summary();
     henka_test_sandbox3d_material_texture_picker_state();
     henka_test_sandbox3d_terrain_layer_display();
     henka_test_sandbox3d_material_asset_application();

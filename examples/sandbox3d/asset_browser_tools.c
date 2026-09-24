@@ -225,23 +225,151 @@ static henka_texture_usage sandbox3d_material_texture_slot_usage(
 const char* sandbox3d_material_texture_slot_label(
     henka_material_texture_slot slot)
 {
-    if (!sandbox3d_material_texture_slot_is_instance_slot(slot))
-    {
-        return "Unknown";
-    }
-
     switch (slot)
     {
         case HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR:
             return "Base Color";
+        case HENKA_MATERIAL_TEXTURE_SLOT_NORMAL:
+            return "Normal";
+        case HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS:
+            return "Metal/Rough";
+        case HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION:
+            return "Occlusion";
+        case HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE:
+            return "Emissive";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR:
+            return "Layer0 Base";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_NORMAL:
+            return "Layer0 Normal";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_METALLIC_ROUGHNESS:
+            return "Layer0 Metal/Rough";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_BASE_COLOR:
+            return "Layer1 Base";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_NORMAL:
+            return "Layer1 Normal";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_METALLIC_ROUGHNESS:
+            return "Layer1 Metal/Rough";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_BASE_COLOR:
+            return "Layer2 Base";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_NORMAL:
+            return "Layer2 Normal";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_METALLIC_ROUGHNESS:
+            return "Layer2 Metal/Rough";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_BASE_COLOR:
+            return "Layer3 Base";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_NORMAL:
+            return "Layer3 Normal";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_METALLIC_ROUGHNESS:
+            return "Layer3 Metal/Rough";
         case HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS:
             return "Thickness";
         case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
             return "Transmission";
         default:
-            return sandbox3d_asset_browser_usage_label(
-                sandbox3d_material_texture_slot_usage(slot));
+            return "Unknown";
     }
+}
+
+henka_result sandbox3d_format_material_dependency_summary(
+    const henka_material_dependency_info* dependencies,
+    char* out_summary,
+    size_t out_summary_capacity)
+{
+    size_t index;
+    size_t offset;
+    size_t core_count = 0U;
+    size_t terrain_count = 0U;
+    size_t volume_count = 0U;
+    size_t other_count = 0U;
+    int written;
+
+    if (out_summary != NULL && out_summary_capacity > 0U)
+    {
+        out_summary[0] = '\0';
+    }
+    if (dependencies == NULL || out_summary == NULL ||
+        out_summary_capacity == 0U ||
+        dependencies->dependency_count > HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < dependencies->dependency_count; ++index)
+    {
+        const henka_material_texture_slot slot =
+            dependencies->dependencies[index].slot;
+        if (slot >= HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR &&
+            slot <= HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE)
+        {
+            ++core_count;
+        }
+        else if (slot >= HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR &&
+                 slot <= HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_METALLIC_ROUGHNESS)
+        {
+            ++terrain_count;
+        }
+        else if (slot == HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS ||
+                 slot == HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION)
+        {
+            ++volume_count;
+        }
+        else
+        {
+            ++other_count;
+        }
+    }
+
+    if (terrain_count > 0U || other_count > 0U)
+    {
+        written = snprintf(
+            out_summary,
+            out_summary_capacity,
+            "%zu textures | core %zu | terrain %zu | volume %zu%s",
+            dependencies->dependency_count,
+            core_count,
+            terrain_count,
+            volume_count,
+            other_count > 0U ? " | other" : "");
+        if (written < 0 || (size_t)written >= out_summary_capacity)
+        {
+            out_summary[0] = '\0';
+            return HENKA_ERROR_LIMIT;
+        }
+        return HENKA_SUCCESS;
+    }
+
+    written = snprintf(
+        out_summary,
+        out_summary_capacity,
+        "%zu texture%s",
+        dependencies->dependency_count,
+        dependencies->dependency_count == 1U ? "" : "s");
+    if (written < 0 || (size_t)written >= out_summary_capacity)
+    {
+        out_summary[0] = '\0';
+        return HENKA_ERROR_LIMIT;
+    }
+    offset = (size_t)written;
+
+    for (index = 0U; index < dependencies->dependency_count; ++index)
+    {
+        const char* label = sandbox3d_material_texture_slot_label(
+            dependencies->dependencies[index].slot);
+        written = snprintf(
+            out_summary + offset,
+            out_summary_capacity - offset,
+            "%s%s",
+            index == 0U ? ": " : ", ",
+            label);
+        if (written < 0 || (size_t)written >= out_summary_capacity - offset)
+        {
+            out_summary[0] = '\0';
+            return HENKA_ERROR_LIMIT;
+        }
+        offset += (size_t)written;
+    }
+
+    return HENKA_SUCCESS;
 }
 
 void sandbox3d_material_texture_pick_reset(
