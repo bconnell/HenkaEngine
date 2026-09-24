@@ -9,9 +9,10 @@
 static void henka_test_sandbox3d_asset_browser_collection(void)
 {
     henka_asset_manager manager;
-    henka_asset_texture_entry textures[2];
+    henka_asset_texture_entry textures[3];
     henka_asset_mesh_entry meshes[1];
-    sandbox3d_asset_browser_item items[2];
+    sandbox3d_asset_browser_item items[3];
+    size_t expected_texture_count;
 
     memset(&manager, 0, sizeof(manager));
     memset(textures, 0, sizeof(textures));
@@ -22,19 +23,46 @@ static void henka_test_sandbox3d_asset_browser_collection(void)
     textures[1].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
     textures[1].metadata.source_path = "assets/textures/b.ktx2";
     textures[1].metadata.display_name = "b.ktx2";
+    textures[2].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    textures[2].metadata.source_path = "ASSETS/TEXTURES/A.PNG";
+    textures[2].metadata.display_name = "A.PNG";
     meshes[0].metadata.type = HENKA_ASSET_TYPE_MESH;
     meshes[0].metadata.source_path = "assets/models/a.obj";
     manager.texture_entries = textures;
-    manager.texture_count = 2U;
+    manager.texture_count = 3U;
     manager.mesh_entries = meshes;
     manager.mesh_count = 1U;
 
-    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect(&manager, HENKA_ASSET_TYPE_TEXTURE, items, 1U) == 2U);
+#if defined(_WIN32)
+    expected_texture_count = 2U;
+#else
+    expected_texture_count = 3U;
+#endif
+    HENKA_TEST_ASSERT(
+        sandbox3d_asset_browser_collect(
+            &manager,
+            HENKA_ASSET_TYPE_TEXTURE,
+            items,
+            3U) == expected_texture_count);
     HENKA_TEST_ASSERT(items[0].metadata_index == 0U);
     HENKA_TEST_ASSERT(strcmp(items[0].metadata.display_name, "a.png") == 0);
-    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect(&manager, HENKA_ASSET_TYPE_MESH, items, 2U) == 1U);
-    HENKA_TEST_ASSERT(items[0].metadata_index == 2U);
-    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect(&manager, HENKA_ASSET_TYPE_MATERIAL, items, 2U) == 0U);
+#if !defined(_WIN32)
+    HENKA_TEST_ASSERT(items[2].metadata_index == 2U);
+    HENKA_TEST_ASSERT(strcmp(items[2].metadata.display_name, "A.PNG") == 0);
+#endif
+    HENKA_TEST_ASSERT(
+        sandbox3d_asset_browser_collect(
+            &manager,
+            HENKA_ASSET_TYPE_MESH,
+            items,
+            3U) == 1U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 3U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_asset_browser_collect(
+            &manager,
+            HENKA_ASSET_TYPE_MATERIAL,
+            items,
+            3U) == 0U);
 }
 
 static void henka_test_sandbox3d_asset_browser_paging(void)
