@@ -35407,7 +35407,9 @@ static void sandbox3d_draw_utility_panel(
                     {
                         const bool retryable =
                             sandbox3d_asset_browser_can_retry(&selected_metadata);
-                        const float state_width = retryable
+                        const bool show_retry =
+                            retryable && panel_bounds.width >= 180.0f;
+                        const float state_width = show_retry
                             ? panel_bounds.width - 112.0f
                             : panel_bounds.width - 28.0f;
 
@@ -35441,7 +35443,7 @@ static void sandbox3d_draw_utility_panel(
                             "State",
                             row_value);
 
-                        if (retryable &&
+                        if (show_retry &&
                             henka_ui_primary_button(
                                 state->ui,
                                 "asset_browser_retry",
