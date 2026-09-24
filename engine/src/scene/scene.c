@@ -4528,18 +4528,28 @@ static henka_result henka_scene_validate_light(henka_scene_light_desc* light)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    direction = henka_vec3_normalize(light->direction);
-    if (henka_vec3_length(direction) <= 0.000001f)
+    if (light->type == HENKA_SCENE_LIGHT_SPOT)
     {
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        direction = henka_vec3_normalize(light->direction);
+        if (henka_vec3_length(direction) <= 0.000001f ||
+            light->inner_cone_cosine < 0.0f ||
+            light->inner_cone_cosine > 1.0f ||
+            light->outer_cone_cosine < 0.0f ||
+            light->outer_cone_cosine > 1.0f ||
+            light->inner_cone_cosine < light->outer_cone_cosine)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        light->direction = direction;
     }
-    light->direction = direction;
-    if (light->type == HENKA_SCENE_LIGHT_SPOT &&
-        (light->inner_cone_cosine < 0.0f || light->inner_cone_cosine > 1.0f ||
-         light->outer_cone_cosine < 0.0f || light->outer_cone_cosine > 1.0f ||
-         light->inner_cone_cosine < light->outer_cone_cosine))
+    else
     {
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        /* Point-light direction and cones have no rendering meaning. Store one
+         * canonical value so equivalent point lights cannot accumulate
+         * arbitrary non-authoritative state. */
+        light->direction = (henka_vec3){0.0f, -1.0f, 0.0f};
+        light->inner_cone_cosine = 1.0f;
+        light->outer_cone_cosine = 0.0f;
     }
     return HENKA_SUCCESS;
 }

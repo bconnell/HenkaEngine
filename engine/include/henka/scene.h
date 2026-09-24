@@ -264,6 +264,8 @@ typedef struct henka_scene_light_desc
 {
     henka_scene_light_type type;
     henka_vec3 position;
+    /* Spot direction must be finite and nonzero and is normalized on commit.
+     * Point lights ignore direction/cones and canonicalize them. */
     henka_vec3 direction;
     henka_vec3 color;
     float intensity;

@@ -2583,18 +2583,24 @@ void henka_test_scene(void)
     light = (henka_scene_light_desc){
         HENKA_SCENE_LIGHT_POINT,
         (henka_vec3){1.0f, 2.0f, 3.0f},
-        (henka_vec3){0.0f, -1.0f, 0.0f},
+        (henka_vec3){0.0f, 0.0f, 0.0f},
         (henka_vec3){1.0f, 0.8f, 0.6f},
         20.0f,
         12.0f,
-        1.0f,
-        0.5f,
+        -4.0f,
+        9.0f,
         true};
     HENKA_TEST_ASSERT(henka_scene_add_light(scene, light, &light_index) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(light_index < HENKA_SCENE_MAX_LOCAL_LIGHTS);
     HENKA_TEST_ASSERT(henka_scene_get_light(scene, light_index, &read_light) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_light.position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_light.direction.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_light.direction.y, -1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_light.direction.z, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_light.inner_cone_cosine, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_light.outer_cone_cosine, 0.0f, 0.0001f);
     light.type = HENKA_SCENE_LIGHT_SPOT;
+    light.direction = (henka_vec3){0.0f, -1.0f, 0.0f};
     light.inner_cone_cosine = 0.8f;
     light.outer_cone_cosine = 0.9f;
     HENKA_TEST_ASSERT(henka_scene_update_light(scene, light_index, light) == HENKA_ERROR_INVALID_ARGUMENT);
