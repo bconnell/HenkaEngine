@@ -274,6 +274,24 @@ static void henka_test_sandbox3d_material_dependency_summary(void)
         summary,
         "3 textures: Base Color, Normal, Transmission") == 0);
 
+    memset(&dependencies, 0, sizeof(dependencies));
+    dependencies.dependency_count = HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES;
+    for (size_t dependency_index = 0U;
+         dependency_index < dependencies.dependency_count;
+         ++dependency_index)
+    {
+        dependencies.dependencies[dependency_index].slot =
+            (henka_material_texture_slot)dependency_index;
+    }
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_material_dependency_summary(
+            &dependencies,
+            summary,
+            sizeof(summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        summary,
+        "19 textures | core 5 | terrain 12 | volume 2") == 0);
+
     memset(small, 'x', sizeof(small));
     HENKA_TEST_ASSERT(
         sandbox3d_format_material_dependency_summary(
