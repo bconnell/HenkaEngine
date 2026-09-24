@@ -225,22 +225,48 @@ static henka_texture_usage sandbox3d_material_texture_slot_usage(
 const char* sandbox3d_material_texture_slot_label(
     henka_material_texture_slot slot)
 {
-    if (!sandbox3d_material_texture_slot_is_instance_slot(slot))
-    {
-        return "Unknown";
-    }
-
     switch (slot)
     {
         case HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR:
             return "Base Color";
+        case HENKA_MATERIAL_TEXTURE_SLOT_NORMAL:
+            return "Normal";
+        case HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS:
+            return "Metal/Rough";
+        case HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION:
+            return "Occlusion";
+        case HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE:
+            return "Emissive";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR:
+            return "Layer0 Base";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_NORMAL:
+            return "Layer0 Normal";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_METALLIC_ROUGHNESS:
+            return "Layer0 Metal/Rough";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_BASE_COLOR:
+            return "Layer1 Base";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_NORMAL:
+            return "Layer1 Normal";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_METALLIC_ROUGHNESS:
+            return "Layer1 Metal/Rough";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_BASE_COLOR:
+            return "Layer2 Base";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_NORMAL:
+            return "Layer2 Normal";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_METALLIC_ROUGHNESS:
+            return "Layer2 Metal/Rough";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_BASE_COLOR:
+            return "Layer3 Base";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_NORMAL:
+            return "Layer3 Normal";
+        case HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_METALLIC_ROUGHNESS:
+            return "Layer3 Metal/Rough";
         case HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS:
             return "Thickness";
         case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
             return "Transmission";
         default:
-            return sandbox3d_asset_browser_usage_label(
-                sandbox3d_material_texture_slot_usage(slot));
+            return "Unknown";
     }
 }
 

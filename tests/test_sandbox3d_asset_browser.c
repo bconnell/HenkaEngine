@@ -291,6 +291,10 @@ static void henka_test_sandbox3d_material_texture_picker_state(void)
         sandbox3d_material_texture_slot_label(HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION),
         "Transmission") == 0);
     HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_material_texture_slot_label(
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_METALLIC_ROUGHNESS),
+        "Layer3 Metal/Rough") == 0);
+    HENKA_TEST_ASSERT(strcmp(
         sandbox3d_material_texture_slot_label((henka_material_texture_slot)99),
         "Unknown") == 0);
 
