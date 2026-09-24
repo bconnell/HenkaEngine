@@ -60,9 +60,12 @@ identity, payload, and metadata unchanged and leaves the retry output null.
 `henka_assets_retry_failed_obj_mesh` and
 `henka_assets_retry_failed_gltf_mesh` replace the diagnostic payload in place
 after a successful candidate load, so existing scene references observe the
-recovered mesh without pointer replacement. The same identity is retained by
-later explicit reimport. File watching and automatic dependency-driven
-reimport remain outside this contract.
+recovered mesh without pointer replacement. Retry entry points are valid only
+while the cached entry is still a fallback. Once recovery succeeds, another
+retry is rejected with a null output; callers should use the ordinary cached
+load or explicit reload path instead. The same identity is retained by later
+explicit reimport. File watching and automatic dependency-driven reimport
+remain outside this contract.
 
 ### Explicit texture reimport
 
@@ -77,9 +80,11 @@ materials and scene entities continue to reference the refreshed payload.
 The replacement is decoded, uploaded, checked against the configured texture
 residency budget, and then committed in place. A source, decode, upload,
 budget, or texture-revision failure leaves the previous payload, metadata,
-revision, and residency accounting unchanged. Runtime-adopted and embedded
-textures do not have a source-file reimport path. Automatic file watching and
-dependency-driven reimport remain outside this contract.
+revision, and residency accounting unchanged. The fallback retry entry points
+are valid only while the cached texture is still a fallback; after successful
+recovery they reject another retry and leave its output null. Runtime-adopted
+and embedded textures do not have a source-file reimport path. Automatic file
+watching and dependency-driven reimport remain outside this contract.
 
 ## OBJ support
 
