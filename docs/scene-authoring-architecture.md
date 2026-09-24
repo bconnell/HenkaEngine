@@ -105,6 +105,11 @@ A failed materialization keeps the active scene intact. Candidate state is valid
 Game Authoring saves a bounded `henka.project` file beside the selected scene.
 The manifest stores a schema version and one confined `startup_scene` path. It
 selects the Scene Document to open; it does not duplicate Scene Document
+state. Project save stages the candidate manifest and candidate Scene Document
+before publishing either file. If a publication step fails after the other file
+has advanced, the previous on-disk bytes (or previous absence) are restored
+before the save returns, so an ordinary save failure cannot leave the manifest
+and selected scene at different process-visible generations.
 objects, runtime state, or subsystem-owned resources.
 
 When `henka.project` is absent, the coordinator uses its existing scene path
