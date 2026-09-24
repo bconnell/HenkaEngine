@@ -1250,6 +1250,13 @@ static void henka_test_gltf_triangle_strip_and_fan_import(void)
         "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":4,\"type\":\"VEC3\"},"
         "{\"bufferView\":1,\"componentType\":5121,\"count\":2,\"type\":\"SCALAR\"}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":1,\"mode\":5}]}]}";
+    static const char* out_of_range_index_accessor =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":99,\"mode\":4}]}]}";
     static const char* unsupported_line_strip =
         "{\"asset\":{\"version\":\"2.0\"},"
         "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
@@ -1290,6 +1297,14 @@ static void henka_test_gltf_triangle_strip_and_fan_import(void)
         short_triangle_strip,
         strlen(short_triangle_strip),
         "short-triangle-strip.gltf",
+        &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL && model.indices == NULL);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        out_of_range_index_accessor,
+        strlen(out_of_range_index_accessor),
+        "out-of-range-index-accessor.gltf",
         &model) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.vertices == NULL && model.indices == NULL);
 

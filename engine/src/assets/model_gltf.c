@@ -868,13 +868,14 @@ static bool henka_gltf_parse_primitive(const henka_gltf_context* context, const 
         (uv1_accessor >= 0 && !henka_gltf_uv_accessor_is_valid(&context->accessors[uv1_accessor])) ||
         (color_accessor >= 0 && !henka_gltf_color_accessor_is_valid(&context->accessors[color_accessor]))) return false;
     if (index_accessor >= 0 &&
+        (size_t)index_accessor >= context->accessor_count) return false;
+    if (index_accessor >= 0 &&
         (context->accessors[index_accessor].component_count != 1 ||
          context->accessors[index_accessor].normalized ||
          (context->accessors[index_accessor].component_type != 5121 &&
           context->accessors[index_accessor].component_type != 5123 &&
           context->accessors[index_accessor].component_type != 5125))) return false;
     index_count = index_accessor >= 0 ? context->accessors[index_accessor].count : context->accessors[position_accessor].count;
-    if (index_accessor >= 0 && (size_t)index_accessor >= context->accessor_count) return false;
     if (mode == 4)
     {
         if (index_count == 0U || index_count % 3U != 0U) return false;
