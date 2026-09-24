@@ -815,9 +815,17 @@ try {
         throw "The visible Base Color texture picker did not start."
     }
 
+    $assetRowPattern =
+        'Material texture picker asset row: entity=\d+ slot=Base Color path=(?<path>.+?) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26\.0\.'
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern $assetRowPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible material texture picker did not publish manager texture rows."
+    }
     $assetRow = Get-LastMatch `
         -Path $stdoutPath `
-        -Pattern 'Material texture picker asset row: entity=\d+ slot=Base Color path=(?<path>.+?) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26\.0\.'
+        -Pattern $assetRowPattern
     $pickerSelectCount = Get-LogMatchCount `
         -Path $stdoutPath `
         -Pattern 'Material texture picker: action=select entity=\d+ slot=Base Color path=.+\.'
@@ -833,9 +841,17 @@ try {
         throw "The visible material texture picker did not select a manager-owned texture candidate."
     }
 
+    $pickerActionsPattern =
+        'Material texture picker actions: entity=\d+ slot=Base Color apply_x=(?<apply>[-0-9.]+) cancel_x=(?<cancel>[-0-9.]+) y=(?<y>[-0-9.]+) apply_width=(?<applyWidth>[-0-9.]+) cancel_width=(?<cancelWidth>[-0-9.]+) height=24\.0\.'
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern $pickerActionsPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible material texture picker did not publish Apply/Cancel geometry."
+    }
     $pickerActions = Get-LastMatch `
         -Path $stdoutPath `
-        -Pattern 'Material texture picker actions: entity=\d+ slot=Base Color apply_x=(?<apply>[-0-9.]+) cancel_x=(?<cancel>[-0-9.]+) y=(?<y>[-0-9.]+) apply_width=(?<applyWidth>[-0-9.]+) cancel_width=(?<cancelWidth>[-0-9.]+) height=24\.0\.'
+        -Pattern $pickerActionsPattern
     Start-Sleep -Milliseconds 250
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
