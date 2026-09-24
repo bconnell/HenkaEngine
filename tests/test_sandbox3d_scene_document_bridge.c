@@ -253,6 +253,7 @@ int main(void)
     henka_material previous_material;
     henka_material valid_runtime_material;
     char previous_name[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+    char previous_tag[HENKA_SCENE_DOCUMENT_MAX_TAG_BYTES];
     char previous_prompt[HENKA_SCENE_DOCUMENT_MAX_PROMPT_BYTES];
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_entity child_entity = HENKA_INVALID_ENTITY;
@@ -284,6 +285,7 @@ int main(void)
         goto cleanup;
     }
     (void)snprintf(object.name, sizeof(object.name), "%s", "Bridge Object");
+    (void)snprintf(object.tag, sizeof(object.tag), "%s", "bridge-tag");
     object.transform.position = (henka_vec3){2.0f, 3.0f, 4.0f};
     object.interaction.enabled = true;
     object.interaction.max_distance = 5.0f;
@@ -335,6 +337,7 @@ int main(void)
         sandbox3d_scene_document_bridge_apply_object(bridge, child_id) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_apply_hierarchy(bridge) != HENKA_SUCCESS ||
         strcmp(henka_scene_get_entity_name(scene, entity), "Bridge Object") != 0 ||
+        strcmp(henka_scene_get_entity_tag(scene, entity), "bridge-tag") != 0 ||
         henka_scene_get_entity_transform(scene, entity, &object.transform) != HENKA_SUCCESS ||
         object.transform.position.x != 2.0f ||
         henka_scene_get_entity_parent(scene, child_entity, &parent_entity) != HENKA_SUCCESS ||
@@ -435,9 +438,14 @@ int main(void)
             scene,
             entity,
             &(henka_interaction_desc){false, 1.0f, "Changed"}) != HENKA_SUCCESS ||
+        henka_scene_set_entity_tag(
+            scene,
+            entity,
+            "changed-runtime-tag") != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_sync_object(bridge, object_id) != HENKA_SUCCESS ||
         henka_scene_document_get_object(document, object_id, &object) != HENKA_SUCCESS ||
         object.transform.position.x != 9.0f || object.visible ||
+        strcmp(object.tag, "changed-runtime-tag") != 0 ||
         object.interaction.enabled || object.interaction.max_distance != 1.0f ||
         strcmp(object.interaction.prompt, "Changed") != 0)
     {
@@ -470,6 +478,11 @@ int main(void)
             "%s",
             previous_info.name == NULL ? "" : previous_info.name) < 0 ||
         snprintf(
+            previous_tag,
+            sizeof(previous_tag),
+            "%s",
+            previous_info.tag == NULL ? "" : previous_info.tag) < 0 ||
+        snprintf(
             previous_prompt,
             sizeof(previous_prompt),
             "%s",
@@ -479,6 +492,7 @@ int main(void)
     }
     object = applied_object;
     (void)snprintf(object.name, sizeof(object.name), "%s", "Rejected renderer state");
+    (void)snprintf(object.tag, sizeof(object.tag), "%s", "rejected-tag");
     object.visible = !previous_info.visible;
     object.transform.position.x += 3.0f;
     object.renderer.material_override = true;
@@ -499,6 +513,7 @@ int main(void)
         henka_result interaction_result;
         henka_result material_result;
         bool name_same;
+        bool tag_same;
         bool visible_same;
         bool transform_same;
         bool interaction_same;
@@ -515,6 +530,8 @@ int main(void)
         material_result = henka_scene_get_entity_material(scene, entity, &material);
         name_same = info_result == HENKA_SUCCESS &&
             strcmp(object_info.name == NULL ? "" : object_info.name, previous_name) == 0;
+        tag_same = info_result == HENKA_SUCCESS &&
+            strcmp(object_info.tag == NULL ? "" : object_info.tag, previous_tag) == 0;
         visible_same = info_result == HENKA_SUCCESS &&
             object_info.visible == previous_info.visible;
         transform_same = info_result == HENKA_SUCCESS &&
@@ -528,7 +545,7 @@ int main(void)
         if (apply_result != HENKA_ERROR_LIMIT ||
             scene->render_revision != UINT64_MAX - 2U ||
             scene->content_revision != UINT64_MAX - 2U ||
-            !name_same || !visible_same ||
+            !name_same || !tag_same || !visible_same ||
             !transform_same || !interaction_same || !material_same ||
             henka_scene_document_set_object(document, &applied_object) != HENKA_SUCCESS)
         {
@@ -539,6 +556,7 @@ int main(void)
     }
     object = applied_object;
     (void)snprintf(object.name, sizeof(object.name), "%s", "Allocation Failure");
+    (void)snprintf(object.tag, sizeof(object.tag), "%s", "allocation-failure-tag");
     object.transform.position.x += 1.0f;
     object.interaction.enabled = !object.interaction.enabled;
     object.interaction.max_distance = 7.0f;
@@ -563,8 +581,8 @@ int main(void)
         const size_t allocations_before = henka_memory_get_allocation_count();
         henka_result apply_result;
 
-        /* The first text allocation may succeed, but the later prompt
-         * allocation must fail without exposing the earlier name change. */
+        /* The name allocation succeeds, then the tag allocation fails.
+         * Neither prepared text value may become visible. */
         henka_memory_test_fail_after(1U);
         apply_result = sandbox3d_scene_document_bridge_apply_object(bridge, object_id);
         henka_memory_test_disable_failures();
@@ -574,6 +592,7 @@ int main(void)
             henka_memory_get_allocation_count() != allocations_before ||
             henka_scene_get_entity_info(scene, entity, &object_info) != HENKA_SUCCESS ||
             strcmp(object_info.name == NULL ? "" : object_info.name, previous_name) != 0 ||
+            strcmp(object_info.tag == NULL ? "" : object_info.tag, previous_tag) != 0 ||
             test_transform_equal(&object_info.transform, &previous_info.transform) == false ||
             henka_scene_get_entity_interaction(scene, entity, &interaction) != HENKA_SUCCESS ||
             interaction.enabled != previous_interaction.enabled ||

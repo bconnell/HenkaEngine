@@ -662,7 +662,9 @@ static henka_result sandbox3d_scene_document_bridge_build_object_update(
             object->interaction.prompt},
         .apply_material = false,
         .material = material,
-        .apply_renderer_enabled = true};
+        .apply_renderer_enabled = true,
+        .apply_tag = true,
+        .tag = object->tag};
     if (object->renderer.material_override)
     {
         material = previous_material;
@@ -972,6 +974,15 @@ henka_result sandbox3d_scene_document_bridge_sync_object(
         "%s",
         info.name == NULL ? "" : info.name);
     if (written < 0 || (size_t)written >= sizeof(candidate.name))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    written = snprintf(
+        candidate.tag,
+        sizeof(candidate.tag),
+        "%s",
+        info.tag == NULL ? "" : info.tag);
+    if (written < 0 || (size_t)written >= sizeof(candidate.tag))
     {
         return HENKA_ERROR_LIMIT;
     }

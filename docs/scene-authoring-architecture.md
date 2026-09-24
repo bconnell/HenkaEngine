@@ -29,6 +29,8 @@ Duplicating an authored object allocates a new persistent Scene Document ID.
 
 The Sandbox adapter maintains a bounded mapping from persistent IDs to current runtime entities. The Scene Document remains the authoring authority.
 
+Entity tags are authored lookup metadata, not a replacement for persistent object IDs. HSCN v17 round-trips tags with the object record; v1-v16 documents load with an empty tag.
+
 ### Binding after reload
 
 Bindings are restored by persistent ID first.
