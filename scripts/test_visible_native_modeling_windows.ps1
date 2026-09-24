@@ -770,7 +770,7 @@ try {
     # workflow is complete so its panel transition cannot affect later edits.
     $detailsGeometry = Get-LastMatch `
         -Path $stdoutPath `
-        -Pattern 'Workspace UI geometry: .*object_details=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)\.'
+        -Pattern 'Workspace UI geometry: .*details=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)\.'
     $detailsX = [double]::Parse(
         $detailsGeometry.Groups["x"].Value,
         [Globalization.CultureInfo]::InvariantCulture)
