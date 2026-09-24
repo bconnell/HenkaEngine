@@ -381,21 +381,27 @@ static bool sandbox3d_asset_browser_source_identity_equal(
     const char* left,
     const char* right)
 {
-    size_t index;
-
     if (left == NULL || right == NULL || left[0] == '\0' || right[0] == '\0')
     {
         return false;
     }
-    for (index = 0U; left[index] != '\0' && right[index] != '\0'; ++index)
+
+#if defined(_WIN32)
     {
-        if (sandbox3d_asset_browser_ascii_lower(left[index]) !=
-            sandbox3d_asset_browser_ascii_lower(right[index]))
+        size_t index;
+        for (index = 0U; left[index] != '\0' && right[index] != '\0'; ++index)
         {
-            return false;
+            if (sandbox3d_asset_browser_ascii_lower(left[index]) !=
+                sandbox3d_asset_browser_ascii_lower(right[index]))
+            {
+                return false;
+            }
         }
+        return left[index] == '\0' && right[index] == '\0';
     }
-    return left[index] == '\0' && right[index] == '\0';
+#else
+    return strcmp(left, right) == 0;
+#endif
 }
 
 static bool sandbox3d_asset_browser_is_first_identity(
