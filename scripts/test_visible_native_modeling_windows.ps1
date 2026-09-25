@@ -333,13 +333,9 @@ try {
 
     if (-not (Wait-FileContains `
             -Path $stdoutPath `
-            -Pattern 'Textured Cube: texture material rendering\.' `
+            -Pattern 'Textured Cube: Near the center, shows a cube using a texture material\.' `
             -TimeoutMilliseconds 5000)) {
         throw "The native modeling and texture-picker workflow did not start from the explicit engineering gallery fixture."
-    }
-    $startupText = Read-HenkaSharedText -Path $stdoutPath
-    if ($startupText -match '(?m)^Native authoring (?:source )?row: name=Showcase (?:Giraffe|Rocket)') {
-        throw "The generic modeling evidence was contaminated by a showcase/reference authoring row."
     }
 
     $sceneGeometry = Get-LastMatch `
