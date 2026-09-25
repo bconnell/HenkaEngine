@@ -212,6 +212,10 @@ henka_result henka_terrain_world_pop_regeneration(
 bool henka_terrain_world_regeneration_request_is_current(
     const henka_terrain_world* world,
     const henka_terrain_regeneration_request* request);
+henka_result henka_terrain_world_cancel_regeneration(
+    henka_terrain_world* world,
+    henka_terrain_region_id region_id,
+    uint32_t targets);
 
 /* Atomically replaces one resident region with a validated storage snapshot. */
 henka_result henka_terrain_world_apply_region_snapshot(

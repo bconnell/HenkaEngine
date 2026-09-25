@@ -334,7 +334,22 @@ static int test_regeneration_queue(void)
     }
 
     if (henka_terrain_world_request_regeneration(
+            world, first,
+            HENKA_TERRAIN_REGENERATION_PHYSICS |
+            HENKA_TERRAIN_REGENERATION_RENDER) != HENKA_SUCCESS ||
+        henka_terrain_world_cancel_regeneration(
+            world, first, HENKA_TERRAIN_REGENERATION_PHYSICS) != HENKA_SUCCESS ||
+        henka_terrain_world_pop_regeneration(world, &request) != HENKA_SUCCESS ||
+        request.targets != HENKA_TERRAIN_REGENERATION_RENDER ||
+        henka_terrain_world_request_regeneration(
             world, first, HENKA_TERRAIN_REGENERATION_RENDER) != HENKA_SUCCESS ||
+        henka_terrain_world_cancel_regeneration(
+            world, first, HENKA_TERRAIN_REGENERATION_RENDER) != HENKA_SUCCESS ||
+        henka_terrain_world_cancel_regeneration(
+            world, first, HENKA_TERRAIN_REGENERATION_RENDER) ==
+            HENKA_SUCCESS ||
+        henka_terrain_world_get_stats(world, &stats) != HENKA_SUCCESS ||
+        stats.pending_regeneration_count != 0U ||
         henka_terrain_world_release_region(world, first) != HENKA_SUCCESS ||
         henka_terrain_world_get_stats(world, &stats) != HENKA_SUCCESS ||
         stats.pending_regeneration_count != 0U)
