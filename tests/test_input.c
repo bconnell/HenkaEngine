@@ -223,6 +223,57 @@ void henka_test_input(void)
         HENKA_INPUT_ACTION_SELECT_TOOL,
         0U) == HENKA_MOUSE_BUTTON_RIGHT);
 
+    {
+        henka_input_binding_snapshot snapshot;
+        henka_input_binding_snapshot invalid_snapshot;
+        henka_input_binding_snapshot before_invalid;
+
+        HENKA_TEST_ASSERT(henka_input_get_binding_snapshot(
+            &engine, &snapshot) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(snapshot.keys[HENKA_INPUT_ACTION_MOVE_FORWARD][0] ==
+            HENKA_KEY_W);
+        HENKA_TEST_ASSERT(
+            snapshot.mouse_buttons[HENKA_INPUT_ACTION_SELECT_TOOL][0] ==
+            HENKA_MOUSE_BUTTON_RIGHT);
+
+        HENKA_TEST_ASSERT(henka_input_bind_action_key(
+            &engine,
+            HENKA_INPUT_ACTION_MOVE_FORWARD,
+            HENKA_KEY_HOME) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_input_apply_binding_snapshot(
+            &engine, &snapshot) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_input_get_action_key_binding(
+            &engine,
+            HENKA_INPUT_ACTION_MOVE_FORWARD,
+            0U) == HENKA_KEY_W);
+
+        HENKA_TEST_ASSERT(henka_input_get_binding_snapshot(
+            &engine, &before_invalid) == HENKA_SUCCESS);
+        invalid_snapshot = before_invalid;
+        invalid_snapshot.keys[HENKA_INPUT_ACTION_MOVE_FORWARD][0] =
+            HENKA_KEY_UNKNOWN;
+        invalid_snapshot.keys[HENKA_INPUT_ACTION_MOVE_FORWARD][1] =
+            HENKA_KEY_HOME;
+        HENKA_TEST_ASSERT(henka_input_apply_binding_snapshot(
+            &engine, &invalid_snapshot) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(henka_input_get_action_key_binding(
+            &engine,
+            HENKA_INPUT_ACTION_MOVE_FORWARD,
+            0U) == HENKA_KEY_W);
+
+        invalid_snapshot = before_invalid;
+        invalid_snapshot.keys[HENKA_INPUT_ACTION_MOVE_FORWARD][0] =
+            HENKA_KEY_W;
+        invalid_snapshot.keys[HENKA_INPUT_ACTION_MOVE_FORWARD][1] =
+            HENKA_KEY_W;
+        HENKA_TEST_ASSERT(henka_input_apply_binding_snapshot(
+            &engine, &invalid_snapshot) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(henka_input_get_binding_snapshot(
+            NULL, &snapshot) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(henka_input_get_binding_snapshot(
+            &engine, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+    }
+
     memset(&input, 0, sizeof(input));
     HENKA_TEST_ASSERT(!input.automation_input_owned);
 #if defined(_WIN32)

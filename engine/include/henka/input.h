@@ -84,6 +84,14 @@ typedef enum henka_input_action
 #define HENKA_MAX_ACTION_MOUSE_BINDINGS 2U
 #define HENKA_INPUT_MAX_TEXT_INPUT_BYTES 256U
 
+/* Value-only complete input binding state. Slots are packed from index zero;
+ * UNKNOWN marks the end of a binding list. */
+typedef struct henka_input_binding_snapshot
+{
+    henka_key keys[HENKA_INPUT_ACTION_COUNT][HENKA_MAX_ACTION_KEY_BINDINGS];
+    henka_mouse_button mouse_buttons[HENKA_INPUT_ACTION_COUNT][HENKA_MAX_ACTION_MOUSE_BINDINGS];
+} henka_input_binding_snapshot;
+
 struct henka_engine;
 
 bool henka_input_is_key_down(const struct henka_engine* engine, henka_key key);
@@ -115,6 +123,13 @@ size_t henka_input_get_action_key_binding_count(const struct henka_engine* engin
 henka_key henka_input_get_action_key_binding(const struct henka_engine* engine, henka_input_action action, size_t index);
 size_t henka_input_get_action_mouse_button_binding_count(const struct henka_engine* engine, henka_input_action action);
 henka_mouse_button henka_input_get_action_mouse_button_binding(const struct henka_engine* engine, henka_input_action action, size_t index);
+henka_result henka_input_get_binding_snapshot(
+    const struct henka_engine* engine,
+    henka_input_binding_snapshot* out_snapshot);
+/* Validates the complete candidate before replacing any live bindings. */
+henka_result henka_input_apply_binding_snapshot(
+    struct henka_engine* engine,
+    const henka_input_binding_snapshot* snapshot);
 void henka_input_consume_key_press(struct henka_engine* engine, henka_key key);
 bool henka_input_action_is_down(const struct henka_engine* engine, henka_input_action action);
 bool henka_input_action_was_pressed(const struct henka_engine* engine, henka_input_action action);

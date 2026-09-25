@@ -2367,6 +2367,125 @@ henka_mouse_button henka_input_get_action_mouse_button_binding(const struct henk
         index < HENKA_MAX_ACTION_MOUSE_BINDINGS ? engine->action_mouse_bindings[action][index] : HENKA_MOUSE_BUTTON_UNKNOWN;
 }
 
+static bool henka_input_binding_snapshot_is_valid(
+    const henka_input_binding_snapshot* snapshot)
+{
+    size_t action;
+
+    if (snapshot == NULL)
+    {
+        return false;
+    }
+    for (action = 0U; action < HENKA_INPUT_ACTION_COUNT; ++action)
+    {
+        size_t index;
+        bool saw_unknown = false;
+
+        for (index = 0U; index < HENKA_MAX_ACTION_KEY_BINDINGS; ++index)
+        {
+            const henka_key key = snapshot->keys[action][index];
+            size_t prior;
+            if (key < HENKA_KEY_UNKNOWN || key >= HENKA_KEY_COUNT)
+            {
+                return false;
+            }
+            if (action == HENKA_INPUT_ACTION_UNKNOWN && key != HENKA_KEY_UNKNOWN)
+            {
+                return false;
+            }
+            if (key == HENKA_KEY_UNKNOWN)
+            {
+                saw_unknown = true;
+                continue;
+            }
+            if (saw_unknown)
+            {
+                return false;
+            }
+            for (prior = 0U; prior < index; ++prior)
+            {
+                if (snapshot->keys[action][prior] == key)
+                {
+                    return false;
+                }
+            }
+        }
+
+        saw_unknown = false;
+        for (index = 0U; index < HENKA_MAX_ACTION_MOUSE_BINDINGS; ++index)
+        {
+            const henka_mouse_button button =
+                snapshot->mouse_buttons[action][index];
+            size_t prior;
+            if (button < HENKA_MOUSE_BUTTON_UNKNOWN ||
+                button >= HENKA_MOUSE_BUTTON_COUNT)
+            {
+                return false;
+            }
+            if (action == HENKA_INPUT_ACTION_UNKNOWN &&
+                button != HENKA_MOUSE_BUTTON_UNKNOWN)
+            {
+                return false;
+            }
+            if (button == HENKA_MOUSE_BUTTON_UNKNOWN)
+            {
+                saw_unknown = true;
+                continue;
+            }
+            if (saw_unknown)
+            {
+                return false;
+            }
+            for (prior = 0U; prior < index; ++prior)
+            {
+                if (snapshot->mouse_buttons[action][prior] == button)
+                {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+henka_result henka_input_get_binding_snapshot(
+    const struct henka_engine* engine,
+    henka_input_binding_snapshot* out_snapshot)
+{
+    if (engine == NULL || out_snapshot == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memcpy(
+        out_snapshot->keys,
+        engine->action_key_bindings,
+        sizeof(out_snapshot->keys));
+    memcpy(
+        out_snapshot->mouse_buttons,
+        engine->action_mouse_bindings,
+        sizeof(out_snapshot->mouse_buttons));
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_input_apply_binding_snapshot(
+    struct henka_engine* engine,
+    const henka_input_binding_snapshot* snapshot)
+{
+    if (engine == NULL || !henka_input_binding_snapshot_is_valid(snapshot))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memcpy(
+        engine->action_key_bindings,
+        snapshot->keys,
+        sizeof(engine->action_key_bindings));
+    memcpy(
+        engine->action_mouse_bindings,
+        snapshot->mouse_buttons,
+        sizeof(engine->action_mouse_bindings));
+    return HENKA_SUCCESS;
+}
+
 void henka_input_consume_key_press(struct henka_engine* engine, henka_key key)
 {
     if (engine != NULL && key > HENKA_KEY_UNKNOWN && key < HENKA_KEY_COUNT)
