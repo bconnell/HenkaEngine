@@ -115,6 +115,18 @@ size_t henka_input_get_action_key_binding_count(const struct henka_engine* engin
 henka_key henka_input_get_action_key_binding(const struct henka_engine* engine, henka_input_action action, size_t index);
 size_t henka_input_get_action_mouse_button_binding_count(const struct henka_engine* engine, henka_input_action action);
 henka_mouse_button henka_input_get_action_mouse_button_binding(const struct henka_engine* engine, henka_input_action action, size_t index);
+/* Returns actions that currently use the requested binding, in stable action
+ * enum order. Passing NULL with capacity 0 returns only the total count. */
+size_t henka_input_get_key_binding_actions(
+    const struct henka_engine* engine,
+    henka_key key,
+    henka_input_action* out_actions,
+    size_t action_capacity);
+size_t henka_input_get_mouse_binding_actions(
+    const struct henka_engine* engine,
+    henka_mouse_button button,
+    henka_input_action* out_actions,
+    size_t action_capacity);
 void henka_input_consume_key_press(struct henka_engine* engine, henka_key key);
 bool henka_input_action_is_down(const struct henka_engine* engine, henka_input_action action);
 bool henka_input_action_was_pressed(const struct henka_engine* engine, henka_input_action action);

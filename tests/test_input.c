@@ -22,6 +22,7 @@ void henka_test_input(void)
     henka_window_id chosen_id;
     henka_window_id next_candidate;
     henka_window_id occupied_ids[3];
+    henka_input_action binding_actions[2];
     henka_result lifecycle_result;
     FILE* automation_file;
     const char* automation_path = "henka_input_automation_test.events";
@@ -222,6 +223,34 @@ void henka_test_input(void)
         &engine,
         HENKA_INPUT_ACTION_SELECT_TOOL,
         0U) == HENKA_MOUSE_BUTTON_RIGHT);
+
+    HENKA_TEST_ASSERT(henka_input_add_action_key_binding(
+        &engine,
+        HENKA_INPUT_ACTION_MOVE_LEFT,
+        HENKA_KEY_W) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_get_key_binding_actions(
+        &engine, HENKA_KEY_W, NULL, 0U) == 2U);
+    memset(binding_actions, 0, sizeof(binding_actions));
+    HENKA_TEST_ASSERT(henka_input_get_key_binding_actions(
+        &engine, HENKA_KEY_W, binding_actions, 1U) == 2U);
+    HENKA_TEST_ASSERT(binding_actions[0] == HENKA_INPUT_ACTION_MOVE_FORWARD);
+    HENKA_TEST_ASSERT(binding_actions[1] == HENKA_INPUT_ACTION_UNKNOWN);
+    HENKA_TEST_ASSERT(henka_input_get_key_binding_actions(
+        &engine, HENKA_KEY_UNKNOWN, binding_actions, 2U) == 0U);
+    HENKA_TEST_ASSERT(henka_input_get_key_binding_actions(
+        &engine, HENKA_KEY_W, NULL, 1U) == 0U);
+
+    HENKA_TEST_ASSERT(henka_input_add_action_mouse_button_binding(
+        &engine,
+        HENKA_INPUT_ACTION_INTERACT,
+        HENKA_MOUSE_BUTTON_RIGHT) == HENKA_SUCCESS);
+    memset(binding_actions, 0, sizeof(binding_actions));
+    HENKA_TEST_ASSERT(henka_input_get_mouse_binding_actions(
+        &engine, HENKA_MOUSE_BUTTON_RIGHT, binding_actions, 2U) == 2U);
+    HENKA_TEST_ASSERT(binding_actions[0] == HENKA_INPUT_ACTION_INTERACT);
+    HENKA_TEST_ASSERT(binding_actions[1] == HENKA_INPUT_ACTION_SELECT_TOOL);
+    HENKA_TEST_ASSERT(henka_input_get_mouse_binding_actions(
+        NULL, HENKA_MOUSE_BUTTON_RIGHT, binding_actions, 2U) == 0U);
 
     memset(&input, 0, sizeof(input));
     HENKA_TEST_ASSERT(!input.automation_input_owned);

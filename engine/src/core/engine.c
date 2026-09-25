@@ -2367,6 +2367,101 @@ henka_mouse_button henka_input_get_action_mouse_button_binding(const struct henk
         index < HENKA_MAX_ACTION_MOUSE_BINDINGS ? engine->action_mouse_bindings[action][index] : HENKA_MOUSE_BUTTON_UNKNOWN;
 }
 
+
+size_t henka_input_get_key_binding_actions(
+    const struct henka_engine* engine,
+    henka_key key,
+    henka_input_action* out_actions,
+    size_t action_capacity)
+{
+    henka_input_action action;
+    size_t count = 0U;
+
+    if (engine == NULL ||
+        key <= HENKA_KEY_UNKNOWN ||
+        key >= HENKA_KEY_COUNT ||
+        (out_actions == NULL && action_capacity != 0U))
+    {
+        return 0U;
+    }
+
+    for (action = HENKA_INPUT_ACTION_MOVE_FORWARD;
+         action < HENKA_INPUT_ACTION_COUNT;
+         ++action)
+    {
+        size_t binding_index;
+        bool matched = false;
+        for (binding_index = 0U;
+             binding_index < HENKA_MAX_ACTION_KEY_BINDINGS;
+             ++binding_index)
+        {
+            if (engine->action_key_bindings[action][binding_index] == key)
+            {
+                matched = true;
+                break;
+            }
+        }
+        if (!matched)
+        {
+            continue;
+        }
+        if (out_actions != NULL && count < action_capacity)
+        {
+            out_actions[count] = action;
+        }
+        ++count;
+    }
+
+    return count;
+}
+
+size_t henka_input_get_mouse_binding_actions(
+    const struct henka_engine* engine,
+    henka_mouse_button button,
+    henka_input_action* out_actions,
+    size_t action_capacity)
+{
+    henka_input_action action;
+    size_t count = 0U;
+
+    if (engine == NULL ||
+        button <= HENKA_MOUSE_BUTTON_UNKNOWN ||
+        button >= HENKA_MOUSE_BUTTON_COUNT ||
+        (out_actions == NULL && action_capacity != 0U))
+    {
+        return 0U;
+    }
+
+    for (action = HENKA_INPUT_ACTION_MOVE_FORWARD;
+         action < HENKA_INPUT_ACTION_COUNT;
+         ++action)
+    {
+        size_t binding_index;
+        bool matched = false;
+        for (binding_index = 0U;
+             binding_index < HENKA_MAX_ACTION_MOUSE_BINDINGS;
+             ++binding_index)
+        {
+            if (engine->action_mouse_bindings[action][binding_index] == button)
+            {
+                matched = true;
+                break;
+            }
+        }
+        if (!matched)
+        {
+            continue;
+        }
+        if (out_actions != NULL && count < action_capacity)
+        {
+            out_actions[count] = action;
+        }
+        ++count;
+    }
+
+    return count;
+}
+
 void henka_input_consume_key_press(struct henka_engine* engine, henka_key key)
 {
     if (engine != NULL && key > HENKA_KEY_UNKNOWN && key < HENKA_KEY_COUNT)
