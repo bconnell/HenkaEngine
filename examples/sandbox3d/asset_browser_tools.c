@@ -288,6 +288,95 @@ static char sandbox3d_asset_browser_ascii_lower(char value)
     return value >= 'A' && value <= 'Z' ? (char)(value + ('a' - 'A')) : value;
 }
 
+static bool sandbox3d_asset_browser_has_extension(
+    const char* path,
+    const char* extension)
+{
+    size_t path_length;
+    size_t extension_length;
+    size_t index;
+
+    if (path == NULL || extension == NULL)
+    {
+        return false;
+    }
+    path_length = strlen(path);
+    extension_length = strlen(extension);
+    if (path_length < extension_length)
+    {
+        return false;
+    }
+    for (index = 0U; index < extension_length; ++index)
+    {
+        if (sandbox3d_asset_browser_ascii_lower(
+                path[path_length - extension_length + index]) !=
+            sandbox3d_asset_browser_ascii_lower(extension[index]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool sandbox3d_asset_browser_can_retry(
+    const henka_asset_metadata* metadata)
+{
+    if (metadata == NULL || metadata->source_path == NULL ||
+        metadata->source_path[0] == '\0' || metadata->loaded ||
+        !metadata->fallback)
+    {
+        return false;
+    }
+    if (metadata->type == HENKA_ASSET_TYPE_TEXTURE)
+    {
+        return true;
+    }
+    if (metadata->type != HENKA_ASSET_TYPE_MESH)
+    {
+        return false;
+    }
+    return sandbox3d_asset_browser_has_extension(metadata->source_path, ".obj") ||
+        sandbox3d_asset_browser_has_extension(metadata->source_path, ".gltf") ||
+        sandbox3d_asset_browser_has_extension(metadata->source_path, ".glb");
+}
+
+henka_result sandbox3d_asset_browser_retry(
+    henka_asset_manager* manager,
+    const henka_asset_metadata* metadata)
+{
+    if (manager == NULL || !sandbox3d_asset_browser_can_retry(metadata))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (metadata->type == HENKA_ASSET_TYPE_TEXTURE)
+    {
+        henka_texture* texture = NULL;
+        return metadata->has_texture_descriptor
+            ? henka_assets_retry_failed_texture_with_descriptor(
+                manager,
+                metadata->source_path,
+                &metadata->texture_descriptor,
+                &texture)
+            : henka_assets_retry_failed_texture(
+                manager,
+                metadata->source_path,
+                &texture);
+    }
+
+    {
+        henka_mesh* mesh = NULL;
+        if (sandbox3d_asset_browser_has_extension(
+                metadata->source_path, ".obj"))
+        {
+            return henka_assets_retry_failed_obj_mesh(
+                manager, metadata->source_path, &mesh);
+        }
+        return henka_assets_retry_failed_gltf_mesh(
+            manager, metadata->source_path, &mesh);
+    }
+}
+
 static bool sandbox3d_asset_browser_source_identity_equal(
     const char* left,
     const char* right)

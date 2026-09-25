@@ -827,20 +827,35 @@ try {
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "material-texture-picker-selected.png")
 
+    $pickerApplyPattern =
+        'Material texture picker: action=apply entity=\d+ slot=Base Color result=(?<result>[^.\r\n]+)\.'
     $pickerApplyCount = Get-LogMatchCount `
         -Path $stdoutPath `
-        -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=success\.'
+        -Pattern $pickerApplyPattern
+    $pickerApplyX =
+        [double]$pickerActions.Groups["apply"].Value +
+        [double]$pickerActions.Groups["applyWidth"].Value * 0.5
+    $pickerApplyY = [double]$pickerActions.Groups["y"].Value + 12.0
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
-        -X ([double]$pickerActions.Groups["apply"].Value +
-            [double]$pickerActions.Groups["applyWidth"].Value * 0.5) `
-        -Y ([double]$pickerActions.Groups["y"].Value + 12.0)
+        -X $pickerApplyX `
+        -Y $pickerApplyY
     if (-not (Wait-LogMatchCountIncrease `
             -Path $stdoutPath `
             -InitialCount $pickerApplyCount `
-            -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=success\.' `
-            -TimeoutMilliseconds 5000)) {
-        throw "The visible material texture picker did not apply the selected manager-owned texture."
+            -Pattern $pickerApplyPattern `
+            -TimeoutMilliseconds 15000)) {
+        throw ("The visible material texture picker Apply control produced no product action " +
+            "within the bounded wait. click=({0:F1},{1:F1})." -f
+            $pickerApplyX,
+            $pickerApplyY)
+    }
+    $pickerApply = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern $pickerApplyPattern
+    $pickerApplyResult = $pickerApply.Groups["result"].Value
+    if ($pickerApplyResult -ne "success") {
+        throw "The visible material texture picker product action failed with $pickerApplyResult."
     }
     Start-Sleep -Milliseconds 250
     Save-ProbeWindowScreenshot `

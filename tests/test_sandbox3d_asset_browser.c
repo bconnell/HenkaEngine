@@ -37,6 +37,45 @@ static void henka_test_sandbox3d_asset_browser_collection(void)
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect(&manager, HENKA_ASSET_TYPE_MATERIAL, items, 2U) == 0U);
 }
 
+static void henka_test_sandbox3d_asset_browser_retry_policy(void)
+{
+    henka_asset_metadata metadata;
+
+    memset(&metadata, 0, sizeof(metadata));
+    metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    metadata.source_path = "assets/textures/missing.png";
+    metadata.fallback = true;
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_can_retry(&metadata));
+    HENKA_TEST_ASSERT(
+        sandbox3d_asset_browser_retry(NULL, &metadata) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+
+    metadata.loaded = true;
+    HENKA_TEST_ASSERT(!sandbox3d_asset_browser_can_retry(&metadata));
+    metadata.loaded = false;
+
+    metadata.type = HENKA_ASSET_TYPE_MESH;
+    metadata.source_path = "assets/models/missing.obj";
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_can_retry(&metadata));
+    metadata.source_path = "assets/models/missing.GLTF";
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_can_retry(&metadata));
+    metadata.source_path = "assets/models/missing.glb";
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_can_retry(&metadata));
+    metadata.source_path = "assets/models/missing.fbx";
+    HENKA_TEST_ASSERT(!sandbox3d_asset_browser_can_retry(&metadata));
+
+    metadata.type = HENKA_ASSET_TYPE_MATERIAL;
+    metadata.source_path = "assets/materials/missing.gltf";
+    HENKA_TEST_ASSERT(!sandbox3d_asset_browser_can_retry(&metadata));
+
+    metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    metadata.source_path = NULL;
+    HENKA_TEST_ASSERT(!sandbox3d_asset_browser_can_retry(&metadata));
+    metadata.source_path = "assets/textures/missing.png";
+    metadata.fallback = false;
+    HENKA_TEST_ASSERT(!sandbox3d_asset_browser_can_retry(&metadata));
+}
+
 static void henka_test_sandbox3d_asset_browser_paging(void)
 {
     henka_asset_manager manager;
@@ -428,6 +467,7 @@ static void henka_test_sandbox3d_material_asset_application(void)
 void henka_test_sandbox3d_asset_browser(void)
 {
     henka_test_sandbox3d_asset_browser_collection();
+    henka_test_sandbox3d_asset_browser_retry_policy();
     henka_test_sandbox3d_asset_browser_paging();
     henka_test_sandbox3d_asset_browser_texture_and_assignment();
     henka_test_sandbox3d_material_texture_picker_state();

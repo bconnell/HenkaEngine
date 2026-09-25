@@ -35085,8 +35085,17 @@ static void sandbox3d_draw_utility_panel(
                 state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE;
             const float asset_panel_bottom =
                 panel_bounds.y + panel_bounds.height - 6.0f;
+            /*
+             * Keep the texture-picker commit row one control stride above the
+             * Utility panel's lower edge. The previous bottom-pinned row was
+             * visibly rendered but its reported center landed in the lower
+             * non-interactive workspace boundary on packaged CI, so product
+             * automation could select a texture but could never deliver the
+             * Apply press. Reserve the same 30 px stride used between rows so
+             * the whole hit target remains inside the panel interaction area.
+             */
             const float picker_action_y =
-                asset_panel_bottom - 24.0f;
+                asset_panel_bottom - 54.0f;
             const float picker_navigation_y =
                 picker_action_y - 30.0f;
             const float picker_row_start_y =
@@ -35405,9 +35414,98 @@ static void sandbox3d_draw_utility_panel(
                     henka_asset_metadata selected_metadata;
                     if (henka_assets_get_metadata_at_index(assets, state->asset_browser_selected_metadata_index, &selected_metadata) == HENKA_SUCCESS)
                     {
-                        sandbox3d_draw_value_row(state->ui, x_left, y_start + 278.0f, panel_bounds.width - 28.0f, "Selected", selected_metadata.source_path != NULL ? selected_metadata.source_path : "(unnamed asset)");
-                        snprintf(row_value, sizeof(row_value), "%s%s", selected_metadata.loaded ? "Loaded" : "Unavailable", selected_metadata.fallback ? " / fallback" : "");
-                        sandbox3d_draw_value_row(state->ui, x_left, y_start + 304.0f, panel_bounds.width - 28.0f, "State", row_value);
+                        const bool retryable =
+                            sandbox3d_asset_browser_can_retry(&selected_metadata);
+                        const bool show_retry =
+                            retryable && panel_bounds.width >= 180.0f;
+                        const float state_width = show_retry
+                            ? panel_bounds.width - 112.0f
+                            : panel_bounds.width - 28.0f;
+
+                        sandbox3d_draw_value_row(
+                            state->ui,
+                            x_left,
+                            y_start + 278.0f,
+                            panel_bounds.width - 28.0f,
+                            "Selected",
+                            selected_metadata.source_path != NULL
+                                ? selected_metadata.source_path
+                                : "(unnamed asset)");
+                        snprintf(
+                            row_value,
+                            sizeof(row_value),
+                            "%s%s%s%s",
+                            selected_metadata.loaded ? "Loaded" : "Unavailable",
+                            selected_metadata.fallback ? " / fallback" : "",
+                            selected_metadata.error_summary != NULL &&
+                                selected_metadata.error_summary[0] != '\0'
+                                ? " | "
+                                : "",
+                            selected_metadata.error_summary != NULL
+                                ? selected_metadata.error_summary
+                                : "");
+                        sandbox3d_draw_value_row(
+                            state->ui,
+                            x_left,
+                            y_start + 304.0f,
+                            state_width,
+                            "State",
+                            row_value);
+
+                        if (show_retry &&
+                            henka_ui_primary_button(
+                                state->ui,
+                                "asset_browser_retry",
+                                (henka_ui_rect){
+                                    x_left + panel_bounds.width - 98.0f,
+                                    y_start + 304.0f,
+                                    70.0f,
+                                    24.0f},
+                                "Retry"))
+                        {
+                            henka_result retry_result =
+                                sandbox3d_asset_browser_retry(
+                                    henka_engine_get_asset_manager(engine),
+                                    &selected_metadata);
+                            henka_asset_metadata refreshed_metadata;
+
+                            memset(
+                                &refreshed_metadata,
+                                0,
+                                sizeof(refreshed_metadata));
+                            if (retry_result == HENKA_SUCCESS)
+                            {
+                                sandbox3d_set_statusf(
+                                    state,
+                                    false,
+                                    false,
+                                    "Asset retry succeeded: %s",
+                                    selected_metadata.source_path);
+                            }
+                            else if (henka_assets_get_metadata_at_index(
+                                    assets,
+                                    state->asset_browser_selected_metadata_index,
+                                    &refreshed_metadata) == HENKA_SUCCESS &&
+                                refreshed_metadata.error_summary != NULL &&
+                                refreshed_metadata.error_summary[0] != '\0')
+                            {
+                                sandbox3d_set_statusf(
+                                    state,
+                                    true,
+                                    false,
+                                    "Asset retry failed: %s",
+                                    refreshed_metadata.error_summary);
+                            }
+                            else
+                            {
+                                sandbox3d_set_statusf(
+                                    state,
+                                    true,
+                                    false,
+                                    "Asset retry failed: %s",
+                                    selected_metadata.source_path);
+                            }
+                        }
                     }
                 }
                 else
