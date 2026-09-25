@@ -301,6 +301,9 @@ try {
 
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
+    # This gate uses the explicit engineering gallery so its manager-owned
+    # texture fixture is available; default-scene cleanliness is independently
+    # asserted by the packaged startup gate.
     # This is the bounded exception for the real visible-authoring gate:
     # PrintWindow and the native UI interaction proof require a visible,
     # non-minimized render surface. Ordinary automated validation keeps
@@ -330,9 +333,9 @@ try {
 
     if (-not (Wait-FileContains `
             -Path $stdoutPath `
-            -Pattern 'DEFAULT_SCENE_READY ground=1 ground_editable=1 camera=1 showcase_assets=0 diagnostic_entities=0 scene_content=product_native' `
+            -Pattern 'Textured Cube: texture material rendering\.' `
             -TimeoutMilliseconds 5000)) {
-        throw "The generic modeling workflow did not start from the clean product-native scene."
+        throw "The native modeling and texture-picker workflow did not start from the explicit engineering gallery fixture."
     }
     $startupText = Read-HenkaSharedText -Path $stdoutPath
     if ($startupText -match '(?m)^Native authoring (?:source )?row: name=Showcase (?:Giraffe|Rocket)') {
