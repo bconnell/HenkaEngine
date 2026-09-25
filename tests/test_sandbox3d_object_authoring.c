@@ -9555,11 +9555,15 @@ static void henka_test_sandbox3d_object_authoring_closed_vertex_fan(void)
         sandbox3d_authoring_object_get_mesh(object));
     HENKA_TEST_ASSERT(undone.vertices == before.vertices &&
         undone.edges == before.edges && undone.faces == before.faces &&
+        sandbox3d_authoring_object_get_selected_component_count(object) == 1U &&
+        sandbox3d_authoring_object_get_active_component_id(object) == center_id &&
         henka_authoring_mesh_validate(
             sandbox3d_authoring_object_get_mesh(object)));
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object)).vertices == after.vertices &&
+        sandbox3d_authoring_object_get_selected_component_count(object) == 1U &&
+        sandbox3d_authoring_object_get_active_component_id(object) == new_vertex_id &&
         henka_authoring_mesh_validate(
             sandbox3d_authoring_object_get_mesh(object)));
 
