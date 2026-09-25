@@ -1315,6 +1315,11 @@ static void henka_test_mesh_fallback_retry_preserves_cached_identity(void)
         manager, obj_peer, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback);
 
+    retried = (henka_mesh*)1;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_obj_mesh(
+        manager, obj_path, &retried) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(retried == NULL);
+
     HENKA_TEST_ASSERT(henka_test_write_file(
         obj_path, obj_updated, strlen(obj_updated)));
     reloaded = NULL;
@@ -1353,6 +1358,11 @@ static void henka_test_mesh_fallback_retry_preserves_cached_identity(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
         scene, gltf_entity, &scene_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene_mesh == gltf_mesh && scene_mesh->vertex_count == 3);
+
+    retried = (henka_mesh*)1;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_gltf_mesh(
+        manager, gltf_path, &retried) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(retried == NULL);
 
     HENKA_TEST_ASSERT(henka_test_write_file(
         gltf_path, gltf_updated, strlen(gltf_updated)));
@@ -1584,6 +1594,11 @@ static void henka_test_descriptor_texture_fallback_retry_preserves_identity(void
         manager, texture, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback && metadata.reload_supported);
     HENKA_TEST_ASSERT(metadata.texture_descriptor.usage == HENKA_TEXTURE_USAGE_NORMAL);
+
+    retried_texture = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_texture_with_descriptor(
+        manager, path, &descriptor, &retried_texture) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(retried_texture == NULL);
 
     (void)remove(path);
     henka_engine_destroy(engine);
