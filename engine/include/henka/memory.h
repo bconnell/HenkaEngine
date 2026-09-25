@@ -9,6 +9,7 @@ typedef struct henka_memory_diagnostics
     size_t active_allocation_count;
     size_t peak_active_allocation_count;
     uint64_t successful_allocation_count;
+    uint64_t failed_allocation_count;
 } henka_memory_diagnostics;
 
 void* henka_malloc(size_t size);

@@ -22,6 +22,7 @@ typedef _Atomic(size_t) henka_memory_counter;
 static henka_memory_counter g_allocation_count = 0U;
 static henka_memory_counter g_peak_allocation_count = 0U;
 static henka_memory_counter g_successful_allocation_count = 0U;
+static henka_memory_counter g_failed_allocation_count = 0U;
 static henka_memory_counter g_test_allocations_before_failure = SIZE_MAX;
 
 static size_t henka_memory_counter_load(const henka_memory_counter* counter)
@@ -84,6 +85,11 @@ static size_t henka_memory_increment_counter(
         1U,
         memory_order_relaxed) + 1U;
 #endif
+}
+
+static void henka_memory_record_failure(void)
+{
+    (void)henka_memory_increment_counter(&g_failed_allocation_count);
 }
 
 static void henka_memory_record_allocation(void)
@@ -161,6 +167,10 @@ void* henka_malloc(size_t size)
 
     if (henka_memory_test_should_fail())
     {
+        if (size > 0U)
+        {
+            henka_memory_record_failure();
+        }
         return NULL;
     }
 
@@ -168,6 +178,10 @@ void* henka_malloc(size_t size)
     if (pointer != NULL)
     {
         henka_memory_record_allocation();
+    }
+    else if (size > 0U)
+    {
+        henka_memory_record_failure();
     }
 
     return pointer;
@@ -179,6 +193,10 @@ void* henka_calloc(size_t count, size_t size)
 
     if (henka_memory_test_should_fail())
     {
+        if (count > 0U && size > 0U)
+        {
+            henka_memory_record_failure();
+        }
         return NULL;
     }
 
@@ -186,6 +204,10 @@ void* henka_calloc(size_t count, size_t size)
     if (pointer != NULL)
     {
         henka_memory_record_allocation();
+    }
+    else if (count > 0U && size > 0U)
+    {
+        henka_memory_record_failure();
     }
 
     return pointer;
@@ -197,6 +219,7 @@ void* henka_realloc(void* pointer, size_t size)
 
     if (size > 0U && henka_memory_test_should_fail())
     {
+        henka_memory_record_failure();
         return NULL;
     }
 
@@ -206,6 +229,10 @@ void* henka_realloc(void* pointer, size_t size)
         if (resized != NULL && size > 0U)
         {
             henka_memory_record_allocation();
+        }
+        else if (resized == NULL && size > 0U)
+        {
+            henka_memory_record_failure();
         }
         return resized;
     }
@@ -218,6 +245,10 @@ void* henka_realloc(void* pointer, size_t size)
     }
 
     resized = realloc(pointer, size);
+    if (resized == NULL)
+    {
+        henka_memory_record_failure();
+    }
     return resized;
 }
 
@@ -247,6 +278,8 @@ void henka_memory_get_diagnostics(henka_memory_diagnostics* out_diagnostics)
         henka_memory_counter_load(&g_peak_allocation_count);
     out_diagnostics->successful_allocation_count =
         (uint64_t)henka_memory_counter_load(&g_successful_allocation_count);
+    out_diagnostics->failed_allocation_count =
+        (uint64_t)henka_memory_counter_load(&g_failed_allocation_count);
 }
 
 void henka_memory_report_leaks(void)

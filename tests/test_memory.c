@@ -173,6 +173,22 @@ void henka_test_memory(void)
         after_diagnostics.successful_allocation_count ==
         during_diagnostics.successful_allocation_count);
 
+    before_diagnostics = after_diagnostics;
+    henka_memory_test_fail_after(0U);
+    block = henka_malloc(16U);
+    henka_memory_test_disable_failures();
+    HENKA_TEST_ASSERT(block == NULL);
+    henka_memory_get_diagnostics(&after_diagnostics);
+    HENKA_TEST_ASSERT(
+        after_diagnostics.failed_allocation_count ==
+        before_diagnostics.failed_allocation_count + 1U);
+    HENKA_TEST_ASSERT(
+        after_diagnostics.active_allocation_count ==
+        before_diagnostics.active_allocation_count);
+    HENKA_TEST_ASSERT(
+        after_diagnostics.successful_allocation_count ==
+        before_diagnostics.successful_allocation_count);
+
 #if defined(_WIN32)
     henka_test_memory_concurrent_accounting();
 #endif
