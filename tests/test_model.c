@@ -1354,6 +1354,22 @@ void henka_test_model(void)
         "v 0.0 1.0 0.0\n"
         "v -1.0 0.5 0.0\n"
         "f 1 2 3 4 5\n";
+    static const char* valid_concave_obj =
+        "v 0.0 0.0 0.0\n"
+        "v 3.0 0.0 0.0\n"
+        "v 3.0 3.0 0.0\n"
+        "v 2.0 3.0 0.0\n"
+        "v 2.0 1.0 0.0\n"
+        "v 1.0 1.0 0.0\n"
+        "v 1.0 3.0 0.0\n"
+        "v 0.0 3.0 0.0\n"
+        "f 1 2 3 4 5 6 7 8\n";
+    static const char* invalid_self_intersecting_obj =
+        "v 0.0 0.0 0.0\n"
+        "v 2.0 2.0 0.0\n"
+        "v 0.0 2.0 0.0\n"
+        "v 2.0 0.0 0.0\n"
+        "f 1 2 3 4\n";
     static const char* valid_negative_index_obj =
         "v 0.0 0.0 0.0\n"
         "v 1.0 0.0 0.0\n"
@@ -1535,10 +1551,57 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.indices != NULL);
     HENKA_TEST_ASSERT(model.vertex_count == 6U);
     HENKA_TEST_ASSERT(model.index_count == 6U);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].normal.y, -1.0f, 0.0001);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].uv.x, 1.0f, 0.0001);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].color.x, 1.0f, 0.0001);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].color.w, 1.0f, 0.0001);
+    {
+        bool found_lower_left = false;
+        bool found_lower_right = false;
+        bool found_upper_right = false;
+        bool found_upper_left = false;
+        size_t vertex_index;
+
+        for (vertex_index = 0U; vertex_index < model.vertex_count; ++vertex_index)
+        {
+            const henka_model_vertex* vertex = &model.vertices[vertex_index];
+
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->normal.y, -1.0f, 0.0001);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->color.x, 1.0f, 0.0001);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->color.w, 1.0f, 0.0001);
+
+            if (fabsf(vertex->position.x + 0.5f) < 0.0001f &&
+                fabsf(vertex->position.z + 0.5f) < 0.0001f)
+            {
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.x, 0.0f, 0.0001);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.y, 0.0f, 0.0001);
+                found_lower_left = true;
+            }
+            else if (fabsf(vertex->position.x - 0.5f) < 0.0001f &&
+                     fabsf(vertex->position.z + 0.5f) < 0.0001f)
+            {
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.x, 1.0f, 0.0001);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.y, 0.0f, 0.0001);
+                found_lower_right = true;
+            }
+            else if (fabsf(vertex->position.x - 0.5f) < 0.0001f &&
+                     fabsf(vertex->position.z - 0.5f) < 0.0001f)
+            {
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.x, 1.0f, 0.0001);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.y, 1.0f, 0.0001);
+                found_upper_right = true;
+            }
+            else if (fabsf(vertex->position.x + 0.5f) < 0.0001f &&
+                     fabsf(vertex->position.z - 0.5f) < 0.0001f)
+            {
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.x, 0.0f, 0.0001);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->uv.y, 1.0f, 0.0001);
+                found_upper_left = true;
+            }
+        }
+
+        HENKA_TEST_ASSERT(
+            found_lower_left &&
+            found_lower_right &&
+            found_upper_right &&
+            found_upper_left);
+    }
     henka_model_data_destroy(&model);
 
     model.vertices = NULL;
@@ -1586,6 +1649,56 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.vertex_count == 9U);
     HENKA_TEST_ASSERT(model.index_count == 9U);
     henka_model_data_destroy(&model);
+
+    model.vertices = NULL;
+    model.indices = NULL;
+    model.vertex_count = 0U;
+    model.index_count = 0U;
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_obj_from_memory(
+            valid_concave_obj,
+            "valid_concave_obj",
+            &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices != NULL);
+    HENKA_TEST_ASSERT(model.indices != NULL);
+    HENKA_TEST_ASSERT(model.vertex_count == 18U);
+    HENKA_TEST_ASSERT(model.index_count == 18U);
+    {
+        float emitted_area = 0.0f;
+        uint32_t triangle_index;
+        for (triangle_index = 0U;
+             triangle_index < model.vertex_count;
+             triangle_index += 3U)
+        {
+            const henka_vec3 a = model.vertices[triangle_index].position;
+            const henka_vec3 b = model.vertices[triangle_index + 1U].position;
+            const henka_vec3 c = model.vertices[triangle_index + 2U].position;
+            float cross =
+                (b.x - a.x) * (c.y - a.y) -
+                (b.y - a.y) * (c.x - a.x);
+            if (cross < 0.0f)
+            {
+                cross = -cross;
+            }
+            emitted_area += 0.5f * cross;
+            HENKA_TEST_ASSERT(
+                model.vertices[triangle_index].normal.z > 0.99f);
+        }
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(emitted_area, 7.0f, 0.0001f);
+    }
+    henka_model_data_destroy(&model);
+
+    model.vertices = NULL;
+    model.indices = NULL;
+    model.vertex_count = 0U;
+    model.index_count = 0U;
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_obj_from_memory(
+            invalid_self_intersecting_obj,
+            "invalid_self_intersecting_obj",
+            &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
 
     model.vertices = NULL;
     model.indices = NULL;
