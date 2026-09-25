@@ -311,7 +311,8 @@ try {
         -WorkingDirectory $runtimeDirectory `
         -StdoutPath $stdoutPath `
         -StderrPath $stderrPath `
-        -StartMinimized:$false
+        -StartMinimized:$false `
+        -StartVisibleWithoutActivation
 
     # Debug OpenGL startup on slower integrated GPUs can finish engine
     # creation near the existing timeout and still need a bounded first frame
@@ -828,7 +829,7 @@ try {
 
     $pickerApplyCount = Get-LogMatchCount `
         -Path $stdoutPath `
-        -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=HENKA_SUCCESS\.'
+        -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=success\.'
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ([double]$pickerActions.Groups["apply"].Value +
@@ -837,7 +838,7 @@ try {
     if (-not (Wait-LogMatchCountIncrease `
             -Path $stdoutPath `
             -InitialCount $pickerApplyCount `
-            -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=HENKA_SUCCESS\.' `
+            -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=success\.' `
             -TimeoutMilliseconds 5000)) {
         throw "The visible material texture picker did not apply the selected manager-owned texture."
     }

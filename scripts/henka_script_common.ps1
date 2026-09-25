@@ -774,6 +774,7 @@ function Initialize-HenkaCapturedProcessType {
 
     Add-Type -TypeDefinition @'
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -811,6 +812,7 @@ public sealed class HenkaCapturedProcess : IDisposable
         out uint processId);
 
     private const int SW_SHOWMINNOACTIVE = 7;
+    private const int SW_SHOWNOACTIVATE = 4;
 
     public Process Process { get; private set; }
 
@@ -833,7 +835,8 @@ public sealed class HenkaCapturedProcess : IDisposable
         string stdoutPath,
         string stderrPath,
         bool createNoWindow,
-        bool startMinimized)
+        bool startMinimized,
+        bool startVisibleWithoutActivation)
     {
         ProcessStartInfo startInfo = new ProcessStartInfo();
         startInfo.FileName = filePath;
@@ -841,7 +844,7 @@ public sealed class HenkaCapturedProcess : IDisposable
         startInfo.WorkingDirectory = workingDirectory;
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = createNoWindow;
-        if (!createNoWindow && startMinimized)
+        if (!createNoWindow && (startMinimized || startVisibleWithoutActivation))
         {
             // Validation may need a native window for PrintWindow or an
             // event-driven UI path, but it must not take ownership of the
@@ -877,6 +880,10 @@ public sealed class HenkaCapturedProcess : IDisposable
             if (!createNoWindow && startMinimized)
             {
                 StartMinimize(process, GetForegroundWindow());
+            }
+            else if (!createNoWindow && startVisibleWithoutActivation)
+            {
+                StartShowWithoutActivation(process);
             }
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
@@ -922,6 +929,22 @@ public sealed class HenkaCapturedProcess : IDisposable
         }, IntPtr.Zero);
     }
 
+    private static void ShowOwnedWindowsWithoutActivation(
+        int processId,
+        HashSet<IntPtr> handledWindows)
+    {
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+        {
+            uint ownerProcessId;
+            GetWindowThreadProcessId(hWnd, out ownerProcessId);
+            if (ownerProcessId == (uint)processId && handledWindows.Add(hWnd))
+            {
+                ShowWindow(hWnd, SW_SHOWNOACTIVATE);
+            }
+            return true;
+        }, IntPtr.Zero);
+    }
+
     public static void StartMinimize(Process process, IntPtr previousForeground)
     {
         // Apply one synchronous pass before returning the launch helper to its
@@ -957,6 +980,35 @@ public sealed class HenkaCapturedProcess : IDisposable
                     }
                     target.Refresh();
                     MinimizeOwnedWindows(target.Id, previousForeground);
+                }
+                catch
+                {
+                    return;
+                }
+                Thread.Sleep(10);
+            }
+        }, process);
+    }
+
+    public static void StartShowWithoutActivation(
+        Process process)
+    {
+        ThreadPool.QueueUserWorkItem(delegate(object state)
+        {
+            Process target = (Process)state;
+            HashSet<IntPtr> handledWindows = new HashSet<IntPtr>();
+            for (int attempt = 0; attempt < 2000; ++attempt)
+            {
+                try
+                {
+                    if (target.HasExited)
+                    {
+                        return;
+                    }
+                    target.Refresh();
+                    ShowOwnedWindowsWithoutActivation(
+                        target.Id,
+                        handledWindows);
                 }
                 catch
                 {
@@ -1066,9 +1118,11 @@ function Start-HenkaProcess {
 
         [switch]$CreateNoWindow,
 
-        # Native validation windows start minimized unless a caller explicitly
-        # opts out for a bounded foreground interaction test.
-        [bool]$StartMinimized = $true
+        # Native validation windows start minimized by default. A capturable
+        # visible surface can instead opt into a non-activating show state.
+        [bool]$StartMinimized = $true,
+
+        [switch]$StartVisibleWithoutActivation
     )
 
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -1077,7 +1131,8 @@ function Start-HenkaProcess {
     $startInfo.WorkingDirectory = $WorkingDirectory
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = [bool]$CreateNoWindow
-    if (-not $CreateNoWindow -and $StartMinimized) {
+    if (-not $CreateNoWindow -and
+        ($StartMinimized -or $StartVisibleWithoutActivation)) {
         # See the captured-process path: hidden creation avoids a transient
         # foreground activation, then the shared callback exposes the window
         # minimized without activation when its native handle exists.
@@ -1086,10 +1141,12 @@ function Start-HenkaProcess {
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
-    if (-not $CreateNoWindow -and $StartMinimized) {
+    if (-not $CreateNoWindow -and
+        ($StartMinimized -or $StartVisibleWithoutActivation)) {
         Initialize-HenkaCapturedProcessType
     }
-    $previousForeground = if (-not $CreateNoWindow -and $StartMinimized) {
+    $previousForeground = if (-not $CreateNoWindow -and
+        ($StartMinimized -or $StartVisibleWithoutActivation)) {
         [HenkaCapturedProcess]::CurrentForegroundWindow()
     } else {
         [IntPtr]::Zero
@@ -1100,6 +1157,9 @@ function Start-HenkaProcess {
     }
     if (-not $CreateNoWindow -and $StartMinimized) {
         [HenkaCapturedProcess]::StartMinimize($process, $previousForeground)
+    }
+    elseif (-not $CreateNoWindow -and $StartVisibleWithoutActivation) {
+        [HenkaCapturedProcess]::StartShowWithoutActivation($process)
     }
     return $process
 }
@@ -1122,9 +1182,11 @@ function Start-HenkaCapturedProcess {
 
         [switch]$CreateNoWindow,
 
-        # Native validation windows start minimized unless a caller explicitly
-        # opts out for a bounded foreground interaction test.
-        [bool]$StartMinimized = $true
+        # Native validation windows start minimized by default. A capturable
+        # visible surface can instead opt into a non-activating show state.
+        [bool]$StartMinimized = $true,
+
+        [switch]$StartVisibleWithoutActivation
     )
 
     Initialize-HenkaCapturedProcessType
@@ -1144,7 +1206,8 @@ function Start-HenkaCapturedProcess {
         $StdoutPath,
         $StderrPath,
         [bool]$CreateNoWindow,
-        $StartMinimized)
+        $StartMinimized,
+        [bool]$StartVisibleWithoutActivation)
 }
 
 function Close-HenkaCapturedProcess {
