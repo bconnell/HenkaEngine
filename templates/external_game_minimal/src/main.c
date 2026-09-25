@@ -191,12 +191,12 @@ static henka_result external_audio_initialize(
     if (result == HENKA_SUCCESS)
     {
         result = henka_scene_document_save_file(
-            state->document, ".", "external_audio_workflow.hnscene");
+            state->document, ".", "external_audio_workflow.hscene");
     }
     if (result == HENKA_SUCCESS)
     {
         result = henka_scene_document_load_file(
-            state->reloaded_document, ".", "external_audio_workflow.hnscene");
+            state->reloaded_document, ".", "external_audio_workflow.hscene");
     }
     if (result == HENKA_SUCCESS)
     {
@@ -381,7 +381,7 @@ static bool external_audio_workflow(void)
     henka_engine_destroy(engine);
     external_audio_destroy(&state);
     remove("external_audio_workflow.wav");
-    remove("external_audio_workflow.hnscene");
+    remove("external_audio_workflow.hscene");
     return result == HENKA_SUCCESS && state.success;
 }
 
