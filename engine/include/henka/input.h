@@ -130,6 +130,8 @@ henka_result henka_input_get_binding_snapshot(
 henka_result henka_input_apply_binding_snapshot(
     struct henka_engine* engine,
     const henka_input_binding_snapshot* snapshot);
+henka_result henka_input_reset_action_bindings_to_defaults(
+    struct henka_engine* engine);
 /* Returns the number of actions currently bound to the supplied control.
  * out_actions may be NULL when capacity is zero; results follow action enum
  * order so callers receive deterministic conflict presentation. */

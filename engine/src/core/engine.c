@@ -276,6 +276,18 @@ static void henka_engine_initialize_action_bindings(henka_engine* engine)
     engine->action_key_bindings[HENKA_INPUT_ACTION_FINE_ADJUSTMENT_MODIFIER][0] = HENKA_KEY_LEFT_SHIFT;
 }
 
+henka_result henka_input_reset_action_bindings_to_defaults(
+    struct henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    henka_engine_initialize_action_bindings(engine);
+    return HENKA_SUCCESS;
+}
+
+
 static henka_package_mode henka_engine_resolve_package_mode(const henka_engine* engine)
 {
     char* marker_path;

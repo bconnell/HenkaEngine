@@ -72,6 +72,22 @@ void henka_test_input(void)
             &engine, HENKA_MOUSE_BUTTON_UNKNOWN, owners, 4U) == 0U);
     }
 
+    HENKA_TEST_ASSERT(henka_input_bind_action_key(
+        &engine,
+        HENKA_INPUT_ACTION_MOVE_FORWARD,
+        HENKA_KEY_HOME) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_reset_action_bindings_to_defaults(
+        &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_get_action_key_binding(
+        &engine,
+        HENKA_INPUT_ACTION_MOVE_FORWARD,
+        0U) == HENKA_KEY_W);
+    HENKA_TEST_ASSERT(henka_input_get_action_key_binding_count(
+        &engine,
+        HENKA_INPUT_ACTION_MOVE_TOOL) == 2U);
+    HENKA_TEST_ASSERT(henka_input_reset_action_bindings_to_defaults(
+        NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+
     memset(&input, 0, sizeof(input));
     memset(&tool_window_state, 0, sizeof(tool_window_state));
     tool_window_state.mouse_position = (henka_vec2){12.0f, 34.0f};
