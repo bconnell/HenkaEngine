@@ -747,6 +747,7 @@ int main(void)
         system, voice, NAN) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_audio_voice_set_occlusion(
         system, voice, 0.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_restart(system, voice) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_voice_pause(system, voice) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_voice_get_info(
         system, voice, &emitter_info) == HENKA_SUCCESS);
