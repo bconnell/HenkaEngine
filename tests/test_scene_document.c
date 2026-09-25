@@ -2368,7 +2368,7 @@ int main(void)
         !loaded_object.audio.streaming ||
         henka_scene_document_format_inspection(
             loaded, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        strstr(inspection, "HSCN version=16") == NULL)
+        strstr(inspection, "HSCN version=17") == NULL)
     {
         fprintf(stderr, "scene document test failed during streamed audio v7 round-trip\n");
         goto cleanup;
