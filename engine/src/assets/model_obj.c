@@ -935,6 +935,104 @@ static float henka_obj_projected_cross(
     return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
 }
 
+static bool henka_obj_projected_point_on_segment(
+    const henka_model_vertex* point,
+    const henka_model_vertex* start,
+    const henka_model_vertex* end,
+    int dropped_axis)
+{
+    const float epsilon = 0.0000001f;
+    float point_x;
+    float point_y;
+    float start_x;
+    float start_y;
+    float end_x;
+    float end_y;
+
+    if (fabsf(henka_obj_projected_cross(
+            start, end, point, dropped_axis)) > epsilon)
+    {
+        return false;
+    }
+
+    henka_obj_project_position(point->position, dropped_axis, &point_x, &point_y);
+    henka_obj_project_position(start->position, dropped_axis, &start_x, &start_y);
+    henka_obj_project_position(end->position, dropped_axis, &end_x, &end_y);
+    return point_x >= fminf(start_x, end_x) - epsilon &&
+        point_x <= fmaxf(start_x, end_x) + epsilon &&
+        point_y >= fminf(start_y, end_y) - epsilon &&
+        point_y <= fmaxf(start_y, end_y) + epsilon;
+}
+
+static bool henka_obj_projected_segments_intersect(
+    const henka_model_vertex* a,
+    const henka_model_vertex* b,
+    const henka_model_vertex* c,
+    const henka_model_vertex* d,
+    int dropped_axis)
+{
+    const float epsilon = 0.0000001f;
+    const float abc = henka_obj_projected_cross(a, b, c, dropped_axis);
+    const float abd = henka_obj_projected_cross(a, b, d, dropped_axis);
+    const float cda = henka_obj_projected_cross(c, d, a, dropped_axis);
+    const float cdb = henka_obj_projected_cross(c, d, b, dropped_axis);
+
+    if (((abc > epsilon && abd < -epsilon) ||
+         (abc < -epsilon && abd > epsilon)) &&
+        ((cda > epsilon && cdb < -epsilon) ||
+         (cda < -epsilon && cdb > epsilon)))
+    {
+        return true;
+    }
+
+    return (fabsf(abc) <= epsilon &&
+            henka_obj_projected_point_on_segment(c, a, b, dropped_axis)) ||
+        (fabsf(abd) <= epsilon &&
+            henka_obj_projected_point_on_segment(d, a, b, dropped_axis)) ||
+        (fabsf(cda) <= epsilon &&
+            henka_obj_projected_point_on_segment(a, c, d, dropped_axis)) ||
+        (fabsf(cdb) <= epsilon &&
+            henka_obj_projected_point_on_segment(b, c, d, dropped_axis));
+}
+
+static bool henka_obj_face_boundary_self_intersects(
+    const henka_model_vertex* vertices,
+    int vertex_count,
+    int dropped_axis)
+{
+    int first_edge;
+
+    for (first_edge = 0; first_edge < vertex_count; ++first_edge)
+    {
+        const int first_end = (first_edge + 1) % vertex_count;
+        int second_edge;
+
+        for (second_edge = first_edge + 1;
+             second_edge < vertex_count;
+             ++second_edge)
+        {
+            const int second_end = (second_edge + 1) % vertex_count;
+
+            if (second_edge == first_end ||
+                (first_edge == 0 && second_end == 0))
+            {
+                continue;
+            }
+            if (henka_obj_projected_segments_intersect(
+                    &vertices[first_edge],
+                    &vertices[first_end],
+                    &vertices[second_edge],
+                    &vertices[second_end],
+                    dropped_axis))
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 static bool henka_obj_projected_point_in_triangle(
     const henka_model_vertex* point,
     const henka_model_vertex* a,
@@ -1054,6 +1152,15 @@ static henka_result henka_emit_face(
         henka_obj_set_error(
             context,
             "face projection is degenerate and cannot be triangulated");
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    if (henka_obj_face_boundary_self_intersects(
+            face_vertices, face->count, dropped_axis))
+    {
+        henka_obj_set_error(
+            context,
+            "face boundary self-intersects and cannot be triangulated");
         return HENKA_ERROR_UNKNOWN;
     }
 

@@ -1370,6 +1370,12 @@ void henka_test_model(void)
         "v 0.0 2.0 0.0\n"
         "v 2.0 0.0 0.0\n"
         "f 1 2 3 4\n";
+    static const char* invalid_self_intersecting_nonzero_area_obj =
+        "v 0.0 0.0 0.0\n"
+        "v 3.0 3.0 0.0\n"
+        "v 0.0 2.0 0.0\n"
+        "v 2.0 0.0 0.0\n"
+        "f 1 2 3 4\n";
     static const char* valid_negative_index_obj =
         "v 0.0 0.0 0.0\n"
         "v 1.0 0.0 0.0\n"
@@ -1609,6 +1615,18 @@ void henka_test_model(void)
     model.vertex_count = 0U;
     model.index_count = 0U;
     HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(invalid_obj, "invalid_obj", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+
+    model.vertices = NULL;
+    model.indices = NULL;
+    model.vertex_count = 0U;
+    model.index_count = 0U;
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_obj_from_memory(
+            invalid_self_intersecting_nonzero_area_obj,
+            "invalid_self_intersecting_nonzero_area_obj",
+            &model) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.vertices == NULL);
     HENKA_TEST_ASSERT(model.indices == NULL);
 
