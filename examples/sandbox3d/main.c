@@ -34827,6 +34827,15 @@ static void sandbox3d_draw_utility_panel(
             layout,
             SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_UTILITY);
+    /*
+     * A slot-targeted texture pick is a bounded transactional mode inside the
+     * Utility panel. While it is active, let the picker own the panel content
+     * area instead of drawing the normal Utility destinations underneath it.
+     * This prevents overlapping controls from competing for the same pointer
+     * event and keeps Apply/Cancel as the only way to finish that transaction.
+     */
+    if (!state->material_texture_pick.active)
+    {
     /* Keep every Utility destination in a measured, non-overlapping row. The
      * previous hand-positioned grid placed Assets and Terrain in the same
      * cell, so one tab could make the other unreachable. */
@@ -34951,7 +34960,17 @@ static void sandbox3d_draw_utility_panel(
         }
     }
 
-    y_start = panel_bounds.y + 126.0f;
+        y_start = panel_bounds.y + 126.0f;
+    }
+    else
+    {
+        /*
+         * The regular Utility destinations are hidden in picker mode, so the
+         * asset rows can start directly below the panel header without sharing
+         * hit space with navigation, paging, or Apply/Cancel controls.
+         */
+        y_start = panel_bounds.y + 38.0f;
+    }
     switch (state->workspace.active_utility)
     {
         case SANDBOX3D_UTILITY_HELP:
