@@ -727,7 +727,7 @@ int main(void)
         system, voice, 0.5f) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
     occluded_sum = fabsf(samples[0]) + fabsf(samples[1]);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(occluded_sum, clear_sum * 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT(fabsf(occluded_sum - clear_sum * 0.5f) < 0.0001f);
     HENKA_TEST_ASSERT(henka_audio_voice_get_info(
         system, voice, &emitter_info) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(emitter_info.occlusion, 0.5f, 0.0001f);
