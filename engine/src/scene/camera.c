@@ -220,6 +220,90 @@ bool henka_camera_is_valid(const henka_camera* camera)
         camera->fast_movement_multiplier > 0.0f;
 }
 
+
+static float henka_camera_blend_float(float from, float to, float factor)
+{
+    return from + (to - from) * factor;
+}
+
+static float henka_camera_blend_angle(float from, float to, float factor)
+{
+    const float delta = henka_camera_wrap_angle_radians(to - from);
+
+    return henka_camera_wrap_angle_radians(from + delta * factor);
+}
+
+henka_result henka_camera_blend(
+    const henka_camera* from,
+    const henka_camera* to,
+    float factor,
+    henka_camera* out_camera)
+{
+    henka_camera candidate;
+
+    if (from == NULL ||
+        to == NULL ||
+        out_camera == NULL ||
+        !henka_camera_is_valid(from) ||
+        !henka_camera_is_valid(to) ||
+        from->projection_mode != to->projection_mode ||
+        !isfinite(factor) ||
+        factor < 0.0f ||
+        factor > 1.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (factor == 0.0f)
+    {
+        *out_camera = *from;
+        return HENKA_SUCCESS;
+    }
+    if (factor == 1.0f)
+    {
+        *out_camera = *to;
+        return HENKA_SUCCESS;
+    }
+
+    candidate = *from;
+    candidate.position.x = henka_camera_blend_float(
+        from->position.x, to->position.x, factor);
+    candidate.position.y = henka_camera_blend_float(
+        from->position.y, to->position.y, factor);
+    candidate.position.z = henka_camera_blend_float(
+        from->position.z, to->position.z, factor);
+    candidate.yaw_radians = henka_camera_blend_angle(
+        from->yaw_radians, to->yaw_radians, factor);
+    candidate.pitch_radians = henka_camera_blend_float(
+        from->pitch_radians, to->pitch_radians, factor);
+    candidate.roll_radians = henka_camera_blend_angle(
+        from->roll_radians, to->roll_radians, factor);
+    candidate.field_of_view_radians = henka_camera_blend_float(
+        from->field_of_view_radians, to->field_of_view_radians, factor);
+    candidate.orthographic_height = henka_camera_blend_float(
+        from->orthographic_height, to->orthographic_height, factor);
+    candidate.near_plane = henka_camera_blend_float(
+        from->near_plane, to->near_plane, factor);
+    candidate.far_plane = henka_camera_blend_float(
+        from->far_plane, to->far_plane, factor);
+    candidate.aspect_ratio = henka_camera_blend_float(
+        from->aspect_ratio, to->aspect_ratio, factor);
+    candidate.movement_speed = henka_camera_blend_float(
+        from->movement_speed, to->movement_speed, factor);
+    candidate.fast_movement_multiplier = henka_camera_blend_float(
+        from->fast_movement_multiplier,
+        to->fast_movement_multiplier,
+        factor);
+
+    if (!henka_camera_is_valid(&candidate))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+
+    *out_camera = candidate;
+    return HENKA_SUCCESS;
+}
+
 henka_camera henka_camera_create_perspective(float field_of_view_radians, float aspect_ratio, float near_plane, float far_plane)
 {
     henka_camera camera;

@@ -231,6 +231,75 @@ void henka_test_camera(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.fast_movement_multiplier, before.fast_movement_multiplier, 0.0001f);
 
     {
+        henka_camera blend_from;
+        henka_camera blend_to;
+        henka_camera blended;
+        henka_camera blend_before;
+        henka_camera orthographic;
+
+        blend_from = henka_camera_create_perspective(
+            50.0f * HENKA_DEG_TO_RAD, 4.0f / 3.0f, 0.2f, 120.0f);
+        blend_to = henka_camera_create_perspective(
+            70.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.4f, 320.0f);
+        blend_from.position = (henka_vec3){-4.0f, 2.0f, 8.0f};
+        blend_to.position = (henka_vec3){6.0f, 8.0f, -2.0f};
+        blend_from.yaw_radians = 170.0f * HENKA_DEG_TO_RAD;
+        blend_to.yaw_radians = -170.0f * HENKA_DEG_TO_RAD;
+        blend_from.pitch_radians = -0.4f;
+        blend_to.pitch_radians = 0.2f;
+        blend_from.roll_radians = 10.0f * HENKA_DEG_TO_RAD;
+        blend_to.roll_radians = 30.0f * HENKA_DEG_TO_RAD;
+        blend_from.movement_speed = 2.0f;
+        blend_to.movement_speed = 10.0f;
+        blend_from.fast_movement_multiplier = 2.0f;
+        blend_to.fast_movement_multiplier = 4.0f;
+
+        HENKA_TEST_ASSERT(henka_camera_is_valid(&blend_from));
+        HENKA_TEST_ASSERT(henka_camera_is_valid(&blend_to));
+        HENKA_TEST_ASSERT(henka_camera_blend(
+            &blend_from, &blend_to, 0.5f, &blended) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(blended.position.x, 1.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(blended.position.y, 5.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(blended.position.z, 3.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            fabsf(fabsf(blended.yaw_radians) - HENKA_PI) < 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(blended.pitch_radians, -0.1f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            blended.roll_radians, 20.0f * HENKA_DEG_TO_RAD, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            blended.field_of_view_radians, 60.0f * HENKA_DEG_TO_RAD, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(blended.near_plane, 0.3f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(blended.far_plane, 220.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(blended.movement_speed, 6.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            blended.fast_movement_multiplier, 3.0f, 0.0001f);
+
+        memset(&blended, 0, sizeof(blended));
+        HENKA_TEST_ASSERT(henka_camera_blend(
+            &blend_from, &blend_to, 0.0f, &blended) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(memcmp(&blended, &blend_from, sizeof(blended)) == 0);
+        HENKA_TEST_ASSERT(henka_camera_blend(
+            &blend_from, &blend_to, 1.0f, &blended) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(memcmp(&blended, &blend_to, sizeof(blended)) == 0);
+
+        blend_before = blended;
+        orthographic = henka_camera_create_orthographic(
+            8.0f, 16.0f / 9.0f, 0.1f, 100.0f);
+        HENKA_TEST_ASSERT(henka_camera_blend(
+            &blend_from, &orthographic, 0.5f, &blended) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(memcmp(&blended, &blend_before, sizeof(blended)) == 0);
+        HENKA_TEST_ASSERT(henka_camera_blend(
+            &blend_from, &blend_to, -0.1f, &blended) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(memcmp(&blended, &blend_before, sizeof(blended)) == 0);
+        HENKA_TEST_ASSERT(henka_camera_blend(
+            &blend_from, &blend_to, NAN, &blended) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(memcmp(&blended, &blend_before, sizeof(blended)) == 0);
+    }
+
+    {
         henka_camera_follow_desc follow_desc;
         henka_camera followed_camera;
         henka_camera_follow_desc invalid_desc;
