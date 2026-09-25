@@ -7,6 +7,8 @@ int main(void)
     henka_save_game_slot_metadata metadata =
         henka_save_game_slot_metadata_default();
     henka_save_game_slot_metadata invalid;
+    henka_save_game_slot_catalog catalog;
+    const henka_save_game_slot_metadata* found;
     char path[HENKA_SAVE_GAME_RELATIVE_PATH_BYTES];
     char tiny[8U];
 
@@ -61,6 +63,48 @@ int main(void)
         tiny[0] != '\0')
     {
         return 5;
+    }
+
+
+    henka_save_game_slot_catalog_reset(&catalog);
+    if (catalog.count != 0U ||
+        henka_save_game_slot_catalog_upsert(&catalog, &metadata) != HENKA_SUCCESS ||
+        catalog.count != 1U)
+    {
+        return 6;
+    }
+
+    found = henka_save_game_slot_catalog_find(&catalog, "slot_01");
+    if (found == NULL || found->sequence != 42U)
+    {
+        return 7;
+    }
+
+    metadata.sequence = 43U;
+    (void)snprintf(
+        metadata.display_name,
+        sizeof(metadata.display_name),
+        "%s",
+        "Checkpoint One Updated");
+    if (henka_save_game_slot_catalog_upsert(&catalog, &metadata) != HENKA_SUCCESS ||
+        catalog.count != 1U)
+    {
+        return 8;
+    }
+    found = henka_save_game_slot_catalog_find(&catalog, "slot_01");
+    if (found == NULL ||
+        found->sequence != 43U ||
+        strcmp(found->display_name, "Checkpoint One Updated") != 0)
+    {
+        return 9;
+    }
+
+    if (henka_save_game_slot_catalog_remove(&catalog, "slot_01") != HENKA_SUCCESS ||
+        catalog.count != 0U ||
+        henka_save_game_slot_catalog_find(&catalog, "slot_01") != NULL ||
+        henka_save_game_slot_catalog_remove(&catalog, "slot_01") == HENKA_SUCCESS)
+    {
+        return 10;
     }
 
     return 0;

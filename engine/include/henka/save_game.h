@@ -19,6 +19,23 @@ typedef struct henka_save_game_slot_metadata
     char display_name[HENKA_SAVE_GAME_DISPLAY_NAME_BYTES];
 } henka_save_game_slot_metadata;
 
+typedef struct henka_save_game_slot_catalog
+{
+    henka_save_game_slot_metadata slots[16U];
+    size_t count;
+} henka_save_game_slot_catalog;
+
+void henka_save_game_slot_catalog_reset(henka_save_game_slot_catalog* catalog);
+henka_result henka_save_game_slot_catalog_upsert(
+    henka_save_game_slot_catalog* catalog,
+    const henka_save_game_slot_metadata* metadata);
+henka_result henka_save_game_slot_catalog_remove(
+    henka_save_game_slot_catalog* catalog,
+    const char* slot_id);
+const henka_save_game_slot_metadata* henka_save_game_slot_catalog_find(
+    const henka_save_game_slot_catalog* catalog,
+    const char* slot_id);
+
 henka_save_game_slot_metadata henka_save_game_slot_metadata_default(void);
 henka_result henka_save_game_slot_metadata_validate(
     const henka_save_game_slot_metadata* metadata);
