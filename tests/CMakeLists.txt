@@ -23,6 +23,19 @@ henka_enable_project_warnings(henka_headless_runtime_tests)
 
 add_test(NAME henka_headless_runtime_tests COMMAND henka_headless_runtime_tests)
 
+add_executable(henka_localization_tests
+    test_localization.c
+)
+
+target_link_libraries(henka_localization_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_localization_tests)
+
+add_test(NAME henka_localization_tests COMMAND henka_localization_tests)
+
 add_executable(henka_audio_tests
     test_audio.c
 )

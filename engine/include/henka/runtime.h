@@ -1,6 +1,7 @@
 #ifndef HENKA_RUNTIME_H
 #define HENKA_RUNTIME_H
 
+#include <henka/localization.h>
 #include <henka/camera.h>
 #include <henka/camera_follow.h>
 #include <henka/audio.h>
