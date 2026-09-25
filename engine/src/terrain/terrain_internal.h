@@ -31,6 +31,8 @@ struct henka_terrain_world
     uint32_t resident_region_count;
     uint32_t resident_chunk_count;
     uint32_t pending_io_count;
+    henka_terrain_regeneration_request regeneration_queue[HENKA_TERRAIN_MAX_RESIDENT_REGIONS];
+    uint32_t regeneration_count;
 };
 
 henka_terrain_region_record* henka_terrain_find_region_record(

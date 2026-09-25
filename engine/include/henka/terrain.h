@@ -96,6 +96,21 @@ typedef struct henka_terrain_region_state
     bool dirty;
 } henka_terrain_region_state;
 
+typedef enum henka_terrain_regeneration_target
+{
+    HENKA_TERRAIN_REGENERATION_NONE = 0,
+    HENKA_TERRAIN_REGENERATION_PHYSICS = 1 << 0,
+    HENKA_TERRAIN_REGENERATION_RENDER = 1 << 1
+} henka_terrain_regeneration_target;
+
+typedef struct henka_terrain_regeneration_request
+{
+    henka_terrain_region_id id;
+    henka_terrain_revision revision;
+    henka_terrain_generation generation;
+    uint32_t targets;
+} henka_terrain_regeneration_request;
+
 typedef struct henka_terrain_world_stats
 {
     uint32_t resident_region_count;
@@ -109,6 +124,8 @@ typedef struct henka_terrain_world_stats
     uint64_t cpu_bytes;
     /* Active regions whose latest edit has not been persisted. */
     uint32_t dirty_region_count;
+    /* Coalesced region rebuild requests waiting for a caller-owned worker. */
+    uint32_t pending_regeneration_count;
 } henka_terrain_world_stats;
 
 henka_terrain_world_desc henka_terrain_world_desc_default(void);
@@ -177,6 +194,18 @@ henka_result henka_terrain_world_get_resident_region_at(
 henka_result henka_terrain_world_get_stats(
     const henka_terrain_world* world,
     henka_terrain_world_stats* out_stats);
+
+/* Queues one resident region for caller-owned physics/render regeneration.
+ * Repeated requests for the same region coalesce, preserve queue order, and
+ * advance to the region's latest revision/generation. This is a deterministic
+ * work-ownership primitive; it does not create worker threads. */
+henka_result henka_terrain_world_request_regeneration(
+    henka_terrain_world* world,
+    henka_terrain_region_id region_id,
+    uint32_t targets);
+henka_result henka_terrain_world_pop_regeneration(
+    henka_terrain_world* world,
+    henka_terrain_regeneration_request* out_request);
 
 /* Atomically replaces one resident region with a validated storage snapshot. */
 henka_result henka_terrain_world_apply_region_snapshot(

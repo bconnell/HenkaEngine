@@ -26,6 +26,39 @@ static bool henka_terrain_chunk_id_matches(
     return left.x == right.x && left.z == right.z;
 }
 
+static void henka_terrain_remove_regeneration_request(
+    henka_terrain_world* world,
+    henka_terrain_region_id id)
+{
+    uint32_t index;
+
+    if (world == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < world->regeneration_count; ++index)
+    {
+        if (henka_terrain_region_id_matches(
+                world->regeneration_queue[index].id, id))
+        {
+            uint32_t move_index;
+            for (move_index = index + 1U;
+                 move_index < world->regeneration_count;
+                 ++move_index)
+            {
+                world->regeneration_queue[move_index - 1U] =
+                    world->regeneration_queue[move_index];
+            }
+            --world->regeneration_count;
+            memset(
+                &world->regeneration_queue[world->regeneration_count],
+                0,
+                sizeof(world->regeneration_queue[0]));
+            return;
+        }
+    }
+}
+
 henka_terrain_world_desc henka_terrain_world_desc_default(void)
 {
     henka_terrain_world_desc desc;
@@ -434,6 +467,7 @@ henka_result henka_terrain_world_release_region(
     {
         return HENKA_ERROR_LIMIT;
     }
+    henka_terrain_remove_regeneration_request(world, region_id);
     henka_free(record->samples);
     memset(record, 0, sizeof(*record));
     if (world->resident_region_count > 0U)
@@ -648,10 +682,82 @@ henka_result henka_terrain_world_get_stats(
         .resident_chunk_count = world->resident_chunk_count,
         .pending_io_count = world->pending_io_count,
         .dirty_region_count = dirty_region_count,
+        .pending_regeneration_count = world->regeneration_count,
         .max_resident_regions = world->desc.max_resident_regions,
         .max_resident_chunks = world->desc.max_resident_chunks,
         .max_pending_io = world->desc.max_pending_io,
         .cpu_bytes = cpu_bytes};
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_world_request_regeneration(
+    henka_terrain_world* world,
+    henka_terrain_region_id region_id,
+    uint32_t targets)
+{
+    henka_terrain_region_record* record;
+    uint32_t index;
+    const uint32_t valid_targets =
+        HENKA_TERRAIN_REGENERATION_PHYSICS |
+        HENKA_TERRAIN_REGENERATION_RENDER;
+
+    if (world == NULL ||
+        targets == HENKA_TERRAIN_REGENERATION_NONE ||
+        (targets & ~valid_targets) != 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    record = henka_terrain_find_region_record(world, region_id);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < world->regeneration_count; ++index)
+    {
+        henka_terrain_regeneration_request* request =
+            &world->regeneration_queue[index];
+        if (henka_terrain_region_id_matches(request->id, region_id))
+        {
+            request->revision = record->state.revision;
+            request->generation = record->state.generation;
+            request->targets |= targets;
+            return HENKA_SUCCESS;
+        }
+    }
+    if (world->regeneration_count >= world->desc.max_resident_regions)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    world->regeneration_queue[world->regeneration_count++] =
+        (henka_terrain_regeneration_request){
+            .id = region_id,
+            .revision = record->state.revision,
+            .generation = record->state.generation,
+            .targets = targets};
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_world_pop_regeneration(
+    henka_terrain_world* world,
+    henka_terrain_regeneration_request* out_request)
+{
+    uint32_t index;
+
+    if (world == NULL || out_request == NULL || world->regeneration_count == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_request = world->regeneration_queue[0];
+    for (index = 1U; index < world->regeneration_count; ++index)
+    {
+        world->regeneration_queue[index - 1U] =
+            world->regeneration_queue[index];
+    }
+    --world->regeneration_count;
+    memset(
+        &world->regeneration_queue[world->regeneration_count],
+        0,
+        sizeof(world->regeneration_queue[0]));
     return HENKA_SUCCESS;
 }
 
