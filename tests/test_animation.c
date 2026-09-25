@@ -103,5 +103,59 @@ int main(void)
         return 1;
     }
 
+
+    {
+        const henka_animation_event events[] = {
+            {0.0, 10U},
+            {0.5, 20U},
+            {1.5, 30U},
+            {2.0, 40U}};
+        henka_animation_event_track event_track = {
+            events,
+            sizeof(events) / sizeof(events[0]),
+            2.0,
+            false};
+        uint32_t ids[4] = {99U, 99U, 99U, 99U};
+        size_t count = 0U;
+
+        if (henka_animation_collect_events(
+                &event_track, 0.0, 1.5, ids, 4U, &count) != HENKA_SUCCESS ||
+            count != 2U || ids[0] != 20U || ids[1] != 30U)
+        {
+            return 1;
+        }
+
+        ids[0] = 77U;
+        ids[1] = 88U;
+        if (henka_animation_collect_events(
+                &event_track, 0.0, 2.0, ids, 1U, &count) !=
+                HENKA_ERROR_LIMIT ||
+            count != 3U || ids[0] != 77U || ids[1] != 88U)
+        {
+            return 1;
+        }
+
+        event_track.looping = true;
+        if (henka_animation_collect_events(
+                &event_track, 1.25, 2.5, ids, 4U, &count) != HENKA_SUCCESS ||
+            count != 3U || ids[0] != 30U || ids[1] != 40U || ids[2] != 10U)
+        {
+            return 1;
+        }
+        if (henka_animation_collect_events(
+                &event_track, 0.25, 2.25, ids, 4U, &count) != HENKA_SUCCESS ||
+            count != 4U || ids[0] != 10U || ids[1] != 20U ||
+            ids[2] != 30U || ids[3] != 40U)
+        {
+            return 1;
+        }
+        if (henka_animation_collect_events(
+                &event_track, 0.0, 2.1, ids, 4U, &count) !=
+                HENKA_ERROR_INVALID_ARGUMENT)
+        {
+            return 1;
+        }
+    }
+
     return 0;
 }
