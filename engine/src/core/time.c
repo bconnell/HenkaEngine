@@ -97,3 +97,72 @@ void henka_time_tick(henka_time_state* state)
     state->last_tick_seconds = now_seconds;
     state->frame_index += 1U;
 }
+
+void henka_frame_time_stats_reset(henka_frame_time_stats* stats)
+{
+    if (stats == NULL)
+    {
+        return;
+    }
+    stats->sample_count = 0U;
+    stats->total_seconds = 0.0;
+    stats->minimum_seconds = 0.0;
+    stats->maximum_seconds = 0.0;
+}
+
+henka_result henka_frame_time_stats_push(
+    henka_frame_time_stats* stats,
+    double delta_seconds)
+{
+    if (stats == NULL ||
+        !isfinite(delta_seconds) ||
+        delta_seconds < 0.0 ||
+        stats->sample_count == UINT64_MAX ||
+        !isfinite(stats->total_seconds + delta_seconds))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (stats->sample_count == 0U)
+    {
+        stats->minimum_seconds = delta_seconds;
+        stats->maximum_seconds = delta_seconds;
+    }
+    else
+    {
+        if (delta_seconds < stats->minimum_seconds)
+        {
+            stats->minimum_seconds = delta_seconds;
+        }
+        if (delta_seconds > stats->maximum_seconds)
+        {
+            stats->maximum_seconds = delta_seconds;
+        }
+    }
+    stats->total_seconds += delta_seconds;
+    ++stats->sample_count;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_frame_time_stats_get_average(
+    const henka_frame_time_stats* stats,
+    double* out_average_seconds)
+{
+    double average;
+
+    if (stats == NULL ||
+        out_average_seconds == NULL ||
+        stats->sample_count == 0U ||
+        !isfinite(stats->total_seconds) ||
+        stats->total_seconds < 0.0)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    average = stats->total_seconds / (double)stats->sample_count;
+    if (!isfinite(average))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    *out_average_seconds = average;
+    return HENKA_SUCCESS;
+}
