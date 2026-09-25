@@ -1,5 +1,6 @@
 #include <henka/localization.h>
 
+#include <stdbool.h>
 #include <string.h>
 
 static bool henka_localization_string_is_bounded(
