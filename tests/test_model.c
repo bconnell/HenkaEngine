@@ -1223,6 +1223,100 @@ static void henka_test_gltf_scene_import(void)
     henka_free(invalid_scene);
 }
 
+
+static void henka_test_gltf_triangle_strip_and_fan_import(void)
+{
+    static const char* triangle_strip =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAACAPwAAgD8AAAAAAAECAw==\",\"byteLength\":52}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":48},{\"buffer\":0,\"byteOffset\":48,\"byteLength\":4}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":4,\"type\":\"VEC3\"},"
+        "{\"bufferView\":1,\"componentType\":5121,\"count\":4,\"type\":\"SCALAR\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":1,\"mode\":5}]}]}";
+    static const char* triangle_fan =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAAAAAAECAw==\",\"byteLength\":52}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":48},{\"buffer\":0,\"byteOffset\":48,\"byteLength\":4}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":4,\"type\":\"VEC3\"},"
+        "{\"bufferView\":1,\"componentType\":5121,\"count\":4,\"type\":\"SCALAR\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":1,\"mode\":6}]}]}";
+    static const char* short_triangle_strip =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAACAPwAAgD8AAAAAAAECAw==\",\"byteLength\":52}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":48},{\"buffer\":0,\"byteOffset\":48,\"byteLength\":2}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":4,\"type\":\"VEC3\"},"
+        "{\"bufferView\":1,\"componentType\":5121,\"count\":2,\"type\":\"SCALAR\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":1,\"mode\":5}]}]}";
+    static const char* out_of_range_index_accessor =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":99,\"mode\":4}]}]}";
+    static const char* unsupported_line_strip =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAACAPwAAgD8AAAAAAAECAw==\",\"byteLength\":52}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":48},{\"buffer\":0,\"byteOffset\":48,\"byteLength\":4}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":4,\"type\":\"VEC3\"},"
+        "{\"bufferView\":1,\"componentType\":5121,\"count\":4,\"type\":\"SCALAR\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":1,\"mode\":3}]}]}";
+    henka_model_data model;
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        triangle_strip, strlen(triangle_strip), "triangle-strip.gltf", &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 6U && model.index_count == 6U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].position.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[2].position.y, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[3].position.y, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[4].position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[5].position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT(model.vertices[0].normal.z > 0.99f);
+    HENKA_TEST_ASSERT(model.vertices[3].normal.z > 0.99f);
+    henka_model_data_destroy(&model);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        triangle_fan, strlen(triangle_fan), "triangle-fan.gltf", &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 6U && model.index_count == 6U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].position.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[3].position.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[5].position.y, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT(model.vertices[0].normal.z > 0.99f);
+    HENKA_TEST_ASSERT(model.vertices[3].normal.z > 0.99f);
+    henka_model_data_destroy(&model);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        short_triangle_strip,
+        strlen(short_triangle_strip),
+        "short-triangle-strip.gltf",
+        &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL && model.indices == NULL);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        out_of_range_index_accessor,
+        strlen(out_of_range_index_accessor),
+        "out-of-range-index-accessor.gltf",
+        &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL && model.indices == NULL);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        unsupported_line_strip,
+        strlen(unsupported_line_strip),
+        "unsupported-line-strip.gltf",
+        &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL && model.indices == NULL);
+}
+
 void henka_test_model(void)
 {
     static const char* valid_gltf =
@@ -1662,5 +1756,6 @@ void henka_test_model(void)
     henka_test_loose_authoring_renderer_bridge();
     henka_test_mixed_loose_authoring_renderer_bridge();
     henka_test_gltf_mixed_normal_primitives_preserve_imported_normals();
+    henka_test_gltf_triangle_strip_and_fan_import();
     henka_test_gltf_scene_import();
 }
