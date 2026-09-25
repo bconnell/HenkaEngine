@@ -13,7 +13,30 @@ typedef struct henka_camera_follow_desc
     double position_lag_seconds;
 } henka_camera_follow_desc;
 
+typedef enum henka_camera_rig_mode
+{
+    HENKA_CAMERA_RIG_FIRST_PERSON = 0,
+    HENKA_CAMERA_RIG_THIRD_PERSON
+} henka_camera_rig_mode;
+
+typedef struct henka_camera_rig_desc
+{
+    henka_camera_rig_mode mode;
+    float eye_height;
+    float lateral_offset;
+    float follow_distance;
+    float look_ahead_distance;
+    double position_lag_seconds;
+} henka_camera_rig_desc;
+
 henka_camera_follow_desc henka_camera_follow_desc_default(void);
+henka_camera_rig_desc henka_camera_rig_desc_default(
+    henka_camera_rig_mode mode);
+henka_result henka_camera_rig_follow_scene_entity(
+    henka_scene* scene,
+    henka_entity target,
+    const henka_camera_rig_desc* rig,
+    double delta_seconds);
 
 /* Updates the scene-owned camera from one live generation-checked entity.
  * The camera is changed only after the target, offsets, timing, and complete

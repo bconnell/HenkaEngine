@@ -63,6 +63,72 @@ static bool henka_camera_follow_cameras_equal(
         left->fast_movement_multiplier == right->fast_movement_multiplier;
 }
 
+static bool henka_camera_rig_desc_is_valid(
+    const henka_camera_rig_desc* rig)
+{
+    return rig != NULL &&
+        (rig->mode == HENKA_CAMERA_RIG_FIRST_PERSON ||
+         rig->mode == HENKA_CAMERA_RIG_THIRD_PERSON) &&
+        isfinite(rig->eye_height) &&
+        isfinite(rig->lateral_offset) &&
+        isfinite(rig->follow_distance) &&
+        isfinite(rig->look_ahead_distance) &&
+        isfinite(rig->position_lag_seconds) &&
+        rig->eye_height >= 0.0f &&
+        rig->follow_distance >= 0.0f &&
+        rig->look_ahead_distance > 0.0f &&
+        rig->position_lag_seconds >= 0.0;
+}
+
+henka_camera_rig_desc henka_camera_rig_desc_default(
+    henka_camera_rig_mode mode)
+{
+    henka_camera_rig_desc rig;
+
+    rig.mode = mode;
+    rig.eye_height = 1.6f;
+    rig.lateral_offset = 0.0f;
+    rig.follow_distance =
+        mode == HENKA_CAMERA_RIG_THIRD_PERSON ? 4.0f : 0.0f;
+    rig.look_ahead_distance = 4.0f;
+    rig.position_lag_seconds =
+        mode == HENKA_CAMERA_RIG_THIRD_PERSON ? 0.12 : 0.0;
+    return rig;
+}
+
+henka_result henka_camera_rig_follow_scene_entity(
+    henka_scene* scene,
+    henka_entity target,
+    const henka_camera_rig_desc* rig,
+    double delta_seconds)
+{
+    henka_camera_follow_desc follow;
+
+    if (!henka_camera_rig_desc_is_valid(rig))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    follow = henka_camera_follow_desc_default();
+    follow.position_offset = (henka_vec3){
+        rig->lateral_offset,
+        rig->eye_height,
+        rig->mode == HENKA_CAMERA_RIG_THIRD_PERSON
+            ? rig->follow_distance
+            : 0.0f};
+    follow.look_at_offset = (henka_vec3){
+        0.0f,
+        rig->eye_height,
+        -rig->look_ahead_distance};
+    follow.position_lag_seconds = rig->position_lag_seconds;
+
+    return henka_camera_follow_scene_entity(
+        scene,
+        target,
+        &follow,
+        delta_seconds);
+}
+
 henka_camera_follow_desc henka_camera_follow_desc_default(void)
 {
     henka_camera_follow_desc desc;

@@ -412,6 +412,50 @@ void henka_test_camera(void)
             follow_scene, follow_target, &follow_desc, 0.1) == HENKA_ERROR_INVALID_ARGUMENT);
         HENKA_TEST_ASSERT(henka_scene_get_camera(follow_scene, &followed_camera) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(memcmp(&before, &followed_camera, sizeof(before)) == 0);
+        {
+            henka_camera_rig_desc rig =
+                henka_camera_rig_desc_default(HENKA_CAMERA_RIG_FIRST_PERSON);
+
+            target_transform = henka_transform_identity();
+            target_transform.position = (henka_vec3){2.0f, 0.0f, 3.0f};
+            HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+                follow_scene, follow_target, target_transform) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_camera_rig_follow_scene_entity(
+                follow_scene, follow_target, &rig, 0.0) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_scene_get_camera(
+                follow_scene, &followed_camera) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                followed_camera.position.x, 2.0f, 0.0001f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                followed_camera.position.y, 1.6f, 0.0001f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                followed_camera.position.z, 3.0f, 0.0001f);
+
+            rig = henka_camera_rig_desc_default(
+                HENKA_CAMERA_RIG_THIRD_PERSON);
+            rig.position_lag_seconds = 0.0;
+            HENKA_TEST_ASSERT(henka_camera_rig_follow_scene_entity(
+                follow_scene, follow_target, &rig, 0.0) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_scene_get_camera(
+                follow_scene, &followed_camera) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                followed_camera.position.x, 2.0f, 0.0001f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                followed_camera.position.y, 1.6f, 0.0001f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                followed_camera.position.z, 7.0f, 0.0001f);
+
+            rig.follow_distance = -1.0f;
+            before = followed_camera;
+            HENKA_TEST_ASSERT(henka_camera_rig_follow_scene_entity(
+                follow_scene, follow_target, &rig, 0.0) ==
+                HENKA_ERROR_INVALID_ARGUMENT);
+            HENKA_TEST_ASSERT(henka_scene_get_camera(
+                follow_scene, &followed_camera) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(memcmp(
+                &before, &followed_camera, sizeof(before)) == 0);
+        }
+
         henka_scene_destroy(follow_scene);
     }
 }
