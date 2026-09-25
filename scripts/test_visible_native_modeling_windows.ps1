@@ -307,7 +307,7 @@ try {
     # the shared default minimized/background-safe policy.
     $capturedProcess = Start-HenkaCapturedProcess `
         -FilePath $runtimeExecutable `
-        -Arguments @() `
+        -Arguments @('--primitive-gallery') `
         -WorkingDirectory $runtimeDirectory `
         -StdoutPath $stdoutPath `
         -StderrPath $stderrPath `
@@ -753,11 +753,12 @@ try {
         throw "The visible Base Color texture picker did not start."
     }
 
-    # Use the checked-in color texture that normal product startup loads.
-    # Arbitrary manager rows can be semantic/runtime textures that are valid
-    # assets but intentionally unsuitable as a Base Color source. The asset
-    # browser is paged, so search its real Next control instead of assuming
-    # this candidate is always on the first page.
+    # The explicit engineering gallery loads a deterministic manager-known
+    # color texture through the normal asset API. Ordinary startup intentionally
+    # stays clean and does not preload showcase/reference assets. Arbitrary
+    # manager rows can be semantic/runtime textures that are valid assets but
+    # unsuitable as a Base Color source. Search the browser's real Next control
+    # instead of assuming this candidate is always on the first page.
     $assetRowPattern =
         'Material texture picker asset row: entity=\d+ slot=Base Color path=assets/textures/cube_albedo\.png x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26\.0\.'
     $assetCandidateFound = (Get-LogMatchCount `
