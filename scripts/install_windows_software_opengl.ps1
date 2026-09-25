@@ -6,8 +6,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$source = [System.IO.Path]::GetFullPath($SourceDirectory)
-$target = [System.IO.Path]::GetFullPath($TargetDirectory)
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$source = Resolve-HenkaRepositoryPath -RepoRoot $repoRoot -Path $SourceDirectory
+$target = Resolve-HenkaRepositoryPath -RepoRoot $repoRoot -Path $TargetDirectory
 if (-not (Test-Path -LiteralPath $source -PathType Container)) {
     throw "CI-only Mesa OpenGL runtime directory was not found: $source"
 }

@@ -93,20 +93,49 @@ Current operations include:
 - plane creation;
 - box creation;
 - duplicate;
-- face winding flip;
+- face winding flip for one or a bounded unique face selection;
+- face-normal translation for one or a bounded vertex-disjoint face selection;
+- deterministic planar face triangulation for one or a bounded vertex-disjoint
+  face selection;
 - face extrude;
-- inset;
-- planar bevel ring;
-- face subdivision;
+- bounded disconnected or full-edge-connected face inset;
+- bounded disconnected or full-edge-connected planar face bevel rings;
+- bounded face subdivision for disconnected or full-edge-connected selections;
+- bounded convex planar face poke for one or a connected/disconnected selection;
+- transactional deletion of one or more selected faces while preserving at
+  least one renderable face;
+- selected face-region extrusion with shared caps and transactional topology;
 - bounded edge bevel;
 - bounded loop-cut operations;
+- bounded split of one selected face-backed boundary or interior edge, a
+  pairwise-disjoint batch, a contiguous same-face boundary-edge chain, or a
+  batch of independent boundary-edge chains at a factor in (0,1), preserving
+  per-corner UVs and hard/seam metadata;
+- bounded midpoint split of one selected standalone loose edge, preserving
+  endpoint metadata and selecting the two replacement edges;
 - bounded vertex and edge extrusion paths described below.
 
 Each operation works on a clone and publishes only a validated result. Capacity, topology, geometry, or non-manifold rejection preserves the committed source.
 
-The shared Sandbox modeling session also routes one selected face through the
-same preview, Apply, Cancel, and undo boundary as the vertex and edge
-extrusion paths.
+Face-region extrusion accepts a deterministic set of selected faces and moves
+the region along its averaged face normal. Selected adjacent faces share one
+translated cap and do not receive an internal wall. An isolated region keeps
+its source faces as the base; a region connected to unselected surface moves
+its source face identities to the translated cap. Material regions, smoothing,
+per-corner UVs, hard-edge intent, and seam intent are preserved. Duplicate,
+invalid, unsupported, or failed selections leave the source unchanged. The
+Sandbox editor routes the selected face region through the shared Preview,
+Cancel, Apply, undo, and redo transaction, while the authoring-mesh API
+remains the topology authority.
+
+Selected-face deletion accepts a bounded unique face-ID set, validates the
+complete candidate before publication, and preserves the source on invalid,
+capacity-invalid, or failed requests. The shared Sandbox modeling session
+routes the same transaction through Preview, Apply, Cancel, undo, and redo.
+
+The shared Sandbox modeling session routes one or a bounded unique face
+selection through the same preview, Apply, Cancel, undo, and redo boundary as
+the vertex and edge extrusion paths.
 
 Face flip preserves:
 
@@ -117,7 +146,49 @@ Face flip preserves:
 - smoothing metadata;
 - per-corner UV correspondence.
 
-The operation reverses only the ordered winding.
+The operation reverses only the ordered winding. Invalid or duplicate face
+selections leave the committed source unchanged.
+
+Planar face triangulation uses deterministic ear clipping and preserves the
+source face identity on the first triangle, with fresh identities for the
+additional triangles. The operation preserves material regions, smoothing,
+and per-corner UVs. The batch form accepts only vertex-disjoint planar faces;
+duplicate, shared-vertex, non-planar, invalid, and capacity-invalid selections
+fail without changing the committed source.
+
+Face inset supports one or a bounded selection of simple planar faces. The
+selection may be disconnected or may contain faces sharing exactly one
+complete existing edge. Each selected face produces a deterministic inner
+face and surrounding ring on one candidate mesh. Vertex-only contact,
+ambiguous multi-edge sharing, duplicate, invalid, and capacity-invalid
+selections fail without changing the committed topology or selection state.
+
+Face bevel supports one or a bounded selection of simple planar faces. The
+selection may be disconnected or may contain faces sharing exactly one
+complete existing edge. Each selected face produces a deterministic planar
+bevel ring on one candidate mesh, and Apply selects the resulting bevel faces
+in Face mode. Vertex-only contact, ambiguous multi-edge sharing, duplicate,
+invalid, and capacity-invalid selections fail without changing the committed
+topology or selection state.
+
+Face subdivision supports one or a bounded selection of simple planar faces.
+Disconnected faces and faces sharing complete existing edges are applied through
+one candidate-first transaction. Each selected face produces a center vertex,
+edge midpoints, and a quad fan; a midpoint on a shared edge is reused while
+per-face corner UVs and material/smoothing metadata remain authored on the
+resulting faces. Apply selects the resulting center vertices in Vertex mode.
+Vertex-only contact, duplicate, invalid, and capacity-invalid selections fail
+without changing the committed topology or selection state.
+
+Face poke supports one or a bounded selection of simple convex planar polygons.
+Selected polygons may be disconnected or may share complete existing edges. The
+operation adds one center vertex for each selected face and replaces each
+polygon with a triangle fan on one candidate mesh while preserving the source
+face identity, material region, smoothing, and per-corner UV data. Apply selects
+the resulting center vertices in input selection order in Vertex mode.
+Duplicate, vertex-only shared contact, non-planar, concave, self-intersecting,
+degenerate, invalid, and capacity-invalid selections fail without changing the
+committed topology or selection state.
 
 ## UV operations
 
@@ -129,6 +200,9 @@ The operation reverses only the ordered winding.
 - bounded scaling and packing of the complete UV island containing a selected face;
 - deterministic bounded packing of every UV island into the unit square;
 - deterministic planar-chart unwrap for connected planar UV islands;
+- deterministic spherical unwrap for bounded ellipsoidal or spherical surfaces
+  around the selected X, Y, or Z axis, with centered pole UVs and generated
+  longitude-wrap seams;
 - finite-value validation;
 - seam detection from shared topology and explicit edge seam metadata.
 
@@ -146,8 +220,10 @@ the explicit seam state is persisted through HAMS v6. The Sandbox Face-mode
 panel also provides transactional planar-chart unwrap. It projects each
 seam-delimited planar island on its dominant geometric axis and packs the charts
 into a padded unit-square grid. Degenerate or non-planar islands are rejected
-without changing the source; broader automatic unwrap strategies remain
-outside this bounded scope.
+without changing the source. Spherical unwrap maps normalized longitude and
+  latitude for bounded non-degenerate ellipsoidal or spherical surfaces, uses a
+  stable centered U value at poles, and marks the generated longitude boundary as
+  a seam. Other automatic unwrap strategies remain outside this bounded scope.
 
 ## Connected Sandbox workflow
 
@@ -237,6 +313,7 @@ Face mode exposes:
 - Inset;
 - Bevel;
 - Subdivide;
+- Poke Face(s);
 - Project UV;
 - Pack UV;
 - Undo;
@@ -270,7 +347,7 @@ This persistence currently operates per authored object. Complete scene/project 
 
 ### Selection history
 
-The authoring bridge stores one bounded selected-face identity beside each mesh-history snapshot.
+The authoring bridge stores one bounded selected-face identity beside each mesh-history snapshot. Face-backed and loose-edge splits additionally store their component-mode selection snapshots so the original edge and the two replacement edges return through undo/redo.
 
 - topology operations select their deterministic result;
 - undo/redo restores the matching prior or next face when it still exists;
@@ -315,20 +392,66 @@ Dissolve supports boundary corner removal and unambiguous manifold triangle fans
 
 Delete removes selected vertices and their incident faces, then removes only newly orphaned vertices in the affected neighborhood.
 
-Connect splits one face between two non-adjacent corners. The original face ID is preserved. The new face receives a fresh logical ID in a reusable physical slot.
+Connect splits one face between two non-adjacent corners. The original face ID is preserved. The new face receives a fresh logical ID in a reusable physical slot. The shared Sandbox modeling-operator session exposes this bounded vertex selection through Preview, Cancel, Apply, and the existing undo/redo boundary without publishing the preview into the committed source.
+
+### Rip face corners
+
+`henka_authoring_mesh_rip_vertex_face` separates exactly one incident face
+corner from a selected surface vertex. The operation duplicates the selected
+vertex, reassigns the lowest logical-ID incident face to the duplicate, and
+leaves the original vertex on the remaining faces. Vertex position, UV,
+material, face smoothing, per-corner UVs, and the exposed hard/seam edge intent
+are preserved. The candidate is validated before publication, so invalid,
+loose, unsupported, or capacity-invalid requests leave the committed mesh
+unchanged.
+
+The Sandbox exposes this bounded operation as `Rip Face(s)` in Vertex mode. It
+accepts one or more selected surface vertices when the lowest logical incident
+face chosen for each vertex is pairwise vertex-disjoint. The shared
+Preview/Cancel/Apply, selection, undo, and redo boundary is used for the whole
+selection, and Apply selects all new duplicate vertices. The core API also
+accepts explicit vertex/face pairs for callers that need deterministic face
+selection. Overlapping or otherwise generalized seam-rip workflows remain
+outside this bounded operation.
+
+### Smooth Vertices / Relax
+
+`henka_authoring_mesh_smooth_vertices` moves selected connected vertices toward
+the simultaneous average of their current topological neighbors. The factor is
+finite and bounded to `[0,1]`; factor `0` is an intentional no-op and factor
+`1` reaches the neighbor average.
+
+The operation evaluates every target from the unchanged source before changing
+any position, then validates and publishes one candidate. It preserves stable
+component identities, topology, per-corner UVs, material regions, smoothing,
+and hard-edge/seam metadata. Duplicate or invalid selections and loose
+vertices without incident edges fail closed without partial publication. The
+Sandbox exposes the same operation through Vertex mode with Preview, Cancel,
+Apply, and the existing direct-object undo/redo boundary.
 
 ### Vertex Extrude
 
-Bounded Vertex Extrude supports a connected open boundary vertex fan, including the one-face corner case.
+Bounded Vertex Extrude supports a connected open boundary vertex fan, including the one-face corner case, a compatible closed interior fan, and a batch of compatible closed interior fans. The batch includes connected selected interior vertex regions whose incident face neighborhoods overlap.
 
 The operation:
 
 - creates one offset cap vertex;
 - replaces the incident fan;
 - creates two boundary side faces;
+- preserves per-face material and smoothing metadata for a closed-fan offset cap;
 - publishes through the shared source/render/bounds/collider/undo transaction.
 
-It rejects closed, disconnected, loose-edge, and incompatible-normal fans.
+It rejects disconnected, loose-edge, and incompatible-normal fans.
+
+Batch Vertex Extrude also supports pairwise fan-disjoint compatible closed
+interior vertices and connected compatible interior vertex regions. Each
+selected fan is evaluated on one candidate; the original selected vertices
+remain valid loose vertices and each replacement cap preserves its source face
+material, smoothing, and corner UV state. Duplicate selections, unsupported
+mixed or non-manifold neighborhoods, open or loose vertices, and capacity
+exhaustion fail without changing the committed source. The Sandbox
+routes the batch through Preview, Cancel, Apply, and the existing Undo/Redo
+history boundary.
 
 ### Vertex Bevel
 
@@ -343,15 +466,39 @@ Vertex Bevel is an atomic multi-selection operation. It uses a deterministic edg
 - creates same-material interior caps with deterministic planar UVs;
 - leaves normal boundary vertices open.
 
-Successful Sandbox bevels replace Vertex selection with live cut vertices and use the standard history/render/bounds/collider transaction.
+Successful Sandbox bevels replace Vertex selection with live cut vertices and use the standard history/render/bounds/collider transaction. The modeling operator routes Vertex Bevel through Preview, Cancel, Apply, Undo, and Redo while restoring the live cut-vertex selection with the corresponding topology state.
 
 ## Edge modeling
 
 ### Dissolve and delete
 
-Transactional single-edge dissolve is available for compatible interior edges.
+Transactional dissolve is available for one compatible interior edge or a
+bounded pairwise-disjoint selection of compatible interior edges. Selected
+edges may not share endpoints or incident faces; hard, seamed, metadata-
+discontinuous, and otherwise incompatible selections fail closed.
 
-Transactional single-edge delete removes the selected edge's incident face set while preserving vertices.
+Transactional edge delete supports one face-backed edge, removing its incident
+face set while preserving vertices, or a bounded pairwise-disjoint selection of
+face-backed edges with disjoint endpoints and incident faces. Standalone wire
+edges also support a bounded pairwise-disjoint batch that removes only those
+edges while preserving their vertices. Mixed domains, overlapping face sets,
+duplicate edges, and shared endpoints fail closed.
+
+### Interior Triangle Edge Flip
+
+The authoring mesh can replace one compatible interior diagonal shared by two
+triangles with the opposite diagonal through a candidate-first transaction. The
+operation preserves the two face identities, material-region and smoothing
+metadata, per-corner UV data, and validated winding. Boundary edges, hard or
+seamed edges, UV-discontinuous pairs, non-triangle faces,
+metadata-discontinuous pairs, an existing opposite diagonal, and
+capacity-invalid or otherwise ambiguous requests fail without publishing a
+partial mesh.
+
+The Sandbox routes this operation through the shared Edge-mode
+Preview/Cancel/Apply session and the direct authoring-object path. Apply
+selects the replacement edge, and both routes use the existing authoring
+Undo/Redo history boundary.
 
 ### Edge Bevel
 
@@ -362,7 +509,9 @@ Bounded edge bevel currently supports:
 - same-face boundary batches with shared-endpoint corner caps;
 - one compatible interior edge in an isolated two-quad patch;
 - pairwise vertex-disjoint interior edges across isolated patches; and
-- a bounded connected quad-strip selection with disjoint edge endpoints.
+- a bounded connected quad-strip selection with disjoint edge endpoints;
+- one compatible three-edge branching interior fan around a valence-three
+  vertex, with a generated center cap.
 
 These forms share one selected-edge bevel contract and create interpolated cut vertices and quad bevel faces transactionally. The singular API remains as a compatibility wrapper.
 
@@ -377,12 +526,16 @@ Interior bevel rejects:
 - ambiguous endpoint fans.
 
 Boundary batch bevel rejects shared faces and unsupported endpoint sharing.
-Mixed selections, branching or unsupported connected interior domains, and
-broader interior edge-set bevel remain incomplete.
+The branching interior form is limited to three compatible non-hard edges in
+three matching quad faces around one valence-three vertex. It creates one
+center cap and publishes only after the updated faces, bevel quads, cap,
+metadata, UVs, and geometry validate together. Mixed selections, larger or
+ambiguous branching domains, and broader interior edge-set bevel remain
+incomplete.
 
 ### Surface-connected Edge Extrude
 
-The core API supports bounded surface-connected extrusion for one open boundary edge or a pairwise vertex-disjoint batch on distinct faces.
+The core API supports bounded surface-connected extrusion for one open boundary edge, a contiguous boundary-edge chain, a batch of independent boundary-edge chains, a pairwise vertex-disjoint batch on distinct faces, one compatible interior edge shared by two quads, a pairwise-disjoint batch of compatible interior edges, a simple connected interior-edge path across compatible quad strips, a batch of independent simple connected interior-edge paths, one compatible closed interior edge cycle that exactly bounds one source face, one compatible connected closed interior edge cycle that encloses a unique smaller connected face region, and one compatible complete closed interior edge fan around an interior vertex.
 
 The operation:
 
@@ -392,9 +545,47 @@ The operation:
 - preserves selected hard-edge intent;
 - publishes after topology and geometry validation.
 
-Interior/manifold edges and mixed, shared-endpoint, same-face, or otherwise unsupported batches remain unsupported.
+Boundary chains are partitioned by endpoint connectivity. Each connected
+component must belong to one boundary face and be an open chain or a simple
+closed loop; independent components are applied together through one
+candidate-first transaction and may belong to different faces.
 
-The shared Sandbox modeling session exposes this path through Preview, Cancel, and Apply for one edge or a bounded batch. The Authoring panel uses the shared amount control.
+For the compatible interior cases, the lower logical-ID incident quad is selected deterministically for each edge. That quad replaces the shared edge with an offset edge and receives one connecting quad; the neighboring quad remains unchanged. The source faces must be quads with matching material and smoothing metadata, and the source edges must not be hard or seamed. Per-corner UVs and face metadata are preserved on the selected quads and connecting quads. Pairwise-disjoint selections and independent simple paths publish all transactions through one candidate-first commit. Each connected path must be simple, pairwise vertex-disjoint, and have exactly two path endpoints. A closed cycle is accepted when every selected edge is a compatible two-face edge, the cycle is one connected degree-two loop, and it either bounds one source face or separates a unique smaller connected face region; the accepted region uses the canonical face extrusion transaction. A complete closed interior edge fan is accepted when every selected edge shares one interior vertex, all of that vertex's incident edges are selected, and the selected edges bound one compatible quad face fan; it uses the same canonical face-region transaction. Equal-sized, non-separating, incomplete, overlapping, or otherwise ambiguous cycles and fans are rejected as unsupported.
+
+Other interior/manifold configurations, mixed metadata, non-quad faces, mixed/shared-endpoint selections, cyclic domains outside the documented single-face-bounded or uniquely enclosed form, larger branching, and otherwise unsupported batches remain unsupported. Disconnected selections are supported as independent compatible edges and simple connected paths; broader disconnected interior components remain unsupported.
+
+The shared Sandbox modeling session exposes this path through Preview, Cancel,
+and Apply for one edge, a contiguous chain, a compatible closed interior edge
+cycle, a compatible closed cycle enclosing a unique smaller connected face
+region, a complete closed interior edge fan, a bounded batch of independent boundary chains, or a compatible
+interior path. The Authoring panel uses the
+shared amount control, and applied edits use the existing Undo/Redo history
+boundary.
+
+### Boundary Edge Bridge
+
+Edge mode can bridge either two distinct compatible boundary edges, two
+disjoint equal-length compatible boundary-edge chains, or a bounded even
+selection of independent compatible chain pairs. Both chains in each pair must
+be open or both must be simple closed loops. The operation creates one
+transactional quad per paired edge, uses deterministic endpoint pairing for
+open chains or cyclic offset/direction pairing for closed loops, and preserves
+source material, smoothing, and endpoint UV data. The Sandbox modeling session
+exposes the operation through the Edge-mode
+Preview/Apply/Cancel path and the authoritative source/render/history
+transaction, with Undo and Redo for the applied edit.
+
+### Boundary Loop Fill
+
+Edge mode can fill one or more independent selected closed boundary edge loops
+in one candidate-first transaction. Each selected edge must be a unique
+face-backed boundary edge. The selected edges are partitioned into simple
+closed cycles; shared-vertex, branched, mixed, duplicate, invalid, and
+capacity-insufficient selections fail without publishing a partial result.
+New faces inherit the source boundary metadata, and the Sandbox operator
+selects all newly filled faces after Apply. Preview, Cancel, Apply, Undo, and
+Redo use the shared authoring-object source/render/bounds/physics/history
+boundary.
 
 ## Loop Cut and Edge Slide
 
@@ -424,7 +615,24 @@ No partial traversal result is published.
 
 The same topology layer orders connected selected edge chains and cycles deterministically for Edge Slide.
 
-### Factor-controlled Loop Cut
+### Isolated multi-face Loop Cut
+
+The core modeling API and Sandbox authoring path support a bounded batch Loop
+Cut for a selected set of vertex-disjoint isolated quad faces. Each source
+face keeps its identity and receives one fresh second-face identity at the
+same validated edge factor. The operation is candidate-first and preserves
+material, smoothing, and per-corner UV data through the normal source/render,
+bounds, physics, and history transaction.
+
+Duplicate faces, shared vertices, non-isolated faces, non-quad faces, invalid
+factors, and insufficient capacity fail without publishing any part of the
+batch. Preview, Apply, Cancel, Undo, and Redo use the same authoring-object
+transaction boundary as the existing single-face and quad-strip operations.
+When more than one face is selected in the Sandbox Authoring panel, the
+factor-controlled Loop Cut control routes this bounded isolated-face batch
+operation before attempting any connected quad-strip route.
+
+### Factor-controlled and uniformly spaced Loop Cut
 
 The editor Loop Cut operator accepts a validated user-entered factor and supports compatible open strips and closed rings.
 
@@ -436,22 +644,62 @@ The workflow provides:
 
 Preview changes evaluated render state only. Apply publishes the complete candidate through the transactional authoring path.
 
-The core API and editor also provide a bounded uniformly spaced multi-cut variant for one isolated boundary-only quad. It creates quad faces only and participates in preview, apply, cancel, and undo.
+The core API provides a bounded uniformly spaced multi-cut variant across a
+compatible open quad strip or closed quad ring. The Sandbox authoring path can
+choose the longest compatible strip from the selected quad, then routes the
+candidate through Preview, Apply, Cancel, and the existing undo/redo history.
+It creates quad faces only and preserves the source material, smoothing, and
+per-corner UV state.
 
-Broader multi-cut spacing, interior cases, and general loop-cut networks remain unfinished.
+The core API and Sandbox authoring path also support a bounded batch of
+compatible quad strips. Multi-face selection supplies one deterministic strip
+start per selected quad. Connected strips may share vertices, and compatible
+strips may intersect through shared quad faces. The batch is executed in
+stable start-edge-ID order on one candidate mesh, so input/selection ordering
+does not change the resulting topology. Each later strip is re-walked against
+the already-updated candidate. If a prior cut consumes a later start edge or
+leaves a non-quad or otherwise ambiguous traversal, the complete batch fails
+without publishing partial topology. Preview, Apply, Cancel, Undo, and Redo
+use the same transaction boundary as the single-strip workflow.
+
+General branching networks, duplicate traversals from opposite strip ends,
+networks whose canonical execution consumes a later strip seed, and other
+ambiguous loop-cut domains remain unsupported. Generalized split workflows
+beyond the bounded face-backed boundary/interior batch and standalone
+loose-edge operations also remain unfinished.
 
 ### Edge Slide
 
-Edge mode provides signed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle selection.
+Edge mode provides signed-factor Edge Slide for one or more pairwise
+vertex-disjoint compatible open edge-loops or closed edge-cycles selected in
+one transaction.
 
 The modeling session supports:
 
 - numeric factors in `(-1, 1)`;
 - Preview;
 - Cancel;
-- one transactional Apply.
+- one transactional Apply for the complete selection.
 
-The operation moves the loop toward deterministic adjacent sides while preserving topology and uses the shared source/render/bounds/collider/undo publication path.
+The operation moves every selected loop toward its deterministic adjacent side
+while preserving topology and uses the shared source/render/bounds/collider/
+undo publication path. Mixed, overlapping, boundary, hard/seamed, or
+metadata-incompatible loop selections fail without publishing a partial move.
+
+### Cylindrical UV unwrap
+
+The core authoring-mesh API and Sandbox Authoring panel provide a bounded
+cylindrical unwrap around the selected X, Y, or Z axis. The operation maps the
+angular coordinate to U, the axial coordinate to V, applies the requested
+unit-square padding, and marks the generated angular wrap boundary as a UV
+seam. It is intended for non-degenerate cylindrical side surfaces; input with
+no axial span or a vertex on the selected axis is rejected without changing
+the committed mesh.
+
+The operation is candidate-first and preserves topology, material regions,
+smoothing, and existing seam state outside the generated wrap boundary. The
+Sandbox routes it through Preview, Apply, Cancel, Undo, and Redo alongside the
+existing planar and island UV operations.
 
 ## Loose components
 
@@ -478,16 +726,65 @@ It rejects zero directions, zero distances, connected vertices, invalid geometry
 
 ### Loose-edge Extrude
 
-The core modeling API also supports bounded explicit-direction loose-edge extrusion.
+The core modeling API supports bounded explicit-direction loose-edge extrusion for
+one or a pairwise-disjoint batch of standalone wire edges.
 
 It:
 
-- creates a parallel edge;
-- creates one quad face;
+- creates one parallel edge and one quad face per selected source edge;
 - inherits endpoint UV/material metadata;
 - preserves source-edge hard intent.
 
+The complete selection is evaluated against the original mesh and published as
+one validated candidate. The Sandbox Edge-mode operator routes the operation
+through Preview, Apply, Cancel, Undo, and Redo.
+
 It rejects face-backed edges, mismatched endpoint materials, degenerate offsets, and capacity exhaustion.
+
+### Loose-edge Split
+
+The core modeling API and Sandbox Edge-mode path support splitting one selected
+standalone wire edge, or a bounded pairwise-disjoint batch of standalone wire
+edges, at each midpoint. Each new vertex interpolates endpoint UVs and inherits
+the endpoint material region. Each pair of replacement edges preserves the
+source hard-edge and seam intent. The operation rejects face-backed edges,
+mismatched endpoint materials, shared endpoints, duplicate selections,
+degenerate source edges, and capacity exhaustion without publishing a partial
+mesh. The Sandbox selects all replacement edges and restores the prior edge
+selection through undo/redo.
+
+### Loose-edge Delete
+
+The core modeling API, object-authoring route, and shared modeling operator
+support deleting one or a bounded pairwise-disjoint selection of standalone wire
+edges. The operation preserves every loose-edge vertex and its remaining
+metadata, rejects face-backed, duplicate, shared-endpoint, invalid, or
+capacity-exhausting selections, and publishes the candidate only after the full
+deletion set validates. Preview, Apply, Cancel, undo, and redo use the same
+source/render/history transaction as the existing face-backed edge delete path.
+
+### Face-backed Edge Split
+
+The core modeling API supports splitting one selected face-backed boundary or
+interior edge at a factor strictly between zero and one, a bounded batch of
+pairwise-disjoint face-backed edges, one contiguous same-face boundary chain,
+or a bounded batch of independent boundary chains. The new vertex interpolates position and
+per-corner UV state. Each incident face receives the new corner, and the two
+replacement edges preserve the source hard-edge and seam intent. Boundary and
+two-face interior edges are supported; non-manifold edges, incompatible
+endpoint material regions, invalid factors, overlapping or duplicate batch
+selections, and capacity exhaustion fail closed without publishing a partial
+mesh.
+
+The Sandbox Edge-mode operator exposes the same operation through Preview,
+Apply, Cancel, and undo/redo. Preview leaves the committed source unchanged;
+Apply selects the two replacement edges for each split. A selected contiguous
+boundary chain may share endpoints when all edges belong to one source face;
+independent boundary chains may be selected together when their components do
+not share endpoints and each component belongs to one source face. Mixed-face
+chains, branched components, duplicate edges, and ambiguous shared-endpoint
+components are rejected. The existing pairwise-disjoint boundary or interior
+batch path remains available for selections outside this boundary-chain form.
 
 ### Sandbox loose-component session
 
@@ -552,6 +849,16 @@ HAMS v6 retains that loose-topology contract and adds one explicit seam byte to
 each modern active-edge record. The seam state is independent of hard-edge
 intent and is used as an island boundary by UV authoring and topology analysis.
 
+### OBJ source export
+
+`henka_authoring_mesh_save_obj` writes authored surface geometry and face-corner
+UVs through an atomic temporary-file replacement. Standalone face-less edges
+are emitted as OBJ `l` line records. Stable Henka IDs, material regions,
+hard-edge flags, seam flags, smoothing metadata, and loose vertices without an
+edge remain HAMS-only state. The Sandbox Object Details panel exposes separate
+Export HAMS and Export OBJ actions; OBJ export does not change the canonical
+HAMS source path.
+
 The loader accepts:
 
 - current HAMS v6;
@@ -585,19 +892,32 @@ The current authoring mesh is a validated modeling foundation. Remaining work in
 
 - broader non-manifold vertex-fan handling;
 - incompatible-normal fan handling;
-- generalized surface-connected Vertex/Edge Extrude beyond the bounded supported
-  boundary-edge cases;
-- broader weld/split/bridge workflows;
-- multi-face and general loop-cut networks;
+- generalized surface-connected Vertex/Edge Extrude beyond the bounded open-fan,
+  connected or fan-disjoint compatible closed-fan, boundary-edge,
+  pairwise-disjoint compatible interior-edge,
+  simple-path, uniquely enclosed closed-cycle, and complete closed-fan cases;
+- generalized closed-loop, branching, and broader weld/split/bridge workflows
+  beyond the bounded face-backed boundary/interior batch and standalone loose-edge
+  operations;
+- general branching, consumed-seed, duplicate-traversal, and otherwise
+  ambiguous loop-cut networks beyond the bounded compatible intersecting
+  quad-strip operations;
 - branching and broader interior edge-set bevel;
 - broader hard-surface modeling profiles;
-- broader automatic UV unwrap beyond the bounded planar-chart scope;
+- broader automatic UV unwrap beyond the bounded planar-chart, cylindrical
+  side-surface, and spherical/ellipsoidal surface projections;
 - texture painting;
 - broader material authoring beyond current bounded material-instance editing;
 - full editor workflows for arbitrary authoring-file selection;
 - complete scene/project serialization;
-- broader source export;
+- source export beyond HAMS and bounded OBJ geometry/UV output;
 - production showcase rebuild workflows;
 - package-level authoring ownership completion.
 
-The bounded fan extrusion remains limited to connected open fans. The loose-component and boundary-edge extrusion paths cover their documented domains only. glTF and KTX2 material ownership continues through the existing asset system.
+The bounded fan extrusion remains limited to connected open fans and compatible
+closed interior fan regions, including pairwise fan-disjoint batches. The loose-component,
+boundary-edge, pairwise-disjoint compatible interior-edge, simple connected
+interior-path, independent interior-path batch, uniquely enclosed closed-cycle,
+branching-fan, and compatible single-sided interior-edge extrusion paths cover
+their documented domains only. glTF and KTX2 material ownership continues
+through the existing asset system.

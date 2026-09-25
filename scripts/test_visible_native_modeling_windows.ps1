@@ -301,12 +301,18 @@ try {
 
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
+    # This is the bounded exception for the real visible-authoring gate:
+    # PrintWindow and the native UI interaction proof require a visible,
+    # non-minimized render surface. Ordinary automated validation keeps
+    # the shared default minimized/background-safe policy.
     $capturedProcess = Start-HenkaCapturedProcess `
         -FilePath $runtimeExecutable `
         -Arguments @() `
         -WorkingDirectory $runtimeDirectory `
         -StdoutPath $stdoutPath `
-        -StderrPath $stderrPath
+        -StderrPath $stderrPath `
+        -StartMinimized:$false `
+        -StartVisibleWithoutActivation
 
     # Debug OpenGL startup on slower integrated GPUs can finish engine
     # creation near the existing timeout and still need a bounded first frame
@@ -425,6 +431,8 @@ try {
 
     Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
     Start-Sleep -Milliseconds 450
+    $initialPickX = [double]($viewportX + $viewportWidth * 0.5)
+    $initialPickY = [double]($viewportY + $viewportHeight * 0.5)
 
     $modeEvidence = @(
         @{ Name = "vertex"; Label = "Vertex"; Code = 0; Pattern = ("Native authoring Vertex selection control: name=" + [Regex]::Escape($authoringName) + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=88.0 height=24.0\.') },
@@ -456,13 +464,91 @@ try {
         Save-ProbeWindowScreenshot `
             -Handle $capturedProcess.Process.MainWindowHandle `
             -Path (Join-Path $runtimeDirectory ($mode.Name + "-mode-normal-distance.png"))
+
+        if ($mode.Name -eq "vertex") {
+            $pickedCount = Get-LogMatchCount `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring component picked: name=" + [Regex]::Escape($authoringName) + ' .* mode=vertex .* selected=1')
+            Send-HenkaAutomationClick `
+                -EventPath $automationInputPath `
+                -X $initialPickX `
+                -Y $initialPickY
+            if (-not (Wait-LogMatchCountIncrease `
+                    -Path $stdoutPath `
+                    -InitialCount $pickedCount `
+                    -Pattern ("Native authoring component picked: name=" + [Regex]::Escape($authoringName) + ' .* mode=vertex .* selected=1') `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The visible editor did not pick one real source vertex for Smooth Vertices."
+            }
+            $smoothControls = Get-LastMatch `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring smooth controls: name=" + [Regex]::Escape($authoringName) + ' smooth_x=(?<x>[-0-9.]+) smooth_y=(?<y>[-0-9.]+) width=90.0 height=24.0\.')
+            $smoothPreviewCount = Get-LogMatchCount `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring smooth preview: name=" + [Regex]::Escape($authoringName) + ' .* result=success')
+            Send-HenkaAutomationClick `
+                -EventPath $automationInputPath `
+                -X ([double]$smoothControls.Groups["x"].Value + 12.0) `
+                -Y ([double]$smoothControls.Groups["y"].Value + 12.0)
+            if (-not (Wait-LogMatchCountIncrease `
+                    -Path $stdoutPath `
+                    -InitialCount $smoothPreviewCount `
+                    -Pattern ("Native authoring smooth preview: name=" + [Regex]::Escape($authoringName) + ' .* result=success') `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The visible Smooth Vertices Preview did not publish a successful candidate."
+            }
+            for ($smoothScrollAttempt = 0; $smoothScrollAttempt -lt 8; ++$smoothScrollAttempt) {
+                if ((Get-LogMatchCount `
+                        -Path $stdoutPath `
+                        -Pattern ("Native authoring smooth transaction: name=" + [Regex]::Escape($authoringName) + ' apply_x=')) -gt 0) {
+                    break
+                }
+                Send-HenkaAutomationScroll `
+                    -EventPath $automationInputPath `
+                    -X 1040.0 `
+                    -Y 350.0 `
+                    -WheelDelta -1.0
+                Start-Sleep -Milliseconds 250
+            }
+            $smoothTransaction = Get-LastMatch `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring smooth transaction: name=" + [Regex]::Escape($authoringName) + ' apply_x=(?<x>[-0-9.]+) cancel_x=(?<cancel>[-0-9.]+) y=(?<y>[-0-9.]+) width=120.0 height=24.0\.')
+            $smoothApplyCount = Get-LogMatchCount `
+                -Path $stdoutPath `
+                -Pattern ("Native authoring smooth apply: name=" + [Regex]::Escape($authoringName) + ' result=success')
+            $smoothApplyX = [double]$smoothTransaction.Groups["x"].Value + 40.0
+            $smoothApplyY = [double]$smoothTransaction.Groups["y"].Value + 12.0
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("move {0} {1}" -f `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyX), `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyY)) `
+                -SettleMilliseconds 300
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("button left down {0} {1}" -f `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyX), `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyY)) `
+                -SettleMilliseconds 300
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("button left up {0} {1}" -f `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyX), `
+                    (Format-HenkaAutomationFloat -Value $smoothApplyY)) `
+                -SettleMilliseconds 300
+            if (-not (Wait-LogMatchCountIncrease `
+                    -Path $stdoutPath `
+                    -InitialCount $smoothApplyCount `
+                    -Pattern ("Native authoring smooth apply: name=" + [Regex]::Escape($authoringName) + ' result=success') `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The visible Smooth Vertices Apply did not commit successfully."
+            }
+        }
     }
 
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "after-frame-before-pick.png")
-    $initialPickX = [double]($viewportX + $viewportWidth * 0.5)
-    $initialPickY = [double]($viewportY + $viewportHeight * 0.5)
     Send-HenkaAutomationEvent `
         -EventPath $automationInputPath `
         -EventLine ("move {0} {1}" -f `
@@ -598,6 +684,169 @@ try {
         throw "The visible material ownership action did not commit successfully."
     }
 
+    # Exercise the real slot-targeted material picker immediately after Own
+    # Material establishes the manager-backed editable instance. The existing
+    # save/close/open/re-edit sequence then validates that this material state
+    # survives the normal authored-asset persistence boundary.
+    $detailsGeometry = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern 'Workspace UI geometry: .*details=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)\.'
+    $detailsX = [double]::Parse(
+        $detailsGeometry.Groups["x"].Value,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $detailsY = [double]::Parse(
+        $detailsGeometry.Groups["y"].Value,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $detailsWidth = [double]::Parse(
+        $detailsGeometry.Groups["width"].Value,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $detailsHeight = [double]::Parse(
+        $detailsGeometry.Groups["height"].Value,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $pickerControlPattern =
+        'Material texture picker control: entity=\d+ slot=Base Color choose_x=(?<x>[-0-9.]+) choose_y=(?<y>[-0-9.]+) width=70\.0 height=24\.0\.'
+    $pickerControlFound = (Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern $pickerControlPattern) -gt 0
+    # Prior modeling/reopen steps legitimately leave Object Details at
+    # different scroll offsets. Search to one bounded end, then reverse across
+    # the panel rather than assuming the picker is always above or below the
+    # current viewport.
+    for ($pickerScrollAttempt = 0; $pickerScrollAttempt -lt 48 -and -not $pickerControlFound; ++$pickerScrollAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta 1.0
+        Start-Sleep -Milliseconds 100
+        $pickerControlFound = (Get-LogMatchCount `
+            -Path $stdoutPath `
+            -Pattern $pickerControlPattern) -gt 0
+    }
+    for ($pickerScrollAttempt = 0; $pickerScrollAttempt -lt 96 -and -not $pickerControlFound; ++$pickerScrollAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta -1.0
+        Start-Sleep -Milliseconds 100
+        $pickerControlFound = (Get-LogMatchCount `
+            -Path $stdoutPath `
+            -Pattern $pickerControlPattern) -gt 0
+    }
+    if (-not $pickerControlFound) {
+        throw "The visible editor did not expose the Base Color texture picker control."
+    }
+    $pickerControl = Get-LastMatch -Path $stdoutPath -Pattern $pickerControlPattern
+    $pickerBeginCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$pickerControl.Groups["x"].Value + 35.0) `
+        -Y ([double]$pickerControl.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerBeginCount `
+            -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible Base Color texture picker did not start."
+    }
+
+    # Use the checked-in color texture that normal product startup loads.
+    # Arbitrary manager rows can be semantic/runtime textures that are valid
+    # assets but intentionally unsuitable as a Base Color source. The asset
+    # browser is paged, so search its real Next control instead of assuming
+    # this candidate is always on the first page.
+    $assetRowPattern =
+        'Material texture picker asset row: entity=\d+ slot=Base Color path=assets/textures/cube_albedo\.png x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26\.0\.'
+    $assetCandidateFound = (Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern $assetRowPattern) -gt 0
+    if (-not $assetCandidateFound) {
+        $utilityGeometry = Get-LastMatch `
+            -Path $stdoutPath `
+            -Pattern 'Workspace UI geometry: .*utility=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)'
+        $utilityX = [double]::Parse(
+            $utilityGeometry.Groups["x"].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $utilityY = [double]::Parse(
+            $utilityGeometry.Groups["y"].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $utilityHeight = [double]::Parse(
+            $utilityGeometry.Groups["height"].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $pickerNextX = $utilityX + 14.0 + 88.0 + 41.0
+        $pickerNextY = $utilityY + $utilityHeight - 48.0
+
+        for ($pickerPageAttempt = 0; $pickerPageAttempt -lt 32 -and -not $assetCandidateFound; ++$pickerPageAttempt) {
+            Send-HenkaAutomationClick `
+                -EventPath $automationInputPath `
+                -X $pickerNextX `
+                -Y $pickerNextY
+            Start-Sleep -Milliseconds 150
+            $assetCandidateFound = (Get-LogMatchCount `
+                -Path $stdoutPath `
+                -Pattern $assetRowPattern) -gt 0
+        }
+    }
+    if (-not $assetCandidateFound) {
+        throw "The visible material texture picker did not publish the packaged cube_albedo.png candidate on any bounded asset page."
+    }
+    $assetRow = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern $assetRowPattern
+    $pickerSelectCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=select entity=\d+ slot=Base Color path=assets/textures/cube_albedo\.png\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$assetRow.Groups["x"].Value + 18.0) `
+        -Y ([double]$assetRow.Groups["y"].Value + 13.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerSelectCount `
+            -Pattern 'Material texture picker: action=select entity=\d+ slot=Base Color path=assets/textures/cube_albedo\.png\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible material texture picker did not select a manager-owned texture candidate."
+    }
+
+    $pickerActionsPattern =
+        'Material texture picker actions: entity=\d+ slot=Base Color apply_x=(?<apply>[-0-9.]+) cancel_x=(?<cancel>[-0-9.]+) y=(?<y>[-0-9.]+) apply_width=(?<applyWidth>[-0-9.]+) cancel_width=(?<cancelWidth>[-0-9.]+) height=24\.0\.'
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern $pickerActionsPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible material texture picker did not publish Apply/Cancel geometry."
+    }
+    $pickerActions = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern $pickerActionsPattern
+    Start-Sleep -Milliseconds 250
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "material-texture-picker-selected.png")
+
+    $pickerApplyCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=success\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$pickerActions.Groups["apply"].Value +
+            [double]$pickerActions.Groups["applyWidth"].Value * 0.5) `
+        -Y ([double]$pickerActions.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerApplyCount `
+            -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=success\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible material texture picker did not apply the selected manager-owned texture."
+    }
+    Start-Sleep -Milliseconds 250
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "material-texture-picker-applied.png")
+
     $projectControls = Get-LastMatch `
         -Path $stdoutPath `
         -Pattern ("Native authoring project controls: name=" + [Regex]::Escape($authoringName) + ' save_x=(?<saveX>[-0-9.]+) save_y=(?<saveY>[-0-9.]+) reload_x=(?<reloadX>[-0-9.]+) reload_y=(?<reloadY>[-0-9.]+) width=(?<width>[-0-9.]+) height=24.0\.')
@@ -697,7 +946,7 @@ try {
         }
     }
 
-    Write-Output "[pass] Product-native generic modeling workflow: clean startup, new asset, component pick, extrude, inset, material ownership, save, close, reopen, and re-edit completed."
+    Write-Output "[pass] Product-native generic modeling workflow: clean startup, new asset, component pick, extrude, inset, material ownership, save, close, reopen, re-edit, and slot-targeted texture picker Apply completed."
     Write-Output "[pass] Evidence scope: PRODUCT_NATIVE_GENERIC; showcase/reference fixtures were not loaded."
     Write-Output "[pass] Runtime evidence retained: $runtimeDirectory"
 }

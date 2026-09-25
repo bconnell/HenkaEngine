@@ -69,6 +69,10 @@ void henka_test_sandbox3d_authoring_asset_document(void)
     henka_bounds second_part_bounds;
     henka_material persisted_material;
     henka_material reloaded_material;
+    henka_texture* persisted_base_color_texture = NULL;
+    henka_asset_metadata reloaded_texture_metadata;
+    const henka_material_asset* reloaded_material_asset = NULL;
+    henka_asset_metadata reloaded_material_metadata;
     henka_shader* basic_shader = NULL;
 
     config.application_name = "Henka Native Authoring Asset Document Test";
@@ -85,6 +89,10 @@ void henka_test_sandbox3d_authoring_asset_document(void)
         "assets/shaders/basic_lit.vert",
         "assets/shaders/basic_lit.frag",
         &basic_shader) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_load_texture(
+        henka_engine_get_asset_manager(engine),
+        "assets/textures/cube_albedo.png",
+        &persisted_base_color_texture) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_create(
         engine, scene, "test_asset", &document) == HENKA_SUCCESS);
@@ -201,6 +209,8 @@ void henka_test_sandbox3d_authoring_asset_document(void)
     persisted_material.base_color = (henka_vec4){0.22f, 0.48f, 0.73f, 0.93f};
     persisted_material.type = HENKA_MATERIAL_TYPE_LIT;
     persisted_material.shader = basic_shader;
+    persisted_material.base_color_texture = persisted_base_color_texture;
+    persisted_material.use_texture = true;
     persisted_material.emissive_color = (henka_vec3){0.04f, 0.08f, 0.12f};
     persisted_material.metallic = 0.61f;
     persisted_material.roughness = 0.37f;
@@ -243,6 +253,8 @@ void henka_test_sandbox3d_authoring_asset_document(void)
     persisted_material.emissive_texture = NULL;
     persisted_material.transmission_texture = NULL;
     persisted_material.thickness_texture = NULL;
+    persisted_material.base_color_texture = persisted_base_color_texture;
+    persisted_material.use_texture = true;
     HENKA_TEST_ASSERT(henka_scene_set_entity_material(
         scene, sandbox3d_authoring_object_get_entity(cylinder), persisted_material) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_save(
@@ -319,6 +331,27 @@ void henka_test_sandbox3d_authoring_asset_document(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(reloaded_material.roughness, 0.37f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(reloaded_material.ior, 1.31f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(reloaded_material.clearcoat, 0.18f, 0.0001f);
+    HENKA_TEST_ASSERT(reloaded_material.base_color_texture != NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_metadata(
+        henka_engine_get_asset_manager(engine),
+        reloaded_material.base_color_texture,
+        &reloaded_texture_metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        reloaded_texture_metadata.source_path,
+        "assets/textures/cube_albedo.png") == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset(
+        scene,
+        sandbox3d_authoring_object_get_entity(
+            sandbox3d_authoring_asset_document_get_part(reloaded_document, 0U)),
+        &reloaded_material_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_material_asset != NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_material_metadata(
+        henka_engine_get_asset_manager(engine),
+        reloaded_material_asset,
+        &reloaded_material_metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        reloaded_material_metadata.source_path,
+        "authored_assets/test_asset/rev1/cylinder_body.material") == 0);
     HENKA_TEST_ASSERT(reloaded_material.normal_uv_set == 1);
     HENKA_TEST_ASSERT(reloaded_material.transmission_uv_set == 1);
     HENKA_TEST_ASSERT(reloaded_material.alpha_mode == HENKA_MATERIAL_ALPHA_MASKED);

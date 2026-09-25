@@ -393,8 +393,8 @@ The asset pipeline has a manager-owned metadata, dependency, import, fallback, a
 
 ### Current development
 
-1. Strengthen asset cache ownership, identity, retry, metadata, and failure-output contracts.
-2. Expand texture/material assignment and material-editing usability while preserving manager ownership and transactional updates.
+1. Continue strengthening asset cache ownership, identity, retry, metadata, and failure-output contracts on the published path-specific mesh fallback/retry identity boundary.
+2. Continue texture/material assignment and material-editing usability on the existing manager-owned transactional path. Object Details now starts an explicit slot-targeted texture picker in Utility > Assets; texture selection remains non-mutating until Apply, and Clear/Inherit remain explicit transactional actions.
 3. Improve external project configuration and asset-root guidance across the validated templates.
 
 ### Future work
@@ -457,56 +457,117 @@ Integrated authoring is already underway as part of the current 3D completion pa
 5. Published Vertex operations include Merge Center, Merge Active, Merge by
    Distance, Connect Vertices, Dissolve Vertex, Delete Vertex, and Vertex Bevel.
    Bounded Vertex Extrude is available for connected open boundary vertex fans,
-   including the one-face corner case. Closed, disconnected, loose-edge, and
-   incompatible-normal fan cases fail closed; generalized Vertex Extrude remains
-   future work.
+   including the one-face corner case, compatible closed interior vertex-fan
+   offset/cap replacement, compatible connected closed interior vertex-fan
+   regions, pairwise fan-disjoint boundary-vertex batches,
+   contiguous same-face boundary-vertex chains, and pairwise-distinct batches
+   of loose vertices. The closed-fan operation preserves the original selected
+   vertex as a loose vertex rather than publishing a non-manifold side wall.
+   Disconnected, loose-edge, disconnected-overlapping, branching, mixed-metadata, and
+   incompatible-normal fan cases fail closed; compatible closed fans preserve
+   per-face material and smoothing metadata; broader interior surface-connected
+   Vertex Extrude remains future work.
 6. Non-destructive topology analysis and explicit transactional safe repair are
    available. Repair can remove enabled isolated vertices, exact
    metadata-preserving duplicate faces, and degenerate faces. Unsafe winding,
    UV, material, smoothing, and non-manifold changes are rejected.
-7. Face winding flip, face extrude, inset, planar bevel rings, face subdivision,
-   selected-face deletion, planar UV projection, bounded per-face transforms,
+7. Face winding flip for one or a bounded unique face selection, bounded
+   vertex-disjoint face-normal translation, disconnected or full-edge-connected face inset, face extrude, bounded
+   disconnected or full-edge-connected planar bevel rings, bounded disconnected or full-edge-connected face subdivision, deterministic planar face triangulation for one or
+   a bounded vertex-disjoint face selection,
+   transactional selected-face deletion,
+   planar UV projection, bounded per-face transforms,
    selected-island UV scaling/packing, deterministic all-island UV packing,
    planar-chart UV unwrap, seam detection, Make Editable, HAMS
    persistence, material promotion, and
    supported PBR material-instance editing are available in the bounded
    workflow.
-8. HAMS preserves explicit loose vertices and standalone wire edges with stable
+8. The bounded bridge operation connects two distinct compatible boundary edges
+   from different faces with one transactional quad while preserving source
+   material, smoothing, and endpoint UV data. It also connects two disjoint,
+   equal-length compatible boundary-edge chains, or a bounded even selection
+   of independent compatible chain pairs, with one transactional quad per
+   paired edge, using deterministic open-chain endpoint or closed-loop cyclic
+   pairing. A selected closed boundary edge loop can also be filled
+   transactionally with one metadata-compatible polygon. Branching bridge and
+   generalized split workflows beyond the bounded standalone loose-edge
+   midpoint and pairwise-disjoint batch operations remain future work.
+9. HAMS preserves explicit loose vertices and standalone wire edges with stable
    IDs and bounded reusable storage. The topology overlay presents those source
    vertices and wire edges for inspection.
-9. The shared modeling-operator session and Authoring panel provide bounded
-   explicit-axis extrusion for one selected loose vertex or standalone edge
-   with numeric Preview, Cancel, and transactional Apply.
-10. Homogeneous wire-only and isolated-vertex-only sources have bounded
+10. The shared modeling-operator session and Authoring panel provide bounded
+   explicit-axis extrusion for one or a bounded batch of selected loose
+   vertices, or one standalone edge, with numeric Preview, Cancel, and
+   transactional Apply. The session also routes the bounded two-vertex
+   Connect Vertices operation through Preview, Cancel, Apply, and undo/redo.
+11. Homogeneous wire-only and isolated-vertex-only sources have bounded
     renderer-backed line and point evaluation. Mixed surface/wire/point sources
     use bounded multi-primitive renderer ownership without dropping valid loose
     components.
-11. glTF/GLB and OBJ import remain supported production boundaries with the
+12. glTF/GLB and OBJ import remain supported production boundaries with the
     documented interchange and authoring limitations.
 
 ### Current Development
 
 #### Edge topology and authoring UX
 
-- Bounded single-edge dissolve and single-edge deletion of an incident face set
-  are available within their supported domains.
+- Bounded single-edge and pairwise-disjoint batch dissolve, plus single-edge
+  deletion of an incident face set
+  are available within their supported domains. Face-backed edges also support
+  bounded pairwise-disjoint batch deletion when endpoints and incident faces
+  are disjoint. Standalone wire edges support bounded pairwise-disjoint batch
+  deletion while preserving vertices; mixed or overlapping selections fail
+  closed.
 - Standalone boundary-edge bevel, bounded multi-edge boundary bevel,
   same-face boundary bevel with shared-endpoint corner caps, and compatible
   interior-edge bevel for isolated two-quad patches, pairwise independent
   selections, and covered connected quad strips are available.
 - One Loop Cut accepts a validated factor across a compatible open quad strip or
-  closed ring with Preview/Refresh and explicit Apply/Cancel publication.
-- Edge mode provides signed-factor Edge Slide for one compatible open edge-loop
-  or closed edge-cycle selection through the shared modeling operator session.
-- Branching or otherwise unsupported interior-edge cases, edge-loop domains,
-  generalized Edge Extrude beyond the bounded boundary-edge cases, and general
-  loop-cut networks remain in progress or planned.
+  closed ring, and uniformly spaced multi-cut accepts the same supported strip
+  and ring domains with Preview/Refresh and explicit Apply/Cancel publication.
+- Edge mode provides signed-factor Edge Slide for one or more pairwise
+  vertex-disjoint compatible open edge-loops or closed edge-cycles selected in
+  one transaction through the shared modeling operator session.
+- Edge mode can split one, a contiguous same-face boundary chain, or a bounded
+  batch of independent boundary chains through the transactional source,
+  render, and history boundary. It can also bridge two selected compatible
+  boundary edges from different faces into one transactional quad, two
+  disjoint equal-length compatible boundary-edge chains, or a bounded even
+  batch of independent compatible chain pairs into one quad per paired edge,
+  while preserving
+  source material, smoothing, and endpoint UV data.
+- Edge mode can fill one selected closed boundary edge loop with one
+  deterministic polygon through the same source/render/history transaction.
+- One compatible three-edge branching interior bevel fan around a valence-three
+  vertex is available through the transactional bevel path. Complete closed
+  interior edge fans around an interior vertex can be extruded as their
+  enclosed face region through the canonical face-region transaction. Compatible
+  simple connected interior-edge paths and
+  bounded batches of independent simple paths are also available through the
+  shared transactional route. A compatible closed interior edge cycle that
+  exactly bounds one source face, or encloses a unique smaller connected face
+  region, is also available through the same candidate-first face-extrusion
+  transaction. Larger or ambiguous branching bevel/extrusion domains, other
+  cyclic edge-loop domains, generalized Edge Extrude beyond the bounded
+  single-edge, contiguous-chain, independent-chain boundary, simple-path, and
+  uniquely enclosed closed-cycle, complete closed-fan, and general
+  compatible intersecting loop-cut strip networks are available with canonical
+  start-edge ordering; general branching, consumed-seed, duplicate-traversal,
+  and otherwise ambiguous loop-cut networks remain in progress or planned.
+  Generalized closed-loop, branching, and split bridge workflows remain future
+  work.
 
 #### Loose-component and surface-connected editing
 
-- Bounded surface-connected extrusion for one open boundary edge or a pairwise
-  batch on distinct faces is available through the shared modeling session and
-  Authoring panel.
+- Bounded surface-connected extrusion for one open boundary edge, a pairwise
+  batch on distinct faces, a contiguous same-face boundary edge-chain
+  operation, or a batch of independent boundary edge chains is available
+  through the shared modeling session and Authoring panel.
+- Standalone wire-edge midpoint splitting supports one edge or a bounded
+  pairwise-disjoint batch through the shared source, render, selection-history,
+  undo, and redo boundary.
+- Standalone wire-edge extrusion supports one or a bounded pairwise-disjoint
+  batch through the same transactional operator boundary.
 - Homogeneous line/point evaluation and bounded triangle/wire/point renderer
   ownership are available.
 - Broader loose-component selection and editing workflows remain in progress.
@@ -522,12 +583,14 @@ Integrated authoring is already underway as part of the current 3D completion pa
 
 ### Future Work
 
-1. Generalized Vertex Extrude beyond connected open boundary fans, broader
-   non-manifold or incompatible-normal fan handling, and broader vertex topology
-   operations.
-2. Generalized surface-connected Edge Extrude beyond the bounded boundary-edge
-   cases, broader edge-set operations, weld/split/bridge workflows, general
-   loop-cut networks, and broader source export.
+1. Generalized Vertex Extrude beyond connected open boundary fans and the
+   bounded compatible closed-fan cap replacement, broader non-manifold or
+   incompatible-normal fan handling, and broader vertex topology operations.
+2. Generalized surface-connected Edge Extrude beyond the bounded boundary-edge,
+   contiguous boundary-chain, and independent boundary-chain cases, broader
+   edge-set operations,
+   weld/split/bridge workflows, general branching or otherwise ambiguous loop-cut
+   networks beyond compatible intersecting strips, and broader source export.
 3. Broader automatic UV unwrap beyond planar charts, texture painting, rigging,
    skinning, and animation authoring.
 4. Complete scene/project serialization and wider adapter-based interchange

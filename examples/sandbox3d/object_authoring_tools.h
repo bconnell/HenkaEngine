@@ -187,6 +187,12 @@ henka_result sandbox3d_authoring_object_shrink_component_selection(
     sandbox3d_authoring_object* object);
 size_t sandbox3d_authoring_object_get_selected_component_count(
     const sandbox3d_authoring_object* object);
+/* Reserves active-mode selection storage without changing the current
+ * selection. Operators use this before publishing a topology candidate when
+ * the result will select more components than the source. */
+henka_result sandbox3d_authoring_object_reserve_component_selection_capacity(
+    sandbox3d_authoring_object* object,
+    size_t required_count);
 /* Returns the most recently picked component in the active topology mode.
  * This is the edit target that receives the strongest viewport cue when a
  * multi-component selection is present. */
@@ -207,6 +213,11 @@ henka_result sandbox3d_authoring_object_replace_component_selection(
     const uint32_t* component_ids,
     size_t component_count,
     uint32_t active_component_id);
+/* Records the current component selection in the active authoring-history
+ * slot after an operator has published replacement components, so Undo/Redo
+ * restores both topology and the user-facing selection state. */
+henka_result sandbox3d_authoring_object_record_current_selection(
+    sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_select_matching_components(
     sandbox3d_authoring_object* object,
     const sandbox3d_authoring_selection_query* query);
@@ -243,6 +254,18 @@ henka_result sandbox3d_authoring_object_add_loose_edge(
     henka_authoring_vertex_id second,
     bool hard,
     henka_authoring_edge_id* out_edge_id);
+henka_result sandbox3d_authoring_object_apply_add_loose_vertex_candidate(
+    henka_authoring_mesh* candidate,
+    henka_vec3 position,
+    henka_vec2 uv,
+    uint32_t material_region,
+    henka_authoring_vertex_id* out_vertex_id);
+henka_result sandbox3d_authoring_object_apply_add_loose_edge_candidate(
+    henka_authoring_mesh* candidate,
+    henka_authoring_vertex_id first,
+    henka_authoring_vertex_id second,
+    bool hard,
+    henka_authoring_edge_id* out_edge_id);
 /* Moves the active face selection along its evaluated local-space normal.
  * The shared face vertices are moved once through the normal transactional
  * source, preserving topology continuity while providing a direct profile
@@ -257,6 +280,20 @@ henka_result sandbox3d_authoring_object_move_selected_face_normal(
  * undo transaction. */
 henka_result sandbox3d_authoring_object_proportional_move_selected_components(
     sandbox3d_authoring_object* object,
+    henka_vec3 offset,
+    size_t ring_count);
+/* Smooths the selected vertices toward their topological-neighbor average
+ * through the authoritative source/render/bounds/physics/undo transaction.
+ * Only vertex-mode selections are accepted; factor is constrained to [0,1]. */
+henka_result sandbox3d_authoring_object_smooth_selected_vertices(
+    sandbox3d_authoring_object* object,
+    float factor);
+henka_result sandbox3d_authoring_object_apply_proportional_move_candidate(
+    const henka_authoring_mesh* source,
+    henka_authoring_mesh* candidate,
+    sandbox3d_authoring_selection_mode selection_mode,
+    const uint32_t* selected_ids,
+    size_t selected_count,
     henka_vec3 offset,
     size_t ring_count);
 /* Adds one topology-adjacent ring to the current vertex, edge, or face
@@ -281,14 +318,55 @@ henka_result sandbox3d_authoring_object_select_edge_loop(
  * fails without replacing the prior selection. */
 henka_result sandbox3d_authoring_object_select_edge_ring(
     sandbox3d_authoring_object* object);
-/* Dissolves one selected compatible interior edge through the authoritative
- * source/render/bounds/physics/undo transaction. Multiple-edge selections are
- * rejected until a stable batch remapping contract is available. */
+/* Dissolves one selected compatible interior edge, or a bounded
+ * pairwise-disjoint selection of compatible interior edges, through the
+ * authoritative source/render/bounds/physics/undo transaction. */
 henka_result sandbox3d_authoring_object_dissolve_selected_edge(
     sandbox3d_authoring_object* object);
-/* Deletes one selected edge and its incident faces through the authoritative
- * source/render/bounds/physics/undo transaction. Multiple-edge selections are
- * rejected until a stable batch deletion contract is available. */
+/* Flips one selected compatible interior triangle edge through the
+ * authoritative source/render/bounds/physics/undo transaction. The
+ * replacement diagonal becomes the selected edge; boundary, hard, seamed,
+ * non-triangle, incompatible-material, and ambiguous edges fail closed. */
+henka_result sandbox3d_authoring_object_flip_selected_edge(
+    sandbox3d_authoring_object* object);
+/* Splits one or a bounded pairwise-disjoint selection of standalone wire
+ * edges at their midpoints through the authoritative
+ * source/render/bounds/physics/undo transaction. Replacement edges inherit
+ * source hard/seam state and become the new edge selection; face-backed,
+ * shared-endpoint, duplicate, or capacity-invalid selections fail closed. */
+henka_result sandbox3d_authoring_object_split_selected_loose_edge(
+    sandbox3d_authoring_object* object);
+/* Splits one or a bounded pairwise-disjoint selection of selected face-backed
+ * boundary or interior edges at a factor strictly between zero and one
+ * through the authoritative source/render, bounds, physics, and undo
+ * transaction. The replacement edges become the new edge selection;
+ * standalone wire edges continue to use the dedicated midpoint operation
+ * above. */
+henka_result sandbox3d_authoring_object_split_selected_edge(
+    sandbox3d_authoring_object* object,
+    float factor);
+/* Bridges two selected compatible boundary edges, two equal-length selected
+ * boundary chains, or a bounded even selection of independent compatible
+ * boundary-chain pairs through the authoritative source/render/bounds/
+ * physics/undo transaction. */
+henka_result sandbox3d_authoring_object_bridge_selected_boundary_edges(
+    sandbox3d_authoring_object* object);
+/* Builds, but does not publish, the selected boundary-edge bridge candidate.
+ * The caller owns the returned candidate and may pass it to the shared
+ * preview transaction or destroy it on failure. */
+henka_result sandbox3d_authoring_object_build_selected_boundary_bridge_candidate(
+    const sandbox3d_authoring_object* object,
+    henka_authoring_mesh** out_candidate,
+    henka_authoring_face_id* out_bridge_face_id,
+    henka_authoring_modeling_report* out_report);
+/* Fills one or more independent selected closed boundary edge loops through
+ * the authoritative source/render/bounds/physics/undo transaction. */
+henka_result sandbox3d_authoring_object_fill_selected_boundary_loop(
+    sandbox3d_authoring_object* object);
+/* Deletes one selected face-backed edge, or a bounded pairwise-disjoint set of
+ * face-backed edges or standalone wire edges, through the authoritative
+ * source/render/bounds/physics/undo transaction. Mixed edge domains and
+ * overlapping face-backed selections are rejected without publication. */
 henka_result sandbox3d_authoring_object_delete_selected_edge(
     sandbox3d_authoring_object* object);
 /* Bevels one selected compatible boundary/interior edge, or a bounded
@@ -298,8 +376,9 @@ henka_result sandbox3d_authoring_object_delete_selected_edge(
  * core contract. */
 henka_result sandbox3d_authoring_object_bevel_selected_edge(
     sandbox3d_authoring_object* object);
-/* Slides the current compatible open edge-loop or closed edge-cycle selection
- * through the authoritative source/render/bounds/physics/undo transaction. */
+/* Slides the current pairwise vertex-disjoint compatible open edge-loop or
+ * closed edge-cycle selection through the authoritative
+ * source/render/bounds/physics/undo transaction. */
 henka_result sandbox3d_authoring_object_slide_selected_edge_loop(
     sandbox3d_authoring_object* object,
     float factor);
@@ -315,6 +394,17 @@ henka_result sandbox3d_authoring_object_scale_selected_components_with_pivot(
     sandbox3d_authoring_pivot_mode pivot_mode);
 henka_result sandbox3d_authoring_object_rotate_selected_components(
     sandbox3d_authoring_object* object,
+    henka_vec3 axis,
+    float radians,
+    sandbox3d_authoring_pivot_mode pivot_mode,
+    sandbox3d_authoring_orientation_mode orientation_mode);
+/* Applies the same validated component transform to an already-cloned
+ * candidate mesh. Modeling operators use this candidate-only boundary so
+ * preview and cancel never publish through the immediate mutation API. */
+henka_result sandbox3d_authoring_object_apply_component_transform_candidate(
+    const sandbox3d_authoring_object* object,
+    henka_authoring_mesh* candidate,
+    henka_vec3 scale,
     henka_vec3 axis,
     float radians,
     sandbox3d_authoring_pivot_mode pivot_mode,
@@ -347,7 +437,8 @@ henka_result sandbox3d_authoring_object_bevel_selected_vertices(
     sandbox3d_authoring_object* object);
 /* Extrudes one selected connected open boundary vertex fan through the
  * authoritative source/render/bounds/physics/undo transaction. Closed,
- * disconnected, loose-edge, and incompatible-normal fans are rejected. */
+ * disconnected, loose-edge, and incompatible-normal fans are rejected; closed
+ * fan replacement preserves each source face's material and smoothing state. */
 henka_result sandbox3d_authoring_object_extrude_selected_vertex(
     sandbox3d_authoring_object* object,
     float distance);
@@ -398,6 +489,16 @@ henka_result sandbox3d_authoring_object_flip_selected_face(
 henka_result sandbox3d_authoring_object_set_selected_face_material_region(
     sandbox3d_authoring_object* object,
     uint32_t material_region);
+/* Applies one smooth/flat shading state to every selected face through the
+ * canonical source/render/bounds/physics/history transaction. */
+henka_result sandbox3d_authoring_object_set_selected_faces_smoothing(
+    sandbox3d_authoring_object* object,
+    bool smooth);
+/* Applies one hard/soft shading boundary state to every selected edge through
+ * the canonical source/render/bounds/physics/history transaction. */
+henka_result sandbox3d_authoring_object_set_selected_edges_hard(
+    sandbox3d_authoring_object* object,
+    bool hard);
 /* Extrudes every selected face as one bounded topology transaction.  The
  * selected faces are validated before any candidate is published; on failure
  * the source, evaluated mesh, bounds, physics, selection, and history remain
@@ -417,6 +518,11 @@ henka_result sandbox3d_authoring_object_extrude_selected_face(
 henka_result sandbox3d_authoring_object_inset_selected_face(
     sandbox3d_authoring_object* object,
     float factor);
+/* Triangulates the selected simple planar polygon through the canonical
+ * candidate mesh, evaluated render, bounds, physics, selection, and history
+ * transaction. The source face identity remains the primary selected face. */
+henka_result sandbox3d_authoring_object_triangulate_selected_face(
+    sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_bevel_selected_face(
     sandbox3d_authoring_object* object,
     float width);
@@ -426,18 +532,58 @@ henka_result sandbox3d_authoring_object_bevel_selected_face(
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
     sandbox3d_authoring_object* object,
     float factor);
+/* Splits a selected set of isolated quad faces at one shared factor. The
+ * candidate remains in Preview until the normal commit/cancel path publishes
+ * or discards it; duplicate, shared-vertex, non-isolated, and capacity-invalid
+ * selections fail without changing the live object. */
+henka_result sandbox3d_authoring_object_preview_loop_cut_selected_faces_at_factor(
+    sandbox3d_authoring_object* object,
+    float factor);
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count);
+/* Uses the selected-face route for an isolated quad and falls back to the
+ * compatible quad-strip route when the selected quad has shared strip edges.
+ * The candidate remains in Preview until the shared preview commit/cancel
+ * path publishes or discards it. */
+/* Splits the compatible quad strip traversed from the selected face with
+ * uniformly spaced cuts. The candidate remains in Preview until the shared
+ * preview commit/cancel path publishes or discards it. */
+henka_result sandbox3d_authoring_object_preview_loop_cut_selected_quad_strip_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count);
+/* Applies uniformly spaced cuts to a bounded selection of compatible quad
+ * strips. Connected strips may share vertices, and compatible strips may
+ * intersect through shared quad faces. Each selected face supplies one
+ * deterministic strip start; canonical start-edge ordering makes the result
+ * selection-order independent. The candidate remains in Preview until the
+ * shared preview commit/cancel path publishes or discards it. */
+henka_result sandbox3d_authoring_object_preview_loop_cut_selected_quad_strips_multi(
     sandbox3d_authoring_object* object,
     size_t cut_count);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
     sandbox3d_authoring_object* object,
     float factor);
+henka_result sandbox3d_authoring_object_loop_cut_selected_faces_at_factor(
+    sandbox3d_authoring_object* object,
+    float factor);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count);
+henka_result sandbox3d_authoring_object_loop_cut_selected_quad_strip_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count);
+henka_result sandbox3d_authoring_object_loop_cut_selected_quad_strips_multi(
     sandbox3d_authoring_object* object,
     size_t cut_count);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_subdivide_selected_face(
+    sandbox3d_authoring_object* object);
+/* Pokes the selected simple planar polygon through the canonical candidate,
+ * evaluated render, bounds, physics, selection, and history transaction. The
+ * bounded operation adds one center vertex and a triangle fan. */
+henka_result sandbox3d_authoring_object_poke_selected_face(
     sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_project_selected_face_uv(
     sandbox3d_authoring_object* object,
@@ -446,6 +592,12 @@ henka_result sandbox3d_authoring_object_pack_selected_face_uv(
     sandbox3d_authoring_object* object,
     float padding);
 henka_result sandbox3d_authoring_object_save_source(
+    const sandbox3d_authoring_object* object,
+    const char* path);
+/* Exports the current authored geometry through the production OBJ writer.
+ * Unlike HAMS source persistence this does not change the object's canonical
+ * source path, because OBJ cannot carry Henka's complete authoring metadata. */
+henka_result sandbox3d_authoring_object_save_obj(
     const sandbox3d_authoring_object* object,
     const char* path);
 henka_result sandbox3d_authoring_object_reload_source(

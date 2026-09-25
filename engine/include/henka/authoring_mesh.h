@@ -205,6 +205,12 @@ henka_result henka_authoring_mesh_history_redo(henka_authoring_mesh_history* his
 /* Versioned bounded persistence. Loading parses into a candidate and swaps it
  * only after complete validation, retaining the prior mesh on every failure. */
 henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, const char* path);
+/* Writes the supported geometry/UV subset of an authored mesh as OBJ. Face
+ * corner UVs are emitted independently, and standalone face-less edges are
+ * emitted as OBJ line primitives. Henka-only IDs, material regions, hard-edge
+ * flags, seams, and smoothing metadata remain HAMS-only state. The destination
+ * is replaced atomically after the complete bounded export is written. */
+henka_result henka_authoring_mesh_save_obj(const henka_authoring_mesh* mesh, const char* path);
 henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const char* path);
 /* Creates a bounded source from a versioned file after validating the file's
  * declared capacities. The output slot must be empty and is assigned only on

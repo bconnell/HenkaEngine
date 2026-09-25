@@ -67,7 +67,7 @@ runtime, packaging, and external-project validation.
 | Networking/server | Foundation | Current renderer-free runtime, dedicated host, and bounded Terrain authority paths |
 | External projects | Foundation | Current separate game/server templates with Windows validation |
 | Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, runtime hierarchy foundation, Save/Reload, and isolated runtime Play scenes |
-| Prefabs | Available | Bounded reusable `.hprefab` capture/save/load, editor Create/Place/Apply/Revert/Unpack/Delete workflow, durable supported instance overrides, and packaged/external public-API proof |
+| Prefabs | Available | Bounded reusable `.hprefab` capture/save/load/update, editor Create/Place/Update From Selected/Apply/Revert/Unpack/Delete workflow, durable supported instance overrides, and packaged/external public-API proof |
 | 2D | Planned | No dedicated 2D scope yet; renderer, sprites, layers, parallax, and animation remain open |
 | Audio | Available | Bounded resident/streamed PCM WAV, Ogg Vorbis, MP3, and FLAC playback, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, authored listener/editor controls, supported Lua/HenkaScript controls, and caller-pumped SDL3 output/recovery |
 | Scripting/behaviors | In Progress | Current bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, persistence, and cross-language events |
@@ -114,7 +114,7 @@ The completed bounded Modeling scope includes:
 - Component selection, connected selection, bounded edge-loop selection, and soft movement
 - Transform, orientation, pivot, and axis-constrained editing foundations
 - Stable vertex/edge/face identities and connectivity queries
-- Face winding flip, extrude, inset, bevel-ring, face subdivision, selected-face deletion, UV projection, uniform face UV scaling, bounded UV-island scaling/packing, and undo/redo
+- Face winding flip, extrude, connected face-region extrusion, inset, bevel-ring, face subdivision, selected-face deletion, UV projection, uniform face UV scaling, bounded UV-island scaling/packing, and undo/redo
 - Native editable source persistence and imported-object Make Editable
 - Validated material-region and supported PBR material-instance editing
 

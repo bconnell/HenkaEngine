@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - 'work/**'
   pull_request:
   workflow_dispatch:
 
@@ -118,6 +119,10 @@ jobs:
       - name: Check exact candidate validation orchestration
         shell: powershell
         run: .\scripts\test_exact_candidate_validation_windows.ps1
+
+      - name: Check automated window focus policy
+        shell: powershell
+        run: .\scripts\test_henka_process_window_policy_windows.ps1
 
       - name: Build Debug
         shell: powershell

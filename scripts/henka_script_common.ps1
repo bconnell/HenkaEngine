@@ -9,6 +9,32 @@ function Get-HenkaRepoRoot {
     return (Resolve-Path (Join-Path $ScriptDirectory "..")).Path
 }
 
+function Resolve-HenkaRepositoryPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw "Henka repository path cannot be empty."
+    }
+
+    $root = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/')
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
+    $resolved = [System.IO.Path]::GetFullPath((Join-Path $root $Path))
+    $rootPrefix = $root + [System.IO.Path]::DirectorySeparatorChar
+    $insideRoot = $resolved.Equals($root, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $resolved.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+    if (-not $insideRoot) {
+        throw "Relative Henka repository path escapes the repository root: $Path"
+    }
+
+    return $resolved
+}
+
 function Write-HenkaGeneratedRootMarker {
     param(
         [Parameter(Mandatory = $true)] [string]$RepoRoot,
@@ -748,9 +774,12 @@ function Initialize-HenkaCapturedProcessType {
 
     Add-Type -TypeDefinition @'
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 public sealed class HenkaCapturedProcess : IDisposable
 {
@@ -759,6 +788,31 @@ public sealed class HenkaCapturedProcess : IDisposable
     private readonly StreamWriter stdoutWriter;
     private readonly StreamWriter stderrWriter;
     private bool disposed;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(
+        IntPtr hWnd,
+        out uint processId);
+
+    private const int SW_SHOWMINNOACTIVE = 7;
+    private const int SW_SHOWNOACTIVATE = 4;
 
     public Process Process { get; private set; }
 
@@ -780,7 +834,9 @@ public sealed class HenkaCapturedProcess : IDisposable
         string workingDirectory,
         string stdoutPath,
         string stderrPath,
-        bool createNoWindow)
+        bool createNoWindow,
+        bool startMinimized,
+        bool startVisibleWithoutActivation)
     {
         ProcessStartInfo startInfo = new ProcessStartInfo();
         startInfo.FileName = filePath;
@@ -788,6 +844,17 @@ public sealed class HenkaCapturedProcess : IDisposable
         startInfo.WorkingDirectory = workingDirectory;
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = createNoWindow;
+        if (!createNoWindow && (startMinimized || startVisibleWithoutActivation))
+        {
+            // Validation may need a native window for PrintWindow or an
+            // event-driven UI path, but it must not take ownership of the
+            // user's typing focus merely by being launched.
+            // Native GUI frameworks can ignore a minimized startup hint while
+            // creating their first window. Hidden startup prevents a transient
+            // foreground activation; StartMinimize then exposes it minimized
+            // without activation once the real window exists.
+            startInfo.WindowStyle = ProcessWindowStyle.Hidden;
+        }
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
 
@@ -810,6 +877,14 @@ public sealed class HenkaCapturedProcess : IDisposable
             {
                 throw new InvalidOperationException("The process did not start.");
             }
+            if (!createNoWindow && startMinimized)
+            {
+                StartMinimize(process, GetForegroundWindow());
+            }
+            else if (!createNoWindow && startVisibleWithoutActivation)
+            {
+                StartShowWithoutActivation(process);
+            }
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             return capture;
@@ -819,6 +894,129 @@ public sealed class HenkaCapturedProcess : IDisposable
             capture.Dispose();
             throw;
         }
+    }
+
+    public static void StartMinimize(Process process)
+    {
+        StartMinimize(process, GetForegroundWindow());
+    }
+
+    public static IntPtr CurrentForegroundWindow()
+    {
+        return GetForegroundWindow();
+    }
+
+    private static void MinimizeOwnedWindows(
+        int processId,
+        IntPtr previousForeground)
+    {
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+        {
+            uint ownerProcessId;
+            GetWindowThreadProcessId(hWnd, out ownerProcessId);
+            if (ownerProcessId == (uint)processId)
+            {
+                ShowWindow(hWnd, SW_SHOWMINNOACTIVE);
+                if (previousForeground != IntPtr.Zero &&
+                    GetForegroundWindow() == hWnd)
+                {
+                    // Restore the user's existing foreground owner; never
+                    // activate the newly launched validation window here.
+                    SetForegroundWindow(previousForeground);
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+    }
+
+    private static void ShowOwnedWindowsWithoutActivation(
+        int processId,
+        HashSet<IntPtr> handledWindows)
+    {
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+        {
+            uint ownerProcessId;
+            GetWindowThreadProcessId(hWnd, out ownerProcessId);
+            if (ownerProcessId == (uint)processId && handledWindows.Add(hWnd))
+            {
+                ShowWindow(hWnd, SW_SHOWNOACTIVATE);
+            }
+            return true;
+        }, IntPtr.Zero);
+    }
+
+    public static void StartMinimize(Process process, IntPtr previousForeground)
+    {
+        // Apply one synchronous pass before returning the launch helper to its
+        // caller. This closes the gap where a native window is created between
+        // Process.Start and the first thread-pool callback.
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Refresh();
+                MinimizeOwnedWindows(process.Id, previousForeground);
+            }
+        }
+        catch
+        {
+            // The bounded monitor below remains the recovery path for a
+            // process whose native window is not ready yet.
+        }
+        ThreadPool.QueueUserWorkItem(delegate(object state)
+        {
+            Process target = (Process)state;
+            // Keep enforcing the non-activating state through the bounded
+            // startup window. A GUI framework can create its handle first and
+            // activate it a few scheduler ticks later, after a one-shot
+            // minimization would already have returned.
+            for (int attempt = 0; attempt < 2000; ++attempt)
+            {
+                try
+                {
+                    if (target.HasExited)
+                    {
+                        return;
+                    }
+                    target.Refresh();
+                    MinimizeOwnedWindows(target.Id, previousForeground);
+                }
+                catch
+                {
+                    return;
+                }
+                Thread.Sleep(10);
+            }
+        }, process);
+    }
+
+    public static void StartShowWithoutActivation(
+        Process process)
+    {
+        ThreadPool.QueueUserWorkItem(delegate(object state)
+        {
+            Process target = (Process)state;
+            HashSet<IntPtr> handledWindows = new HashSet<IntPtr>();
+            for (int attempt = 0; attempt < 2000; ++attempt)
+            {
+                try
+                {
+                    if (target.HasExited)
+                    {
+                        return;
+                    }
+                    target.Refresh();
+                    ShowOwnedWindowsWithoutActivation(
+                        target.Id,
+                        handledWindows);
+                }
+                catch
+                {
+                    return;
+                }
+                Thread.Sleep(10);
+            }
+        }, process);
     }
 
     private void OnOutputDataReceived(object sender, DataReceivedEventArgs eventArgs)
@@ -918,7 +1116,13 @@ function Start-HenkaProcess {
         [Parameter(Mandatory = $true)]
         [string]$WorkingDirectory,
 
-        [switch]$CreateNoWindow
+        [switch]$CreateNoWindow,
+
+        # Native validation windows start minimized by default. A capturable
+        # visible surface can instead opt into a non-activating show state.
+        [bool]$StartMinimized = $true,
+
+        [switch]$StartVisibleWithoutActivation
     )
 
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -927,12 +1131,35 @@ function Start-HenkaProcess {
     $startInfo.WorkingDirectory = $WorkingDirectory
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = [bool]$CreateNoWindow
+    if (-not $CreateNoWindow -and
+        ($StartMinimized -or $StartVisibleWithoutActivation)) {
+        # See the captured-process path: hidden creation avoids a transient
+        # foreground activation, then the shared callback exposes the window
+        # minimized without activation when its native handle exists.
+        $startInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+    }
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
+    if (-not $CreateNoWindow -and
+        ($StartMinimized -or $StartVisibleWithoutActivation)) {
+        Initialize-HenkaCapturedProcessType
+    }
+    $previousForeground = if (-not $CreateNoWindow -and
+        ($StartMinimized -or $StartVisibleWithoutActivation)) {
+        [HenkaCapturedProcess]::CurrentForegroundWindow()
+    } else {
+        [IntPtr]::Zero
+    }
     if (-not $process.Start()) {
         $process.Dispose()
         throw "The process did not start: $FilePath"
+    }
+    if (-not $CreateNoWindow -and $StartMinimized) {
+        [HenkaCapturedProcess]::StartMinimize($process, $previousForeground)
+    }
+    elseif (-not $CreateNoWindow -and $StartVisibleWithoutActivation) {
+        [HenkaCapturedProcess]::StartShowWithoutActivation($process)
     }
     return $process
 }
@@ -953,7 +1180,13 @@ function Start-HenkaCapturedProcess {
         [Parameter(Mandatory = $true)]
         [string]$StderrPath,
 
-        [switch]$CreateNoWindow
+        [switch]$CreateNoWindow,
+
+        # Native validation windows start minimized by default. A capturable
+        # visible surface can instead opt into a non-activating show state.
+        [bool]$StartMinimized = $true,
+
+        [switch]$StartVisibleWithoutActivation
     )
 
     Initialize-HenkaCapturedProcessType
@@ -972,7 +1205,9 @@ function Start-HenkaCapturedProcess {
         $WorkingDirectory,
         $StdoutPath,
         $StderrPath,
-        [bool]$CreateNoWindow)
+        [bool]$CreateNoWindow,
+        $StartMinimized,
+        [bool]$StartVisibleWithoutActivation)
 }
 
 function Close-HenkaCapturedProcess {

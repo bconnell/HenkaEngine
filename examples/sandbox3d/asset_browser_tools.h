@@ -44,7 +44,25 @@ typedef struct sandbox3d_texture_slot_display
     char state[32];
 } sandbox3d_texture_slot_display;
 
+typedef struct sandbox3d_material_texture_pick
+{
+    bool active;
+    henka_entity entity;
+    henka_material_texture_slot slot;
+} sandbox3d_material_texture_pick;
+
 const char* sandbox3d_texture_usage_label(henka_texture_usage usage);
+
+const char* sandbox3d_material_texture_slot_label(
+    henka_material_texture_slot slot);
+
+void sandbox3d_material_texture_pick_reset(
+    sandbox3d_material_texture_pick* pick);
+
+henka_result sandbox3d_material_texture_pick_begin(
+    sandbox3d_material_texture_pick* pick,
+    henka_entity entity,
+    henka_material_texture_slot slot);
 
 const char* sandbox3d_terrain_layer_label(uint32_t layer_index);
 

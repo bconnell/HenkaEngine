@@ -15,6 +15,38 @@ $archivePath = Join-Path $cacheRoot $archiveName
 $extractRoot = Join-Path $cacheRoot "extracted"
 $downloadUri = "https://github.com/pal1000/mesa-dist-win/releases/download/26.1.7/$archiveName"
 $expectedSha256 = "c6e90c3117233b66f7816df05026a5fb0f88eaf7829bd07a1724b981487ec0bb"
+$sevenZipBootstrapVersion = "26.03"
+$sevenZipBootstrapUri = "https://github.com/ip7z/7zip/releases/download/$sevenZipBootstrapVersion/7zr.exe"
+$sevenZipBootstrapSha256 = "ad4c82fadcbdf93c03b4fc440f300509c7d60c5c2f4d183e35d9d70d6957037d"
+$sevenZipBootstrapRoot = Join-Path $cacheRoot ("tools\7zip-" + $sevenZipBootstrapVersion)
+$sevenZipBootstrapPath = Join-Path $sevenZipBootstrapRoot "7zr.exe"
+
+function Get-PinnedSevenZipExtractor {
+    [System.IO.Directory]::CreateDirectory($sevenZipBootstrapRoot) | Out-Null
+
+    $needsDownload = -not (Test-Path -LiteralPath $sevenZipBootstrapPath -PathType Leaf)
+    if (-not $needsDownload) {
+        $cachedHash = (Get-FileHash -LiteralPath $sevenZipBootstrapPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($cachedHash -ne $sevenZipBootstrapSha256) {
+            Write-Warning "Cached 7zr.exe hash does not match the pinned 7-Zip $sevenZipBootstrapVersion extractor; refreshing it."
+            Remove-Item -LiteralPath $sevenZipBootstrapPath -Force
+            $needsDownload = $true
+        }
+    }
+
+    if ($needsDownload) {
+        Write-Host "Downloading pinned standalone 7-Zip extractor: $sevenZipBootstrapUri"
+        Invoke-WebRequest -Uri $sevenZipBootstrapUri -OutFile $sevenZipBootstrapPath -UseBasicParsing
+    }
+
+    $actualHash = (Get-FileHash -LiteralPath $sevenZipBootstrapPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $sevenZipBootstrapSha256) {
+        Remove-Item -LiteralPath $sevenZipBootstrapPath -Force -ErrorAction SilentlyContinue
+        throw "Pinned 7zr.exe hash mismatch. Expected $sevenZipBootstrapSha256, got $actualHash."
+    }
+
+    return $sevenZipBootstrapPath
+}
 
 function Get-SevenZipPath {
     $command = Get-Command 7z.exe -ErrorAction SilentlyContinue
@@ -32,7 +64,37 @@ function Get-SevenZipPath {
         }
     }
 
-    throw "7-Zip was not found on the hosted Windows runner; cannot extract the pinned Mesa runtime."
+    return (Get-PinnedSevenZipExtractor)
+}
+
+function Expand-PinnedMesaArchive {
+    param(
+        [Parameter(Mandatory = $true)][string]$ArchivePath,
+        [Parameter(Mandatory = $true)][string]$DestinationDirectory
+    )
+
+    $sevenZip = Get-SevenZipPath
+    if ([string]::IsNullOrWhiteSpace($sevenZip) -or
+        -not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) {
+        throw "A verified 7-Zip extractor is required to extract the pinned Mesa runtime."
+    }
+
+    if (Test-Path -LiteralPath $DestinationDirectory) {
+        Remove-Item -LiteralPath $DestinationDirectory -Recurse -Force
+    }
+    [System.IO.Directory]::CreateDirectory($DestinationDirectory) | Out-Null
+
+    try {
+        Write-Host "Extracting pinned Mesa runtime with verified 7-Zip: $sevenZip"
+        & $sevenZip x $ArchivePath "-o$DestinationDirectory" -y | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "Pinned Mesa3D runtime extraction failed with exit code $LASTEXITCODE."
+        }
+    }
+    catch {
+        Remove-Item -LiteralPath $DestinationDirectory -Recurse -Force -ErrorAction SilentlyContinue
+        throw
+    }
 }
 
 function Install-SoftwareOpenGLRuntime {
@@ -51,7 +113,7 @@ function Install-SoftwareOpenGLRuntime {
     foreach ($dll in $dlls) {
         Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $destination $dll.Name) -Force
     }
-    Write-Host "Installed CI-only Mesa OpenGL runtime into $destination"
+    Write-Host "Installed app-local Mesa OpenGL runtime into $destination"
 }
 
 [System.IO.Directory]::CreateDirectory($cacheRoot) | Out-Null
@@ -74,12 +136,7 @@ if (Test-Path -LiteralPath $extractRoot -PathType Container) {
         Select-Object -ExpandProperty DirectoryName)
 }
 if ($driverDirectories.Count -eq 0) {
-    $sevenZip = Get-SevenZipPath
-    [System.IO.Directory]::CreateDirectory($extractRoot) | Out-Null
-    & $sevenZip x $archivePath "-o$extractRoot" -y | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "Pinned Mesa3D runtime extraction failed with exit code $LASTEXITCODE."
-    }
+    Expand-PinnedMesaArchive -ArchivePath $archivePath -DestinationDirectory $extractRoot
     $driverDirectories = @(Get-ChildItem -LiteralPath $extractRoot -Recurse -Filter "opengl32.dll" -File |
         Where-Object {
             $_.FullName -match '(?i)(^|[\\/])x64([\\/]|$)' -and
@@ -92,7 +149,7 @@ if ($driverDirectories.Count -ne 1) {
 }
 $driverDirectory = [System.IO.Path]::GetFullPath($driverDirectories[0])
 
-# This is intentionally an app-local CI dependency. It never changes the host
+# This is intentionally an app-local validation dependency. It never changes the host
 # OpenGL registration or the shipped Henka package contents.
 $env:HENKA_CI_SOFTWARE_OPENGL_ROOT = $driverDirectory
 $env:GALLIUM_DRIVER = "llvmpipe"
@@ -105,7 +162,8 @@ if (-not [string]::IsNullOrWhiteSpace([string]$env:GITHUB_PATH)) {
 }
 
 foreach ($target in $TargetDirectory) {
-    Install-SoftwareOpenGLRuntime -SourceDirectory $driverDirectory -DestinationDirectory $target
+    $resolvedTarget = Resolve-HenkaRepositoryPath -RepoRoot $repoRoot -Path $target
+    Install-SoftwareOpenGLRuntime -SourceDirectory $driverDirectory -DestinationDirectory $resolvedTarget
 }
 
 Write-Host "[pass] Pinned Mesa3D llvmpipe runtime is ready: $driverDirectory"

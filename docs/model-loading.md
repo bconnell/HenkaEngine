@@ -52,11 +52,17 @@ at the refreshed payload. Mesh reimport does not mutate Scene Document state or
 consume a scene render revision.
 
 If source parsing, path resolution, upload, or another candidate step fails,
-the existing mesh payload and asset metadata remain unchanged. Cached fallback
-entries continue through `henka_assets_retry_failed_obj_mesh` or
-`henka_assets_retry_failed_gltf_mesh`; once a retry produces a real
-manager-owned mesh, the same explicit reimport APIs apply. File watching and
-automatic dependency-driven reimport remain outside this contract.
+the existing mesh payload and asset metadata remain unchanged. A source failure
+that enters the cache uses a path-specific manager-owned diagnostic mesh rather
+than the manager's shared fallback object. Equivalent canonical path spellings
+therefore return one stable borrowed mesh identity. Failed retry leaves that
+identity, payload, and metadata unchanged and leaves the retry output null.
+`henka_assets_retry_failed_obj_mesh` and
+`henka_assets_retry_failed_gltf_mesh` replace the diagnostic payload in place
+after a successful candidate load, so existing scene references observe the
+recovered mesh without pointer replacement. The same identity is retained by
+later explicit reimport. File watching and automatic dependency-driven
+reimport remain outside this contract.
 
 ### Explicit texture reimport
 
