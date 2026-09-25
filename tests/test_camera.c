@@ -300,6 +300,42 @@ void henka_test_camera(void)
     }
 
     {
+        henka_camera shake_source;
+        henka_camera shaken;
+        henka_camera unchanged;
+        henka_camera_shake_sample sample;
+
+        shake_source = henka_camera_create_perspective(
+            60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
+        shake_source.position = (henka_vec3){2.0f, 3.0f, 4.0f};
+        shake_source.yaw_radians = 0.0f;
+        shake_source.pitch_radians = 0.0f;
+        shake_source.roll_radians = 0.0f;
+        sample.local_position_offset = (henka_vec3){1.0f, 2.0f, 3.0f};
+        sample.yaw_offset_radians = 0.1f;
+        sample.pitch_offset_radians = -0.2f;
+        sample.roll_offset_radians = 0.05f;
+        HENKA_TEST_ASSERT(henka_camera_apply_shake_sample(
+            &shake_source, &sample, &shaken) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(shaken.position.x, 2.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(shaken.position.y, 5.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(shaken.position.z, 8.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(shaken.yaw_radians, 0.1f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(shaken.pitch_radians, -0.2f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(shaken.roll_radians, 0.05f, 0.0001f);
+
+        unchanged = shaken;
+        sample.pitch_offset_radians = HENKA_PI;
+        HENKA_TEST_ASSERT(henka_camera_apply_shake_sample(
+            &shake_source, &sample, &shaken) == HENKA_ERROR_NUMERIC_RANGE);
+        HENKA_TEST_ASSERT(memcmp(&shaken, &unchanged, sizeof(shaken)) == 0);
+        sample.pitch_offset_radians = NAN;
+        HENKA_TEST_ASSERT(henka_camera_apply_shake_sample(
+            &shake_source, &sample, &shaken) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(memcmp(&shaken, &unchanged, sizeof(shaken)) == 0);
+    }
+
+    {
         henka_camera_follow_desc follow_desc;
         henka_camera followed_camera;
         henka_camera_follow_desc invalid_desc;

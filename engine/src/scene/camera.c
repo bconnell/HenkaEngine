@@ -304,6 +304,56 @@ henka_result henka_camera_blend(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_camera_apply_shake_sample(
+    const henka_camera* source,
+    const henka_camera_shake_sample* sample,
+    henka_camera* out_camera)
+{
+    henka_camera candidate;
+    henka_vec3 local_offset;
+    henka_vec3 right;
+    henka_vec3 up;
+    henka_vec3 forward;
+
+    if (source == NULL ||
+        sample == NULL ||
+        out_camera == NULL ||
+        !henka_camera_is_valid(source) ||
+        !henka_vec3_is_finite(sample->local_position_offset) ||
+        !isfinite(sample->yaw_offset_radians) ||
+        !isfinite(sample->pitch_offset_radians) ||
+        !isfinite(sample->roll_offset_radians))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    candidate = *source;
+    right = henka_camera_get_right(source);
+    up = henka_camera_get_up(source);
+    forward = henka_camera_get_forward(source);
+    local_offset = henka_vec3_add(
+        henka_vec3_scale(right, sample->local_position_offset.x),
+        henka_vec3_add(
+            henka_vec3_scale(up, sample->local_position_offset.y),
+            henka_vec3_scale(forward, sample->local_position_offset.z)));
+    candidate.position = henka_vec3_add(source->position, local_offset);
+    candidate.yaw_radians = henka_camera_wrap_angle_radians(
+        source->yaw_radians + sample->yaw_offset_radians);
+    candidate.pitch_radians =
+        source->pitch_radians + sample->pitch_offset_radians;
+    candidate.roll_radians = henka_camera_wrap_angle_radians(
+        source->roll_radians + sample->roll_offset_radians);
+
+    if (!henka_camera_is_valid(&candidate))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+
+    *out_camera = candidate;
+    return HENKA_SUCCESS;
+}
+
+
 henka_camera henka_camera_create_perspective(float field_of_view_radians, float aspect_ratio, float near_plane, float far_plane)
 {
     henka_camera camera;

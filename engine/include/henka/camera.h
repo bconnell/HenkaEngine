@@ -51,6 +51,14 @@ typedef struct henka_camera
     float fast_movement_multiplier;
 } henka_camera;
 
+typedef struct henka_camera_shake_sample
+{
+    henka_vec3 local_position_offset;
+    float yaw_offset_radians;
+    float pitch_offset_radians;
+    float roll_offset_radians;
+} henka_camera_shake_sample;
+
 henka_camera henka_camera_create_perspective(float field_of_view_radians, float aspect_ratio, float near_plane, float far_plane);
 bool henka_camera_is_valid(const henka_camera* camera);
 /* Blends two valid cameras with the same projection mode. The factor is
@@ -60,6 +68,12 @@ henka_result henka_camera_blend(
     const henka_camera* from,
     const henka_camera* to,
     float factor,
+    henka_camera* out_camera);
+/* Applies one caller-generated shake sample without owning a temporal envelope.
+ * The source camera is unchanged and invalid samples leave out_camera unchanged. */
+henka_result henka_camera_apply_shake_sample(
+    const henka_camera* source,
+    const henka_camera_shake_sample* sample,
     henka_camera* out_camera);
 henka_camera henka_camera_create_orthographic(float orthographic_height, float aspect_ratio, float near_plane, float far_plane);
 const char* henka_camera_preset_get_label(henka_camera_preset preset);
