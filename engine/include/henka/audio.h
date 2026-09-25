@@ -109,6 +109,8 @@ typedef struct henka_audio_voice_info
     size_t source_frame;
     float gain;
     float pitch;
+    /* 0 is unobstructed and 1 is fully occluded. */
+    float occlusion;
     bool active;
     bool paused;
     bool looping;
@@ -257,6 +259,11 @@ henka_result henka_audio_voice_set_pitch(
     henka_audio_system* system,
     henka_audio_voice_id voice,
     float pitch);
+/* Runtime-only attenuation hook for physics/gameplay-owned occlusion. */
+henka_result henka_audio_voice_set_occlusion(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    float occlusion);
 henka_result henka_audio_voice_set_looping(
     henka_audio_system* system,
     henka_audio_voice_id voice,

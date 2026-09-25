@@ -591,6 +591,8 @@ int main(void)
     float left_position_right;
     float near_sum;
     float far_sum;
+    float clear_sum;
+    float occluded_sum;
     size_t paused_source_frame;
     size_t muted_source_frame;
     bool muted;
@@ -713,6 +715,38 @@ int main(void)
     HENKA_TEST_ASSERT(emitter_info.gain == 1.0f && emitter_info.pitch == 1.0f &&
         emitter_info.looping && emitter_info.spatial &&
         emitter_info.bus == HENKA_AUDIO_BUS_SFX);
+
+    HENKA_TEST_ASSERT(henka_audio_voice_restart(system, voice) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_occlusion(
+        system, voice, 0.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    clear_sum = fabsf(samples[0]) + fabsf(samples[1]);
+    HENKA_TEST_ASSERT(clear_sum > 0.0f);
+    HENKA_TEST_ASSERT(henka_audio_voice_restart(system, voice) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_occlusion(
+        system, voice, 0.5f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    occluded_sum = fabsf(samples[0]) + fabsf(samples[1]);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(occluded_sum, clear_sum * 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, voice, &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(emitter_info.occlusion, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_audio_voice_restart(system, voice) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_occlusion(
+        system, voice, 1.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_audio_system_mix(system, samples, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!test_nonzero_mix(samples, 1U));
+    HENKA_TEST_ASSERT(henka_audio_voice_get_info(
+        system, voice, &emitter_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(emitter_info.source_frame > 0U);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_occlusion(
+        system, voice, -0.1f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_occlusion(
+        system, voice, 1.1f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_occlusion(
+        system, voice, NAN) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_audio_voice_set_occlusion(
+        system, voice, 0.0f) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_voice_pause(system, voice) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_audio_voice_get_info(
         system, voice, &emitter_info) == HENKA_SUCCESS);

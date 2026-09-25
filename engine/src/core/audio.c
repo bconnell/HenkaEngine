@@ -35,6 +35,7 @@ typedef struct henka_audio_voice_slot
     const henka_audio_clip* clip;
     henka_audio_stream* stream;
     henka_audio_voice_desc desc;
+    float occlusion;
     double source_position;
     bool paused;
     size_t stream_window_start;
@@ -724,6 +725,7 @@ static void henka_audio_release_voice(
     slot->entity = HENKA_INVALID_ENTITY;
     slot->clip = NULL;
     slot->stream = NULL;
+    slot->occlusion = 0.0f;
     slot->source_position = 0.0;
     slot->paused = false;
     slot->stream_window_start = 0U;
@@ -1445,6 +1447,7 @@ henka_result henka_audio_voice_play(
         slot->clip = clip;
         slot->stream = NULL;
         slot->desc = effective_desc;
+        slot->occlusion = 0.0f;
         slot->source_position = 0.0;
         slot->paused = false;
         slot->stream_window_start = 0U;
@@ -1501,6 +1504,7 @@ henka_result henka_audio_voice_play_stream(
         slot->clip = NULL;
         slot->stream = stream;
         slot->desc = effective_desc;
+        slot->occlusion = 0.0f;
         slot->source_position = 0.0;
         slot->paused = false;
         slot->stream_window_start = 0U;
@@ -1618,6 +1622,23 @@ henka_result henka_audio_voice_set_pitch(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_audio_voice_set_occlusion(
+    henka_audio_system* system,
+    henka_audio_voice_id voice,
+    float occlusion)
+{
+    henka_audio_voice_slot* slot = henka_audio_find_voice(system, voice);
+    if (slot == NULL ||
+        !henka_audio_float_is_valid(occlusion) ||
+        occlusion < 0.0f ||
+        occlusion > 1.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->occlusion = occlusion;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_audio_voice_set_looping(
     henka_audio_system* system,
     henka_audio_voice_id voice,
@@ -1696,6 +1717,7 @@ henka_result henka_audio_voice_get_info(
         slot->source_position < 0.0 ? 0U : (size_t)slot->source_position,
         slot->desc.gain,
         slot->desc.pitch,
+        slot->occlusion,
         slot->active,
         slot->paused,
         slot->desc.looping,
@@ -2443,7 +2465,8 @@ henka_result henka_audio_system_mix(
         henka_audio_get_spatial_gains(
             system, slot, transform.position, &left_gain, &right_gain);
         bus_gain = system->bus_gains[HENKA_AUDIO_BUS_MASTER] *
-            system->bus_gains[slot->desc.bus] * slot->desc.gain;
+            system->bus_gains[slot->desc.bus] * slot->desc.gain *
+            (1.0f - slot->occlusion);
         if (system->bus_muted[HENKA_AUDIO_BUS_MASTER] ||
             system->bus_muted[slot->desc.bus])
         {
