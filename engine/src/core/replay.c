@@ -85,3 +85,73 @@ henka_result henka_replay_buffer_get(
     *out_event = buffer->events[index];
     return HENKA_SUCCESS;
 }
+
+static bool henka_replay_buffer_is_valid(const henka_replay_buffer* buffer)
+{
+    return buffer != NULL &&
+        buffer->events != NULL &&
+        buffer->capacity > 0U &&
+        buffer->capacity <= HENKA_REPLAY_MAX_EVENTS &&
+        buffer->count <= buffer->capacity;
+}
+
+henka_result henka_replay_cursor_init(
+    henka_replay_cursor* cursor,
+    const henka_replay_buffer* buffer)
+{
+    if (cursor == NULL || !henka_replay_buffer_is_valid(buffer))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    cursor->buffer = buffer;
+    cursor->index = 0U;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_replay_cursor_seek_tick(
+    henka_replay_cursor* cursor,
+    uint64_t tick)
+{
+    size_t low;
+    size_t high;
+
+    if (cursor == NULL || !henka_replay_buffer_is_valid(cursor->buffer))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    low = 0U;
+    high = cursor->buffer->count;
+    while (low < high)
+    {
+        const size_t middle = low + (high - low) / 2U;
+        if (cursor->buffer->events[middle].tick < tick)
+        {
+            low = middle + 1U;
+        }
+        else
+        {
+            high = middle;
+        }
+    }
+    cursor->index = low;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_replay_cursor_next(
+    henka_replay_cursor* cursor,
+    henka_replay_event* out_event)
+{
+    if (cursor == NULL ||
+        out_event == NULL ||
+        !henka_replay_buffer_is_valid(cursor->buffer))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (cursor->index >= cursor->buffer->count)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    *out_event = cursor->buffer->events[cursor->index++];
+    return HENKA_SUCCESS;
+}

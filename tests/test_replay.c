@@ -71,5 +71,32 @@ int main(void)
         return 1;
     }
 
+
+    {
+        henka_replay_cursor cursor;
+
+        henka_replay_buffer_clear(&buffer);
+        if (henka_replay_buffer_append(
+                &buffer, 2U, 10U, NULL, 0U) != HENKA_SUCCESS ||
+            henka_replay_buffer_append(
+                &buffer, 5U, 11U, NULL, 0U) != HENKA_SUCCESS ||
+            henka_replay_cursor_init(&cursor, &buffer) != HENKA_SUCCESS ||
+            henka_replay_cursor_seek_tick(&cursor, 3U) != HENKA_SUCCESS ||
+            henka_replay_cursor_next(&cursor, &event) != HENKA_SUCCESS ||
+            event.tick != 5U ||
+            event.type != 11U ||
+            henka_replay_cursor_next(&cursor, &event) != HENKA_ERROR_LIMIT)
+        {
+            return 1;
+        }
+
+        if (henka_replay_cursor_seek_tick(&cursor, 0U) != HENKA_SUCCESS ||
+            henka_replay_cursor_next(&cursor, &event) != HENKA_SUCCESS ||
+            event.tick != 2U)
+        {
+            return 1;
+        }
+    }
+
     return 0;
 }

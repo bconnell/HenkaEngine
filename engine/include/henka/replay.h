@@ -24,6 +24,12 @@ typedef struct henka_replay_buffer
     size_t count;
 } henka_replay_buffer;
 
+typedef struct henka_replay_cursor
+{
+    const henka_replay_buffer* buffer;
+    size_t index;
+} henka_replay_cursor;
+
 /* Initializes a caller-owned fixed-capacity event buffer. Events are recorded
  * in nondecreasing tick order. The buffer performs no allocation. */
 henka_result henka_replay_buffer_init(
@@ -40,6 +46,16 @@ henka_result henka_replay_buffer_append(
 henka_result henka_replay_buffer_get(
     const henka_replay_buffer* buffer,
     size_t index,
+    henka_replay_event* out_event);
+
+henka_result henka_replay_cursor_init(
+    henka_replay_cursor* cursor,
+    const henka_replay_buffer* buffer);
+henka_result henka_replay_cursor_seek_tick(
+    henka_replay_cursor* cursor,
+    uint64_t tick);
+henka_result henka_replay_cursor_next(
+    henka_replay_cursor* cursor,
     henka_replay_event* out_event);
 
 #endif
