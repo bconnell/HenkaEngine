@@ -8,6 +8,7 @@
 #define HENKA_LOCALIZATION_MAX_ENTRIES 4096U
 #define HENKA_LOCALIZATION_MAX_KEY_BYTES 128U
 #define HENKA_LOCALIZATION_MAX_VALUE_BYTES 4096U
+#define HENKA_LOCALIZATION_MAX_CATALOG_CHAIN 16U
 
 typedef struct henka_localization_entry
 {
@@ -34,5 +35,14 @@ henka_result henka_localization_lookup(
     const henka_localization_catalog* fallback,
     const char* key,
     const char** out_value);
+
+/* Resolves catalogs in caller-supplied priority order. out_catalog_index is
+ * optional and identifies the catalog that supplied the returned value. */
+henka_result henka_localization_lookup_chain(
+    const henka_localization_catalog* const* catalogs,
+    size_t catalog_count,
+    const char* key,
+    const char** out_value,
+    size_t* out_catalog_index);
 
 #endif

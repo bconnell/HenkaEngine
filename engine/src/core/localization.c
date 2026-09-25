@@ -120,3 +120,48 @@ henka_result henka_localization_lookup(
     *out_value = value;
     return HENKA_SUCCESS;
 }
+
+henka_result henka_localization_lookup_chain(
+    const henka_localization_catalog* const* catalogs,
+    size_t catalog_count,
+    const char* key,
+    const char** out_value,
+    size_t* out_catalog_index)
+{
+    size_t index;
+
+    if (catalogs == NULL ||
+        catalog_count == 0U ||
+        catalog_count > HENKA_LOCALIZATION_MAX_CATALOG_CHAIN ||
+        out_value == NULL ||
+        !henka_localization_string_is_bounded(
+            key,
+            HENKA_LOCALIZATION_MAX_KEY_BYTES,
+            true))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < catalog_count; ++index)
+    {
+        const char* value;
+        if (catalogs[index] == NULL ||
+            henka_localization_catalog_validate(catalogs[index]) !=
+                HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        value = henka_localization_find(catalogs[index], key);
+        if (value != NULL)
+        {
+            *out_value = value;
+            if (out_catalog_index != NULL)
+            {
+                *out_catalog_index = index;
+            }
+            return HENKA_SUCCESS;
+        }
+    }
+
+    return HENKA_ERROR_ASSET_SOURCE;
+}
