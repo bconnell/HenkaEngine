@@ -117,14 +117,31 @@ static void henka_test_memory_concurrent_accounting(void)
 void henka_test_memory(void)
 {
     void* block;
+    void* second_block;
     void* resized;
     size_t before_count;
+    henka_memory_diagnostics before_diagnostics;
+    henka_memory_diagnostics during_diagnostics;
+    henka_memory_diagnostics after_diagnostics;
 
     before_count = henka_memory_get_allocation_count();
+    before_diagnostics = henka_memory_get_diagnostics();
+    HENKA_TEST_ASSERT(before_diagnostics.active_allocations == before_count);
+    HENKA_TEST_ASSERT(
+        before_diagnostics.peak_allocations >=
+        before_diagnostics.active_allocations);
 
     block = henka_malloc(16U);
     HENKA_TEST_ASSERT(block != NULL);
     HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == before_count + 1U);
+    second_block = henka_malloc(8U);
+    HENKA_TEST_ASSERT(second_block != NULL);
+    during_diagnostics = henka_memory_get_diagnostics();
+    HENKA_TEST_ASSERT(during_diagnostics.active_allocations == before_count + 2U);
+    HENKA_TEST_ASSERT(
+        during_diagnostics.peak_allocations >=
+        during_diagnostics.active_allocations);
+    henka_free(second_block);
 
     memset(block, 0xAB, 16U);
 
@@ -141,6 +158,11 @@ void henka_test_memory(void)
 
     henka_free(block);
     HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == before_count);
+    after_diagnostics = henka_memory_get_diagnostics();
+    HENKA_TEST_ASSERT(after_diagnostics.active_allocations == before_count);
+    HENKA_TEST_ASSERT(
+        after_diagnostics.peak_allocations >=
+        during_diagnostics.peak_allocations);
 
 #if defined(_WIN32)
     henka_test_memory_concurrent_accounting();

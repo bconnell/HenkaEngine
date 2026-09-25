@@ -20,6 +20,7 @@ typedef _Atomic(size_t) henka_memory_counter;
 #endif
 
 static henka_memory_counter g_allocation_count = 0U;
+static henka_memory_counter g_peak_allocation_count = 0U;
 static henka_memory_counter g_test_allocations_before_failure = SIZE_MAX;
 
 static size_t henka_memory_counter_load(const henka_memory_counter* counter)
@@ -71,16 +72,31 @@ static int henka_memory_counter_compare_exchange(
 #endif
 }
 
+static void henka_memory_record_peak(size_t current_count)
+{
+    size_t peak_count = henka_memory_counter_load(&g_peak_allocation_count);
+
+    while (current_count > peak_count &&
+           !henka_memory_counter_compare_exchange(
+               &g_peak_allocation_count,
+               &peak_count,
+               current_count))
+    {
+    }
+}
+
 static void henka_memory_increment_allocation_count(void)
 {
+    size_t current_count;
 #if defined(_WIN32)
-    (void)InterlockedIncrement64(&g_allocation_count);
+    current_count = (size_t)InterlockedIncrement64(&g_allocation_count);
 #else
-    (void)atomic_fetch_add_explicit(
+    current_count = atomic_fetch_add_explicit(
         &g_allocation_count,
         1U,
-        memory_order_relaxed);
+        memory_order_relaxed) + 1U;
 #endif
+    henka_memory_record_peak(current_count);
 }
 
 static void henka_memory_decrement_allocation_count(void)
@@ -213,6 +229,18 @@ void henka_free(void* pointer)
 size_t henka_memory_get_allocation_count(void)
 {
     return henka_memory_counter_load(&g_allocation_count);
+}
+
+henka_memory_diagnostics henka_memory_get_diagnostics(void)
+{
+    const size_t active = henka_memory_counter_load(&g_allocation_count);
+    size_t peak = henka_memory_counter_load(&g_peak_allocation_count);
+
+    if (peak < active)
+    {
+        peak = active;
+    }
+    return (henka_memory_diagnostics){active, peak};
 }
 
 void henka_memory_report_leaks(void)
