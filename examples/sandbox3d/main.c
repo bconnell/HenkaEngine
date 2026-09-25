@@ -34827,6 +34827,15 @@ static void sandbox3d_draw_utility_panel(
             layout,
             SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_UTILITY);
+    /*
+     * A slot-targeted texture pick is a bounded transactional mode inside the
+     * Utility panel. While it is active, let the picker own the panel content
+     * area instead of drawing the normal Utility destinations underneath it.
+     * This prevents overlapping controls from competing for the same pointer
+     * event and keeps Apply/Cancel as the only way to finish that transaction.
+     */
+    if (!state->material_texture_pick.active)
+    {
     /* Keep every Utility destination in a measured, non-overlapping row. The
      * previous hand-positioned grid placed Assets and Terrain in the same
      * cell, so one tab could make the other unreachable. */
@@ -34951,7 +34960,17 @@ static void sandbox3d_draw_utility_panel(
         }
     }
 
-    y_start = panel_bounds.y + 126.0f;
+        y_start = panel_bounds.y + 126.0f;
+    }
+    else
+    {
+        /*
+         * The regular Utility destinations are hidden in picker mode, so the
+         * asset rows can start directly below the panel header without sharing
+         * hit space with navigation, paging, or Apply/Cancel controls.
+         */
+        y_start = panel_bounds.y + 38.0f;
+    }
     switch (state->workspace.active_utility)
     {
         case SANDBOX3D_UTILITY_HELP:
@@ -35086,16 +35105,15 @@ static void sandbox3d_draw_utility_panel(
             const float asset_panel_bottom =
                 panel_bounds.y + panel_bounds.height - 6.0f;
             /*
-             * Keep the texture-picker commit row one control stride above the
-             * Utility panel's lower edge. The previous bottom-pinned row was
-             * visibly rendered but its reported center landed in the lower
-             * non-interactive workspace boundary on packaged CI, so product
-             * automation could select a texture but could never deliver the
-             * Apply press. Reserve the same 30 px stride used between rows so
-             * the whole hit target remains inside the panel interaction area.
+             * Keep the texture-picker commit row clear of the lower workspace
+             * interaction boundary. The bottom-pinned row and the first 30 px
+             * inset both rendered visibly, but the latter still placed Apply
+             * below the last interaction band proven by the visible workflow.
+             * Move Apply up one additional control stride; navigation stays
+             * one stride above it and paging shrinks to preserve row spacing.
              */
             const float picker_action_y =
-                asset_panel_bottom - 54.0f;
+                asset_panel_bottom - 84.0f;
             const float picker_navigation_y =
                 picker_action_y - 30.0f;
             const float picker_row_start_y =
@@ -35588,6 +35606,35 @@ static void sandbox3d_draw_utility_panel(
                             reported_action_slot = (int)state->material_texture_pick.slot;
                             reported_action_metadata_index =
                                 state->asset_browser_selected_metadata_index;
+                        }
+                    }
+
+                    if (picker_button_count == 2U &&
+                        state->asset_browser_selected_texture != NULL)
+                    {
+                        const henka_vec2 picker_mouse =
+                            henka_ui_get_mouse_position(state->ui);
+                        if (henka_ui_rect_contains(
+                                picker_buttons[0],
+                                picker_mouse) &&
+                            (henka_input_was_mouse_button_pressed(
+                                 engine,
+                                 HENKA_MOUSE_BUTTON_LEFT) ||
+                             henka_input_was_mouse_button_released(
+                                 engine,
+                                 HENKA_MOUSE_BUTTON_LEFT)))
+                        {
+                            printf(
+                                "Material texture picker Apply input: x=%.1f y=%.1f pressed=%d released=%d.\n",
+                                picker_mouse.x,
+                                picker_mouse.y,
+                                henka_input_was_mouse_button_pressed(
+                                    engine,
+                                    HENKA_MOUSE_BUTTON_LEFT) ? 1 : 0,
+                                henka_input_was_mouse_button_released(
+                                    engine,
+                                    HENKA_MOUSE_BUTTON_LEFT) ? 1 : 0);
+                            fflush(stdout);
                         }
                     }
 
