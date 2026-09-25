@@ -163,6 +163,19 @@ void henka_test_persistence(void)
     HENKA_TEST_ASSERT(result == HENKA_ERROR_UNKNOWN);
     HENKA_TEST_ASSERT(strcmp(henka_settings_get_string(reloaded, "stable", ""), "unchanged") == 0);
     HENKA_TEST_ASSERT(henka_settings_has_key(reloaded, "good") == false);
+
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        "build/test_tmp/persistence_duplicate.settings",
+        "canonical=first\n"
+        "canonical=second\n"));
+    result = henka_settings_load_file(
+        reloaded,
+        "build/test_tmp/persistence_duplicate.settings");
+    HENKA_TEST_ASSERT(result == HENKA_ERROR_UNKNOWN);
+    HENKA_TEST_ASSERT(strcmp(
+        henka_settings_get_string(reloaded, "stable", ""),
+        "unchanged") == 0);
+    HENKA_TEST_ASSERT(henka_settings_has_key(reloaded, "canonical") == false);
     henka_settings_destroy(reloaded);
 
     result = henka_settings_load_file(settings, "build/test_tmp/does_not_exist.settings");

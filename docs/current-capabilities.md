@@ -1015,7 +1015,7 @@ Settings and save slots use:
 
 - confined paths;
 - bounded identifiers;
-- complete record validation;
+- complete record validation, including rejection of duplicate settings keys;
 - same-directory temporary files;
 - flush/close-before-replace behavior;
 - failure retention of prior in-memory state.

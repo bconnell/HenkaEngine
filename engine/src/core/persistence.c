@@ -991,6 +991,19 @@ henka_result henka_settings_load_file(henka_settings* settings, const char* path
             return HENKA_ERROR_OUT_OF_MEMORY;
         }
 
+        if (henka_settings_has_key(loaded, key))
+        {
+            HENKA_LOG_WARN(
+                "Rejecting duplicate settings key on line %u in %s: %s",
+                line_number,
+                path,
+                key);
+            henka_free(key);
+            henka_free(value);
+            had_parse_error = true;
+            continue;
+        }
+
         result = henka_settings_set_string(loaded, key, value);
         henka_free(key);
         henka_free(value);

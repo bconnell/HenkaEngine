@@ -28,7 +28,7 @@ Keys use ASCII letters, digits, `.`, `_`, and `-`. Values may contain ordinary p
 
 ## Transactional behavior
 
-Settings loads are transactional. The complete file is parsed into a temporary object first. An unreadable, malformed, unsafe, or overlong file returns an error and leaves the destination unchanged.
+Settings loads are transactional. The complete file is parsed into a temporary object first. An unreadable, malformed, unsafe, overlong, or duplicate-key file returns an error and leaves the destination unchanged. A persisted settings record therefore has one authoritative value per key instead of last-write-wins ambiguity.
 
 Save-data loads follow the same rule. The version, scene id, full camera pose, and every boolean flag must validate before the destination changes.
 
