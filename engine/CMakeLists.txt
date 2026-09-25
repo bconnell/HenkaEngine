@@ -8,6 +8,7 @@ add_library(henka_runtime STATIC
     src/core/prefab.c
     src/core/result.c
     src/core/scene_document.c
+    src/core/save_game.c
     src/core/time.c
     src/core/audio.c
     src/scripting/script_host.c

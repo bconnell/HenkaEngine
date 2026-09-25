@@ -36,6 +36,19 @@ henka_enable_project_warnings(henka_audio_tests)
 
 add_test(NAME henka_audio_tests COMMAND henka_audio_tests)
 
+add_executable(henka_save_game_tests
+    test_save_game.c
+)
+
+target_link_libraries(henka_save_game_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_save_game_tests)
+
+add_test(NAME henka_save_game_tests COMMAND henka_save_game_tests)
+
 add_executable(henka_scene_document_tests
     test_scene_document.c
 )
