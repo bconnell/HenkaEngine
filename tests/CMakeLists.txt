@@ -10,6 +10,19 @@ else()
     add_compile_options("-include${CMAKE_CURRENT_SOURCE_DIR}/test_assertions.h")
 endif()
 
+add_executable(henka_accessibility_tests
+    test_accessibility.c
+)
+
+target_link_libraries(henka_accessibility_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_accessibility_tests)
+
+add_test(NAME henka_accessibility_tests COMMAND henka_accessibility_tests)
+
 add_executable(henka_headless_runtime_tests
     test_headless_runtime.c
 )
