@@ -206,6 +206,12 @@ henka_result henka_terrain_world_request_regeneration(
 henka_result henka_terrain_world_pop_regeneration(
     henka_terrain_world* world,
     henka_terrain_regeneration_request* out_request);
+/* Returns true only while the request still matches the resident region's
+ * authoritative revision/generation. Background workers should check this
+ * before publishing derived physics or render data. */
+bool henka_terrain_world_regeneration_request_is_current(
+    const henka_terrain_world* world,
+    const henka_terrain_regeneration_request* request);
 
 /* Atomically replaces one resident region with a validated storage snapshot. */
 henka_result henka_terrain_world_apply_region_snapshot(

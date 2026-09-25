@@ -300,14 +300,28 @@ static int test_regeneration_queue(void)
              HENKA_TERRAIN_REGENERATION_RENDER) ||
         henka_terrain_world_pop_regeneration(world, &request) != HENKA_SUCCESS ||
         !henka_terrain_region_id_equal(request.id, second) ||
-        request.targets != HENKA_TERRAIN_REGENERATION_RENDER ||
+        request.targets != HENKA_TERRAIN_REGENERATION_RENDER)
+    {
+        goto cleanup;
+    }
+    HENKA_TEST_ASSERT(henka_terrain_world_regeneration_request_is_current(
+        world, &request));
+    if (henka_terrain_world_set_region_revision(
+            world, second, 9U, 10U, true) != HENKA_SUCCESS ||
+        henka_terrain_world_regeneration_request_is_current(
+            world, &request) ||
         henka_terrain_world_pop_regeneration(world, &request) ==
             HENKA_SUCCESS)
     {
         goto cleanup;
     }
 
-    if (henka_terrain_world_request_regeneration(
+    memset(&request, 0, sizeof(request));
+    if (henka_terrain_world_regeneration_request_is_current(
+            world, &request) ||
+        henka_terrain_world_regeneration_request_is_current(
+            NULL, &request) ||
+        henka_terrain_world_request_regeneration(
             world, first, HENKA_TERRAIN_REGENERATION_NONE) ==
             HENKA_SUCCESS ||
         henka_terrain_world_request_regeneration(

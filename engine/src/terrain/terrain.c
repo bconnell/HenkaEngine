@@ -761,6 +761,29 @@ henka_result henka_terrain_world_pop_regeneration(
     return HENKA_SUCCESS;
 }
 
+bool henka_terrain_world_regeneration_request_is_current(
+    const henka_terrain_world* world,
+    const henka_terrain_regeneration_request* request)
+{
+    const henka_terrain_region_record* record;
+    const uint32_t valid_targets =
+        HENKA_TERRAIN_REGENERATION_PHYSICS |
+        HENKA_TERRAIN_REGENERATION_RENDER;
+
+    if (world == NULL ||
+        request == NULL ||
+        request->targets == HENKA_TERRAIN_REGENERATION_NONE ||
+        (request->targets & ~valid_targets) != 0U)
+    {
+        return false;
+    }
+
+    record = henka_terrain_find_region_record_const(world, request->id);
+    return record != NULL &&
+        record->state.revision == request->revision &&
+        record->state.generation == request->generation;
+}
+
 henka_result henka_terrain_world_apply_region_snapshot(
     henka_terrain_world* world,
     henka_terrain_region_storage_info info,
