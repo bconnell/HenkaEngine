@@ -3646,6 +3646,16 @@ henka_result henka_scene_set_entity_local_bounds(henka_scene* scene, henka_entit
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (record->has_local_bounds &&
+        record->local_bounds.center.x == bounds.center.x &&
+        record->local_bounds.center.y == bounds.center.y &&
+        record->local_bounds.center.z == bounds.center.z &&
+        record->local_bounds.extents.x == bounds.extents.x &&
+        record->local_bounds.extents.y == bounds.extents.y &&
+        record->local_bounds.extents.z == bounds.extents.z)
+    {
+        return HENKA_SUCCESS;
+    }
     if (!henka_scene_render_revision_available(scene))
     {
         return HENKA_ERROR_LIMIT;
@@ -3665,6 +3675,10 @@ henka_result henka_scene_clear_entity_local_bounds(henka_scene* scene, henka_ent
     if (record == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!record->has_local_bounds)
+    {
+        return HENKA_SUCCESS;
     }
     if (!henka_scene_render_revision_available(scene))
     {
@@ -3689,6 +3703,14 @@ henka_result henka_scene_set_entity_interaction(henka_scene* scene, henka_entity
         interaction->max_distance < 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (record->interaction.enabled == interaction->enabled &&
+        record->interaction.max_distance == interaction->max_distance &&
+        henka_scene_presentation_text_equal(
+            record->interaction.prompt,
+            interaction->prompt))
+    {
+        return HENKA_SUCCESS;
     }
     if (!henka_scene_render_revision_available(scene))
     {
@@ -3717,6 +3739,10 @@ henka_result henka_scene_set_entity_flags(henka_scene* scene, henka_entity entit
     if (record == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (record->flags == flags)
+    {
+        return HENKA_SUCCESS;
     }
     if (!henka_scene_render_revision_available(scene))
     {

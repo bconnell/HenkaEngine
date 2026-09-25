@@ -2508,6 +2508,7 @@ void henka_test_scene(void)
     uint32_t reflection_probe_index;
     uint32_t light_indices[HENKA_SCENE_MAX_LOCAL_LIGHTS];
     uint32_t light_index;
+    uint64_t revision;
 
     henka_test_scene_render_settings();
     henka_test_scene_render_resources();
@@ -2762,6 +2763,10 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_is_entity_helper(scene, helper));
     HENKA_TEST_ASSERT(henka_scene_get_entity_flags(scene, helper, &flags) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT((flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U);
+    revision = henka_scene_get_render_revision(scene);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
+        scene, helper, HENKA_SCENE_ENTITY_FLAG_HELPER) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == revision);
     HENKA_TEST_ASSERT(henka_scene_set_entity_selection_owner(scene, second, helper) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
         scene,
@@ -2775,6 +2780,10 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, second, bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, second, &bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.x, 0.5f, 0.0001f);
+    revision = henka_scene_get_render_revision(scene);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(
+        scene, second, bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == revision);
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(
         scene,
         second,
@@ -2854,6 +2863,10 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_interaction(scene, second, &read_interaction) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(read_interaction.enabled);
     HENKA_TEST_ASSERT(strcmp(read_interaction.prompt, "Inspect sample") == 0);
+    revision = henka_scene_get_render_revision(scene);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_interaction(
+        scene, second, &read_interaction) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == revision);
     interaction.max_distance = -1.0f;
     HENKA_TEST_ASSERT(henka_scene_set_entity_interaction(scene, second, &interaction) == HENKA_ERROR_INVALID_ARGUMENT);
     interaction.max_distance = NAN;
