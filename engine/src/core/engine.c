@@ -2408,6 +2408,79 @@ henka_result henka_input_remove_action_mouse_button_binding(
     return HENKA_ERROR_INVALID_ARGUMENT;
 }
 
+henka_result henka_input_set_action_key_binding_at(
+    struct henka_engine* engine,
+    henka_input_action action,
+    size_t index,
+    henka_key key)
+{
+    size_t existing_index;
+
+    if (engine == NULL ||
+        action <= HENKA_INPUT_ACTION_UNKNOWN ||
+        action >= HENKA_INPUT_ACTION_COUNT ||
+        index >= HENKA_MAX_ACTION_KEY_BINDINGS ||
+        key <= HENKA_KEY_UNKNOWN ||
+        key >= HENKA_KEY_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (existing_index = 0U;
+         existing_index < HENKA_MAX_ACTION_KEY_BINDINGS;
+         ++existing_index)
+    {
+        if (existing_index != index &&
+            engine->action_key_bindings[action][existing_index] == key)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    if (index > 0U &&
+        engine->action_key_bindings[action][index - 1U] == HENKA_KEY_UNKNOWN)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    engine->action_key_bindings[action][index] = key;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_input_set_action_mouse_button_binding_at(
+    struct henka_engine* engine,
+    henka_input_action action,
+    size_t index,
+    henka_mouse_button button)
+{
+    size_t existing_index;
+
+    if (engine == NULL ||
+        action <= HENKA_INPUT_ACTION_UNKNOWN ||
+        action >= HENKA_INPUT_ACTION_COUNT ||
+        index >= HENKA_MAX_ACTION_MOUSE_BINDINGS ||
+        button <= HENKA_MOUSE_BUTTON_UNKNOWN ||
+        button >= HENKA_MOUSE_BUTTON_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (existing_index = 0U;
+         existing_index < HENKA_MAX_ACTION_MOUSE_BINDINGS;
+         ++existing_index)
+    {
+        if (existing_index != index &&
+            engine->action_mouse_bindings[action][existing_index] == button)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    if (index > 0U &&
+        engine->action_mouse_bindings[action][index - 1U] ==
+            HENKA_MOUSE_BUTTON_UNKNOWN)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    engine->action_mouse_bindings[action][index] = button;
+    return HENKA_SUCCESS;
+}
+
 size_t henka_input_get_action_key_binding_count(const struct henka_engine* engine, henka_input_action action)
 {
     size_t index;

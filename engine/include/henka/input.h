@@ -119,6 +119,16 @@ henka_result henka_input_remove_action_mouse_button_binding(
     struct henka_engine* engine,
     henka_input_action action,
     henka_mouse_button button);
+henka_result henka_input_set_action_key_binding_at(
+    struct henka_engine* engine,
+    henka_input_action action,
+    size_t index,
+    henka_key key);
+henka_result henka_input_set_action_mouse_button_binding_at(
+    struct henka_engine* engine,
+    henka_input_action action,
+    size_t index,
+    henka_mouse_button button);
 size_t henka_input_get_action_key_binding_count(const struct henka_engine* engine, henka_input_action action);
 henka_key henka_input_get_action_key_binding(const struct henka_engine* engine, henka_input_action action, size_t index);
 size_t henka_input_get_action_mouse_button_binding_count(const struct henka_engine* engine, henka_input_action action);

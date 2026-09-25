@@ -279,6 +279,33 @@ void henka_test_input(void)
     HENKA_TEST_ASSERT(henka_input_get_action_mouse_button_binding(
         &engine, HENKA_INPUT_ACTION_SELECT_TOOL, 0U) == HENKA_MOUSE_BUTTON_LEFT);
 
+    HENKA_TEST_ASSERT(henka_input_set_action_key_binding_at(
+        &engine, HENKA_INPUT_ACTION_MOVE_FORWARD, 0U, HENKA_KEY_W) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_add_action_key_binding(
+        &engine, HENKA_INPUT_ACTION_MOVE_FORWARD, HENKA_KEY_UP) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_set_action_key_binding_at(
+        &engine, HENKA_INPUT_ACTION_MOVE_FORWARD, 1U, HENKA_KEY_DOWN) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_get_action_key_binding(
+        &engine, HENKA_INPUT_ACTION_MOVE_FORWARD, 1U) == HENKA_KEY_DOWN);
+    HENKA_TEST_ASSERT(henka_input_set_action_key_binding_at(
+        &engine, HENKA_INPUT_ACTION_MOVE_FORWARD, 1U, HENKA_KEY_W) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+
+    HENKA_TEST_ASSERT(henka_input_set_action_mouse_button_binding_at(
+        &engine, HENKA_INPUT_ACTION_SELECT_TOOL, 0U, HENKA_MOUSE_BUTTON_RIGHT) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_add_action_mouse_button_binding(
+        &engine, HENKA_INPUT_ACTION_SELECT_TOOL, HENKA_MOUSE_BUTTON_LEFT) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_set_action_mouse_button_binding_at(
+        &engine, HENKA_INPUT_ACTION_SELECT_TOOL, 1U, HENKA_MOUSE_BUTTON_MIDDLE) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_get_action_mouse_button_binding(
+        &engine, HENKA_INPUT_ACTION_SELECT_TOOL, 1U) == HENKA_MOUSE_BUTTON_MIDDLE);
+
     memset(&input, 0, sizeof(input));
     HENKA_TEST_ASSERT(!input.automation_input_owned);
 #if defined(_WIN32)
