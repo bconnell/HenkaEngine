@@ -35521,6 +35521,35 @@ static void sandbox3d_draw_utility_panel(
                     }
 
                     if (picker_button_count == 2U &&
+                        state->asset_browser_selected_texture != NULL)
+                    {
+                        const henka_vec2 picker_mouse =
+                            henka_ui_get_mouse_position(state->ui);
+                        if (henka_ui_rect_contains(
+                                picker_buttons[0],
+                                picker_mouse) &&
+                            (henka_input_was_mouse_button_pressed(
+                                 engine,
+                                 HENKA_MOUSE_BUTTON_LEFT) ||
+                             henka_input_was_mouse_button_released(
+                                 engine,
+                                 HENKA_MOUSE_BUTTON_LEFT)))
+                        {
+                            printf(
+                                "Material texture picker Apply input: x=%.1f y=%.1f pressed=%d released=%d.\n",
+                                picker_mouse.x,
+                                picker_mouse.y,
+                                henka_input_was_mouse_button_pressed(
+                                    engine,
+                                    HENKA_MOUSE_BUTTON_LEFT) ? 1 : 0,
+                                henka_input_was_mouse_button_released(
+                                    engine,
+                                    HENKA_MOUSE_BUTTON_LEFT) ? 1 : 0);
+                            fflush(stdout);
+                        }
+                    }
+
+                    if (picker_button_count == 2U &&
                         state->asset_browser_selected_texture != NULL &&
                         henka_ui_primary_button(
                             state->ui,
