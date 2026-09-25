@@ -829,16 +829,38 @@ try {
     $pickerApplyCount = Get-LogMatchCount `
         -Path $stdoutPath `
         -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=HENKA_SUCCESS\.'
-    Send-HenkaAutomationClick `
+    $pickerApplyX =
+        [double]$pickerActions.Groups["apply"].Value +
+        [double]$pickerActions.Groups["applyWidth"].Value * 0.5
+    $pickerApplyY = [double]$pickerActions.Groups["y"].Value + 12.0
+
+    # The software OpenGL CI path can take longer than the generic click
+    # helper's settle interval to present each frame. Drive the primary button
+    # as an explicit move/down/up sequence so the UI owns the active ID across
+    # distinct rendered frames before release.
+    Send-HenkaAutomationEvent `
         -EventPath $automationInputPath `
-        -X ([double]$pickerActions.Groups["apply"].Value +
-            [double]$pickerActions.Groups["applyWidth"].Value * 0.5) `
-        -Y ([double]$pickerActions.Groups["y"].Value + 12.0)
+        -EventLine ("move {0} {1}" -f `
+            (Format-HenkaAutomationFloat -Value $pickerApplyX), `
+            (Format-HenkaAutomationFloat -Value $pickerApplyY)) `
+        -SettleMilliseconds 350
+    Send-HenkaAutomationEvent `
+        -EventPath $automationInputPath `
+        -EventLine ("button left down {0} {1}" -f `
+            (Format-HenkaAutomationFloat -Value $pickerApplyX), `
+            (Format-HenkaAutomationFloat -Value $pickerApplyY)) `
+        -SettleMilliseconds 350
+    Send-HenkaAutomationEvent `
+        -EventPath $automationInputPath `
+        -EventLine ("button left up {0} {1}" -f `
+            (Format-HenkaAutomationFloat -Value $pickerApplyX), `
+            (Format-HenkaAutomationFloat -Value $pickerApplyY)) `
+        -SettleMilliseconds 350
     if (-not (Wait-LogMatchCountIncrease `
             -Path $stdoutPath `
             -InitialCount $pickerApplyCount `
             -Pattern 'Material texture picker: action=apply entity=\d+ slot=Base Color result=HENKA_SUCCESS\.' `
-            -TimeoutMilliseconds 5000)) {
+            -TimeoutMilliseconds 10000)) {
         throw "The visible material texture picker did not apply the selected manager-owned texture."
     }
     Start-Sleep -Milliseconds 250

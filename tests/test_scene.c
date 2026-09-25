@@ -2370,6 +2370,12 @@ static void henka_test_scene_render_settings(void)
     HENKA_TEST_ASSERT(read_back.fog.mode == HENKA_SCENE_FOG_EXPONENTIAL);
     HENKA_TEST_ASSERT(henka_scene_set_render_settings(scene, read_back) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == revision);
+    henka_scene_set_light_direction(scene, read_back.light_direction);
+    henka_scene_set_light_color(scene, read_back.light_color);
+    henka_scene_set_light_intensity(scene, read_back.light_intensity);
+    henka_scene_set_ambient_color(scene, read_back.ambient_color);
+    HENKA_TEST_ASSERT(henka_scene_set_fog(scene, read_back.fog) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == revision);
 
     invalid = read_back;
     invalid.light_direction = (henka_vec3){0.0f, 0.0f, 0.0f};

@@ -3975,6 +3975,12 @@ void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direct
         return;
     }
 
+    if (scene->light_direction.x == normalized_direction.x &&
+        scene->light_direction.y == normalized_direction.y &&
+        scene->light_direction.z == normalized_direction.z)
+    {
+        return;
+    }
     scene->light_direction = normalized_direction;
     henka_scene_bump_render_revision(scene);
 }
@@ -3987,6 +3993,12 @@ void henka_scene_set_light_color(henka_scene* scene, henka_vec3 light_color)
         light_color.x >= 0.0f && light_color.y >= 0.0f && light_color.z >= 0.0f &&
         light_color.x <= 1.0f && light_color.y <= 1.0f && light_color.z <= 1.0f)
     {
+        if (scene->light_color.x == light_color.x &&
+            scene->light_color.y == light_color.y &&
+            scene->light_color.z == light_color.z)
+        {
+            return;
+        }
         scene->light_color = light_color;
         henka_scene_bump_render_revision(scene);
     }
@@ -3997,6 +4009,10 @@ void henka_scene_set_light_intensity(henka_scene* scene, float light_intensity)
     if (scene != NULL && henka_scene_render_revision_available(scene) &&
         henka_is_finite_float(light_intensity) && light_intensity >= 0.0f && light_intensity <= 10000.0f)
     {
+        if (scene->light_intensity == light_intensity)
+        {
+            return;
+        }
         scene->light_intensity = light_intensity;
         henka_scene_bump_render_revision(scene);
     }
@@ -4011,6 +4027,12 @@ void henka_scene_set_ambient_color(henka_scene* scene, henka_vec3 ambient_color)
         ambient_color.x >= 0.0f && ambient_color.y >= 0.0f && ambient_color.z >= 0.0f &&
         ambient_color.x <= 16.0f && ambient_color.y <= 16.0f && ambient_color.z <= 16.0f)
     {
+        if (scene->ambient_color.x == ambient_color.x &&
+            scene->ambient_color.y == ambient_color.y &&
+            scene->ambient_color.z == ambient_color.z)
+        {
+            return;
+        }
         scene->ambient_color = ambient_color;
         henka_scene_bump_render_revision(scene);
     }
@@ -4821,6 +4843,17 @@ henka_result henka_scene_set_fog(henka_scene* scene, henka_scene_fog_desc fog)
         return HENKA_ERROR_LIMIT;
     }
 
+    if (scene->fog.enabled == fog.enabled &&
+        scene->fog.mode == fog.mode &&
+        scene->fog.color.x == fog.color.x &&
+        scene->fog.color.y == fog.color.y &&
+        scene->fog.color.z == fog.color.z &&
+        scene->fog.start_distance == fog.start_distance &&
+        scene->fog.end_distance == fog.end_distance &&
+        scene->fog.density == fog.density)
+    {
+        return HENKA_SUCCESS;
+    }
     scene->fog = fog;
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
