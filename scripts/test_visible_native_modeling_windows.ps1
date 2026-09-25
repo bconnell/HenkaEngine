@@ -777,7 +777,9 @@ try {
             $utilityGeometry.Groups["height"].Value,
             [Globalization.CultureInfo]::InvariantCulture)
         $pickerNextX = $utilityX + 14.0 + 88.0 + 41.0
-        $pickerNextY = $utilityY + $utilityHeight - 48.0
+        # The texture-picker navigation row sits 30 px above the Apply/Cancel
+        # row. Click its center so pagination is exercised through the real UI.
+        $pickerNextY = $utilityY + $utilityHeight - 78.0
 
         for ($pickerPageAttempt = 0; $pickerPageAttempt -lt 32 -and -not $assetCandidateFound; ++$pickerPageAttempt) {
             Send-HenkaAutomationClick `
