@@ -35086,16 +35086,15 @@ static void sandbox3d_draw_utility_panel(
             const float asset_panel_bottom =
                 panel_bounds.y + panel_bounds.height - 6.0f;
             /*
-             * Keep the texture-picker commit row one control stride above the
-             * Utility panel's lower edge. The previous bottom-pinned row was
-             * visibly rendered but its reported center landed in the lower
-             * non-interactive workspace boundary on packaged CI, so product
-             * automation could select a texture but could never deliver the
-             * Apply press. Reserve the same 30 px stride used between rows so
-             * the whole hit target remains inside the panel interaction area.
+             * Keep the texture-picker commit row clear of the lower workspace
+             * interaction boundary. The bottom-pinned row and the first 30 px
+             * inset both rendered visibly, but the latter still placed Apply
+             * below the last interaction band proven by the visible workflow.
+             * Move Apply up one additional control stride; navigation stays
+             * one stride above it and paging shrinks to preserve row spacing.
              */
             const float picker_action_y =
-                asset_panel_bottom - 54.0f;
+                asset_panel_bottom - 84.0f;
             const float picker_navigation_y =
                 picker_action_y - 30.0f;
             const float picker_row_start_y =

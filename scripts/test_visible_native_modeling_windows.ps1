@@ -779,7 +779,7 @@ try {
         # The product keeps picker navigation one 30 px control stride above
         # the safely inset Apply row. Target the actual navigation-row center,
         # not the old bottom-pinned location that now overlaps Apply.
-        $pickerNextY = $utilityY + $utilityHeight - 78.0
+        $pickerNextY = $utilityY + $utilityHeight - 108.0
 
         for ($pickerPageAttempt = 0; $pickerPageAttempt -lt 32 -and -not $assetCandidateFound; ++$pickerPageAttempt) {
             Send-HenkaAutomationClick `
