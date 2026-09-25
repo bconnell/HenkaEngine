@@ -139,6 +139,9 @@ void henka_test_memory(void)
     during_diagnostics = henka_memory_get_diagnostics();
     HENKA_TEST_ASSERT(during_diagnostics.active_allocations == before_count + 2U);
     HENKA_TEST_ASSERT(
+        during_diagnostics.total_allocations ==
+        before_diagnostics.total_allocations + 2U);
+    HENKA_TEST_ASSERT(
         during_diagnostics.peak_allocations >=
         during_diagnostics.active_allocations);
     henka_free(second_block);
@@ -160,6 +163,9 @@ void henka_test_memory(void)
     HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == before_count);
     after_diagnostics = henka_memory_get_diagnostics();
     HENKA_TEST_ASSERT(after_diagnostics.active_allocations == before_count);
+    HENKA_TEST_ASSERT(
+        after_diagnostics.total_allocations >=
+        during_diagnostics.total_allocations + 1U);
     HENKA_TEST_ASSERT(
         after_diagnostics.peak_allocations >=
         during_diagnostics.peak_allocations);

@@ -7,6 +7,9 @@ typedef struct henka_memory_diagnostics
 {
     size_t active_allocations;
     size_t peak_allocations;
+    /* Successful allocation creations since process start. Reallocating an
+     * existing live block does not increment this value. */
+    size_t total_allocations;
 } henka_memory_diagnostics;
 
 void* henka_malloc(size_t size);
