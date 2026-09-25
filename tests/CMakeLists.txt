@@ -23,6 +23,19 @@ henka_enable_project_warnings(henka_headless_runtime_tests)
 
 add_test(NAME henka_headless_runtime_tests COMMAND henka_headless_runtime_tests)
 
+add_executable(henka_animation_tests
+    test_animation.c
+)
+
+target_link_libraries(henka_animation_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_animation_tests)
+
+add_test(NAME henka_animation_tests COMMAND henka_animation_tests)
+
 add_executable(henka_audio_tests
     test_audio.c
 )
