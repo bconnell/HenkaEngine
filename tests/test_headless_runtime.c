@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include <henka/camera.h>
+#include <henka/log.h>
 #include <henka/math.h>
 #include <henka/physics.h>
 #include <henka/scene.h>
@@ -46,6 +47,21 @@ int main(void)
         henka_physics_world_destroy(physics);
         henka_scene_destroy(scene);
         return 6;
+    }
+
+    if (henka_log_set_minimum_level(HENKA_LOG_LEVEL_WARNING) != HENKA_SUCCESS ||
+        henka_log_get_minimum_level() != HENKA_LOG_LEVEL_WARNING ||
+        henka_log_should_write(HENKA_LOG_LEVEL_INFO) ||
+        !henka_log_should_write(HENKA_LOG_LEVEL_WARNING) ||
+        !henka_log_should_write(HENKA_LOG_LEVEL_ERROR) ||
+        henka_log_set_minimum_level((henka_log_level)99) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_log_get_minimum_level() != HENKA_LOG_LEVEL_WARNING ||
+        henka_log_set_minimum_level(HENKA_LOG_LEVEL_INFO) != HENKA_SUCCESS)
+    {
+        henka_physics_world_destroy(physics);
+        henka_scene_destroy(scene);
+        return 8;
     }
 
     henka_physics_world_destroy(physics);
