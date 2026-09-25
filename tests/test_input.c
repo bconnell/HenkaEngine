@@ -51,6 +51,27 @@ void henka_test_input(void)
         HENKA_ERROR_INVALID_ARGUMENT);
 
     memset(&diagnostics, 0x5a, sizeof(diagnostics));
+    {
+        henka_input_action owners[4];
+        size_t owner_count;
+
+        owner_count = henka_input_find_actions_for_key(
+            &engine, HENKA_KEY_S, owners, 4U);
+        HENKA_TEST_ASSERT(owner_count == 2U);
+        HENKA_TEST_ASSERT(owners[0] == HENKA_INPUT_ACTION_MOVE_BACK);
+        HENKA_TEST_ASSERT(owners[1] == HENKA_INPUT_ACTION_SCALE_TOOL);
+        HENKA_TEST_ASSERT(henka_input_find_actions_for_key(
+            &engine, HENKA_KEY_S, NULL, 0U) == 2U);
+        HENKA_TEST_ASSERT(henka_input_find_actions_for_key(
+            &engine, HENKA_KEY_UNKNOWN, owners, 4U) == 0U);
+
+        owner_count = henka_input_find_actions_for_mouse_button(
+            &engine, HENKA_MOUSE_BUTTON_RIGHT, owners, 4U);
+        HENKA_TEST_ASSERT(owner_count >= 1U);
+        HENKA_TEST_ASSERT(henka_input_find_actions_for_mouse_button(
+            &engine, HENKA_MOUSE_BUTTON_UNKNOWN, owners, 4U) == 0U);
+    }
+
     memset(&input, 0, sizeof(input));
     memset(&tool_window_state, 0, sizeof(tool_window_state));
     tool_window_state.mouse_position = (henka_vec2){12.0f, 34.0f};

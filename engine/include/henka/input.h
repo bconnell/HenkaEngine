@@ -130,6 +130,19 @@ henka_result henka_input_get_binding_snapshot(
 henka_result henka_input_apply_binding_snapshot(
     struct henka_engine* engine,
     const henka_input_binding_snapshot* snapshot);
+/* Returns the number of actions currently bound to the supplied control.
+ * out_actions may be NULL when capacity is zero; results follow action enum
+ * order so callers receive deterministic conflict presentation. */
+size_t henka_input_find_actions_for_key(
+    const struct henka_engine* engine,
+    henka_key key,
+    henka_input_action* out_actions,
+    size_t capacity);
+size_t henka_input_find_actions_for_mouse_button(
+    const struct henka_engine* engine,
+    henka_mouse_button button,
+    henka_input_action* out_actions,
+    size_t capacity);
 void henka_input_consume_key_press(struct henka_engine* engine, henka_key key);
 bool henka_input_action_is_down(const struct henka_engine* engine, henka_input_action action);
 bool henka_input_action_was_pressed(const struct henka_engine* engine, henka_input_action action);

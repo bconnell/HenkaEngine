@@ -2486,6 +2486,91 @@ henka_result henka_input_apply_binding_snapshot(
     return HENKA_SUCCESS;
 }
 
+static size_t henka_input_collect_key_owners(
+    const henka_engine* engine,
+    henka_key key,
+    henka_input_action* out_actions,
+    size_t capacity)
+{
+    size_t count = 0U;
+    henka_input_action action;
+
+    for (action = HENKA_INPUT_ACTION_MOVE_FORWARD;
+         action < HENKA_INPUT_ACTION_COUNT;
+         ++action)
+    {
+        size_t index;
+        for (index = 0U; index < HENKA_MAX_ACTION_KEY_BINDINGS; ++index)
+        {
+            if (engine->action_key_bindings[action][index] == key)
+            {
+                if (out_actions != NULL && count < capacity)
+                {
+                    out_actions[count] = action;
+                }
+                ++count;
+                break;
+            }
+        }
+    }
+    return count;
+}
+
+size_t henka_input_find_actions_for_key(
+    const struct henka_engine* engine,
+    henka_key key,
+    henka_input_action* out_actions,
+    size_t capacity)
+{
+    if (engine == NULL ||
+        key <= HENKA_KEY_UNKNOWN ||
+        key >= HENKA_KEY_COUNT ||
+        (capacity > 0U && out_actions == NULL))
+    {
+        return 0U;
+    }
+    return henka_input_collect_key_owners(
+        engine, key, out_actions, capacity);
+}
+
+size_t henka_input_find_actions_for_mouse_button(
+    const struct henka_engine* engine,
+    henka_mouse_button button,
+    henka_input_action* out_actions,
+    size_t capacity)
+{
+    size_t count = 0U;
+    henka_input_action action;
+
+    if (engine == NULL ||
+        button <= HENKA_MOUSE_BUTTON_UNKNOWN ||
+        button >= HENKA_MOUSE_BUTTON_COUNT ||
+        (capacity > 0U && out_actions == NULL))
+    {
+        return 0U;
+    }
+
+    for (action = HENKA_INPUT_ACTION_MOVE_FORWARD;
+         action < HENKA_INPUT_ACTION_COUNT;
+         ++action)
+    {
+        size_t index;
+        for (index = 0U; index < HENKA_MAX_ACTION_MOUSE_BINDINGS; ++index)
+        {
+            if (engine->action_mouse_bindings[action][index] == button)
+            {
+                if (out_actions != NULL && count < capacity)
+                {
+                    out_actions[count] = action;
+                }
+                ++count;
+                break;
+            }
+        }
+    }
+    return count;
+}
+
 void henka_input_consume_key_press(struct henka_engine* engine, henka_key key)
 {
     if (engine != NULL && key > HENKA_KEY_UNKNOWN && key < HENKA_KEY_COUNT)
