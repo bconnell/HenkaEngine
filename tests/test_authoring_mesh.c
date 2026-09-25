@@ -6775,16 +6775,104 @@ static int test_vertex_extrude_operation(void)
         henka_authoring_mesh_destroy(box);
     }
     {
+        const henka_authoring_mesh_desc limited_desc = {5U, 8U, 4U, 3U};
+        const henka_vec3 ring_positions[4] = {
+            {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+            {-1.0f, 0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}};
+        henka_authoring_mesh* limited = NULL;
+        henka_authoring_vertex_id center_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_vertex_id ring_ids[4] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        henka_authoring_face_id face_ids[4] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        henka_authoring_vertex_id face_vertices[3];
+        henka_authoring_vertex_id output_vertex_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_modeling_report limited_report = {0};
+        henka_authoring_mesh_counts limited_before;
+        henka_authoring_mesh_counts limited_after;
+        const henka_authoring_vertex* center;
+        size_t index;
+        bool intact = true;
+
+        if (henka_authoring_mesh_create(&limited_desc, &limited) != HENKA_SUCCESS ||
+            henka_authoring_mesh_add_vertex(
+                limited, (henka_vec3){0.0f, 0.0f, 0.0f},
+                (henka_vec2){0.5f, 0.5f}, 3U, &center_id) != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(limited);
+            goto cleanup;
+        }
+        for (index = 0U; index < 4U; ++index)
+        {
+            if (henka_authoring_mesh_add_vertex(
+                    limited, ring_positions[index], (henka_vec2){0.0f, 0.0f},
+                    3U, &ring_ids[index]) != HENKA_SUCCESS)
+            {
+                henka_authoring_mesh_destroy(limited);
+                goto cleanup;
+            }
+        }
+        for (index = 0U; index < 4U; ++index)
+        {
+            face_vertices[0] = center_id;
+            face_vertices[1] = ring_ids[index];
+            face_vertices[2] = ring_ids[(index + 1U) % 4U];
+            if (henka_authoring_mesh_add_face(
+                    limited, face_vertices, 3U, 3U, true, &face_ids[index]) != HENKA_SUCCESS)
+            {
+                henka_authoring_mesh_destroy(limited);
+                goto cleanup;
+            }
+        }
+        limited_before = henka_authoring_mesh_get_counts(limited);
+        if (limited_before.vertices != limited_desc.max_vertices ||
+            limited_before.edges != limited_desc.max_edges ||
+            limited_before.faces != limited_desc.max_faces ||
+            henka_authoring_mesh_extrude_vertex(
+                limited, center_id, 0.5f, &output_vertex_id, &limited_report) !=
+                HENKA_ERROR_LIMIT)
+        {
+            henka_authoring_mesh_destroy(limited);
+            goto cleanup;
+        }
+        limited_after = henka_authoring_mesh_get_counts(limited);
+        center = henka_authoring_mesh_get_vertex(limited, center_id);
+        intact = output_vertex_id == HENKA_AUTHORING_INVALID_ID &&
+            !limited_report.changed &&
+            memcmp(&limited_before, &limited_after, sizeof(limited_before)) == 0 &&
+            center != NULL && center->position.x == 0.0f && center->position.y == 0.0f &&
+            center->position.z == 0.0f && center->uv.x == 0.5f && center->uv.y == 0.5f &&
+            center->material_region == 3U &&
+            henka_authoring_mesh_get_vertex_edge_count(limited, center_id) == 4U &&
+            henka_authoring_mesh_validate(limited);
+        for (index = 0U; intact && index < 4U; ++index)
+        {
+            const henka_authoring_face* face =
+                henka_authoring_mesh_get_face(limited, face_ids[index]);
+            intact = face != NULL && face->corner_count == 3U &&
+                face->material_region == 3U && face->smooth &&
+                face->vertices[0] == center_id &&
+                face->vertices[1] == ring_ids[index] &&
+                face->vertices[2] == ring_ids[(index + 1U) % 4U];
+        }
+        henka_authoring_mesh_destroy(limited);
+        if (!intact) goto cleanup;
+    }
+    {
         henka_authoring_mesh* closed_fan = NULL;
         henka_authoring_vertex_id center_id = HENKA_AUTHORING_INVALID_ID;
         henka_authoring_vertex_id ring_ids[4] = {
             HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
             HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
         henka_authoring_vertex_id face_vertices[3];
-        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
-            henka_authoring_vertex_id closed_new_vertex_id = HENKA_AUTHORING_INVALID_ID;
-            henka_authoring_modeling_report closed_report = {0};
-            henka_authoring_modeling_report boundary_report = {0};
+        henka_authoring_face_id face_ids[4] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        henka_authoring_vertex_id closed_new_vertex_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_modeling_report closed_report = {0};
+        henka_authoring_modeling_report boundary_report = {0};
         henka_authoring_mesh_counts closed_before;
         henka_authoring_mesh_counts closed_after;
         const henka_vec3 ring_positions[4] = {
@@ -6818,7 +6906,7 @@ static int test_vertex_extrude_operation(void)
                     closed_fan, face_vertices, 3U,
                     index % 2U == 0U ? 3U : 4U,
                     index % 2U == 0U,
-                    &face_id) != HENKA_SUCCESS)
+                    &face_ids[index]) != HENKA_SUCCESS)
             {
                 henka_authoring_mesh_destroy(closed_fan);
                 goto cleanup;
@@ -6835,6 +6923,110 @@ static int test_vertex_extrude_operation(void)
         {
             henka_authoring_mesh_destroy(closed_fan);
             goto cleanup;
+        }
+        {
+            bool saw_allocation_failure = false;
+            bool saw_success_after_failure_window = false;
+            size_t failure_index;
+            for (failure_index = 0U; failure_index < 128U; ++failure_index)
+            {
+                henka_authoring_mesh* attempt = NULL;
+                henka_authoring_vertex_id attempted_vertex_id = HENKA_AUTHORING_INVALID_ID;
+                henka_authoring_modeling_report attempted_report = {0};
+                henka_authoring_mesh_counts attempt_before;
+                henka_authoring_mesh_counts attempt_after;
+                henka_result operation_result;
+                size_t face_index;
+                bool unchanged = true;
+
+                if (henka_authoring_mesh_clone(closed_fan, &attempt) != HENKA_SUCCESS)
+                {
+                    henka_authoring_mesh_destroy(attempt);
+                    henka_authoring_mesh_destroy(closed_fan);
+                    goto cleanup;
+                }
+                attempt_before = henka_authoring_mesh_get_counts(attempt);
+                henka_memory_test_fail_after(failure_index);
+                operation_result = henka_authoring_mesh_extrude_vertex(
+                    attempt, center_id, 0.5f, &attempted_vertex_id, &attempted_report);
+                henka_memory_test_disable_failures();
+                attempt_after = henka_authoring_mesh_get_counts(attempt);
+                if (operation_result == HENKA_ERROR_OUT_OF_MEMORY)
+                {
+                    const henka_authoring_vertex* source_center =
+                        henka_authoring_mesh_get_vertex(closed_fan, center_id);
+                    const henka_authoring_vertex* after_center =
+                        henka_authoring_mesh_get_vertex(attempt, center_id);
+                    saw_allocation_failure = true;
+                    unchanged = attempted_vertex_id == HENKA_AUTHORING_INVALID_ID &&
+                        !attempted_report.changed &&
+                        memcmp(&attempt_before, &attempt_after, sizeof(attempt_before)) == 0 &&
+                        source_center != NULL && after_center != NULL &&
+                        source_center->position.x == after_center->position.x &&
+                        source_center->position.y == after_center->position.y &&
+                        source_center->position.z == after_center->position.z &&
+                        source_center->uv.x == after_center->uv.x &&
+                        source_center->uv.y == after_center->uv.y &&
+                        source_center->material_region == after_center->material_region &&
+                        henka_authoring_mesh_get_vertex_edge_count(attempt, center_id) == 4U &&
+                        henka_authoring_mesh_validate(attempt);
+                    for (face_index = 0U; unchanged && face_index < 4U; ++face_index)
+                    {
+                        const henka_authoring_face* source_face =
+                            henka_authoring_mesh_get_face(closed_fan, face_ids[face_index]);
+                        const henka_authoring_face* after_face =
+                            henka_authoring_mesh_get_face(attempt, face_ids[face_index]);
+                        size_t corner_index;
+                        if (source_face == NULL || after_face == NULL ||
+                            source_face->corner_count != after_face->corner_count ||
+                            source_face->material_region != after_face->material_region ||
+                            source_face->smooth != after_face->smooth)
+                        {
+                            unchanged = false;
+                            break;
+                        }
+                        for (corner_index = 0U; corner_index < source_face->corner_count;
+                             ++corner_index)
+                        {
+                            if (source_face->vertices[corner_index] !=
+                                    after_face->vertices[corner_index] ||
+                                source_face->edges[corner_index] !=
+                                    after_face->edges[corner_index] ||
+                                source_face->uvs[corner_index].x !=
+                                    after_face->uvs[corner_index].x ||
+                                source_face->uvs[corner_index].y !=
+                                    after_face->uvs[corner_index].y)
+                            {
+                                unchanged = false;
+                                break;
+                            }
+                        }
+                    }
+                    henka_authoring_mesh_destroy(attempt);
+                    if (!unchanged)
+                    {
+                        henka_authoring_mesh_destroy(closed_fan);
+                        goto cleanup;
+                    }
+                }
+                else if (operation_result == HENKA_SUCCESS)
+                {
+                    saw_success_after_failure_window = true;
+                    henka_authoring_mesh_destroy(attempt);
+                    break;
+                }
+                else
+                {
+                    henka_authoring_mesh_destroy(attempt);
+                    henka_authoring_mesh_destroy(closed_fan);
+                    goto cleanup;
+                }
+            }
+            if (!saw_allocation_failure || !saw_success_after_failure_window)
+            {
+                henka_authoring_mesh_destroy(closed_fan);
+                goto cleanup;
+            }
         }
         {
             const henka_result closed_result = henka_authoring_mesh_extrude_vertex(
