@@ -776,7 +776,10 @@ try {
             $utilityGeometry.Groups["height"].Value,
             [Globalization.CultureInfo]::InvariantCulture)
         $pickerNextX = $utilityX + 14.0 + 88.0 + 41.0
-        $pickerNextY = $utilityY + $utilityHeight - 48.0
+        # The product keeps picker navigation one 30 px control stride above
+        # the safely inset Apply row. Target the actual navigation-row center,
+        # not the old bottom-pinned location that now overlaps Apply.
+        $pickerNextY = $utilityY + $utilityHeight - 78.0
 
         for ($pickerPageAttempt = 0; $pickerPageAttempt -lt 32 -and -not $assetCandidateFound; ++$pickerPageAttempt) {
             Send-HenkaAutomationClick `
