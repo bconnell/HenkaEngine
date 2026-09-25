@@ -10,6 +10,19 @@ else()
     add_compile_options("-include${CMAKE_CURRENT_SOURCE_DIR}/test_assertions.h")
 endif()
 
+add_executable(henka_replay_tests
+    test_replay.c
+)
+
+target_link_libraries(henka_replay_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_replay_tests)
+
+add_test(NAME henka_replay_tests COMMAND henka_replay_tests)
+
 add_executable(henka_headless_runtime_tests
     test_headless_runtime.c
 )
