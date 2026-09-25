@@ -353,6 +353,9 @@ henka_result henka_audio_emitter_set_gain(
 henka_result henka_audio_emitter_set_pitch(
     henka_audio_emitter* emitter,
     float pitch);
+henka_result henka_audio_emitter_set_occlusion(
+    henka_audio_emitter* emitter,
+    float occlusion);
 henka_result henka_audio_emitter_set_looping(
     henka_audio_emitter* emitter,
     bool looping);

@@ -2177,6 +2177,24 @@ henka_result henka_audio_emitter_set_pitch(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_audio_emitter_set_occlusion(
+    henka_audio_emitter* emitter,
+    float occlusion)
+{
+    if (!henka_audio_emitter_owner_is_valid(emitter) ||
+        !henka_audio_float_is_valid(occlusion) ||
+        occlusion < 0.0f ||
+        occlusion > 1.0f ||
+        !henka_audio_voice_is_valid(emitter->system, emitter->voice))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_audio_voice_set_occlusion(
+        emitter->system,
+        emitter->voice,
+        occlusion);
+}
+
 henka_result henka_audio_emitter_set_looping(
     henka_audio_emitter* emitter,
     bool looping)
