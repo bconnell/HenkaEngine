@@ -1,4 +1,5 @@
 #include "henka_internal.h"
+#include "model_obj_internal.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -766,11 +767,9 @@ static henka_result henka_build_face_vertices(
     henka_model_vertex out_vertices[HENKA_OBJ_MAX_FACE_VERTICES])
 {
     henka_vec3 computed_normal;
-    bool has_computed_normal;
     bool needs_computed_normal;
     int index;
 
-    has_computed_normal = false;
     needs_computed_normal = false;
     for (index = 0; index < face->count; ++index)
     {
@@ -820,27 +819,24 @@ static henka_result henka_build_face_vertices(
     {
         int triangle_index;
 
-        computed_normal = (henka_vec3){0.0f, 1.0f, 0.0f};
+        computed_normal = (henka_vec3){0.0f, 0.0f, 0.0f};
         for (triangle_index = 1; triangle_index + 1 < face->count; ++triangle_index)
         {
             const henka_vec3 candidate_cross = henka_obj_triangle_cross(
                 &out_vertices[0],
                 &out_vertices[triangle_index],
                 &out_vertices[triangle_index + 1]);
-
-            if (!henka_obj_cross_is_degenerate(candidate_cross))
-            {
-                computed_normal = henka_vec3_normalize(candidate_cross);
-                has_computed_normal = true;
-                break;
-            }
+            computed_normal.x += candidate_cross.x;
+            computed_normal.y += candidate_cross.y;
+            computed_normal.z += candidate_cross.z;
         }
 
-        if (!has_computed_normal)
+        if (henka_obj_cross_is_degenerate(computed_normal))
         {
             henka_obj_set_error(context, "face is degenerate and cannot produce a normal");
             return HENKA_ERROR_UNKNOWN;
         }
+        computed_normal = henka_vec3_normalize(computed_normal);
 
         for (index = 0; index < face->count; ++index)
         {
@@ -896,8 +892,8 @@ static henka_result henka_append_triangle(
 static void henka_obj_project_position(
     henka_vec3 position,
     int dropped_axis,
-    float* out_x,
-    float* out_y)
+    double* out_x,
+    double* out_y)
 {
     if (dropped_axis == 0)
     {
@@ -916,18 +912,18 @@ static void henka_obj_project_position(
     }
 }
 
-static float henka_obj_projected_cross(
+static double henka_obj_projected_cross(
     const henka_model_vertex* a,
     const henka_model_vertex* b,
     const henka_model_vertex* c,
     int dropped_axis)
 {
-    float ax;
-    float ay;
-    float bx;
-    float by;
-    float cx;
-    float cy;
+    double ax;
+    double ay;
+    double bx;
+    double by;
+    double cx;
+    double cy;
 
     henka_obj_project_position(a->position, dropped_axis, &ax, &ay);
     henka_obj_project_position(b->position, dropped_axis, &bx, &by);
@@ -941,16 +937,15 @@ static bool henka_obj_projected_point_on_segment(
     const henka_model_vertex* end,
     int dropped_axis)
 {
-    const float epsilon = 0.0000001f;
-    float point_x;
-    float point_y;
-    float start_x;
-    float start_y;
-    float end_x;
-    float end_y;
+    double point_x;
+    double point_y;
+    double start_x;
+    double start_y;
+    double end_x;
+    double end_y;
 
-    if (fabsf(henka_obj_projected_cross(
-            start, end, point, dropped_axis)) > epsilon)
+    if (henka_obj_projected_cross(
+            start, end, point, dropped_axis) != 0.0)
     {
         return false;
     }
@@ -958,40 +953,39 @@ static bool henka_obj_projected_point_on_segment(
     henka_obj_project_position(point->position, dropped_axis, &point_x, &point_y);
     henka_obj_project_position(start->position, dropped_axis, &start_x, &start_y);
     henka_obj_project_position(end->position, dropped_axis, &end_x, &end_y);
-    return point_x >= fminf(start_x, end_x) - epsilon &&
-        point_x <= fmaxf(start_x, end_x) + epsilon &&
-        point_y >= fminf(start_y, end_y) - epsilon &&
-        point_y <= fmaxf(start_y, end_y) + epsilon;
+    return point_x >= fmin(start_x, end_x) &&
+        point_x <= fmax(start_x, end_x) &&
+        point_y >= fmin(start_y, end_y) &&
+        point_y <= fmax(start_y, end_y);
 }
 
-static bool henka_obj_projected_segments_intersect(
+bool henka_obj_projected_segments_intersect(
     const henka_model_vertex* a,
     const henka_model_vertex* b,
     const henka_model_vertex* c,
     const henka_model_vertex* d,
     int dropped_axis)
 {
-    const float epsilon = 0.0000001f;
-    const float abc = henka_obj_projected_cross(a, b, c, dropped_axis);
-    const float abd = henka_obj_projected_cross(a, b, d, dropped_axis);
-    const float cda = henka_obj_projected_cross(c, d, a, dropped_axis);
-    const float cdb = henka_obj_projected_cross(c, d, b, dropped_axis);
+    const double abc = henka_obj_projected_cross(a, b, c, dropped_axis);
+    const double abd = henka_obj_projected_cross(a, b, d, dropped_axis);
+    const double cda = henka_obj_projected_cross(c, d, a, dropped_axis);
+    const double cdb = henka_obj_projected_cross(c, d, b, dropped_axis);
 
-    if (((abc > epsilon && abd < -epsilon) ||
-         (abc < -epsilon && abd > epsilon)) &&
-        ((cda > epsilon && cdb < -epsilon) ||
-         (cda < -epsilon && cdb > epsilon)))
+    if (((abc > 0.0 && abd < 0.0) ||
+         (abc < 0.0 && abd > 0.0)) &&
+        ((cda > 0.0 && cdb < 0.0) ||
+         (cda < 0.0 && cdb > 0.0)))
     {
         return true;
     }
 
-    return (fabsf(abc) <= epsilon &&
+    return (abc == 0.0 &&
             henka_obj_projected_point_on_segment(c, a, b, dropped_axis)) ||
-        (fabsf(abd) <= epsilon &&
+        (abd == 0.0 &&
             henka_obj_projected_point_on_segment(d, a, b, dropped_axis)) ||
-        (fabsf(cda) <= epsilon &&
+        (cda == 0.0 &&
             henka_obj_projected_point_on_segment(a, c, d, dropped_axis)) ||
-        (fabsf(cdb) <= epsilon &&
+        (cdb == 0.0 &&
             henka_obj_projected_point_on_segment(b, c, d, dropped_axis));
 }
 
@@ -1042,11 +1036,11 @@ static bool henka_obj_projected_point_in_triangle(
     float orientation)
 {
     const float epsilon = 0.0000001f;
-    const float ab = orientation *
+    const double ab = orientation *
         henka_obj_projected_cross(a, b, point, dropped_axis);
-    const float bc = orientation *
+    const double bc = orientation *
         henka_obj_projected_cross(b, c, point, dropped_axis);
-    const float ca = orientation *
+    const double ca = orientation *
         henka_obj_projected_cross(c, a, point, dropped_axis);
     return ab >= -epsilon && bc >= -epsilon && ca >= -epsilon;
 }
@@ -1062,7 +1056,9 @@ static bool henka_obj_face_projection(
     float abs_x;
     float abs_y;
     float abs_z;
-    float area = 0.0f;
+    double origin_x;
+    double origin_y;
+    double area = 0.0;
     int dropped_axis;
     int index;
 
@@ -1091,31 +1087,45 @@ static bool henka_obj_face_projection(
     dropped_axis = abs_x >= abs_y && abs_x >= abs_z ? 0 :
         (abs_y >= abs_z ? 1 : 2);
 
+    henka_obj_project_position(
+        vertices[0].position,
+        dropped_axis,
+        &origin_x,
+        &origin_y);
+
     for (index = 0; index < vertex_count; ++index)
     {
-        float current_x;
-        float current_y;
-        float next_x;
-        float next_y;
+        double current_projected_x;
+        double current_projected_y;
+        double next_projected_x;
+        double next_projected_y;
+        double current_x;
+        double current_y;
+        double next_x;
+        double next_y;
         henka_obj_project_position(
             vertices[index].position,
             dropped_axis,
-            &current_x,
-            &current_y);
+            &current_projected_x,
+            &current_projected_y);
         henka_obj_project_position(
             vertices[(index + 1) % vertex_count].position,
             dropped_axis,
-            &next_x,
-            &next_y);
+            &next_projected_x,
+            &next_projected_y);
+        current_x = current_projected_x - origin_x;
+        current_y = current_projected_y - origin_y;
+        next_x = next_projected_x - origin_x;
+        next_y = next_projected_y - origin_y;
         area += current_x * next_y - next_x * current_y;
     }
-    if (!isfinite(area) || fabsf(area) <= epsilon)
+    if (!isfinite(area) || fabs(area) <= (double)epsilon)
     {
         return false;
     }
 
     *out_dropped_axis = dropped_axis;
-    *out_orientation = area > 0.0f ? 1.0f : -1.0f;
+    *out_orientation = area > 0.0 ? 1.0f : -1.0f;
     return true;
 }
 
@@ -1186,7 +1196,7 @@ static henka_result henka_emit_face(
             const henka_model_vertex* a = &face_vertices[previous_index];
             const henka_model_vertex* b = &face_vertices[current_index];
             const henka_model_vertex* c = &face_vertices[next_index];
-            const float projected_cross = orientation *
+            const double projected_cross = orientation *
                 henka_obj_projected_cross(a, b, c, dropped_axis);
             bool contains_vertex = false;
             int test_position;

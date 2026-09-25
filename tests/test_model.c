@@ -13,6 +13,7 @@
 
 #include "../engine/src/core/checked.h"
 #include "../engine/src/henka_internal.h"
+#include "../engine/src/assets/model_obj_internal.h"
 
 static void henka_test_write_u32(unsigned char* destination, uint32_t value)
 {
@@ -1223,6 +1224,21 @@ static void henka_test_gltf_scene_import(void)
     henka_free(invalid_scene);
 }
 
+static void henka_test_obj_projected_segment_intersection_scale(void)
+{
+    const henka_model_vertex a = {.position = {-0.00018f, 0.0f, 0.0f}};
+    const henka_model_vertex b = {.position = {0.00018f, 0.0f, 0.0f}};
+    const henka_model_vertex c = {.position = {0.0f, -0.00018f, 0.0f}};
+    const henka_model_vertex d = {.position = {0.0f, 0.00018f, 0.0f}};
+    const henka_model_vertex e = {.position = {-0.00018f, 0.001f, 0.0f}};
+    const henka_model_vertex f = {.position = {0.00018f, 0.001f, 0.0f}};
+
+    HENKA_TEST_ASSERT(
+        henka_obj_projected_segments_intersect(&a, &b, &c, &d, 2));
+    HENKA_TEST_ASSERT(
+        !henka_obj_projected_segments_intersect(&a, &b, &e, &f, 2));
+}
+
 void henka_test_model(void)
 {
     static const char* valid_gltf =
@@ -1364,6 +1380,21 @@ void henka_test_model(void)
         "v 1.0 3.0 0.0\n"
         "v 0.0 3.0 0.0\n"
         "f 1 2 3 4 5 6 7 8\n";
+    static const char* valid_concave_reflex_first_obj =
+        "v 2.0 1.0 0.0\n"
+        "v 1.0 1.0 0.0\n"
+        "v 1.0 3.0 0.0\n"
+        "v 0.0 3.0 0.0\n"
+        "v 0.0 0.0 0.0\n"
+        "v 3.0 0.0 0.0\n"
+        "v 3.0 3.0 0.0\n"
+        "v 2.0 3.0 0.0\n"
+        "f 1 2 3 4 5 6 7 8\n";
+    static const char* valid_translated_triangle_obj =
+        "v 10000.0 10000.0 0.0\n"
+        "v 10001.0 10000.0 0.0\n"
+        "v 10000.0 10001.0 0.0\n"
+        "f 1 2 3\n";
     static const char* invalid_self_intersecting_obj =
         "v 0.0 0.0 0.0\n"
         "v 2.0 2.0 0.0\n"
@@ -1614,6 +1645,40 @@ void henka_test_model(void)
     model.indices = NULL;
     model.vertex_count = 0U;
     model.index_count = 0U;
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_obj_from_memory(
+            valid_translated_triangle_obj,
+            "valid_translated_triangle_obj",
+            &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U);
+    HENKA_TEST_ASSERT(model.index_count == 3U);
+    HENKA_TEST_ASSERT(model.vertices[0].normal.z > 0.99f);
+    henka_model_data_destroy(&model);
+
+    model.vertices = NULL;
+    model.indices = NULL;
+    model.vertex_count = 0U;
+    model.index_count = 0U;
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_obj_from_memory(
+            valid_concave_reflex_first_obj,
+            "valid_concave_reflex_first_obj",
+            &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 18U);
+    HENKA_TEST_ASSERT(model.index_count == 18U);
+    {
+        uint32_t vertex_index;
+        for (vertex_index = 0U; vertex_index < model.vertex_count; ++vertex_index)
+        {
+            HENKA_TEST_ASSERT(model.vertices[vertex_index].normal.z > 0.99f);
+        }
+    }
+    henka_model_data_destroy(&model);
+
+    model.vertices = NULL;
+    model.indices = NULL;
+    model.vertex_count = 0U;
+    model.index_count = 0U;
     HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(invalid_obj, "invalid_obj", &model) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.vertices == NULL);
     HENKA_TEST_ASSERT(model.indices == NULL);
@@ -1778,6 +1843,7 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.vertices == NULL);
     HENKA_TEST_ASSERT(model.indices == NULL);
 
+    henka_test_obj_projected_segment_intersection_scale();
     henka_test_model_rejects_unsafe_bounds();
     henka_test_model_load_failure_preserves_destination();
     henka_test_gltf_rejects_extra_material_vector_components();
