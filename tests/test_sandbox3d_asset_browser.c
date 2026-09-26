@@ -37,6 +37,60 @@ static void henka_test_sandbox3d_asset_browser_collection(void)
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect(&manager, HENKA_ASSET_TYPE_MATERIAL, items, 2U) == 0U);
 }
 
+static void henka_test_sandbox3d_asset_browser_texture_descriptor_identity(void)
+{
+    henka_asset_manager manager;
+    henka_asset_texture_entry textures[3];
+    sandbox3d_asset_browser_item items[3];
+    char label[128];
+
+    memset(&manager, 0, sizeof(manager));
+    memset(textures, 0, sizeof(textures));
+    textures[0].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    textures[0].metadata.source_path = "assets/textures/shared.png";
+    textures[0].metadata.display_name = "shared.png";
+    textures[0].metadata.has_texture_descriptor = true;
+    textures[0].metadata.texture_descriptor =
+        henka_texture_descriptor_default_color();
+
+    textures[1].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    textures[1].metadata.source_path = "assets/textures/shared.png";
+    textures[1].metadata.display_name = "shared.png";
+    textures[1].metadata.has_texture_descriptor = true;
+    textures[1].metadata.texture_descriptor =
+        henka_texture_descriptor_default_normal();
+
+    textures[2].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    textures[2].metadata.source_path = "assets/textures/shared.png";
+    textures[2].metadata.display_name = "shared.png";
+    textures[2].metadata.has_texture_descriptor = true;
+    textures[2].metadata.texture_descriptor =
+        henka_texture_descriptor_default_color();
+
+    manager.texture_entries = textures;
+    manager.texture_count = 3U;
+
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect(
+        &manager,
+        HENKA_ASSET_TYPE_TEXTURE,
+        items,
+        3U) == 2U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 0U);
+    HENKA_TEST_ASSERT(items[1].metadata_index == 1U);
+    HENKA_TEST_ASSERT(items[0].metadata.texture_descriptor.usage ==
+        HENKA_TEXTURE_USAGE_COLOR);
+    HENKA_TEST_ASSERT(items[1].metadata.texture_descriptor.usage ==
+        HENKA_TEXTURE_USAGE_NORMAL);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_format_item_label(
+        &items[0], label, sizeof(label)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(label, "[Color/sRGB] shared.png") == 0);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_format_item_label(
+        &items[1], label, sizeof(label)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(label, "[Normal/linear] shared.png") == 0);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_format_item_label(
+        &items[1], label, 8U) == HENKA_ERROR_LIMIT);
+}
+
 static void henka_test_sandbox3d_asset_browser_retry_policy(void)
 {
     henka_asset_metadata metadata;
@@ -45,6 +99,7 @@ static void henka_test_sandbox3d_asset_browser_retry_policy(void)
     metadata.type = HENKA_ASSET_TYPE_TEXTURE;
     metadata.source_path = "assets/textures/missing.png";
     metadata.fallback = true;
+    metadata.reload_supported = true;
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_can_retry(&metadata));
     HENKA_TEST_ASSERT(
         sandbox3d_asset_browser_retry(NULL, &metadata) ==
@@ -56,6 +111,7 @@ static void henka_test_sandbox3d_asset_browser_retry_policy(void)
 
     metadata.type = HENKA_ASSET_TYPE_MESH;
     metadata.source_path = "assets/models/missing.obj";
+    metadata.reload_supported = true;
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_can_retry(&metadata));
     metadata.source_path = "assets/models/missing.GLTF";
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_can_retry(&metadata));
@@ -63,12 +119,20 @@ static void henka_test_sandbox3d_asset_browser_retry_policy(void)
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_can_retry(&metadata));
     metadata.source_path = "assets/models/missing.fbx";
     HENKA_TEST_ASSERT(!sandbox3d_asset_browser_can_retry(&metadata));
+    metadata.source_path = "assets/models/missing.obj";
+    metadata.reload_supported = false;
+    HENKA_TEST_ASSERT(!sandbox3d_asset_browser_can_retry(&metadata));
 
     metadata.type = HENKA_ASSET_TYPE_MATERIAL;
     metadata.source_path = "assets/materials/missing.gltf";
     HENKA_TEST_ASSERT(!sandbox3d_asset_browser_can_retry(&metadata));
 
     metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    metadata.source_path = "assets/models/embedded.gltf#embedded-00000001";
+    metadata.fallback = true;
+    metadata.reload_supported = false;
+    HENKA_TEST_ASSERT(!sandbox3d_asset_browser_can_retry(&metadata));
+
     metadata.source_path = NULL;
     HENKA_TEST_ASSERT(!sandbox3d_asset_browser_can_retry(&metadata));
     metadata.source_path = "assets/textures/missing.png";
@@ -467,6 +531,7 @@ static void henka_test_sandbox3d_material_asset_application(void)
 void henka_test_sandbox3d_asset_browser(void)
 {
     henka_test_sandbox3d_asset_browser_collection();
+    henka_test_sandbox3d_asset_browser_texture_descriptor_identity();
     henka_test_sandbox3d_asset_browser_retry_policy();
     henka_test_sandbox3d_asset_browser_paging();
     henka_test_sandbox3d_asset_browser_texture_and_assignment();

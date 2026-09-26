@@ -196,6 +196,34 @@ function Click-LoggedControl {
         -Y ([double]$match.Groups[$YGroup].Value + $YOffset)
 }
 
+function Test-AssetRetryRowInsidePanel {
+    param(
+        [Parameter(Mandatory = $true)][double]$PanelX,
+        [Parameter(Mandatory = $true)][double]$PanelY,
+        [Parameter(Mandatory = $true)][double]$PanelWidth,
+        [Parameter(Mandatory = $true)][double]$PanelHeight,
+        [Parameter(Mandatory = $true)][double]$RowX,
+        [Parameter(Mandatory = $true)][double]$RowY,
+        [Parameter(Mandatory = $true)][double]$NameWidth,
+        [Parameter(Mandatory = $true)][double]$RetryX,
+        [Parameter(Mandatory = $true)][double]$RetryY,
+        [Parameter(Mandatory = $true)][double]$RetryWidth,
+        [double]$MinimumPanelWidth = 332.0,
+        [double]$Tolerance = 0.1
+    )
+
+    $panelRight = $PanelX + $PanelWidth
+    $panelBottom = $PanelY + $PanelHeight
+    return $PanelWidth -ge $MinimumPanelWidth -and
+        $NameWidth -gt 0.0 -and
+        $RowX -ge ($PanelX - $Tolerance) -and
+        ($RowY + 26.0) -le ($panelBottom + $Tolerance) -and
+        $RetryX -ge ($RowX + $NameWidth) -and
+        $RetryY -ge ($PanelY - $Tolerance) -and
+        ($RetryY + 24.0) -le ($panelBottom + $Tolerance) -and
+        ($RetryX + $RetryWidth) -le ($panelRight + $Tolerance)
+}
+
 function Invoke-VisibleFaceExtrude {
     param(
         [Parameter(Mandatory = $true)][string]$Pattern,
@@ -344,6 +372,197 @@ try {
     $panelX = [double]::Parse($sceneGeometry.Groups["x"].Value, [Globalization.CultureInfo]::InvariantCulture)
     $panelY = [double]::Parse($sceneGeometry.Groups["y"].Value, [Globalization.CultureInfo]::InvariantCulture)
     $panelWidth = [double]::Parse($sceneGeometry.Groups["width"].Value, [Globalization.CultureInfo]::InvariantCulture)
+
+    # Exercise the real Utility > Assets fallback-recovery surface before the
+    # modeling workflow mutates the scene. The geometry contract rejects the
+    # former off-panel detail action as a deliberate negative control.
+    if (Test-AssetRetryRowInsidePanel `
+            -PanelX 0.0 -PanelY 0.0 -PanelWidth 320.0 -PanelHeight 228.0 `
+            -RowX 14.0 -RowY 430.0 -NameWidth 150.0 `
+            -RetryX 240.0 -RetryY 430.0 -RetryWidth 56.0 `
+            -MinimumPanelWidth 0.0) {
+        throw "The Asset Browser Retry geometry validator accepted an off-panel negative control."
+    }
+    Write-Output "[pass] Asset Browser Retry geometry negative control rejected an off-panel action."
+    if (-not (Test-AssetRetryRowInsidePanel `
+            -PanelX 0.0 -PanelY 0.0 -PanelWidth 332.0 -PanelHeight 228.0 `
+            -RowX 14.0 -RowY 100.0 -NameWidth 242.0 `
+            -RetryX 262.0 -RetryY 101.0 -RetryWidth 56.0)) {
+        throw "The Asset Browser Retry geometry validator rejected the supported 332px utility-panel minimum."
+    }
+    if (Test-AssetRetryRowInsidePanel `
+            -PanelX 0.0 -PanelY 0.0 -PanelWidth 332.0 -PanelHeight 228.0 `
+            -RowX 14.0 -RowY 100.0 -NameWidth 250.0 `
+            -RetryX 262.0 -RetryY 101.0 -RetryWidth 56.0) {
+        throw "The Asset Browser Retry geometry validator accepted overlapping name and Retry controls."
+    }
+    if (Test-AssetRetryRowInsidePanel `
+            -PanelX 0.0 -PanelY 0.0 -PanelWidth 120.0 -PanelHeight 228.0 `
+            -RowX 14.0 -RowY 100.0 -NameWidth 42.0 `
+            -RetryX 62.0 -RetryY 101.0 -RetryWidth 56.0) {
+        throw "The Asset Browser Retry geometry validator accepted an unsupported undersized panel."
+    }
+    Write-Output "[pass] Retry layout accepts the supported minimum width and rejects name overlap and undersized panels."
+
+    $utilityGeometry = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern 'Workspace UI geometry: .*utility=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+) '
+    $utilityX = [double]::Parse($utilityGeometry.Groups["x"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $utilityY = [double]::Parse($utilityGeometry.Groups["y"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $utilityWidth = [double]::Parse($utilityGeometry.Groups["width"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $utilityHeight = [double]::Parse($utilityGeometry.Groups["height"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    if ($utilityWidth -lt 332.0) {
+        throw "The live Asset Browser Utility panel is narrower than its supported 332px minimum."
+    }
+    $utilityAssetTab = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern 'Utility Assets tab: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=24\.0\.'
+    $assetNavigationPattern =
+        'Asset Browser layout: type=Textures page=(?<page>\d+)/(?<pageCount>\d+) panel=(?<panelX>[-0-9.]+),(?<panelY>[-0-9.]+),(?<panelWidth>[-0-9.]+),(?<panelHeight>[-0-9.]+) row_start=(?<rowStart>[-0-9.]+) navigation_x=(?<nextX>[-0-9.]+) navigation_y=(?<navigationY>[-0-9.]+) navigation_next_enabled=(?<nextEnabled>[01]) rows=(?<rows>\d+)\.'
+    $fallbackRowPattern =
+        'Asset Browser row: path=assets/textures/missing_texture\.png x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) name_width=(?<nameWidth>[-0-9.]+) retry=1 retry_x=(?<retryX>[-0-9.]+) retry_y=(?<retryY>[-0-9.]+) retry_width=(?<retryWidth>[-0-9.]+) retry_height=24\.0\.'
+    $assetTabClickCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern $assetNavigationPattern
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$utilityAssetTab.Groups["x"].Value + ([double]$utilityAssetTab.Groups["width"].Value * 0.5)) `
+        -Y ([double]$utilityAssetTab.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $assetTabClickCount `
+            -Pattern $assetNavigationPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "The real Utility Assets tab did not expose its current bounded asset page."
+    }
+
+    $fallbackRow = $null
+    for ($assetPageAttempt = 0; $assetPageAttempt -lt 64 -and $null -eq $fallbackRow; ++$assetPageAttempt) {
+        $fallbackMatches = [Regex]::Matches((Read-SharedLogText -Path $stdoutPath), $fallbackRowPattern)
+        if ($fallbackMatches.Count -gt 0) {
+            $fallbackRow = $fallbackMatches[$fallbackMatches.Count - 1]
+            break
+        }
+        $page = Get-LastMatch -Path $stdoutPath -Pattern $assetNavigationPattern
+        if ($page.Groups["nextEnabled"].Value -ne "1") {
+            break
+        }
+        $beforePage = [int]$page.Groups["page"].Value
+        $pageReportCount = Get-LogMatchCount -Path $stdoutPath -Pattern $assetNavigationPattern
+        Send-HenkaAutomationClick `
+            -EventPath $automationInputPath `
+            -X ([double]$page.Groups["nextX"].Value) `
+            -Y ([double]$page.Groups["navigationY"].Value + 12.0)
+        if (-not (Wait-LogMatchCountIncrease `
+                -Path $stdoutPath `
+                -InitialCount $pageReportCount `
+                -Pattern $assetNavigationPattern `
+                -TimeoutMilliseconds 5000)) {
+            throw "The in-panel Asset Browser Next control did not publish another page."
+        }
+        $page = Get-LastMatch -Path $stdoutPath -Pattern $assetNavigationPattern
+        if ([int]$page.Groups["page"].Value -ne ($beforePage + 1)) {
+            throw "The Asset Browser Next control did not advance exactly one page."
+        }
+    }
+    if ($null -eq $fallbackRow) {
+        throw "The visible Asset Browser did not expose the known file-backed Missing Texture fallback."
+    }
+
+    if (-not (Test-AssetRetryRowInsidePanel `
+            -PanelX $utilityX -PanelY $utilityY -PanelWidth $utilityWidth -PanelHeight $utilityHeight `
+            -RowX ([double]$fallbackRow.Groups["x"].Value) `
+            -RowY ([double]$fallbackRow.Groups["y"].Value) `
+            -NameWidth ([double]$fallbackRow.Groups["nameWidth"].Value) `
+            -RetryX ([double]$fallbackRow.Groups["retryX"].Value) `
+            -RetryY ([double]$fallbackRow.Groups["retryY"].Value) `
+            -RetryWidth ([double]$fallbackRow.Groups["retryWidth"].Value))) {
+        throw "The real Asset Browser Retry row or button is clipped, overlapping, or outside Utility panel bounds."
+    }
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "asset-browser-retry-fallback.png")
+
+    $missingTexturePath = Join-Path $runtimeDirectory "assets\textures\missing_texture.png"
+    $validRetryTexturePath = Join-Path $runtimeDirectory "assets\textures\cube_albedo.png"
+    if (Test-Path -LiteralPath $missingTexturePath) {
+        throw "The visible fallback fixture unexpectedly has a source file; refusing to mutate the packaged fixture."
+    }
+    if (-not (Test-Path -LiteralPath $validRetryTexturePath -PathType Leaf)) {
+        throw "The packaged real texture required for the retry-recovery control is missing."
+    }
+
+    $retryPattern = 'Asset Browser Retry: path=assets/textures/missing_texture\.png result=(?<result>[^.]+)\.'
+    $retryCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retryPattern
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$fallbackRow.Groups["retryX"].Value + ([double]$fallbackRow.Groups["retryWidth"].Value * 0.5)) `
+        -Y ([double]$fallbackRow.Groups["retryY"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease -Path $stdoutPath -InitialCount $retryCount -Pattern $retryPattern -TimeoutMilliseconds 5000)) {
+        throw "The visible Asset Browser Retry button did not invoke the failed-source recovery API."
+    }
+    $retryResult = Get-LastMatch -Path $stdoutPath -Pattern $retryPattern
+    if ($retryResult.Groups["result"].Value -eq "success") {
+        throw "Retry succeeded even though the known missing texture source was still absent."
+    }
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern 'Asset Browser Retry state: loaded=0 fallback=1 reload_supported=1\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "A failed Retry attempt changed or lost the original file-backed fallback entry."
+    }
+    $retryFeedbackPattern = 'Asset Browser status row: warning=1 message=Retry failed: (?<result>[^.]+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=22\.0 panel=(?<panelX>[-0-9.]+),(?<panelY>[-0-9.]+),(?<panelWidth>[-0-9.]+),(?<panelHeight>[-0-9.]+) navigation_y=(?<navigationY>[-0-9.]+) row_start=(?<rowStart>[-0-9.]+) rows=(?<rows>\d+)\.'
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern $retryFeedbackPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "The Assets panel did not display the latest Retry error status."
+    }
+    $retryFeedback = Get-LastMatch -Path $stdoutPath -Pattern $retryFeedbackPattern
+    if ($retryFeedback.Groups["result"].Value -ne "asset source error") {
+        throw "The visible Retry feedback did not report the current source error result."
+    }
+    $statusX = [double]$retryFeedback.Groups["x"].Value
+    $statusY = [double]$retryFeedback.Groups["y"].Value
+    $statusWidth = [double]$retryFeedback.Groups["width"].Value
+    $statusPanelX = [double]$retryFeedback.Groups["panelX"].Value
+    $statusPanelY = [double]$retryFeedback.Groups["panelY"].Value
+    $statusPanelWidth = [double]$retryFeedback.Groups["panelWidth"].Value
+    $statusPanelHeight = [double]$retryFeedback.Groups["panelHeight"].Value
+    $statusNavigationY = [double]$retryFeedback.Groups["navigationY"].Value
+    $visibleRowStartY = [double]$retryFeedback.Groups["rowStart"].Value
+    $visibleRows = [int]$retryFeedback.Groups["rows"].Value
+    $lastVisibleRowBottom = $visibleRowStartY + [Math]::Max(0, $visibleRows - 1) * 30.0 + 26.0
+    if ($statusX -lt $statusPanelX -or
+        $statusY -lt $statusPanelY -or
+        ($statusX + $statusWidth) -gt ($statusPanelX + $statusPanelWidth) -or
+        ($statusY + 22.0) -gt $statusNavigationY -or
+        ($visibleRows -gt 0 -and $lastVisibleRowBottom -gt $statusY) -or
+        ($statusY + 22.0) -gt ($statusPanelY + $statusPanelHeight)) {
+        throw "The visible Retry status row is clipped by the Utility panel or overlaps its navigation controls."
+    }
+    Write-Output "[pass] Failed Retry shows the current source error in an in-bounds Assets status row without overlapping the visible asset page or navigation."
+    Start-Sleep -Milliseconds 150
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "asset-browser-retry-failure-feedback.png")
+
+    Copy-Item -LiteralPath $validRetryTexturePath -Destination $missingTexturePath
+    $retryCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retryPattern
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$fallbackRow.Groups["retryX"].Value + ([double]$fallbackRow.Groups["retryWidth"].Value * 0.5)) `
+        -Y ([double]$fallbackRow.Groups["retryY"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease -Path $stdoutPath -InitialCount $retryCount -Pattern $retryPattern -TimeoutMilliseconds 5000)) {
+        throw "The visible Asset Browser Retry button did not recover after the real source file appeared."
+    }
+    $retryResult = Get-LastMatch -Path $stdoutPath -Pattern $retryPattern
+    if ($retryResult.Groups["result"].Value -ne "success" -or
+        -not (Wait-FileContains -Path $stdoutPath -Pattern 'Asset Browser Retry state: loaded=1 fallback=0 reload_supported=1\.' -TimeoutMilliseconds 5000)) {
+        throw "Retry did not publish a loaded, non-fallback texture state after source recovery."
+    }
+    Write-Output "[pass] Real Asset Browser Retry is inside the Utility panel, rejects a still-missing source without corrupting fallback state, then loads the repaired file-backed texture."
+
     $actionWidth = [double][Math]::Max(56.0, ($panelWidth - 40.0) / 3.0)
     $primitiveActionWidth = [double][Math]::Max(72.0, ($panelWidth - 34.0) / 2.0)
     $nativeActionY = [double]($panelY + 90.0)
@@ -912,6 +1131,224 @@ try {
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "material-texture-picker-applied.png")
 
+    # A keyboard Utility shortcut must not switch away from Assets while
+    # leaving the slot-targeted texture transaction active and its Apply/
+    # Cancel controls unreachable.
+    $pickerBeginCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$pickerControl.Groups["x"].Value + 35.0) `
+        -Y ([double]$pickerControl.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerBeginCount `
+            -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible Base Color texture picker could not be reopened for the utility-switch regression."
+    }
+    $pickerCancelCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=cancel reason=utility-change\.'
+    Send-HenkaAutomationKey `
+        -EventPath $automationInputPath `
+        -KeyName "H"
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerCancelCount `
+            -Pattern 'Material texture picker: action=cancel reason=utility-change\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The H Help hotkey changed the Utility destination without cancelling the active material texture pick."
+    }
+    Write-Output "[pass] H Help hotkey cancels an active material texture pick before hiding its Apply/Cancel controls."
+
+    $utilityAssetsTab = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern 'Utility Assets tab: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=24\.0\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$utilityAssetsTab.Groups["x"].Value + [double]$utilityAssetsTab.Groups["width"].Value * 0.5) `
+        -Y ([double]$utilityAssetsTab.Groups["y"].Value + 12.0)
+    Start-Sleep -Milliseconds 150
+    $pickerBeginCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$pickerControl.Groups["x"].Value + 35.0) `
+        -Y ([double]$pickerControl.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerBeginCount `
+            -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible Base Color texture picker could not be reopened for the F2 utility-switch regression."
+    }
+    $pickerCancelCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=cancel reason=utility-change\.'
+    Send-HenkaAutomationKey `
+        -EventPath $automationInputPath `
+        -KeyName "F2"
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerCancelCount `
+            -Pattern 'Material texture picker: action=cancel reason=utility-change\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The F2 Scene Legend hotkey changed the Utility destination without cancelling the active material texture pick."
+    }
+    Write-Output "[pass] F2 Scene Legend hotkey cancels an active material texture pick before hiding its Apply/Cancel controls."
+
+    # The Tools subview is transient Assets-panel navigation. It must not stay
+    # active when another utility is selected and a material picker later
+    # returns to Assets, or it hides the picker's rows and transaction controls.
+    $assetNavigationCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern $assetNavigationPattern
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$utilityAssetsTab.Groups["x"].Value + [double]$utilityAssetsTab.Groups["width"].Value * 0.5) `
+        -Y ([double]$utilityAssetsTab.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $assetNavigationCount `
+            -Pattern $assetNavigationPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "The Assets Utility tab did not restore the Asset Browser before the Tools-state regression."
+    }
+    # The product telemetry intentionally reports picker geometry only when
+    # entity, slot, or page changes. Advance one real picker page so the next
+    # picker session has a distinct page transition to observe even though it
+    # targets the same entity and slot.
+    $pickerBeginCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$pickerControl.Groups["x"].Value + 35.0) `
+        -Y ([double]$pickerControl.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerBeginCount `
+            -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The material texture picker could not open for Tools-state telemetry setup."
+    }
+    $pickerNavigationPattern =
+        'Material texture picker navigation: entity=\d+ slot=Base Color page=(?<page>\d+)/(?<pageCount>\d+) next_x=(?<x>[-0-9.]+) next_y=(?<y>[-0-9.]+) enabled=(?<enabled>[01])\.'
+    $pickerNavigation = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern $pickerNavigationPattern
+    if ($pickerNavigation.Groups["enabled"].Value -ne "1") {
+        throw "The material texture picker Next control was unavailable during telemetry setup."
+    }
+    $pickerNavigationCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern $pickerNavigationPattern
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$pickerNavigation.Groups["x"].Value) `
+        -Y ([double]$pickerNavigation.Groups["y"].Value)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerNavigationCount `
+            -Pattern $pickerNavigationPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "The material texture picker did not publish its telemetry-preparation page transition."
+    }
+    $pickerNavigation = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern $pickerNavigationPattern
+    if ([int]$pickerNavigation.Groups["page"].Value -ne 2) {
+        throw "The material texture picker telemetry setup did not advance to its second page."
+    }
+    $pickerCancelCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=cancel reason=utility-change\.'
+    Send-HenkaAutomationKey `
+        -EventPath $automationInputPath `
+        -KeyName "H"
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerCancelCount `
+            -Pattern 'Material texture picker: action=cancel reason=utility-change\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The material texture picker could not cancel after preparing distinct geometry telemetry."
+    }
+    $assetNavigationCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern $assetNavigationPattern
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$utilityAssetsTab.Groups["x"].Value + [double]$utilityAssetsTab.Groups["width"].Value * 0.5) `
+        -Y ([double]$utilityAssetsTab.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $assetNavigationCount `
+            -Pattern $assetNavigationPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "Assets did not reopen after telemetry setup cancellation."
+    }
+    $toolsOpenCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Asset Browser Tools: action=open utility-navigation\.'
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ($utilityX + $utilityWidth - 49.0) `
+        -Y ($utilityY + 50.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $toolsOpenCount `
+            -Pattern 'Asset Browser Tools: action=open utility-navigation\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The Asset Browser Tools control did not open its utility-navigation subview."
+    }
+    Send-HenkaAutomationKey `
+        -EventPath $automationInputPath `
+        -KeyName "H"
+    $pickerBeginCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.'
+    $pickerNavigationCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker navigation: entity=\d+ slot=Base Color page='
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$pickerControl.Groups["x"].Value + 35.0) `
+        -Y ([double]$pickerControl.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerBeginCount `
+            -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The material texture picker did not begin after returning from the Assets Tools subview."
+    }
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerNavigationCount `
+            -Pattern 'Material texture picker navigation: entity=\d+ slot=Base Color page=' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The material texture pick began, but stale Assets Tools navigation hid the picker controls."
+    }
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "material-texture-picker-after-tools-navigation.png")
+    $pickerCancelCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern 'Material texture picker: action=cancel reason=utility-change\.'
+    Send-HenkaAutomationKey `
+        -EventPath $automationInputPath `
+        -KeyName "H"
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerCancelCount `
+            -Pattern 'Material texture picker: action=cancel reason=utility-change\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The Tools-state picker regression could not return safely to another Utility."
+    }
+    Write-Output "[pass] Asset Browser Tools state is cleared when a material picker returns to Assets after a utility change."
+
     $projectControls = Get-LastMatch `
         -Path $stdoutPath `
         -Pattern ("Native authoring project controls: name=" + [Regex]::Escape($authoringName) + ' save_x=(?<saveX>[-0-9.]+) save_y=(?<saveY>[-0-9.]+) reload_x=(?<reloadX>[-0-9.]+) reload_y=(?<reloadY>[-0-9.]+) width=(?<width>[-0-9.]+) height=24.0\.')
@@ -1011,8 +1448,8 @@ try {
         }
     }
 
-    Write-Output "[pass] Product-native generic modeling workflow: clean startup, new asset, component pick, extrude, inset, material ownership, save, close, reopen, re-edit, and slot-targeted texture picker Apply completed."
-    Write-Output "[pass] Evidence scope: PRODUCT_NATIVE_GENERIC; showcase/reference fixtures were not loaded."
+    Write-Output "[pass] Product-native workflow: in-panel Asset Browser Retry failure/recovery, explicit primitive-gallery startup, authored mesh editing/history/persistence, and slot-targeted texture picker Apply completed."
+    Write-Output "[pass] Evidence scope: PRODUCT_NATIVE_GENERIC; the bounded --primitive-gallery fixture supplied the texture sample, with no Giraffe/Rocket showcase dependency."
     Write-Output "[pass] Runtime evidence retained: $runtimeDirectory"
 }
 finally {

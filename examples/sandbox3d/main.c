@@ -590,6 +590,7 @@ typedef struct sandbox3d_state
     const henka_material_asset* asset_browser_selected_material;
     const henka_prefab* asset_browser_selected_prefab;
     bool asset_browser_selection_valid;
+    bool asset_browser_show_utility_navigation;
     sandbox3d_material_texture_pick material_texture_pick;
     henka_material_instance_parameter material_editor_parameter;
     unsigned int material_editor_component;
@@ -11116,6 +11117,18 @@ static void sandbox3d_set_active_utility(sandbox3d_state* state, sandbox3d_utili
         return;
     }
 
+    if (utility != SANDBOX3D_UTILITY_ASSETS &&
+        state->material_texture_pick.active)
+    {
+        sandbox3d_material_texture_pick_reset(
+            &state->material_texture_pick);
+        printf(
+            "Material texture picker: action=cancel reason=utility-change.\n");
+        fflush(stdout);
+    }
+    /* The Tools page is a transient subview of Assets, not Utility routing
+     * state. Never let it survive a transition to or from another Utility. */
+    state->asset_browser_show_utility_navigation = false;
     if (state->workspace.active_utility != utility && utility == SANDBOX3D_UTILITY_TERRAIN)
     {
         printf("Utility active: Terrain.\n");
@@ -11142,7 +11155,8 @@ static bool sandbox3d_apply_work_context(
         case SANDBOX3D_WORK_CONTEXT_BUILD:
             if (state->workspace.active_utility == SANDBOX3D_UTILITY_TERRAIN)
             {
-                state->workspace.active_utility = SANDBOX3D_UTILITY_NONE;
+                sandbox3d_set_active_utility(
+                    state, SANDBOX3D_UTILITY_NONE);
             }
             state->editor_ui.details_materials_expanded = true;
             state->editor_ui.details_authoring_expanded = true;
@@ -11153,7 +11167,8 @@ static bool sandbox3d_apply_work_context(
         case SANDBOX3D_WORK_CONTEXT_GAME:
             if (state->workspace.active_utility == SANDBOX3D_UTILITY_TERRAIN)
             {
-                state->workspace.active_utility = SANDBOX3D_UTILITY_NONE;
+                sandbox3d_set_active_utility(
+                    state, SANDBOX3D_UTILITY_NONE);
             }
             state->editor_ui.details_materials_expanded = false;
             state->editor_ui.details_authoring_expanded = false;
@@ -11162,7 +11177,8 @@ static bool sandbox3d_apply_work_context(
             break;
 
         case SANDBOX3D_WORK_CONTEXT_WORLD:
-            state->workspace.active_utility = SANDBOX3D_UTILITY_TERRAIN;
+            sandbox3d_set_active_utility(
+                state, SANDBOX3D_UTILITY_TERRAIN);
             state->editor_ui.details_materials_expanded = true;
             state->editor_ui.details_authoring_expanded = false;
             state->editor_ui.details_physics_expanded = false;
@@ -34834,7 +34850,9 @@ static void sandbox3d_draw_utility_panel(
      * This prevents overlapping controls from competing for the same pointer
      * event and keeps Apply/Cancel as the only way to finish that transaction.
      */
-    if (!state->material_texture_pick.active)
+    if (!state->material_texture_pick.active &&
+        (state->workspace.active_utility != SANDBOX3D_UTILITY_ASSETS ||
+         state->asset_browser_show_utility_navigation))
     {
     /* Keep every Utility destination in a measured, non-overlapping row. The
      * previous hand-positioned grid placed Assets and Terrain in the same
@@ -34881,9 +34899,26 @@ static void sandbox3d_draw_utility_panel(
                 3U,
                 &utility_tab_count) == HENKA_SUCCESS)
         {
+            static henka_ui_rect reported_assets_tab = {
+                -1.0f, -1.0f, -1.0f, -1.0f};
+            if (fabsf(utility_tab_rects[0].x - reported_assets_tab.x) > 0.01f ||
+                fabsf(utility_tab_rects[0].y - reported_assets_tab.y) > 0.01f ||
+                fabsf(utility_tab_rects[0].width - reported_assets_tab.width) > 0.01f ||
+                fabsf(utility_tab_rects[0].height - reported_assets_tab.height) > 0.01f)
+            {
+                printf(
+                    "Utility Assets tab: x=%.1f y=%.1f width=%.1f height=%.1f.\n",
+                    utility_tab_rects[0].x,
+                    utility_tab_rects[0].y,
+                    utility_tab_rects[0].width,
+                    utility_tab_rects[0].height);
+                fflush(stdout);
+                reported_assets_tab = utility_tab_rects[0];
+            }
             if (henka_ui_tab(state->ui, "utility_tab_assets", utility_tab_rects[0], "Assets", state->workspace.active_utility == SANDBOX3D_UTILITY_ASSETS))
             {
                 sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_ASSETS);
+                y_start = panel_bounds.y + 38.0f;
             }
             if (henka_ui_tab(state->ui, "utility_tab_paths", utility_tab_rects[1], "Paths", state->workspace.active_utility == SANDBOX3D_UTILITY_PATHS))
             {
@@ -34965,9 +35000,9 @@ static void sandbox3d_draw_utility_panel(
     else
     {
         /*
-         * The regular Utility destinations are hidden in picker mode, so the
-         * asset rows can start directly below the panel header without sharing
-         * hit space with navigation, paging, or Apply/Cancel controls.
+         * The regular Utility destinations are hidden in the focused Asset
+         * Browser and texture-picker views, so their controls can use the
+         * actual panel bounds without sharing hit space with navigation.
          */
         y_start = panel_bounds.y + 38.0f;
     }
@@ -35097,7 +35132,26 @@ static void sandbox3d_draw_utility_panel(
 
         case SANDBOX3D_UTILITY_ASSETS:
         {
+            if (state->asset_browser_show_utility_navigation)
+            {
+                henka_ui_label(
+                    state->ui,
+                    x_left,
+                    panel_bounds.y + 158.0f,
+                    1.0f,
+                    "Choose a utility above, or return to Assets.");
+                if (henka_ui_button(
+                        state->ui,
+                        "asset_browser_return",
+                        (henka_ui_rect){x_left, panel_bounds.y + 178.0f, 112.0f, 24.0f},
+                        "Back to Assets"))
+                {
+                    state->asset_browser_show_utility_navigation = false;
+                }
+                break;
+            }
             sandbox3d_asset_browser_item items[32];
+            henka_ui_rect asset_type_tab_rects[4];
             const char* type_label;
             const bool texture_pick_active =
                 state->material_texture_pick.active &&
@@ -35116,11 +35170,16 @@ static void sandbox3d_draw_utility_panel(
                 asset_panel_bottom - 84.0f;
             const float picker_navigation_y =
                 picker_action_y - 30.0f;
-            const henka_ui_rect next_page_button = {
-                x_left + 88.0f,
+            const float asset_browser_navigation_y =
                 texture_pick_active
                     ? picker_navigation_y
-                    : y_start + 252.0f,
+                    : asset_panel_bottom - 30.0f;
+            const float asset_browser_status_y = texture_pick_active
+                ? 0.0f
+                : asset_browser_navigation_y - 26.0f;
+            const henka_ui_rect next_page_button = {
+                x_left + 88.0f,
+                asset_browser_navigation_y,
                 82.0f,
                 24.0f};
             const float picker_row_start_y =
@@ -35130,6 +35189,7 @@ static void sandbox3d_draw_utility_panel(
             size_t item_count;
             size_t item_index;
             size_t page_count;
+            size_t asset_type_tab_count = 0U;
 
             if (state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL)
             {
@@ -35154,7 +35214,43 @@ static void sandbox3d_draw_utility_panel(
                     x_left,
                     y_start,
                     "Manager asset browser");
-                if (henka_ui_tab(state->ui, "asset_browser_textures", (henka_ui_rect){x_left, y_start + 20.0f, 68.0f, 24.0f}, "Textures", state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE))
+                if (henka_ui_button(
+                        state->ui,
+                        "asset_browser_tools",
+                        (henka_ui_rect){
+                            panel_bounds.x + panel_bounds.width - 84.0f,
+                            y_start,
+                            70.0f,
+                            24.0f},
+                        "Tools"))
+                {
+                    state->asset_browser_show_utility_navigation = true;
+                    printf("Asset Browser Tools: action=open utility-navigation.\n");
+                    fflush(stdout);
+                }
+                {
+                    const char* labels[] = {
+                        "Textures", "Materials", "Meshes", "Prefabs"};
+                    if (sandbox3d_editor_layout_text_control_row(
+                            (henka_ui_rect){
+                                x_left,
+                                y_start + 20.0f,
+                                panel_bounds.width - 28.0f,
+                                24.0f},
+                            labels,
+                            4U,
+                            48.0f,
+                            8.0f,
+                            8.0f,
+                            asset_type_tab_rects,
+                            4U,
+                            &asset_type_tab_count) != HENKA_SUCCESS)
+                    {
+                        asset_type_tab_count = 0U;
+                    }
+                }
+                if (asset_type_tab_count == 4U &&
+                    henka_ui_tab(state->ui, "asset_browser_textures", asset_type_tab_rects[0], "Textures", state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE))
                 {
                     state->asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
                     state->asset_browser_page = 0U;
@@ -35163,7 +35259,8 @@ static void sandbox3d_draw_utility_panel(
                     state->asset_browser_selected_material = NULL;
                     state->asset_browser_selected_prefab = NULL;
                 }
-                if (henka_ui_tab(state->ui, "asset_browser_materials", (henka_ui_rect){x_left + 74.0f, y_start + 20.0f, 76.0f, 24.0f}, "Materials", state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL))
+                if (asset_type_tab_count == 4U &&
+                    henka_ui_tab(state->ui, "asset_browser_materials", asset_type_tab_rects[1], "Materials", state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL))
                 {
                     sandbox3d_material_texture_pick_reset(
                         &state->material_texture_pick);
@@ -35174,7 +35271,8 @@ static void sandbox3d_draw_utility_panel(
                     state->asset_browser_selected_material = NULL;
                     state->asset_browser_selected_prefab = NULL;
                 }
-                if (henka_ui_tab(state->ui, "asset_browser_meshes", (henka_ui_rect){x_left + 156.0f, y_start + 20.0f, 60.0f, 24.0f}, "Meshes", state->asset_browser_type == HENKA_ASSET_TYPE_MESH))
+                if (asset_type_tab_count == 4U &&
+                    henka_ui_tab(state->ui, "asset_browser_meshes", asset_type_tab_rects[2], "Meshes", state->asset_browser_type == HENKA_ASSET_TYPE_MESH))
                 {
                     sandbox3d_material_texture_pick_reset(
                         &state->material_texture_pick);
@@ -35185,7 +35283,8 @@ static void sandbox3d_draw_utility_panel(
                     state->asset_browser_selected_material = NULL;
                     state->asset_browser_selected_prefab = NULL;
                 }
-                if (henka_ui_tab(state->ui, "asset_browser_prefabs", (henka_ui_rect){x_left + 222.0f, y_start + 20.0f, 70.0f, 24.0f}, "Prefabs", state->asset_browser_type == HENKA_ASSET_TYPE_PREFAB))
+                if (asset_type_tab_count == 4U &&
+                    henka_ui_tab(state->ui, "asset_browser_prefabs", asset_type_tab_rects[3], "Prefabs", state->asset_browser_type == HENKA_ASSET_TYPE_PREFAB))
                 {
                     sandbox3d_material_texture_pick_reset(
                         &state->material_texture_pick);
@@ -35197,7 +35296,7 @@ static void sandbox3d_draw_utility_panel(
                     state->asset_browser_selected_prefab = NULL;
                 }
             }
-            else
+            if (texture_pick_active)
             {
                 const float picker_row_space =
                     picker_navigation_y - picker_row_start_y;
@@ -35217,6 +35316,25 @@ static void sandbox3d_draw_utility_panel(
                 else
                 {
                     asset_page_size = 1U;
+                }
+            }
+            else
+            {
+                const float asset_row_start_y = y_start + 78.0f;
+                const float asset_row_space =
+                    asset_browser_status_y - asset_row_start_y;
+                if (asset_row_space >= 26.0f)
+                {
+                    asset_page_size =
+                        (size_t)((asset_row_space - 26.0f) / 30.0f) + 1U;
+                    if (asset_page_size > 6U)
+                    {
+                        asset_page_size = 6U;
+                    }
+                }
+                else
+                {
+                    asset_page_size = 0U;
                 }
             }
             page_count = sandbox3d_asset_browser_page_count(assets, state->asset_browser_type, asset_page_size);
@@ -35260,6 +35378,147 @@ static void sandbox3d_draw_utility_panel(
             {
                 snprintf(row_value, sizeof(row_value), "%s | %zu known | page %zu/%zu", type_label, sandbox3d_asset_browser_collect(assets, state->asset_browser_type, NULL, 0U), page_count == 0U ? 0U : state->asset_browser_page + 1U, page_count);
                 sandbox3d_draw_value_row(state->ui, x_left, y_start + 50.0f, panel_bounds.width - 28.0f, "Source", row_value);
+            }
+            if (!texture_pick_active)
+            {
+                static henka_asset_type reported_type = HENKA_ASSET_TYPE_UNKNOWN;
+                static size_t reported_page = (size_t)-1;
+                static float reported_panel_x = -1.0f;
+                static float reported_panel_y = -1.0f;
+                static float reported_panel_width = -1.0f;
+                static float reported_panel_height = -1.0f;
+                static float reported_row_start = -1.0f;
+                static float reported_navigation_y = -1.0f;
+                if (reported_type != state->asset_browser_type ||
+                    reported_page != state->asset_browser_page ||
+                    fabsf(reported_panel_x - panel_bounds.x) > 0.01f ||
+                    fabsf(reported_panel_y - panel_bounds.y) > 0.01f ||
+                    fabsf(reported_panel_width - panel_bounds.width) > 0.01f ||
+                    fabsf(reported_panel_height - panel_bounds.height) > 0.01f ||
+                    fabsf(reported_row_start - (y_start + 78.0f)) > 0.01f ||
+                    fabsf(reported_navigation_y - asset_browser_navigation_y) > 0.01f)
+                {
+                    printf(
+                        "Asset Browser layout: type=%s page=%zu/%zu panel=%.1f,%.1f,%.1f,%.1f row_start=%.1f navigation_x=%.1f navigation_y=%.1f navigation_next_enabled=%d rows=%zu.\n",
+                        type_label,
+                        page_count == 0U ? 0U : state->asset_browser_page + 1U,
+                        page_count,
+                        panel_bounds.x,
+                        panel_bounds.y,
+                        panel_bounds.width,
+                        panel_bounds.height,
+                        y_start + 78.0f,
+                        x_left + 129.0f,
+                        asset_browser_navigation_y,
+                        state->asset_browser_page + 1U < page_count ? 1 : 0,
+                        item_count);
+                    for (item_index = 0U; item_index < item_count; ++item_index)
+                    {
+                        const bool retryable =
+                            sandbox3d_asset_browser_can_retry(
+                                &items[item_index].metadata);
+                        const float retry_width = 56.0f;
+                        const float row_width = panel_bounds.width - 28.0f;
+                        const float row_y = y_start + 78.0f +
+                            (float)item_index * 30.0f;
+                        const float retry_x = x_left + row_width - retry_width;
+                        const float name_width = retryable
+                            ? row_width - retry_width - 6.0f
+                            : row_width;
+                        printf(
+                            "Asset Browser row: path=%s x=%.1f y=%.1f name_width=%.1f retry=%d retry_x=%.1f retry_y=%.1f retry_width=%.1f retry_height=24.0.\n",
+                            items[item_index].metadata.source_path != NULL
+                                ? items[item_index].metadata.source_path
+                                : "(unnamed)",
+                            x_left,
+                            row_y,
+                            name_width,
+                            retryable ? 1 : 0,
+                            retry_x,
+                            row_y + 1.0f,
+                            retryable ? retry_width : 0.0f);
+                    }
+                    fflush(stdout);
+                    reported_type = state->asset_browser_type;
+                    reported_page = state->asset_browser_page;
+                    reported_panel_x = panel_bounds.x;
+                    reported_panel_y = panel_bounds.y;
+                    reported_panel_width = panel_bounds.width;
+                    reported_panel_height = panel_bounds.height;
+                    reported_row_start = y_start + 78.0f;
+                    reported_navigation_y = asset_browser_navigation_y;
+                }
+            }
+            if (!texture_pick_active)
+            {
+                static char reported_status_text[sizeof(state->status_message)] = "";
+                static int reported_status_warning = -1;
+                static henka_ui_rect reported_status_rect = {
+                    -1.0f, -1.0f, -1.0f, -1.0f};
+                static henka_ui_rect reported_status_panel = {
+                    -1.0f, -1.0f, -1.0f, -1.0f};
+                static float reported_status_navigation_y = -1.0f;
+                const char* status_text = state->status_message[0] != '\0'
+                    ? state->status_message
+                    : "Ready.";
+                const henka_ui_rect status_rect = {
+                    x_left,
+                    asset_browser_status_y,
+                    panel_bounds.width - 28.0f,
+                    22.0f};
+                if (strcmp(reported_status_text, status_text) != 0 ||
+                    reported_status_warning != (state->status_warning ? 1 : 0) ||
+                    fabsf(reported_status_rect.x - status_rect.x) > 0.01f ||
+                    fabsf(reported_status_rect.y - status_rect.y) > 0.01f ||
+                    fabsf(reported_status_rect.width - status_rect.width) > 0.01f ||
+                    fabsf(reported_status_panel.x - panel_bounds.x) > 0.01f ||
+                    fabsf(reported_status_panel.y - panel_bounds.y) > 0.01f ||
+                    fabsf(reported_status_panel.width - panel_bounds.width) > 0.01f ||
+                    fabsf(reported_status_panel.height - panel_bounds.height) > 0.01f ||
+                    fabsf(reported_status_navigation_y - asset_browser_navigation_y) > 0.01f)
+                {
+                    printf(
+                        "Asset Browser status row: warning=%d message=%s x=%.1f y=%.1f width=%.1f height=22.0 panel=%.1f,%.1f,%.1f,%.1f navigation_y=%.1f row_start=%.1f rows=%zu.\n",
+                        state->status_warning ? 1 : 0,
+                        status_text,
+                        status_rect.x,
+                        status_rect.y,
+                        status_rect.width,
+                        panel_bounds.x,
+                        panel_bounds.y,
+                        panel_bounds.width,
+                        panel_bounds.height,
+                        asset_browser_navigation_y,
+                        y_start + 78.0f,
+                        item_count);
+                    fflush(stdout);
+                    snprintf(
+                        reported_status_text,
+                        sizeof(reported_status_text),
+                        "%s",
+                        status_text);
+                    reported_status_warning =
+                        state->status_warning ? 1 : 0;
+                    reported_status_rect = status_rect;
+                    reported_status_panel = panel_bounds;
+                    reported_status_navigation_y = asset_browser_navigation_y;
+                }
+                sandbox3d_draw_value_row(
+                    state->ui,
+                    status_rect.x,
+                    status_rect.y,
+                    status_rect.width,
+                    "Last",
+                    status_text);
+                if (asset_page_size == 0U)
+                {
+                    henka_ui_label(
+                        state->ui,
+                        x_left,
+                        y_start + 78.0f,
+                        1.0f,
+                        "Increase Utility panel height to browse assets.");
+                }
             }
             if (state->material_texture_pick.active &&
                 state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE)
@@ -35312,21 +35571,46 @@ static void sandbox3d_draw_utility_panel(
             for (item_index = 0U; item_index < item_count; ++item_index)
             {
                 char item_id[64];
-                const char* display_name = items[item_index].metadata.display_name != NULL
-                    ? items[item_index].metadata.display_name
-                    : items[item_index].metadata.source_path;
+                char item_label[512] = "";
+                const char* display_name = "(unnamed asset)";
+                const bool retryable = !texture_pick_active &&
+                    sandbox3d_asset_browser_can_retry(
+                        &items[item_index].metadata);
+                const float asset_row_y = texture_pick_active
+                    ? picker_row_start_y +
+                        (float)item_index * picker_row_stride
+                    : y_start + 78.0f + (float)item_index * 30.0f;
+                const float asset_row_width = panel_bounds.width - 28.0f;
+                const float retry_width = 56.0f;
+                const float retry_x = x_left + asset_row_width - retry_width;
+                const float name_width = retryable
+                    ? asset_row_width - retry_width - 6.0f
+                    : asset_row_width;
+                char retry_id[64];
+                if (sandbox3d_asset_browser_format_item_label(
+                        &items[item_index],
+                        item_label,
+                        sizeof(item_label)) == HENKA_SUCCESS)
+                {
+                    display_name = item_label;
+                }
+                else if (item_label[0] != '\0')
+                {
+                    display_name = item_label;
+                }
                 snprintf(item_id, sizeof(item_id), "asset_browser_item_%zu", items[item_index].metadata_index);
+                snprintf(
+                    retry_id,
+                    sizeof(retry_id),
+                    "asset_browser_retry_%zu",
+                    items[item_index].metadata_index);
                 if (henka_ui_selectable(
                         state->ui,
                         item_id,
                         (henka_ui_rect){
                             x_left,
-                            texture_pick_active
-                                ? picker_row_start_y +
-                                    (float)item_index * picker_row_stride
-                                : y_start + 78.0f +
-                                    (float)item_index * 30.0f,
-                            panel_bounds.width - 28.0f,
+                            asset_row_y,
+                            name_width,
                             26.0f},
                         display_name != NULL ? display_name : "(unnamed asset)",
                         state->asset_browser_selection_valid && state->asset_browser_selected_metadata_index == items[item_index].metadata_index))
@@ -35415,15 +35699,65 @@ static void sandbox3d_draw_utility_panel(
                         }
                     }
                 }
+                if (retryable &&
+                    henka_ui_primary_button(
+                        state->ui,
+                        retry_id,
+                        (henka_ui_rect){retry_x, asset_row_y + 1.0f, retry_width, 24.0f},
+                        "Retry"))
+                {
+                    const henka_result retry_result =
+                        sandbox3d_asset_browser_retry(
+                            henka_engine_get_asset_manager(engine),
+                            &items[item_index].metadata);
+                    henka_asset_metadata retry_state;
+                    state->asset_browser_selection_valid = true;
+                    state->asset_browser_selected_metadata_index =
+                        items[item_index].metadata_index;
+                    printf(
+                        "Asset Browser Retry: path=%s result=%s.\n",
+                        items[item_index].metadata.source_path != NULL
+                            ? items[item_index].metadata.source_path
+                            : "(unnamed)",
+                        henka_result_to_string(retry_result));
+                    fflush(stdout);
+                    if (retry_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Retry succeeded.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Retry failed: %s",
+                            henka_result_to_string(retry_result));
+                    }
+                    if (henka_assets_get_metadata_at_index(
+                            assets,
+                            items[item_index].metadata_index,
+                            &retry_state) == HENKA_SUCCESS)
+                    {
+                        printf(
+                            "Asset Browser Retry state: loaded=%d fallback=%d reload_supported=%d.\n",
+                            retry_state.loaded ? 1 : 0,
+                            retry_state.fallback ? 1 : 0,
+                            retry_state.reload_supported ? 1 : 0);
+                        fflush(stdout);
+                    }
+                }
             }
             if (henka_ui_button(
                     state->ui,
                     "asset_browser_prev",
                     (henka_ui_rect){
                         x_left,
-                        texture_pick_active
-                            ? picker_navigation_y
-                            : y_start + 252.0f,
+                        asset_browser_navigation_y,
                         82.0f,
                         24.0f},
                     "Prev") &&
@@ -35439,112 +35773,6 @@ static void sandbox3d_draw_utility_panel(
                 state->asset_browser_page + 1U < page_count)
             {
                 ++state->asset_browser_page;
-            }
-            if (!texture_pick_active)
-            {
-                if (state->asset_browser_selection_valid)
-                {
-                    henka_asset_metadata selected_metadata;
-                    if (henka_assets_get_metadata_at_index(assets, state->asset_browser_selected_metadata_index, &selected_metadata) == HENKA_SUCCESS)
-                    {
-                        const bool retryable =
-                            sandbox3d_asset_browser_can_retry(&selected_metadata);
-                        const bool show_retry =
-                            retryable && panel_bounds.width >= 180.0f;
-                        const float state_width = show_retry
-                            ? panel_bounds.width - 112.0f
-                            : panel_bounds.width - 28.0f;
-
-                        sandbox3d_draw_value_row(
-                            state->ui,
-                            x_left,
-                            y_start + 278.0f,
-                            panel_bounds.width - 28.0f,
-                            "Selected",
-                            selected_metadata.source_path != NULL
-                                ? selected_metadata.source_path
-                                : "(unnamed asset)");
-                        snprintf(
-                            row_value,
-                            sizeof(row_value),
-                            "%s%s%s%s",
-                            selected_metadata.loaded ? "Loaded" : "Unavailable",
-                            selected_metadata.fallback ? " / fallback" : "",
-                            selected_metadata.error_summary != NULL &&
-                                selected_metadata.error_summary[0] != '\0'
-                                ? " | "
-                                : "",
-                            selected_metadata.error_summary != NULL
-                                ? selected_metadata.error_summary
-                                : "");
-                        sandbox3d_draw_value_row(
-                            state->ui,
-                            x_left,
-                            y_start + 304.0f,
-                            state_width,
-                            "State",
-                            row_value);
-
-                        if (show_retry &&
-                            henka_ui_primary_button(
-                                state->ui,
-                                "asset_browser_retry",
-                                (henka_ui_rect){
-                                    x_left + panel_bounds.width - 98.0f,
-                                    y_start + 304.0f,
-                                    70.0f,
-                                    24.0f},
-                                "Retry"))
-                        {
-                            henka_result retry_result =
-                                sandbox3d_asset_browser_retry(
-                                    henka_engine_get_asset_manager(engine),
-                                    &selected_metadata);
-                            henka_asset_metadata refreshed_metadata;
-
-                            memset(
-                                &refreshed_metadata,
-                                0,
-                                sizeof(refreshed_metadata));
-                            if (retry_result == HENKA_SUCCESS)
-                            {
-                                sandbox3d_set_statusf(
-                                    state,
-                                    false,
-                                    false,
-                                    "Asset retry succeeded: %s",
-                                    selected_metadata.source_path);
-                            }
-                            else if (henka_assets_get_metadata_at_index(
-                                    assets,
-                                    state->asset_browser_selected_metadata_index,
-                                    &refreshed_metadata) == HENKA_SUCCESS &&
-                                refreshed_metadata.error_summary != NULL &&
-                                refreshed_metadata.error_summary[0] != '\0')
-                            {
-                                sandbox3d_set_statusf(
-                                    state,
-                                    true,
-                                    false,
-                                    "Asset retry failed: %s",
-                                    refreshed_metadata.error_summary);
-                            }
-                            else
-                            {
-                                sandbox3d_set_statusf(
-                                    state,
-                                    true,
-                                    false,
-                                    "Asset retry failed: %s",
-                                    selected_metadata.source_path);
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    henka_ui_label(state->ui, x_left, y_start + 278.0f, 1.0f, "Select a manager-known asset.");
-                }
             }
             if (state->material_texture_pick.active)
             {

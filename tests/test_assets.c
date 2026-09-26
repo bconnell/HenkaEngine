@@ -1553,7 +1553,7 @@ static void henka_test_descriptor_texture_fallback_retry_preserves_identity(void
     HENKA_TEST_ASSERT(texture != NULL);
     HENKA_TEST_ASSERT(henka_assets_get_texture_metadata(
         manager, texture, &metadata) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback && !metadata.reload_supported);
+    HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback && metadata.reload_supported);
     HENKA_TEST_ASSERT(metadata.has_texture_descriptor);
     HENKA_TEST_ASSERT(metadata.texture_descriptor.usage == HENKA_TEXTURE_USAGE_NORMAL);
     HENKA_TEST_ASSERT(henka_texture_get_info(texture, &before_info) == HENKA_SUCCESS);
@@ -1573,7 +1573,7 @@ static void henka_test_descriptor_texture_fallback_retry_preserves_identity(void
     HENKA_TEST_ASSERT(after_failure_info.content_revision == before_info.content_revision);
     HENKA_TEST_ASSERT(henka_assets_get_texture_metadata(
         manager, texture, &metadata) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback && !metadata.reload_supported);
+    HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback && metadata.reload_supported);
     HENKA_TEST_ASSERT(metadata.texture_descriptor.usage == HENKA_TEXTURE_USAGE_NORMAL);
     HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
         manager, &after_failure_diagnostics) == HENKA_SUCCESS);
@@ -1657,7 +1657,18 @@ static void henka_test_material_dependency_reimport_refreshes_real_scene_binding
         "\"materials\":[{\"name\":\"Missing Material\",\"pbrMetallicRoughness\":{"
         "\"baseColorTexture\":{\"index\":0}}}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    static const char* gltf_embedded_decode_fallback =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"images\":[{\"uri\":\"data:application/octet-stream;base64,AQID\"}],"
+        "\"textures\":[{\"source\":0}],"
+        "\"materials\":[{\"pbrMetallicRoughness\":{\"baseColorTexture\":{\"index\":0}}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
     const char* gltf_path = "build/test_tmp/material-dependency-reimport.gltf";
+    const char* embedded_gltf_path = "build/test_tmp/material-embedded-fallback.gltf";
     const char* image_a_path = "build/test_tmp/material-a.bmp";
     const char* image_b_path = "build/test_tmp/material-b.bmp";
     henka_engine_config config = {0};
@@ -1665,8 +1676,10 @@ static void henka_test_material_dependency_reimport_refreshes_real_scene_binding
     henka_asset_manager* manager;
     henka_shader* shader = NULL;
     henka_material_asset* asset = NULL;
+    henka_material_asset* embedded_asset = NULL;
     henka_material_asset* reloaded_asset = NULL;
     henka_material material_a;
+    henka_material embedded_material;
     henka_material material_b;
     henka_material material_after_failure;
     henka_material_dependency_info dependencies;
@@ -1677,6 +1690,8 @@ static void henka_test_material_dependency_reimport_refreshes_real_scene_binding
     henka_material scene_material_after_failure;
     henka_texture* texture_a;
     henka_texture* texture_b;
+    henka_texture* embedded_texture = NULL;
+    henka_texture* retried_embedded_texture = (henka_texture*)1;
     uint64_t revision_before_failure;
     uint64_t scene_material_revision;
     size_t refreshed_count;
@@ -1696,6 +1711,29 @@ static void henka_test_material_dependency_reimport_refreshes_real_scene_binding
         "assets/shaders/basic_lit.vert",
         "assets/shaders/basic_lit.frag",
         &shader) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        embedded_gltf_path,
+        gltf_embedded_decode_fallback,
+        strlen(gltf_embedded_decode_fallback)));
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_material_asset(
+        manager, embedded_gltf_path, shader, &embedded_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(embedded_asset != NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_material(
+        embedded_asset, &embedded_material) == HENKA_SUCCESS);
+    embedded_texture = embedded_material.base_color_texture;
+    HENKA_TEST_ASSERT(embedded_texture != NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_metadata(
+        manager, embedded_texture, &texture_metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!texture_metadata.loaded && texture_metadata.fallback);
+    HENKA_TEST_ASSERT(!texture_metadata.reload_supported);
+    HENKA_TEST_ASSERT(strstr(texture_metadata.source_path, "#embedded-") != NULL);
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_texture_with_descriptor(
+        manager,
+        texture_metadata.source_path,
+        &texture_metadata.texture_descriptor,
+        &retried_embedded_texture) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(retried_embedded_texture == NULL);
+
     HENKA_TEST_ASSERT(henka_test_write_file(image_a_path, bmp_a, sizeof(bmp_a)));
     HENKA_TEST_ASSERT(henka_test_write_file(image_b_path, bmp_b, sizeof(bmp_b)));
     HENKA_TEST_ASSERT(henka_test_write_file(gltf_path, gltf_a, strlen(gltf_a)));
@@ -1781,6 +1819,7 @@ static void henka_test_material_dependency_reimport_refreshes_real_scene_binding
     henka_scene_destroy(scene);
     henka_engine_destroy(engine);
     (void)remove(gltf_path);
+    (void)remove(embedded_gltf_path);
     (void)remove(image_a_path);
     (void)remove(image_b_path);
 }

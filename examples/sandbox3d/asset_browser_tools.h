@@ -32,6 +32,11 @@ size_t sandbox3d_asset_browser_collect_page(
     sandbox3d_asset_browser_item* out_items,
     size_t capacity);
 
+henka_result sandbox3d_asset_browser_format_item_label(
+    const sandbox3d_asset_browser_item* item,
+    char* out_label,
+    size_t out_label_capacity);
+
 bool sandbox3d_asset_browser_can_retry(
     const henka_asset_metadata* metadata);
 
