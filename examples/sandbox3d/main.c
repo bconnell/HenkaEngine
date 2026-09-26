@@ -35116,6 +35116,13 @@ static void sandbox3d_draw_utility_panel(
                 asset_panel_bottom - 84.0f;
             const float picker_navigation_y =
                 picker_action_y - 30.0f;
+            const henka_ui_rect next_page_button = {
+                x_left + 88.0f,
+                texture_pick_active
+                    ? picker_navigation_y
+                    : y_start + 252.0f,
+                82.0f,
+                24.0f};
             const float picker_row_start_y =
                 y_start + 24.0f;
             const float picker_row_stride = 30.0f;
@@ -35282,6 +35289,20 @@ static void sandbox3d_draw_utility_panel(
                                     (float)item_index * 30.0f,
                             panel_bounds.width - 28.0f);
                     }
+                    printf(
+                        "Material texture picker navigation: entity=%u slot=%s page=%zu/%zu next_x=%.1f next_y=%.1f enabled=%d.\n",
+                        (unsigned int)state->material_texture_pick.entity,
+                        sandbox3d_material_texture_slot_label(
+                            state->material_texture_pick.slot),
+                        page_count == 0U
+                            ? 0U
+                            : state->asset_browser_page + 1U,
+                        page_count,
+                        next_page_button.x + next_page_button.width * 0.5f,
+                        next_page_button.y + next_page_button.height * 0.5f,
+                        state->asset_browser_page + 1U < page_count
+                            ? 1
+                            : 0);
                     fflush(stdout);
                     reported_asset_entity = state->material_texture_pick.entity;
                     reported_asset_slot = (int)state->material_texture_pick.slot;
@@ -35413,13 +35434,7 @@ static void sandbox3d_draw_utility_panel(
             if (henka_ui_button(
                     state->ui,
                     "asset_browser_next",
-                    (henka_ui_rect){
-                        x_left + 88.0f,
-                        texture_pick_active
-                            ? picker_navigation_y
-                            : y_start + 252.0f,
-                        82.0f,
-                        24.0f},
+                    next_page_button,
                     "Next") &&
                 state->asset_browser_page + 1U < page_count)
             {

@@ -764,29 +764,47 @@ try {
         -Path $stdoutPath `
         -Pattern $assetRowPattern) -gt 0
     if (-not $assetCandidateFound) {
-        $utilityGeometry = Get-LastMatch `
-            -Path $stdoutPath `
-            -Pattern 'Workspace UI geometry: .*utility=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)'
-        $utilityX = [double]::Parse(
-            $utilityGeometry.Groups["x"].Value,
-            [Globalization.CultureInfo]::InvariantCulture)
-        $utilityY = [double]::Parse(
-            $utilityGeometry.Groups["y"].Value,
-            [Globalization.CultureInfo]::InvariantCulture)
-        $utilityHeight = [double]::Parse(
-            $utilityGeometry.Groups["height"].Value,
-            [Globalization.CultureInfo]::InvariantCulture)
-        $pickerNextX = $utilityX + 14.0 + 88.0 + 41.0
-        # The product keeps picker navigation one 30 px control stride above
-        # the safely inset Apply row. Click the navigation center, not Apply.
-        $pickerNextY = $utilityY + $utilityHeight - 108.0
+        $pickerNavigationPattern =
+            'Material texture picker navigation: entity=\d+ slot=Base Color page=(?<page>\d+)/(?<pageCount>\d+) next_x=(?<x>[-0-9.]+) next_y=(?<y>[-0-9.]+) enabled=(?<enabled>[01])\.'
+        if (-not (Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern $pickerNavigationPattern `
+                -TimeoutMilliseconds 5000)) {
+            throw "The visible material texture picker did not report its Next control."
+        }
 
         for ($pickerPageAttempt = 0; $pickerPageAttempt -lt 32 -and -not $assetCandidateFound; ++$pickerPageAttempt) {
+            $pickerNavigation = Get-LastMatch `
+                -Path $stdoutPath `
+                -Pattern $pickerNavigationPattern
+            if ($pickerNavigation.Groups["enabled"].Value -ne "1") {
+                break
+            }
+
+            $currentPage = [int]$pickerNavigation.Groups["page"].Value
+            $navigationCount = Get-LogMatchCount `
+                -Path $stdoutPath `
+                -Pattern $pickerNavigationPattern
             Send-HenkaAutomationClick `
                 -EventPath $automationInputPath `
-                -X $pickerNextX `
-                -Y $pickerNextY
-            Start-Sleep -Milliseconds 150
+                -X ([double]$pickerNavigation.Groups["x"].Value) `
+                -Y ([double]$pickerNavigation.Groups["y"].Value)
+            if (-not (Wait-LogMatchCountIncrease `
+                    -Path $stdoutPath `
+                    -InitialCount $navigationCount `
+                    -Pattern $pickerNavigationPattern `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The visible material texture picker Next control did not publish a page transition."
+            }
+            $nextPage = Get-LastMatch `
+                -Path $stdoutPath `
+                -Pattern $pickerNavigationPattern
+            if ([int]$nextPage.Groups["page"].Value -ne ($currentPage + 1)) {
+                throw ("The visible material texture picker Next control did not advance exactly one page. " +
+                    "before={0} after={1}." -f
+                    $currentPage,
+                    $nextPage.Groups["page"].Value)
+            }
             $assetCandidateFound = (Get-LogMatchCount `
                 -Path $stdoutPath `
                 -Pattern $assetRowPattern) -gt 0
@@ -831,9 +849,14 @@ try {
 
     $pickerApplyPattern =
         'Material texture picker: action=apply entity=\d+ slot=Base Color result=(?<result>[^.\r\n]+)\.'
+    $pickerApplyInputPattern =
+        'Material texture picker Apply input: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) pressed=(?<pressed>[01]) released=(?<released>[01])\.'
     $pickerApplyCount = Get-LogMatchCount `
         -Path $stdoutPath `
         -Pattern $pickerApplyPattern
+    $pickerApplyInputCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern $pickerApplyInputPattern
     $pickerApplyX =
         [double]$pickerActions.Groups["apply"].Value +
         [double]$pickerActions.Groups["applyWidth"].Value * 0.5
@@ -842,6 +865,31 @@ try {
         -EventPath $automationInputPath `
         -X $pickerApplyX `
         -Y $pickerApplyY
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $pickerApplyInputCount `
+            -Pattern $pickerApplyInputPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible material texture picker did not report pointer input inside its Apply control."
+    }
+    $pickerApplyInput = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern $pickerApplyInputPattern
+    $inputX = [double]$pickerApplyInput.Groups["x"].Value
+    $inputY = [double]$pickerApplyInput.Groups["y"].Value
+    if (($pickerApplyInput.Groups["pressed"].Value -ne "1" -and
+            $pickerApplyInput.Groups["released"].Value -ne "1") -or
+        [Math]::Abs($inputX - $pickerApplyX) -gt 1.0 -or
+        [Math]::Abs($inputY - $pickerApplyY) -gt 1.0) {
+        throw ("The picker Apply input did not match the requested in-control click. " +
+            "requested=({0:F1},{1:F1}) observed=({2:F1},{3:F1}) pressed={4} released={5}." -f
+            $pickerApplyX,
+            $pickerApplyY,
+            $inputX,
+            $inputY,
+            $pickerApplyInput.Groups["pressed"].Value,
+            $pickerApplyInput.Groups["released"].Value)
+    }
     if (-not (Wait-LogMatchCountIncrease `
             -Path $stdoutPath `
             -InitialCount $pickerApplyCount `
