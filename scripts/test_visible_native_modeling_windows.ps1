@@ -91,6 +91,98 @@ function Wait-LogMatchCountIncrease {
     return $false
 }
 
+function Get-HenkaProgressWaitDecision {
+    param(
+        [Parameter(Mandatory = $true)][int]$ElapsedMilliseconds,
+        [Parameter(Mandatory = $true)][int]$MillisecondsSinceProgress,
+        [Parameter(Mandatory = $true)][bool]$TargetObserved,
+        [Parameter(Mandatory = $true)][int]$MaximumTimeoutMilliseconds,
+        [Parameter(Mandatory = $true)][int]$NoProgressTimeoutMilliseconds
+    )
+
+    if ($ElapsedMilliseconds -lt 0 -or
+        $MillisecondsSinceProgress -lt 0 -or
+        $MaximumTimeoutMilliseconds -le 0 -or
+        $NoProgressTimeoutMilliseconds -le 0 -or
+        $NoProgressTimeoutMilliseconds -gt $MaximumTimeoutMilliseconds) {
+        throw "The bounded Henka progress-wait limits were invalid."
+    }
+    if ($ElapsedMilliseconds -ge $MaximumTimeoutMilliseconds) {
+        return "timed-out"
+    }
+    if ($TargetObserved) {
+        return "ready"
+    }
+    if ($MillisecondsSinceProgress -ge $NoProgressTimeoutMilliseconds) {
+        return "stalled"
+    }
+    return "continue"
+}
+
+function Wait-LogMatchCountIncreaseWithProgress {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][int]$InitialCount,
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][int]$InitialProgressCount,
+        [Parameter(Mandatory = $true)][string]$ProgressPattern,
+        [int]$MaximumTimeoutMilliseconds = 30000,
+        [int]$NoProgressTimeoutMilliseconds = 10000
+    )
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $lastProgressCount = $InitialProgressCount
+    $lastProgressAtMilliseconds = 0
+    while ($true) {
+        $text = Read-SharedLogText -Path $Path
+        $targetCount = [Regex]::Matches($text, $Pattern).Count
+        $progressCount = [Regex]::Matches($text, $ProgressPattern).Count
+        $elapsedMilliseconds = [int]$stopwatch.ElapsedMilliseconds
+        if ($progressCount -gt $lastProgressCount) {
+            $lastProgressCount = $progressCount
+            $lastProgressAtMilliseconds = $elapsedMilliseconds
+        }
+        $decision = Get-HenkaProgressWaitDecision `
+            -ElapsedMilliseconds $elapsedMilliseconds `
+            -MillisecondsSinceProgress ($elapsedMilliseconds - $lastProgressAtMilliseconds) `
+            -TargetObserved:($targetCount -gt $InitialCount) `
+            -MaximumTimeoutMilliseconds $MaximumTimeoutMilliseconds `
+            -NoProgressTimeoutMilliseconds $NoProgressTimeoutMilliseconds
+
+        if ($decision -ne "continue") {
+            return [pscustomobject]@{
+                Satisfied = ($decision -eq "ready")
+                Decision = $decision
+                ElapsedMilliseconds = [int]$stopwatch.ElapsedMilliseconds
+                ProgressDelta = [Math]::Max(0, $progressCount - $InitialProgressCount)
+                ProgressCount = $progressCount
+            }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+}
+
+function Wait-VisibleFileContainsWithProgress {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][int]$InitialCount,
+        [Parameter(Mandatory = $true)][int]$InitialProgressCount,
+        [Parameter(Mandatory = $true)][string]$ProgressPattern,
+        [int]$MaximumTimeoutMilliseconds = 30000,
+        [int]$NoProgressTimeoutMilliseconds = 10000
+    )
+
+    return Wait-LogMatchCountIncreaseWithProgress `
+        -Path $Path `
+        -InitialCount $InitialCount `
+        -Pattern $Pattern `
+        -InitialProgressCount $InitialProgressCount `
+        -ProgressPattern $ProgressPattern `
+        -MaximumTimeoutMilliseconds $MaximumTimeoutMilliseconds `
+        -NoProgressTimeoutMilliseconds $NoProgressTimeoutMilliseconds
+}
+
 function Clear-TextField {
     param([Parameter(Mandatory = $true)][string]$EventPath)
 
@@ -286,6 +378,44 @@ function Wait-AssetNameInput {
 }
 
 try {
+    $slowProgressDecision = Get-HenkaProgressWaitDecision `
+        -ElapsedMilliseconds 6000 `
+        -MillisecondsSinceProgress 250 `
+        -TargetObserved:$false `
+        -MaximumTimeoutMilliseconds 30000 `
+        -NoProgressTimeoutMilliseconds 10000
+    if ($slowProgressDecision -ne "continue") {
+        throw "The progress-aware UI wait rejected an active application after the legacy five-second threshold."
+    }
+    $progressCompletionDecision = Get-HenkaProgressWaitDecision `
+        -ElapsedMilliseconds 16000 `
+        -MillisecondsSinceProgress 0 `
+        -TargetObserved:$true `
+        -MaximumTimeoutMilliseconds 30000 `
+        -NoProgressTimeoutMilliseconds 10000
+    if ($progressCompletionDecision -ne "ready") {
+        throw "The progress-aware UI wait did not accept the requested application state after slow progress."
+    }
+    $noProgressDecision = Get-HenkaProgressWaitDecision `
+        -ElapsedMilliseconds 15000 `
+        -MillisecondsSinceProgress 10000 `
+        -TargetObserved:$false `
+        -MaximumTimeoutMilliseconds 30000 `
+        -NoProgressTimeoutMilliseconds 10000
+    if ($noProgressDecision -ne "stalled") {
+        throw "The progress-aware UI wait failed to reject a stalled application before its hard limit."
+    }
+    $hardLimitDecision = Get-HenkaProgressWaitDecision `
+        -ElapsedMilliseconds 30000 `
+        -MillisecondsSinceProgress 0 `
+        -TargetObserved:$false `
+        -MaximumTimeoutMilliseconds 30000 `
+        -NoProgressTimeoutMilliseconds 10000
+    if ($hardLimitDecision -ne "timed-out") {
+        throw "The progress-aware UI wait exceeded its absolute hard limit while progress continued."
+    }
+    Write-Output "[pass] Progress-aware UI readiness tolerates slow application progress, detects stalls, and enforces its hard limit."
+
     $interactionToolsPath = Join-Path $repoRoot "examples\sandbox3d\interaction_tools.h"
     $sandboxSourcePath = Join-Path $repoRoot "examples\sandbox3d\main.c"
     $interactionToolsText = [System.IO.File]::ReadAllText($interactionToolsPath)
@@ -427,22 +557,41 @@ try {
         -Path $stdoutPath `
         -Pattern 'Utility Assets tab: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=24\.0\.'
     $assetNavigationPattern =
-        'Asset Browser layout: type=Textures page=(?<page>\d+)/(?<pageCount>\d+) panel=(?<panelX>[-0-9.]+),(?<panelY>[-0-9.]+),(?<panelWidth>[-0-9.]+),(?<panelHeight>[-0-9.]+) row_start=(?<rowStart>[-0-9.]+) navigation_x=(?<nextX>[-0-9.]+) navigation_y=(?<navigationY>[-0-9.]+) navigation_next_enabled=(?<nextEnabled>[01]) rows=(?<rows>\d+)\.'
+        'Asset Browser layout: type=Textures page=(?<page>[1-9]\d*)/(?<pageCount>[1-9]\d*) panel=(?<panelX>[-0-9.]+),(?<panelY>[-0-9.]+),(?<panelWidth>[-0-9.]+),(?<panelHeight>[-0-9.]+) row_start=(?<rowStart>[-0-9.]+) navigation_x=(?<nextX>[-0-9.]+) navigation_y=(?<navigationY>[-0-9.]+) navigation_next_enabled=(?<nextEnabled>[01]) rows=(?<rows>\d+)\.'
+    $emptyAssetPageReport = 'Asset Browser layout: type=Textures page=0/0 panel=832.0,442.9,432.0,261.1 row_start=646.9 navigation_x=975.0 navigation_y=668.0 navigation_next_enabled=0 rows=0.'
+    $validAssetPageReport = 'Asset Browser layout: type=Textures page=1/9 panel=832.0,442.9,432.0,261.1 row_start=558.9 navigation_x=975.0 navigation_y=668.0 navigation_next_enabled=1 rows=2.'
+    if ([Regex]::IsMatch($emptyAssetPageReport, $assetNavigationPattern) -or
+        -not [Regex]::IsMatch($validAssetPageReport, $assetNavigationPattern)) {
+        throw "The Asset Browser readiness predicate must reject an empty 0/0 layout and accept a populated bounded page."
+    }
+    Write-Output "[pass] Asset Browser readiness rejects the empty 0/0 view and requires a populated page."
     $fallbackRowPattern =
         'Asset Browser row: path=assets/textures/missing_texture\.png x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) name_width=(?<nameWidth>[-0-9.]+) retry=1 retry_x=(?<retryX>[-0-9.]+) retry_y=(?<retryY>[-0-9.]+) retry_width=(?<retryWidth>[-0-9.]+) retry_height=24\.0\.'
+    $applicationFrameProgressPattern = 'Native authoring source row: name='
     $assetTabClickCount = Get-LogMatchCount `
         -Path $stdoutPath `
         -Pattern $assetNavigationPattern
+    $assetTabProgressCount = Get-LogMatchCount `
+        -Path $stdoutPath `
+        -Pattern $applicationFrameProgressPattern
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ([double]$utilityAssetTab.Groups["x"].Value + ([double]$utilityAssetTab.Groups["width"].Value * 0.5)) `
         -Y ([double]$utilityAssetTab.Groups["y"].Value + 12.0)
-    if (-not (Wait-LogMatchCountIncrease `
+    $assetTabWait = Wait-LogMatchCountIncreaseWithProgress `
             -Path $stdoutPath `
             -InitialCount $assetTabClickCount `
             -Pattern $assetNavigationPattern `
-            -TimeoutMilliseconds 5000)) {
-        throw "The real Utility Assets tab did not expose its current bounded asset page."
+            -InitialProgressCount $assetTabProgressCount `
+            -ProgressPattern $applicationFrameProgressPattern
+    if (-not $assetTabWait.Satisfied) {
+        $assetProcessAlive = $null -ne $capturedProcess -and -not $capturedProcess.Process.HasExited
+        throw ("The real Utility Assets tab did not expose its current bounded asset page " +
+            "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2}, process_alive={3})." -f
+            $assetTabWait.Decision,
+            $assetTabWait.ElapsedMilliseconds,
+            $assetTabWait.ProgressDelta,
+            $assetProcessAlive)
     }
 
     $fallbackRow = $null
@@ -457,20 +606,31 @@ try {
             break
         }
         $beforePage = [int]$page.Groups["page"].Value
-        $pageReportCount = Get-LogMatchCount -Path $stdoutPath -Pattern $assetNavigationPattern
+        $expectedPage = $beforePage + 1
+        $expectedAssetPagePattern = $assetNavigationPattern.Replace(
+            '(?<page>[1-9]\d*)',
+            "(?<page>$expectedPage)")
+        $pageReportCount = Get-LogMatchCount -Path $stdoutPath -Pattern $expectedAssetPagePattern
+        $pageProgressCount = Get-LogMatchCount -Path $stdoutPath -Pattern $applicationFrameProgressPattern
         Send-HenkaAutomationClick `
             -EventPath $automationInputPath `
             -X ([double]$page.Groups["nextX"].Value) `
             -Y ([double]$page.Groups["navigationY"].Value + 12.0)
-        if (-not (Wait-LogMatchCountIncrease `
+        $pageWait = Wait-LogMatchCountIncreaseWithProgress `
                 -Path $stdoutPath `
                 -InitialCount $pageReportCount `
-                -Pattern $assetNavigationPattern `
-                -TimeoutMilliseconds 5000)) {
-            throw "The in-panel Asset Browser Next control did not publish another page."
+                -Pattern $expectedAssetPagePattern `
+                -InitialProgressCount $pageProgressCount `
+                -ProgressPattern $applicationFrameProgressPattern
+        if (-not $pageWait.Satisfied) {
+            throw ("The in-panel Asset Browser Next control did not publish another page " +
+                "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2})." -f
+                $pageWait.Decision,
+                $pageWait.ElapsedMilliseconds,
+                $pageWait.ProgressDelta)
         }
-        $page = Get-LastMatch -Path $stdoutPath -Pattern $assetNavigationPattern
-        if ([int]$page.Groups["page"].Value -ne ($beforePage + 1)) {
+        $page = Get-LastMatch -Path $stdoutPath -Pattern $expectedAssetPagePattern
+        if ([int]$page.Groups["page"].Value -ne $expectedPage) {
             throw "The Asset Browser Next control did not advance exactly one page."
         }
     }
@@ -505,30 +665,58 @@ try {
     }
 
     $retryPattern = 'Asset Browser Retry: path=assets/textures/missing_texture\.png result=(?<result>[^.]+)\.'
+    $retryFailureStatePattern = 'Asset Browser Retry state: loaded=0 fallback=1 reload_supported=1\.'
+    $retryFeedbackPattern = 'Asset Browser status row: warning=1 message=Retry failed: (?<result>[^.]+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=22\.0 panel=(?<panelX>[-0-9.]+),(?<panelY>[-0-9.]+),(?<panelWidth>[-0-9.]+),(?<panelHeight>[-0-9.]+) navigation_y=(?<navigationY>[-0-9.]+) row_start=(?<rowStart>[-0-9.]+) rows=(?<rows>\d+)\.'
     $retryCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retryPattern
+    $retryFailureStateCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retryFailureStatePattern
+    $retryFeedbackCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retryFeedbackPattern
+    $retryProgressCount = Get-LogMatchCount -Path $stdoutPath -Pattern $applicationFrameProgressPattern
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ([double]$fallbackRow.Groups["retryX"].Value + ([double]$fallbackRow.Groups["retryWidth"].Value * 0.5)) `
         -Y ([double]$fallbackRow.Groups["retryY"].Value + 12.0)
-    if (-not (Wait-LogMatchCountIncrease -Path $stdoutPath -InitialCount $retryCount -Pattern $retryPattern -TimeoutMilliseconds 5000)) {
-        throw "The visible Asset Browser Retry button did not invoke the failed-source recovery API."
+    $retryWait = Wait-LogMatchCountIncreaseWithProgress `
+        -Path $stdoutPath `
+        -InitialCount $retryCount `
+        -Pattern $retryPattern `
+        -InitialProgressCount $retryProgressCount `
+        -ProgressPattern $applicationFrameProgressPattern
+    if (-not $retryWait.Satisfied) {
+        throw ("The visible Asset Browser Retry button did not invoke the failed-source recovery API " +
+            "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2})." -f
+            $retryWait.Decision,
+            $retryWait.ElapsedMilliseconds,
+            $retryWait.ProgressDelta)
     }
     $retryResult = Get-LastMatch -Path $stdoutPath -Pattern $retryPattern
     if ($retryResult.Groups["result"].Value -eq "success") {
         throw "Retry succeeded even though the known missing texture source was still absent."
     }
-    if (-not (Wait-FileContains `
-            -Path $stdoutPath `
-            -Pattern 'Asset Browser Retry state: loaded=0 fallback=1 reload_supported=1\.' `
-            -TimeoutMilliseconds 5000)) {
-        throw "A failed Retry attempt changed or lost the original file-backed fallback entry."
+    $retryStateWait = Wait-VisibleFileContainsWithProgress `
+        -Path $stdoutPath `
+        -Pattern $retryFailureStatePattern `
+        -InitialCount $retryFailureStateCount `
+        -InitialProgressCount $retryProgressCount `
+        -ProgressPattern $applicationFrameProgressPattern
+    if (-not $retryStateWait.Satisfied) {
+        throw ("A failed Retry attempt changed or lost the original file-backed fallback entry " +
+            "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2})." -f
+            $retryStateWait.Decision,
+            $retryStateWait.ElapsedMilliseconds,
+            $retryStateWait.ProgressDelta)
     }
-    $retryFeedbackPattern = 'Asset Browser status row: warning=1 message=Retry failed: (?<result>[^.]+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=22\.0 panel=(?<panelX>[-0-9.]+),(?<panelY>[-0-9.]+),(?<panelWidth>[-0-9.]+),(?<panelHeight>[-0-9.]+) navigation_y=(?<navigationY>[-0-9.]+) row_start=(?<rowStart>[-0-9.]+) rows=(?<rows>\d+)\.'
-    if (-not (Wait-FileContains `
-            -Path $stdoutPath `
-            -Pattern $retryFeedbackPattern `
-            -TimeoutMilliseconds 5000)) {
-        throw "The Assets panel did not display the latest Retry error status."
+    $retryFeedbackWait = Wait-VisibleFileContainsWithProgress `
+        -Path $stdoutPath `
+        -Pattern $retryFeedbackPattern `
+        -InitialCount $retryFeedbackCount `
+        -InitialProgressCount $retryProgressCount `
+        -ProgressPattern $applicationFrameProgressPattern
+    if (-not $retryFeedbackWait.Satisfied) {
+        throw ("The Assets panel did not display the latest Retry error status " +
+            "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2})." -f
+            $retryFeedbackWait.Decision,
+            $retryFeedbackWait.ElapsedMilliseconds,
+            $retryFeedbackWait.ProgressDelta)
     }
     $retryFeedback = Get-LastMatch -Path $stdoutPath -Pattern $retryFeedbackPattern
     if ($retryFeedback.Groups["result"].Value -ne "asset source error") {
@@ -561,17 +749,41 @@ try {
 
     Copy-Item -LiteralPath $validRetryTexturePath -Destination $missingTexturePath
     $retryCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retryPattern
+    $retrySuccessStatePattern = 'Asset Browser Retry state: loaded=1 fallback=0 reload_supported=1\.'
+    $retrySuccessStateCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retrySuccessStatePattern
+    $retryProgressCount = Get-LogMatchCount -Path $stdoutPath -Pattern $applicationFrameProgressPattern
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ([double]$fallbackRow.Groups["retryX"].Value + ([double]$fallbackRow.Groups["retryWidth"].Value * 0.5)) `
         -Y ([double]$fallbackRow.Groups["retryY"].Value + 12.0)
-    if (-not (Wait-LogMatchCountIncrease -Path $stdoutPath -InitialCount $retryCount -Pattern $retryPattern -TimeoutMilliseconds 5000)) {
-        throw "The visible Asset Browser Retry button did not recover after the real source file appeared."
+    $retryWait = Wait-LogMatchCountIncreaseWithProgress `
+        -Path $stdoutPath `
+        -InitialCount $retryCount `
+        -Pattern $retryPattern `
+        -InitialProgressCount $retryProgressCount `
+        -ProgressPattern $applicationFrameProgressPattern
+    if (-not $retryWait.Satisfied) {
+        throw ("The visible Asset Browser Retry button did not recover after the real source file appeared " +
+            "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2})." -f
+            $retryWait.Decision,
+            $retryWait.ElapsedMilliseconds,
+            $retryWait.ProgressDelta)
     }
     $retryResult = Get-LastMatch -Path $stdoutPath -Pattern $retryPattern
+    $retryStateWait = Wait-VisibleFileContainsWithProgress `
+        -Path $stdoutPath `
+        -Pattern $retrySuccessStatePattern `
+        -InitialCount $retrySuccessStateCount `
+        -InitialProgressCount $retryProgressCount `
+        -ProgressPattern $applicationFrameProgressPattern
     if ($retryResult.Groups["result"].Value -ne "success" -or
-        -not (Wait-FileContains -Path $stdoutPath -Pattern 'Asset Browser Retry state: loaded=1 fallback=0 reload_supported=1\.' -TimeoutMilliseconds 5000)) {
-        throw "Retry did not publish a loaded, non-fallback texture state after source recovery."
+        -not $retryStateWait.Satisfied) {
+        throw ("Retry did not publish a loaded, non-fallback texture state after source recovery " +
+            "(retry_result={0}, wait={1}, elapsed_ms={2}, app_progress_reports=+{3})." -f
+            $retryResult.Groups["result"].Value,
+            $retryStateWait.Decision,
+            $retryStateWait.ElapsedMilliseconds,
+            $retryStateWait.ProgressDelta)
     }
     Write-Output "[pass] Real Asset Browser Retry is inside the Utility panel, rejects a still-missing source without corrupting fallback state, then loads the repaired file-backed texture."
 
