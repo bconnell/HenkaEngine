@@ -209,6 +209,7 @@ function Test-AssetRetryRowInsidePanel {
         [Parameter(Mandatory = $true)][double]$RetryY,
         [Parameter(Mandatory = $true)][double]$RetryWidth,
         [double]$MinimumPanelWidth = 332.0,
+        [double]$MinimumRetryWidth = 64.0,
         [double]$Tolerance = 0.1
     )
 
@@ -216,6 +217,7 @@ function Test-AssetRetryRowInsidePanel {
     $panelBottom = $PanelY + $PanelHeight
     return $PanelWidth -ge $MinimumPanelWidth -and
         $NameWidth -gt 0.0 -and
+        $RetryWidth -ge $MinimumRetryWidth -and
         $RowX -ge ($PanelX - $Tolerance) -and
         ($RowY + 26.0) -le ($panelBottom + $Tolerance) -and
         $RetryX -ge ($RowX + $NameWidth) -and
@@ -384,22 +386,29 @@ try {
         throw "The Asset Browser Retry geometry validator accepted an off-panel negative control."
     }
     Write-Output "[pass] Asset Browser Retry geometry negative control rejected an off-panel action."
-    if (-not (Test-AssetRetryRowInsidePanel `
+    if (Test-AssetRetryRowInsidePanel `
             -PanelX 0.0 -PanelY 0.0 -PanelWidth 332.0 -PanelHeight 228.0 `
             -RowX 14.0 -RowY 100.0 -NameWidth 242.0 `
-            -RetryX 262.0 -RetryY 101.0 -RetryWidth 56.0)) {
-        throw "The Asset Browser Retry geometry validator rejected the supported 332px utility-panel minimum."
+            -RetryX 262.0 -RetryY 101.0 -RetryWidth 56.0) {
+        throw "The Asset Browser Retry geometry validator accepted a button too narrow to show its complete caption."
+    }
+    Write-Output "[pass] Retry geometry rejects a clipped caption-width negative control."
+    if (-not (Test-AssetRetryRowInsidePanel `
+            -PanelX 0.0 -PanelY 0.0 -PanelWidth 332.0 -PanelHeight 228.0 `
+            -RowX 14.0 -RowY 100.0 -NameWidth 234.0 `
+            -RetryX 262.0 -RetryY 101.0 -RetryWidth 64.0)) {
+        throw "The Asset Browser Retry geometry validator rejected the supported 332px panel with a fully readable Retry caption."
     }
     if (Test-AssetRetryRowInsidePanel `
             -PanelX 0.0 -PanelY 0.0 -PanelWidth 332.0 -PanelHeight 228.0 `
             -RowX 14.0 -RowY 100.0 -NameWidth 250.0 `
-            -RetryX 262.0 -RetryY 101.0 -RetryWidth 56.0) {
+            -RetryX 262.0 -RetryY 101.0 -RetryWidth 64.0) {
         throw "The Asset Browser Retry geometry validator accepted overlapping name and Retry controls."
     }
     if (Test-AssetRetryRowInsidePanel `
             -PanelX 0.0 -PanelY 0.0 -PanelWidth 120.0 -PanelHeight 228.0 `
             -RowX 14.0 -RowY 100.0 -NameWidth 42.0 `
-            -RetryX 62.0 -RetryY 101.0 -RetryWidth 56.0) {
+            -RetryX 62.0 -RetryY 101.0 -RetryWidth 64.0) {
         throw "The Asset Browser Retry geometry validator accepted an unsupported undersized panel."
     }
     Write-Output "[pass] Retry layout accepts the supported minimum width and rejects name overlap and undersized panels."
@@ -469,6 +478,9 @@ try {
         throw "The visible Asset Browser did not expose the known file-backed Missing Texture fallback."
     }
 
+    if ([double]$fallbackRow.Groups["retryWidth"].Value -lt 64.0) {
+        throw "The live Asset Browser Retry button is too narrow to render its complete caption."
+    }
     if (-not (Test-AssetRetryRowInsidePanel `
             -PanelX $utilityX -PanelY $utilityY -PanelWidth $utilityWidth -PanelHeight $utilityHeight `
             -RowX ([double]$fallbackRow.Groups["x"].Value) `
@@ -477,7 +489,7 @@ try {
             -RetryX ([double]$fallbackRow.Groups["retryX"].Value) `
             -RetryY ([double]$fallbackRow.Groups["retryY"].Value) `
             -RetryWidth ([double]$fallbackRow.Groups["retryWidth"].Value))) {
-        throw "The real Asset Browser Retry row or button is clipped, overlapping, or outside Utility panel bounds."
+        throw "The real Asset Browser Retry row or button caption is clipped, overlapping, or outside Utility panel bounds."
     }
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `

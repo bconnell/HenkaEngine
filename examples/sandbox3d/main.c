@@ -35417,7 +35417,7 @@ static void sandbox3d_draw_utility_panel(
                         const bool retryable =
                             sandbox3d_asset_browser_can_retry(
                                 &items[item_index].metadata);
-                        const float retry_width = 56.0f;
+                        const float retry_width = 64.0f;
                         const float row_width = panel_bounds.width - 28.0f;
                         const float row_y = y_start + 78.0f +
                             (float)item_index * 30.0f;
@@ -35581,7 +35581,7 @@ static void sandbox3d_draw_utility_panel(
                         (float)item_index * picker_row_stride
                     : y_start + 78.0f + (float)item_index * 30.0f;
                 const float asset_row_width = panel_bounds.width - 28.0f;
-                const float retry_width = 56.0f;
+                const float retry_width = 64.0f;
                 const float retry_x = x_left + asset_row_width - retry_width;
                 const float name_width = retryable
                     ? asset_row_width - retry_width - 6.0f
