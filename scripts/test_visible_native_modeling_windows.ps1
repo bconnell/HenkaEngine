@@ -64,6 +64,71 @@ function Read-SharedLogText {
     return $text
 }
 
+function Test-ProductFirstFrameReady {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$LogText)
+
+    return [Regex]::IsMatch(
+        $LogText,
+        '(?m)^HENKA_AUTOMATION_DIAGNOSTIC frame seq=1 phase=render-complete\s*$')
+}
+
+function Test-ProductStartupReady {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$LogText,
+        [Parameter(Mandatory = $true)][bool]$ProcessAlive
+    )
+
+    return $ProcessAlive -and
+        $LogText.Contains("Sandbox UI ready:") -and
+        (Test-ProductFirstFrameReady -LogText $LogText)
+}
+
+function Wait-ProductStartupReady {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)]$CapturedProcess,
+        [Parameter(Mandatory = $true)][int]$TimeoutMilliseconds
+    )
+
+    if ($TimeoutMilliseconds -le 0) {
+        throw "The product-startup readiness hard limit must be positive."
+    }
+
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $uiReady = $false
+    $firstFrameReady = $false
+    do {
+        $logText = Read-SharedLogText -Path $Path
+        $uiReady = $logText.Contains("Sandbox UI ready:")
+        $firstFrameReady = Test-ProductFirstFrameReady -LogText $logText
+        $processAlive = -not $CapturedProcess.Process.HasExited
+        if (Test-ProductStartupReady -LogText $logText -ProcessAlive:$processAlive) {
+            $watch.Stop()
+            return [pscustomobject]@{
+                Satisfied = $true
+                UiReady = $true
+                FirstFrameReady = $true
+                ProcessAlive = $processAlive
+                ElapsedMilliseconds = [int]$watch.ElapsedMilliseconds
+            }
+        }
+        if (-not $processAlive -or
+            $watch.ElapsedMilliseconds -ge $TimeoutMilliseconds) {
+            break
+        }
+        Start-Sleep -Milliseconds 50
+    } while ($true)
+
+    $watch.Stop()
+    return [pscustomobject]@{
+        Satisfied = $false
+        UiReady = $uiReady
+        FirstFrameReady = $firstFrameReady
+        ProcessAlive = -not $CapturedProcess.Process.HasExited
+        ElapsedMilliseconds = [int]$watch.ElapsedMilliseconds
+    }
+}
+
 function Get-LogMatchCount {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -469,7 +534,35 @@ try {
     if ([Regex]::Matches($consumedInputRecord, $automationRecordProgressPattern).Count -ne 1) {
         throw "A product-consumed automation input record was not recognized as operation progress."
     }
+    if (-not (Get-Command -Name Test-ProductFirstFrameReady -ErrorAction SilentlyContinue)) {
+        throw "The visible workflow is missing an exact first-product-frame readiness predicate."
+    }
+    if (-not (Get-Command -Name Test-ProductStartupReady -ErrorAction SilentlyContinue)) {
+        throw "Startup readiness must reject a completed-frame marker from an exited product process."
+    }
+    $uiReadyBeforeRender = @(
+        "Sandbox UI ready: Standard mode, framebuffer 1280x720."
+        "HENKA_AUTOMATION_DIAGNOSTIC frame seq=1 phase=render-begin"
+    ) -join "`n"
+    $unrelatedLaterFrame = @(
+        "Sandbox UI ready: Standard mode, framebuffer 1280x720."
+        "HENKA_AUTOMATION_DIAGNOSTIC frame seq=2 phase=render-complete"
+    ) -join "`n"
+    $firstFrameComplete = @(
+        "Sandbox UI ready: Standard mode, framebuffer 1280x720."
+        "HENKA_AUTOMATION_DIAGNOSTIC frame seq=1 phase=render-complete"
+    ) -join "`n"
+    if ((Test-ProductFirstFrameReady -LogText $uiReadyBeforeRender) -or
+        (Test-ProductFirstFrameReady -LogText $unrelatedLaterFrame) -or
+        -not (Test-ProductFirstFrameReady -LogText $firstFrameComplete)) {
+        throw "Startup readiness must require completion of the product's actual first rendered frame, not UI setup or a later-frame heartbeat."
+    }
+    if (-not (Test-ProductStartupReady -LogText $firstFrameComplete -ProcessAlive:$true) -or
+        (Test-ProductStartupReady -LogText $firstFrameComplete -ProcessAlive:$false)) {
+        throw "Product startup readiness must require both the first rendered frame and a still-live process."
+    }
     Write-Output "[pass] Progress-aware UI waits accept consumed input progress, reject unrelated frame heartbeats, detect stalls, and enforce the hard limit."
+    Write-Output "[pass] Startup readiness requires the actual first completed product render; UI setup and unrelated later frames do not satisfy it."
 
     $interactionToolsPath = Join-Path $repoRoot "examples\sandbox3d\interaction_tools.h"
     $sandboxSourcePath = Join-Path $repoRoot "examples\sandbox3d\main.c"
@@ -537,14 +630,33 @@ try {
     # creation near the existing timeout and still need a bounded first frame
     # to publish the UI geometry report. Keep this bounded, but do not turn a
     # slow renderer startup into a false harness failure.
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 60000)) {
+    $startupReadiness = Wait-ProductStartupReady `
+        -Path $stdoutPath `
+        -CapturedProcess $capturedProcess `
+        -TimeoutMilliseconds 60000
+    if (-not $startupReadiness.Satisfied) {
         $startupDiagnostics = ((Read-HenkaSharedText -Path $stdoutPath) + "`n" +
             (Read-HenkaSharedText -Path $stderrPath)).Trim()
         $startupDiagnostics = $startupDiagnostics -replace "\s+", " "
         if ($startupDiagnostics.Length -gt 2048) {
             $startupDiagnostics = $startupDiagnostics.Substring($startupDiagnostics.Length - 2048)
         }
-        throw "The editor did not report a usable UI. Startup diagnostics: $startupDiagnostics"
+        throw ("The editor did not complete product startup readiness " +
+            "(ui_ready={0}, first_frame_ready={1}, elapsed_ms={2}, process_alive={3}). " -f
+            $startupReadiness.UiReady,
+            $startupReadiness.FirstFrameReady,
+            $startupReadiness.ElapsedMilliseconds,
+            $startupReadiness.ProcessAlive) +
+            "Startup diagnostics: $startupDiagnostics"
+    }
+    Write-Output ("[pass] Product startup readiness required Sandbox UI setup and the actual first rendered frame " +
+        "(elapsed_ms={0})." -f $startupReadiness.ElapsedMilliseconds)
+
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern 'Primitive gallery contract: textured_cube=1 missing_texture=1 showcase_entities=0 renderer_reference_subjects=0\.' `
+            -TimeoutMilliseconds 5000)) {
+        throw "The visible authoring workflow did not verify its required lightweight primitive-gallery scene contract."
     }
 
     if (-not (Wait-FileContains `

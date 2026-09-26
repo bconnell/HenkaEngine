@@ -412,6 +412,7 @@ typedef struct sandbox3d_physics_state
 #define SANDBOX3D_TERRAIN_STREAM_DRAIN_PUMPS 2048U
 #define SANDBOX3D_SHOWCASE_MAX_GIRAFFE_MATERIAL_INSTANCES 16U
 #define SANDBOX3D_MAX_IMPORTED_SOURCE_BINDINGS 512U
+#define SANDBOX3D_AUTOMATION_ASSET_LAYOUT_LOG_LIMIT 512U
 
 typedef struct sandbox3d_imported_source_binding
 {
@@ -589,6 +590,7 @@ typedef struct sandbox3d_state
     uint64_t automation_diagnostic_frame_sequence;
     uint64_t automation_diagnostic_utility_action_sequence;
     uint64_t automation_diagnostic_assets_reported_action_sequence;
+    uint32_t automation_diagnostic_asset_layout_log_lines;
     henka_texture* asset_browser_selected_texture;
     const henka_material_asset* asset_browser_selected_material;
     const henka_prefab* asset_browser_selected_prefab;
@@ -9282,6 +9284,99 @@ static bool sandbox3d_default_scene_requested(const sandbox3d_state* state)
         !state->realism_reference_capture_requested;
 }
 
+static henka_result sandbox3d_validate_primitive_gallery_contract(
+    const sandbox3d_state* state)
+{
+    static const char* const renderer_reference_prefixes[] =
+    {
+        "Realism ", "Lighting Subject ", "SSS Subject ", "Normal Map ",
+        "Color Space ", "Energy ", "IBL Roughness "
+    };
+    henka_material cube_material;
+    henka_material fallback_material;
+    size_t entity_index;
+    size_t showcase_entity_count;
+    size_t renderer_reference_subject_count;
+    bool has_missing_texture_fixture;
+    bool has_textured_cube_fixture;
+
+    if (state == NULL || state->scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!state->primitive_gallery)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    has_textured_cube_fixture =
+        state->cube_entity != HENKA_INVALID_ENTITY &&
+        henka_scene_is_entity_valid(state->scene, state->cube_entity) &&
+        henka_scene_get_entity_material(
+            state->scene, state->cube_entity, &cube_material) == HENKA_SUCCESS &&
+        cube_material.use_texture && cube_material.base_color_texture != NULL;
+    has_missing_texture_fixture =
+        state->fallback_cube_entity != HENKA_INVALID_ENTITY &&
+        state->missing_texture != NULL &&
+        henka_scene_is_entity_valid(state->scene, state->fallback_cube_entity) &&
+        henka_scene_get_entity_material(
+            state->scene, state->fallback_cube_entity, &fallback_material) == HENKA_SUCCESS &&
+        fallback_material.use_texture &&
+        fallback_material.base_color_texture == state->missing_texture;
+    showcase_entity_count = 0U;
+    renderer_reference_subject_count = 0U;
+    for (entity_index = 0U;
+         entity_index < henka_scene_get_entity_count(state->scene);
+         ++entity_index)
+    {
+        const henka_entity entity = henka_scene_get_entity_at_index(
+            state->scene, entity_index);
+        const char* name = entity == HENKA_INVALID_ENTITY
+            ? NULL
+            : henka_scene_get_entity_name(state->scene, entity);
+        size_t prefix_index;
+
+        if (name == NULL)
+        {
+            continue;
+        }
+        if (strncmp(name, "Showcase Giraffe", sizeof("Showcase Giraffe") - 1U) == 0 ||
+            strncmp(name, "Showcase Rocket", sizeof("Showcase Rocket") - 1U) == 0)
+        {
+            ++showcase_entity_count;
+        }
+        for (prefix_index = 0U;
+             prefix_index < sizeof(renderer_reference_prefixes) /
+                 sizeof(renderer_reference_prefixes[0]);
+             ++prefix_index)
+        {
+            const char* prefix = renderer_reference_prefixes[prefix_index];
+            if (strncmp(name, prefix, strlen(prefix)) == 0)
+            {
+                ++renderer_reference_subject_count;
+                break;
+            }
+        }
+    }
+
+    if (!has_textured_cube_fixture || !has_missing_texture_fixture ||
+        showcase_entity_count != 0U || renderer_reference_subject_count != 0U)
+    {
+        HENKA_LOG_ERROR(
+            "Primitive gallery scene contract failed: textured_cube=%d missing_texture=%d showcase_entities=%zu renderer_reference_subjects=%zu",
+            has_textured_cube_fixture ? 1 : 0,
+            has_missing_texture_fixture ? 1 : 0,
+            showcase_entity_count,
+            renderer_reference_subject_count);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    printf(
+        "Primitive gallery contract: textured_cube=1 missing_texture=1 showcase_entities=0 renderer_reference_subjects=0.\n");
+    fflush(stdout);
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_create_default_ground_authoring(
     henka_engine* engine,
     sandbox3d_state* state)
@@ -16043,6 +16138,35 @@ static bool sandbox3d_copy_environment_value(
         return true;
     }
 #endif
+}
+
+static bool sandbox3d_reserve_asset_browser_diagnostic_lines(
+    sandbox3d_state* state,
+    size_t line_count)
+{
+    char diagnostics_value[8];
+
+    /* UI-geometry breadcrumbs are for the visible-workflow harness only.
+     * Bound their combined output so repeated panel resizing cannot grow the
+     * ordinary Sandbox log without limit. */
+    if (state == NULL || line_count == 0U ||
+        state->automation_diagnostic_asset_layout_log_lines >
+            SANDBOX3D_AUTOMATION_ASSET_LAYOUT_LOG_LIMIT ||
+        line_count >
+            (size_t)(SANDBOX3D_AUTOMATION_ASSET_LAYOUT_LOG_LIMIT -
+                state->automation_diagnostic_asset_layout_log_lines) ||
+        !sandbox3d_copy_environment_value(
+            "HENKA_AUTOMATION_DIAGNOSTICS",
+            diagnostics_value,
+            sizeof(diagnostics_value)) ||
+        strcmp(diagnostics_value, "1") != 0)
+    {
+        return false;
+    }
+
+    state->automation_diagnostic_asset_layout_log_lines +=
+        (uint32_t)line_count;
+    return true;
 }
 
 static henka_result sandbox3d_mcp_resolve_selected_authoring_object(
@@ -34935,13 +35059,18 @@ static void sandbox3d_draw_utility_panel(
                 fabsf(utility_tab_rects[0].width - reported_assets_tab.width) > 0.01f ||
                 fabsf(utility_tab_rects[0].height - reported_assets_tab.height) > 0.01f)
             {
-                printf(
-                    "Utility Assets tab: x=%.1f y=%.1f width=%.1f height=%.1f.\n",
-                    utility_tab_rects[0].x,
-                    utility_tab_rects[0].y,
-                    utility_tab_rects[0].width,
-                    utility_tab_rects[0].height);
-                fflush(stdout);
+                if (sandbox3d_reserve_asset_browser_diagnostic_lines(
+                        state,
+                        1U))
+                {
+                    printf(
+                        "Utility Assets tab: x=%.1f y=%.1f width=%.1f height=%.1f.\n",
+                        utility_tab_rects[0].x,
+                        utility_tab_rects[0].y,
+                        utility_tab_rects[0].width,
+                        utility_tab_rects[0].height);
+                    fflush(stdout);
+                }
                 reported_assets_tab = utility_tab_rects[0];
             }
             if (henka_ui_tab(state->ui, "utility_tab_assets", utility_tab_rects[0], "Assets", state->workspace.active_utility == SANDBOX3D_UTILITY_ASSETS))
@@ -35462,47 +35591,52 @@ static void sandbox3d_draw_utility_panel(
                     fabsf(reported_row_start - (y_start + 78.0f)) > 0.01f ||
                     fabsf(reported_navigation_y - asset_browser_navigation_y) > 0.01f)
                 {
-                    printf(
-                        "Asset Browser layout: type=%s page=%zu/%zu panel=%.1f,%.1f,%.1f,%.1f row_start=%.1f navigation_x=%.1f navigation_y=%.1f navigation_next_enabled=%d rows=%zu.\n",
-                        type_label,
-                        page_count == 0U ? 0U : state->asset_browser_page + 1U,
-                        page_count,
-                        panel_bounds.x,
-                        panel_bounds.y,
-                        panel_bounds.width,
-                        panel_bounds.height,
-                        y_start + 78.0f,
-                        x_left + 129.0f,
-                        asset_browser_navigation_y,
-                        state->asset_browser_page + 1U < page_count ? 1 : 0,
-                        item_count);
-                    for (item_index = 0U; item_index < item_count; ++item_index)
+                    if (sandbox3d_reserve_asset_browser_diagnostic_lines(
+                            state,
+                            item_count + 1U))
                     {
-                        const bool retryable =
-                            sandbox3d_asset_browser_can_retry(
-                                &items[item_index].metadata);
-                        const float retry_width = 64.0f;
-                        const float row_width = panel_bounds.width - 28.0f;
-                        const float row_y = y_start + 78.0f +
-                            (float)item_index * 30.0f;
-                        const float retry_x = x_left + row_width - retry_width;
-                        const float name_width = retryable
-                            ? row_width - retry_width - 6.0f
-                            : row_width;
                         printf(
-                            "Asset Browser row: path=%s x=%.1f y=%.1f name_width=%.1f retry=%d retry_x=%.1f retry_y=%.1f retry_width=%.1f retry_height=24.0.\n",
-                            items[item_index].metadata.source_path != NULL
-                                ? items[item_index].metadata.source_path
-                                : "(unnamed)",
-                            x_left,
-                            row_y,
-                            name_width,
-                            retryable ? 1 : 0,
-                            retry_x,
-                            row_y + 1.0f,
-                            retryable ? retry_width : 0.0f);
+                            "Asset Browser layout: type=%s page=%zu/%zu panel=%.1f,%.1f,%.1f,%.1f row_start=%.1f navigation_x=%.1f navigation_y=%.1f navigation_next_enabled=%d rows=%zu.\n",
+                            type_label,
+                            page_count == 0U ? 0U : state->asset_browser_page + 1U,
+                            page_count,
+                            panel_bounds.x,
+                            panel_bounds.y,
+                            panel_bounds.width,
+                            panel_bounds.height,
+                            y_start + 78.0f,
+                            x_left + 129.0f,
+                            asset_browser_navigation_y,
+                            state->asset_browser_page + 1U < page_count ? 1 : 0,
+                            item_count);
+                        for (item_index = 0U; item_index < item_count; ++item_index)
+                        {
+                            const bool retryable =
+                                sandbox3d_asset_browser_can_retry(
+                                    &items[item_index].metadata);
+                            const float retry_width = 64.0f;
+                            const float row_width = panel_bounds.width - 28.0f;
+                            const float row_y = y_start + 78.0f +
+                                (float)item_index * 30.0f;
+                            const float retry_x = x_left + row_width - retry_width;
+                            const float name_width = retryable
+                                ? row_width - retry_width - 6.0f
+                                : row_width;
+                            printf(
+                                "Asset Browser row: path=%s x=%.1f y=%.1f name_width=%.1f retry=%d retry_x=%.1f retry_y=%.1f retry_width=%.1f retry_height=24.0.\n",
+                                items[item_index].metadata.source_path != NULL
+                                    ? items[item_index].metadata.source_path
+                                    : "(unnamed)",
+                                x_left,
+                                row_y,
+                                name_width,
+                                retryable ? 1 : 0,
+                                retry_x,
+                                row_y + 1.0f,
+                                retryable ? retry_width : 0.0f);
+                        }
+                        fflush(stdout);
                     }
-                    fflush(stdout);
                     reported_type = state->asset_browser_type;
                     reported_page = state->asset_browser_page;
                     reported_panel_x = panel_bounds.x;
@@ -35541,21 +35675,26 @@ static void sandbox3d_draw_utility_panel(
                     fabsf(reported_status_panel.height - panel_bounds.height) > 0.01f ||
                     fabsf(reported_status_navigation_y - asset_browser_navigation_y) > 0.01f)
                 {
-                    printf(
-                        "Asset Browser status row: warning=%d message=%s x=%.1f y=%.1f width=%.1f height=22.0 panel=%.1f,%.1f,%.1f,%.1f navigation_y=%.1f row_start=%.1f rows=%zu.\n",
-                        state->status_warning ? 1 : 0,
-                        status_text,
-                        status_rect.x,
-                        status_rect.y,
-                        status_rect.width,
-                        panel_bounds.x,
-                        panel_bounds.y,
-                        panel_bounds.width,
-                        panel_bounds.height,
-                        asset_browser_navigation_y,
-                        y_start + 78.0f,
-                        item_count);
-                    fflush(stdout);
+                    if (sandbox3d_reserve_asset_browser_diagnostic_lines(
+                            state,
+                            1U))
+                    {
+                        printf(
+                            "Asset Browser status row: warning=%d message=%s x=%.1f y=%.1f width=%.1f height=22.0 panel=%.1f,%.1f,%.1f,%.1f navigation_y=%.1f row_start=%.1f rows=%zu.\n",
+                            state->status_warning ? 1 : 0,
+                            status_text,
+                            status_rect.x,
+                            status_rect.y,
+                            status_rect.width,
+                            panel_bounds.x,
+                            panel_bounds.y,
+                            panel_bounds.width,
+                            panel_bounds.height,
+                            asset_browser_navigation_y,
+                            y_start + 78.0f,
+                            item_count);
+                        fflush(stdout);
+                    }
                     snprintf(
                         reported_status_text,
                         sizeof(reported_status_text),
@@ -35594,39 +35733,44 @@ static void sandbox3d_draw_utility_panel(
                     reported_asset_slot != (int)state->material_texture_pick.slot ||
                     reported_asset_page != state->asset_browser_page)
                 {
-                    for (item_index = 0U; item_index < item_count; ++item_index)
+                    if (sandbox3d_reserve_asset_browser_diagnostic_lines(
+                            state,
+                            item_count + 1U))
                     {
+                        for (item_index = 0U; item_index < item_count; ++item_index)
+                        {
+                            printf(
+                                "Material texture picker asset row: entity=%u slot=%s path=%s x=%.1f y=%.1f width=%.1f height=26.0.\n",
+                                (unsigned int)state->material_texture_pick.entity,
+                                sandbox3d_material_texture_slot_label(
+                                    state->material_texture_pick.slot),
+                                items[item_index].metadata.source_path != NULL
+                                    ? items[item_index].metadata.source_path
+                                    : "(unnamed asset)",
+                                x_left,
+                                texture_pick_active
+                                    ? picker_row_start_y +
+                                        (float)item_index * picker_row_stride
+                                    : y_start + 78.0f +
+                                        (float)item_index * 30.0f,
+                                panel_bounds.width - 28.0f);
+                        }
                         printf(
-                            "Material texture picker asset row: entity=%u slot=%s path=%s x=%.1f y=%.1f width=%.1f height=26.0.\n",
+                            "Material texture picker navigation: entity=%u slot=%s page=%zu/%zu next_x=%.1f next_y=%.1f enabled=%d.\n",
                             (unsigned int)state->material_texture_pick.entity,
                             sandbox3d_material_texture_slot_label(
                                 state->material_texture_pick.slot),
-                            items[item_index].metadata.source_path != NULL
-                                ? items[item_index].metadata.source_path
-                                : "(unnamed asset)",
-                            x_left,
-                            texture_pick_active
-                                ? picker_row_start_y +
-                                    (float)item_index * picker_row_stride
-                                : y_start + 78.0f +
-                                    (float)item_index * 30.0f,
-                            panel_bounds.width - 28.0f);
+                            page_count == 0U
+                                ? 0U
+                                : state->asset_browser_page + 1U,
+                            page_count,
+                            next_page_button.x + next_page_button.width * 0.5f,
+                            next_page_button.y + next_page_button.height * 0.5f,
+                            state->asset_browser_page + 1U < page_count
+                                ? 1
+                                : 0);
+                        fflush(stdout);
                     }
-                    printf(
-                        "Material texture picker navigation: entity=%u slot=%s page=%zu/%zu next_x=%.1f next_y=%.1f enabled=%d.\n",
-                        (unsigned int)state->material_texture_pick.entity,
-                        sandbox3d_material_texture_slot_label(
-                            state->material_texture_pick.slot),
-                        page_count == 0U
-                            ? 0U
-                            : state->asset_browser_page + 1U,
-                        page_count,
-                        next_page_button.x + next_page_button.width * 0.5f,
-                        next_page_button.y + next_page_button.height * 0.5f,
-                        state->asset_browser_page + 1U < page_count
-                            ? 1
-                            : 0);
-                    fflush(stdout);
                     reported_asset_entity = state->material_texture_pick.entity;
                     reported_asset_slot = (int)state->material_texture_pick.slot;
                     reported_asset_page = state->asset_browser_page;
@@ -35898,17 +36042,22 @@ static void sandbox3d_draw_utility_panel(
                             reported_action_metadata_index !=
                                 state->asset_browser_selected_metadata_index)
                         {
-                            printf(
-                                "Material texture picker actions: entity=%u slot=%s apply_x=%.1f cancel_x=%.1f y=%.1f apply_width=%.1f cancel_width=%.1f height=24.0.\n",
-                                (unsigned int)state->material_texture_pick.entity,
-                                sandbox3d_material_texture_slot_label(
-                                    state->material_texture_pick.slot),
-                                picker_buttons[0].x,
-                                picker_buttons[1].x,
-                                picker_buttons[0].y,
-                                picker_buttons[0].width,
-                                picker_buttons[1].width);
-                            fflush(stdout);
+                            if (sandbox3d_reserve_asset_browser_diagnostic_lines(
+                                    state,
+                                    1U))
+                            {
+                                printf(
+                                    "Material texture picker actions: entity=%u slot=%s apply_x=%.1f cancel_x=%.1f y=%.1f apply_width=%.1f cancel_width=%.1f height=24.0.\n",
+                                    (unsigned int)state->material_texture_pick.entity,
+                                    sandbox3d_material_texture_slot_label(
+                                        state->material_texture_pick.slot),
+                                    picker_buttons[0].x,
+                                    picker_buttons[1].x,
+                                    picker_buttons[0].y,
+                                    picker_buttons[0].width,
+                                    picker_buttons[1].width);
+                                fflush(stdout);
+                            }
                             reported_action_entity = state->material_texture_pick.entity;
                             reported_action_slot = (int)state->material_texture_pick.slot;
                             reported_action_metadata_index =
@@ -35931,17 +36080,22 @@ static void sandbox3d_draw_utility_panel(
                                  engine,
                                  HENKA_MOUSE_BUTTON_LEFT)))
                         {
-                            printf(
-                                "Material texture picker Apply input: x=%.1f y=%.1f pressed=%d released=%d.\n",
-                                picker_mouse.x,
-                                picker_mouse.y,
-                                henka_input_was_mouse_button_pressed(
-                                    engine,
-                                    HENKA_MOUSE_BUTTON_LEFT) ? 1 : 0,
-                                henka_input_was_mouse_button_released(
-                                    engine,
-                                    HENKA_MOUSE_BUTTON_LEFT) ? 1 : 0);
-                            fflush(stdout);
+                            if (sandbox3d_reserve_asset_browser_diagnostic_lines(
+                                    state,
+                                    1U))
+                            {
+                                printf(
+                                    "Material texture picker Apply input: x=%.1f y=%.1f pressed=%d released=%d.\n",
+                                    picker_mouse.x,
+                                    picker_mouse.y,
+                                    henka_input_was_mouse_button_pressed(
+                                        engine,
+                                        HENKA_MOUSE_BUTTON_LEFT) ? 1 : 0,
+                                    henka_input_was_mouse_button_released(
+                                        engine,
+                                        HENKA_MOUSE_BUTTON_LEFT) ? 1 : 0);
+                                fflush(stdout);
+                            }
                         }
                     }
 
@@ -37663,6 +37817,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     size_t giraffe_entity_count;
     size_t giraffe_sss_count;
     size_t rocket_entity_count;
+    size_t realism_entity_index;
     size_t source_binding_start;
     unsigned char* detail_normal_pixels;
     unsigned char* macro_variation_pixels;
@@ -38026,7 +38181,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         wet_dry_roughness_pixels = NULL;
         henka_free(color_space_reference_pixels);
         color_space_reference_pixels = NULL;
+        /* The bounded primitive gallery supplies authoring and texture
+         * fixtures, not reflection-probe coverage. Keep its first rendered
+         * frame free of synchronous six-face probe capture; dedicated
+         * renderer fixtures exercise that path independently. */
         if (!sandbox3d_default_scene_requested(state) &&
+            !state->primitive_gallery &&
             !sandbox3d_is_ibl_reference_kind(state->realism_reference_kind))
         {
             result = henka_scene_add_reflection_probe(
@@ -38269,7 +38429,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         }
     }
 
-    if (!sandbox3d_default_scene_requested(state))
+    if (!sandbox3d_default_scene_requested(state) &&
+        !state->primitive_gallery)
     {
     giraffe_scene_asset = NULL;
     result = henka_assets_load_gltf_scene_asset(
@@ -38509,6 +38670,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     state->fallback_cube_entity = HENKA_INVALID_ENTITY;
     state->fallback_model_entity = HENKA_INVALID_ENTITY;
     state->foliage_entity = HENKA_INVALID_ENTITY;
+    for (realism_entity_index = 0U;
+         realism_entity_index < SANDBOX3D_REALISM_ENTITY_COUNT;
+         ++realism_entity_index)
+    {
+        state->realism_entities[realism_entity_index] = HENKA_INVALID_ENTITY;
+    }
     if (!sandbox3d_default_scene_requested(state))
     {
         state->cube_entity = henka_scene_create_entity_named(state->scene, "Textured Cube");
@@ -38623,7 +38790,10 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     grid_material.use_texture = false;
     grid_material.use_lighting = false;
 
-    if (!sandbox3d_default_scene_requested(state))
+    /* The primitive gallery is a bounded authoring-interaction fixture.
+     * Renderer reference workflows own the nine-material realism ladder. */
+    if (!sandbox3d_default_scene_requested(state) &&
+        !state->primitive_gallery)
     {
         static const char* realism_names[SANDBOX3D_REALISM_ENTITY_COUNT] =
         {
@@ -39453,6 +39623,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 henka_result_to_string(result));
             goto fail;
         }
+    }
+    result = sandbox3d_validate_primitive_gallery_contract(state);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
     }
 
     result = sandbox3d_initialize_gizmo_rendering(engine, state);
