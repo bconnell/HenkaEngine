@@ -49,6 +49,50 @@ const char* sandbox3d_texture_usage_label(henka_texture_usage usage)
     }
 }
 
+henka_result sandbox3d_asset_browser_format_item_label(
+    const sandbox3d_asset_browser_item* item,
+    char* out_label,
+    size_t out_label_capacity)
+{
+    const char* name;
+    int written;
+
+    if (item == NULL || out_label == NULL || out_label_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    name = item->metadata.display_name != NULL
+        ? item->metadata.display_name
+        : item->metadata.source_path;
+    if (name == NULL || name[0] == '\0')
+    {
+        name = "(unnamed asset)";
+    }
+
+    if (item->metadata.type == HENKA_ASSET_TYPE_TEXTURE &&
+        item->metadata.has_texture_descriptor)
+    {
+        written = snprintf(
+            out_label,
+            out_label_capacity,
+            "[%s] %s",
+            sandbox3d_texture_usage_label(
+                item->metadata.texture_descriptor.usage),
+            name);
+    }
+    else
+    {
+        written = snprintf(out_label, out_label_capacity, "%s", name);
+    }
+
+    if (written < 0 || (size_t)written >= out_label_capacity)
+    {
+        out_label[out_label_capacity - 1U] = '\0';
+        return HENKA_ERROR_LIMIT;
+    }
+    return HENKA_SUCCESS;
+}
+
 static const char* sandbox3d_asset_browser_format_label(henka_texture_gpu_format format)
 {
     switch (format)
@@ -288,6 +332,95 @@ static char sandbox3d_asset_browser_ascii_lower(char value)
     return value >= 'A' && value <= 'Z' ? (char)(value + ('a' - 'A')) : value;
 }
 
+static bool sandbox3d_asset_browser_has_extension(
+    const char* path,
+    const char* extension)
+{
+    size_t path_length;
+    size_t extension_length;
+    size_t index;
+
+    if (path == NULL || extension == NULL)
+    {
+        return false;
+    }
+    path_length = strlen(path);
+    extension_length = strlen(extension);
+    if (path_length < extension_length)
+    {
+        return false;
+    }
+    for (index = 0U; index < extension_length; ++index)
+    {
+        if (sandbox3d_asset_browser_ascii_lower(
+                path[path_length - extension_length + index]) !=
+            sandbox3d_asset_browser_ascii_lower(extension[index]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool sandbox3d_asset_browser_can_retry(
+    const henka_asset_metadata* metadata)
+{
+    if (metadata == NULL || metadata->source_path == NULL ||
+        metadata->source_path[0] == '\0' || metadata->loaded ||
+        !metadata->fallback || !metadata->reload_supported)
+    {
+        return false;
+    }
+    if (metadata->type == HENKA_ASSET_TYPE_TEXTURE)
+    {
+        return true;
+    }
+    if (metadata->type != HENKA_ASSET_TYPE_MESH)
+    {
+        return false;
+    }
+    return sandbox3d_asset_browser_has_extension(metadata->source_path, ".obj") ||
+        sandbox3d_asset_browser_has_extension(metadata->source_path, ".gltf") ||
+        sandbox3d_asset_browser_has_extension(metadata->source_path, ".glb");
+}
+
+henka_result sandbox3d_asset_browser_retry(
+    henka_asset_manager* manager,
+    const henka_asset_metadata* metadata)
+{
+    if (manager == NULL || !sandbox3d_asset_browser_can_retry(metadata))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (metadata->type == HENKA_ASSET_TYPE_TEXTURE)
+    {
+        henka_texture* texture = NULL;
+        return metadata->has_texture_descriptor
+            ? henka_assets_retry_failed_texture_with_descriptor(
+                manager,
+                metadata->source_path,
+                &metadata->texture_descriptor,
+                &texture)
+            : henka_assets_retry_failed_texture(
+                manager,
+                metadata->source_path,
+                &texture);
+    }
+
+    {
+        henka_mesh* mesh = NULL;
+        if (sandbox3d_asset_browser_has_extension(
+                metadata->source_path, ".obj"))
+        {
+            return henka_assets_retry_failed_obj_mesh(
+                manager, metadata->source_path, &mesh);
+        }
+        return henka_assets_retry_failed_gltf_mesh(
+            manager, metadata->source_path, &mesh);
+    }
+}
+
 static bool sandbox3d_asset_browser_source_identity_equal(
     const char* left,
     const char* right)
@@ -307,6 +440,22 @@ static bool sandbox3d_asset_browser_source_identity_equal(
         }
     }
     return left[index] == '\0' && right[index] == '\0';
+}
+
+static bool sandbox3d_asset_browser_texture_descriptor_equal(
+    const henka_texture_descriptor* left,
+    const henka_texture_descriptor* right)
+{
+    return left != NULL && right != NULL &&
+        left->color_space == right->color_space &&
+        left->min_filter == right->min_filter &&
+        left->mag_filter == right->mag_filter &&
+        left->wrap_u == right->wrap_u &&
+        left->wrap_v == right->wrap_v &&
+        left->generate_mipmaps == right->generate_mipmaps &&
+        left->vertical_flip == right->vertical_flip &&
+        left->usage == right->usage &&
+        left->anisotropy == right->anisotropy;
 }
 
 static bool sandbox3d_asset_browser_is_first_identity(
@@ -329,7 +478,19 @@ static bool sandbox3d_asset_browser_is_first_identity(
             sandbox3d_asset_browser_source_identity_equal(
                 previous.source_path, metadata->source_path))
         {
-            return false;
+            if (metadata->type != HENKA_ASSET_TYPE_TEXTURE)
+            {
+                return false;
+            }
+            if (previous.has_texture_descriptor ==
+                metadata->has_texture_descriptor &&
+                (!metadata->has_texture_descriptor ||
+                 sandbox3d_asset_browser_texture_descriptor_equal(
+                    &previous.texture_descriptor,
+                    &metadata->texture_descriptor)))
+            {
+                return false;
+            }
         }
     }
     return true;

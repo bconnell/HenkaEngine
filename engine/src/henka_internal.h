@@ -133,6 +133,9 @@ typedef struct henka_input_state
     bool automation_input_faulted;
     char automation_input_path[1024];
     uint64_t automation_input_offset;
+    uint64_t automation_input_record_sequence;
+    bool automation_input_record_available;
+    bool automation_input_release_consumed;
     uint32_t automation_input_stream_failures;
     bool close_requested;
 } henka_input_state;

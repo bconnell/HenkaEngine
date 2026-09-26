@@ -18,6 +18,25 @@
 #include <share.h>
 #endif
 
+static bool henka_platform_automation_diagnostics_enabled(void)
+{
+#if defined(_WIN32)
+    char* value = NULL;
+    size_t value_length = 0U;
+    bool enabled = false;
+    if (_dupenv_s(&value, &value_length, "HENKA_AUTOMATION_DIAGNOSTICS") == 0 &&
+        value != NULL)
+    {
+        enabled = strcmp(value, "1") == 0;
+    }
+    free(value);
+    return enabled;
+#else
+    const char* value = getenv("HENKA_AUTOMATION_DIAGNOSTICS");
+    return value != NULL && strcmp(value, "1") == 0;
+#endif
+}
+
 static bool henka_platform_append_text_input(
     henka_input_state* input,
     const char* text);
@@ -58,6 +77,9 @@ bool henka_input_automation_begin(
 
     memcpy(input->automation_input_path, event_path, path_length + 1U);
     input->automation_input_offset = 0U;
+    input->automation_input_record_sequence = 0U;
+    input->automation_input_record_available = false;
+    input->automation_input_release_consumed = false;
     input->automation_input_owned = true;
     input->automation_input_faulted = false;
     input->automation_input_stream_failures = 0U;
@@ -78,6 +100,9 @@ void henka_input_automation_release(henka_input_state* input)
     input->automation_input_faulted = false;
     input->automation_input_path[0] = '\0';
     input->automation_input_offset = 0U;
+    input->automation_input_record_sequence = 0U;
+    input->automation_input_record_available = false;
+    input->automation_input_release_consumed = false;
     input->automation_input_stream_failures = 0U;
     henka_platform_release_input_on_focus_loss(input);
 }
@@ -342,6 +367,9 @@ static void henka_platform_poll_automation_event(henka_input_state* input)
         return;
     }
 
+    input->automation_input_record_available = false;
+    input->automation_input_release_consumed = false;
+
     stream = NULL;
 #if defined(_WIN32)
     stream = _fsopen(input->automation_input_path, "rb", _SH_DENYNO);
@@ -403,9 +431,70 @@ static void henka_platform_poll_automation_event(henka_input_state* input)
         return;
     }
     line[strcspn(line, "\r\n")] = '\0';
+    input->automation_input_record_available = true;
     if (henka_input_automation_apply_event(input, line))
     {
         input->automation_input_offset = (uint64_t)next_offset;
+        if (input->automation_input_record_sequence < UINT64_MAX)
+        {
+            ++input->automation_input_record_sequence;
+        }
+        {
+            const char* cursor = line;
+            char command[32] = {0};
+            char first[32] = {0};
+            char second[32] = {0};
+            const char* type = "other";
+            const char* button = "none";
+            bool has_command = henka_input_automation_next_token(
+                &cursor, command, sizeof(command));
+            bool has_first = henka_input_automation_next_token(
+                &cursor, first, sizeof(first));
+            bool has_second = henka_input_automation_next_token(
+                &cursor, second, sizeof(second));
+            if (has_command && strcmp(command, "move") == 0)
+            {
+                type = "move";
+            }
+            else if (has_command && has_first && has_second &&
+                strcmp(command, "button") == 0)
+            {
+                button = first;
+                if (strcmp(second, "up") == 0)
+                {
+                    type = "button-up";
+                    input->automation_input_release_consumed = true;
+                }
+                else if (strcmp(second, "down") == 0)
+                {
+                    type = "button-down";
+                }
+            }
+            else if (has_command && has_first && has_second &&
+                strcmp(command, "key") == 0)
+            {
+                type = strcmp(second, "up") == 0 ? "key-up" : "key-down";
+            }
+            else if (has_command && strcmp(command, "wheel") == 0)
+            {
+                type = "wheel";
+            }
+            else if (has_command && strcmp(command, "text") == 0)
+            {
+                type = "text";
+            }
+            if (henka_platform_automation_diagnostics_enabled() &&
+                input->automation_input_record_sequence <= 512U)
+            {
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC input record=%llu type=%s button=%s release_consumed=%u\n",
+                    (unsigned long long)input->automation_input_record_sequence,
+                    type,
+                    button,
+                    input->automation_input_release_consumed ? 1U : 0U);
+                fflush(stdout);
+            }
+        }
     }
     else
     {

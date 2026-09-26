@@ -13,10 +13,12 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 
 $sandboxCMakePath = Join-Path $RepositoryRoot "examples\sandbox3d\CMakeLists.txt"
 $packageScriptPath = Join-Path $RepositoryRoot "scripts\package_sandbox3d_windows.ps1"
+$packageValidationPath = Join-Path $RepositoryRoot "scripts\check_packaged_sandbox3d_windows.ps1"
 $generatorScriptPath = Join-Path $RepositoryRoot "scripts\generate_residency_fixtures_windows.ps1"
 $genericModelingScriptPath = Join-Path $RepositoryRoot "scripts\test_visible_native_modeling_windows.ps1"
+$windowsCiWorkflowPath = Join-Path $RepositoryRoot ".github\workflows\windows-ci.yml"
 
-foreach ($path in @($sandboxCMakePath, $packageScriptPath, $generatorScriptPath, $genericModelingScriptPath)) {
+foreach ($path in @($sandboxCMakePath, $packageScriptPath, $packageValidationPath, $generatorScriptPath, $genericModelingScriptPath, $windowsCiWorkflowPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Fixture-scope contract input is missing: $path"
     }
@@ -25,7 +27,41 @@ foreach ($path in @($sandboxCMakePath, $packageScriptPath, $generatorScriptPath,
 $sandboxLines = Get-Content -LiteralPath $sandboxCMakePath
 $sandboxText = $sandboxLines -join "`n"
 $packageText = Get-Content -LiteralPath $packageScriptPath -Raw
+$packageValidationText = Get-Content -LiteralPath $packageValidationPath -Raw
 $genericModelingText = Get-Content -LiteralPath $genericModelingScriptPath -Raw
+$windowsCiWorkflowText = Get-Content -LiteralPath $windowsCiWorkflowPath -Raw
+
+function Test-UsesPrimitiveGalleryArgument {
+    param([Parameter(Mandatory = $true)][string]$ScriptText)
+
+    $argumentLists = [System.Text.RegularExpressions.Regex]::Matches(
+        $ScriptText,
+        '(?is)-Arguments\s+@\((?<arguments>[^)]*)\)')
+    foreach ($argumentList in $argumentLists) {
+        if ([System.Text.RegularExpressions.Regex]::IsMatch(
+                $argumentList.Groups['arguments'].Value,
+                '(?:''--primitive-gallery''|"--primitive-gallery")')) {
+            return $true
+        }
+    }
+    return $false
+}
+
+# Keep the validator independent of PowerShell string-literal quote style and
+# prove it rejects a neighboring, non-matching switch as well.
+$galleryArgumentCases = @(
+    [pscustomobject]@{ Text = "-Arguments @('--primitive-gallery')"; Expected = $true },
+    [pscustomobject]@{ Text = '-Arguments @("--primitive-gallery")'; Expected = $true },
+    [pscustomobject]@{ Text = "-Arguments @('--other', '--primitive-gallery')"; Expected = $true },
+    [pscustomobject]@{ Text = "-Arguments @('--primitive-gallery-extra')"; Expected = $false },
+    [pscustomobject]@{ Text = "-Arguments @('--other')"; Expected = $false }
+)
+foreach ($case in $galleryArgumentCases) {
+    if ((Test-UsesPrimitiveGalleryArgument -ScriptText $case.Text) -ne $case.Expected) {
+        throw "Primitive-gallery argument parser regression for: $($case.Text)"
+    }
+}
+
 $insideNormalPostBuild = $false
 $normalPostBuildLines = New-Object System.Collections.Generic.List[string]
 foreach ($line in $sandboxLines) {
@@ -69,12 +105,16 @@ if ($packageText -notmatch 'generate_residency_fixtures_windows\.ps1') {
 if ($packageText -match '(?s)\$residencyFixtureSource\s+-Destination.*?-Recurse') {
     throw "Packaging must copy only the bounded named residency fixtures, not the whole output directory."
 }
-if ($genericModelingText -match '(?m)-Arguments\s+@\("--primitive-gallery"\)') {
-    throw "Generic modeling evidence must not launch the showcase/reference gallery."
+if (-not (Test-UsesPrimitiveGalleryArgument -ScriptText $genericModelingText)) {
+    throw "The visible native modeling workflow must explicitly identify its bounded primitive-gallery fixture."
 }
-if ($genericModelingText -notmatch 'DEFAULT_SCENE_READY ground=1 ground_editable=1 camera=1 showcase_assets=0 diagnostic_entities=0 scene_content=product_native') {
-    throw "Generic modeling evidence must prove clean product-native startup before authoring."
+if ($packageValidationText -notmatch 'DEFAULT_SCENE_READY ground=1 ground_editable=1 camera=1 showcase_assets=0 diagnostic_entities=0 scene_content=product_native') {
+    throw "The packaged normal-startup validator must retain the clean product-native default-scene assertion."
+}
+if ($windowsCiWorkflowText -notmatch '(?m)check_packaged_sandbox3d_windows\.ps1\s+-NonInteractive\s+-ProductStartupPrimitiveOnly') {
+    throw "Hosted Windows validation must execute the packaged clean-default startup gate independently of the gallery workflow."
 }
 
 Write-Output "[pass] Sandbox3D residency fixtures are excluded from normal builds and generated only by the explicit stress target."
-Write-Output "[pass] Generic modeling evidence starts from the product-native scene and keeps showcase/reference fixtures explicit."
+Write-Output "[pass] Visible native modeling explicitly uses the bounded primitive gallery; quote-style parser controls passed."
+Write-Output "[pass] Hosted packaged startup retains an independent clean product-native default-scene gate."
