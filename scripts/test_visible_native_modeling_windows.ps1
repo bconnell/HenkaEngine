@@ -19,6 +19,8 @@ $assetName = "VisibleModel_" + ([Guid]::NewGuid().ToString("N").Substring(0, 12)
 $capturedProcess = $null
 $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
 $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
+$previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
+$automationRecordProgressPattern = 'HENKA_AUTOMATION_DIAGNOSTIC input record=\d+ type='
 
 . (Join-Path $repoRoot "scripts\henka_script_common.ps1")
 . (Join-Path $repoRoot "scripts\henka_ui_automation_helpers.ps1")
@@ -414,7 +416,60 @@ try {
     if ($hardLimitDecision -ne "timed-out") {
         throw "The progress-aware UI wait exceeded its absolute hard limit while progress continued."
     }
-    Write-Output "[pass] Progress-aware UI readiness tolerates slow application progress, detects stalls, and enforces its hard limit."
+    $unrelatedProgressLog = [System.Text.StringBuilder]::new()
+    $legacyFrameProgressPattern = 'Native authoring source row: name='
+    $legacyProgressCount = 0
+    $operationProgressCount = 0
+    $legacyLastProgressAt = 0
+    $operationLastProgressAt = 0
+    $legacyDecision = "continue"
+    $operationDecision = "continue"
+    for ($elapsed = 1000; $elapsed -le 12000; $elapsed += 1000) {
+        [void]$unrelatedProgressLog.AppendLine(
+            "HENKA_AUTOMATION_DIAGNOSTIC frame seq=$($elapsed * 6) phase=render-complete")
+        [void]$unrelatedProgressLog.AppendLine(
+            'Native authoring source row: name=Giraffe source=assets/giraffe.glb.')
+        $unrelatedProgressText = $unrelatedProgressLog.ToString()
+        $nextLegacyProgressCount =
+            [Regex]::Matches($unrelatedProgressText, $legacyFrameProgressPattern).Count
+        $nextOperationProgressCount =
+            [Regex]::Matches($unrelatedProgressText, $automationRecordProgressPattern).Count
+        if ($nextLegacyProgressCount -gt $legacyProgressCount) {
+            $legacyLastProgressAt = $elapsed
+        }
+        if ($nextOperationProgressCount -gt $operationProgressCount) {
+            $operationLastProgressAt = $elapsed
+        }
+        $legacyProgressCount = $nextLegacyProgressCount
+        $operationProgressCount = $nextOperationProgressCount
+        $legacyDecision = Get-HenkaProgressWaitDecision `
+            -ElapsedMilliseconds $elapsed `
+            -MillisecondsSinceProgress ($elapsed - $legacyLastProgressAt) `
+            -TargetObserved:$false `
+            -MaximumTimeoutMilliseconds 30000 `
+            -NoProgressTimeoutMilliseconds 10000
+        $operationDecision = Get-HenkaProgressWaitDecision `
+            -ElapsedMilliseconds $elapsed `
+            -MillisecondsSinceProgress ($elapsed - $operationLastProgressAt) `
+            -TargetObserved:$false `
+            -MaximumTimeoutMilliseconds 30000 `
+            -NoProgressTimeoutMilliseconds 10000
+        if ($operationDecision -ne "continue") {
+            break
+        }
+    }
+    if ($legacyProgressCount -ne 10 -or $legacyDecision -ne "continue") {
+        throw "The unrelated-progress negative control did not reproduce the old heartbeat-masked wait."
+    }
+    if ($operationProgressCount -ne 0 -or $operationDecision -ne "stalled") {
+        throw "Repeated unrelated frame/source-row heartbeats kept the active UI operation alive."
+    }
+    $consumedInputRecord =
+        'HENKA_AUTOMATION_DIAGNOSTIC input record=181 type=button-up button=left release_consumed=1'
+    if ([Regex]::Matches($consumedInputRecord, $automationRecordProgressPattern).Count -ne 1) {
+        throw "A product-consumed automation input record was not recognized as operation progress."
+    }
+    Write-Output "[pass] Progress-aware UI waits accept consumed input progress, reject unrelated frame heartbeats, detect stalls, and enforce the hard limit."
 
     $interactionToolsPath = Join-Path $repoRoot "examples\sandbox3d\interaction_tools.h"
     $sandboxSourcePath = Join-Path $repoRoot "examples\sandbox3d\main.c"
@@ -461,6 +516,7 @@ try {
 
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
+    $env:HENKA_AUTOMATION_DIAGNOSTICS = "1"
     # This gate uses the explicit engineering gallery so its manager-owned
     # texture fixture is available; default-scene cleanliness is independently
     # asserted by the packaged startup gate.
@@ -567,13 +623,12 @@ try {
     Write-Output "[pass] Asset Browser readiness rejects the empty 0/0 view and requires a populated page."
     $fallbackRowPattern =
         'Asset Browser row: path=assets/textures/missing_texture\.png x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) name_width=(?<nameWidth>[-0-9.]+) retry=1 retry_x=(?<retryX>[-0-9.]+) retry_y=(?<retryY>[-0-9.]+) retry_width=(?<retryWidth>[-0-9.]+) retry_height=24\.0\.'
-    $applicationFrameProgressPattern = 'Native authoring source row: name='
     $assetTabClickCount = Get-LogMatchCount `
         -Path $stdoutPath `
         -Pattern $assetNavigationPattern
     $assetTabProgressCount = Get-LogMatchCount `
         -Path $stdoutPath `
-        -Pattern $applicationFrameProgressPattern
+        -Pattern $automationRecordProgressPattern
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ([double]$utilityAssetTab.Groups["x"].Value + ([double]$utilityAssetTab.Groups["width"].Value * 0.5)) `
@@ -583,15 +638,40 @@ try {
             -InitialCount $assetTabClickCount `
             -Pattern $assetNavigationPattern `
             -InitialProgressCount $assetTabProgressCount `
-            -ProgressPattern $applicationFrameProgressPattern
+            -ProgressPattern $automationRecordProgressPattern
     if (-not $assetTabWait.Satisfied) {
         $assetProcessAlive = $null -ne $capturedProcess -and -not $capturedProcess.Process.HasExited
+        $automationDiagnosticsText = (Read-HenkaSharedText -Path $stdoutPath) + "`n" +
+            (Read-HenkaSharedText -Path $stderrPath)
+        $automationDiagnostics = @($automationDiagnosticsText -split "\r?\n" |
+            Where-Object { $_ -match 'HENKA_AUTOMATION_DIAGNOSTIC|Asset Browser layout:' } |
+            Select-Object -Last 48)
+        $automationDiagnosticsText = ($automationDiagnostics -join "`n").Trim()
+        if ([string]::IsNullOrWhiteSpace($automationDiagnosticsText)) {
+            $automationDiagnosticsText = "(product emitted no automation-boundary diagnostics)"
+        }
+        if ($automationDiagnosticsText.Length -gt 6000) {
+            $automationDiagnosticsText = $automationDiagnosticsText.Substring(
+                $automationDiagnosticsText.Length - 6000)
+        }
         throw ("The real Utility Assets tab did not expose its current bounded asset page " +
-            "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2}, process_alive={3})." -f
+            "(wait={0}, elapsed_ms={1}, consumed_automation_records=+{2}, process_alive={3})." -f
             $assetTabWait.Decision,
             $assetTabWait.ElapsedMilliseconds,
             $assetTabWait.ProgressDelta,
-            $assetProcessAlive)
+            $assetProcessAlive) + "`nRecent product diagnostics:`n" + $automationDiagnosticsText
+    }
+    $assetTransitionTrace = @(
+        (Read-SharedLogText -Path $stdoutPath) -split "\r?\n" |
+            Where-Object {
+                $_ -match '^HENKA_AUTOMATION_DIAGNOSTIC (frame|input|utility|assets) ' -or
+                $_ -match '^Asset Browser layout:'
+            } |
+            Select-Object -Last 32
+    )
+    if ($assetTransitionTrace.Count -gt 0) {
+        Write-Output "[diagnostic] Product-process Utility-to-Assets trace (bounded to the latest 32 records):"
+        $assetTransitionTrace | ForEach-Object { Write-Output "  $_" }
     }
 
     $fallbackRow = $null
@@ -611,7 +691,7 @@ try {
             '(?<page>[1-9]\d*)',
             "(?<page>$expectedPage)")
         $pageReportCount = Get-LogMatchCount -Path $stdoutPath -Pattern $expectedAssetPagePattern
-        $pageProgressCount = Get-LogMatchCount -Path $stdoutPath -Pattern $applicationFrameProgressPattern
+        $pageProgressCount = Get-LogMatchCount -Path $stdoutPath -Pattern $automationRecordProgressPattern
         Send-HenkaAutomationClick `
             -EventPath $automationInputPath `
             -X ([double]$page.Groups["nextX"].Value) `
@@ -621,10 +701,10 @@ try {
                 -InitialCount $pageReportCount `
                 -Pattern $expectedAssetPagePattern `
                 -InitialProgressCount $pageProgressCount `
-                -ProgressPattern $applicationFrameProgressPattern
+                -ProgressPattern $automationRecordProgressPattern
         if (-not $pageWait.Satisfied) {
             throw ("The in-panel Asset Browser Next control did not publish another page " +
-                "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2})." -f
+                "(wait={0}, elapsed_ms={1}, consumed_automation_records=+{2})." -f
                 $pageWait.Decision,
                 $pageWait.ElapsedMilliseconds,
                 $pageWait.ProgressDelta)
@@ -670,7 +750,7 @@ try {
     $retryCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retryPattern
     $retryFailureStateCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retryFailureStatePattern
     $retryFeedbackCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retryFeedbackPattern
-    $retryProgressCount = Get-LogMatchCount -Path $stdoutPath -Pattern $applicationFrameProgressPattern
+    $retryProgressCount = Get-LogMatchCount -Path $stdoutPath -Pattern $automationRecordProgressPattern
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ([double]$fallbackRow.Groups["retryX"].Value + ([double]$fallbackRow.Groups["retryWidth"].Value * 0.5)) `
@@ -680,10 +760,10 @@ try {
         -InitialCount $retryCount `
         -Pattern $retryPattern `
         -InitialProgressCount $retryProgressCount `
-        -ProgressPattern $applicationFrameProgressPattern
+        -ProgressPattern $automationRecordProgressPattern
     if (-not $retryWait.Satisfied) {
         throw ("The visible Asset Browser Retry button did not invoke the failed-source recovery API " +
-            "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2})." -f
+            "(wait={0}, elapsed_ms={1}, consumed_automation_records=+{2})." -f
             $retryWait.Decision,
             $retryWait.ElapsedMilliseconds,
             $retryWait.ProgressDelta)
@@ -697,10 +777,10 @@ try {
         -Pattern $retryFailureStatePattern `
         -InitialCount $retryFailureStateCount `
         -InitialProgressCount $retryProgressCount `
-        -ProgressPattern $applicationFrameProgressPattern
+        -ProgressPattern $automationRecordProgressPattern
     if (-not $retryStateWait.Satisfied) {
         throw ("A failed Retry attempt changed or lost the original file-backed fallback entry " +
-            "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2})." -f
+            "(wait={0}, elapsed_ms={1}, consumed_automation_records=+{2})." -f
             $retryStateWait.Decision,
             $retryStateWait.ElapsedMilliseconds,
             $retryStateWait.ProgressDelta)
@@ -710,10 +790,10 @@ try {
         -Pattern $retryFeedbackPattern `
         -InitialCount $retryFeedbackCount `
         -InitialProgressCount $retryProgressCount `
-        -ProgressPattern $applicationFrameProgressPattern
+        -ProgressPattern $automationRecordProgressPattern
     if (-not $retryFeedbackWait.Satisfied) {
         throw ("The Assets panel did not display the latest Retry error status " +
-            "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2})." -f
+            "(wait={0}, elapsed_ms={1}, consumed_automation_records=+{2})." -f
             $retryFeedbackWait.Decision,
             $retryFeedbackWait.ElapsedMilliseconds,
             $retryFeedbackWait.ProgressDelta)
@@ -751,7 +831,7 @@ try {
     $retryCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retryPattern
     $retrySuccessStatePattern = 'Asset Browser Retry state: loaded=1 fallback=0 reload_supported=1\.'
     $retrySuccessStateCount = Get-LogMatchCount -Path $stdoutPath -Pattern $retrySuccessStatePattern
-    $retryProgressCount = Get-LogMatchCount -Path $stdoutPath -Pattern $applicationFrameProgressPattern
+    $retryProgressCount = Get-LogMatchCount -Path $stdoutPath -Pattern $automationRecordProgressPattern
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X ([double]$fallbackRow.Groups["retryX"].Value + ([double]$fallbackRow.Groups["retryWidth"].Value * 0.5)) `
@@ -761,10 +841,10 @@ try {
         -InitialCount $retryCount `
         -Pattern $retryPattern `
         -InitialProgressCount $retryProgressCount `
-        -ProgressPattern $applicationFrameProgressPattern
+        -ProgressPattern $automationRecordProgressPattern
     if (-not $retryWait.Satisfied) {
         throw ("The visible Asset Browser Retry button did not recover after the real source file appeared " +
-            "(wait={0}, elapsed_ms={1}, app_progress_reports=+{2})." -f
+            "(wait={0}, elapsed_ms={1}, consumed_automation_records=+{2})." -f
             $retryWait.Decision,
             $retryWait.ElapsedMilliseconds,
             $retryWait.ProgressDelta)
@@ -775,11 +855,11 @@ try {
         -Pattern $retrySuccessStatePattern `
         -InitialCount $retrySuccessStateCount `
         -InitialProgressCount $retryProgressCount `
-        -ProgressPattern $applicationFrameProgressPattern
+        -ProgressPattern $automationRecordProgressPattern
     if ($retryResult.Groups["result"].Value -ne "success" -or
         -not $retryStateWait.Satisfied) {
         throw ("Retry did not publish a loaded, non-fallback texture state after source recovery " +
-            "(retry_result={0}, wait={1}, elapsed_ms={2}, app_progress_reports=+{3})." -f
+            "(retry_result={0}, wait={1}, elapsed_ms={2}, consumed_automation_records=+{3})." -f
             $retryResult.Groups["result"].Value,
             $retryStateWait.Decision,
             $retryStateWait.ElapsedMilliseconds,
@@ -1682,6 +1762,12 @@ finally {
     }
     else {
         $env:HENKA_AUTOMATION_INPUT_OWNED = $previousAutomationOwned
+    }
+    if ($null -eq $previousAutomationDiagnostics) {
+        Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTICS -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_DIAGNOSTICS = $previousAutomationDiagnostics
     }
     if ($null -eq $previousAutomationFile) {
         Remove-Item Env:HENKA_AUTOMATION_INPUT_FILE -ErrorAction SilentlyContinue

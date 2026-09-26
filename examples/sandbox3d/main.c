@@ -586,6 +586,9 @@ typedef struct sandbox3d_state
     henka_asset_type asset_browser_type;
     size_t asset_browser_page;
     size_t asset_browser_selected_metadata_index;
+    uint64_t automation_diagnostic_frame_sequence;
+    uint64_t automation_diagnostic_utility_action_sequence;
+    uint64_t automation_diagnostic_assets_reported_action_sequence;
     henka_texture* asset_browser_selected_texture;
     const henka_material_asset* asset_browser_selected_material;
     const henka_prefab* asset_browser_selected_prefab;
@@ -11112,10 +11115,20 @@ static sandbox3d_workspace_panel_id sandbox3d_find_workspace_header_drag_panel_a
 
 static void sandbox3d_set_active_utility(sandbox3d_state* state, sandbox3d_utility_view utility)
 {
+    sandbox3d_utility_view previous_utility;
+    char diagnostics_value[8];
+    bool diagnostics_enabled;
+
     if (state == NULL)
     {
         return;
     }
+    previous_utility = state->workspace.active_utility;
+    diagnostics_enabled = sandbox3d_copy_environment_value(
+        "HENKA_AUTOMATION_DIAGNOSTICS",
+        diagnostics_value,
+        sizeof(diagnostics_value)) &&
+        strcmp(diagnostics_value, "1") == 0;
 
     if (utility != SANDBOX3D_UTILITY_ASSETS &&
         state->material_texture_pick.active)
@@ -11135,6 +11148,22 @@ static void sandbox3d_set_active_utility(sandbox3d_state* state, sandbox3d_utili
         fflush(stdout);
     }
     state->workspace.active_utility = utility;
+    if (diagnostics_enabled)
+    {
+        if (state->automation_diagnostic_utility_action_sequence < UINT64_MAX)
+        {
+            ++state->automation_diagnostic_utility_action_sequence;
+        }
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC utility action_seq=%llu frame=%llu before=%s requested=%s after=%s changed=%u\n",
+            (unsigned long long)state->automation_diagnostic_utility_action_sequence,
+            (unsigned long long)state->automation_diagnostic_frame_sequence,
+            sandbox3d_get_utility_label(previous_utility),
+            sandbox3d_get_utility_label(utility),
+            sandbox3d_get_utility_label(state->workspace.active_utility),
+            previous_utility != state->workspace.active_utility ? 1U : 0U);
+        fflush(stdout);
+    }
 }
 
 /* HENKA_WORK_CONTEXT_RUNTIME_V1
@@ -35132,8 +35161,27 @@ static void sandbox3d_draw_utility_panel(
 
         case SANDBOX3D_UTILITY_ASSETS:
         {
+            char diagnostics_value[8];
+            const bool diagnostics_enabled =
+                sandbox3d_copy_environment_value(
+                    "HENKA_AUTOMATION_DIAGNOSTICS",
+                    diagnostics_value,
+                    sizeof(diagnostics_value)) &&
+                strcmp(diagnostics_value, "1") == 0;
             if (state->asset_browser_show_utility_navigation)
             {
+                if (diagnostics_enabled &&
+                    state->automation_diagnostic_assets_reported_action_sequence <
+                        state->automation_diagnostic_utility_action_sequence)
+                {
+                    printf(
+                        "HENKA_AUTOMATION_DIAGNOSTIC assets frame=%llu action_seq=%llu draw=utility-navigation metadata_collected=0 page=0 page_count=0 rows=0 populated=0\n",
+                        (unsigned long long)state->automation_diagnostic_frame_sequence,
+                        (unsigned long long)state->automation_diagnostic_utility_action_sequence);
+                    fflush(stdout);
+                    state->automation_diagnostic_assets_reported_action_sequence =
+                        state->automation_diagnostic_utility_action_sequence;
+                }
                 henka_ui_label(
                     state->ui,
                     x_left,
@@ -35353,6 +35401,22 @@ static void sandbox3d_draw_utility_panel(
                 asset_page_size,
                 items,
                 32U);
+            if (diagnostics_enabled &&
+                state->automation_diagnostic_assets_reported_action_sequence <
+                    state->automation_diagnostic_utility_action_sequence)
+            {
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC assets frame=%llu action_seq=%llu draw=asset-browser metadata_collected=1 page=%zu page_count=%zu rows=%zu populated=%u\n",
+                    (unsigned long long)state->automation_diagnostic_frame_sequence,
+                    (unsigned long long)state->automation_diagnostic_utility_action_sequence,
+                    page_count == 0U ? 0U : state->asset_browser_page + 1U,
+                    page_count,
+                    item_count,
+                    page_count > 0U && item_count > 0U ? 1U : 0U);
+                fflush(stdout);
+                state->automation_diagnostic_assets_reported_action_sequence =
+                    state->automation_diagnostic_utility_action_sequence;
+            }
             if (texture_pick_active)
             {
                 snprintf(
@@ -41010,6 +41074,19 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    if (state != NULL)
+    {
+        char diagnostics_value[8];
+        if (sandbox3d_copy_environment_value(
+                "HENKA_AUTOMATION_DIAGNOSTICS",
+                diagnostics_value,
+                sizeof(diagnostics_value)) &&
+            strcmp(diagnostics_value, "1") == 0)
+        {
+            state->automation_diagnostic_frame_sequence =
+                henka_engine_get_frame_index(engine);
+        }
+    }
     if (state != NULL && state->mcp_server != NULL)
     {
         (void)sandbox3d_mcp_server_poll(state->mcp_server);
