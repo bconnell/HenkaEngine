@@ -1092,6 +1092,9 @@ henka_result henka_engine_run(henka_engine* engine)
     henka_platform_frame_state frame_state;
     henka_result result;
     henka_result run_result;
+    char automation_diagnostics_value[8];
+    bool automation_diagnostics_enabled;
+    uint32_t automation_diagnostic_frame_report_count;
 
     result = henka_engine_begin_run_transition(engine);
     if (result != HENKA_SUCCESS)
@@ -1117,11 +1120,32 @@ henka_result henka_engine_run(henka_engine* engine)
     engine->shutdown_callback_pending = true;
     engine->run_state = HENKA_ENGINE_RUN_STATE_RUNNING;
     run_result = HENKA_SUCCESS;
+    automation_diagnostics_enabled =
+        henka_copy_environment_value(
+            "HENKA_AUTOMATION_DIAGNOSTICS",
+            automation_diagnostics_value,
+            sizeof(automation_diagnostics_value)) &&
+        strcmp(automation_diagnostics_value, "1") == 0;
+    automation_diagnostic_frame_report_count = 0U;
     HENKA_LOG_INFO("entering engine run loop");
 
     while (henka_engine_should_continue_run(engine))
     {
+        bool report_automation_frame;
         henka_time_tick(&engine->time);
+        report_automation_frame = automation_diagnostics_enabled &&
+            automation_diagnostic_frame_report_count < 256U &&
+            (engine->time.frame_index <= 5U ||
+             engine->time.frame_index % 30U == 0U);
+        if (report_automation_frame)
+        {
+            ++automation_diagnostic_frame_report_count;
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC frame seq=%llu phase=loop-begin records=%llu\n",
+                (unsigned long long)engine->time.frame_index,
+                (unsigned long long)engine->input.automation_input_record_sequence);
+            fflush(stdout);
+        }
         henka_input_reset_frame_state(&engine->input);
 
         result = henka_platform_poll_events(
@@ -1135,6 +1159,18 @@ henka_result henka_engine_run(henka_engine* engine)
                 henka_result_to_string(result));
             run_result = result;
             break;
+        }
+
+        if (report_automation_frame)
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC frame seq=%llu phase=events-polled record_available=%u consumed_seq=%llu release_consumed=%u input_faulted=%u\n",
+                (unsigned long long)engine->time.frame_index,
+                engine->input.automation_input_record_available ? 1U : 0U,
+                (unsigned long long)engine->input.automation_input_record_sequence,
+                engine->input.automation_input_release_consumed ? 1U : 0U,
+                engine->input.automation_input_faulted ? 1U : 0U);
+            fflush(stdout);
         }
 
         if (frame_state.close_requested)
@@ -1152,6 +1188,14 @@ henka_result henka_engine_run(henka_engine* engine)
                 engine,
                 engine->time.delta_seconds,
                 engine->config.user_data);
+        }
+
+        if (report_automation_frame)
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC frame seq=%llu phase=update-complete\n",
+                (unsigned long long)engine->time.frame_index);
+            fflush(stdout);
         }
 
         if (!henka_engine_should_continue_run(engine))
@@ -1190,11 +1234,25 @@ henka_result henka_engine_run(henka_engine* engine)
             break;
         }
 
+        if (report_automation_frame)
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC frame seq=%llu phase=render-begin\n",
+                (unsigned long long)engine->time.frame_index);
+            fflush(stdout);
+        }
         result = henka_engine_render_frame(engine);
         if (result != HENKA_SUCCESS)
         {
             run_result = result;
             break;
+        }
+        if (report_automation_frame)
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC frame seq=%llu phase=render-complete\n",
+                (unsigned long long)engine->time.frame_index);
+            fflush(stdout);
         }
     }
 

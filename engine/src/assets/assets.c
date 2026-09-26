@@ -2385,7 +2385,7 @@ henka_result henka_assets_load_texture_with_descriptor(
         fallback_active;
     manager->texture_entries[
         manager->texture_count].metadata.reload_supported =
-        !fallback_active;
+        true;
     manager->texture_entries[
         manager->texture_count].metadata.has_texture_descriptor = true;
     manager->texture_entries[
@@ -3956,7 +3956,11 @@ static henka_result henka_assets_load_embedded_texture(
     manager->texture_entries[manager->texture_count].metadata.display_name = display_name;
     manager->texture_entries[manager->texture_count].metadata.loaded = !fallback;
     manager->texture_entries[manager->texture_count].metadata.fallback = fallback;
-    manager->texture_entries[manager->texture_count].metadata.reload_supported = fallback;
+    /* Embedded bytes have no independently addressable file source. The
+     * manager's texture retry API accepts filesystem-backed source paths, so
+     * advertising this synthetic identity as reloadable would expose a Retry
+     * action that cannot recover the embedded payload. */
+    manager->texture_entries[manager->texture_count].metadata.reload_supported = false;
     manager->texture_entries[manager->texture_count].metadata.has_texture_descriptor = true;
     manager->texture_entries[manager->texture_count].metadata.texture_descriptor = *descriptor;
     henka_asset_set_summary(&manager->texture_entries[manager->texture_count].metadata,
@@ -6029,10 +6033,9 @@ henka_result henka_assets_retry_failed_texture_with_descriptor(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (!entry->metadata.fallback)
+    if (!entry->metadata.fallback || !entry->metadata.reload_supported)
     {
-        *out_texture = entry->texture;
-        return HENKA_SUCCESS;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     resolved_path = NULL;
@@ -6132,8 +6135,7 @@ henka_result henka_assets_retry_failed_obj_mesh(
 
     if (!entry->metadata.fallback)
     {
-        *out_mesh = entry->mesh;
-        return HENKA_SUCCESS;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (!entry->owns_mesh || entry->mesh == manager->fallback_mesh ||
         entry->source_path == NULL)
@@ -6192,7 +6194,7 @@ henka_result henka_assets_retry_failed_gltf_mesh(
     entry = henka_asset_manager_find_mesh_entry(manager, key);
     henka_free(key);
     if (entry == NULL || entry->mesh == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
-    if (!entry->metadata.fallback) { *out_mesh = entry->mesh; return HENKA_SUCCESS; }
+    if (!entry->metadata.fallback) return HENKA_ERROR_INVALID_ARGUMENT;
     if (!entry->owns_mesh || entry->mesh == manager->fallback_mesh || entry->source_path == NULL)
         return HENKA_ERROR_INVALID_ARGUMENT;
     result = henka_assets_resolve_path(henka_engine_get_asset_base_path(manager->engine), entry->source_path, &resolved_path);

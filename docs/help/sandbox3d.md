@@ -129,6 +129,17 @@ If the target selection changes while the picker is open, Henka cancels the
 pending assignment instead of applying the texture to a stale or different
 object.
 
+### Asset fallback recovery
+
+`Utility > Assets` marks manager-known source failures as unavailable fallback
+entries. Failed file-backed texture and OBJ/glTF mesh entries expose `Retry`
+only when their metadata marks the source as reloadable. Embedded glTF images
+that fell back after decode failure have no separately addressable source and
+do not expose `Retry`. Retry uses the existing asset-manager recovery API for
+the exact cached source identity. A failed retry keeps the fallback object and
+metadata intact; a successful retry replaces the cached payload in place so
+existing borrowers observe the recovered asset without pointer churn.
+
 ## Compass and camera
 
 The Scene View contains a procedural Compass overlay in the upper-right by default.
