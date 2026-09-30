@@ -442,26 +442,31 @@ static uint64_t henka_topology_face_hash(
     return hash;
 }
 
-static bool henka_topology_faces_same_vertex_set(
+static bool henka_topology_faces_same_vertex_multiset(
     const henka_authoring_face* first,
     const henka_authoring_face* second,
-    uint32_t* first_sorted)
+    uint32_t* sorted_scratch)
 {
+    uint32_t* first_sorted;
+    uint32_t* second_sorted;
     size_t index;
 
     if (first == NULL ||
         second == NULL ||
-        first_sorted == NULL ||
+        sorted_scratch == NULL ||
         first->corner_count != second->corner_count)
     {
         return false;
     }
+    first_sorted = sorted_scratch;
+    second_sorted = sorted_scratch + first->corner_count;
 
     for (index = 0U;
          index < first->corner_count;
          ++index)
     {
         first_sorted[index] = first->vertices[index];
+        second_sorted[index] = second->vertices[index];
     }
 
     qsort(
@@ -469,27 +474,15 @@ static bool henka_topology_faces_same_vertex_set(
         first->corner_count,
         sizeof(*first_sorted),
         henka_topology_compare_vertex_ids);
+    qsort(
+        second_sorted,
+        second->corner_count,
+        sizeof(*second_sorted),
+        henka_topology_compare_vertex_ids);
 
-    for (index = 0U;
-         index < first->corner_count;
-         ++index)
+    for (index = 0U; index < first->corner_count; ++index)
     {
-        size_t low = 0U;
-        size_t high = first->corner_count;
-        const uint32_t sought = second->vertices[index];
-        while (low < high)
-        {
-            const size_t middle = low + ((high - low) / 2U);
-            if (first_sorted[middle] < sought)
-            {
-                low = middle + 1U;
-            }
-            else
-            {
-                high = middle;
-            }
-        }
-        if (low >= first->corner_count || first_sorted[low] != sought)
+        if (first_sorted[index] != second_sorted[index])
         {
             return false;
         }
@@ -1660,10 +1653,15 @@ henka_result henka_authoring_topology_analyze(
         size_t face_bytes;
         const size_t max_face_corners =
             henka_authoring_mesh_get_desc(mesh).max_face_corners;
+        size_t scratch_count;
         size_t scratch_bytes;
 
         if (!henka_checked_size_multiply(
                 max_face_corners,
+                2U,
+                &scratch_count) ||
+            !henka_checked_size_multiply(
+                scratch_count,
                 sizeof(*face_vertex_scratch),
                 &scratch_bytes))
         {
@@ -1805,7 +1803,7 @@ henka_result henka_authoring_topology_analyze(
                     break;
                 }
 
-                if (henka_topology_faces_same_vertex_set(
+                if (henka_topology_faces_same_vertex_multiset(
                         face,
                         henka_authoring_mesh_get_face(
                             mesh,
@@ -2135,6 +2133,7 @@ static henka_result henka_topology_mark_repair_faces(
 {
     const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
     uint32_t* face_vertex_scratch = NULL;
+    size_t scratch_count = 0U;
     size_t scratch_bytes = 0U;
     size_t face_slot;
     henka_result result = HENKA_SUCCESS;
@@ -2151,6 +2150,10 @@ static henka_result henka_topology_mark_repair_faces(
     {
         if (!henka_checked_size_multiply(
                 desc.max_face_corners,
+                2U,
+                &scratch_count) ||
+            !henka_checked_size_multiply(
+                scratch_count,
                 sizeof(*face_vertex_scratch),
                 &scratch_bytes))
         {
@@ -2193,7 +2196,7 @@ static henka_result henka_topology_mark_repair_faces(
                 mesh, prior_slot, &prior_id) == HENKA_SUCCESS
                 ? henka_authoring_mesh_get_face(mesh, prior_id)
                 : NULL;
-            if (prior == NULL || !henka_topology_faces_same_vertex_set(
+            if (prior == NULL || !henka_topology_faces_same_vertex_multiset(
                     face, prior, face_vertex_scratch))
             {
                 continue;
@@ -2201,7 +2204,7 @@ static henka_result henka_topology_mark_repair_faces(
             if (!henka_topology_faces_same_cycle(
                     prior, face, options->analysis.uv_seam_tolerance))
             {
-                /* Same vertex set with different winding, material, smoothing,
+                /* Same vertex multiset with different winding, material, smoothing,
                  * or UV data is not a safe duplicate to discard. */
                 result = HENKA_ERROR_INVALID_ARGUMENT;
                 goto cleanup;
