@@ -95,8 +95,9 @@ Current operations include:
 - duplicate;
 - face winding flip for one or a bounded unique face selection;
 - face-normal translation for one or a bounded vertex-disjoint face selection;
-- deterministic planar face triangulation for one or a bounded vertex-disjoint
-  face selection;
+- deterministic planar face triangulation for one face or a bounded batch of
+  unique planar faces, including faces that share an existing edge or meet at
+  a vertex;
 - face extrude;
 - bounded disconnected or full-edge-connected face inset;
 - bounded disconnected or full-edge-connected planar face bevel rings;

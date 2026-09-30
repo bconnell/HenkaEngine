@@ -583,8 +583,9 @@ Available operations also include:
 - bounded disconnected or full-edge-connected face inset;
 - bounded disconnected or full-edge-connected planar face bevel rings;
 - bounded disconnected or full-edge-connected face subdivision;
-- deterministic planar face triangulation for one or a bounded vertex-disjoint
-  face selection;
+- deterministic planar face triangulation for one face or a bounded batch of
+  unique planar faces, including faces that share an existing edge or meet at
+  a vertex;
 - transactional deletion of a bounded selected-face set while preserving one
   renderable face;
 - transactional fill for one or more independent closed boundary loops;
