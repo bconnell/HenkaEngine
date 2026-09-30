@@ -630,11 +630,13 @@ Apply/Cancel, and undo/redo using the same transaction boundary.
 
 ### HAMS persistence
 
-HAMS v6 writes portable little-endian data through unique same-directory temporary files and retains reads for checked-in v2/v3/v4 surface-only and v5 loose-topology sources.
+HAMS v7 writes portable little-endian data through unique same-directory temporary files and reads v2-v6 compatibility sources.
 
 HAMS v5 introduced persisted loose vertices and zero-face wire edges. HAMS v6
-extends that record format with explicit UV seam state. Legacy files are
-migrated in memory only and are not silently rewritten.
+extends that record format with explicit UV seam state. HAMS v7 retains the v6
+record layout and expands configured face-corner capacity beyond 32, up to the
+hard vertex bound. Legacy files are migrated in memory only and are not
+silently rewritten.
 
 Native authoring sources can also be exported as bounded OBJ geometry with
 face-corner UVs. OBJ export uses atomic replacement, emits standalone
@@ -786,7 +788,7 @@ Broader runtime/resource mapping, complete Inspector authoring, and debugger too
 
 ### Loose-component and wire/point authoring support
 
-The core authoring representation preserves explicit loose vertices and standalone wire edges with stable logical IDs, bounded reusable storage, explicit UV seam metadata, and HAMS v6 save/reload support.
+The core authoring representation preserves explicit loose vertices and standalone wire edges with stable logical IDs, bounded reusable storage, explicit UV seam metadata, and HAMS v7 save/reload support.
 
 The core modeling API also provides:
 

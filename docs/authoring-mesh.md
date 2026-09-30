@@ -149,11 +149,12 @@ Face flip preserves:
 The operation reverses only the ordered winding. Invalid or duplicate face
 selections leave the committed source unchanged.
 
-Planar face triangulation uses deterministic ear clipping and preserves the
+Planar face triangulation uses deterministic ear clipping and preserves each
 source face identity on the first triangle, with fresh identities for the
 additional triangles. The operation preserves material regions, smoothing,
-and per-corner UVs. The batch form accepts only vertex-disjoint planar faces;
-duplicate, shared-vertex, non-planar, invalid, and capacity-invalid selections
+and per-corner UVs. The batch form accepts unique planar faces in connected or
+disconnected selections, including faces that share an existing edge or meet
+at a vertex. Duplicate, non-planar, invalid, and capacity-invalid selections
 fail without changing the committed source.
 
 Face inset supports one or a bounded selection of simple planar faces. The
@@ -216,7 +217,7 @@ undo/redo history; UV state persists through the HAMS source path.
 
 In Edge mode, the Sandbox exposes a transactional Toggle UV Seam operation for
 the selected edges. It supports preview, Cancel, Apply, and authoring undo/redo;
-the explicit seam state is persisted through HAMS v6. The Sandbox Face-mode
+the explicit seam state is persisted through HAMS v7. The Sandbox Face-mode
 panel also provides transactional planar-chart unwrap. It projects each
 seam-delimited planar island on its dominant geometric axis and packs the charts
 into a padded unit-square grid. Degenerate or non-planar islands are rejected
@@ -708,7 +709,7 @@ The authoring representation supports explicit loose vertices and standalone wir
 - stable logical IDs;
 - bounded physical storage;
 - deterministic endpoint ordering;
-- HAMS v6 transactional persistence with explicit seam metadata.
+- HAMS v7 transactional persistence with explicit seam metadata.
 
 A standalone edge connects two distinct active vertices. It has zero incident faces until a face consumes that endpoint pair. It can be removed explicitly while face-less.
 
@@ -833,7 +834,7 @@ This keeps shading basis generation in the shared renderer path while preserving
 
 ## HAMS file format
 
-`henka_authoring_mesh_save_file` writes HAMS v6 using explicit little-endian 32-bit integers and IEEE-754 float bit patterns.
+`henka_authoring_mesh_save_file` writes HAMS v7 using explicit little-endian 32-bit integers and IEEE-754 float bit patterns.
 
 Each save:
 
@@ -846,8 +847,10 @@ A failed or concurrent save preserves the prior valid source.
 HAMS v5 is the first version whose validity contract includes loose vertices and zero-face wire edges.
 
 HAMS v6 retains that loose-topology contract and adds one explicit seam byte to
-each modern active-edge record. The seam state is independent of hard-edge
-intent and is used as an island boundary by UV authoring and topology analysis.
+each modern active-edge record. HAMS v7 retains the v6 record layout and
+supports configured face-corner capacities above the former 32-corner limit,
+up to the hard vertex bound. The seam state is independent of hard-edge intent
+and is used as an island boundary by UV authoring and topology analysis.
 
 ### OBJ source export
 
@@ -861,7 +864,8 @@ HAMS source path.
 
 The loader accepts:
 
-- current HAMS v6;
+- current HAMS v7;
+- HAMS v6, including loose topology and explicit seam state;
 - loose-topology HAMS v5, with explicit seam state defaulting to false;
 - repository-supported surface-only HAMS v2;
 - surface-only HAMS v3;

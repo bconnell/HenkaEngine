@@ -562,6 +562,81 @@ cleanup:
     return result ? 1 : fail("degenerate face repair");
 }
 
+static int test_large_face_duplicate_analysis(void)
+{
+    enum { CORNER_COUNT = 40 };
+    const henka_authoring_mesh_desc desc = {64U, 128U, 4U, CORNER_COUNT};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[CORNER_COUNT];
+    henka_authoring_face_id first_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id duplicate_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_topology_options options = henka_authoring_topology_options_default();
+    henka_authoring_topology_report report;
+    henka_authoring_topology_repair_options repair_options =
+        henka_authoring_topology_repair_options_default();
+    henka_authoring_topology_repair_report repair_report;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < CORNER_COUNT; ++index)
+    {
+        const float angle = 6.2831853071795864769f * (float)index / CORNER_COUNT;
+        const henka_vec3 position = {cosf(angle), sinf(angle), 0.0f};
+        if (henka_authoring_mesh_add_vertex(
+                mesh, position, (henka_vec2){position.x, position.y}, 0U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, vertices, CORNER_COUNT, 0U, true, &first_face) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(
+            mesh, vertices, CORNER_COUNT, 0U, true, &duplicate_face) != HENKA_SUCCESS ||
+        first_face == duplicate_face || !henka_authoring_mesh_validate(mesh))
+    {
+        (void)fprintf(stderr, "could not construct two valid 40-corner duplicate faces\n");
+        goto cleanup;
+    }
+    if (henka_authoring_topology_analyze(mesh, &options, &report) != HENKA_SUCCESS)
+    {
+        (void)fprintf(stderr, "topology analysis rejected valid 40-corner duplicate faces\n");
+        goto cleanup;
+    }
+    if (report.face_count != 2U || report.ngon_count != 2U ||
+        report.max_face_corners != CORNER_COUNT || report.duplicate_face_count != 1U)
+    {
+        (void)fprintf(stderr,
+            "large-face analysis: faces=%zu ngons=%zu max-corners=%zu duplicates=%zu\n",
+            report.face_count,
+            report.ngon_count,
+            report.max_face_corners,
+            report.duplicate_face_count);
+        goto cleanup;
+    }
+    repair_options.analysis = options;
+    repair_options.max_passes = 2U;
+    repair_options.remove_duplicate_faces = true;
+    if (henka_authoring_mesh_repair_topology(mesh, &repair_options, &repair_report) !=
+            HENKA_SUCCESS ||
+        !repair_report.changed || repair_report.removed_duplicate_faces != 1U ||
+        henka_authoring_mesh_get_counts(mesh).faces != 1U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        (void)fprintf(stderr, "large-face duplicate repair did not remove exactly one face\n");
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("large face duplicate analysis");
+}
+
 int main(void)
 {
     if (!test_quad_cage_and_quality() ||
@@ -569,7 +644,8 @@ int main(void)
         !test_profiles() ||
         !test_transactional_safe_repair() ||
         !test_quad_strip_walk() ||
-        !test_degenerate_face_repair())
+        !test_degenerate_face_repair() ||
+        !test_large_face_duplicate_analysis())
     {
         return 1;
     }
