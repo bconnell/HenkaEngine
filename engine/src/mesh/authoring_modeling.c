@@ -143,6 +143,28 @@ static int modeling_vertex_id_compare(const void* left_pointer, const void* righ
     return left < right ? -1 : left > right ? 1 : 0;
 }
 
+static bool modeling_sorted_vertex_ids_contains(
+    const henka_authoring_vertex_id* sorted_ids,
+    size_t count,
+    henka_authoring_vertex_id vertex_id)
+{
+    size_t low = 0U;
+    size_t high = count;
+    while (low < high)
+    {
+        const size_t middle = low + (high - low) / 2U;
+        if (sorted_ids[middle] < vertex_id)
+        {
+            low = middle + 1U;
+        }
+        else
+        {
+            high = middle;
+        }
+    }
+    return low < count && sorted_ids[low] == vertex_id;
+}
+
 static size_t modeling_active_vertex_count(const henka_authoring_mesh* mesh)
 {
     const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
@@ -3630,17 +3652,9 @@ static henka_result modeling_collect_closed_boundary_loop(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    for (edge_index = 0U; edge_index < edge_count; ++edge_index)
-    {
-        size_t prior;
-        for (prior = 0U; prior < edge_index; ++prior)
-        {
-            if (out_vertices[prior] == out_vertices[edge_index])
-            {
-                return HENKA_ERROR_INVALID_ARGUMENT;
-            }
-        }
-    }
+    /* The topology ordering helper accepts only one connected degree-two cycle.
+     * With self-edges and duplicate selected edges rejected, uniqueness follows
+     * from that graph invariant; avoid rechecking every vertex pair here. */
     return HENKA_SUCCESS;
 }
 
@@ -3764,17 +3778,8 @@ static henka_result modeling_collect_boundary_chain(
         out_vertices[edge_index + 1U] = next_vertex;
         out_uvs[edge_index + 1U] = face->uvs[next_corner];
     }
-    for (edge_index = 0U; edge_index <= edge_count; ++edge_index)
-    {
-        size_t prior;
-        for (prior = 0U; prior < edge_index; ++prior)
-        {
-            if (out_vertices[prior] == out_vertices[edge_index])
-            {
-                return HENKA_ERROR_INVALID_ARGUMENT;
-            }
-        }
-    }
+    /* A connected graph with exactly two degree-one vertices and all other
+     * degrees two is a simple path, so repeated vertices cannot occur. */
     return HENKA_SUCCESS;
 }
 
@@ -3862,16 +3867,25 @@ static henka_result modeling_bridge_boundary_edge_chains_with_scratch(
             first_vertex->position, reversed_vertex->position));
     }
     {
-        size_t first_index;
-        for (first_index = 0U; first_index <= first_edge_count; ++first_index)
+        const size_t unique_vertex_count = first_edge_count +
+            (first_closed ? 0U : 1U);
+        henka_authoring_vertex_id* sorted_first_vertices =
+            (henka_authoring_vertex_id*)first_ordered;
+        /* Ordered edge IDs are no longer needed after collection. Reuse the
+         * first scratch buffer, provisioned for edge_count + 1 IDs, to check
+         * chain disjointness in O(n log n) rather than comparing every pair. */
+        for (index = 0U; index < unique_vertex_count; ++index)
         {
-            size_t second_index;
-            for (second_index = 0U; second_index <= first_edge_count; ++second_index)
+            sorted_first_vertices[index] = first_vertices[index];
+        }
+        qsort(sorted_first_vertices, unique_vertex_count,
+            sizeof(*sorted_first_vertices), modeling_vertex_id_compare);
+        for (index = 0U; index < unique_vertex_count; ++index)
+        {
+            if (modeling_sorted_vertex_ids_contains(
+                    sorted_first_vertices, unique_vertex_count, second_vertices[index]))
             {
-                if (first_vertices[first_index] == second_vertices[second_index])
-                {
-                    return HENKA_ERROR_INVALID_ARGUMENT;
-                }
+                return HENKA_ERROR_INVALID_ARGUMENT;
             }
         }
     }
@@ -4045,7 +4059,7 @@ henka_result henka_authoring_mesh_bridge_boundary_edge_chains(
         return HENKA_ERROR_LIMIT;
     }
 
-    first_ordered = (henka_authoring_edge_id*)henka_malloc(edge_bytes);
+    first_ordered = (henka_authoring_edge_id*)henka_malloc(vertex_bytes);
     second_ordered = (henka_authoring_edge_id*)henka_malloc(edge_bytes);
     first_vertices = (henka_authoring_vertex_id*)henka_malloc(vertex_bytes);
     second_vertices = (henka_authoring_vertex_id*)henka_malloc(vertex_bytes);

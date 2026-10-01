@@ -11817,7 +11817,9 @@ static int test_boundary_edge_chain_bridge_supports_more_than_32_edges(void)
             chain_edge_snapshots[strip][index] = *edge;
         }
     }
-    for (index = 0U; index < 6U; ++index)
+    /* Cover all public scratch allocations, both endpoint-index builds, and
+     * the candidate clone before proving the operation succeeds. */
+    for (index = 0U; index < 13U; ++index)
     {
         const size_t allocations_before = henka_memory_get_allocation_count();
         size_t strip_index;
@@ -11891,6 +11893,131 @@ static int test_boundary_edge_chain_bridge_supports_more_than_32_edges(void)
 cleanup:
     henka_authoring_mesh_destroy(mesh);
     return result ? 1 : fail("boundary edge-chain bridge with 33 edges");
+}
+
+static int test_boundary_edge_chain_bridge_large_batch_scales(void)
+{
+    enum { EDGE_COUNT = 4096U, VERTEX_COUNT = EDGE_COUNT + 1U, STRIP_COUNT = 2U };
+    const henka_authoring_mesh_desc desc = {
+        STRIP_COUNT * VERTEX_COUNT * 2U,
+        EDGE_COUNT * 8U,
+        EDGE_COUNT * 4U,
+        8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id* lower = NULL;
+    henka_authoring_vertex_id* upper = NULL;
+    henka_authoring_edge_id* chain_edges = NULL;
+    henka_authoring_face_id first_bridge_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_result bridge_result = HENKA_ERROR_UNKNOWN;
+    clock_t start;
+    clock_t finish;
+    size_t strip;
+    size_t index;
+    int result = 0;
+
+    lower = (henka_authoring_vertex_id*)henka_malloc(
+        STRIP_COUNT * VERTEX_COUNT * sizeof(*lower));
+    upper = (henka_authoring_vertex_id*)henka_malloc(
+        STRIP_COUNT * VERTEX_COUNT * sizeof(*upper));
+    chain_edges = (henka_authoring_edge_id*)henka_malloc(
+        STRIP_COUNT * EDGE_COUNT * sizeof(*chain_edges));
+    if (lower == NULL || upper == NULL || chain_edges == NULL ||
+        henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (strip = 0U; strip < STRIP_COUNT; ++strip)
+    {
+        const float y = (float)strip * 3.0f;
+        for (index = 0U; index < VERTEX_COUNT; ++index)
+        {
+            const float x = (float)index;
+            const size_t vertex_index = strip * VERTEX_COUNT + index;
+            if (henka_authoring_mesh_add_vertex(
+                    mesh, (henka_vec3){x, y, 0.0f}, (henka_vec2){x, 0.0f}, 6U,
+                    &lower[vertex_index]) != HENKA_SUCCESS ||
+                henka_authoring_mesh_add_vertex(
+                    mesh, (henka_vec3){x, y, 1.0f}, (henka_vec2){x, 1.0f}, 6U,
+                    &upper[vertex_index]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+        for (index = 0U; index < EDGE_COUNT; ++index)
+        {
+            const size_t first_vertex_index = strip * VERTEX_COUNT + index;
+            const henka_authoring_vertex_id face_vertices[4] = {
+                lower[first_vertex_index], lower[first_vertex_index + 1U],
+                upper[first_vertex_index + 1U], upper[first_vertex_index]};
+            henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+            const henka_authoring_face* face;
+            if (henka_authoring_mesh_add_face(
+                    mesh, face_vertices, 4U, 6U, true, &face_id) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+            face = henka_authoring_mesh_get_face(mesh, face_id);
+            if (face == NULL || face->corner_count != 4U)
+            {
+                goto cleanup;
+            }
+            chain_edges[strip * EDGE_COUNT + index] = face->edges[0];
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (before.vertices != STRIP_COUNT * VERTEX_COUNT * 2U ||
+        before.faces != STRIP_COUNT * EDGE_COUNT || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    start = clock();
+    if (start == (clock_t)-1)
+    {
+        goto cleanup;
+    }
+    bridge_result = henka_authoring_mesh_bridge_boundary_edge_chains(
+        mesh, chain_edges, EDGE_COUNT,
+        chain_edges + EDGE_COUNT, EDGE_COUNT,
+        &first_bridge_face, &report);
+    finish = clock();
+    if (bridge_result != HENKA_SUCCESS || finish == (clock_t)-1 || finish < start)
+    {
+        (void)fprintf(stderr, "large boundary-chain bridge returned %d\n",
+            (int)bridge_result);
+        goto cleanup;
+    }
+    {
+        const double elapsed_seconds =
+            (double)(finish - start) / (double)CLOCKS_PER_SEC;
+        (void)fprintf(stderr,
+            "4096-edge boundary-chain bridge CPU seconds: %.3f\n", elapsed_seconds);
+        if (elapsed_seconds > 4.0)
+        {
+            (void)fprintf(stderr,
+                "4096-edge boundary-chain bridge exceeded 4 CPU seconds\n");
+            goto cleanup;
+        }
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || report.created_faces != EDGE_COUNT ||
+        first_bridge_face == HENKA_AUTHORING_INVALID_ID ||
+        after.vertices != before.vertices || after.faces != before.faces + EDGE_COUNT ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    henka_free(chain_edges);
+    henka_free(upper);
+    henka_free(lower);
+    return result ? 1 : fail("large boundary edge-chain bridge scaling");
 }
 
 static int test_boundary_edge_chain_bridge_supports_configured_large_faces(void)
@@ -14457,6 +14584,7 @@ int main(void)
         test_boundary_edge_chain_bridge_operation() &&
         test_boundary_edge_chain_bridge_supports_configured_large_faces() &&
         test_boundary_edge_chain_bridge_supports_more_than_32_edges() &&
+        test_boundary_edge_chain_bridge_large_batch_scales() &&
         test_closed_boundary_loop_bridge_operation() &&
         test_boundary_edge_chain_pair_batch_bridge_operation() &&
         test_boundary_loop_fill_operation() &&
