@@ -188,9 +188,9 @@ henka_result henka_authoring_mesh_triangulate_face(
     henka_authoring_face_id face_id,
     henka_authoring_modeling_report* out_report);
 /* Triangulates a bounded unique selection of simple planar polygon faces
- * transactionally. The selected faces must be vertex-disjoint so the result
- * is independent of face iteration order. Invalid, duplicate, shared-vertex,
- * non-planar, and capacity-invalid selections fail without changing source. */
+ * transactionally; selected faces may meet at existing edges or vertices.
+ * Invalid, duplicate, non-planar, and capacity-invalid selections fail
+ * without changing the source mesh. */
 henka_result henka_authoring_mesh_triangulate_faces(
     henka_authoring_mesh* mesh,
     const henka_authoring_face_id* face_ids,
@@ -680,9 +680,11 @@ henka_result henka_authoring_mesh_bridge_boundary_edges(
  * have matching material and smoothing metadata along their source faces.
  * Open-chain pairing chooses the shorter geometric direction. Closed-loop
  * pairing chooses a deterministic cyclic offset and direction. Per-corner UVs
- * are preserved. Mixed open/closed, unequal or ambiguous chains, unsupported
- * metadata, degenerate geometry, and capacity failures are rejected without
- * changing the source mesh. */
+ * are preserved. Chain length is bounded by the mesh's configured edge
+ * capacity and is independent of the per-face corner limit. Mixed
+ * open/closed, unequal or ambiguous chains, unsupported metadata, degenerate
+ * geometry, and capacity failures are rejected without changing the source
+ * mesh. */
 henka_result henka_authoring_mesh_bridge_boundary_edge_chains(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* first_edge_ids,

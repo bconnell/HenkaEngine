@@ -25,8 +25,26 @@ Assert-Contract ($sandbox -match 'reference_probe_captured_count=%u') `
     'SSGI readiness metadata must report the captured probe count.'
 Assert-Contract (([regex]::Matches($sandbox, 'henka_scene_add_reflection_probe\s*\(')).Count -eq 2) `
     'The reference fixture must have exactly two scene-level reflection-probe creation sites.'
-Assert-Contract ($sandbox -match '(?s)if\s*\(\s*!sandbox3d_default_scene_requested\(state\)\s*&&\s*!sandbox3d_is_ibl_reference_kind\(state->realism_reference_kind\)\s*\).*?henka_scene_add_reflection_probe.*?henka_scene_add_reflection_probe') `
-    'Probe-backed reference fixtures must create both scene-level probes without enabling unrelated terrain content.'
+$probeSetupPattern = '(?s)if\s*\(\s*!sandbox3d_default_scene_requested\(state\)\s*&&\s*!state->primitive_gallery\s*&&\s*!sandbox3d_is_ibl_reference_kind\(state->realism_reference_kind\)\s*\).*?henka_scene_add_reflection_probe.*?henka_scene_add_reflection_probe'
+Assert-Contract ($sandbox -match $probeSetupPattern) `
+    'Probe-backed non-gallery reference fixtures must create both scene-level probes.'
+
+$galleryGuardMutation = [regex]::Replace(
+    $sandbox,
+    '(?s)(if\s*\(\s*!sandbox3d_default_scene_requested\(state\)\s*&&\s*)!state->primitive_gallery\s*&&',
+    '$1',
+    1)
+Assert-Contract ($galleryGuardMutation -ne $sandbox) `
+    'The gallery-exclusion negative control must modify the intended probe-creation guard.'
+Assert-Contract ($galleryGuardMutation -notmatch $probeSetupPattern) `
+    'The probe-creation contract must reject removal of the bounded-gallery exclusion.'
+
+$iblKindMatch = [regex]::Match(
+    $sandbox,
+    '(?s)static bool sandbox3d_is_ibl_reference_kind\(.*?\)\s*\{(?<body>.*?)\n\}')
+Assert-Contract ($iblKindMatch.Success -and
+    $iblKindMatch.Groups['body'].Value -notmatch 'SANDBOX3D_REALISM_REFERENCE_KIND_SSGI') `
+    'The SSGI reference path must remain in the probe-backed non-IBL fixture class.'
 Assert-Contract ($capture -match 'test_ssgi_probe_readiness_windows\.ps1' -or $capture -match 'reference_probe_enabled_count') `
     'SSGI evidence must retain the probe-health contract in its capture path.'
 Assert-Contract ($checker -match 'reference_probe_enabled_count') `

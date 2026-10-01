@@ -352,8 +352,11 @@ henka_result henka_assets_enforce_texture_residency_budget(
     size_t max_evictions,
     size_t* out_evicted_textures);
 /* Mesh loads require an initialized empty output slot. The returned mesh is
- * borrowed and manager-owned; rejected or failed loads preserve a non-empty
- * caller slot and leave an empty slot empty. */
+ * borrowed and manager-owned. A cached source failure uses a path-specific
+ * diagnostic mesh object rather than the manager's shared fallback object, so
+ * the borrowed identity remains stable if a later retry recovers the source.
+ * Rejected hard failures preserve a non-empty caller slot and leave an empty
+ * slot empty. */
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 /* Reimports a previously loaded manager-owned mesh transactionally. The
@@ -545,13 +548,17 @@ henka_result henka_assets_instantiate_gltf_scene(
     size_t* out_entity_count);
 
 /*
- * Retries only a cached texture fallback from a previous failed load. The
- * descriptor-aware form selects the exact cache entry when one source path
- * has multiple semantic descriptors; the convenience form selects the
- * default color descriptor. The fallback entry and borrowed texture pointer
+ * Retries only a cached, reload-supported file-backed texture fallback from a
+ * previous failed load. Embedded/runtime-only entries without an addressable
+ * reload source are rejected. The descriptor-aware form selects the exact
+ * cache entry when one source path has multiple semantic descriptors. The
+ * convenience form selects the default color descriptor. The fallback entry
+ * and borrowed texture pointer
  * remain intact when the replacement load fails. Failure leaves out_texture
- * null. Success updates the existing borrowed texture object in place, so
- * materials do not retain a permanently stale fallback pointer.
+ * null. Calling a retry on an entry that is no longer a fallback is rejected
+ * and also leaves out_texture null. Success updates the existing borrowed
+ * texture object in place, so materials do not retain a permanently stale
+ * fallback pointer.
  */
 henka_result henka_assets_retry_failed_texture(
     henka_asset_manager* manager,
@@ -564,9 +571,14 @@ henka_result henka_assets_retry_failed_texture_with_descriptor(
     henka_texture** out_texture);
 
 /*
- * Retries only a cached source-failure fallback entry from a previous failed
- * OBJ load. Allocation and renderer failures are not cached as fallbacks.
- * The fallback entry remains intact when the replacement load fails.
+ * Retries only a cached source-failure fallback mesh entry. OBJ and glTF
+ * fallback entries own path-specific diagnostic mesh objects. A failed retry
+ * leaves that object and its metadata unchanged and leaves out_mesh null.
+ * Calling a retry on an entry that is no longer a fallback is rejected and
+ * also leaves out_mesh null. Success replaces the payload in place,
+ * preserving the borrowed mesh pointer for scenes and other existing
+ * consumers. Allocation and renderer failures
+ * are not cached as successful recoveries.
  */
 henka_result henka_assets_retry_failed_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_retry_failed_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);

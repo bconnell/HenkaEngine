@@ -32,6 +32,18 @@ size_t sandbox3d_asset_browser_collect_page(
     sandbox3d_asset_browser_item* out_items,
     size_t capacity);
 
+henka_result sandbox3d_asset_browser_format_item_label(
+    const sandbox3d_asset_browser_item* item,
+    char* out_label,
+    size_t out_label_capacity);
+
+bool sandbox3d_asset_browser_can_retry(
+    const henka_asset_metadata* metadata);
+
+henka_result sandbox3d_asset_browser_retry(
+    henka_asset_manager* manager,
+    const henka_asset_metadata* metadata);
+
 typedef struct sandbox3d_texture_slot_display
 {
     bool assigned;
@@ -44,7 +56,25 @@ typedef struct sandbox3d_texture_slot_display
     char state[32];
 } sandbox3d_texture_slot_display;
 
+typedef struct sandbox3d_material_texture_pick
+{
+    bool active;
+    henka_entity entity;
+    henka_material_texture_slot slot;
+} sandbox3d_material_texture_pick;
+
 const char* sandbox3d_texture_usage_label(henka_texture_usage usage);
+
+const char* sandbox3d_material_texture_slot_label(
+    henka_material_texture_slot slot);
+
+void sandbox3d_material_texture_pick_reset(
+    sandbox3d_material_texture_pick* pick);
+
+henka_result sandbox3d_material_texture_pick_begin(
+    sandbox3d_material_texture_pick* pick,
+    henka_entity entity,
+    henka_material_texture_slot slot);
 
 const char* sandbox3d_terrain_layer_label(uint32_t layer_index);
 

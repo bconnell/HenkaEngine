@@ -115,6 +115,31 @@ Changing selection, clearing selection, hiding or locking the target, or changin
 
 Custom profiles are documented in [editor-controls.md](../editor-controls.md).
 
+### Material texture assignment
+
+For a selected object with an editable manager-backed material instance, expand
+`Object Details > Materials` and choose `Choose` beside Base Color, Normal,
+Metal/Rough, Occlusion, Emissive, Thickness, or Transmission. Henka opens
+`Utility > Assets` in texture mode for that exact object and slot. Selecting a
+manager-known texture only selects a candidate; `Apply` performs the
+transactional slot update. `Cancel` closes the picker without changing the
+material. `Clear` and `Inherit` remain explicit Object Details actions.
+
+If the target selection changes while the picker is open, Henka cancels the
+pending assignment instead of applying the texture to a stale or different
+object.
+
+### Asset fallback recovery
+
+`Utility > Assets` marks manager-known source failures as unavailable fallback
+entries. Failed file-backed texture and OBJ/glTF mesh entries expose `Retry`
+only when their metadata marks the source as reloadable. Embedded glTF images
+that fell back after decode failure have no separately addressable source and
+do not expose `Retry`. Retry uses the existing asset-manager recovery API for
+the exact cached source identity. A failed retry keeps the fallback object and
+metadata intact; a successful retry replaces the cached payload in place so
+existing borrowers observe the recovered asset without pointer churn.
+
 ## Compass and camera
 
 The Scene View contains a procedural Compass overlay in the upper-right by default.

@@ -1426,10 +1426,15 @@ henka_result sandbox3d_authoring_asset_document_load(
         const char* name;
         const char* relative_source;
         const char* relative_material;
+        const henka_material_asset* material_asset = NULL;
+        henka_material_asset* adopted_material_asset = NULL;
+        henka_asset_manager* assets = henka_engine_get_asset_manager(engine);
+        bool material_asset_needs_adoption = false;
+        bool apply_material = false;
         int primitive;
         bool visible;
         henka_transform transform = henka_transform_identity();
-        henka_material material;
+        henka_material material = henka_material_default();
         if (!sandbox3d_authoring_asset_key(key, sizeof(key), index, "name")) { result = HENKA_ERROR_LIMIT; break; }
         name = henka_settings_get_string(settings, key, NULL);
         if (!sandbox3d_authoring_asset_key(key, sizeof(key), index, "source_path")) { result = HENKA_ERROR_LIMIT; break; }
@@ -1453,12 +1458,54 @@ henka_result sandbox3d_authoring_asset_document_load(
             if (result == HENKA_SUCCESS) result = HENKA_ERROR_ASSET_SOURCE;
             break;
         }
-        result = sandbox3d_authoring_asset_load_material_file(
-            engine, project_root, expected_material_relative, material_template, &material);
+        if (assets == NULL)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        else
+        {
+            result = henka_assets_get_material_asset_for_path(
+                assets, expected_material_relative, &material_asset);
+            if (result == HENKA_SUCCESS)
+            {
+                result = henka_assets_get_material_asset_material(
+                    material_asset, &material);
+                apply_material = result == HENKA_SUCCESS;
+            }
+            else if (result == HENKA_ERROR_UNKNOWN)
+            {
+                result = sandbox3d_authoring_asset_load_material_file(
+                    engine, project_root, expected_material_relative,
+                    material_template, &material);
+                material_asset_needs_adoption =
+                    result == HENKA_SUCCESS && material_template != NULL;
+                apply_material = material_asset_needs_adoption;
+            }
+        }
         if (result != HENKA_SUCCESS) break;
         result = henka_path_resolve_confined(project_root, expected_relative, &source_path);
-        if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_document_add_loaded_part(candidate, name, (sandbox3d_authoring_primitive_kind)primitive, source_path, transform, visible, material, material_template != NULL, history_steps);
+        if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_document_add_loaded_part(candidate, name, (sandbox3d_authoring_primitive_kind)primitive, source_path, transform, visible, material, apply_material, history_steps);
         henka_free(source_path);
+        if (result == HENKA_SUCCESS && material_asset_needs_adoption)
+        {
+            result = henka_assets_adopt_runtime_material(
+                assets,
+                expected_material_relative,
+                &material,
+                &adopted_material_asset);
+            material_asset = adopted_material_asset;
+        }
+        if (result == HENKA_SUCCESS && material_asset != NULL)
+        {
+            const sandbox3d_authoring_asset_part* loaded_part =
+                &candidate->parts[candidate->part_count - 1U];
+            result = henka_scene_set_entity_material_asset(
+                scene, loaded_part->entity, material_asset);
+        }
+        else if (result == HENKA_SUCCESS && apply_material)
+        {
+            result = HENKA_ERROR_ASSET_SOURCE;
+        }
     }
     henka_settings_destroy(settings);
     henka_free(manifest_path);

@@ -19,11 +19,13 @@
 #include "../core/checked.h"
 #include "authoring_mesh_internal.h"
 
-#define HENKA_AUTHORING_MESH_FILE_VERSION 6U
+#define HENKA_AUTHORING_MESH_FILE_VERSION 7U
 #define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION 2U
 #define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V3 3U
 #define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V4 4U
 #define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V5 5U
+#define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V6 6U
+#define HENKA_AUTHORING_MESH_LEGACY_MAX_FACE_CORNERS 32U
 #define HENKA_AUTHORING_TEMP_PATH_SUFFIX_CAPACITY 96U
 
 #ifdef _WIN32
@@ -76,6 +78,9 @@ struct henka_authoring_mesh
     size_t active_vertices;
     size_t active_edges;
     size_t active_faces;
+    size_t next_unused_edge_slot;
+    size_t next_inactive_edge_slot;
+    size_t next_free_face_slot;
     henka_authoring_vertex_id next_vertex_id;
     henka_authoring_edge_id next_edge_id;
     henka_authoring_face_id next_face_id;
@@ -159,7 +164,16 @@ static bool authoring_desc_valid(const henka_authoring_mesh_desc* desc)
         desc->max_edges > 0U && desc->max_edges <= HENKA_AUTHORING_MESH_HARD_MAX_EDGES &&
         desc->max_faces > 0U && desc->max_faces <= HENKA_AUTHORING_MESH_HARD_MAX_FACES &&
         desc->max_face_corners >= 3U &&
-        desc->max_face_corners <= HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS;
+        desc->max_face_corners <= HENKA_AUTHORING_MESH_HARD_MAX_VERTICES;
+}
+
+static bool authoring_file_desc_valid(
+    uint32_t version,
+    const henka_authoring_mesh_desc* desc)
+{
+    return authoring_desc_valid(desc) &&
+        (version == HENKA_AUTHORING_MESH_FILE_VERSION ||
+         desc->max_face_corners <= HENKA_AUTHORING_MESH_LEGACY_MAX_FACE_CORNERS);
 }
 
 static size_t authoring_id_lookup_hash(uint32_t id, size_t capacity)
@@ -435,6 +449,9 @@ static bool authoring_mesh_rebuild_maps(henka_authoring_mesh* mesh)
     {
         return false;
     }
+    mesh->next_unused_edge_slot = mesh->desc.max_edges;
+    mesh->next_inactive_edge_slot = mesh->desc.max_edges;
+    mesh->next_free_face_slot = mesh->desc.max_faces;
     authoring_id_lookup_clear(mesh->vertex_lookup, mesh->vertex_lookup_capacity);
     authoring_id_lookup_clear(mesh->edge_id_lookup, mesh->edge_id_lookup_capacity);
     authoring_id_lookup_clear(mesh->face_lookup, mesh->face_lookup_capacity);
@@ -467,6 +484,18 @@ static bool authoring_mesh_rebuild_maps(henka_authoring_mesh* mesh)
             }
             ++active_edges;
         }
+        else
+        {
+            if (mesh->next_inactive_edge_slot == mesh->desc.max_edges)
+            {
+                mesh->next_inactive_edge_slot = index;
+            }
+            if (mesh->edges[index].id == 0U &&
+                mesh->next_unused_edge_slot == mesh->desc.max_edges)
+            {
+                mesh->next_unused_edge_slot = index;
+            }
+        }
     }
     for (index = 0U; index < mesh->desc.max_faces; ++index)
     {
@@ -481,6 +510,10 @@ static bool authoring_mesh_rebuild_maps(henka_authoring_mesh* mesh)
                 return false;
             }
             ++active_faces;
+        }
+        else if (mesh->next_free_face_slot == mesh->desc.max_faces)
+        {
+            mesh->next_free_face_slot = index;
         }
     }
     mesh->active_vertices = active_vertices;
@@ -628,30 +661,135 @@ static size_t authoring_find_free_vertex_slot(const henka_authoring_mesh* mesh)
     return SIZE_MAX;
 }
 
-static size_t authoring_find_free_edge_slot(const henka_authoring_mesh* mesh)
+static void authoring_note_edge_slot_free(henka_authoring_mesh* mesh, size_t slot)
+{
+    if (mesh == NULL || slot >= mesh->desc.max_edges)
+    {
+        return;
+    }
+    if (slot < mesh->next_unused_edge_slot)
+    {
+        mesh->next_unused_edge_slot = slot;
+    }
+    if (slot < mesh->next_inactive_edge_slot)
+    {
+        mesh->next_inactive_edge_slot = slot;
+    }
+}
+
+static void authoring_note_edge_slot_active(henka_authoring_mesh* mesh, size_t slot)
+{
+    if (mesh == NULL || slot >= mesh->desc.max_edges)
+    {
+        return;
+    }
+    if (slot == mesh->next_unused_edge_slot)
+    {
+        while (mesh->next_unused_edge_slot < mesh->desc.max_edges &&
+               (mesh->edges[mesh->next_unused_edge_slot].id != 0U ||
+                mesh->edges[mesh->next_unused_edge_slot].active))
+        {
+            ++mesh->next_unused_edge_slot;
+        }
+    }
+    if (slot == mesh->next_inactive_edge_slot)
+    {
+        while (mesh->next_inactive_edge_slot < mesh->desc.max_edges &&
+               mesh->edges[mesh->next_inactive_edge_slot].active)
+        {
+            ++mesh->next_inactive_edge_slot;
+        }
+    }
+}
+
+static size_t authoring_find_free_edge_slot(henka_authoring_mesh* mesh)
 {
     size_t index;
     if (mesh == NULL) return SIZE_MAX;
-    for (index = 0U; index < mesh->desc.max_edges; ++index)
+    for (index = mesh->next_unused_edge_slot;
+         index < mesh->desc.max_edges;
+         ++index)
     {
-        if (mesh->edges[index].id == 0U && !mesh->edges[index].active) return index;
+        if (mesh->edges[index].id == 0U && !mesh->edges[index].active)
+        {
+            mesh->next_unused_edge_slot = index;
+            return index;
+        }
+    }
+    mesh->next_unused_edge_slot = mesh->desc.max_edges;
+    for (index = mesh->next_inactive_edge_slot;
+         index < mesh->desc.max_edges;
+         ++index)
+    {
+        if (!mesh->edges[index].active)
+        {
+            mesh->next_inactive_edge_slot = index;
+            return index;
+        }
     }
     for (index = 0U; index < mesh->desc.max_edges; ++index)
     {
-        if (!mesh->edges[index].active) return index;
+        if (!mesh->edges[index].active)
+        {
+            mesh->next_inactive_edge_slot = index;
+            if (mesh->edges[index].id == 0U &&
+                index < mesh->next_unused_edge_slot)
+            {
+                mesh->next_unused_edge_slot = index;
+            }
+            return index;
+        }
     }
+    mesh->next_inactive_edge_slot = mesh->desc.max_edges;
     return SIZE_MAX;
 }
 
-static size_t authoring_find_free_face_slot(const henka_authoring_mesh* mesh)
+static size_t authoring_find_free_face_slot(henka_authoring_mesh* mesh)
 {
     size_t index;
     if (mesh == NULL) return SIZE_MAX;
+    for (index = mesh->next_free_face_slot;
+         index < mesh->desc.max_faces;
+         ++index)
+    {
+        if (!mesh->faces[index].active)
+        {
+            mesh->next_free_face_slot = index;
+            return index;
+        }
+    }
     for (index = 0U; index < mesh->desc.max_faces; ++index)
     {
-        if (!mesh->faces[index].active) return index;
+        if (!mesh->faces[index].active)
+        {
+            mesh->next_free_face_slot = index;
+            return index;
+        }
     }
+    mesh->next_free_face_slot = mesh->desc.max_faces;
     return SIZE_MAX;
+}
+
+static void authoring_note_face_slot_free(henka_authoring_mesh* mesh, size_t slot)
+{
+    if (mesh != NULL && slot < mesh->next_free_face_slot)
+    {
+        mesh->next_free_face_slot = slot;
+    }
+}
+
+static void authoring_note_face_slot_active(henka_authoring_mesh* mesh, size_t slot)
+{
+    if (mesh == NULL || slot != mesh->next_free_face_slot)
+    {
+        return;
+    }
+    ++mesh->next_free_face_slot;
+    while (mesh->next_free_face_slot < mesh->desc.max_faces &&
+           mesh->faces[mesh->next_free_face_slot].active)
+    {
+        ++mesh->next_free_face_slot;
+    }
 }
 
 static henka_result authoring_append_edge(
@@ -681,6 +819,7 @@ static henka_result authoring_append_edge(
     if (!authoring_take_next_id(&mesh->next_edge_id, &edge->id))
     {
         mesh->next_edge_id = previous_next_id;
+        authoring_note_edge_slot_free(mesh, slot);
         return HENKA_ERROR_LIMIT;
     }
     edge->vertices[0] = low;
@@ -702,9 +841,11 @@ static henka_result authoring_append_edge(
     {
         memset(edge, 0, sizeof(*edge));
         mesh->next_edge_id = previous_next_id;
+        authoring_note_edge_slot_free(mesh, slot);
         return HENKA_ERROR_LIMIT;
     }
     ++mesh->active_edges;
+    authoring_note_edge_slot_active(mesh, slot);
     if (!authoring_edge_lookup_insert(mesh, low, high, edge->id))
     {
         --mesh->active_edges;
@@ -714,6 +855,7 @@ static henka_result authoring_append_edge(
             edge->id);
         memset(edge, 0, sizeof(*edge));
         mesh->next_edge_id = previous_next_id;
+        authoring_note_edge_slot_free(mesh, slot);
         return HENKA_ERROR_LIMIT;
     }
     *out_id = edge->id;
@@ -1241,16 +1383,19 @@ henka_result henka_authoring_mesh_remove_edge(
     henka_authoring_edge_id id)
 {
     henka_authoring_edge* edge = authoring_edge(mesh, id);
+    size_t slot;
 
     if (edge == NULL || !edge->active || edge->face_count != 0U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    slot = (size_t)(edge - mesh->edges);
     (void)authoring_id_lookup_remove(
         mesh->edge_id_lookup,
         mesh->edge_id_lookup_capacity,
         edge->id);
     memset(edge, 0, sizeof(*edge));
+    authoring_note_edge_slot_free(mesh, slot);
     --mesh->active_edges;
     mesh->edge_lookup_ready = false;
     return HENKA_SUCCESS;
@@ -1390,7 +1535,11 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
         goto rollback;
     }
     ++mesh->active_faces;
-    mesh->edge_lookup_ready = false;
+    authoring_note_face_slot_active(mesh, face_slot);
+    /* Adding a face changes edge adjacency, not the endpoint-to-edge mapping.
+     * Existing edges keep their keys and authoring_append_edge inserts every
+     * new edge, so invalidating this map here would rebuild it on every face
+     * in a large batch. */
     *out_id = face->id;
     return HENKA_SUCCESS;
 
@@ -1421,6 +1570,8 @@ rollback:
                         mesh->edge_id_lookup_capacity,
                         edge->id);
                     memset(edge, 0, sizeof(*edge));
+                    authoring_note_edge_slot_free(
+                        mesh, (size_t)(edge - mesh->edges));
                     --mesh->active_edges;
                 }
                 break;
@@ -1434,6 +1585,7 @@ rollback:
     henka_free(face->edges);
     henka_free(face->uvs);
     memset(face, 0, sizeof(*face));
+    authoring_note_face_slot_free(mesh, face_slot);
     *out_id = HENKA_AUTHORING_INVALID_ID;
     return result;
 }
@@ -1441,11 +1593,13 @@ rollback:
 henka_result henka_authoring_mesh_remove_face(henka_authoring_mesh* mesh, henka_authoring_face_id id)
 {
     henka_authoring_face* face = authoring_face(mesh, id);
+    size_t face_slot;
     size_t corner;
     if (face == NULL || !face->active)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    face_slot = (size_t)(face - mesh->faces);
     for (corner = 0U; corner < face->corner_count; ++corner)
     {
         henka_authoring_edge* edge = authoring_edge(mesh, face->edges[corner]);
@@ -1471,6 +1625,8 @@ henka_result henka_authoring_mesh_remove_face(henka_authoring_mesh* mesh, henka_
                         mesh->edge_id_lookup_capacity,
                         edge->id);
                     memset(edge, 0, sizeof(*edge));
+                    authoring_note_edge_slot_free(
+                        mesh, (size_t)(edge - mesh->edges));
                     --mesh->active_edges;
                 }
                 break;
@@ -1485,6 +1641,7 @@ henka_result henka_authoring_mesh_remove_face(henka_authoring_mesh* mesh, henka_
         mesh->face_lookup_capacity,
         face->id);
     memset(face, 0, sizeof(*face));
+    authoring_note_face_slot_free(mesh, face_slot);
     --mesh->active_faces;
     mesh->edge_lookup_ready = false;
     return HENKA_SUCCESS;
@@ -1747,6 +1904,7 @@ henka_result henka_authoring_mesh_apply_face_loop_updates_internal(
         ++unique_relation_count;
         index = end;
     }
+    mesh->next_inactive_edge_slot = 0U;
     for (index = 0U; index < mesh->desc.max_edges; ++index)
     {
         mesh->edges[index].active = false;
@@ -1790,6 +1948,8 @@ henka_result henka_authoring_mesh_apply_face_loop_updates_internal(
             if (edge != NULL)
             {
                 edge->active = true;
+                authoring_note_edge_slot_active(
+                    mesh, (size_t)(edge - mesh->edges));
                 edge->vertices[0] = relations[start].low;
                 edge->vertices[1] = relations[start].high;
             }
@@ -1876,6 +2036,60 @@ cleanup:
     henka_free(work);
     henka_free(relations);
     return result;
+}
+
+henka_result henka_authoring_mesh_reverse_face_winding_internal(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id)
+{
+    henka_authoring_face* face;
+    size_t first;
+    size_t last;
+
+    if (mesh == NULL || face_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    face = authoring_face(mesh, face_id);
+    if (face == NULL || !face->active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (face->corner_count < 3U ||
+        face->corner_count > mesh->desc.max_face_corners ||
+        face->vertices == NULL || face->edges == NULL || face->uvs == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    /* Keep corner zero fixed while reversing the remainder of the vertex/UV
+     * loop. Edge IDs follow the reversed directed-corner order, while each
+     * edge's undirected endpoints, adjacency, and flags remain unchanged. */
+    first = 1U;
+    last = face->corner_count - 1U;
+    while (first < last)
+    {
+        const henka_authoring_vertex_id vertex = face->vertices[first];
+        const henka_vec2 uv = face->uvs[first];
+        face->vertices[first] = face->vertices[last];
+        face->uvs[first] = face->uvs[last];
+        face->vertices[last] = vertex;
+        face->uvs[last] = uv;
+        ++first;
+        --last;
+    }
+
+    first = 0U;
+    last = face->corner_count - 1U;
+    while (first < last)
+    {
+        const henka_authoring_edge_id edge = face->edges[first];
+        face->edges[first] = face->edges[last];
+        face->edges[last] = edge;
+        ++first;
+        --last;
+    }
+    return HENKA_SUCCESS;
 }
 
 const henka_authoring_face* henka_authoring_mesh_get_face(const henka_authoring_mesh* mesh, henka_authoring_face_id id)
@@ -2705,7 +2919,9 @@ henka_result henka_authoring_mesh_recover_quads(
     bool* merge_owner = NULL;
     authoring_id_lookup_entry* vertex_map = NULL;
     henka_authoring_vertex_id* mapped_vertices = NULL;
+    henka_authoring_vertex_id* face_mapped_vertices = NULL;
     henka_authoring_mesh* replacement = NULL;
+    size_t face_mapped_bytes = 0U;
     size_t candidate_count = 0U;
     size_t merged_pairs = 0U;
     size_t edge_index;
@@ -2832,8 +3048,17 @@ henka_result henka_authoring_mesh_recover_quads(
     mapped_vertices = henka_calloc(
         mesh->desc.max_vertices,
         sizeof(*mapped_vertices));
+    if (!henka_checked_size_multiply(
+            mesh->desc.max_face_corners,
+            sizeof(*face_mapped_vertices),
+            &face_mapped_bytes))
+    {
+        result = HENKA_ERROR_LIMIT;
+        goto cleanup;
+    }
+    face_mapped_vertices = henka_malloc(face_mapped_bytes);
 
-    if (vertex_map == NULL || mapped_vertices == NULL)
+    if (vertex_map == NULL || mapped_vertices == NULL || face_mapped_vertices == NULL)
     {
         result = HENKA_ERROR_OUT_OF_MEMORY;
         goto cleanup;
@@ -3006,13 +3231,9 @@ henka_result henka_authoring_mesh_recover_quads(
         }
 
         {
-            henka_authoring_vertex_id
-                face_mapped_vertices[
-                    HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
             size_t corner;
 
-            if (source_face->corner_count >
-                HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+            if (source_face->corner_count > mesh->desc.max_face_corners)
             {
                 result = HENKA_ERROR_LIMIT;
                 goto cleanup;
@@ -3115,6 +3336,7 @@ henka_result henka_authoring_mesh_recover_quads(
 
 cleanup:
     henka_authoring_mesh_destroy(replacement);
+    henka_free(face_mapped_vertices);
     henka_free(vertex_map);
     henka_free(mapped_vertices);
     henka_free(merge_owner);
@@ -3777,6 +3999,7 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
              version != HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V3 &&
              version != HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V4 &&
              version != HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V5 &&
+             version != HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V6 &&
              version != HENKA_AUTHORING_MESH_FILE_VERSION) ||
             !authoring_read_u32(file, &capacities[0]) || !authoring_read_u32(file, &capacities[1]) ||
             !authoring_read_u32(file, &capacities[2]) || !authoring_read_u32(file, &capacities[3]) ||
@@ -3787,6 +4010,7 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
         }
         if ((version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V4 ||
              version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V5 ||
+             version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V6 ||
              version == HENKA_AUTHORING_MESH_FILE_VERSION) &&
             (!authoring_read_u32(file, &next_ids[0]) ||
              !authoring_read_u32(file, &next_ids[1]) ||
@@ -3796,7 +4020,8 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
         }
     }
     file_desc = (henka_authoring_mesh_desc){capacities[0], capacities[1], capacities[2], capacities[3]};
-    if (!authoring_desc_valid(&file_desc) || !authoring_desc_equal(&file_desc, &mesh->desc) ||
+    if (!authoring_file_desc_valid(version, &file_desc) ||
+        !authoring_desc_equal(&file_desc, &mesh->desc) ||
         records[0] > capacities[0] || records[1] > capacities[1] || records[2] > capacities[2])
     {
         result = HENKA_ERROR_INVALID_ARGUMENT;
@@ -3810,6 +4035,7 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
     result = HENKA_ERROR_INVALID_ARGUMENT;
     if (version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V4 ||
         version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V5 ||
+        version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V6 ||
         version == HENKA_AUTHORING_MESH_FILE_VERSION)
     {
         candidate->next_vertex_id = next_ids[0];
@@ -3845,8 +4071,10 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
                 !authoring_read_u32(file, &face_count) ||
                 !authoring_read_byte(file, &hard) || hard > 1U || face_count > 2U ||
                 (version != HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V5 &&
+                 version != HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V6 &&
                  version != HENKA_AUTHORING_MESH_FILE_VERSION && face_count == 0U) ||
-                (version == HENKA_AUTHORING_MESH_FILE_VERSION &&
+                ((version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V6 ||
+                  version == HENKA_AUTHORING_MESH_FILE_VERSION) &&
                  (!authoring_read_byte(file, &seam) || seam > 1U)))
             {
                 goto cleanup;
@@ -4028,7 +4256,7 @@ henka_result henka_authoring_mesh_load_file_new(const char* path, henka_authorin
     }
     {
         char magic[4];
-        uint32_t version;
+        uint32_t version = 0U;
         uint32_t capacities[4] = {0U, 0U, 0U, 0U};
         const bool header_ok = fread(magic, sizeof(magic), 1U, file) == 1U &&
             memcmp(magic, "HAMS", sizeof(magic)) == 0 &&
@@ -4037,6 +4265,7 @@ henka_result henka_authoring_mesh_load_file_new(const char* path, henka_authorin
              version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V3 ||
              version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V4 ||
              version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V5 ||
+             version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V6 ||
              version == HENKA_AUTHORING_MESH_FILE_VERSION) &&
             authoring_read_u32(file, &capacities[0]) &&
             authoring_read_u32(file, &capacities[1]) &&
@@ -4044,7 +4273,7 @@ henka_result henka_authoring_mesh_load_file_new(const char* path, henka_authorin
             authoring_read_u32(file, &capacities[3]);
         desc = (henka_authoring_mesh_desc){
             capacities[0], capacities[1], capacities[2], capacities[3]};
-        if (!header_ok || !authoring_desc_valid(&desc))
+        if (!header_ok || !authoring_file_desc_valid(version, &desc))
         {
             fclose(file);
             return HENKA_ERROR_INVALID_ARGUMENT;

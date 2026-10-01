@@ -6876,6 +6876,7 @@ henka_result sandbox3d_authoring_object_extrude_selected_vertex(
     const uint32_t* selected_ids;
     henka_authoring_mesh* candidate = NULL;
     henka_authoring_modeling_report report = {0};
+    sandbox3d_authoring_component_selection_snapshot after_snapshot = {0};
     henka_authoring_vertex_id new_vertex_id = HENKA_AUTHORING_INVALID_ID;
     size_t selected_count = 0U;
     bool published = false;
@@ -6891,7 +6892,12 @@ henka_result sandbox3d_authoring_object_extrude_selected_vertex(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    result = sandbox3d_authoring_capture_component_selection_history_slot(
+        object, object->selection_history_cursor);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    }
     if (result == HENKA_SUCCESS)
     {
         result = henka_authoring_mesh_extrude_vertex(
@@ -6901,6 +6907,39 @@ henka_result sandbox3d_authoring_object_extrude_selected_vertex(
             &new_vertex_id,
             &report);
     }
+    if (result == HENKA_SUCCESS &&
+        (new_vertex_id == HENKA_AUTHORING_INVALID_ID ||
+         (size_t)new_vertex_id > object->selected_vertex_max_id ||
+         henka_authoring_mesh_get_vertex(candidate, new_vertex_id) == NULL))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        after_snapshot.ids = henka_malloc(sizeof(*after_snapshot.ids));
+        if (after_snapshot.ids == NULL)
+        {
+            result = HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        else
+        {
+            after_snapshot.mode = SANDBOX3D_AUTHORING_SELECTION_VERTEX;
+            after_snapshot.active_component_id = new_vertex_id;
+            after_snapshot.ids[0U] = new_vertex_id;
+            after_snapshot.count = 1U;
+            after_snapshot.valid = true;
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        /* Ensure the post-commit selection replacement cannot allocate after
+         * the candidate mesh has become authoritative. */
+        result = sandbox3d_authoring_selection_reserve_ids(
+            &object->selected_vertices,
+            &object->selected_vertex_capacity,
+            1U,
+            object->selected_vertex_max_id);
+    }
     if (result == HENKA_SUCCESS)
     {
         result = sandbox3d_authoring_publish_candidate(
@@ -6909,13 +6948,21 @@ henka_result sandbox3d_authoring_object_extrude_selected_vertex(
     }
     if (result == HENKA_SUCCESS)
     {
-        sandbox3d_authoring_object_clear_component_selection(object);
-        result = sandbox3d_authoring_object_select_component(object, new_vertex_id, false);
+        result = sandbox3d_authoring_replace_current_selection(
+            object, after_snapshot.ids, after_snapshot.count, new_vertex_id);
+        if (result == HENKA_SUCCESS)
+        {
+            sandbox3d_authoring_destroy_component_selection_snapshot(
+                &object->component_selection_history[object->selection_history_cursor]);
+            object->component_selection_history[object->selection_history_cursor] = after_snapshot;
+            after_snapshot.ids = NULL;
+        }
     }
     if (result != HENKA_SUCCESS && !published)
     {
         henka_authoring_mesh_destroy(candidate);
     }
+    sandbox3d_authoring_destroy_component_selection_snapshot(&after_snapshot);
     return result;
 }
 

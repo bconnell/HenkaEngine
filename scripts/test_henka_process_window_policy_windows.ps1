@@ -30,6 +30,10 @@ public static class HenkaWindowPolicyNative
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindow(IntPtr hWnd, int command);
 }
 "@
 }
@@ -40,6 +44,7 @@ $stdoutPath = Join-Path $fixtureRoot "stdout.log"
 $stderrPath = Join-Path $fixtureRoot "stderr.log"
 $readyPath = Join-Path $fixtureRoot "ready.txt"
 $capturedProcess = $null
+$nonActivatingVisibleProcess = $null
 $plainProcess = $null
 $previousForeground = [HenkaWindowPolicyNative]::GetForegroundWindow()
 
@@ -117,7 +122,50 @@ $form.add_Shown({
     } else {
         Write-Output "[pass] Child window did not acquire foreground focus."
     }
-    Write-Output "[pass] Shared Henka process launch policy creates validation windows hidden, then exposes them minimized and unfocused."
+
+    $visibleReadyPath = Join-Path $fixtureRoot "visible-ready.txt"
+    $nonActivatingVisibleProcess = Start-HenkaCapturedProcess `
+        -FilePath "powershell.exe" `
+        -Arguments @( `
+            "-NoProfile", `
+            "-ExecutionPolicy", "Bypass", `
+            "-File", $fixturePath, `
+            "-ReadyPath", $visibleReadyPath) `
+        -WorkingDirectory $RepositoryRoot `
+        -StdoutPath (Join-Path $fixtureRoot "visible-stdout.log") `
+        -StderrPath (Join-Path $fixtureRoot "visible-stderr.log") `
+        -StartMinimized:$false `
+        -StartVisibleWithoutActivation
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+    while (-not (Test-Path -LiteralPath $visibleReadyPath -PathType Leaf) -and
+        -not $nonActivatingVisibleProcess.Process.HasExited -and
+        [DateTime]::UtcNow -lt $deadline) {
+        Start-Sleep -Milliseconds 50
+    }
+    if (-not (Test-Path -LiteralPath $visibleReadyPath -PathType Leaf)) {
+        throw "The non-activating visible control window did not report readiness."
+    }
+    Start-Sleep -Milliseconds 250
+    $nonActivatingVisibleProcess.Process.Refresh()
+    $visibleHandle = $nonActivatingVisibleProcess.Process.MainWindowHandle
+    if ($visibleHandle -eq [IntPtr]::Zero -or
+        -not [HenkaWindowPolicyNative]::IsWindowVisible($visibleHandle) -or
+        [HenkaWindowPolicyNative]::IsIconic($visibleHandle)) {
+        throw "The explicit non-activating visible window was not shown in a capturable state."
+    }
+    if ($visibleHandle -eq [HenkaWindowPolicyNative]::GetForegroundWindow()) {
+        throw "An explicit non-activating visible window acquired foreground focus."
+    }
+    [void][HenkaWindowPolicyNative]::ShowWindow($visibleHandle, 6)
+    Start-Sleep -Milliseconds 250
+    $nonActivatingVisibleProcess.Process.Refresh()
+    if (-not [HenkaWindowPolicyNative]::IsIconic($visibleHandle)) {
+        throw "The bounded capture monitor undid a user's later minimize action."
+    }
+    Write-Output "[pass] Shared process policy supports a visible, non-minimized capture window without taking foreground focus."
+    Write-Output "[pass] A later user minimize action remains respected by the capture-window policy."
+    Write-Output "[pass] Shared Henka process launch policy creates validation windows hidden/minimized by default and supports bounded unfocused capture."
 }
 finally {
     if ($null -ne $plainProcess) {
@@ -128,6 +176,9 @@ finally {
     }
     if ($null -ne $capturedProcess) {
         Close-HenkaCapturedProcess -CapturedProcess $capturedProcess
+    }
+    if ($null -ne $nonActivatingVisibleProcess) {
+        Close-HenkaCapturedProcess -CapturedProcess $nonActivatingVisibleProcess
     }
     if (Test-Path -LiteralPath $fixtureRoot -PathType Container) {
         Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue

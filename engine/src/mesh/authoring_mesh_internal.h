@@ -22,4 +22,10 @@ henka_result henka_authoring_mesh_apply_face_loop_updates_internal(
     const henka_authoring_face_loop_update* updates,
     size_t update_count);
 
+/* Reverses one face's corner winding on a candidate mesh. The undirected
+ * edge relation is unchanged, so existing edge IDs and adjacency stay valid. */
+henka_result henka_authoring_mesh_reverse_face_winding_internal(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id);
+
 #endif

@@ -52,11 +52,17 @@ at the refreshed payload. Mesh reimport does not mutate Scene Document state or
 consume a scene render revision.
 
 If source parsing, path resolution, upload, or another candidate step fails,
-the existing mesh payload and asset metadata remain unchanged. Cached fallback
-entries continue through `henka_assets_retry_failed_obj_mesh` or
-`henka_assets_retry_failed_gltf_mesh`; once a retry produces a real
-manager-owned mesh, the same explicit reimport APIs apply. File watching and
-automatic dependency-driven reimport remain outside this contract.
+the existing mesh payload and asset metadata remain unchanged. A source failure
+that enters the cache uses a path-specific manager-owned diagnostic mesh rather
+than the manager's shared fallback object. Equivalent canonical path spellings
+therefore return one stable borrowed mesh identity. Failed retry leaves that
+identity, payload, and metadata unchanged and leaves the retry output null.
+`henka_assets_retry_failed_obj_mesh` and
+`henka_assets_retry_failed_gltf_mesh` replace the diagnostic payload in place
+after a successful candidate load, so existing scene references observe the
+recovered mesh without pointer replacement. The same identity is retained by
+later explicit reimport. File watching and automatic dependency-driven
+reimport remain outside this contract.
 
 ### Explicit texture reimport
 
@@ -86,7 +92,7 @@ The OBJ loader accepts:
 - texture coordinates;
 - normals;
 - computed face normals when normals are absent;
-- triangle, quad, and bounded n-gon faces through fan triangulation;
+- triangle, quad, and bounded simple n-gon faces through deterministic ear-clipping triangulation, including concave polygons;
 - positive and negative position, texture-coordinate, and normal indices;
 - `o`, `g`, `s`, `mtllib`, and `usemtl` records as non-render statements;
 - cached mesh loading through the asset manager;
@@ -121,7 +127,7 @@ The bounded glTF path supports:
 
 ### Geometry and buffers
 
-- triangle primitives;
+- triangle-list, triangle-strip, and triangle-fan primitives, normalized to the engine triangle-list model;
 - glTF JSON with embedded data-URI buffers;
 - GLB version 2 JSON/BIN containers;
 - confined external `.bin` buffers for file loads;
@@ -299,7 +305,7 @@ Scene data stays CPU-owned until manager/renderer instantiation publishes depend
 
 Instantiation applies the first active glTF camera and publishes active punctual lights into the runtime scene. The runtime currently supports a bounded four-local-light list. Instantiation builds imported entities and Scene-wide camera/light bindings in an independent candidate, then publishes the complete candidate. If a valid active scene would exceed the local-light capacity or any candidate mutation fails, instantiation returns the error before changing the target scene or its revision watermarks.
 
-A valid scene may contain cameras, lights, and nodes without mesh buffers. Mesh-bearing scenes require valid bounded buffers, accessors, and triangle primitives.
+A valid scene may contain cameras, lights, and nodes without mesh buffers. Mesh-bearing scenes require valid bounded buffers and accessors. Triangle-list, triangle-strip, and triangle-fan primitives are normalized to the same triangle-list runtime representation; point and line modes remain unsupported.
 
 `henka_model_scene_data_set_active_scene` selects another validated scene before instantiation. `henka_assets_set_gltf_scene_active_scene` provides the manager-owned equivalent. Invalid indexes leave the current selection unchanged.
 
@@ -326,7 +332,6 @@ Malformed faces, empty meshes, invalid indexes, non-finite values, degenerate tr
 Current model/import gaps include:
 
 - MTL material import;
-- concave OBJ polygon correction beyond fan triangulation;
 - skeletal animation;
 - skinning;
 - morph targets;

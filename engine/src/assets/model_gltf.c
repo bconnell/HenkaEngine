@@ -833,9 +833,10 @@ static bool henka_gltf_parse_primitive(const henka_gltf_context* context, const 
 {
     const char* attributes; const char* attributes_end; const char* value; const char* value_end;
     int position_accessor; int normal_accessor = -1; int uv_accessor = -1; int uv1_accessor = -1; int color_accessor = -1; int tangent_accessor = -1; int index_accessor = -1; int mode = 4;
-    size_t base_vertex_count; size_t index_count; size_t index;
+    size_t base_vertex_count; size_t index_count; size_t output_count; size_t index;
     if (henka_gltf_find_member(primitive, primitive_end, "mode", &value, &value_end) && !henka_gltf_integer(value, value_end, &mode)) return false;
-    if (mode != 4 || !henka_gltf_find_member(primitive, primitive_end, "attributes", &attributes, &attributes_end) ||
+    if ((mode != 4 && mode != 5 && mode != 6) ||
+        !henka_gltf_find_member(primitive, primitive_end, "attributes", &attributes, &attributes_end) ||
         !henka_gltf_member_int(attributes, attributes_end, "POSITION", &position_accessor)) return false;
     if (henka_gltf_find_member(attributes, attributes_end, "NORMAL", &value, &value_end) &&
         (!henka_gltf_member_int(attributes, attributes_end, "NORMAL", &normal_accessor) || normal_accessor < 0)) return false;
@@ -867,22 +868,65 @@ static bool henka_gltf_parse_primitive(const henka_gltf_context* context, const 
         (uv1_accessor >= 0 && !henka_gltf_uv_accessor_is_valid(&context->accessors[uv1_accessor])) ||
         (color_accessor >= 0 && !henka_gltf_color_accessor_is_valid(&context->accessors[color_accessor]))) return false;
     if (index_accessor >= 0 &&
+        (size_t)index_accessor >= context->accessor_count) return false;
+    if (index_accessor >= 0 &&
         (context->accessors[index_accessor].component_count != 1 ||
          context->accessors[index_accessor].normalized ||
          (context->accessors[index_accessor].component_type != 5121 &&
           context->accessors[index_accessor].component_type != 5123 &&
           context->accessors[index_accessor].component_type != 5125))) return false;
     index_count = index_accessor >= 0 ? context->accessors[index_accessor].count : context->accessors[position_accessor].count;
-    if (index_count == 0U || index_count % 3U != 0U || (index_accessor >= 0 && (size_t)index_accessor >= context->accessor_count)) return false;
-    base_vertex_count = builder->count;
-    for (index = 0U; index < index_count; ++index)
+    if (mode == 4)
     {
-        size_t source_index = index;
+        if (index_count == 0U || index_count % 3U != 0U) return false;
+        output_count = index_count;
+    }
+    else
+    {
+        if (index_count < 3U ||
+            !henka_checked_size_multiply(index_count - 2U, 3U, &output_count) ||
+            output_count > HENKA_MAX_MESH_ELEMENTS)
+        {
+            return false;
+        }
+    }
+    base_vertex_count = builder->count;
+    for (index = 0U; index < output_count; ++index)
+    {
+        size_t sequence_index = index;
+        size_t source_index;
         henka_model_vertex vertex;
         float component;
+
+        if (mode == 5)
+        {
+            const size_t triangle = index / 3U;
+            const size_t corner = index % 3U;
+            if (corner == 2U)
+            {
+                sequence_index = triangle + 2U;
+            }
+            else if ((triangle & 1U) == 0U)
+            {
+                sequence_index = triangle + corner;
+            }
+            else
+            {
+                sequence_index = triangle + (1U - corner);
+            }
+        }
+        else if (mode == 6)
+        {
+            const size_t triangle = index / 3U;
+            const size_t corner = index % 3U;
+            sequence_index = corner == 0U ? 0U : triangle + corner;
+        }
+
+        if (sequence_index >= index_count) return false;
+        source_index = sequence_index;
         if (index_accessor >= 0)
         {
-            if (!henka_gltf_read_component(context, index_accessor, index, 0U, &component) || component < 0.0f || floor(component) != component || component >= (float)context->accessors[position_accessor].count) return false;
+            if (!henka_gltf_read_component(context, index_accessor, sequence_index, 0U, &component) || component < 0.0f || floor(component) != component || component >= (float)context->accessors[position_accessor].count) return false;
             source_index = (size_t)component;
         }
         memset(&vertex, 0, sizeof(vertex));
