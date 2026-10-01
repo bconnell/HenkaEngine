@@ -752,11 +752,12 @@ henka_result henka_authoring_mesh_delete_faces(
     size_t face_count,
     henka_authoring_modeling_report* out_report);
 
-/* Removes a bounded pairwise-disjoint set of face-backed edges and their
- * incident face sets while preserving vertices. Selected edges may not share
- * endpoints or incident faces, and at least one renderable face must remain.
- * Invalid, duplicate, overlapping, and capacity-exhausting requests fail
- * without publishing a partial candidate. */
+/* Removes a pairwise-disjoint set of face-backed edges and their incident face
+ * sets while preserving vertices. The batch is bounded by the mesh's
+ * configured edge capacity, independent of face corner capacity. Selected
+ * edges may not share endpoints or incident faces, and at least one
+ * renderable face must remain. Invalid, duplicate, overlapping, and
+ * capacity-exhausting requests fail without publishing a partial candidate. */
 henka_result henka_authoring_mesh_delete_face_edges(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* edge_ids,
