@@ -11861,11 +11861,10 @@ cleanup:
 static int test_boundary_edge_chain_extrude_supports_configured_large_face(void)
 {
     enum { CORNER_COUNT = 40U };
-    const henka_authoring_mesh_desc desc = {64U, 128U, 16U, CORNER_COUNT};
+    const henka_authoring_mesh_desc desc = {96U, 160U, 64U, CORNER_COUNT};
     henka_authoring_mesh* mesh = NULL;
     henka_authoring_vertex_id vertices[CORNER_COUNT];
-    henka_authoring_edge_id selected_edges[2] = {
-        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id selected_edges[CORNER_COUNT];
     henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_modeling_report report = {0};
     henka_authoring_mesh_counts before;
@@ -11900,8 +11899,7 @@ static int test_boundary_edge_chain_extrude_supports_configured_large_face(void)
         {
             goto cleanup;
         }
-        selected_edges[0] = face->edges[0];
-        selected_edges[1] = face->edges[1];
+        memcpy(selected_edges, face->edges, sizeof(selected_edges));
     }
     before = henka_authoring_mesh_get_counts(mesh);
     if (before.vertices != CORNER_COUNT || before.edges != CORNER_COUNT ||
@@ -11911,18 +11909,19 @@ static int test_boundary_edge_chain_extrude_supports_configured_large_face(void)
     }
 
     if (henka_authoring_mesh_extrude_boundary_edge_chain(
-            mesh, selected_edges, 2U, 0.5f, &report) != HENKA_SUCCESS)
+            mesh, selected_edges, CORNER_COUNT, 0.5f, &report) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
     after = henka_authoring_mesh_get_counts(mesh);
     {
         const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, face_id);
-        if (!report.changed || report.created_vertices != 3U ||
-            report.created_faces != 2U ||
-            after.vertices != before.vertices + 3U ||
-            after.faces != before.faces + 2U ||
-            after.edges <= before.edges ||
+        if (!report.changed || report.created_vertices != CORNER_COUNT ||
+            report.created_edges != CORNER_COUNT * 2U ||
+            report.created_faces != CORNER_COUNT ||
+            after.vertices != before.vertices + CORNER_COUNT ||
+            after.edges != before.edges + CORNER_COUNT * 2U ||
+            after.faces != before.faces + CORNER_COUNT ||
             face == NULL || face->corner_count != CORNER_COUNT ||
             face->material_region != 12U || !face->smooth ||
             !henka_authoring_mesh_validate(mesh))
