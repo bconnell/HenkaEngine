@@ -11283,6 +11283,8 @@ static int test_connected_quad_strip_loop_cut_batch_operation(void)
     henka_authoring_mesh* overlap_reverse = NULL;
     henka_authoring_mesh* consumed_network = NULL;
     henka_authoring_mesh* consumed_snapshot = NULL;
+    henka_authoring_mesh* consumed_probe = NULL;
+    henka_authoring_mesh* snapshot_probe = NULL;
     henka_authoring_vertex_id vertices[9];
     henka_authoring_edge_id start_edges[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
@@ -11429,6 +11431,45 @@ static int test_connected_quad_strip_loop_cut_batch_operation(void)
         {
             goto cleanup;
         }
+        if (henka_authoring_mesh_clone(consumed_network, &consumed_probe) != HENKA_SUCCESS ||
+            henka_authoring_mesh_clone(consumed_snapshot, &snapshot_probe) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        {
+            henka_authoring_vertex_id consumed_next_vertex = HENKA_AUTHORING_INVALID_ID;
+            henka_authoring_vertex_id snapshot_next_vertex = HENKA_AUTHORING_INVALID_ID;
+            henka_authoring_face_id consumed_next_face = HENKA_AUTHORING_INVALID_ID;
+            henka_authoring_face_id snapshot_next_face = HENKA_AUTHORING_INVALID_ID;
+            henka_authoring_vertex_id consumed_triangle_vertices[3] = {
+                vertices[1], vertices[0], HENKA_AUTHORING_INVALID_ID};
+            henka_authoring_vertex_id snapshot_triangle_vertices[3] = {
+                vertices[1], vertices[0], HENKA_AUTHORING_INVALID_ID};
+
+            if (henka_authoring_mesh_add_vertex(
+                    consumed_probe, (henka_vec3){0.0f, -1.0f, 0.0f},
+                    (henka_vec2){0.0f, -1.0f}, 17U, &consumed_next_vertex) != HENKA_SUCCESS ||
+                henka_authoring_mesh_add_vertex(
+                    snapshot_probe, (henka_vec3){0.0f, -1.0f, 0.0f},
+                    (henka_vec2){0.0f, -1.0f}, 17U, &snapshot_next_vertex) != HENKA_SUCCESS ||
+                consumed_next_vertex != snapshot_next_vertex)
+            {
+                goto cleanup;
+            }
+            consumed_triangle_vertices[2] = consumed_next_vertex;
+            snapshot_triangle_vertices[2] = snapshot_next_vertex;
+            if (henka_authoring_mesh_add_face(
+                    consumed_probe, consumed_triangle_vertices, 3U, 17U, true,
+                    &consumed_next_face) != HENKA_SUCCESS ||
+                henka_authoring_mesh_add_face(
+                    snapshot_probe, snapshot_triangle_vertices, 3U, 17U, true,
+                    &snapshot_next_face) != HENKA_SUCCESS ||
+                consumed_next_face != snapshot_next_face ||
+                !test_authoring_mesh_contents_equal(consumed_probe, snapshot_probe))
+            {
+                goto cleanup;
+            }
+        }
     }
 
     if (henka_authoring_mesh_loop_cut_quad_strips_multi(
@@ -11464,6 +11505,8 @@ static int test_connected_quad_strip_loop_cut_batch_operation(void)
     result = 1;
 
 cleanup:
+    henka_authoring_mesh_destroy(snapshot_probe);
+    henka_authoring_mesh_destroy(consumed_probe);
     henka_authoring_mesh_destroy(consumed_snapshot);
     henka_authoring_mesh_destroy(consumed_network);
     henka_authoring_mesh_destroy(overlap_reverse);
