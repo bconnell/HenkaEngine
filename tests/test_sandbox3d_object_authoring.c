@@ -1224,6 +1224,84 @@ static void henka_test_sandbox3d_modeling_operator_face_normal(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_modeling_operator_face_normal_large_face(void)
+{
+    enum { CORNER_COUNT = 40U };
+    const henka_authoring_mesh_desc desc = {64U, 128U, 16U, CORNER_COUNT};
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    sandbox3d_modeling_operator_session session = {0};
+    henka_authoring_vertex_id vertices[CORNER_COUNT];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_vec3 before_position;
+    henka_vec3 after_position;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    size_t index;
+
+    config.application_name = "Henka Large Face Normal Operator Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Large Face Normal Operator");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    for (index = 0U; index < CORNER_COUNT; ++index)
+    {
+        const float angle = 6.2831853071795864769f *
+            (float)index / (float)CORNER_COUNT;
+        const henka_vec3 position = {cosf(angle), sinf(angle), 0.0f};
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, position, (henka_vec2){position.x, position.y},
+            21U, &vertices[index]) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+        source, vertices, CORNER_COUNT, 21U, true, &face_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, face_id, false) == HENKA_SUCCESS);
+    before_position = henka_authoring_mesh_get_vertex(
+        sandbox3d_authoring_object_get_mesh(object), vertices[0U])->position;
+
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_FACE_NORMAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.25f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    after_position = henka_authoring_mesh_get_vertex(
+        sandbox3d_authoring_object_get_mesh(object), vertices[0U])->position;
+    HENKA_TEST_ASSERT(henka_vec3_length(henka_vec3_subtract(
+        after_position, before_position)) > 0.1f);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), vertices[0U])->position.z,
+        before_position.z,
+        0.0001f);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), vertices[0U])->position.z,
+        after_position.z,
+        0.0001f);
+
+    sandbox3d_modeling_operator_reset(&session);
+    sandbox3d_authoring_object_destroy(object);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_modeling_operator_inset_faces(void)
 {
     henka_engine_config config = {0};
@@ -12558,6 +12636,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_modeling_operator_inset_face();
     henka_test_sandbox3d_modeling_operator_inset_faces();
     henka_test_sandbox3d_modeling_operator_face_normal();
+    henka_test_sandbox3d_modeling_operator_face_normal_large_face();
     henka_test_sandbox3d_modeling_operator_face_normal_batch();
     henka_test_sandbox3d_modeling_operator_subdivide_face();
     henka_test_sandbox3d_modeling_operator_subdivide_faces();
