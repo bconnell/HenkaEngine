@@ -377,50 +377,33 @@ static void henka_topology_union(
     }
 }
 
-static void henka_topology_sort_ids(
-    uint32_t* ids,
-    size_t count)
+static int henka_topology_compare_vertex_ids(
+    const void* left_pointer,
+    const void* right_pointer)
 {
-    size_t index;
+    const uint32_t left = *(const uint32_t*)left_pointer;
+    const uint32_t right = *(const uint32_t*)right_pointer;
+    return (left > right) - (left < right);
+}
 
-    for (index = 1U;
-         index < count;
-         ++index)
+static void henka_topology_sort_ids(uint32_t* ids, size_t count)
+{
+    if (ids != NULL && count > 1U)
     {
-        const uint32_t value =
-            ids[index];
-
-        size_t cursor =
-            index;
-
-        while (cursor > 0U &&
-            ids[cursor - 1U] > value)
-        {
-            ids[cursor] =
-                ids[cursor - 1U];
-
-            cursor -= 1U;
-        }
-
-        ids[cursor] =
-            value;
+        qsort(ids, count, sizeof(*ids), henka_topology_compare_vertex_ids);
     }
 }
 
 static uint64_t henka_topology_face_hash(
-    const henka_authoring_face* face)
+    const henka_authoring_face* face,
+    uint32_t* sorted)
 {
-    uint32_t sorted[
-        HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-
     uint64_t hash =
         UINT64_C(1469598103934665603);
 
     size_t index;
 
-    if (face == NULL ||
-        face->corner_count >
-            HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+    if (face == NULL || sorted == NULL)
     {
         return 0U;
     }
@@ -433,9 +416,11 @@ static uint64_t henka_topology_face_hash(
             face->vertices[index];
     }
 
-    henka_topology_sort_ids(
+    qsort(
         sorted,
-        face->corner_count);
+        face->corner_count,
+        sizeof(*sorted),
+        henka_topology_compare_vertex_ids);
 
     hash ^=
         (uint64_t)face->corner_count;
@@ -457,53 +442,47 @@ static uint64_t henka_topology_face_hash(
     return hash;
 }
 
-static bool henka_topology_faces_same_vertex_set(
+static bool henka_topology_faces_same_vertex_multiset(
     const henka_authoring_face* first,
-    const henka_authoring_face* second)
+    const henka_authoring_face* second,
+    uint32_t* sorted_scratch)
 {
-    uint32_t first_sorted[
-        HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-
-    uint32_t second_sorted[
-        HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-
+    uint32_t* first_sorted;
+    uint32_t* second_sorted;
     size_t index;
 
     if (first == NULL ||
         second == NULL ||
-        first->corner_count !=
-            second->corner_count ||
-        first->corner_count >
-            HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+        sorted_scratch == NULL ||
+        first->corner_count != second->corner_count)
     {
         return false;
     }
+    first_sorted = sorted_scratch;
+    second_sorted = sorted_scratch + first->corner_count;
 
     for (index = 0U;
          index < first->corner_count;
          ++index)
     {
-        first_sorted[index] =
-            first->vertices[index];
-
-        second_sorted[index] =
-            second->vertices[index];
+        first_sorted[index] = first->vertices[index];
+        second_sorted[index] = second->vertices[index];
     }
 
-    henka_topology_sort_ids(
+    qsort(
         first_sorted,
-        first->corner_count);
-
-    henka_topology_sort_ids(
+        first->corner_count,
+        sizeof(*first_sorted),
+        henka_topology_compare_vertex_ids);
+    qsort(
         second_sorted,
-        second->corner_count);
+        second->corner_count,
+        sizeof(*second_sorted),
+        henka_topology_compare_vertex_ids);
 
-    for (index = 0U;
-         index < first->corner_count;
-         ++index)
+    for (index = 0U; index < first->corner_count; ++index)
     {
-        if (first_sorted[index] !=
-            second_sorted[index])
+        if (first_sorted[index] != second_sorted[index])
         {
             return false;
         }
@@ -1267,6 +1246,7 @@ henka_result henka_authoring_topology_analyze(
     size_t* next_in_cell = NULL;
     henka_topology_cell_bucket* cell_buckets = NULL;
     henka_authoring_face_id* face_slots = NULL;
+    uint32_t* face_vertex_scratch = NULL;
 
     size_t cell_capacity = 0U;
     size_t face_slot_capacity = 0U;
@@ -1671,6 +1651,29 @@ henka_result henka_authoring_topology_analyze(
     {
         size_t requested;
         size_t face_bytes;
+        const size_t max_face_corners =
+            henka_authoring_mesh_get_desc(mesh).max_face_corners;
+        size_t scratch_count;
+        size_t scratch_bytes;
+
+        if (!henka_checked_size_multiply(
+                max_face_corners,
+                2U,
+                &scratch_count) ||
+            !henka_checked_size_multiply(
+                scratch_count,
+                sizeof(*face_vertex_scratch),
+                &scratch_bytes))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
+        face_vertex_scratch = (uint32_t*)henka_malloc(scratch_bytes);
+        if (face_vertex_scratch == NULL)
+        {
+            result = HENKA_ERROR_OUT_OF_MEMORY;
+            goto cleanup;
+        }
 
         if (!henka_checked_size_multiply(counts.faces, 2U, &requested) ||
             !henka_checked_size_add(requested, 1U, &requested))
@@ -1773,7 +1776,7 @@ henka_result henka_authoring_topology_analyze(
         if (face_slot_capacity > 0U)
         {
             const uint64_t hash =
-                henka_topology_face_hash(face);
+                henka_topology_face_hash(face, face_vertex_scratch);
 
             size_t slot =
                 (size_t)(
@@ -1800,11 +1803,12 @@ henka_result henka_authoring_topology_analyze(
                     break;
                 }
 
-                if (henka_topology_faces_same_vertex_set(
+                if (henka_topology_faces_same_vertex_multiset(
                         face,
                         henka_authoring_mesh_get_face(
                             mesh,
-                            face_slots[slot])))
+                            face_slots[slot]),
+                        face_vertex_scratch))
                 {
                     out_report->
                         duplicate_face_count +=
@@ -2044,6 +2048,7 @@ henka_result henka_authoring_topology_analyze(
     }
 
 cleanup:
+    henka_free(face_vertex_scratch);
     henka_free(face_slots);
     henka_free(cell_buckets);
     henka_free(next_in_cell);
@@ -2127,7 +2132,11 @@ static henka_result henka_topology_mark_repair_faces(
     size_t* out_degenerate_count)
 {
     const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
+    uint32_t* face_vertex_scratch = NULL;
+    size_t scratch_count = 0U;
+    size_t scratch_bytes = 0U;
     size_t face_slot;
+    henka_result result = HENKA_SUCCESS;
     if (mesh == NULL || options == NULL || remove_faces == NULL ||
         remove_face_capacity < desc.max_faces || out_duplicate_count == NULL ||
         out_degenerate_count == NULL)
@@ -2137,6 +2146,25 @@ static henka_result henka_topology_mark_repair_faces(
     *out_duplicate_count = 0U;
     *out_degenerate_count = 0U;
     memset(remove_faces, 0, remove_face_capacity);
+    if (options->remove_duplicate_faces)
+    {
+        if (!henka_checked_size_multiply(
+                desc.max_face_corners,
+                2U,
+                &scratch_count) ||
+            !henka_checked_size_multiply(
+                scratch_count,
+                sizeof(*face_vertex_scratch),
+                &scratch_bytes))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        face_vertex_scratch = (uint32_t*)henka_malloc(scratch_bytes);
+        if (face_vertex_scratch == NULL)
+        {
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+    }
     for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
     {
         henka_authoring_face_id face_id;
@@ -2168,23 +2196,27 @@ static henka_result henka_topology_mark_repair_faces(
                 mesh, prior_slot, &prior_id) == HENKA_SUCCESS
                 ? henka_authoring_mesh_get_face(mesh, prior_id)
                 : NULL;
-            if (prior == NULL || !henka_topology_faces_same_vertex_set(face, prior))
+            if (prior == NULL || !henka_topology_faces_same_vertex_multiset(
+                    face, prior, face_vertex_scratch))
             {
                 continue;
             }
             if (!henka_topology_faces_same_cycle(
                     prior, face, options->analysis.uv_seam_tolerance))
             {
-                /* Same vertex set with different winding, material, smoothing,
+                /* Same vertex multiset with different winding, material, smoothing,
                  * or UV data is not a safe duplicate to discard. */
-                return HENKA_ERROR_INVALID_ARGUMENT;
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
             }
             remove_faces[face_slot] = 1U;
             *out_duplicate_count += 1U;
             break;
         }
     }
-    return HENKA_SUCCESS;
+cleanup:
+    henka_free(face_vertex_scratch);
+    return result;
 }
 
 henka_result henka_authoring_mesh_repair_topology(

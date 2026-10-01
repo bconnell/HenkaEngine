@@ -5,6 +5,8 @@
 
 #include <henka/memory.h>
 
+#include "../core/checked.h"
+
 static bool uv_finite_vec2(henka_vec2 value)
 {
     return isfinite(value.x) && isfinite(value.y);
@@ -279,9 +281,10 @@ henka_result henka_authoring_mesh_project_face_uv(
 {
     henka_authoring_mesh* candidate = NULL;
     const henka_authoring_face* source;
-    henka_vec2 projected[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_vec2* projected = NULL;
     henka_vec2 minimum = {0.0f, 0.0f};
     henka_vec2 maximum = {0.0f, 0.0f};
+    size_t projected_bytes;
     size_t corner;
     henka_result result;
     if (mesh == NULL || axis > HENKA_AUTHORING_UV_PROJECT_Z || !uv_face_valid(mesh, face_id))
@@ -289,9 +292,15 @@ henka_result henka_authoring_mesh_project_face_uv(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     source = henka_authoring_mesh_get_face(mesh, face_id);
-    if (source->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+    if (!henka_checked_size_multiply(
+            source->corner_count, sizeof(*projected), &projected_bytes))
     {
         return HENKA_ERROR_LIMIT;
+    }
+    projected = henka_malloc(projected_bytes);
+    if (projected == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
     }
     for (corner = 0U; corner < source->corner_count; ++corner)
     {
@@ -322,6 +331,7 @@ henka_result henka_authoring_mesh_project_face_uv(
         candidate = NULL;
     }
     henka_authoring_mesh_destroy(candidate);
+    henka_free(projected);
     return result;
 }
 
