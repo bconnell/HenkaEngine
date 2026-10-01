@@ -11120,6 +11120,154 @@ cleanup:
     return result ? 1 : fail("disjoint quad strip batch");
 }
 
+static int test_authoring_mesh_contents_equal(
+    const henka_authoring_mesh* first,
+    const henka_authoring_mesh* second)
+{
+    henka_authoring_mesh_desc first_desc;
+    henka_authoring_mesh_desc second_desc;
+    henka_authoring_mesh_counts first_counts;
+    henka_authoring_mesh_counts second_counts;
+    size_t slot;
+
+    if (first == NULL || second == NULL ||
+        !henka_authoring_mesh_validate(first) || !henka_authoring_mesh_validate(second))
+    {
+        return 0;
+    }
+    first_desc = henka_authoring_mesh_get_desc(first);
+    second_desc = henka_authoring_mesh_get_desc(second);
+    first_counts = henka_authoring_mesh_get_counts(first);
+    second_counts = henka_authoring_mesh_get_counts(second);
+    if (
+        first_desc.max_vertices != second_desc.max_vertices ||
+        first_desc.max_edges != second_desc.max_edges ||
+        first_desc.max_faces != second_desc.max_faces ||
+        first_desc.max_face_corners != second_desc.max_face_corners ||
+        first_counts.vertices != second_counts.vertices ||
+        first_counts.edges != second_counts.edges ||
+        first_counts.faces != second_counts.faces)
+    {
+        return 0;
+    }
+
+    for (slot = 0U; slot < first_desc.max_vertices; ++slot)
+    {
+        henka_authoring_vertex_id first_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_vertex_id second_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_result first_result =
+            henka_authoring_mesh_get_vertex_id_at(first, slot, &first_id);
+        const henka_result second_result =
+            henka_authoring_mesh_get_vertex_id_at(second, slot, &second_id);
+        const henka_authoring_vertex* first_vertex;
+        const henka_authoring_vertex* second_vertex;
+
+        if (first_result != second_result)
+        {
+            return 0;
+        }
+        if (first_result != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        first_vertex = henka_authoring_mesh_get_vertex(first, first_id);
+        second_vertex = henka_authoring_mesh_get_vertex(second, second_id);
+        if (first_id != second_id || first_vertex == NULL || second_vertex == NULL ||
+            first_vertex->id != second_vertex->id ||
+            first_vertex->position.x != second_vertex->position.x ||
+            first_vertex->position.y != second_vertex->position.y ||
+            first_vertex->position.z != second_vertex->position.z ||
+            first_vertex->uv.x != second_vertex->uv.x ||
+            first_vertex->uv.y != second_vertex->uv.y ||
+            first_vertex->material_region != second_vertex->material_region ||
+            first_vertex->active != second_vertex->active)
+        {
+            return 0;
+        }
+    }
+
+    for (slot = 0U; slot < first_desc.max_edges; ++slot)
+    {
+        henka_authoring_edge_id first_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_edge_id second_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_result first_result =
+            henka_authoring_mesh_get_edge_id_at(first, slot, &first_id);
+        const henka_result second_result =
+            henka_authoring_mesh_get_edge_id_at(second, slot, &second_id);
+        const henka_authoring_edge* first_edge;
+        const henka_authoring_edge* second_edge;
+
+        if (first_result != second_result)
+        {
+            return 0;
+        }
+        if (first_result != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        first_edge = henka_authoring_mesh_get_edge(first, first_id);
+        second_edge = henka_authoring_mesh_get_edge(second, second_id);
+        if (first_id != second_id || first_edge == NULL || second_edge == NULL ||
+            first_edge->id != second_edge->id ||
+            first_edge->vertices[0] != second_edge->vertices[0] ||
+            first_edge->vertices[1] != second_edge->vertices[1] ||
+            first_edge->faces[0] != second_edge->faces[0] ||
+            first_edge->faces[1] != second_edge->faces[1] ||
+            first_edge->face_count != second_edge->face_count ||
+            first_edge->hard != second_edge->hard ||
+            first_edge->seam != second_edge->seam ||
+            first_edge->active != second_edge->active)
+        {
+            return 0;
+        }
+    }
+
+    for (slot = 0U; slot < first_desc.max_faces; ++slot)
+    {
+        henka_authoring_face_id first_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_face_id second_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_result first_result =
+            henka_authoring_mesh_get_face_id_at(first, slot, &first_id);
+        const henka_result second_result =
+            henka_authoring_mesh_get_face_id_at(second, slot, &second_id);
+        const henka_authoring_face* first_face;
+        const henka_authoring_face* second_face;
+        size_t corner;
+
+        if (first_result != second_result)
+        {
+            return 0;
+        }
+        if (first_result != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        first_face = henka_authoring_mesh_get_face(first, first_id);
+        second_face = henka_authoring_mesh_get_face(second, second_id);
+        if (first_id != second_id || first_face == NULL || second_face == NULL ||
+            first_face->id != second_face->id ||
+            first_face->corner_count != second_face->corner_count ||
+            first_face->material_region != second_face->material_region ||
+            first_face->smooth != second_face->smooth ||
+            first_face->active != second_face->active)
+        {
+            return 0;
+        }
+        for (corner = 0U; corner < first_face->corner_count; ++corner)
+        {
+            if (first_face->vertices[corner] != second_face->vertices[corner] ||
+                first_face->edges[corner] != second_face->edges[corner] ||
+                first_face->uvs[corner].x != second_face->uvs[corner].x ||
+                first_face->uvs[corner].y != second_face->uvs[corner].y)
+            {
+                return 0;
+            }
+        }
+    }
+
+    return 1;
+}
+
 static int test_connected_quad_strip_loop_cut_batch_operation(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 32U, 16U};
@@ -11134,6 +11282,7 @@ static int test_connected_quad_strip_loop_cut_batch_operation(void)
     henka_authoring_mesh* overlap_forward = NULL;
     henka_authoring_mesh* overlap_reverse = NULL;
     henka_authoring_mesh* consumed_network = NULL;
+    henka_authoring_mesh* consumed_snapshot = NULL;
     henka_authoring_vertex_id vertices[9];
     henka_authoring_edge_id start_edges[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
@@ -11247,7 +11396,8 @@ static int test_connected_quad_strip_loop_cut_batch_operation(void)
         goto cleanup;
     }
 
-    if (henka_authoring_mesh_clone(mesh, &consumed_network) != HENKA_SUCCESS)
+    if (henka_authoring_mesh_clone(mesh, &consumed_network) != HENKA_SUCCESS ||
+        henka_authoring_mesh_clone(consumed_network, &consumed_snapshot) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -11270,6 +11420,7 @@ static int test_connected_quad_strip_loop_cut_batch_operation(void)
         }
         consumed_after = henka_authoring_mesh_get_counts(consumed_network);
         if (memcmp(&consumed_before, &consumed_after, sizeof(consumed_before)) != 0 ||
+            !test_authoring_mesh_contents_equal(consumed_network, consumed_snapshot) ||
             consumed_last[0] != HENKA_AUTHORING_INVALID_ID ||
             consumed_last[1] != HENKA_AUTHORING_INVALID_ID ||
             consumed_primary[0] != HENKA_AUTHORING_INVALID_ID ||
@@ -11313,6 +11464,7 @@ static int test_connected_quad_strip_loop_cut_batch_operation(void)
     result = 1;
 
 cleanup:
+    henka_authoring_mesh_destroy(consumed_snapshot);
     henka_authoring_mesh_destroy(consumed_network);
     henka_authoring_mesh_destroy(overlap_reverse);
     henka_authoring_mesh_destroy(overlap_forward);
