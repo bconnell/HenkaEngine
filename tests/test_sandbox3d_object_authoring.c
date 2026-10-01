@@ -8172,6 +8172,63 @@ static void henka_test_sandbox3d_object_authoring_loose_edge_delete_batch(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_large_face_render_bridge(void)
+{
+    enum { CORNER_COUNT = 40U };
+    const henka_authoring_mesh_desc desc = {64U, 128U, 16U, CORNER_COUNT};
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_vertex_id vertices[CORNER_COUNT];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_counts counts;
+    henka_entity entity;
+    size_t index;
+
+    config.application_name = "Henka Large Face Render Bridge Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Large Face Render Bridge");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    for (index = 0U; index < CORNER_COUNT; ++index)
+    {
+        const float angle = 6.2831853071795864769f *
+            (float)index / (float)CORNER_COUNT;
+        const henka_vec3 position = {cosf(angle), sinf(angle), 0.0f};
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, position, (henka_vec2){position.x, position.y},
+            17U, &vertices[index]) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+        source, vertices, CORNER_COUNT, 17U, true, &face_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(source));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 4U, &object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == CORNER_COUNT &&
+        counts.edges == CORNER_COUNT && counts.faces == 1U);
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object), face_id);
+        HENKA_TEST_ASSERT(face != NULL && face->corner_count == CORNER_COUNT &&
+            face->material_region == 17U && face->smooth);
+    }
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_face_edge_delete_batch(void)
 {
     henka_engine_config config = {0};
@@ -12552,6 +12609,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_duplicate();
     henka_test_sandbox3d_object_authoring_source_persistence();
     henka_test_sandbox3d_object_authoring_clone_bridge();
+    henka_test_sandbox3d_object_authoring_large_face_render_bridge();
     henka_test_sandbox3d_object_authoring_model_primitive_bridge();
     henka_test_sandbox3d_object_authoring_real_gltf_import_bridge();
     henka_test_sandbox3d_object_authoring_real_obj_import_bridge();
