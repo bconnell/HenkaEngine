@@ -680,9 +680,11 @@ henka_result henka_authoring_mesh_bridge_boundary_edges(
  * have matching material and smoothing metadata along their source faces.
  * Open-chain pairing chooses the shorter geometric direction. Closed-loop
  * pairing chooses a deterministic cyclic offset and direction. Per-corner UVs
- * are preserved. Mixed open/closed, unequal or ambiguous chains, unsupported
- * metadata, degenerate geometry, and capacity failures are rejected without
- * changing the source mesh. */
+ * are preserved. Chain length is bounded by the mesh's configured edge
+ * capacity and is independent of the per-face corner limit. Mixed
+ * open/closed, unequal or ambiguous chains, unsupported metadata, degenerate
+ * geometry, and capacity failures are rejected without changing the source
+ * mesh. */
 henka_result henka_authoring_mesh_bridge_boundary_edge_chains(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* first_edge_ids,

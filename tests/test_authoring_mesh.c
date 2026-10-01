@@ -11853,6 +11853,385 @@ cleanup:
     return result ? 1 : fail("transactional boundary edge-chain bridge");
 }
 
+static int test_boundary_edge_chain_bridge_supports_more_than_32_edges(void)
+{
+    enum { EDGE_COUNT = 33U, VERTEX_COUNT = EDGE_COUNT + 1U };
+    const henka_authoring_mesh_desc desc = {136U, 512U, 128U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id lower[2][VERTEX_COUNT];
+    henka_authoring_vertex_id upper[2][VERTEX_COUNT];
+    henka_authoring_edge_id chain_edges[2][EDGE_COUNT];
+    henka_authoring_edge chain_edge_snapshots[2][EDGE_COUNT];
+    henka_authoring_face_id first_bridge_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_result bridge_result = HENKA_ERROR_UNKNOWN;
+    size_t strip;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (strip = 0U; strip < 2U; ++strip)
+    {
+        const float y = strip == 0U ? 0.0f : 3.0f;
+        for (index = 0U; index < VERTEX_COUNT; ++index)
+        {
+            const float x = (float)index;
+            if (henka_authoring_mesh_add_vertex(
+                    mesh,
+                    (henka_vec3){x, y, 0.0f},
+                    (henka_vec2){x, 0.0f},
+                    6U,
+                    &lower[strip][index]) != HENKA_SUCCESS ||
+                henka_authoring_mesh_add_vertex(
+                    mesh,
+                    (henka_vec3){x, y, 1.0f},
+                    (henka_vec2){x, 1.0f},
+                    6U,
+                    &upper[strip][index]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+        for (index = 0U; index < EDGE_COUNT; ++index)
+        {
+            const henka_authoring_vertex_id face_vertices[4] = {
+                lower[strip][index],
+                lower[strip][index + 1U],
+                upper[strip][index + 1U],
+                upper[strip][index]};
+            henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+            const henka_authoring_face* face;
+            if (henka_authoring_mesh_add_face(
+                    mesh, face_vertices, 4U, 6U, true, &face_id) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+            face = henka_authoring_mesh_get_face(mesh, face_id);
+            if (face == NULL || face->corner_count != 4U)
+            {
+                goto cleanup;
+            }
+            chain_edges[strip][index] = face->edges[0];
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (before.vertices != 136U || before.faces != 66U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    for (strip = 0U; strip < 2U; ++strip)
+    {
+        for (index = 0U; index < EDGE_COUNT; ++index)
+        {
+            const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+                mesh, chain_edges[strip][index]);
+            if (edge == NULL)
+            {
+                goto cleanup;
+            }
+            chain_edge_snapshots[strip][index] = *edge;
+        }
+    }
+    /* Cover all public scratch allocations, both endpoint-index builds, and
+     * the candidate clone before proving the operation succeeds. */
+    for (index = 0U; index < 13U; ++index)
+    {
+        const size_t allocations_before = henka_memory_get_allocation_count();
+        size_t strip_index;
+        report = (henka_authoring_modeling_report){0};
+        first_bridge_face = HENKA_AUTHORING_INVALID_ID;
+        henka_memory_test_fail_after(index);
+        bridge_result = henka_authoring_mesh_bridge_boundary_edge_chains(
+            mesh,
+            chain_edges[0], EDGE_COUNT,
+            chain_edges[1], EDGE_COUNT,
+            &first_bridge_face,
+            &report);
+        henka_memory_test_disable_failures();
+        after = henka_authoring_mesh_get_counts(mesh);
+        if (bridge_result != HENKA_ERROR_OUT_OF_MEMORY || report.changed ||
+            first_bridge_face != HENKA_AUTHORING_INVALID_ID ||
+            memcmp(&before, &after, sizeof(before)) != 0 ||
+            henka_memory_get_allocation_count() != allocations_before ||
+            !henka_authoring_mesh_validate(mesh))
+        {
+            (void)fprintf(stderr,
+                "33-edge bridge allocation failure %zu returned %d or changed state\n",
+                index, (int)bridge_result);
+            goto cleanup;
+        }
+        for (strip_index = 0U; strip_index < 2U; ++strip_index)
+        {
+            size_t edge_index;
+            for (edge_index = 0U; edge_index < EDGE_COUNT; ++edge_index)
+            {
+                const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+                    mesh, chain_edges[strip_index][edge_index]);
+                const henka_authoring_edge* snapshot =
+                    &chain_edge_snapshots[strip_index][edge_index];
+                if (edge == NULL || edge->id != snapshot->id ||
+                    memcmp(edge->vertices, snapshot->vertices, sizeof(edge->vertices)) != 0 ||
+                    memcmp(edge->faces, snapshot->faces, sizeof(edge->faces)) != 0 ||
+                    edge->face_count != snapshot->face_count ||
+                    edge->hard != snapshot->hard || edge->seam != snapshot->seam ||
+                    edge->active != snapshot->active)
+                {
+                    goto cleanup;
+                }
+            }
+        }
+    }
+
+    bridge_result = henka_authoring_mesh_bridge_boundary_edge_chains(
+        mesh,
+        chain_edges[0], EDGE_COUNT,
+        chain_edges[1], EDGE_COUNT,
+        &first_bridge_face,
+        &report);
+    if (bridge_result != HENKA_SUCCESS)
+    {
+        (void)fprintf(stderr,
+            "33-edge boundary-chain bridge was rejected: result=%d\n",
+            (int)bridge_result);
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || report.created_faces != EDGE_COUNT ||
+        first_bridge_face == HENKA_AUTHORING_INVALID_ID ||
+        after.vertices != before.vertices || after.faces != before.faces + EDGE_COUNT ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("boundary edge-chain bridge with 33 edges");
+}
+
+static int test_boundary_edge_chain_bridge_large_batch_scales(void)
+{
+    enum { EDGE_COUNT = 4096U, VERTEX_COUNT = EDGE_COUNT + 1U, STRIP_COUNT = 2U };
+    const henka_authoring_mesh_desc desc = {
+        STRIP_COUNT * VERTEX_COUNT * 2U,
+        EDGE_COUNT * 8U,
+        EDGE_COUNT * 4U,
+        8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id* lower = NULL;
+    henka_authoring_vertex_id* upper = NULL;
+    henka_authoring_edge_id* chain_edges = NULL;
+    henka_authoring_face_id first_bridge_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_result bridge_result = HENKA_ERROR_UNKNOWN;
+    clock_t start;
+    clock_t finish;
+    size_t strip;
+    size_t index;
+    int result = 0;
+
+    lower = (henka_authoring_vertex_id*)henka_malloc(
+        STRIP_COUNT * VERTEX_COUNT * sizeof(*lower));
+    upper = (henka_authoring_vertex_id*)henka_malloc(
+        STRIP_COUNT * VERTEX_COUNT * sizeof(*upper));
+    chain_edges = (henka_authoring_edge_id*)henka_malloc(
+        STRIP_COUNT * EDGE_COUNT * sizeof(*chain_edges));
+    if (lower == NULL || upper == NULL || chain_edges == NULL ||
+        henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (strip = 0U; strip < STRIP_COUNT; ++strip)
+    {
+        const float y = (float)strip * 3.0f;
+        for (index = 0U; index < VERTEX_COUNT; ++index)
+        {
+            const float x = (float)index;
+            const size_t vertex_index = strip * VERTEX_COUNT + index;
+            if (henka_authoring_mesh_add_vertex(
+                    mesh, (henka_vec3){x, y, 0.0f}, (henka_vec2){x, 0.0f}, 6U,
+                    &lower[vertex_index]) != HENKA_SUCCESS ||
+                henka_authoring_mesh_add_vertex(
+                    mesh, (henka_vec3){x, y, 1.0f}, (henka_vec2){x, 1.0f}, 6U,
+                    &upper[vertex_index]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+        for (index = 0U; index < EDGE_COUNT; ++index)
+        {
+            const size_t first_vertex_index = strip * VERTEX_COUNT + index;
+            const henka_authoring_vertex_id face_vertices[4] = {
+                lower[first_vertex_index], lower[first_vertex_index + 1U],
+                upper[first_vertex_index + 1U], upper[first_vertex_index]};
+            henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+            const henka_authoring_face* face;
+            if (henka_authoring_mesh_add_face(
+                    mesh, face_vertices, 4U, 6U, true, &face_id) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+            face = henka_authoring_mesh_get_face(mesh, face_id);
+            if (face == NULL || face->corner_count != 4U)
+            {
+                goto cleanup;
+            }
+            chain_edges[strip * EDGE_COUNT + index] = face->edges[0];
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (before.vertices != STRIP_COUNT * VERTEX_COUNT * 2U ||
+        before.faces != STRIP_COUNT * EDGE_COUNT || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    start = clock();
+    if (start == (clock_t)-1)
+    {
+        goto cleanup;
+    }
+    bridge_result = henka_authoring_mesh_bridge_boundary_edge_chains(
+        mesh, chain_edges, EDGE_COUNT,
+        chain_edges + EDGE_COUNT, EDGE_COUNT,
+        &first_bridge_face, &report);
+    finish = clock();
+    if (bridge_result != HENKA_SUCCESS || finish == (clock_t)-1 || finish < start)
+    {
+        (void)fprintf(stderr, "large boundary-chain bridge returned %d\n",
+            (int)bridge_result);
+        goto cleanup;
+    }
+    {
+        const double elapsed_seconds =
+            (double)(finish - start) / (double)CLOCKS_PER_SEC;
+        (void)fprintf(stderr,
+            "4096-edge boundary-chain bridge CPU seconds: %.3f\n", elapsed_seconds);
+        if (elapsed_seconds > 4.0)
+        {
+            (void)fprintf(stderr,
+                "4096-edge boundary-chain bridge exceeded 4 CPU seconds\n");
+            goto cleanup;
+        }
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || report.created_faces != EDGE_COUNT ||
+        first_bridge_face == HENKA_AUTHORING_INVALID_ID ||
+        after.vertices != before.vertices || after.faces != before.faces + EDGE_COUNT ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    henka_free(chain_edges);
+    henka_free(upper);
+    henka_free(lower);
+    return result ? 1 : fail("large boundary edge-chain bridge scaling");
+}
+
+static int test_boundary_edge_chain_bridge_supports_configured_large_faces(void)
+{
+    enum { CORNER_COUNT = 40U };
+    const henka_authoring_mesh_desc desc = {80U, 256U, 64U, CORNER_COUNT};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id face_vertices[2][CORNER_COUNT];
+    henka_authoring_edge_id boundary_edges[2][CORNER_COUNT];
+    henka_authoring_face_id first_bridge_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_result bridge_result = HENKA_ERROR_UNKNOWN;
+    size_t ring;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (ring = 0U; ring < 2U; ++ring)
+    {
+        const float phase = ring == 0U ? 0.0f : 0.25f;
+        const float z = ring == 0U ? 0.0f : 2.0f;
+        for (index = 0U; index < CORNER_COUNT; ++index)
+        {
+            const float angle = 6.2831853071795864769f *
+                ((float)index + phase) / (float)CORNER_COUNT;
+            if (henka_authoring_mesh_add_vertex(
+                    mesh,
+                    (henka_vec3){cosf(angle), sinf(angle), z},
+                    (henka_vec2){0.0f, 0.0f},
+                    6U,
+                    &face_vertices[ring][index]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+        {
+            henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+            const henka_authoring_face* face;
+            if (henka_authoring_mesh_add_face(
+                    mesh, face_vertices[ring], CORNER_COUNT, 6U, true, &face_id) !=
+                HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+            face = henka_authoring_mesh_get_face(mesh, face_id);
+            if (face == NULL || face->corner_count != CORNER_COUNT)
+            {
+                goto cleanup;
+            }
+            memcpy(boundary_edges[ring], face->edges, sizeof(boundary_edges[ring]));
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (before.vertices != 80U || before.faces != 2U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    bridge_result = henka_authoring_mesh_bridge_boundary_edge_chains(
+        mesh,
+        boundary_edges[0], CORNER_COUNT,
+        boundary_edges[1], CORNER_COUNT,
+        &first_bridge_face,
+        &report);
+    if (bridge_result != HENKA_SUCCESS)
+    {
+        (void)fprintf(stderr,
+            "40-corner configured face boundary bridge was rejected: result=%d\n",
+            (int)bridge_result);
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || report.created_faces != CORNER_COUNT ||
+        first_bridge_face == HENKA_AUTHORING_INVALID_ID ||
+        after.vertices != before.vertices || after.faces != before.faces + CORNER_COUNT ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("boundary edge-chain bridge with configured 40-corner faces");
+}
+
 static int test_closed_boundary_loop_bridge_operation(void)
 {
     const henka_authoring_mesh_desc desc = {16U, 32U, 16U, 8U};
@@ -14326,6 +14705,9 @@ int main(void)
         test_boundary_edge_chain_batch_extrude_operation() &&
         test_boundary_edge_bridge_operation() &&
         test_boundary_edge_chain_bridge_operation() &&
+        test_boundary_edge_chain_bridge_supports_configured_large_faces() &&
+        test_boundary_edge_chain_bridge_supports_more_than_32_edges() &&
+        test_boundary_edge_chain_bridge_large_batch_scales() &&
         test_closed_boundary_loop_bridge_operation() &&
         test_boundary_edge_chain_pair_batch_bridge_operation() &&
         test_boundary_loop_fill_operation() &&
