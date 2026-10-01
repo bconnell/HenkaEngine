@@ -12494,8 +12494,7 @@ henka_result henka_authoring_mesh_extrude_edge(
     }
     source_face_id = source_edge->faces[0];
     source_face = henka_authoring_mesh_get_face(mesh, source_face_id);
-    if (source_face == NULL || source_face->corner_count < 3U ||
-        source_face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+    if (source_face == NULL || source_face->corner_count < 3U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
