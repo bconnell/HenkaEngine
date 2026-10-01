@@ -279,7 +279,8 @@ static henka_result sandbox3d_authoring_evaluate_render(
     henka_model_data model;
     size_t vertex_count = 0U;
     size_t index_count = 0U;
-    size_t face_id;
+    henka_authoring_mesh_desc desc;
+    size_t face_slot;
     size_t vertex_index;
     size_t index;
     henka_vec3 minimum = {0.0f, 0.0f, 0.0f};
@@ -322,26 +323,28 @@ static henka_result sandbox3d_authoring_evaluate_render(
         return HENKA_SUCCESS;
     }
 
-    for (face_id = 1U; face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
+    desc = henka_authoring_mesh_get_desc(source);
+    for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
     {
-        const henka_authoring_face* face = henka_authoring_mesh_get_face(
-            source, (henka_authoring_face_id)face_id);
-        if (face == NULL)
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_face* face;
+        size_t face_index_count;
+
+        if (henka_authoring_mesh_get_face_id_at(source, face_slot, &face_id) != HENKA_SUCCESS)
         {
             continue;
         }
-        if (face->corner_count < 3U || face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+        face = henka_authoring_mesh_get_face(source, face_id);
+        if (face == NULL || face->corner_count < 3U ||
+            face->corner_count > desc.max_face_corners ||
+            !henka_checked_size_add(vertex_count, face->corner_count, &vertex_count) ||
+            !henka_checked_size_multiply(face->corner_count - 2U, 3U, &face_index_count) ||
+            !henka_checked_size_add(index_count, face_index_count, &index_count))
         {
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            return HENKA_ERROR_LIMIT;
         }
-        vertex_count += face->corner_count;
-        index_count += (face->corner_count - 2U) * 3U;
     }
-    if (vertex_count == 0U ||
-        vertex_count > (size_t)HENKA_AUTHORING_MESH_HARD_MAX_FACES * HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS ||
-        index_count == 0U ||
-        index_count > (size_t)HENKA_AUTHORING_MESH_HARD_MAX_FACES *
-            (HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS - 2U) * 3U ||
+    if (vertex_count == 0U || index_count == 0U ||
         vertex_count > UINT32_MAX || index_count > UINT32_MAX)
     {
         return HENKA_ERROR_LIMIT;
