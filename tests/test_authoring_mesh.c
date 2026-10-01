@@ -12057,6 +12057,100 @@ cleanup:
     return result ? 1 : fail("transactional boundary edge bridge");
 }
 
+static int test_boundary_edge_bridge_supports_configured_large_faces(void)
+{
+    enum { CORNER_COUNT = 40U };
+    const henka_authoring_mesh_desc desc = {80U, 128U, 8U, CORNER_COUNT};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id face_vertices[2][CORNER_COUNT];
+    henka_authoring_face_id face_ids[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id bridge_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id bridge_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    size_t ring;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (ring = 0U; ring < 2U; ++ring)
+    {
+        const float z = ring == 0U ? 0.0f : 2.0f;
+        for (index = 0U; index < CORNER_COUNT; ++index)
+        {
+            const float angle = 6.2831853071795864769f *
+                (float)index / (float)CORNER_COUNT;
+            const henka_vec3 position = {cosf(angle), sinf(angle), z};
+            if (henka_authoring_mesh_add_vertex(
+                    mesh, position, (henka_vec2){position.x, position.y}, 6U,
+                    &face_vertices[ring][index]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+        if (henka_authoring_mesh_add_face(
+                mesh, face_vertices[ring], CORNER_COUNT, 6U, true,
+                &face_ids[ring]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        {
+            const henka_authoring_face* face =
+                henka_authoring_mesh_get_face(mesh, face_ids[ring]);
+            if (face == NULL || face->corner_count != CORNER_COUNT)
+            {
+                goto cleanup;
+            }
+            bridge_edges[ring] = face->edges[0];
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (before.vertices != 80U || before.edges != 80U || before.faces != 2U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    if (henka_authoring_mesh_bridge_boundary_edges(
+            mesh, bridge_edges[0], bridge_edges[1], &bridge_face_id, &report) !=
+        HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    {
+        const henka_authoring_edge* first_edge =
+            henka_authoring_mesh_get_edge(mesh, bridge_edges[0]);
+        const henka_authoring_edge* second_edge =
+            henka_authoring_mesh_get_edge(mesh, bridge_edges[1]);
+        const henka_authoring_face* bridge_face =
+            henka_authoring_mesh_get_face(mesh, bridge_face_id);
+        if (!report.changed || report.created_edges != 2U ||
+            report.created_faces != 1U ||
+            bridge_face_id == HENKA_AUTHORING_INVALID_ID ||
+            first_edge == NULL || second_edge == NULL || bridge_face == NULL ||
+            first_edge->face_count != 2U || second_edge->face_count != 2U ||
+            bridge_face->corner_count != 4U ||
+            bridge_face->material_region != 6U || !bridge_face->smooth ||
+            after.vertices != before.vertices || after.edges != before.edges + 2U ||
+            after.faces != before.faces + 1U || !henka_authoring_mesh_validate(mesh))
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("boundary edge bridge with configured 40-corner faces");
+}
+
 static int test_boundary_edge_chain_bridge_operation(void)
 {
     const henka_authoring_mesh_desc desc = {16U, 32U, 16U, 8U};
@@ -15222,6 +15316,7 @@ int main(void)
         test_boundary_edge_chain_extrude_operation() &&
         test_boundary_edge_chain_batch_extrude_operation() &&
         test_boundary_edge_bridge_operation() &&
+        test_boundary_edge_bridge_supports_configured_large_faces() &&
         test_boundary_edge_chain_bridge_operation() &&
         test_boundary_edge_chain_bridge_supports_configured_large_faces() &&
         test_boundary_edge_chain_bridge_supports_more_than_32_edges() &&
