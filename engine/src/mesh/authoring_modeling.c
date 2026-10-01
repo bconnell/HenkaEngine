@@ -4299,6 +4299,7 @@ henka_result henka_authoring_mesh_bridge_boundary_edges(
     henka_authoring_vertex_id bridge_vertices[4];
     henka_vec2 bridge_uvs[4];
     henka_authoring_face_id bridge_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_desc desc;
     size_t first_corner[2] = {SIZE_MAX, SIZE_MAX};
     size_t second_corner[2] = {SIZE_MAX, SIZE_MAX};
     size_t corner;
@@ -4325,6 +4326,7 @@ henka_result henka_authoring_mesh_bridge_boundary_edges(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    desc = henka_authoring_mesh_get_desc(mesh);
     first_edge = henka_authoring_mesh_get_edge(mesh, first_edge_id);
     second_edge = henka_authoring_mesh_get_edge(mesh, second_edge_id);
     if (first_edge == NULL || second_edge == NULL ||
@@ -4337,8 +4339,8 @@ henka_result henka_authoring_mesh_bridge_boundary_edges(
     second_face = henka_authoring_mesh_get_face(mesh, second_edge->faces[0]);
     if (first_face == NULL || second_face == NULL ||
         first_face->corner_count < 3U || second_face->corner_count < 3U ||
-        first_face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS ||
-        second_face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS ||
+        first_face->corner_count > desc.max_face_corners ||
+        second_face->corner_count > desc.max_face_corners ||
         first_face->material_region != second_face->material_region ||
         first_face->smooth != second_face->smooth)
     {
