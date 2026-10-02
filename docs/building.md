@@ -212,6 +212,8 @@ provenance.
 
 The GitHub Windows workflow covers the packaged Debug contract and bounded soak, then runs the Release build-and-test path before the external-game template validation. Each packaged-soak iteration has a finite process timeout and terminates the full child process tree on timeout; the CI soak step also has its own outer timeout so a hung graphical process cannot consume the entire job budget.
 
+Full Windows CI runs on `work/**` pushes and again after the merged result reaches `main`. Opening a pull request does not launch a duplicate full suite for the same commit. Publication therefore requires a green exact-head work-branch run, an unchanged pull-request head at merge time, and the normal post-merge `main` validation.
+
 ### Sanitized runtime gate
 
 Run the first-party memory-safety gate with:
