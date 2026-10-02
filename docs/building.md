@@ -210,7 +210,7 @@ system remains responsible for detecting source changes during the build.
 Exact-candidate validation continues to use its own isolated build tree and
 provenance.
 
-The GitHub Windows workflow covers the packaged Debug contract and bounded soak, then runs the Release build-and-test path before the external-game template validation.
+The GitHub Windows workflow covers the packaged Debug contract and bounded soak, then runs the Release build-and-test path before the external-game template validation. Each packaged-soak iteration has a finite process timeout and terminates the full child process tree on timeout; the CI soak step also has its own outer timeout so a hung graphical process cannot consume the entire job budget.
 
 ### Sanitized runtime gate
 

@@ -166,7 +166,8 @@ jobs:
 
       - name: Run bounded packaged soak
         shell: powershell
-        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10
+        timeout-minutes: 8
+        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10 -IterationTimeoutMilliseconds 30000
 
       - name: Run Release tests
         shell: powershell
