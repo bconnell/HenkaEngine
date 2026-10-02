@@ -143,6 +143,14 @@ static void henka_test_sandbox3d_object_details_file_backed_refresh(void)
         view.access == SANDBOX3D_MATERIAL_ACCESS_EDITABLE_INSTANCE);
     HENKA_OBJECT_DETAILS_REQUIRE(henka_assets_material_instance_set_float(
         binding.instance, HENKA_MATERIAL_INSTANCE_ROUGHNESS, 0.91f) == HENKA_SUCCESS);
+    HENKA_OBJECT_DETAILS_REQUIRE(binding.undo_history != NULL);
+    HENKA_OBJECT_DETAILS_REQUIRE(binding.redo_history != NULL);
+    binding.undo_history[0] = *binding.instance;
+    binding.redo_history[0] = *binding.instance;
+    binding.undo_count = 1U;
+    binding.redo_count = 1U;
+    HENKA_OBJECT_DETAILS_REQUIRE(binding.undo_history[0].definition_revision == 1U);
+    HENKA_OBJECT_DETAILS_REQUIRE(binding.redo_history[0].definition_revision == 1U);
     HENKA_OBJECT_DETAILS_REQUIRE(sandbox3d_object_details_write_file(
         gltf_path, gltf_b, strlen(gltf_b)));
     HENKA_OBJECT_DETAILS_REQUIRE(henka_assets_reload_material_asset(
@@ -151,6 +159,8 @@ static void henka_test_sandbox3d_object_details_file_backed_refresh(void)
     HENKA_OBJECT_DETAILS_REQUIRE(sandbox3d_prepare_material_editor_binding(
         scene, entity, &binding, 1U) == HENKA_SUCCESS);
     HENKA_OBJECT_DETAILS_REQUIRE(binding.instance->definition_revision == asset->revision);
+    HENKA_OBJECT_DETAILS_REQUIRE(binding.undo_count == 0U);
+    HENKA_OBJECT_DETAILS_REQUIRE(binding.redo_count == 0U);
     HENKA_OBJECT_DETAILS_REQUIRE(fabsf(binding.instance->material.base_color.z - 0.9f) <= 0.0001f);
     HENKA_OBJECT_DETAILS_REQUIRE(fabsf(binding.instance->material.roughness - 0.91f) <= 0.0001f);
     HENKA_OBJECT_DETAILS_REQUIRE(henka_scene_get_entity_material(
