@@ -120,13 +120,15 @@ exit $LASTEXITCODE
     try {
         Invoke-HenkaNativeCapture `
             -FilePath "powershell.exe" `
-            -Arguments @("-NoProfile", "-Command", "Start-Sleep -Seconds 30") `
+            -Arguments @("-NoProfile", "-Command", "Write-Output 'timeout-regression-ready'; Start-Sleep -Seconds 30") `
             -WorkingDirectory $RepositoryRoot `
             -Label "Run bounded captured-process timeout regression" `
             -TimeoutMilliseconds 1000 | Out-Null
     }
     catch {
-        $timeoutObserved = $_.Exception.Message -match "exceeded timeout 1000ms"
+        $timeoutObserved =
+            $_.Exception.Message -match "exceeded timeout 1000ms" -and
+            $_.Exception.Message -match "timeout-regression-ready"
     }
     $timeoutStopwatch.Stop()
     if (-not $timeoutObserved -or $timeoutStopwatch.ElapsedMilliseconds -gt 10000) {

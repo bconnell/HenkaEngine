@@ -1392,7 +1392,13 @@ function Invoke-HenkaNativeCapture {
 
         if (-not $capturedProcess.WaitForExit($TimeoutMilliseconds)) {
             Stop-HenkaProcessTree -ProcessId $capturedProcess.Process.Id
-            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated."
+            $timeoutOutput = (Read-HenkaSharedText -Path $stdoutPath) + "`n" +
+                (Read-HenkaSharedText -Path $stderrPath)
+            $timeoutDiagnostic = (($timeoutOutput -replace "\\s+", " ").Trim())
+            if ($timeoutDiagnostic.Length -gt 512) {
+                $timeoutDiagnostic = $timeoutDiagnostic.Substring(0, 512)
+            }
+            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated. Diagnostics: $timeoutDiagnostic"
         }
 
         $exitCode = $capturedProcess.Process.ExitCode
@@ -1465,7 +1471,13 @@ function Invoke-HenkaExpectedFailure {
 
         if (-not $capturedProcess.WaitForExit($TimeoutMilliseconds)) {
             Stop-HenkaProcessTree -ProcessId $capturedProcess.Process.Id
-            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated."
+            $timeoutOutput = (Read-HenkaSharedText -Path $stdoutPath) + "`n" +
+                (Read-HenkaSharedText -Path $stderrPath)
+            $timeoutDiagnostic = (($timeoutOutput -replace "\\s+", " ").Trim())
+            if ($timeoutDiagnostic.Length -gt 512) {
+                $timeoutDiagnostic = $timeoutDiagnostic.Substring(0, 512)
+            }
+            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated. Diagnostics: $timeoutDiagnostic"
         }
 
         $stdout = Read-HenkaSharedText -Path $stdoutPath
