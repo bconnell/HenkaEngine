@@ -8873,7 +8873,7 @@ henka_result henka_authoring_mesh_create_box(
 
 static bool modeling_primitive_segments_are_valid(size_t segments)
 {
-    return segments >= 3U && segments <= HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS;
+    return segments >= 3U;
 }
 
 static henka_result modeling_finish_primitive_constructor(
@@ -8902,27 +8902,57 @@ henka_result henka_authoring_mesh_create_cylinder(
     henka_authoring_mesh** out_mesh)
 {
     henka_authoring_mesh* mesh = NULL;
-    henka_authoring_vertex_id lower[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-    henka_authoring_vertex_id upper[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-    henka_authoring_vertex_id cap[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_authoring_vertex_id* lower = NULL;
+    henka_authoring_vertex_id* upper = NULL;
+    henka_authoring_vertex_id* cap = NULL;
+    henka_authoring_mesh_desc actual_desc;
     const float half_height = height * 0.5f;
+    size_t id_bytes = 0U;
+    size_t required_vertices = 0U;
+    size_t required_edges = 0U;
+    size_t required_faces = 0U;
     size_t index;
-    henka_result result;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+
     if (out_mesh != NULL)
     {
         *out_mesh = NULL;
     }
-
-    if (out_mesh == NULL || !modeling_finite_scalar(radius) || !modeling_finite_scalar(height) ||
-        radius <= 0.0f || height <= 0.0f || !modeling_primitive_segments_are_valid(segments))
+    if (out_mesh == NULL || !modeling_finite_scalar(radius) ||
+        !modeling_finite_scalar(height) || radius <= 0.0f || height <= 0.0f ||
+        !modeling_primitive_segments_are_valid(segments))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
     result = henka_authoring_mesh_create(desc, &mesh);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
+    actual_desc = henka_authoring_mesh_get_desc(mesh);
+    if (!henka_checked_size_multiply(segments, sizeof(*lower), &id_bytes) ||
+        !henka_checked_size_multiply(segments, 2U, &required_vertices) ||
+        !henka_checked_size_multiply(segments, 3U, &required_edges) ||
+        !henka_checked_size_add(segments, 2U, &required_faces) ||
+        segments > actual_desc.max_face_corners ||
+        required_vertices > actual_desc.max_vertices ||
+        required_edges > actual_desc.max_edges ||
+        required_faces > actual_desc.max_faces)
+    {
+        result = HENKA_ERROR_LIMIT;
+        goto cleanup;
+    }
+
+    lower = (henka_authoring_vertex_id*)henka_malloc(id_bytes);
+    upper = (henka_authoring_vertex_id*)henka_malloc(id_bytes);
+    cap = (henka_authoring_vertex_id*)henka_malloc(id_bytes);
+    if (lower == NULL || upper == NULL || cap == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
     for (index = 0U; index < segments; ++index)
     {
         const float fraction = (float)index / (float)segments;
@@ -8930,47 +8960,50 @@ henka_result henka_authoring_mesh_create_cylinder(
         const float x = radius * cosf(angle);
         const float z = radius * sinf(angle);
         result = henka_authoring_mesh_add_vertex(
-            mesh, (henka_vec3){x, -half_height, z}, (henka_vec2){fraction, 0.0f}, 0U, &lower[index]);
-        if (result != HENKA_SUCCESS)
-        {
-            henka_authoring_mesh_destroy(mesh);
-            return result;
-        }
+            mesh, (henka_vec3){x, -half_height, z},
+            (henka_vec2){fraction, 0.0f}, 0U, &lower[index]);
+        if (result != HENKA_SUCCESS) goto cleanup;
         result = henka_authoring_mesh_add_vertex(
-            mesh, (henka_vec3){x, half_height, z}, (henka_vec2){fraction, 1.0f}, 0U, &upper[index]);
-        if (result != HENKA_SUCCESS)
-        {
-            henka_authoring_mesh_destroy(mesh);
-            return result;
-        }
+            mesh, (henka_vec3){x, half_height, z},
+            (henka_vec2){fraction, 1.0f}, 0U, &upper[index]);
+        if (result != HENKA_SUCCESS) goto cleanup;
     }
+
     for (index = 0U; index < segments; ++index)
     {
         const size_t next = (index + 1U) % segments;
         const henka_authoring_vertex_id side[4] = {
             lower[index], upper[index], upper[next], lower[next]};
-        if (henka_authoring_mesh_add_face(mesh, side, 4U, 0U, true, &(henka_authoring_face_id){0U}) != HENKA_SUCCESS)
-        {
-            henka_authoring_mesh_destroy(mesh);
-            return HENKA_ERROR_LIMIT;
-        }
+        result = henka_authoring_mesh_add_face(
+            mesh, side, 4U, 0U, true, &(henka_authoring_face_id){0U});
+        if (result != HENKA_SUCCESS) goto cleanup;
         cap[index] = lower[index];
     }
-    result = henka_authoring_mesh_add_face(mesh, cap, segments, 0U, false, &(henka_authoring_face_id){0U});
-    if (result == HENKA_SUCCESS)
+    result = henka_authoring_mesh_add_face(
+        mesh, cap, segments, 0U, false, &(henka_authoring_face_id){0U});
+    if (result != HENKA_SUCCESS) goto cleanup;
+    for (index = 0U; index < segments; ++index)
     {
-        for (index = 0U; index < segments; ++index)
-        {
-            cap[index] = upper[segments - 1U - index];
-        }
-        result = henka_authoring_mesh_add_face(mesh, cap, segments, 0U, false, &(henka_authoring_face_id){0U});
+        cap[index] = upper[segments - 1U - index];
     }
-    if (result != HENKA_SUCCESS)
-    {
-        henka_authoring_mesh_destroy(mesh);
-        return result;
-    }
+    result = henka_authoring_mesh_add_face(
+        mesh, cap, segments, 0U, false, &(henka_authoring_face_id){0U});
+    if (result != HENKA_SUCCESS) goto cleanup;
+
+    henka_free(cap);
+    henka_free(upper);
+    henka_free(lower);
+    cap = NULL;
+    upper = NULL;
+    lower = NULL;
     return modeling_finish_primitive_constructor(mesh, out_mesh);
+
+cleanup:
+    henka_free(cap);
+    henka_free(upper);
+    henka_free(lower);
+    henka_authoring_mesh_destroy(mesh);
+    return result;
 }
 
 henka_result henka_authoring_mesh_create_cone(
@@ -8981,64 +9014,91 @@ henka_result henka_authoring_mesh_create_cone(
     henka_authoring_mesh** out_mesh)
 {
     henka_authoring_mesh* mesh = NULL;
-    henka_authoring_vertex_id base[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_authoring_vertex_id* base = NULL;
     henka_authoring_vertex_id apex = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_desc actual_desc;
     const float half_height = height * 0.5f;
+    size_t id_bytes = 0U;
+    size_t required_vertices = 0U;
+    size_t required_edges = 0U;
+    size_t required_faces = 0U;
     size_t index;
-    henka_result result;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+
     if (out_mesh != NULL)
     {
         *out_mesh = NULL;
     }
-
-    if (out_mesh == NULL || !modeling_finite_scalar(radius) || !modeling_finite_scalar(height) ||
-        radius <= 0.0f || height <= 0.0f || !modeling_primitive_segments_are_valid(segments))
+    if (out_mesh == NULL || !modeling_finite_scalar(radius) ||
+        !modeling_finite_scalar(height) || radius <= 0.0f || height <= 0.0f ||
+        !modeling_primitive_segments_are_valid(segments))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
     result = henka_authoring_mesh_create(desc, &mesh);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
+    actual_desc = henka_authoring_mesh_get_desc(mesh);
+    if (!henka_checked_size_multiply(segments, sizeof(*base), &id_bytes) ||
+        !henka_checked_size_add(segments, 1U, &required_vertices) ||
+        !henka_checked_size_multiply(segments, 2U, &required_edges) ||
+        !henka_checked_size_add(segments, 1U, &required_faces) ||
+        segments > actual_desc.max_face_corners ||
+        required_vertices > actual_desc.max_vertices ||
+        required_edges > actual_desc.max_edges ||
+        required_faces > actual_desc.max_faces)
+    {
+        result = HENKA_ERROR_LIMIT;
+        goto cleanup;
+    }
+
+    base = (henka_authoring_vertex_id*)henka_malloc(id_bytes);
+    if (base == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
     for (index = 0U; index < segments; ++index)
     {
         const float fraction = (float)index / (float)segments;
         const float angle = 2.0f * HENKA_PI * fraction;
-        result = henka_authoring_mesh_add_vertex(mesh,
-            (henka_vec3){radius * cosf(angle), -half_height, radius * sinf(angle)},
+        result = henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){
+                radius * cosf(angle), -half_height, radius * sinf(angle)},
             (henka_vec2){fraction, 0.0f}, 0U, &base[index]);
-        if (result != HENKA_SUCCESS)
-        {
-            henka_authoring_mesh_destroy(mesh);
-            return result;
-        }
+        if (result != HENKA_SUCCESS) goto cleanup;
     }
     result = henka_authoring_mesh_add_vertex(
-        mesh, (henka_vec3){0.0f, half_height, 0.0f}, (henka_vec2){0.5f, 1.0f}, 0U, &apex);
-    if (result != HENKA_SUCCESS)
-    {
-        henka_authoring_mesh_destroy(mesh);
-        return result;
-    }
+        mesh, (henka_vec3){0.0f, half_height, 0.0f},
+        (henka_vec2){0.5f, 1.0f}, 0U, &apex);
+    if (result != HENKA_SUCCESS) goto cleanup;
+
     for (index = 0U; index < segments; ++index)
     {
         const size_t next = (index + 1U) % segments;
-        const henka_authoring_vertex_id side[3] = {base[index], apex, base[next]};
-        result = henka_authoring_mesh_add_face(mesh, side, 3U, 0U, true, &(henka_authoring_face_id){0U});
-        if (result != HENKA_SUCCESS)
-        {
-            henka_authoring_mesh_destroy(mesh);
-            return result;
-        }
+        const henka_authoring_vertex_id side[3] = {
+            base[index], apex, base[next]};
+        result = henka_authoring_mesh_add_face(
+            mesh, side, 3U, 0U, true, &(henka_authoring_face_id){0U});
+        if (result != HENKA_SUCCESS) goto cleanup;
     }
-    result = henka_authoring_mesh_add_face(mesh, base, segments, 0U, false, &(henka_authoring_face_id){0U});
-    if (result != HENKA_SUCCESS)
-    {
-        henka_authoring_mesh_destroy(mesh);
-        return result;
-    }
+    result = henka_authoring_mesh_add_face(
+        mesh, base, segments, 0U, false, &(henka_authoring_face_id){0U});
+    if (result != HENKA_SUCCESS) goto cleanup;
+
+    henka_free(base);
+    base = NULL;
     return modeling_finish_primitive_constructor(mesh, out_mesh);
+
+cleanup:
+    henka_free(base);
+    henka_authoring_mesh_destroy(mesh);
+    return result;
 }
 
 henka_result henka_authoring_mesh_create_uv_sphere(
@@ -9049,67 +9109,109 @@ henka_result henka_authoring_mesh_create_uv_sphere(
     henka_authoring_mesh** out_mesh)
 {
     henka_authoring_mesh* mesh = NULL;
-    henka_authoring_vertex_id previous[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-    henka_authoring_vertex_id current[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_authoring_vertex_id* previous = NULL;
+    henka_authoring_vertex_id* current = NULL;
     henka_authoring_vertex_id top = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_vertex_id bottom = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_desc actual_desc;
+    size_t ring_bytes = 0U;
+    size_t ring_count = 0U;
+    size_t required_vertices = 0U;
+    size_t required_edges = 0U;
+    size_t required_faces = 0U;
+    size_t twice_latitude = 0U;
+    size_t edge_factor = 0U;
     size_t latitude;
     size_t longitude;
-    henka_result result;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+
     if (out_mesh != NULL)
     {
         *out_mesh = NULL;
     }
-
     if (out_mesh == NULL || !modeling_finite_scalar(radius) || radius <= 0.0f ||
         !modeling_primitive_segments_are_valid(longitude_segments) ||
         !modeling_primitive_segments_are_valid(latitude_segments))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
     result = henka_authoring_mesh_create(desc, &mesh);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
-    result = henka_authoring_mesh_add_vertex(
-        mesh, (henka_vec3){0.0f, radius, 0.0f}, (henka_vec2){0.5f, 0.0f}, 0U, &top);
-    if (result != HENKA_SUCCESS)
+    actual_desc = henka_authoring_mesh_get_desc(mesh);
+    ring_count = latitude_segments - 1U;
+    if (!henka_checked_size_multiply(
+            longitude_segments, sizeof(*previous), &ring_bytes) ||
+        !henka_checked_size_multiply(
+            ring_count, longitude_segments, &required_vertices) ||
+        !henka_checked_size_add(required_vertices, 2U, &required_vertices) ||
+        !henka_checked_size_multiply(
+            latitude_segments, longitude_segments, &required_faces) ||
+        !henka_checked_size_multiply(latitude_segments, 2U, &twice_latitude) ||
+        twice_latitude == 0U ||
+        !henka_checked_size_multiply(
+            twice_latitude - 1U, longitude_segments, &required_edges) ||
+        actual_desc.max_face_corners < 4U ||
+        required_vertices > actual_desc.max_vertices ||
+        required_edges > actual_desc.max_edges ||
+        required_faces > actual_desc.max_faces)
     {
-        henka_authoring_mesh_destroy(mesh);
-        return result;
+        result = HENKA_ERROR_LIMIT;
+        goto cleanup;
     }
+    edge_factor = twice_latitude - 1U;
+    (void)edge_factor;
+
+    previous = (henka_authoring_vertex_id*)henka_malloc(ring_bytes);
+    current = (henka_authoring_vertex_id*)henka_malloc(ring_bytes);
+    if (previous == NULL || current == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
+    result = henka_authoring_mesh_add_vertex(
+        mesh, (henka_vec3){0.0f, radius, 0.0f},
+        (henka_vec2){0.5f, 0.0f}, 0U, &top);
+    if (result != HENKA_SUCCESS) goto cleanup;
+
     for (latitude = 1U; latitude < latitude_segments; ++latitude)
     {
-        const float vertical_fraction = (float)latitude / (float)latitude_segments;
+        const float vertical_fraction =
+            (float)latitude / (float)latitude_segments;
         const float polar = HENKA_PI * vertical_fraction;
         const float ring_radius = radius * sinf(polar);
         const float y = radius * cosf(polar);
+        henka_authoring_vertex_id* swap;
+
         for (longitude = 0U; longitude < longitude_segments; ++longitude)
         {
-            const float horizontal_fraction = (float)longitude / (float)longitude_segments;
+            const float horizontal_fraction =
+                (float)longitude / (float)longitude_segments;
             const float angle = 2.0f * HENKA_PI * horizontal_fraction;
-            result = henka_authoring_mesh_add_vertex(mesh,
-                (henka_vec3){ring_radius * cosf(angle), y, ring_radius * sinf(angle)},
-                (henka_vec2){horizontal_fraction, vertical_fraction}, 0U, &current[longitude]);
-            if (result != HENKA_SUCCESS)
-            {
-                henka_authoring_mesh_destroy(mesh);
-                return result;
-            }
+            result = henka_authoring_mesh_add_vertex(
+                mesh,
+                (henka_vec3){
+                    ring_radius * cosf(angle), y, ring_radius * sinf(angle)},
+                (henka_vec2){horizontal_fraction, vertical_fraction},
+                0U, &current[longitude]);
+            if (result != HENKA_SUCCESS) goto cleanup;
         }
+
         if (latitude == 1U)
         {
             for (longitude = 0U; longitude < longitude_segments; ++longitude)
             {
                 const size_t next = (longitude + 1U) % longitude_segments;
-                const henka_authoring_vertex_id face[3] = {top, current[next], current[longitude]};
-                result = henka_authoring_mesh_add_face(mesh, face, 3U, 0U, true, &(henka_authoring_face_id){0U});
-                if (result != HENKA_SUCCESS)
-                {
-                    henka_authoring_mesh_destroy(mesh);
-                    return result;
-                }
+                const henka_authoring_vertex_id face[3] = {
+                    top, current[next], current[longitude]};
+                result = henka_authoring_mesh_add_face(
+                    mesh, face, 3U, 0U, true,
+                    &(henka_authoring_face_id){0U});
+                if (result != HENKA_SUCCESS) goto cleanup;
             }
         }
         else
@@ -9118,38 +9220,45 @@ henka_result henka_authoring_mesh_create_uv_sphere(
             {
                 const size_t next = (longitude + 1U) % longitude_segments;
                 const henka_authoring_vertex_id face[4] = {
-                    previous[longitude], previous[next], current[next], current[longitude]};
-                result = henka_authoring_mesh_add_face(mesh, face, 4U, 0U, true, &(henka_authoring_face_id){0U});
-                if (result != HENKA_SUCCESS)
-                {
-                    henka_authoring_mesh_destroy(mesh);
-                    return result;
-                }
+                    previous[longitude], previous[next],
+                    current[next], current[longitude]};
+                result = henka_authoring_mesh_add_face(
+                    mesh, face, 4U, 0U, true,
+                    &(henka_authoring_face_id){0U});
+                if (result != HENKA_SUCCESS) goto cleanup;
             }
         }
-        memcpy(previous, current, longitude_segments * sizeof(*previous));
+
+        swap = previous;
+        previous = current;
+        current = swap;
     }
+
     result = henka_authoring_mesh_add_vertex(
-        mesh, (henka_vec3){0.0f, -radius, 0.0f}, (henka_vec2){0.5f, 1.0f}, 0U, &bottom);
-    if (result == HENKA_SUCCESS)
+        mesh, (henka_vec3){0.0f, -radius, 0.0f},
+        (henka_vec2){0.5f, 1.0f}, 0U, &bottom);
+    if (result != HENKA_SUCCESS) goto cleanup;
+    for (longitude = 0U; longitude < longitude_segments; ++longitude)
     {
-        for (longitude = 0U; longitude < longitude_segments; ++longitude)
-        {
-            const size_t next = (longitude + 1U) % longitude_segments;
-            const henka_authoring_vertex_id face[3] = {previous[longitude], previous[next], bottom};
-            result = henka_authoring_mesh_add_face(mesh, face, 3U, 0U, true, &(henka_authoring_face_id){0U});
-            if (result != HENKA_SUCCESS)
-            {
-                break;
-            }
-        }
+        const size_t next = (longitude + 1U) % longitude_segments;
+        const henka_authoring_vertex_id face[3] = {
+            previous[longitude], previous[next], bottom};
+        result = henka_authoring_mesh_add_face(
+            mesh, face, 3U, 0U, true, &(henka_authoring_face_id){0U});
+        if (result != HENKA_SUCCESS) goto cleanup;
     }
-    if (result != HENKA_SUCCESS)
-    {
-        henka_authoring_mesh_destroy(mesh);
-        return result;
-    }
+
+    henka_free(current);
+    henka_free(previous);
+    current = NULL;
+    previous = NULL;
     return modeling_finish_primitive_constructor(mesh, out_mesh);
+
+cleanup:
+    henka_free(current);
+    henka_free(previous);
+    henka_authoring_mesh_destroy(mesh);
+    return result;
 }
 
 static bool modeling_quad_sphere_counts(
