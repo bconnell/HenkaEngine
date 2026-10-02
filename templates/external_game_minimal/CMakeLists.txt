@@ -32,6 +32,14 @@ add_executable(external_game_minimal
     src/main.c
 )
 
+# Give both single- and multi-config generators one explicit runtime directory
+# expression so the asset lifecycle target can use the same destination
+# without depending on the executable target itself.
+set(EXTERNAL_GAME_RUNTIME_DIR "${CMAKE_BINARY_DIR}/$<CONFIG>")
+set_target_properties(external_game_minimal PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${EXTERNAL_GAME_RUNTIME_DIR}"
+)
+
 target_link_libraries(external_game_minimal
     PRIVATE
         henka
@@ -43,17 +51,18 @@ else()
     target_compile_options(external_game_minimal PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
-add_custom_command(TARGET external_game_minimal POST_BUILD
+# Asset delivery is a dependency of the executable target rather than a
+# separate ALL-only side effect. The phony target intentionally runs whenever
+# external_game_minimal is requested, including when the executable itself is
+# already up to date. Engine-owned generic assets are copied first and the
+# consumer's assets are copied second so project-owned files win on collisions.
+add_custom_target(external_game_template_assets
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${HENKA_ENGINE_DIR}/assets"
-        "$<TARGET_FILE_DIR:external_game_minimal>/assets"
-)
-
-# Keep consumer-owned script fixtures synchronized even when the executable
-# itself is already up to date in a reused validation build directory.
-add_custom_target(external_game_template_assets ALL
+        "${EXTERNAL_GAME_RUNTIME_DIR}/assets"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-        "$<TARGET_FILE_DIR:external_game_minimal>/assets"
-    DEPENDS external_game_minimal
+        "${EXTERNAL_GAME_RUNTIME_DIR}/assets"
+    COMMENT "Synchronizing Henka and external game assets"
 )
+add_dependencies(external_game_minimal external_game_template_assets)
