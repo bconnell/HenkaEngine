@@ -126,10 +126,12 @@ jobs:
 
       - name: Build Debug
         shell: powershell
+        timeout-minutes: 15
         run: .\scripts\build_windows.ps1 -Configuration Debug
 
       - name: Prepare pinned software OpenGL fallback
         shell: powershell
+        timeout-minutes: 5
         run: .\scripts\setup_windows_software_opengl.ps1 -TargetDirectory @("build\tests\Debug", "build\examples\sandbox3d\Debug")
 
       - name: Check OpenGL capability
@@ -138,14 +140,17 @@ jobs:
 
       - name: Run tests
         shell: powershell
+        timeout-minutes: 15
         run: .\scripts\test_windows.ps1
 
       - name: Refresh Debug build provenance
         shell: powershell
+        timeout-minutes: 15
         run: .\scripts\build_windows.ps1 -Configuration Debug
 
       - name: Build packaged sandbox
         shell: powershell
+        timeout-minutes: 5
         run: .\scripts\package_sandbox3d_windows.ps1 -ResetUserData -Configuration Debug
 
       - name: Check packaged sandbox contract
@@ -158,10 +163,12 @@ jobs:
 
       - name: Verify packaged product-native startup primitive
         shell: powershell
+        timeout-minutes: 6
         run: .\scripts\check_packaged_sandbox3d_windows.ps1 -NonInteractive -ProductStartupPrimitiveOnly
 
       - name: Verify visible native modeling workflow
         shell: powershell
+        timeout-minutes: 5
         run: .\scripts\test_visible_native_modeling_windows.ps1
 
       - name: Run bounded packaged soak
@@ -171,14 +178,17 @@ jobs:
 
       - name: Run Release tests
         shell: powershell
+        timeout-minutes: 20
         run: .\scripts\test_windows.ps1 -Configuration Release
 
       - name: Validate external game template
         shell: powershell
+        timeout-minutes: 10
         run: .\scripts\test_external_game_template_windows.ps1 -NoLocalProviders
 
       - name: Validate external server template
         shell: powershell
+        timeout-minutes: 5
         run: .\scripts\test_external_server_template_windows.ps1 -NoLocalProviders
 
       - name: Check generated output lifecycle

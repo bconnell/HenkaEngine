@@ -65,7 +65,8 @@ exit 0
         "-RepositoryRoot", $repoRoot,
         "-CandidatePath", $candidate,
         "-Configuration", "Debug",
-        "-DependencyRoot", $dependencyRoot
+        "-DependencyRoot", $dependencyRoot,
+        "-StageTimeoutMilliseconds", "5000"
     )
     $success = Invoke-ValidationWrapper -Arguments $wrapperArguments
     if ($success.ExitCode -ne 0) {
@@ -181,6 +182,30 @@ exit 17
     # The package failure is an intentional negative control. Do not leak its
     # expected native exit code into the enclosing PowerShell process.
     $global:LASTEXITCODE = 0
+
+    Write-FixtureScript -Path (Join-Path $candidateScripts "build_windows.ps1") -Body @"
+param([ValidateSet("Debug", "Release")][string]`$Configuration = "Debug", [string]`$DependencyRoot = "", [string]`$BuildTarget = "")
+Write-Output "exact-candidate-timeout-probe-ready"
+Start-Sleep -Seconds 30
+exit 0
+"@
+    $timeoutArguments = @($wrapperArguments)
+    $timeoutIndex = [Array]::IndexOf($timeoutArguments, "-StageTimeoutMilliseconds")
+    if ($timeoutIndex -lt 0 -or $timeoutIndex + 1 -ge $timeoutArguments.Count) {
+        throw "The exact-candidate timeout regression could not locate the stage timeout argument."
+    }
+    $timeoutArguments[$timeoutIndex + 1] = "1000"
+    $timeoutStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $timeoutFailure = Invoke-ValidationWrapper -Arguments $timeoutArguments
+    $timeoutStopwatch.Stop()
+    $timeoutText = $timeoutFailure.Output -join [Environment]::NewLine
+    if ($timeoutFailure.ExitCode -eq 0 -or
+        $timeoutText -notmatch "Build exact Henka candidate exceeded timeout 1000ms" -or
+        $timeoutStopwatch.ElapsedMilliseconds -gt 10000) {
+        throw "The exact-candidate stage timeout did not fail closed within its cleanup budget: exit=$($timeoutFailure.ExitCode) elapsed=$($timeoutStopwatch.ElapsedMilliseconds)ms output=$timeoutText"
+    }
+    Write-Host "[pass] Exact-candidate stages terminate their process tree on timeout."
+
     Write-Host "Exact-candidate orchestration regression passed."
 } finally {
     if (Test-Path -LiteralPath $fixture) {
