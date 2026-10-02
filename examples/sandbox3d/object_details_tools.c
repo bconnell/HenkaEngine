@@ -183,6 +183,13 @@ henka_result sandbox3d_prepare_material_editor_binding(
             }
             binding->owned_instance = candidate;
             binding->instance = &binding->owned_instance;
+            /* History snapshots are revision-scoped. A transactional source
+             * reload can replace definition values and dependencies while
+             * preserving the stable material-asset pointer. Do not allow
+             * Undo/Redo to cross that source-authority boundary and restore a
+             * snapshot captured against the prior definition revision. */
+            binding->undo_count = 0U;
+            binding->redo_count = 0U;
         }
     }
 
