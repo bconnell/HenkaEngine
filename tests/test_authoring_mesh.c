@@ -10553,7 +10553,8 @@ static int test_loose_edge_extrude_batch_rejection_coverage(void)
     henka_authoring_mesh_destroy(mesh);
     mesh = NULL;
 
-    /* Endpoint material regions are part of the source-edge contract. */
+    /* Independent edges may use different material regions, but each source
+     * edge still requires matching material regions at its two endpoints. */
     if (henka_authoring_mesh_create(
             &(henka_authoring_mesh_desc){8U, 8U, 2U, 8U}, &mesh) != HENKA_SUCCESS ||
         henka_authoring_mesh_add_vertex(
@@ -10566,7 +10567,7 @@ static int test_loose_edge_extrude_batch_rejection_coverage(void)
             mesh, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){2.0f, 0.0f}, 9U,
             &vertices[2]) != HENKA_SUCCESS ||
         henka_authoring_mesh_add_vertex(
-            mesh, (henka_vec3){3.0f, 0.0f, 0.0f}, (henka_vec2){3.0f, 0.0f}, 9U,
+            mesh, (henka_vec3){3.0f, 0.0f, 0.0f}, (henka_vec2){3.0f, 0.0f}, 10U,
             &vertices[3]) != HENKA_SUCCESS ||
         henka_authoring_mesh_add_edge(mesh, vertices[0], vertices[1], true,
                                       &edge_ids[0]) != HENKA_SUCCESS ||
