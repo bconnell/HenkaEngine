@@ -1547,6 +1547,108 @@ try {
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "material-texture-picker-applied.png")
 
+    # Reset Overrides is a real material edit and must participate in the same
+    # bounded material history as scalar/vector/texture edits. Force a fresh
+    # visible action-row report, reset the explicit texture override, then undo
+    # and prove the exact override masks return.
+    $resetActionPattern =
+        'Material instance editor actions: entity=\d+ reset_x=(?<x>[-0-9.]+) reset_y=(?<y>[-0-9.]+) reset_width=(?<width>[-0-9.]+) reimport_x=[-0-9.]+ reimport_width=[-0-9.]+ height=24\.0\.'
+    $resetActionCount = Get-LogMatchCount -Path $stdoutPath -Pattern $resetActionPattern
+    $resetActionFound = $false
+    for ($resetScrollAttempt = 0; $resetScrollAttempt -lt 96 -and -not $resetActionFound; ++$resetScrollAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta -1.0
+        Start-Sleep -Milliseconds 100
+        $resetActionFound = (Get-LogMatchCount -Path $stdoutPath -Pattern $resetActionPattern) -gt $resetActionCount
+    }
+    for ($resetScrollAttempt = 0; $resetScrollAttempt -lt 96 -and -not $resetActionFound; ++$resetScrollAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta 1.0
+        Start-Sleep -Milliseconds 100
+        $resetActionFound = (Get-LogMatchCount -Path $stdoutPath -Pattern $resetActionPattern) -gt $resetActionCount
+    }
+    if (-not $resetActionFound) {
+        throw "The visible material editor did not expose a fresh Reset Overrides action row."
+    }
+    $resetAction = Get-LastMatch -Path $stdoutPath -Pattern $resetActionPattern
+    $resetPattern =
+        'Material instance editor reset: entity=\d+ before_override=0x(?<before>[0-9A-Fa-f]+) before_texture_override=0x(?<beforeTexture>[0-9A-Fa-f]+) after_override=0x(?<after>[0-9A-Fa-f]+) after_texture_override=0x(?<afterTexture>[0-9A-Fa-f]+) undo_count=(?<undo>\d+) redo_count=(?<redo>\d+)\.'
+    $resetCount = Get-LogMatchCount -Path $stdoutPath -Pattern $resetPattern
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$resetAction.Groups["x"].Value + [double]$resetAction.Groups["width"].Value * 0.5) `
+        -Y ([double]$resetAction.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $resetCount `
+            -Pattern $resetPattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "Reset Overrides produced no material transaction."
+    }
+    $resetResult = Get-LastMatch -Path $stdoutPath -Pattern $resetPattern
+    if (($resetResult.Groups["before"].Value -eq "00000000" -and
+            $resetResult.Groups["beforeTexture"].Value -eq "00000000") -or
+        $resetResult.Groups["after"].Value -ne "00000000" -or
+        $resetResult.Groups["afterTexture"].Value -ne "00000000" -or
+        [int]$resetResult.Groups["undo"].Value -lt 1 -or
+        $resetResult.Groups["redo"].Value -ne "0") {
+        throw "Reset Overrides did not clear the active overrides while recording an undoable prior state."
+    }
+
+    $historyPattern =
+        ("Native authoring material history: name=" + [Regex]::Escape($authoringName) +
+        ' undo_x=(?<undoX>[-0-9.]+) redo_x=(?<redoX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=24\.0\.')
+    $historyCount = Get-LogMatchCount -Path $stdoutPath -Pattern $historyPattern
+    $historyFound = $false
+    for ($historyScrollAttempt = 0; $historyScrollAttempt -lt 128 -and -not $historyFound; ++$historyScrollAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta -1.0
+        Start-Sleep -Milliseconds 100
+        $historyFound = (Get-LogMatchCount -Path $stdoutPath -Pattern $historyPattern) -gt $historyCount
+    }
+    for ($historyScrollAttempt = 0; $historyScrollAttempt -lt 128 -and -not $historyFound; ++$historyScrollAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta 1.0
+        Start-Sleep -Milliseconds 100
+        $historyFound = (Get-LogMatchCount -Path $stdoutPath -Pattern $historyPattern) -gt $historyCount
+    }
+    if (-not $historyFound) {
+        throw "The visible material editor did not expose a fresh Undo Material control after Reset Overrides."
+    }
+    $history = Get-LastMatch -Path $stdoutPath -Pattern $historyPattern
+    $undoStatePattern =
+        'Material instance history: action=undo entity=\d+ override_mask=0x(?<override>[0-9A-Fa-f]+) texture_override_mask=0x(?<texture>[0-9A-Fa-f]+) undo_count=\d+ redo_count=\d+\.'
+    $undoStateCount = Get-LogMatchCount -Path $stdoutPath -Pattern $undoStatePattern
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ([double]$history.Groups["undoX"].Value + [double]$history.Groups["width"].Value * 0.5) `
+        -Y ([double]$history.Groups["y"].Value + 12.0)
+    if (-not (Wait-LogMatchCountIncrease `
+            -Path $stdoutPath `
+            -InitialCount $undoStateCount `
+            -Pattern $undoStatePattern `
+            -TimeoutMilliseconds 5000)) {
+        throw "Undo Material did not restore the pre-reset material instance."
+    }
+    $undoState = Get-LastMatch -Path $stdoutPath -Pattern $undoStatePattern
+    if ($undoState.Groups["override"].Value -ne $resetResult.Groups["before"].Value -or
+        $undoState.Groups["texture"].Value -ne $resetResult.Groups["beforeTexture"].Value) {
+        throw "Undo Material did not restore the exact override masks captured before Reset Overrides."
+    }
+    Write-Output "[pass] Reset Overrides participates in material undo history and restores the prior override masks."
+
     # A keyboard Utility shortcut must not switch away from Assets while
     # leaving the slot-targeted texture transaction active and its Apply/
     # Cancel controls unreachable.
