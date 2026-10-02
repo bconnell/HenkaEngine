@@ -12449,10 +12449,10 @@ henka_result henka_authoring_mesh_extrude_edge(
     henka_authoring_mesh_counts after;
     henka_authoring_mesh_desc desc;
     henka_authoring_face_loop_update update = {0};
-    henka_authoring_vertex_id source_vertices[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-    henka_authoring_vertex_id updated_vertices[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-    henka_vec2 source_uvs[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-    henka_vec2 updated_uvs[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_authoring_vertex_id* source_vertices = NULL;
+    henka_authoring_vertex_id* updated_vertices = NULL;
+    henka_vec2* source_uvs = NULL;
+    henka_vec2* updated_uvs = NULL;
     henka_authoring_vertex_id new_vertices[2] = {
         HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_face_id source_face_id = HENKA_AUTHORING_INVALID_ID;
@@ -12463,6 +12463,8 @@ henka_result henka_authoring_mesh_extrude_edge(
     henka_vec3 offset;
     henka_vec3 normal;
     size_t source_corner_count;
+    size_t vertex_bytes = 0U;
+    size_t uv_bytes = 0U;
     size_t start_corner = SIZE_MAX;
     size_t end_corner = SIZE_MAX;
     size_t corner;
@@ -12504,15 +12506,11 @@ henka_result henka_authoring_mesh_extrude_edge(
     source_material_region = source_face->material_region;
     source_smooth = source_face->smooth;
     source_edge_hard = source_edge->hard;
-    memcpy(source_vertices, source_face->vertices,
-        source_corner_count * sizeof(*source_vertices));
-    memcpy(source_uvs, source_face->uvs,
-        source_corner_count * sizeof(*source_uvs));
     for (corner = 0U; corner < source_corner_count; ++corner)
     {
-        const henka_authoring_vertex_id current = source_vertices[corner];
+        const henka_authoring_vertex_id current = source_face->vertices[corner];
         const henka_authoring_vertex_id next =
-            source_vertices[(corner + 1U) % source_corner_count];
+            source_face->vertices[(corner + 1U) % source_corner_count];
         if ((current == source_edge->vertices[0] && next == source_edge->vertices[1]) ||
             (current == source_edge->vertices[1] && next == source_edge->vertices[0]))
         {
@@ -12543,6 +12541,25 @@ henka_result henka_authoring_mesh_extrude_edge(
     {
         return HENKA_ERROR_LIMIT;
     }
+    if (!henka_checked_size_multiply(
+            source_corner_count, sizeof(*source_vertices), &vertex_bytes) ||
+        !henka_checked_size_multiply(
+            source_corner_count, sizeof(*source_uvs), &uv_bytes))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    source_vertices = (henka_authoring_vertex_id*)henka_malloc(vertex_bytes);
+    updated_vertices = (henka_authoring_vertex_id*)henka_malloc(vertex_bytes);
+    source_uvs = (henka_vec2*)henka_malloc(uv_bytes);
+    updated_uvs = (henka_vec2*)henka_malloc(uv_bytes);
+    if (source_vertices == NULL || updated_vertices == NULL ||
+        source_uvs == NULL || updated_uvs == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    memcpy(source_vertices, source_face->vertices, vertex_bytes);
+    memcpy(source_uvs, source_face->uvs, uv_bytes);
     result = henka_authoring_mesh_clone(mesh, &candidate);
     if (result != HENKA_SUCCESS)
     {
@@ -12642,6 +12659,10 @@ henka_result henka_authoring_mesh_extrude_edge(
 
 cleanup:
     henka_authoring_mesh_destroy(candidate);
+    henka_free(updated_uvs);
+    henka_free(source_uvs);
+    henka_free(updated_vertices);
+    henka_free(source_vertices);
     return result;
 }
 
