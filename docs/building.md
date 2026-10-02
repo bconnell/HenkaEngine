@@ -203,6 +203,9 @@ filter:
 
 The validation script resolves a unique executable CTest entry to its matching
 CMake target and builds only that target plus its direct build dependencies.
+CTest executions use a finite per-test timeout (300 seconds by default), while
+configure/build/test command invocations also have an outer command timeout so
+one deadlocked test or tool cannot consume the entire validation job.
 Ambiguous selections and script-backed tests keep the broader build fallback.
 When the existing CMake cache still matches the repository and dependency
 configuration, the explicit configure step is skipped; the normal build
@@ -212,7 +215,7 @@ provenance.
 
 The GitHub Windows workflow covers the packaged Debug contract and bounded soak, then runs the Release build-and-test path before the external-game template validation. Each packaged-soak iteration has a finite process timeout and terminates the full child process tree on timeout; the CI soak step also has its own outer timeout so a hung graphical process cannot consume the entire job budget.
 
-Full Windows CI runs on `work/**` pushes and again after the merged result reaches `main`. Opening a pull request does not launch a duplicate full suite for the same commit. Publication therefore requires a green exact-head work-branch run, an unchanged pull-request head at merge time, and the normal post-merge `main` validation.
+Full Windows CI runs on `work/**` pushes, pull requests, and again after the merged result reaches `main`. Pull-request coverage is retained for external contributors and validates the GitHub PR integration boundary. To avoid serially paying for two long pre-merge gates, freeze the candidate and open the pull request while the exact-head branch run is active; merge only after both applicable validations are green and the head remains unchanged.
 
 ### Sanitized runtime gate
 

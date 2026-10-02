@@ -1077,10 +1077,12 @@ public sealed class HenkaCapturedProcess : IDisposable
             if (Process != null && !Process.HasExited)
             {
                 Process.Kill();
-                Process.WaitForExit();
+                Process.WaitForExit(5000);
             }
-            if (Process != null)
+            if (Process != null && Process.HasExited)
             {
+                // Drain redirected async output only after a bounded exit was
+                // observed. Disposal must never become an unbounded wait.
                 Process.WaitForExit();
             }
         }
@@ -1213,9 +1215,21 @@ function Start-HenkaCapturedProcess {
 function Close-HenkaCapturedProcess {
     param($CapturedProcess)
 
-    if ($null -ne $CapturedProcess) {
-        $CapturedProcess.Dispose()
+    if ($null -eq $CapturedProcess) {
+        return
     }
+
+    try {
+        if ($null -ne $CapturedProcess.Process -and
+            -not $CapturedProcess.Process.HasExited) {
+            Stop-HenkaProcessTree -ProcessId $CapturedProcess.Process.Id
+            [void]$CapturedProcess.WaitForExit(5000)
+        }
+    }
+    catch {
+        # Disposal below remains the last bounded cleanup attempt.
+    }
+    $CapturedProcess.Dispose()
 }
 
 function Stop-HenkaProcessTree {
@@ -1353,7 +1367,8 @@ function Invoke-HenkaNativeCapture {
         [Parameter(Mandatory = $true)]
         [string]$Label,
 
-        [int]$TimeoutMilliseconds = -1
+        [ValidateRange(1000, 3600000)]
+        [int]$TimeoutMilliseconds = 180000
     )
 
     $captureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-native-" + [Guid]::NewGuid().ToString("N"))
