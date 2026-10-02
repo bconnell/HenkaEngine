@@ -19,8 +19,9 @@
 #define HENKA_AUTHORING_MESH_HARD_MAX_VERTICES 65536U
 #define HENKA_AUTHORING_MESH_HARD_MAX_EDGES 131072U
 #define HENKA_AUTHORING_MESH_HARD_MAX_FACES 65536U
-/* Several specialized authoring operators use bounded 32-corner scratch. Mesh
- * descriptors and storage may configure larger faces up to the vertex bound. */
+/* Legacy compatibility value for callers that used the former 32-corner
+ * operator ceiling. Face storage and modeling operators use descriptor/resource
+ * limits instead; this value is not a hard face-corner limit. */
 #define HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS 32U
 
 typedef uint32_t henka_authoring_vertex_id;
