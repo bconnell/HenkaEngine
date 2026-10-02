@@ -5461,6 +5461,95 @@ cleanup:
     return result ? 1 : fail("same-face boundary edge batch bevel operation");
 }
 
+
+static int test_same_face_boundary_bevel_supports_large_configured_face(void)
+{
+    enum { CORNER_COUNT = 40U };
+    const henka_authoring_mesh_desc desc = {
+        160U, 256U, 128U, CORNER_COUNT * 2U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[CORNER_COUNT];
+    henka_authoring_edge_id selected_edges[CORNER_COUNT];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    clock_t start;
+    clock_t finish;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < CORNER_COUNT; ++index)
+    {
+        const float angle = 6.2831853071795864769f *
+            (float)index / (float)CORNER_COUNT;
+        const henka_vec3 position = {cosf(angle), sinf(angle), 0.0f};
+        if (henka_authoring_mesh_add_vertex(
+                mesh, position, (henka_vec2){position.x, position.y}, 25U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, vertices, CORNER_COUNT, 25U, true, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        const henka_authoring_face* face =
+            henka_authoring_mesh_get_face(mesh, face_id);
+        if (face == NULL || face->corner_count != CORNER_COUNT)
+        {
+            goto cleanup;
+        }
+        memcpy(selected_edges, face->edges, sizeof(selected_edges));
+    }
+
+    before = henka_authoring_mesh_get_counts(mesh);
+    start = clock();
+    if (henka_authoring_mesh_bevel_edges(
+            mesh, selected_edges, CORNER_COUNT, 0.02f, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    finish = clock();
+    if ((double)(finish - start) / (double)CLOCKS_PER_SEC > 4.0)
+    {
+        (void)fprintf(stderr,
+            "40-edge same-face boundary bevel exceeded 4 CPU seconds\n");
+        goto cleanup;
+    }
+
+    after = henka_authoring_mesh_get_counts(mesh);
+    {
+        const henka_authoring_face* source_face =
+            henka_authoring_mesh_get_face(mesh, face_id);
+        if (!report.changed ||
+            report.created_vertices != CORNER_COUNT * 2U ||
+            report.created_faces != CORNER_COUNT * 2U ||
+            after.vertices != before.vertices + CORNER_COUNT * 2U ||
+            after.faces != before.faces + CORNER_COUNT * 2U ||
+            source_face == NULL ||
+            source_face->corner_count != CORNER_COUNT * 2U ||
+            source_face->material_region != 25U || !source_face->smooth ||
+            !henka_authoring_mesh_validate(mesh))
+        {
+            goto cleanup;
+        }
+    }
+
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("large configured same-face boundary bevel");
+}
+
 static int test_single_quad_face_cut_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -16053,6 +16142,7 @@ int main(void)
         test_history_accepts_same_lineage_clone() &&
         test_boundary_edge_bevel_operation() && test_boundary_edge_batch_bevel_operation() &&
         test_same_face_boundary_edge_batch_bevel_operation() &&
+        test_same_face_boundary_bevel_supports_large_configured_face() &&
         test_single_quad_face_cut_operation() &&
         test_multi_cut_single_quad_operation() &&
         test_interior_edge_bevel_operation() && test_multi_interior_edge_bevel_operation() &&
