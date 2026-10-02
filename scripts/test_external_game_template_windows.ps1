@@ -156,13 +156,30 @@ Invoke-ExternalNativeDirect `
 
 Invoke-ExternalNativeDirect `
     -FilePath $cmake `
-    -Arguments @("--build", $validationBuild, "--config", "Debug", "--parallel", "8") `
+    -Arguments @(
+        "--build", $validationBuild,
+        "--config", "Debug",
+        "--target", "external_game_minimal",
+        "--parallel", "8"
+    ) `
     -WorkingDirectory $repoRoot `
-    -Label "Build external game template"
+    -Label "Build explicit external game executable target"
 
 $templateExe = Join-Path $validationBuild "Debug\external_game_minimal.exe"
 if (-not (Test-Path -LiteralPath $templateExe -PathType Leaf)) {
     throw "The external game template executable was not produced: $templateExe"
+}
+$templateRuntimeRoot = Split-Path -Parent $templateExe
+foreach ($runtimeAsset in @(
+    "assets\scripts\publisher.hks",
+    "assets\scripts\subscriber.lua",
+    "assets\shaders\basic_lit.vert",
+    "assets\shaders\basic_lit.frag"
+)) {
+    $runtimeAssetPath = Join-Path $templateRuntimeRoot $runtimeAsset
+    if (-not (Test-Path -LiteralPath $runtimeAssetPath -PathType Leaf)) {
+        throw "The explicit external_game_minimal target did not synchronize required runtime asset: $runtimeAsset"
+    }
 }
 
 $softwareOpenGLRoot = [string]$env:HENKA_CI_SOFTWARE_OPENGL_ROOT

@@ -19,7 +19,7 @@ cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
 ## Build
 
 ```powershell
-cmake --build build --config Debug
+cmake --build build --config Debug --target external_game_minimal
 ```
 
 ## Run
@@ -55,6 +55,10 @@ stale-entity cleanup. It uses only public Henka APIs.
 - `src/main.c` is intentionally small and exercises a reusable runtime-facing
   Terrain workflow rather than being a graphical Sandbox copy.
 - `assets/` is where your game-specific content can start.
+- Building the `external_game_minimal` target synchronizes the selected
+  engine's generic runtime assets and then the project's own assets beside the
+  executable. Project-owned files win when paths overlap, and the asset sync
+  runs even when the executable is already up to date.
 - `.gitignore` ignores local build and user data output.
 - The template turns off Henka example and test targets so your game build stays focused on the engine library plus your own project.
 - This template is generic on purpose. It does not include story, characters, or game-specific content.
