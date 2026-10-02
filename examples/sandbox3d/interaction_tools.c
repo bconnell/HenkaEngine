@@ -448,8 +448,9 @@ henka_result sandbox3d_build_authoring_cage(
     size_t edge_capacity,
     size_t* out_edge_count)
 {
+    henka_authoring_mesh_desc desc;
     henka_authoring_mesh_counts counts;
-    size_t edge_id;
+    size_t physical_slot;
     size_t output_count;
 
     if (out_edge_count != NULL)
@@ -465,6 +466,7 @@ henka_result sandbox3d_build_authoring_cage(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    desc = henka_authoring_mesh_get_desc(mesh);
     counts = henka_authoring_mesh_get_counts(mesh);
 
     if (counts.edges > edge_capacity)
@@ -474,19 +476,23 @@ henka_result sandbox3d_build_authoring_cage(
 
     output_count = 0U;
 
-    for (edge_id = 1U;
-         edge_id <= HENKA_AUTHORING_MESH_HARD_MAX_EDGES &&
-         output_count < counts.edges;
-         ++edge_id)
+    for (physical_slot = 0U;
+         physical_slot < desc.max_edges && output_count < counts.edges;
+         ++physical_slot)
     {
-        const henka_authoring_edge* edge =
-            henka_authoring_mesh_get_edge(
-                mesh,
-                (henka_authoring_edge_id)edge_id);
+        henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_edge* edge;
 
-        if (edge == NULL)
+        if (henka_authoring_mesh_get_edge_id_at(
+                mesh, physical_slot, &edge_id) != HENKA_SUCCESS)
         {
             continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge == NULL)
+        {
+            *out_edge_count = 0U;
+            return HENKA_ERROR_UNKNOWN;
         }
 
         out_edges[output_count].id = edge->id;

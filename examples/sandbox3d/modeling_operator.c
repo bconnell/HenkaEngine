@@ -1090,7 +1090,7 @@ static henka_result sandbox3d_modeling_operator_collect_vertices(
             size_t corner;
             if (face == NULL || face->vertices == NULL ||
                 face->corner_count < 3U ||
-                face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+                face->corner_count > vertex_capacity)
             {
                 return HENKA_ERROR_INVALID_ARGUMENT;
             }
