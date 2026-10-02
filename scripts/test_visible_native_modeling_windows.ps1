@@ -1649,6 +1649,35 @@ try {
     }
     Write-Output "[pass] Reset Overrides participates in material undo history and restores the prior override masks."
 
+    # The reset/history proof scrolls Object Details away from the texture rows.
+    # Reacquire live Base Color picker geometry before the pre-existing utility
+    # switch regressions instead of clicking coordinates captured before those
+    # scroll operations.
+    $pickerControlCount = Get-LogMatchCount -Path $stdoutPath -Pattern $pickerControlPattern
+    $pickerControlFound = $false
+    for ($pickerReacquireAttempt = 0; $pickerReacquireAttempt -lt 64 -and -not $pickerControlFound; ++$pickerReacquireAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta 1.0
+        Start-Sleep -Milliseconds 100
+        $pickerControlFound = (Get-LogMatchCount -Path $stdoutPath -Pattern $pickerControlPattern) -gt $pickerControlCount
+    }
+    for ($pickerReacquireAttempt = 0; $pickerReacquireAttempt -lt 128 -and -not $pickerControlFound; ++$pickerReacquireAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta -1.0
+        Start-Sleep -Milliseconds 100
+        $pickerControlFound = (Get-LogMatchCount -Path $stdoutPath -Pattern $pickerControlPattern) -gt $pickerControlCount
+    }
+    if (-not $pickerControlFound) {
+        throw "The visible material editor did not republish Base Color picker geometry after the Reset/Undo history proof."
+    }
+    $pickerControl = Get-LastMatch -Path $stdoutPath -Pattern $pickerControlPattern
+
     # A keyboard Utility shortcut must not switch away from Assets while
     # leaving the slot-targeted texture transaction active and its Apply/
     # Cancel controls unreachable.
