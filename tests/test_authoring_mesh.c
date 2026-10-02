@@ -8205,6 +8205,61 @@ cleanup:
     return result ? 1 : fail("bounded primitive constructors");
 }
 
+
+static int test_large_segment_primitive_constructors(void)
+{
+    const henka_authoring_mesh_desc desc = {512U, 1024U, 512U, 64U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh_counts counts;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_cylinder(
+            &desc, 1.0f, 2.0f, 40U, &mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    counts = henka_authoring_mesh_get_counts(mesh);
+    if (counts.vertices != 80U || counts.edges != 120U || counts.faces != 42U)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    if (henka_authoring_mesh_create_cone(
+            &desc, 1.0f, 2.0f, 40U, &mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    counts = henka_authoring_mesh_get_counts(mesh);
+    if (counts.vertices != 41U || counts.edges != 80U || counts.faces != 41U)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    if (henka_authoring_mesh_create_uv_sphere(
+            &desc, 1.0f, 40U, 6U, &mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    counts = henka_authoring_mesh_get_counts(mesh);
+    if (counts.vertices != 202U || counts.edges != 440U || counts.faces != 240U)
+    {
+        goto cleanup;
+    }
+
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("large-segment primitive constructors");
+}
+
 static int test_edge_dissolve_operation(void)
 {
     const henka_authoring_mesh_desc desc = {128U, 256U, 128U, 8U};
@@ -16164,6 +16219,7 @@ int main(void)
         test_vertex_face_rip_batch_operation() && test_obj_export_round_trip() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
+        test_large_segment_primitive_constructors() &&
         test_edge_dissolve_operation() &&
         test_disjoint_edge_dissolve_batch_operation() &&
         test_edge_delete_operation() &&
