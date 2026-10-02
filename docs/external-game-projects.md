@@ -61,6 +61,14 @@ cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
 
 The template builds a real external executable using Henka's public API.
 
+Building the `external_game_minimal` target also synchronizes the selected
+engine's generic runtime assets and then the consumer project's own `assets/`
+tree beside the executable. This synchronization is a dependency of the
+executable target, so explicit target builds do not silently omit project
+assets and repeated builds refresh assets even when the executable is already
+up to date. Project-owned files are copied last and therefore win when a path
+overlaps an engine-provided generic asset.
+
 The consuming game owns its own window, scene, camera, assets, and presentation policy.
 
 ## Current public API coverage
