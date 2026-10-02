@@ -213,7 +213,10 @@ build provenance after its successful test pass, so hosted CI packages that
 proven artifact directly instead of performing a redundant second Debug build.
 Hosted Windows CI adds tighter step-level budgets around the normally short
 build, package, graphical smoke, Release-test, and external-template stages so
-failures are localized before the whole-job timeout.
+failures are localized before the whole-job timeout. Release validation runs
+in an independent Windows job with its own pinned software OpenGL fallback, so
+it executes in parallel with the Debug/package path instead of adding its full
+duration to that path's critical chain.
 Ambiguous selections and script-backed tests keep the broader build fallback.
 When the existing CMake cache still matches the repository and dependency
 configuration, the explicit configure step is skipped; the normal build

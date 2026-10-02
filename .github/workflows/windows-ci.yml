@@ -171,11 +171,6 @@ jobs:
         timeout-minutes: 8
         run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10 -IterationTimeoutMilliseconds 30000
 
-      - name: Run Release tests
-        shell: powershell
-        timeout-minutes: 20
-        run: .\scripts\test_windows.ps1 -Configuration Release
-
       - name: Validate external game template
         shell: powershell
         timeout-minutes: 10
@@ -193,6 +188,27 @@ jobs:
       - name: Test generated artifact lifecycle
         shell: powershell
         run: .\scripts\test_generated_artifact_lifecycle_windows.ps1
+
+  release-tests:
+    # Release validation is independent of the Debug/package workspace. Run it
+    # on its own stable Windows image so it does not extend the Debug critical
+    # path, while retaining the same pinned software OpenGL fallback contract.
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Prepare pinned software OpenGL fallback
+        shell: powershell
+        timeout-minutes: 5
+        run: .\scripts\setup_windows_software_opengl.ps1
+
+      - name: Run Release tests
+        shell: powershell
+        timeout-minutes: 20
+        run: .\scripts\test_windows.ps1 -Configuration Release
 
   sanitizer-runtime:
     runs-on: windows-2022
