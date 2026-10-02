@@ -203,9 +203,10 @@ filter:
 
 The validation script resolves a unique executable CTest entry to its matching
 CMake target and builds only that target plus its direct build dependencies.
-CTest executions use a finite per-test timeout (300 seconds by default), while
-configure/build/test command invocations also have an outer command timeout so
-one deadlocked test or tool cannot consume the entire validation job. Exact
+CTest registrations carry a 300-second per-test timeout, and the normal
+PowerShell validation path also passes that same finite ceiling explicitly.
+Configure/build/test command invocations have an outer command timeout so one
+deadlocked test or tool cannot consume the entire validation job. Exact
 candidate validation likewise bounds each build, test, and package child stage
 and terminates its process tree on timeout. The normal test path writes fresh
 build provenance after its successful test pass, so hosted CI packages that
