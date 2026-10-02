@@ -79,7 +79,8 @@ exit $LASTEXITCODE
             "-ExecutionPolicy", "Bypass",
             "-File", $launcherScript) `
         -WorkingDirectory $RepositoryRoot `
-        -Label "Run owned child process lifetime regression"
+        -Label "Run owned child process lifetime regression" `
+        -TimeoutMilliseconds 10000
     $waitStopwatch.Stop()
 
     if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf) -or
