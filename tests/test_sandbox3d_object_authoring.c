@@ -11900,6 +11900,7 @@ static void henka_test_sandbox3d_object_authoring_high_logical_id_selection(void
     henka_authoring_face_id stable_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_face_id high_face_id = HENKA_AUTHORING_INVALID_ID;
     uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+    size_t physical_slot = SIZE_MAX;
     henka_entity entity;
     size_t index;
 
@@ -11974,6 +11975,15 @@ static void henka_test_sandbox3d_object_authoring_high_logical_id_selection(void
     HENKA_TEST_ASSERT(high_vertex_id > desc.max_vertices);
     HENKA_TEST_ASSERT(high_edge_id > desc.max_edges);
     HENKA_TEST_ASSERT(high_face_id > desc.max_faces);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_vertex_slot(
+        source, high_vertex_id, &physical_slot) == HENKA_SUCCESS &&
+        physical_slot < desc.max_vertices);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge_slot(
+        source, high_edge_id, &physical_slot) == HENKA_SUCCESS &&
+        physical_slot < desc.max_edges);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_slot(
+        source, high_face_id, &physical_slot) == HENKA_SUCCESS &&
+        physical_slot < desc.max_faces);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(source, stable_face_id) != NULL);
     HENKA_TEST_ASSERT(henka_authoring_mesh_validate(source));
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
@@ -11988,6 +11998,23 @@ static void henka_test_sandbox3d_object_authoring_high_logical_id_selection(void
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
         object, 0U, &selected_id) == HENKA_SUCCESS &&
         selected_id == high_vertex_id);
+    {
+        const henka_authoring_vertex* before_vertex =
+            henka_authoring_mesh_get_vertex(
+                sandbox3d_authoring_object_get_mesh(object), high_vertex_id);
+        henka_vec3 before_position;
+        const henka_authoring_vertex* after_vertex;
+        HENKA_TEST_ASSERT(before_vertex != NULL);
+        before_position = before_vertex->position;
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_proportional_move_selected_components(
+                object, (henka_vec3){0.0f, 0.0f, 0.25f}, 0U) == HENKA_SUCCESS);
+        after_vertex = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), high_vertex_id);
+        HENKA_TEST_ASSERT(after_vertex != NULL);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            after_vertex->position.z, before_position.z + 0.25f, 0.0001f);
+    }
 
     sandbox3d_authoring_object_set_selection_mode(
         object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
@@ -12007,6 +12034,16 @@ static void henka_test_sandbox3d_object_authoring_high_logical_id_selection(void
         sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
         object, 0U, &selected_id) == HENKA_SUCCESS &&
+        selected_id == high_face_id);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_select_all_components(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 0U, &selected_id) == HENKA_SUCCESS &&
+        selected_id == stable_face_id);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 1U, &selected_id) == HENKA_SUCCESS &&
         selected_id == high_face_id);
 
     sandbox3d_authoring_object_destroy(object);

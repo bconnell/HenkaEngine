@@ -1038,6 +1038,66 @@ henka_result henka_authoring_mesh_get_face_id_at(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_authoring_mesh_get_vertex_slot(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id id,
+    size_t* out_physical_slot)
+{
+    const size_t slot = authoring_vertex_slot(mesh, id);
+    if (out_physical_slot != NULL)
+    {
+        *out_physical_slot = SIZE_MAX;
+    }
+    if (mesh == NULL || out_physical_slot == NULL ||
+        slot >= mesh->desc.max_vertices || !mesh->vertices[slot].active ||
+        mesh->vertices[slot].id != id)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_physical_slot = slot;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_authoring_mesh_get_edge_slot(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_edge_id id,
+    size_t* out_physical_slot)
+{
+    const size_t slot = authoring_edge_slot(mesh, id);
+    if (out_physical_slot != NULL)
+    {
+        *out_physical_slot = SIZE_MAX;
+    }
+    if (mesh == NULL || out_physical_slot == NULL ||
+        slot >= mesh->desc.max_edges || !mesh->edges[slot].active ||
+        mesh->edges[slot].id != id)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_physical_slot = slot;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_authoring_mesh_get_face_slot(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_face_id id,
+    size_t* out_physical_slot)
+{
+    const size_t slot = authoring_face_slot(mesh, id);
+    if (out_physical_slot != NULL)
+    {
+        *out_physical_slot = SIZE_MAX;
+    }
+    if (mesh == NULL || out_physical_slot == NULL ||
+        slot >= mesh->desc.max_faces || !mesh->faces[slot].active ||
+        mesh->faces[slot].id != id)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_physical_slot = slot;
+    return HENKA_SUCCESS;
+}
+
 bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh)
 {
     size_t index;

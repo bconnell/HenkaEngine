@@ -65,19 +65,19 @@ struct sandbox3d_authoring_object
      * ascending iteration for the existing authoring consumers. */
     uint64_t* selected_vertex_bits;
     size_t selected_vertex_word_count;
-    size_t selected_vertex_max_id;
+    size_t selected_vertex_slot_capacity;
     uint32_t* selected_vertices;
     size_t selected_vertex_capacity;
     size_t selected_vertex_count;
     uint64_t* selected_edge_bits;
     size_t selected_edge_word_count;
-    size_t selected_edge_max_id;
+    size_t selected_edge_slot_capacity;
     uint32_t* selected_edges;
     size_t selected_edge_capacity;
     size_t selected_edge_count;
     uint64_t* selected_face_bits;
     size_t selected_face_word_count;
-    size_t selected_face_max_id;
+    size_t selected_face_slot_capacity;
     uint32_t* selected_faces;
     size_t selected_face_capacity;
     size_t selected_face_count;
@@ -434,16 +434,74 @@ cleanup:
     return result;
 }
 
+static henka_result sandbox3d_authoring_component_slot(
+    const henka_authoring_mesh* mesh,
+    sandbox3d_authoring_selection_mode mode,
+    uint32_t id,
+    size_t* out_slot)
+{
+    if (out_slot != NULL)
+    {
+        *out_slot = SIZE_MAX;
+    }
+    if (mesh == NULL || out_slot == NULL || id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    switch (mode)
+    {
+        case SANDBOX3D_AUTHORING_SELECTION_VERTEX:
+            return henka_authoring_mesh_get_vertex_slot(
+                mesh, (henka_authoring_vertex_id)id, out_slot);
+        case SANDBOX3D_AUTHORING_SELECTION_EDGE:
+            return henka_authoring_mesh_get_edge_slot(
+                mesh, (henka_authoring_edge_id)id, out_slot);
+        case SANDBOX3D_AUTHORING_SELECTION_FACE:
+            return henka_authoring_mesh_get_face_slot(
+                mesh, (henka_authoring_face_id)id, out_slot);
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+}
+
+static henka_result sandbox3d_authoring_component_id_at(
+    const henka_authoring_mesh* mesh,
+    sandbox3d_authoring_selection_mode mode,
+    size_t physical_slot,
+    uint32_t* out_id)
+{
+    if (out_id != NULL)
+    {
+        *out_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (mesh == NULL || out_id == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    switch (mode)
+    {
+        case SANDBOX3D_AUTHORING_SELECTION_VERTEX:
+            return henka_authoring_mesh_get_vertex_id_at(
+                mesh, physical_slot, (henka_authoring_vertex_id*)out_id);
+        case SANDBOX3D_AUTHORING_SELECTION_EDGE:
+            return henka_authoring_mesh_get_edge_id_at(
+                mesh, physical_slot, (henka_authoring_edge_id*)out_id);
+        case SANDBOX3D_AUTHORING_SELECTION_FACE:
+            return henka_authoring_mesh_get_face_id_at(
+                mesh, physical_slot, (henka_authoring_face_id*)out_id);
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+}
+
 static bool sandbox3d_authoring_selection_word_count(
-    size_t max_slot_id,
+    size_t slot_capacity,
     size_t* out_word_count)
 {
-    size_t bit_count;
     size_t rounded_count;
-    if (out_word_count == NULL || max_slot_id == 0U ||
-        max_slot_id > HENKA_AUTHORING_MESH_HARD_MAX_EDGES ||
-        !henka_checked_size_add(max_slot_id, 1U, &bit_count) ||
-        !henka_checked_size_add(bit_count, 63U, &rounded_count))
+    if (out_word_count == NULL || slot_capacity == 0U ||
+        slot_capacity > HENKA_AUTHORING_MESH_HARD_MAX_EDGES ||
+        !henka_checked_size_add(slot_capacity, 63U, &rounded_count))
     {
         return false;
     }
@@ -468,9 +526,11 @@ static void sandbox3d_authoring_selection_destroy(
 }
 
 static henka_result sandbox3d_authoring_selection_build_resized(
+    const henka_authoring_mesh* mesh,
+    sandbox3d_authoring_selection_mode mode,
     const uint32_t* old_ids,
     size_t old_count,
-    size_t new_max_slot_id,
+    size_t slot_capacity,
     uint64_t** out_bits,
     size_t* out_word_count,
     uint32_t** out_ids,
@@ -485,10 +545,10 @@ static henka_result sandbox3d_authoring_selection_build_resized(
     size_t bytes;
     size_t index;
 
-    if ((old_count > 0U && old_ids == NULL) || out_bits == NULL ||
-        out_word_count == NULL || out_ids == NULL ||
+    if (mesh == NULL || (old_count > 0U && old_ids == NULL) ||
+        out_bits == NULL || out_word_count == NULL || out_ids == NULL ||
         out_id_capacity == NULL || out_selected_count == NULL ||
-        !sandbox3d_authoring_selection_word_count(new_max_slot_id, &next_word_count))
+        !sandbox3d_authoring_selection_word_count(slot_capacity, &next_word_count))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -501,7 +561,7 @@ static henka_result sandbox3d_authoring_selection_build_resized(
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
-    next_id_capacity = old_count < new_max_slot_id ? old_count : new_max_slot_id;
+    next_id_capacity = old_count < slot_capacity ? old_count : slot_capacity;
     if (next_id_capacity > 0U)
     {
         if (!henka_checked_size_multiply(next_id_capacity, sizeof(*next_ids), &bytes))
@@ -519,15 +579,21 @@ static henka_result sandbox3d_authoring_selection_build_resized(
     for (index = 0U; index < old_count; ++index)
     {
         const uint32_t id = old_ids[index];
+        size_t physical_slot;
         size_t word;
-        uint64_t mask;
-        if (id == HENKA_AUTHORING_INVALID_ID || (size_t)id > new_max_slot_id)
+        if (sandbox3d_authoring_component_slot(
+                mesh, mode, id, &physical_slot) != HENKA_SUCCESS)
         {
             continue;
         }
-        word = (size_t)id / 64U;
-        mask = UINT64_C(1) << ((size_t)id % 64U);
-        next_bits[word] |= mask;
+        word = physical_slot / 64U;
+        if (word >= next_word_count || next_count >= next_id_capacity)
+        {
+            henka_free(next_ids);
+            henka_free(next_bits);
+            return HENKA_ERROR_LIMIT;
+        }
+        next_bits[word] |= UINT64_C(1) << (physical_slot % 64U);
         next_ids[next_count++] = id;
     }
     *out_bits = next_bits;
@@ -597,26 +663,31 @@ static henka_result sandbox3d_authoring_selection_reserve_ids(
 }
 
 static bool sandbox3d_authoring_selection_contains(
+    const henka_authoring_mesh* mesh,
+    sandbox3d_authoring_selection_mode mode,
     const uint64_t* bits,
     size_t word_count,
-    size_t max_slot_id,
     uint32_t id)
 {
+    size_t physical_slot;
     size_t word;
-    if (bits == NULL || id == HENKA_AUTHORING_INVALID_ID ||
-        (size_t)id > max_slot_id)
+    if (bits == NULL ||
+        sandbox3d_authoring_component_slot(
+            mesh, mode, id, &physical_slot) != HENKA_SUCCESS)
     {
         return false;
     }
-    word = (size_t)id / 64U;
+    word = physical_slot / 64U;
     return word < word_count &&
-        (bits[word] & (UINT64_C(1) << ((size_t)id % 64U))) != 0U;
+        (bits[word] & (UINT64_C(1) << (physical_slot % 64U))) != 0U;
 }
 
 static henka_result sandbox3d_authoring_selection_add(
+    const henka_authoring_mesh* mesh,
+    sandbox3d_authoring_selection_mode mode,
     uint64_t* bits,
     size_t word_count,
-    size_t max_slot_id,
+    size_t slot_capacity,
     uint32_t** ids,
     size_t* id_capacity,
     size_t* selected_count,
@@ -624,25 +695,34 @@ static henka_result sandbox3d_authoring_selection_add(
 {
     size_t index;
     size_t required;
+    size_t physical_slot;
     size_t word;
     henka_result reserve_result;
-    if (bits == NULL || ids == NULL || id_capacity == NULL || selected_count == NULL ||
-        id == HENKA_AUTHORING_INVALID_ID || (size_t)id > max_slot_id ||
+
+    if (bits == NULL || ids == NULL || id_capacity == NULL ||
+        selected_count == NULL ||
+        sandbox3d_authoring_component_slot(
+            mesh, mode, id, &physical_slot) != HENKA_SUCCESS ||
         !henka_checked_size_add(*selected_count, 1U, &required))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (sandbox3d_authoring_selection_contains(bits, word_count, max_slot_id, id))
+    if (sandbox3d_authoring_selection_contains(
+            mesh, mode, bits, word_count, id))
     {
         return HENKA_SUCCESS;
     }
-    word = (size_t)id / 64U;
+    if (required > slot_capacity)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    word = physical_slot / 64U;
     if (word >= word_count)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     reserve_result = sandbox3d_authoring_selection_reserve_ids(
-        ids, id_capacity, required, max_slot_id);
+        ids, id_capacity, required, slot_capacity);
     if (reserve_result != HENKA_SUCCESS)
     {
         return reserve_result;
@@ -655,7 +735,7 @@ static henka_result sandbox3d_authoring_selection_add(
     }
     (*ids)[index] = id;
     ++(*selected_count);
-    bits[word] |= UINT64_C(1) << ((size_t)id % 64U);
+    bits[word] |= UINT64_C(1) << (physical_slot % 64U);
     return HENKA_SUCCESS;
 }
 
@@ -692,38 +772,25 @@ static henka_result sandbox3d_authoring_resize_selection_for_mesh(
     size_t next_edge_count = 0U;
     size_t next_face_count = 0U;
     henka_result result;
+
     if (object == NULL || mesh == NULL || !henka_authoring_mesh_validate(mesh))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (object->selected_vertex_max_id == desc.max_vertices &&
-        object->selected_edge_max_id == desc.max_edges &&
-        object->selected_face_max_id == desc.max_faces)
-    {
-        return HENKA_SUCCESS;
-    }
     result = sandbox3d_authoring_selection_build_resized(
-        object->selected_vertices,
-        object->selected_vertex_count,
-        desc.max_vertices,
-        &next_vertex_bits,
-        &next_vertex_words,
-        &next_vertices,
-        &next_vertex_capacity,
-        &next_vertex_count);
+        mesh, SANDBOX3D_AUTHORING_SELECTION_VERTEX,
+        object->selected_vertices, object->selected_vertex_count,
+        desc.max_vertices, &next_vertex_bits, &next_vertex_words,
+        &next_vertices, &next_vertex_capacity, &next_vertex_count);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
     result = sandbox3d_authoring_selection_build_resized(
-        object->selected_edges,
-        object->selected_edge_count,
-        desc.max_edges,
-        &next_edge_bits,
-        &next_edge_words,
-        &next_edges,
-        &next_edge_capacity,
-        &next_edge_count);
+        mesh, SANDBOX3D_AUTHORING_SELECTION_EDGE,
+        object->selected_edges, object->selected_edge_count,
+        desc.max_edges, &next_edge_bits, &next_edge_words,
+        &next_edges, &next_edge_capacity, &next_edge_count);
     if (result != HENKA_SUCCESS)
     {
         henka_free(next_vertex_bits);
@@ -731,14 +798,10 @@ static henka_result sandbox3d_authoring_resize_selection_for_mesh(
         return result;
     }
     result = sandbox3d_authoring_selection_build_resized(
-        object->selected_faces,
-        object->selected_face_count,
-        desc.max_faces,
-        &next_face_bits,
-        &next_face_words,
-        &next_faces,
-        &next_face_capacity,
-        &next_face_count);
+        mesh, SANDBOX3D_AUTHORING_SELECTION_FACE,
+        object->selected_faces, object->selected_face_count,
+        desc.max_faces, &next_face_bits, &next_face_words,
+        &next_faces, &next_face_capacity, &next_face_count);
     if (result != HENKA_SUCCESS)
     {
         henka_free(next_vertex_bits);
@@ -747,8 +810,7 @@ static henka_result sandbox3d_authoring_resize_selection_for_mesh(
         henka_free(next_edges);
         return result;
     }
-    /* The vertex build was intentionally kept separate so a failure in any
-     * component type leaves all existing selection storage untouched. */
+
     sandbox3d_authoring_selection_destroy(
         &object->selected_vertex_bits, &object->selected_vertices);
     sandbox3d_authoring_selection_destroy(
@@ -757,19 +819,19 @@ static henka_result sandbox3d_authoring_resize_selection_for_mesh(
         &object->selected_face_bits, &object->selected_faces);
     object->selected_vertex_bits = next_vertex_bits;
     object->selected_vertex_word_count = next_vertex_words;
-    object->selected_vertex_max_id = desc.max_vertices;
+    object->selected_vertex_slot_capacity = desc.max_vertices;
     object->selected_vertices = next_vertices;
     object->selected_vertex_capacity = next_vertex_capacity;
     object->selected_vertex_count = next_vertex_count;
     object->selected_edge_bits = next_edge_bits;
     object->selected_edge_word_count = next_edge_words;
-    object->selected_edge_max_id = desc.max_edges;
+    object->selected_edge_slot_capacity = desc.max_edges;
     object->selected_edges = next_edges;
     object->selected_edge_capacity = next_edge_capacity;
     object->selected_edge_count = next_edge_count;
     object->selected_face_bits = next_face_bits;
     object->selected_face_word_count = next_face_words;
-    object->selected_face_max_id = desc.max_faces;
+    object->selected_face_slot_capacity = desc.max_faces;
     object->selected_faces = next_faces;
     object->selected_face_capacity = next_face_capacity;
     object->selected_face_count = next_face_count;
@@ -818,23 +880,23 @@ static bool sandbox3d_authoring_component_selected(
     if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
     {
         return sandbox3d_authoring_selection_contains(
+            object->mesh, object->selection_mode,
             object->selected_vertex_bits,
             object->selected_vertex_word_count,
-            object->selected_vertex_max_id,
             id);
     }
     if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
     {
         return sandbox3d_authoring_selection_contains(
+            object->mesh, object->selection_mode,
             object->selected_edge_bits,
             object->selected_edge_word_count,
-            object->selected_edge_max_id,
             id);
     }
     return sandbox3d_authoring_selection_contains(
+        object->mesh, object->selection_mode,
         object->selected_face_bits,
         object->selected_face_word_count,
-        object->selected_face_max_id,
         id);
 }
 
@@ -844,7 +906,6 @@ static void sandbox3d_authoring_remove_invalid_component_selection(
     uint32_t* ids;
     uint64_t* bits;
     size_t word_count;
-    size_t max_slot_id;
     size_t* count;
     size_t prior_count;
     const uint32_t prior_active_id = object != NULL
@@ -855,50 +916,49 @@ static void sandbox3d_authoring_remove_invalid_component_selection(
         : HENKA_AUTHORING_INVALID_ID;
     size_t index;
     size_t write_index = 0U;
-    if (object == NULL) return;
+
+    if (object == NULL)
+    {
+        return;
+    }
     ids = sandbox3d_authoring_selected_ids(object, &index);
     if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
     {
         bits = object->selected_vertex_bits;
         word_count = object->selected_vertex_word_count;
-        max_slot_id = object->selected_vertex_max_id;
         count = &object->selected_vertex_count;
     }
     else if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
     {
         bits = object->selected_edge_bits;
         word_count = object->selected_edge_word_count;
-        max_slot_id = object->selected_edge_max_id;
         count = &object->selected_edge_count;
     }
     else
     {
         bits = object->selected_face_bits;
         word_count = object->selected_face_word_count;
-        max_slot_id = object->selected_face_max_id;
         count = &object->selected_face_count;
     }
     prior_count = *count;
     sandbox3d_authoring_selection_clear(bits, word_count, count);
-    if (ids == NULL) return;
+    if (ids == NULL)
+    {
+        return;
+    }
     for (index = 0U; index < prior_count; ++index)
     {
-        const bool valid = object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
-            ? henka_authoring_mesh_get_vertex(object->mesh, ids[index]) != NULL
-            : object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
-                ? henka_authoring_mesh_get_edge(object->mesh, ids[index]) != NULL
-                : henka_authoring_mesh_get_face(object->mesh, ids[index]) != NULL;
-        if (valid)
+        size_t physical_slot;
+        if (sandbox3d_authoring_component_slot(
+                object->mesh,
+                object->selection_mode,
+                ids[index],
+                &physical_slot) == HENKA_SUCCESS &&
+            physical_slot / 64U < word_count)
         {
             ids[write_index++] = ids[index];
-        }
-    }
-    for (index = 0U; index < write_index; ++index)
-    {
-        const uint32_t id = ids[index];
-        if ((size_t)id <= max_slot_id)
-        {
-            bits[(size_t)id / 64U] |= UINT64_C(1) << ((size_t)id % 64U);
+            bits[physical_slot / 64U] |=
+                UINT64_C(1) << (physical_slot % 64U);
         }
     }
     *count = write_index;
@@ -923,7 +983,7 @@ static void sandbox3d_authoring_remove_invalid_component_selection(
     }
 }
 
-static size_t sandbox3d_authoring_current_selection_max_id(
+static size_t sandbox3d_authoring_current_selection_slot_capacity(
     const sandbox3d_authoring_object* object)
 {
     if (object == NULL)
@@ -933,12 +993,12 @@ static size_t sandbox3d_authoring_current_selection_max_id(
     switch (object->selection_mode)
     {
         case SANDBOX3D_AUTHORING_SELECTION_VERTEX:
-            return object->selected_vertex_max_id;
+            return object->selected_vertex_slot_capacity;
         case SANDBOX3D_AUTHORING_SELECTION_EDGE:
-            return object->selected_edge_max_id;
+            return object->selected_edge_slot_capacity;
         case SANDBOX3D_AUTHORING_SELECTION_FACE:
         default:
-            return object->selected_face_max_id;
+            return object->selected_face_slot_capacity;
     }
 }
 
@@ -976,26 +1036,25 @@ static henka_result sandbox3d_authoring_replace_current_selection(
     uint64_t** old_bits;
     uint32_t** old_ids;
     size_t* old_word_count;
-    size_t* old_max_id;
+    size_t* old_slot_capacity;
     size_t* old_capacity;
     size_t* old_count;
-    size_t max_id;
+    size_t slot_capacity;
     size_t word_count;
     size_t bit_bytes;
     size_t bytes;
     size_t index;
     uint32_t next_active = HENKA_AUTHORING_INVALID_ID;
     bool reuse_storage = false;
-    henka_result result;
 
-    if (object == NULL || (count > 0U && ids == NULL) ||
-        !sandbox3d_authoring_selection_word_count(
-            sandbox3d_authoring_current_selection_max_id(object), &word_count))
+    if (object == NULL || (count > 0U && ids == NULL))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    max_id = sandbox3d_authoring_current_selection_max_id(object);
-    if (count > max_id || !henka_checked_size_multiply(word_count, sizeof(*next_bits), &bit_bytes))
+    slot_capacity = sandbox3d_authoring_current_selection_slot_capacity(object);
+    if (!sandbox3d_authoring_selection_word_count(slot_capacity, &word_count) ||
+        count > slot_capacity ||
+        !henka_checked_size_multiply(word_count, sizeof(*next_bits), &bit_bytes))
     {
         return HENKA_ERROR_LIMIT;
     }
@@ -1005,7 +1064,7 @@ static henka_result sandbox3d_authoring_replace_current_selection(
         old_bits = &object->selected_vertex_bits;
         old_ids = &object->selected_vertices;
         old_word_count = &object->selected_vertex_word_count;
-        old_max_id = &object->selected_vertex_max_id;
+        old_slot_capacity = &object->selected_vertex_slot_capacity;
         old_capacity = &object->selected_vertex_capacity;
         old_count = &object->selected_vertex_count;
     }
@@ -1014,7 +1073,7 @@ static henka_result sandbox3d_authoring_replace_current_selection(
         old_bits = &object->selected_edge_bits;
         old_ids = &object->selected_edges;
         old_word_count = &object->selected_edge_word_count;
-        old_max_id = &object->selected_edge_max_id;
+        old_slot_capacity = &object->selected_edge_slot_capacity;
         old_capacity = &object->selected_edge_capacity;
         old_count = &object->selected_edge_count;
     }
@@ -1023,28 +1082,30 @@ static henka_result sandbox3d_authoring_replace_current_selection(
         old_bits = &object->selected_face_bits;
         old_ids = &object->selected_faces;
         old_word_count = &object->selected_face_word_count;
-        old_max_id = &object->selected_face_max_id;
+        old_slot_capacity = &object->selected_face_slot_capacity;
         old_capacity = &object->selected_face_capacity;
         old_count = &object->selected_face_count;
     }
 
-    /* Validate the complete replacement before touching the current store.
-     * This is also intentionally done after the caller has published a mesh
-     * candidate, so newly-created component IDs are checked against the
-     * candidate that is now authoritative. */
     for (index = 0U; index < count; ++index)
     {
+        size_t physical_slot;
         const uint32_t id = ids[index];
         if (id == HENKA_AUTHORING_INVALID_ID ||
             (index > 0U && ids[index - 1U] >= id) ||
-            !sandbox3d_authoring_current_component_active(object, id))
+            !sandbox3d_authoring_current_component_active(object, id) ||
+            sandbox3d_authoring_component_slot(
+                object->mesh,
+                object->selection_mode,
+                id,
+                &physical_slot) != HENKA_SUCCESS)
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
     }
 
     reuse_storage = *old_bits != NULL && *old_word_count == word_count &&
-        *old_max_id == max_id && count <= *old_capacity &&
+        *old_slot_capacity == slot_capacity && count <= *old_capacity &&
         (count == 0U || *old_ids != NULL);
     if (reuse_storage)
     {
@@ -1077,16 +1138,24 @@ static henka_result sandbox3d_authoring_replace_current_selection(
     memset(next_bits, 0, bit_bytes);
     for (index = 0U; index < count; ++index)
     {
+        size_t physical_slot;
         const uint32_t id = ids[index];
+        (void)sandbox3d_authoring_component_slot(
+            object->mesh, object->selection_mode, id, &physical_slot);
         next_ids[index] = id;
-        next_bits[(size_t)id / 64U] |= UINT64_C(1) << ((size_t)id % 64U);
+        next_bits[physical_slot / 64U] |=
+            UINT64_C(1) << (physical_slot % 64U);
     }
     if (count > 0U)
     {
         next_active = sandbox3d_authoring_selection_contains(
-            next_bits, word_count, max_id, active_hint)
+            object->mesh,
+            object->selection_mode,
+            next_bits,
+            word_count,
+            active_hint)
             ? active_hint
-            : next_ids[0];
+            : next_ids[0U];
     }
 
     if (!reuse_storage)
@@ -1097,15 +1166,14 @@ static henka_result sandbox3d_authoring_replace_current_selection(
         *old_capacity = count;
     }
     *old_word_count = word_count;
-    *old_max_id = max_id;
+    *old_slot_capacity = slot_capacity;
     *old_count = count;
     object->active_component_id = next_active;
     if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)
     {
         object->selected_face = (henka_authoring_face_id)next_active;
     }
-    result = HENKA_SUCCESS;
-    return result;
+    return HENKA_SUCCESS;
 }
 
 static bool sandbox3d_authoring_current_selection_contains(
@@ -1122,9 +1190,9 @@ static henka_result sandbox3d_authoring_build_selection_set(
     size_t explicit_count)
 {
     uint32_t* ids = NULL;
-    size_t max_id;
+    size_t slot_capacity;
     size_t count = 0U;
-    size_t id;
+    size_t slot;
     size_t bytes;
     henka_result result;
 
@@ -1132,22 +1200,20 @@ static henka_result sandbox3d_authoring_build_selection_set(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    max_id = sandbox3d_authoring_current_selection_max_id(object);
-    if (max_id == 0U || !henka_checked_size_multiply(max_id, sizeof(*ids), &bytes))
+    slot_capacity = sandbox3d_authoring_current_selection_slot_capacity(object);
+    if (slot_capacity == 0U ||
+        !henka_checked_size_multiply(slot_capacity, sizeof(*ids), &bytes))
     {
         return HENKA_ERROR_LIMIT;
     }
-    if (max_id > 0U)
+    ids = henka_calloc(slot_capacity, sizeof(*ids));
+    if (ids == NULL)
     {
-        ids = henka_calloc(max_id, sizeof(*ids));
-        if (ids == NULL)
-        {
-            return HENKA_ERROR_OUT_OF_MEMORY;
-        }
+        return HENKA_ERROR_OUT_OF_MEMORY;
     }
     if (explicit_ids != NULL)
     {
-        if (explicit_count > max_id)
+        if (explicit_count > slot_capacity)
         {
             henka_free(ids);
             return HENKA_ERROR_LIMIT;
@@ -1160,16 +1226,31 @@ static henka_result sandbox3d_authoring_build_selection_set(
     }
     else
     {
-        for (id = 1U; id <= max_id; ++id)
+        for (slot = 0U; slot < slot_capacity; ++slot)
         {
-            const bool active = sandbox3d_authoring_current_component_active(
-                object, (uint32_t)id);
-            const bool selected = sandbox3d_authoring_current_selection_contains(
-                object, (uint32_t)id);
-            if (active && (invert ? !selected : true))
+            uint32_t id = HENKA_AUTHORING_INVALID_ID;
+            size_t insert;
+            if (sandbox3d_authoring_component_id_at(
+                    object->mesh,
+                    object->selection_mode,
+                    slot,
+                    &id) != HENKA_SUCCESS)
             {
-                ids[count++] = (uint32_t)id;
+                continue;
             }
+            if (invert &&
+                sandbox3d_authoring_current_selection_contains(object, id))
+            {
+                continue;
+            }
+            insert = count;
+            while (insert > 0U && ids[insert - 1U] > id)
+            {
+                ids[insert] = ids[insert - 1U];
+                --insert;
+            }
+            ids[insert] = id;
+            ++count;
         }
     }
     result = sandbox3d_authoring_replace_current_selection(
@@ -1205,7 +1286,6 @@ henka_result sandbox3d_authoring_object_shrink_component_selection(
     size_t selected_count = 0U;
     size_t retained_count = 0U;
     size_t index;
-    size_t max_id;
     size_t bytes;
     henka_result result;
 
@@ -1218,7 +1298,6 @@ henka_result sandbox3d_authoring_object_shrink_component_selection(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    max_id = sandbox3d_authoring_current_selection_max_id(object);
     if (!henka_checked_size_multiply(selected_count, sizeof(*retained_ids), &bytes))
     {
         return HENKA_ERROR_LIMIT;
@@ -1232,7 +1311,7 @@ henka_result sandbox3d_authoring_object_shrink_component_selection(
     {
         const uint32_t id = selected_ids[index];
         bool keep = true;
-        if ((size_t)id > max_id || !sandbox3d_authoring_current_component_active(object, id))
+        if (!sandbox3d_authoring_current_component_active(object, id))
         {
             henka_free(retained_ids);
             return HENKA_ERROR_INVALID_ARGUMENT;
@@ -1506,7 +1585,7 @@ typedef struct sandbox3d_authoring_face_selection_plan
     uint64_t* bits;
     uint32_t* ids;
     size_t word_count;
-    size_t max_id;
+    size_t slot_capacity;
     size_t capacity;
     size_t count;
     henka_authoring_face_id selected_face;
@@ -1573,8 +1652,7 @@ static henka_result sandbox3d_authoring_prepare_selection_repair(
     henka_authoring_mesh_desc candidate_desc;
     henka_authoring_face_id desired_face = HENKA_AUTHORING_INVALID_ID;
     size_t candidate_word_count;
-    size_t initial_count;
-    size_t index;
+    size_t face_slot;
     henka_result result;
 
     if (plan == NULL || object == NULL || candidate == NULL ||
@@ -1598,37 +1676,25 @@ static henka_result sandbox3d_authoring_prepare_selection_repair(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     plan->word_count = candidate_word_count;
-    plan->max_id = candidate_desc.max_faces;
+    plan->slot_capacity = candidate_desc.max_faces;
 
-    /* Some topology operations intentionally pass the replaced face as a
-     * selection hint even though that ID no longer exists in the candidate.
-     * The committed plan chooses the first retained face in that case. */
-    if ((size_t)selected_after <= candidate_desc.max_faces &&
-        henka_authoring_mesh_get_face(candidate, selected_after) != NULL)
+    if (henka_authoring_mesh_get_face(candidate, selected_after) != NULL)
     {
         desired_face = selected_after;
     }
-    else if ((size_t)object->selected_face <= candidate_desc.max_faces &&
-        henka_authoring_mesh_get_face(candidate, object->selected_face) != NULL)
+    else if (henka_authoring_mesh_get_face(
+                 candidate, object->selected_face) != NULL)
     {
         desired_face = object->selected_face;
     }
-    else
+    else if (allow_fallback)
     {
-        if (!allow_fallback)
+        for (face_slot = 0U; face_slot < candidate_desc.max_faces; ++face_slot)
         {
-            desired_face = HENKA_AUTHORING_INVALID_ID;
-        }
-        else
-        {
-            for (index = 1U; index <= candidate_desc.max_faces; ++index)
+            if (henka_authoring_mesh_get_face_id_at(
+                    candidate, face_slot, &desired_face) == HENKA_SUCCESS)
             {
-                if (henka_authoring_mesh_get_face(
-                        candidate, (henka_authoring_face_id)index) != NULL)
-                {
-                    desired_face = (henka_authoring_face_id)index;
-                    break;
-                }
+                break;
             }
         }
     }
@@ -1641,6 +1707,8 @@ static henka_result sandbox3d_authoring_prepare_selection_repair(
     }
 
     result = sandbox3d_authoring_selection_build_resized(
+        candidate,
+        SANDBOX3D_AUTHORING_SELECTION_FACE,
         object->selected_faces,
         object->selected_face_count,
         candidate_desc.max_faces,
@@ -1653,30 +1721,21 @@ static henka_result sandbox3d_authoring_prepare_selection_repair(
     {
         return result;
     }
-    initial_count = plan->count;
-    sandbox3d_authoring_selection_clear(
-        plan->bits, plan->word_count, &plan->count);
-    for (index = 0U; index < initial_count; ++index)
-    {
-        const uint32_t id = plan->ids[index];
-        if (henka_authoring_mesh_get_face(candidate, (henka_authoring_face_id)id) != NULL)
-        {
-            plan->ids[plan->count++] = id;
-            plan->bits[(size_t)id / 64U] |= UINT64_C(1) << ((size_t)id % 64U);
-        }
-    }
 
     if (desired_face != HENKA_AUTHORING_INVALID_ID &&
         !sandbox3d_authoring_selection_contains(
+            candidate,
+            SANDBOX3D_AUTHORING_SELECTION_FACE,
             plan->bits,
             plan->word_count,
-            plan->max_id,
             desired_face))
     {
         result = sandbox3d_authoring_selection_add(
+            candidate,
+            SANDBOX3D_AUTHORING_SELECTION_FACE,
             plan->bits,
             plan->word_count,
-            plan->max_id,
+            plan->slot_capacity,
             &plan->ids,
             &plan->capacity,
             &plan->count,
@@ -1689,9 +1748,10 @@ static henka_result sandbox3d_authoring_prepare_selection_repair(
     }
     plan->selected_face = desired_face;
     plan->active_component_id = sandbox3d_authoring_selection_contains(
+            candidate,
+            SANDBOX3D_AUTHORING_SELECTION_FACE,
             plan->bits,
             plan->word_count,
-            plan->max_id,
             object->active_component_id)
         ? object->active_component_id
         : plan->count > 0U ? plan->ids[0U] : HENKA_AUTHORING_INVALID_ID;
@@ -1713,7 +1773,7 @@ static void sandbox3d_authoring_commit_face_selection_plan(
     old_ids = object->selected_faces;
     object->selected_face_bits = plan->bits;
     object->selected_face_word_count = plan->word_count;
-    object->selected_face_max_id = plan->max_id;
+    object->selected_face_slot_capacity = plan->slot_capacity;
     object->selected_faces = plan->ids;
     object->selected_face_capacity = plan->capacity;
     object->selected_face_count = plan->count;
@@ -3094,7 +3154,7 @@ henka_result sandbox3d_authoring_object_reserve_component_selection_capacity(
             &object->selected_vertices,
             &object->selected_vertex_capacity,
             required_count,
-            object->selected_vertex_max_id);
+            object->selected_vertex_slot_capacity);
     }
     if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
     {
@@ -3102,13 +3162,13 @@ henka_result sandbox3d_authoring_object_reserve_component_selection_capacity(
             &object->selected_edges,
             &object->selected_edge_capacity,
             required_count,
-            object->selected_edge_max_id);
+            object->selected_edge_slot_capacity);
     }
     return sandbox3d_authoring_selection_reserve_ids(
         &object->selected_faces,
         &object->selected_face_capacity,
         required_count,
-        object->selected_face_max_id);
+        object->selected_face_slot_capacity);
 }
 
 henka_result sandbox3d_authoring_object_get_selected_component_at(
@@ -3135,50 +3195,53 @@ henka_result sandbox3d_authoring_object_select_component(
 {
     uint64_t* bits;
     size_t word_count;
-    size_t max_slot_id;
+    size_t slot_capacity;
     uint32_t** ids;
     size_t* id_capacity;
     size_t* count;
     henka_result result;
-    if (object == NULL || component_id == HENKA_AUTHORING_INVALID_ID)
+
+    if (object == NULL || component_id == HENKA_AUTHORING_INVALID_ID ||
+        !sandbox3d_authoring_current_component_active(object, component_id))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
     {
-        if (henka_authoring_mesh_get_vertex(object->mesh, component_id) == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
         bits = object->selected_vertex_bits;
         word_count = object->selected_vertex_word_count;
-        max_slot_id = object->selected_vertex_max_id;
+        slot_capacity = object->selected_vertex_slot_capacity;
         ids = &object->selected_vertices;
         id_capacity = &object->selected_vertex_capacity;
         count = &object->selected_vertex_count;
     }
     else if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
     {
-        if (henka_authoring_mesh_get_edge(object->mesh, component_id) == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
         bits = object->selected_edge_bits;
         word_count = object->selected_edge_word_count;
-        max_slot_id = object->selected_edge_max_id;
+        slot_capacity = object->selected_edge_slot_capacity;
         ids = &object->selected_edges;
         id_capacity = &object->selected_edge_capacity;
         count = &object->selected_edge_count;
     }
     else
     {
-        if (henka_authoring_mesh_get_face(object->mesh, component_id) == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
         bits = object->selected_face_bits;
         word_count = object->selected_face_word_count;
-        max_slot_id = object->selected_face_max_id;
+        slot_capacity = object->selected_face_slot_capacity;
         ids = &object->selected_faces;
         id_capacity = &object->selected_face_capacity;
         count = &object->selected_face_count;
     }
     if (!additive && !sandbox3d_authoring_selection_contains(
-            bits, word_count, max_slot_id, component_id))
+            object->mesh,
+            object->selection_mode,
+            bits,
+            word_count,
+            component_id))
     {
         result = sandbox3d_authoring_selection_reserve_ids(
-            ids, id_capacity, 1U, max_slot_id);
+            ids, id_capacity, 1U, slot_capacity);
         if (result != HENKA_SUCCESS)
         {
             return result;
@@ -3189,9 +3252,11 @@ henka_result sandbox3d_authoring_object_select_component(
         sandbox3d_authoring_selection_clear(bits, word_count, count);
     }
     result = sandbox3d_authoring_selection_add(
+        object->mesh,
+        object->selection_mode,
         bits,
         word_count,
-        max_slot_id,
+        slot_capacity,
         ids,
         id_capacity,
         count,
@@ -3575,7 +3640,7 @@ henka_result sandbox3d_authoring_object_move_selected_components(
     henka_result result;
     if (object == NULL || !sandbox3d_authoring_finite_vec3(offset)) return HENKA_ERROR_INVALID_ARGUMENT;
     result = sandbox3d_authoring_allocate_id_scratch(
-        object->selected_vertex_max_id, &vertex_ids);
+        object->selected_vertex_slot_capacity, &vertex_ids);
     if (result != HENKA_SUCCESS) return result;
     selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
     if (selected_ids == NULL || selected_count == 0U)
@@ -3607,7 +3672,7 @@ henka_result sandbox3d_authoring_object_move_selected_components(
             bool duplicate = false;
             for (existing = 0U; existing < vertex_count; ++existing)
                 if (vertex_ids[existing] == candidates[candidate_index]) duplicate = true;
-            if (!duplicate && vertex_count < object->selected_vertex_max_id)
+            if (!duplicate && vertex_count < object->selected_vertex_slot_capacity)
                 vertex_ids[vertex_count++] = candidates[candidate_index];
         }
     }
@@ -3926,10 +3991,10 @@ henka_result sandbox3d_authoring_object_grow_component_selection(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     addition_capacity = object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
-        ? object->selected_vertex_max_id
+        ? object->selected_vertex_slot_capacity
         : object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
-            ? object->selected_edge_max_id
-            : object->selected_face_max_id;
+            ? object->selected_edge_slot_capacity
+            : object->selected_face_slot_capacity;
     if (sandbox3d_authoring_allocate_id_scratch(addition_capacity, &additions) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -4268,18 +4333,7 @@ henka_result sandbox3d_authoring_object_select_matching_components(
     {
         active_id = HENKA_AUTHORING_INVALID_ID;
     }
-    else if (!sandbox3d_authoring_selection_contains(
-            object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
-                ? object->selected_vertex_bits
-                : object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
-                    ? object->selected_edge_bits
-                    : object->selected_face_bits,
-            object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
-                ? object->selected_vertex_word_count
-                : object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
-                    ? object->selected_edge_word_count
-                    : object->selected_face_word_count,
-            sandbox3d_authoring_current_selection_max_id(object), active_id) ||
+    else if (!sandbox3d_authoring_component_selected(object, active_id) ||
         !bsearch(&active_id, matching_ids, matching_count, sizeof(*matching_ids),
             sandbox3d_authoring_compare_ids))
     {
@@ -4297,75 +4351,54 @@ static henka_result sandbox3d_authoring_replace_edge_selection(
     size_t edge_count,
     henka_authoring_edge_id active_id)
 {
+    uint32_t* sorted_ids = NULL;
     size_t edge_index;
     size_t bytes;
     bool active_present = false;
     henka_result result;
 
-    if (object == NULL || object->mesh == NULL || edge_ids == NULL || edge_count == 0U ||
-        active_id == HENKA_AUTHORING_INVALID_ID)
+    if (object == NULL || object->mesh == NULL || edge_ids == NULL ||
+        edge_count == 0U || active_id == HENKA_AUTHORING_INVALID_ID)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (edge_count > object->selected_edge_max_id ||
-        !henka_checked_size_multiply(edge_count, sizeof(*edge_ids), &bytes))
+    if (edge_count > object->selected_edge_slot_capacity ||
+        !henka_checked_size_multiply(edge_count, sizeof(*sorted_ids), &bytes))
     {
         return HENKA_ERROR_LIMIT;
     }
+    sorted_ids = henka_malloc(bytes);
+    if (sorted_ids == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(sorted_ids, edge_ids, bytes);
+    qsort(sorted_ids, edge_count, sizeof(*sorted_ids),
+        sandbox3d_authoring_compare_ids);
     for (edge_index = 0U; edge_index < edge_count; ++edge_index)
     {
-        const henka_authoring_edge_id edge_id = edge_ids[edge_index];
-        size_t prior_index;
+        const henka_authoring_edge_id edge_id = sorted_ids[edge_index];
         if (edge_id == HENKA_AUTHORING_INVALID_ID ||
-            (size_t)edge_id > object->selected_edge_max_id ||
             henka_authoring_mesh_get_edge(object->mesh, edge_id) == NULL ||
-            (size_t)edge_id / 64U >= object->selected_edge_word_count)
+            (edge_index > 0U && sorted_ids[edge_index - 1U] == edge_id))
         {
+            henka_free(sorted_ids);
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
         if (edge_id == active_id)
         {
             active_present = true;
         }
-        for (prior_index = 0U; prior_index < edge_index; ++prior_index)
-        {
-            if (edge_ids[prior_index] == edge_id)
-            {
-                return HENKA_ERROR_INVALID_ARGUMENT;
-            }
-        }
     }
     if (!active_present)
     {
+        henka_free(sorted_ids);
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = sandbox3d_authoring_selection_reserve_ids(
-        &object->selected_edges,
-        &object->selected_edge_capacity,
-        edge_count,
-        object->selected_edge_max_id);
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
-    }
-
-    /* Everything above is fallible. The replacement below is deliberately
-     * non-fallible so a failed traversal never leaves a partial selection. */
-    sandbox3d_authoring_selection_clear(
-        object->selected_edge_bits,
-        object->selected_edge_word_count,
-        &object->selected_edge_count);
-    memcpy(object->selected_edges, edge_ids, bytes);
-    qsort(object->selected_edges, edge_count, sizeof(*object->selected_edges),
-        sandbox3d_authoring_compare_ids);
-    for (edge_index = 0U; edge_index < edge_count; ++edge_index)
-    {
-        const size_t id = (size_t)object->selected_edges[edge_index];
-        object->selected_edge_bits[id / 64U] |= UINT64_C(1) << (id % 64U);
-    }
-    object->selected_edge_count = edge_count;
-    object->active_component_id = active_id;
-    return HENKA_SUCCESS;
+    result = sandbox3d_authoring_replace_current_selection(
+        object, sorted_ids, edge_count, active_id);
+    henka_free(sorted_ids);
+    return result;
 }
 
 static henka_result sandbox3d_authoring_collect_edge_loop_branch(
@@ -4535,7 +4568,7 @@ henka_result sandbox3d_authoring_object_select_edge_loop(
     sandbox3d_authoring_object* object)
 {
     uint32_t* loop_edges = NULL;
-    const size_t loop_capacity = object != NULL ? object->selected_edge_max_id : 0U;
+    const size_t loop_capacity = object != NULL ? object->selected_edge_slot_capacity : 0U;
     const henka_authoring_edge* active_edge;
     const henka_authoring_edge_id active_id = object != NULL
         ? object->active_component_id : HENKA_AUTHORING_INVALID_ID;
@@ -4691,7 +4724,7 @@ henka_result sandbox3d_authoring_object_select_edge_ring(
     sandbox3d_authoring_object* object)
 {
     uint32_t* ring_edges = NULL;
-    const size_t ring_capacity = object != NULL ? object->selected_edge_max_id : 0U;
+    const size_t ring_capacity = object != NULL ? object->selected_edge_slot_capacity : 0U;
     const henka_authoring_edge* active_edge;
     const henka_authoring_edge_id active_id = object != NULL
         ? object->active_component_id : HENKA_AUTHORING_INVALID_ID;
@@ -4834,7 +4867,7 @@ henka_result sandbox3d_authoring_object_flip_selected_edge(
             &object->selected_edges,
             &object->selected_edge_capacity,
             1U,
-            object->selected_edge_max_id);
+            object->selected_edge_slot_capacity);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -4948,7 +4981,7 @@ henka_result sandbox3d_authoring_object_split_selected_loose_edge(
             &object->selected_edges,
             &object->selected_edge_capacity,
             replacement_count,
-            object->selected_edge_max_id);
+            object->selected_edge_slot_capacity);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -5117,7 +5150,7 @@ henka_result sandbox3d_authoring_object_split_selected_edge(
             &object->selected_edges,
             &object->selected_edge_capacity,
             replacement_count,
-            object->selected_edge_max_id);
+            object->selected_edge_slot_capacity);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -5568,21 +5601,21 @@ static henka_result sandbox3d_authoring_apply_proportional_move_candidate(
     uint16_t* distances = NULL;
     uint32_t* queue = NULL;
     size_t vertex_capacity;
-    size_t vertex_array_capacity;
     size_t selected_vertex_count = 0U;
     size_t selected_index;
     size_t queue_head = 0U;
     size_t queue_tail = 0U;
     henka_result result;
 
-    if (source == NULL || candidate == NULL || selected_ids == NULL || selected_count == 0U ||
-        !sandbox3d_authoring_finite_vec3(offset) || ring_count > 8U)
+    if (source == NULL || candidate == NULL || selected_ids == NULL ||
+        selected_count == 0U || !sandbox3d_authoring_finite_vec3(offset) ||
+        ring_count > 8U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     vertex_capacity = henka_authoring_mesh_get_desc(source).max_vertices;
-    if (!henka_checked_size_add(vertex_capacity, 1U, &vertex_array_capacity) ||
-        sandbox3d_authoring_allocate_id_scratch(vertex_capacity, &selected_vertex_ids) != HENKA_SUCCESS)
+    if (sandbox3d_authoring_allocate_id_scratch(
+            vertex_capacity, &selected_vertex_ids) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_LIMIT;
     }
@@ -5615,7 +5648,9 @@ static henka_result sandbox3d_authoring_apply_proportional_move_candidate(
                 candidate_count = face->corner_count;
             }
         }
-        for (size_t candidate_index = 0U; candidate_index < candidate_count; ++candidate_index)
+        for (size_t candidate_index = 0U;
+             candidate_index < candidate_count;
+             ++candidate_index)
         {
             (void)sandbox3d_authoring_append_unique_id(
                 selected_vertex_ids,
@@ -5630,34 +5665,35 @@ static henka_result sandbox3d_authoring_apply_proportional_move_candidate(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    distances = henka_calloc(vertex_array_capacity, sizeof(*distances));
-    queue = henka_calloc(vertex_array_capacity, sizeof(*queue));
+    distances = henka_calloc(vertex_capacity, sizeof(*distances));
+    queue = henka_calloc(vertex_capacity, sizeof(*queue));
     if (distances == NULL || queue == NULL)
     {
         henka_free(distances);
         henka_free(queue);
+        henka_free(selected_vertex_ids);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
-    for (selected_index = 0U;
-         selected_index <= vertex_capacity;
-         ++selected_index)
+    for (selected_index = 0U; selected_index < vertex_capacity; ++selected_index)
     {
         distances[selected_index] = UINT16_MAX;
     }
     for (selected_index = 0U; selected_index < selected_vertex_count; ++selected_index)
     {
         const uint32_t vertex_id = selected_vertex_ids[selected_index];
-        if (vertex_id == HENKA_AUTHORING_INVALID_ID ||
-            (size_t)vertex_id > vertex_capacity ||
-            henka_authoring_mesh_get_vertex(source, (henka_authoring_vertex_id)vertex_id) == NULL)
+        size_t vertex_slot;
+        if (henka_authoring_mesh_get_vertex_slot(
+                source,
+                (henka_authoring_vertex_id)vertex_id,
+                &vertex_slot) != HENKA_SUCCESS)
         {
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto proportional_move_cleanup;
         }
-        if (distances[vertex_id] == UINT16_MAX)
+        if (distances[vertex_slot] == UINT16_MAX)
         {
-            distances[vertex_id] = 0U;
-            if (queue_tail >= vertex_array_capacity)
+            distances[vertex_slot] = 0U;
+            if (queue_tail >= vertex_capacity)
             {
                 result = HENKA_ERROR_LIMIT;
                 goto proportional_move_cleanup;
@@ -5668,10 +5704,21 @@ static henka_result sandbox3d_authoring_apply_proportional_move_candidate(
     while (queue_head < queue_tail)
     {
         const uint32_t vertex_id = queue[queue_head++];
-        const uint16_t distance = distances[vertex_id];
-        const size_t edge_count = henka_authoring_mesh_get_vertex_edge_count(
-            source, (henka_authoring_vertex_id)vertex_id);
+        size_t vertex_slot;
+        uint16_t distance;
+        size_t edge_count;
         size_t edge_index;
+        if (henka_authoring_mesh_get_vertex_slot(
+                source,
+                (henka_authoring_vertex_id)vertex_id,
+                &vertex_slot) != HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto proportional_move_cleanup;
+        }
+        distance = distances[vertex_slot];
+        edge_count = henka_authoring_mesh_get_vertex_edge_count(
+            source, (henka_authoring_vertex_id)vertex_id);
         if ((size_t)distance >= ring_count)
         {
             continue;
@@ -5681,6 +5728,7 @@ static henka_result sandbox3d_authoring_apply_proportional_move_candidate(
             henka_authoring_edge_id edge_id;
             const henka_authoring_edge* edge;
             uint32_t neighbor_id;
+            size_t neighbor_slot;
             if (henka_authoring_mesh_get_vertex_edge_at(
                     source,
                     (henka_authoring_vertex_id)vertex_id,
@@ -5690,15 +5738,19 @@ static henka_result sandbox3d_authoring_apply_proportional_move_candidate(
             {
                 continue;
             }
-            neighbor_id = edge->vertices[0] == vertex_id ? edge->vertices[1] : edge->vertices[0];
-            if (neighbor_id == HENKA_AUTHORING_INVALID_ID ||
-                (size_t)neighbor_id > vertex_capacity ||
-                distances[neighbor_id] != UINT16_MAX)
+            neighbor_id = edge->vertices[0] == vertex_id
+                ? edge->vertices[1]
+                : edge->vertices[0];
+            if (henka_authoring_mesh_get_vertex_slot(
+                    source,
+                    (henka_authoring_vertex_id)neighbor_id,
+                    &neighbor_slot) != HENKA_SUCCESS ||
+                distances[neighbor_slot] != UINT16_MAX)
             {
                 continue;
             }
-            distances[neighbor_id] = (uint16_t)(distance + 1U);
-            if (queue_tail >= vertex_array_capacity)
+            distances[neighbor_slot] = (uint16_t)(distance + 1U);
+            if (queue_tail >= vertex_capacity)
             {
                 result = HENKA_ERROR_LIMIT;
                 goto proportional_move_cleanup;
@@ -5708,28 +5760,30 @@ static henka_result sandbox3d_authoring_apply_proportional_move_candidate(
     }
 
     result = HENKA_SUCCESS;
-    for (selected_index = 1U;
-         selected_index <= vertex_capacity;
-         ++selected_index)
+    for (selected_index = 0U; selected_index < vertex_capacity; ++selected_index)
     {
+        henka_authoring_vertex_id vertex_id = HENKA_AUTHORING_INVALID_ID;
         const henka_authoring_vertex* vertex;
         const float falloff_denominator = (float)(ring_count + 1U);
         float falloff;
         henka_vec3 position;
         if (distances[selected_index] == UINT16_MAX ||
-            (size_t)distances[selected_index] > ring_count)
+            (size_t)distances[selected_index] > ring_count ||
+            henka_authoring_mesh_get_vertex_id_at(
+                source, selected_index, &vertex_id) != HENKA_SUCCESS)
         {
             continue;
         }
-        vertex = henka_authoring_mesh_get_vertex(candidate, (henka_authoring_vertex_id)selected_index);
+        vertex = henka_authoring_mesh_get_vertex(candidate, vertex_id);
         if (vertex == NULL)
         {
             result = HENKA_ERROR_INVALID_ARGUMENT;
             break;
         }
-        falloff = ((float)(ring_count + 1U) - (float)distances[selected_index]) /
-            falloff_denominator;
-        position = henka_vec3_add(vertex->position, henka_vec3_scale(offset, falloff));
+        falloff = ((float)(ring_count + 1U) -
+            (float)distances[selected_index]) / falloff_denominator;
+        position = henka_vec3_add(
+            vertex->position, henka_vec3_scale(offset, falloff));
         result = henka_authoring_mesh_set_vertex_position(
             candidate, vertex->id, position);
         if (result != HENKA_SUCCESS)
@@ -5737,6 +5791,7 @@ static henka_result sandbox3d_authoring_apply_proportional_move_candidate(
             break;
         }
     }
+
 proportional_move_cleanup:
     henka_free(distances);
     henka_free(queue);
@@ -5863,10 +5918,10 @@ henka_result sandbox3d_authoring_object_select_connected_components(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     iteration_limit = object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
-        ? object->selected_vertex_max_id
+        ? object->selected_vertex_slot_capacity
         : object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
-            ? object->selected_edge_max_id
-            : object->selected_face_max_id;
+            ? object->selected_edge_slot_capacity
+            : object->selected_face_slot_capacity;
 
     /* Each successful growth either reaches a fixed point or adds at least
      * one component. The mesh slot capacity bounds this loop even when a
@@ -5915,7 +5970,7 @@ static henka_result sandbox3d_authoring_collect_selected_vertices(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     result = sandbox3d_authoring_allocate_id_scratch(
-        object->selected_vertex_max_id, &vertex_ids);
+        object->selected_vertex_slot_capacity, &vertex_ids);
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -5958,7 +6013,7 @@ static henka_result sandbox3d_authoring_collect_selected_vertices(
             if (!sandbox3d_authoring_append_unique_id(
                     vertex_ids,
                     &vertex_count,
-                    object->selected_vertex_max_id,
+                    object->selected_vertex_slot_capacity,
                     candidates[candidate_index]))
             {
                 henka_free(vertex_ids);
@@ -6024,7 +6079,7 @@ static henka_result sandbox3d_authoring_collect_normal_faces(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     result = sandbox3d_authoring_allocate_id_scratch(
-        object->selected_face_max_id, &selected_ids);
+        object->selected_face_slot_capacity, &selected_ids);
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -6040,7 +6095,7 @@ static henka_result sandbox3d_authoring_collect_normal_faces(
         for (selected_index = 0U; selected_index < selected_count; ++selected_index)
         {
             if (!sandbox3d_authoring_append_unique_id(
-                    selected_ids, &face_count, object->selected_face_max_id, ids[selected_index]))
+                    selected_ids, &face_count, object->selected_face_slot_capacity, ids[selected_index]))
             {
                 henka_free(selected_ids);
                 return HENKA_ERROR_INVALID_ARGUMENT;
@@ -6070,7 +6125,7 @@ static henka_result sandbox3d_authoring_collect_normal_faces(
                 for (face_index = 0U; face_index < edge->face_count; ++face_index)
                 {
                     if (!sandbox3d_authoring_append_unique_id(
-                            selected_ids, &face_count, object->selected_face_max_id, edge->faces[face_index]))
+                            selected_ids, &face_count, object->selected_face_slot_capacity, edge->faces[face_index]))
                     {
                         henka_free(selected_ids);
                         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -6097,7 +6152,7 @@ static henka_result sandbox3d_authoring_collect_normal_faces(
                     for (face_index = 0U; face_index < edge->face_count; ++face_index)
                     {
                         if (!sandbox3d_authoring_append_unique_id(
-                                selected_ids, &face_count, object->selected_face_max_id, edge->faces[face_index]))
+                                selected_ids, &face_count, object->selected_face_slot_capacity, edge->faces[face_index]))
                         {
                             henka_free(selected_ids);
                             return HENKA_ERROR_INVALID_ARGUMENT;
@@ -6860,11 +6915,11 @@ henka_result sandbox3d_authoring_object_bevel_selected_vertices(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
-    if (selected_ids == NULL || selected_count == 0U || object->selected_vertex_max_id == 0U)
+    if (selected_ids == NULL || selected_count == 0U || object->selected_vertex_slot_capacity == 0U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result_vertices = henka_malloc(object->selected_vertex_max_id * sizeof(*result_vertices));
+    result_vertices = henka_malloc(object->selected_vertex_slot_capacity * sizeof(*result_vertices));
     if (result_vertices == NULL) return HENKA_ERROR_OUT_OF_MEMORY;
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
@@ -6875,7 +6930,7 @@ henka_result sandbox3d_authoring_object_bevel_selected_vertices(
             selected_count,
             object->bevel_width,
             result_vertices,
-            object->selected_vertex_max_id,
+            object->selected_vertex_slot_capacity,
             &result_count,
             &report);
     }
@@ -6947,7 +7002,6 @@ henka_result sandbox3d_authoring_object_extrude_selected_vertex(
     }
     if (result == HENKA_SUCCESS &&
         (new_vertex_id == HENKA_AUTHORING_INVALID_ID ||
-         (size_t)new_vertex_id > object->selected_vertex_max_id ||
          henka_authoring_mesh_get_vertex(candidate, new_vertex_id) == NULL))
     {
         result = HENKA_ERROR_INVALID_ARGUMENT;
@@ -6976,7 +7030,7 @@ henka_result sandbox3d_authoring_object_extrude_selected_vertex(
             &object->selected_vertices,
             &object->selected_vertex_capacity,
             1U,
-            object->selected_vertex_max_id);
+            object->selected_vertex_slot_capacity);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -7599,7 +7653,7 @@ henka_result sandbox3d_authoring_object_extrude_selected_faces(
     }
     selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
     if (selected_ids == NULL || selected_count == 0U ||
-        selected_count > object->selected_face_max_id)
+        selected_count > object->selected_face_slot_capacity)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
