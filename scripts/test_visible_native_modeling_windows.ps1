@@ -1718,6 +1718,32 @@ try {
         -X ([double]$utilityAssetsTab.Groups["x"].Value + [double]$utilityAssetsTab.Groups["width"].Value * 0.5) `
         -Y ([double]$utilityAssetsTab.Groups["y"].Value + 12.0)
     Start-Sleep -Milliseconds 150
+
+    $pickerControlCount = Get-LogMatchCount -Path $stdoutPath -Pattern $pickerControlPattern
+    $pickerControlFound = $false
+    for ($pickerReacquireAttempt = 0; $pickerReacquireAttempt -lt 64 -and -not $pickerControlFound; ++$pickerReacquireAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta 1.0
+        Start-Sleep -Milliseconds 100
+        $pickerControlFound = (Get-LogMatchCount -Path $stdoutPath -Pattern $pickerControlPattern) -gt $pickerControlCount
+    }
+    for ($pickerReacquireAttempt = 0; $pickerReacquireAttempt -lt 128 -and -not $pickerControlFound; ++$pickerReacquireAttempt) {
+        Send-HenkaAutomationScroll `
+            -EventPath $automationInputPath `
+            -X ($detailsX + $detailsWidth * 0.5) `
+            -Y ($detailsY + $detailsHeight * 0.5) `
+            -WheelDelta -1.0
+        Start-Sleep -Milliseconds 100
+        $pickerControlFound = (Get-LogMatchCount -Path $stdoutPath -Pattern $pickerControlPattern) -gt $pickerControlCount
+    }
+    if (-not $pickerControlFound) {
+        throw "The visible material editor did not republish Base Color picker geometry before the F2 utility-switch regression."
+    }
+    $pickerControl = Get-LastMatch -Path $stdoutPath -Pattern $pickerControlPattern
+
     $pickerBeginCount = Get-LogMatchCount `
         -Path $stdoutPath `
         -Pattern 'Material texture picker: action=begin entity=\d+ slot=Base Color\.'
