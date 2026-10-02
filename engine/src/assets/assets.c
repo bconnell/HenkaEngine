@@ -3462,7 +3462,8 @@ static henka_result henka_assets_reload_mesh(
     entry = henka_asset_manager_find_mesh_entry(manager, key);
     henka_free(key);
     if (entry == NULL || entry->mesh == NULL || entry->metadata.fallback ||
-        !entry->owns_mesh || entry->source_path == NULL)
+        !entry->owns_mesh || entry->source_path == NULL ||
+        entry->source_is_gltf != gltf)
         return HENKA_ERROR_INVALID_ARGUMENT;
 
     result = henka_assets_build_mesh_candidate(
@@ -3539,6 +3540,12 @@ henka_result henka_assets_load_obj_mesh(
         key);
     if (existing_entry != NULL)
     {
+        if (existing_entry->source_is_gltf)
+        {
+            henka_free(source_path);
+            henka_free(key);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
         *out_mesh = existing_entry->mesh;
         henka_free(source_path);
         henka_free(key);
@@ -3621,6 +3628,7 @@ henka_result henka_assets_load_obj_mesh(
         display_name;
     manager->mesh_entries[manager->mesh_count].mesh = mesh;
     manager->mesh_entries[manager->mesh_count].owns_mesh = true;
+    manager->mesh_entries[manager->mesh_count].source_is_gltf = false;
     manager->mesh_entries[manager->mesh_count].metadata.type =
         HENKA_ASSET_TYPE_MESH;
     manager->mesh_entries[manager->mesh_count].metadata.source_path =
@@ -3667,6 +3675,11 @@ henka_result henka_assets_load_gltf_mesh(
     existing_entry = henka_asset_manager_find_mesh_entry(manager, key);
     if (existing_entry != NULL)
     {
+        if (!existing_entry->source_is_gltf)
+        {
+            henka_free(source_path); henka_free(key);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
         *out_mesh = existing_entry->mesh;
         henka_free(source_path); henka_free(key);
         return HENKA_SUCCESS;
@@ -3721,6 +3734,7 @@ henka_result henka_assets_load_gltf_mesh(
     manager->mesh_entries[manager->mesh_count].display_name = display_name;
     manager->mesh_entries[manager->mesh_count].mesh = mesh;
     manager->mesh_entries[manager->mesh_count].owns_mesh = true;
+    manager->mesh_entries[manager->mesh_count].source_is_gltf = true;
     manager->mesh_entries[manager->mesh_count].metadata.type = HENKA_ASSET_TYPE_MESH;
     manager->mesh_entries[manager->mesh_count].metadata.source_path = source_path;
     manager->mesh_entries[manager->mesh_count].metadata.display_name = display_name;
@@ -6138,7 +6152,7 @@ henka_result henka_assets_retry_failed_obj_mesh(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     if (!entry->owns_mesh || entry->mesh == manager->fallback_mesh ||
-        entry->source_path == NULL)
+        entry->source_path == NULL || entry->source_is_gltf)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -6195,7 +6209,8 @@ henka_result henka_assets_retry_failed_gltf_mesh(
     henka_free(key);
     if (entry == NULL || entry->mesh == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
     if (!entry->metadata.fallback) return HENKA_ERROR_INVALID_ARGUMENT;
-    if (!entry->owns_mesh || entry->mesh == manager->fallback_mesh || entry->source_path == NULL)
+    if (!entry->owns_mesh || entry->mesh == manager->fallback_mesh || entry->source_path == NULL ||
+        !entry->source_is_gltf)
         return HENKA_ERROR_INVALID_ARGUMENT;
     result = henka_assets_resolve_path(henka_engine_get_asset_base_path(manager->engine), entry->source_path, &resolved_path);
     if (result != HENKA_SUCCESS) return result;
