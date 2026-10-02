@@ -19,8 +19,9 @@
 #define HENKA_AUTHORING_MESH_HARD_MAX_VERTICES 65536U
 #define HENKA_AUTHORING_MESH_HARD_MAX_EDGES 131072U
 #define HENKA_AUTHORING_MESH_HARD_MAX_FACES 65536U
-/* Several specialized authoring operators use bounded 32-corner scratch. Mesh
- * descriptors and storage may configure larger faces up to the vertex bound. */
+/* Legacy compatibility value for callers that used the former 32-corner
+ * operator ceiling. Face storage and modeling operators use descriptor/resource
+ * limits instead; this value is not a hard face-corner limit. */
 #define HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS 32U
 
 typedef uint32_t henka_authoring_vertex_id;
@@ -121,6 +122,20 @@ henka_result henka_authoring_mesh_get_face_id_at(
     const henka_authoring_mesh* mesh,
     size_t physical_slot,
     henka_authoring_face_id* out_id);
+/* Resolves one active stable logical ID to its current bounded physical slot.
+ * Slots are storage/cache indexes only and must not be persisted as identity. */
+henka_result henka_authoring_mesh_get_vertex_slot(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id id,
+    size_t* out_physical_slot);
+henka_result henka_authoring_mesh_get_edge_slot(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_edge_id id,
+    size_t* out_physical_slot);
+henka_result henka_authoring_mesh_get_face_slot(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_face_id id,
+    size_t* out_physical_slot);
 bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh);
 /* Returns bounds from active source vertices. */
 henka_result henka_authoring_mesh_get_bounds(

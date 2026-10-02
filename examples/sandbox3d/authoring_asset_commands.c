@@ -132,11 +132,10 @@ henka_result sandbox3d_authoring_asset_commands_add_primitive(
     request.primitive.height = 1.0f;
     request.primitive.depth = 1.0f;
     request.primitive.radius = 0.5f;
-    /* New native assets should begin with a smooth, authorable surface.  Keep
-     * the tessellation bounded by the public constructor hard limit while
-     * avoiding a visibly faceted low-detail source that users must repair
-     * before ordinary modeling can even be evaluated. */
-    request.primitive.segments = HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS;
+    /* New native assets should begin with a smooth, authorable surface while
+     * keeping the default lightweight. Higher segment counts remain available
+     * through the configured authoring primitive request. */
+    request.primitive.segments = 32U;
     request.primitive.latitude_segments = 24U;
     request.primitive.subdivisions = 8U;
     if (action == SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_CYLINDER ||
