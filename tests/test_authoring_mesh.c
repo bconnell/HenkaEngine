@@ -12023,6 +12023,98 @@ cleanup:
     return result ? 1 : fail("boundary edge-chain extrude with configured 40-corner face");
 }
 
+
+static int test_boundary_edge_chain_batch_extrude_large_selection_scales(void)
+{
+    enum { CORNER_COUNT = 512U };
+    const henka_authoring_mesh_desc desc = {
+        CORNER_COUNT * 2U, CORNER_COUNT * 4U, CORNER_COUNT * 2U, CORNER_COUNT};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[CORNER_COUNT];
+    henka_authoring_edge_id selected_edges[CORNER_COUNT];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    clock_t start;
+    clock_t finish;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < CORNER_COUNT; ++index)
+    {
+        const float angle = 6.2831853071795864769f *
+            (float)index / (float)CORNER_COUNT;
+        const henka_vec3 position = {cosf(angle), sinf(angle), 0.0f};
+        if (henka_authoring_mesh_add_vertex(
+                mesh, position, (henka_vec2){position.x, position.y}, 13U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, vertices, CORNER_COUNT, 13U, true, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        const henka_authoring_face* face =
+            henka_authoring_mesh_get_face(mesh, face_id);
+        if (face == NULL || face->corner_count != CORNER_COUNT)
+        {
+            goto cleanup;
+        }
+        memcpy(selected_edges, face->edges, sizeof(selected_edges));
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (!henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    start = clock();
+    if (henka_authoring_mesh_extrude_boundary_edge_chains(
+            mesh, selected_edges, CORNER_COUNT, 0.25f, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    finish = clock();
+    if ((double)(finish - start) / (double)CLOCKS_PER_SEC > 4.0)
+    {
+        (void)fprintf(stderr,
+            "512-edge boundary-chain component grouping exceeded 4 CPU seconds\n");
+        goto cleanup;
+    }
+
+    after = henka_authoring_mesh_get_counts(mesh);
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, face_id);
+        if (!report.changed ||
+            report.created_vertices != CORNER_COUNT ||
+            report.created_edges != CORNER_COUNT * 2U ||
+            report.created_faces != CORNER_COUNT ||
+            after.vertices != before.vertices + CORNER_COUNT ||
+            after.edges != before.edges + CORNER_COUNT * 2U ||
+            after.faces != before.faces + CORNER_COUNT ||
+            face == NULL || face->corner_count != CORNER_COUNT ||
+            face->material_region != 13U || !face->smooth ||
+            !henka_authoring_mesh_validate(mesh))
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("large boundary-chain component grouping");
+}
+
 static int test_boundary_edge_chain_batch_extrude_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -15481,6 +15573,7 @@ int main(void)
         test_generalized_closed_interior_edge_fan_extrude_operation() &&
         test_boundary_edge_chain_extrude_operation() &&
         test_boundary_edge_chain_extrude_supports_configured_large_face() &&
+        test_boundary_edge_chain_batch_extrude_large_selection_scales() &&
         test_boundary_edge_chain_batch_extrude_operation() &&
         test_boundary_edge_bridge_operation() &&
         test_boundary_edge_bridge_supports_configured_large_faces() &&
