@@ -376,9 +376,9 @@ henka_result sandbox3d_authoring_asset_document_add_primitive(
     }
 
     mesh_desc = henka_authoring_mesh_desc_default();
-    /* Cylinders and cones encode their cap as one bounded polygon.  Keep the
-     * per-face descriptor limit aligned with the requested segment count,
-     * which the public constructor already limits to the fixed hard maximum. */
+    /* Cylinders and cones encode their cap as one polygon. Keep the per-face
+     * descriptor limit aligned with the requested segment count; the constructor
+     * then enforces the mesh's configured resource capacities. */
     if ((kind == SANDBOX3D_AUTHORING_PRIMITIVE_CYLINDER ||
          kind == SANDBOX3D_AUTHORING_PRIMITIVE_CONE) &&
         desc->segments > mesh_desc.max_face_corners)
