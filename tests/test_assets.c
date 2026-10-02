@@ -1242,6 +1242,7 @@ static void henka_test_mesh_fallback_retry_preserves_cached_identity(void)
     henka_mesh* gltf_mesh = NULL;
     henka_mesh* retried = NULL;
     henka_mesh* reloaded = NULL;
+    henka_mesh* wrong_importer = NULL;
     henka_mesh* scene_mesh = NULL;
     henka_asset_metadata metadata;
 
@@ -1268,6 +1269,15 @@ static void henka_test_mesh_fallback_retry_preserves_cached_identity(void)
         manager, obj_mesh, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback && metadata.reload_supported);
     HENKA_TEST_ASSERT(strcmp(metadata.source_path, obj_path) == 0);
+
+    wrong_importer = NULL;
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_mesh(
+        manager, obj_path, &wrong_importer) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(wrong_importer == NULL);
+    wrong_importer = NULL;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_gltf_mesh(
+        manager, obj_path, &wrong_importer) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(wrong_importer == NULL);
 
     HENKA_TEST_ASSERT(henka_assets_load_obj_mesh(
         manager, "./build/test_tmp/mesh-fallback-identity.obj", &obj_again) == HENKA_SUCCESS);
@@ -1311,6 +1321,14 @@ static void henka_test_mesh_fallback_retry_preserves_cached_identity(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
         scene, obj_entity, &scene_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene_mesh == obj_mesh && scene_mesh->vertex_count == 3);
+    wrong_importer = NULL;
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_mesh(
+        manager, obj_path, &wrong_importer) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(wrong_importer == NULL);
+    wrong_importer = NULL;
+    HENKA_TEST_ASSERT(henka_assets_reload_gltf_mesh(
+        manager, obj_path, &wrong_importer) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(wrong_importer == NULL);
     HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
         manager, obj_peer, &metadata) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback);
@@ -1336,6 +1354,15 @@ static void henka_test_mesh_fallback_retry_preserves_cached_identity(void)
     HENKA_TEST_ASSERT(!metadata.loaded && metadata.fallback);
     HENKA_TEST_ASSERT(strcmp(metadata.source_path, gltf_path) == 0);
 
+    wrong_importer = NULL;
+    HENKA_TEST_ASSERT(henka_assets_load_obj_mesh(
+        manager, gltf_path, &wrong_importer) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(wrong_importer == NULL);
+    wrong_importer = NULL;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_obj_mesh(
+        manager, gltf_path, &wrong_importer) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(wrong_importer == NULL);
+
     gltf_entity = henka_scene_create_entity_named(scene, "Recovered glTF");
     HENKA_TEST_ASSERT(gltf_entity != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(
@@ -1358,6 +1385,14 @@ static void henka_test_mesh_fallback_retry_preserves_cached_identity(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
         scene, gltf_entity, &scene_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene_mesh == gltf_mesh && scene_mesh->vertex_count == 3);
+    wrong_importer = NULL;
+    HENKA_TEST_ASSERT(henka_assets_load_obj_mesh(
+        manager, gltf_path, &wrong_importer) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(wrong_importer == NULL);
+    wrong_importer = NULL;
+    HENKA_TEST_ASSERT(henka_assets_reload_obj_mesh(
+        manager, gltf_path, &wrong_importer) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(wrong_importer == NULL);
 
     retried = (henka_mesh*)1;
     HENKA_TEST_ASSERT(henka_assets_retry_failed_gltf_mesh(

@@ -253,6 +253,9 @@ typedef struct henka_asset_mesh_entry
     char* display_name;
     henka_mesh* mesh;
     bool owns_mesh;
+    /* The canonical path owns one mesh importer family for the lifetime of
+     * this cache entry. Cross-importer cache hits are rejected. */
+    bool source_is_gltf;
     henka_asset_metadata metadata;
 } henka_asset_mesh_entry;
 
