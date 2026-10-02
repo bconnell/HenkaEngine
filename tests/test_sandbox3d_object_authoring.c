@@ -11924,27 +11924,27 @@ static void henka_test_sandbox3d_object_authoring_high_logical_id_selection(void
     }
     HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
         source,
-        (henka_authoring_vertex_id[]){vertices[0], vertices[1], vertices[2]},
+        (henka_authoring_vertex_id[]){vertices[0], vertices[1], vertices[3]},
         3U,
         0U,
         true,
         &stable_face_id) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
         source,
-        (henka_authoring_vertex_id[]){vertices[3], vertices[4], vertices[5]},
+        (henka_authoring_vertex_id[]){vertices[4], vertices[5], vertices[7]},
         3U,
         0U,
         true,
         &high_face_id) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_add_edge(
-        source, vertices[6], vertices[7], false, &high_edge_id) == HENKA_SUCCESS);
+        source, vertices[6], vertices[8], false, &high_edge_id) == HENKA_SUCCESS);
 
     for (index = 0U; index < 8U; ++index)
     {
         HENKA_TEST_ASSERT(henka_authoring_mesh_remove_edge(
             source, high_edge_id) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(henka_authoring_mesh_add_edge(
-            source, vertices[6], vertices[7], false, &high_edge_id) == HENKA_SUCCESS);
+            source, vertices[6], vertices[8], false, &high_edge_id) == HENKA_SUCCESS);
     }
     for (index = 0U; index < 4U; ++index)
     {
@@ -11952,13 +11952,13 @@ static void henka_test_sandbox3d_object_authoring_high_logical_id_selection(void
             source, high_face_id) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
             source,
-            (henka_authoring_vertex_id[]){vertices[3], vertices[4], vertices[5]},
+            (henka_authoring_vertex_id[]){vertices[4], vertices[5], vertices[7]},
             3U,
             0U,
             true,
             &high_face_id) == HENKA_SUCCESS);
     }
-    high_vertex_id = vertices[8];
+    high_vertex_id = vertices[2];
     for (index = 0U; index < 4U; ++index)
     {
         HENKA_TEST_ASSERT(henka_authoring_mesh_remove_vertex(
