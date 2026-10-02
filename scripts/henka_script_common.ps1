@@ -1055,15 +1055,6 @@ public sealed class HenkaCapturedProcess : IDisposable
         return exited;
     }
 
-    public void Kill()
-    {
-        if (!Process.HasExited)
-        {
-            Process.Kill();
-            Process.WaitForExit();
-        }
-    }
-
     public void Dispose()
     {
         if (disposed)
