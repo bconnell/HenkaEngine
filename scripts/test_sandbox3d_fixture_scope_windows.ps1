@@ -119,10 +119,14 @@ if (-not (Test-UsesPrimitiveGalleryArgument -ScriptText $genericModelingText)) {
 if ($packageValidationText -notmatch 'DEFAULT_SCENE_READY ground=1 ground_editable=1 camera=1 showcase_assets=0 diagnostic_entities=0 scene_content=product_native') {
     throw "The packaged normal-startup validator must retain the clean product-native default-scene assertion."
 }
-if (-not (Test-UsesExactArgument -ScriptText $packageValidationText -Argument "--material-stress")) {
-    throw "The packaged non-interactive validator must execute the bounded material-instance stress path."
+$materialStressArguments = 'Arguments = @("--material-stress")'
+$materialStressHandoff = '-Arguments $stressCase.Arguments'
+if (-not $packageValidationText.Contains($materialStressArguments) -or
+    -not $packageValidationText.Contains($materialStressHandoff)) {
+    throw "The packaged non-interactive validator must declare the material stress case and execute stress-case arguments through the shared capture loop."
 }
-if ($packageValidationText -notmatch 'Material stress: typed-overrides=all-supported invalid-edit=retained entity-commit=valid refresh=valid reset=valid\\\.') {
+$materialStressPattern = 'Pattern = "Material stress: typed-overrides=all-supported invalid-edit=retained entity-commit=valid refresh=valid reset=valid\."'
+if (-not $packageValidationText.Contains($materialStressPattern)) {
     throw "The packaged material stress gate must verify the complete material-instance success marker."
 }
 if ($windowsCiWorkflowText -notmatch '(?m)check_packaged_sandbox3d_windows\.ps1\s+-NonInteractive\s+-ProductStartupPrimitiveOnly') {
