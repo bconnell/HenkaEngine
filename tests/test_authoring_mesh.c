@@ -10277,6 +10277,84 @@ cleanup:
     return result ? 1 : fail("transactional loose edge batch extrude");
 }
 
+
+static int test_loose_edge_extrude_large_mixed_material_batch_scales(void)
+{
+    enum { EDGE_COUNT = 128U };
+    const henka_authoring_mesh_desc desc = {
+        EDGE_COUNT * 5U, EDGE_COUNT * 5U, EDGE_COUNT * 2U, 4U};
+    const henka_vec3 direction = {0.0f, 1.0f, 0.0f};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_edge_id edge_ids[EDGE_COUNT];
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    clock_t start;
+    clock_t finish;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < EDGE_COUNT; ++index)
+    {
+        const float x = (float)index * 3.0f;
+        const uint32_t material_region = (uint32_t)(index % 11U);
+        henka_authoring_vertex_id vertices[2] = {
+            HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+        if (henka_authoring_mesh_add_vertex(
+                mesh, (henka_vec3){x, 0.0f, 0.0f},
+                (henka_vec2){0.0f, 0.0f}, material_region,
+                &vertices[0]) != HENKA_SUCCESS ||
+            henka_authoring_mesh_add_vertex(
+                mesh, (henka_vec3){x + 1.0f, 0.0f, 0.0f},
+                (henka_vec2){1.0f, 0.0f}, material_region,
+                &vertices[1]) != HENKA_SUCCESS ||
+            henka_authoring_mesh_add_edge(
+                mesh, vertices[0], vertices[1], (index % 2U) == 0U,
+                &edge_ids[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+
+    before = henka_authoring_mesh_get_counts(mesh);
+    start = clock();
+    if (henka_authoring_mesh_extrude_loose_edges(
+            mesh, edge_ids, EDGE_COUNT, direction, 0.5f, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    finish = clock();
+    if ((double)(finish - start) / (double)CLOCKS_PER_SEC > 4.0)
+    {
+        (void)fprintf(stderr,
+            "128-edge loose-edge batch extrusion exceeded 4 CPU seconds\n");
+        goto cleanup;
+    }
+
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed ||
+        report.created_vertices != EDGE_COUNT * 2U ||
+        report.created_edges != EDGE_COUNT * 3U ||
+        report.created_faces != EDGE_COUNT ||
+        after.vertices != before.vertices + EDGE_COUNT * 2U ||
+        after.edges != before.edges + EDGE_COUNT * 3U ||
+        after.faces != before.faces + EDGE_COUNT ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("large mixed-material loose-edge extrusion scaling");
+}
+
 static int test_loose_edge_extrude_batch_rejection_coverage(void)
 {
     const henka_vec3 direction = {0.0f, 1.0f, 0.0f};
@@ -16016,6 +16094,7 @@ int main(void)
         test_vertex_extrude_supports_configured_large_face() &&
         test_loose_edge_extrude_operation() &&
         test_loose_edge_extrude_batch_operation() &&
+        test_loose_edge_extrude_large_mixed_material_batch_scales() &&
         test_loose_edge_extrude_batch_rejection_coverage() &&
         test_loose_edge_split_operation() &&
         test_loose_edge_split_batch_operation() &&
