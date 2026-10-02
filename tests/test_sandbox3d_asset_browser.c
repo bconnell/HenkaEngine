@@ -37,6 +37,36 @@ static void henka_test_sandbox3d_asset_browser_collection(void)
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect(&manager, HENKA_ASSET_TYPE_MATERIAL, items, 2U) == 0U);
 }
 
+static void henka_test_sandbox3d_asset_browser_platform_path_identity(void)
+{
+    henka_asset_manager manager;
+    henka_asset_texture_entry textures[2];
+    sandbox3d_asset_browser_item items[2];
+    size_t count;
+
+    memset(&manager, 0, sizeof(manager));
+    memset(textures, 0, sizeof(textures));
+    textures[0].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    textures[0].metadata.source_path = "assets/textures/CaseSensitive.png";
+    textures[0].metadata.display_name = "CaseSensitive.png";
+    textures[1].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    textures[1].metadata.source_path = "assets/textures/casesensitive.png";
+    textures[1].metadata.display_name = "casesensitive.png";
+    manager.texture_entries = textures;
+    manager.texture_count = 2U;
+
+    count = sandbox3d_asset_browser_collect(
+        &manager, HENKA_ASSET_TYPE_TEXTURE, items, 2U);
+#if defined(_WIN32)
+    HENKA_TEST_ASSERT(count == 1U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 0U);
+#else
+    HENKA_TEST_ASSERT(count == 2U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 0U);
+    HENKA_TEST_ASSERT(items[1].metadata_index == 1U);
+#endif
+}
+
 static void henka_test_sandbox3d_asset_browser_texture_descriptor_identity(void)
 {
     henka_asset_manager manager;
@@ -531,6 +561,7 @@ static void henka_test_sandbox3d_material_asset_application(void)
 void henka_test_sandbox3d_asset_browser(void)
 {
     henka_test_sandbox3d_asset_browser_collection();
+    henka_test_sandbox3d_asset_browser_platform_path_identity();
     henka_test_sandbox3d_asset_browser_texture_descriptor_identity();
     henka_test_sandbox3d_asset_browser_retry_policy();
     henka_test_sandbox3d_asset_browser_paging();
