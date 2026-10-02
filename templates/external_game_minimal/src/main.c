@@ -526,6 +526,120 @@ static void external_graphical_terrain_destroy(external_graphical_terrain_state*
     state->authored_entity = HENKA_INVALID_ENTITY;
 }
 
+
+static henka_result external_material_instance_workflow(
+    henka_engine* engine,
+    henka_scene* scene,
+    henka_entity entity,
+    henka_shader* shader)
+{
+    const char* material_path = "assets/models/henka_marker.gltf";
+    henka_asset_manager* assets;
+    henka_material_asset* asset = NULL;
+    henka_material_asset* reloaded_asset = NULL;
+    henka_material_instance instance = {0};
+    henka_material definition_material = {0};
+    henka_material effective_material = {0};
+    henka_material scene_material = {0};
+    henka_asset_metadata metadata = {0};
+    uint64_t revision_before = 0U;
+    uint64_t revision_after = 0U;
+    float override_roughness;
+    henka_result result;
+
+    if (engine == NULL || scene == NULL || entity == HENKA_INVALID_ENTITY ||
+        shader == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_assets_load_gltf_material_asset(
+        assets, material_path, shader, &asset);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_get_material_metadata(assets, asset, &metadata);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_get_material_asset_revision(asset, &revision_before);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_get_material_asset_material(asset, &definition_material);
+    if (result != HENKA_SUCCESS || asset == NULL ||
+        metadata.source_path == NULL ||
+        strcmp(metadata.source_path, material_path) != 0 ||
+        revision_before == 0U)
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    }
+
+    override_roughness =
+        definition_material.roughness < 0.5f ? 0.83f : 0.17f;
+    result = henka_assets_create_material_instance(asset, &instance);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_float(
+            &instance, HENKA_MATERIAL_INSTANCE_ROUGHNESS, override_roughness);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_apply_material_instance_to_entity(
+            &instance, scene, entity);
+    if (result == HENKA_SUCCESS)
+        result = henka_scene_get_entity_material(scene, entity, &scene_material);
+    if (result != HENKA_SUCCESS ||
+        fabsf(scene_material.roughness - override_roughness) > 0.0001f)
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    }
+
+    result = henka_assets_reload_material_asset(assets, asset, &reloaded_asset);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_get_material_asset_revision(
+            reloaded_asset, &revision_after);
+    if (result != HENKA_SUCCESS || reloaded_asset != asset ||
+        revision_after <= revision_before)
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    }
+
+    result = henka_assets_refresh_material_instance(&instance);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_get_material_instance_material(
+            &instance, &effective_material);
+    if (result != HENKA_SUCCESS ||
+        instance.definition != asset ||
+        instance.definition_revision != revision_after ||
+        fabsf(effective_material.roughness - override_roughness) > 0.0001f)
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    }
+
+    result = henka_assets_material_instance_reset_override(
+        &instance, HENKA_MATERIAL_INSTANCE_ROUGHNESS);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_get_material_asset_material(
+            asset, &definition_material);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_get_material_instance_material(
+            &instance, &effective_material);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_apply_material_instance_to_entity(
+            &instance, scene, entity);
+    if (result == HENKA_SUCCESS)
+        result = henka_scene_get_entity_material(scene, entity, &scene_material);
+    if (result != HENKA_SUCCESS ||
+        fabsf(effective_material.roughness - definition_material.roughness) > 0.0001f ||
+        fabsf(scene_material.roughness - definition_material.roughness) > 0.0001f)
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    }
+
+    printf(
+        "External public material asset/instance load, override, reload, refresh, and reset workflow passed (revision %llu->%llu).\n",
+        (unsigned long long)revision_before,
+        (unsigned long long)revision_after);
+    return HENKA_SUCCESS;
+}
+
 static henka_result external_authoring_initialize(
     henka_engine* engine,
     external_graphical_terrain_state* state)
@@ -666,6 +780,18 @@ static henka_result external_authoring_initialize(
     if (result != HENKA_SUCCESS)
     {
         printf("External authoring failure: install entity state (%s).\n", henka_result_to_string(result));
+        return result;
+    }
+    result = external_material_instance_workflow(
+        engine,
+        state->scene,
+        state->authored_entity,
+        state->authored_shader);
+    if (result != HENKA_SUCCESS)
+    {
+        printf(
+            "External authoring failure: material asset/instance workflow (%s).\n",
+            henka_result_to_string(result));
         return result;
     }
 
