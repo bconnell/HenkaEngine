@@ -9976,6 +9976,7 @@ henka_result henka_authoring_mesh_extrude_vertex(
     modeling_vertex_fan_face* fan_faces = NULL;
     henka_authoring_vertex_id* fan_vertices = NULL;
     henka_authoring_vertex_id* side_vertices = NULL;
+    henka_authoring_vertex_id* cap = NULL;
     henka_vec2* fan_uvs = NULL;
     bool* fan_edge_hard = NULL;
     bool* visited = NULL;
@@ -9995,6 +9996,7 @@ henka_result henka_authoring_mesh_extrude_vertex(
     size_t boundary_count = 0U;
     size_t side_vertex_count = 0U;
     size_t side_capacity = 0U;
+    size_t cap_bytes = 0U;
     size_t required_faces = 0U;
     size_t required_edges = 0U;
     size_t edge_count;
@@ -10062,7 +10064,7 @@ henka_result henka_authoring_mesh_extrude_vertex(
             continue;
         }
         if (incident_face_count >= desc.max_faces || face->corner_count < 3U ||
-            face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+            face->corner_count > desc.max_face_corners)
         {
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto cleanup;
@@ -10183,6 +10185,18 @@ henka_result henka_authoring_mesh_extrude_vertex(
             result = HENKA_ERROR_OUT_OF_MEMORY;
             goto cleanup;
         }
+    }
+    if (!henka_checked_size_multiply(
+            desc.max_face_corners, sizeof(*cap), &cap_bytes))
+    {
+        result = HENKA_ERROR_LIMIT;
+        goto cleanup;
+    }
+    cap = (henka_authoring_vertex_id*)henka_malloc(cap_bytes);
+    if (cap == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
     }
     boundary_count = 0U;
     for (index = 0U; index < incident_face_count; ++index)
@@ -10310,7 +10324,6 @@ henka_result henka_authoring_mesh_extrude_vertex(
     }
     for (index = 0U; result == HENKA_SUCCESS && index < incident_face_count; ++index)
     {
-        henka_authoring_vertex_id cap[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
         const size_t base = index * desc.max_face_corners;
         const modeling_vertex_fan_face* fan_face = &fan_faces[index];
         const henka_authoring_face* source_face = henka_authoring_mesh_get_face(
@@ -10426,6 +10439,7 @@ cleanup:
     henka_free(fan_edge_hard);
     henka_free(fan_uvs);
     henka_free(fan_vertices);
+    henka_free(cap);
     henka_free(side_vertices);
     henka_free(fan_faces);
     return result;
