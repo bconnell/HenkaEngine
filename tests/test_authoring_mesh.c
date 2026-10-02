@@ -15251,6 +15251,306 @@ cleanup:
     return result ? 1 : fail("boundary edge chain batch split");
 }
 
+
+static int test_boundary_edge_chain_split_large_face_scales(void)
+{
+    enum { CORNER_COUNT = 256U };
+    const henka_authoring_mesh_desc desc = {
+        CORNER_COUNT * 3U, CORNER_COUNT * 4U, 8U, CORNER_COUNT * 2U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[CORNER_COUNT];
+    henka_authoring_edge_id selected_edges[CORNER_COUNT];
+    henka_authoring_vertex_id split_vertices[CORNER_COUNT];
+    henka_authoring_edge_id first_edges[CORNER_COUNT];
+    henka_authoring_edge_id second_edges[CORNER_COUNT];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    clock_t start;
+    clock_t finish;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < CORNER_COUNT; ++index)
+    {
+        const float angle = 6.2831853071795864769f *
+            (float)index / (float)CORNER_COUNT;
+        const henka_vec3 position = {cosf(angle), sinf(angle), 0.0f};
+        if (henka_authoring_mesh_add_vertex(
+                mesh, position, (henka_vec2){position.x, position.y}, 21U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, vertices, CORNER_COUNT, 21U, true, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        const henka_authoring_face* face =
+            henka_authoring_mesh_get_face(mesh, face_id);
+        if (face == NULL || face->corner_count != CORNER_COUNT)
+        {
+            goto cleanup;
+        }
+        memcpy(selected_edges, face->edges, sizeof(selected_edges));
+    }
+    if (henka_authoring_mesh_set_edge_hard(
+            mesh, selected_edges[0], true) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_seam(
+            mesh, selected_edges[0], true) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    before = henka_authoring_mesh_get_counts(mesh);
+    start = clock();
+    if (henka_authoring_mesh_split_boundary_edge_chain(
+            mesh, selected_edges, CORNER_COUNT, 0.25f,
+            split_vertices, first_edges, second_edges, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    finish = clock();
+    if ((double)(finish - start) / (double)CLOCKS_PER_SEC > 4.0)
+    {
+        (void)fprintf(stderr,
+            "256-edge boundary-chain split exceeded 4 CPU seconds\n");
+        goto cleanup;
+    }
+
+    after = henka_authoring_mesh_get_counts(mesh);
+    {
+        const henka_authoring_face* face =
+            henka_authoring_mesh_get_face(mesh, face_id);
+        const henka_authoring_edge* first =
+            henka_authoring_mesh_get_edge(mesh, first_edges[0]);
+        const henka_authoring_edge* second =
+            henka_authoring_mesh_get_edge(mesh, second_edges[0]);
+        if (!report.changed ||
+            report.created_vertices != CORNER_COUNT ||
+            report.created_edges != CORNER_COUNT ||
+            after.vertices != before.vertices + CORNER_COUNT ||
+            after.edges != before.edges + CORNER_COUNT ||
+            after.faces != before.faces ||
+            face == NULL || face->corner_count != CORNER_COUNT * 2U ||
+            face->material_region != 21U || !face->smooth ||
+            first == NULL || second == NULL ||
+            !first->hard || !second->hard || !first->seam || !second->seam ||
+            henka_authoring_mesh_get_vertex(mesh, split_vertices[0]) == NULL ||
+            !henka_authoring_mesh_validate(mesh))
+        {
+            goto cleanup;
+        }
+    }
+
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("large boundary-edge chain split scaling");
+}
+
+static int test_boundary_edge_chain_batch_split_same_face_components(void)
+{
+    enum { CORNER_COUNT = 8U, SELECTED_COUNT = 4U };
+    const henka_authoring_mesh_desc desc = {32U, 64U, 8U, 16U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[CORNER_COUNT];
+    henka_authoring_edge_id selected_edges[SELECTED_COUNT];
+    henka_authoring_vertex_id split_vertices[SELECTED_COUNT];
+    henka_authoring_edge_id first_edges[SELECTED_COUNT];
+    henka_authoring_edge_id second_edges[SELECTED_COUNT];
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < CORNER_COUNT; ++index)
+    {
+        const float angle = 6.2831853071795864769f *
+            (float)index / (float)CORNER_COUNT;
+        const henka_vec3 position = {cosf(angle), sinf(angle), 0.0f};
+        if (henka_authoring_mesh_add_vertex(
+                mesh, position, (henka_vec2){position.x, position.y}, 22U,
+                &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, vertices, CORNER_COUNT, 22U, false, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        const henka_authoring_face* face =
+            henka_authoring_mesh_get_face(mesh, face_id);
+        if (face == NULL)
+        {
+            goto cleanup;
+        }
+        selected_edges[0] = face->edges[0];
+        selected_edges[1] = face->edges[1];
+        selected_edges[2] = face->edges[4];
+        selected_edges[3] = face->edges[5];
+    }
+
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_split_boundary_edge_chains(
+            mesh, selected_edges, SELECTED_COUNT, 0.5f,
+            split_vertices, first_edges, second_edges, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    {
+        const henka_authoring_face* face =
+            henka_authoring_mesh_get_face(mesh, face_id);
+        if (!report.changed ||
+            after.vertices != before.vertices + SELECTED_COUNT ||
+            after.edges != before.edges + SELECTED_COUNT ||
+            after.faces != before.faces ||
+            face == NULL || face->corner_count != CORNER_COUNT + SELECTED_COUNT ||
+            face->material_region != 22U || face->smooth ||
+            !henka_authoring_mesh_validate(mesh))
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < SELECTED_COUNT; ++index)
+    {
+        if (henka_authoring_mesh_get_vertex(mesh, split_vertices[index]) == NULL ||
+            henka_authoring_mesh_get_edge(mesh, first_edges[index]) == NULL ||
+            henka_authoring_mesh_get_edge(mesh, second_edges[index]) == NULL)
+        {
+            goto cleanup;
+        }
+    }
+
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("same-face boundary split components");
+}
+
+static int test_boundary_edge_chain_batch_split_many_components_scales(void)
+{
+    enum { COMPONENT_COUNT = 128U };
+    const henka_authoring_mesh_desc desc = {
+        COMPONENT_COUNT * 8U, COMPONENT_COUNT * 8U,
+        COMPONENT_COUNT * 2U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_edge_id selected_edges[COMPONENT_COUNT];
+    henka_authoring_vertex_id split_vertices[COMPONENT_COUNT];
+    henka_authoring_edge_id first_edges[COMPONENT_COUNT];
+    henka_authoring_edge_id second_edges[COMPONENT_COUNT];
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    clock_t start;
+    clock_t finish;
+    size_t component;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (component = 0U; component < COMPONENT_COUNT; ++component)
+    {
+        const float x = (float)component * 3.0f;
+        const henka_vec3 positions[4] = {
+            {x, 0.0f, 0.0f}, {x + 1.0f, 0.0f, 0.0f},
+            {x + 1.0f, 1.0f, 0.0f}, {x, 1.0f, 0.0f}};
+        henka_authoring_vertex_id local_vertices[4];
+        henka_authoring_face_id local_face = HENKA_AUTHORING_INVALID_ID;
+        size_t corner;
+        for (corner = 0U; corner < 4U; ++corner)
+        {
+            if (henka_authoring_mesh_add_vertex(
+                    mesh, positions[corner],
+                    (henka_vec2){positions[corner].x, positions[corner].y},
+                    (uint32_t)(component % 9U), &local_vertices[corner]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+        if (henka_authoring_mesh_add_face(
+                mesh, local_vertices, 4U, (uint32_t)(component % 9U), true,
+                &local_face) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        {
+            const henka_authoring_face* face =
+                henka_authoring_mesh_get_face(mesh, local_face);
+            if (face == NULL)
+            {
+                goto cleanup;
+            }
+            selected_edges[component] = face->edges[0];
+        }
+    }
+
+    before = henka_authoring_mesh_get_counts(mesh);
+    start = clock();
+    if (henka_authoring_mesh_split_boundary_edge_chains(
+            mesh, selected_edges, COMPONENT_COUNT, 0.5f,
+            split_vertices, first_edges, second_edges, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    finish = clock();
+    if ((double)(finish - start) / (double)CLOCKS_PER_SEC > 4.0)
+    {
+        (void)fprintf(stderr,
+            "128-component boundary-chain split exceeded 4 CPU seconds\n");
+        goto cleanup;
+    }
+
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed ||
+        report.created_vertices != COMPONENT_COUNT ||
+        report.created_edges != COMPONENT_COUNT ||
+        after.vertices != before.vertices + COMPONENT_COUNT ||
+        after.edges != before.edges + COMPONENT_COUNT ||
+        after.faces != before.faces ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (component = 0U; component < COMPONENT_COUNT; ++component)
+    {
+        if (henka_authoring_mesh_get_vertex(mesh, split_vertices[component]) == NULL ||
+            henka_authoring_mesh_get_edge(mesh, first_edges[component]) == NULL ||
+            henka_authoring_mesh_get_edge(mesh, second_edges[component]) == NULL)
+        {
+            goto cleanup;
+        }
+    }
+
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("many-component boundary-chain split scaling");
+}
+
 static int test_obj_export_round_trip(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 32U, 32U, 8U};
@@ -15658,6 +15958,9 @@ int main(void)
         test_connected_quad_strip_loop_cut_batch_operation() &&
         test_boundary_edge_chain_split_operation() &&
         test_boundary_edge_chain_batch_split_operation() &&
+        test_boundary_edge_chain_split_large_face_scales() &&
+        test_boundary_edge_chain_batch_split_same_face_components() &&
+        test_boundary_edge_chain_batch_split_many_components_scales() &&
         test_boundary_edge_extrude_operation() &&
         test_boundary_edge_extrude_supports_configured_large_face() &&
         test_interior_edge_extrude_operation() &&
