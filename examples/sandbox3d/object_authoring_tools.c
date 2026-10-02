@@ -1520,8 +1520,7 @@ static void sandbox3d_authoring_repair_selected_face_identity(
     bool allow_fallback)
 {
     henka_authoring_face_id repaired_face = preferred_face;
-    size_t face_id;
-    if (object == NULL)
+    if (object == NULL || object->mesh == NULL)
     {
         return;
     }
@@ -1530,12 +1529,16 @@ static void sandbox3d_authoring_repair_selected_face_identity(
         repaired_face = HENKA_AUTHORING_INVALID_ID;
         if (allow_fallback)
         {
-            for (face_id = 1U; face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
+            const henka_authoring_mesh_desc desc =
+                henka_authoring_mesh_get_desc(object->mesh);
+            size_t face_slot;
+            for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
             {
-                if (henka_authoring_mesh_get_face(
-                        object->mesh, (henka_authoring_face_id)face_id) != NULL)
+                henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+                if (henka_authoring_mesh_get_face_id_at(
+                        object->mesh, face_slot, &face_id) == HENKA_SUCCESS)
                 {
-                    repaired_face = (henka_authoring_face_id)face_id;
+                    repaired_face = face_id;
                     break;
                 }
             }
@@ -6541,7 +6544,8 @@ henka_result sandbox3d_authoring_object_transform_vertex_regions(
     henka_authoring_mesh* candidate = NULL;
     size_t affected_vertices = 0U;
     size_t transform_index;
-    uint32_t vertex_id;
+    size_t vertex_slot;
+    henka_authoring_mesh_desc desc;
     henka_result result;
 
     if (out_affected_vertices != NULL)
@@ -6565,18 +6569,26 @@ henka_result sandbox3d_authoring_object_transform_vertex_regions(
     {
         return result;
     }
-    for (vertex_id = 1U; vertex_id <= HENKA_AUTHORING_MESH_HARD_MAX_VERTICES; ++vertex_id)
+    desc = henka_authoring_mesh_get_desc(candidate);
+    for (vertex_slot = 0U; vertex_slot < desc.max_vertices; ++vertex_slot)
     {
-        const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
-            candidate, (henka_authoring_vertex_id)vertex_id);
-        const henka_vec3 original_position = vertex != NULL ? vertex->position : (henka_vec3){0.0f, 0.0f, 0.0f};
+        henka_authoring_vertex_id vertex_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_vertex* vertex;
+        henka_vec3 original_position;
         henka_vec3 position;
         bool matched = false;
 
+        if (henka_authoring_mesh_get_vertex_id_at(
+                candidate, vertex_slot, &vertex_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        vertex = henka_authoring_mesh_get_vertex(candidate, vertex_id);
         if (vertex == NULL)
         {
             continue;
         }
+        original_position = vertex->position;
         position = original_position;
         for (transform_index = 0U; transform_index < transform_count; ++transform_index)
         {
