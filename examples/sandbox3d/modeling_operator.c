@@ -41,6 +41,18 @@ static bool sandbox3d_modeling_operator_selected_vertex_contains(
     return false;
 }
 
+static int sandbox3d_modeling_operator_compare_vertex_id(
+    const void* left,
+    const void* right)
+{
+    const henka_authoring_vertex_id left_id =
+        *(const henka_authoring_vertex_id*)left;
+    const henka_authoring_vertex_id right_id =
+        *(const henka_authoring_vertex_id*)right;
+    return left_id < right_id ? -1 : (left_id > right_id ? 1 : 0);
+}
+
+
 static henka_result sandbox3d_modeling_operator_find_first_incident_face(
     const henka_authoring_mesh* mesh,
     henka_authoring_vertex_id vertex_id,
@@ -99,11 +111,11 @@ static henka_result sandbox3d_modeling_operator_apply_face_normal(
     float distance)
 {
     const henka_authoring_face* face;
-    henka_authoring_vertex_id unique_vertices[
-        HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_authoring_vertex_id* unique_vertices = NULL;
     henka_vec3 normal;
     size_t unique_count = 0U;
     size_t corner;
+    henka_result result = HENKA_SUCCESS;
 
     if (source == NULL || candidate == NULL || !isfinite(distance) ||
         fabsf(distance) > 100.0f)
@@ -111,8 +123,7 @@ static henka_result sandbox3d_modeling_operator_apply_face_normal(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     face = henka_authoring_mesh_get_face(source, face_id);
-    if (face == NULL || face->vertices == NULL || face->corner_count < 3U ||
-        face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+    if (face == NULL || face->vertices == NULL || face->corner_count < 3U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -137,29 +148,32 @@ static henka_result sandbox3d_modeling_operator_apply_face_normal(
         }
         normal = henka_vec3_normalize(cross);
     }
+
+    unique_vertices = henka_calloc(face->corner_count, sizeof(*unique_vertices));
+    if (unique_vertices == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(
+        unique_vertices,
+        face->vertices,
+        face->corner_count * sizeof(*unique_vertices));
+    qsort(
+        unique_vertices,
+        face->corner_count,
+        sizeof(*unique_vertices),
+        sandbox3d_modeling_operator_compare_vertex_id);
+
     for (corner = 0U; corner < face->corner_count; ++corner)
     {
-        henka_authoring_vertex_id vertex_id = face->vertices[corner];
+        const henka_authoring_vertex_id vertex_id = unique_vertices[corner];
         const henka_authoring_vertex* candidate_vertex;
-        size_t index;
-        bool seen = false;
-        for (index = 0U; index < unique_count; ++index)
-        {
-            if (unique_vertices[index] == vertex_id)
-            {
-                seen = true;
-                break;
-            }
-        }
-        if (seen)
+
+        if (corner > 0U && unique_vertices[corner - 1U] == vertex_id)
         {
             continue;
         }
-        if (unique_count >= sizeof(unique_vertices) / sizeof(unique_vertices[0]))
-        {
-            return HENKA_ERROR_LIMIT;
-        }
-        unique_vertices[unique_count++] = vertex_id;
+        ++unique_count;
         candidate_vertex = henka_authoring_mesh_get_vertex(candidate, vertex_id);
         if (candidate_vertex == NULL ||
             henka_authoring_mesh_set_vertex_position(
@@ -169,10 +183,18 @@ static henka_result sandbox3d_modeling_operator_apply_face_normal(
                     candidate_vertex->position,
                     henka_vec3_scale(normal, distance))) != HENKA_SUCCESS)
         {
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
         }
     }
-    return HENKA_SUCCESS;
+    if (unique_count != face->corner_count)
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+cleanup:
+    henka_free(unique_vertices);
+    return result;
 }
 
 static bool sandbox3d_modeling_operator_faces_share_vertex(

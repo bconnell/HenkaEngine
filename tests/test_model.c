@@ -800,7 +800,8 @@ static void henka_test_authoring_mesh_renderer_bridge(void)
     henka_authoring_mesh* source = NULL;
     henka_authoring_mesh_desc desc = {3U, 3U, 1U, 3U};
     henka_authoring_mesh_desc box_desc = {64U, 128U, 64U, 8U};
-    henka_authoring_vertex_id vertices[3];
+    henka_authoring_mesh_desc large_face_desc = {64U, 128U, 16U, 40U};
+    henka_authoring_vertex_id vertices[40];
     henka_authoring_vertex_id face_vertices[] = {1U, 2U, 3U};
     henka_authoring_face_id face_id;
     henka_texture_residency_diagnostics residency;
@@ -840,6 +841,30 @@ static void henka_test_authoring_mesh_renderer_bridge(void)
         &box_desc, 2.0f, 2.0f, 2.0f, &source) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_mesh_create_from_authoring_mesh(engine, source, &mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(mesh != NULL);
+    henka_mesh_destroy(mesh);
+    mesh = NULL;
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(
+        &large_face_desc, &source) == HENKA_SUCCESS);
+    {
+        henka_authoring_vertex_id large_vertices[40];
+        for (size_t index = 0U; index < 40U; ++index)
+        {
+            const float angle = 6.2831853071795864769f * (float)index / 40.0f;
+            const henka_vec3 position = {cosf(angle), sinf(angle), 0.0f};
+            HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+                source, position, (henka_vec2){position.x, position.y}, 9U,
+                &large_vertices[index]) == HENKA_SUCCESS);
+        }
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+            source, large_vertices, 40U, 9U, true, &face_id) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(source));
+        HENKA_TEST_ASSERT(henka_mesh_create_from_authoring_mesh(
+            engine, source, &mesh) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(mesh != NULL);
+    }
     henka_mesh_destroy(mesh);
     mesh = NULL;
     henka_authoring_mesh_destroy(source);
