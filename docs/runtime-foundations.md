@@ -476,7 +476,7 @@ Imported transmission-scalar and volume-thickness textures remain manager-owned 
 
 The Sandbox Object Details panel creates a bounded persistent material instance for selected imported entities that retain material-definition identity.
 
-Per-entity overrides survive definition revision changes. Reimport resolves through the definition identity using the standalone material cache or owning glTF-scene transaction.
+Per-entity overrides survive definition revision changes. Reimport resolves through the definition identity using the standalone material cache or owning glTF-scene transaction. Object Details material undo/redo snapshots are revision-scoped and are cleared only after a newer definition revision has refreshed and published successfully, so history cannot restore state captured against a superseded source definition.
 
 Editor controls expose:
 
