@@ -11899,6 +11899,7 @@ static void henka_test_sandbox3d_object_authoring_high_logical_id_selection(void
     henka_authoring_edge_id high_edge_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_face_id stable_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_face_id high_face_id = HENKA_AUTHORING_INVALID_ID;
+    uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
     henka_entity entity;
     size_t index;
 
@@ -11982,22 +11983,31 @@ static void henka_test_sandbox3d_object_authoring_high_logical_id_selection(void
         object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
         object, high_vertex_id, false) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(sandbox3d_authoring_object_component_selected(
-        object, high_vertex_id));
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 0U, &selected_id) == HENKA_SUCCESS &&
+        selected_id == high_vertex_id);
 
     sandbox3d_authoring_object_set_selection_mode(
         object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
         object, high_edge_id, false) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(sandbox3d_authoring_object_component_selected(
-        object, high_edge_id));
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 0U, &selected_id) == HENKA_SUCCESS &&
+        selected_id == high_edge_id);
 
     sandbox3d_authoring_object_set_selection_mode(
         object, SANDBOX3D_AUTHORING_SELECTION_FACE);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
         object, high_face_id, false) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(sandbox3d_authoring_object_component_selected(
-        object, high_face_id));
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 0U, &selected_id) == HENKA_SUCCESS &&
+        selected_id == high_face_id);
 
     sandbox3d_authoring_object_destroy(object);
     henka_authoring_mesh_destroy(source);
