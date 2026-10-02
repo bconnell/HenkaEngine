@@ -31,20 +31,28 @@ $packageValidationText = Get-Content -LiteralPath $packageValidationPath -Raw
 $genericModelingText = Get-Content -LiteralPath $genericModelingScriptPath -Raw
 $windowsCiWorkflowText = Get-Content -LiteralPath $windowsCiWorkflowPath -Raw
 
-function Test-UsesPrimitiveGalleryArgument {
-    param([Parameter(Mandatory = $true)][string]$ScriptText)
+function Test-UsesExactArgument {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptText,
+        [Parameter(Mandatory = $true)][string]$Argument
+    )
 
     $argumentLists = [System.Text.RegularExpressions.Regex]::Matches(
         $ScriptText,
         '(?is)-Arguments\s+@\((?<arguments>[^)]*)\)')
     foreach ($argumentList in $argumentLists) {
-        if ([System.Text.RegularExpressions.Regex]::IsMatch(
-                $argumentList.Groups['arguments'].Value,
-                '(?:''--primitive-gallery''|"--primitive-gallery")')) {
+        $arguments = $argumentList.Groups['arguments'].Value
+        if ($arguments.Contains("'" + $Argument + "'") -or
+            $arguments.Contains('"' + $Argument + '"')) {
             return $true
         }
     }
     return $false
+}
+
+function Test-UsesPrimitiveGalleryArgument {
+    param([Parameter(Mandatory = $true)][string]$ScriptText)
+    return Test-UsesExactArgument -ScriptText $ScriptText -Argument "--primitive-gallery"
 }
 
 # Keep the validator independent of PowerShell string-literal quote style and
@@ -111,6 +119,12 @@ if (-not (Test-UsesPrimitiveGalleryArgument -ScriptText $genericModelingText)) {
 if ($packageValidationText -notmatch 'DEFAULT_SCENE_READY ground=1 ground_editable=1 camera=1 showcase_assets=0 diagnostic_entities=0 scene_content=product_native') {
     throw "The packaged normal-startup validator must retain the clean product-native default-scene assertion."
 }
+if (-not (Test-UsesExactArgument -ScriptText $packageValidationText -Argument "--material-stress")) {
+    throw "The packaged non-interactive validator must execute the bounded material-instance stress path."
+}
+if ($packageValidationText -notmatch 'Material stress: typed-overrides=all-supported invalid-edit=retained entity-commit=valid refresh=valid reset=valid\\\.') {
+    throw "The packaged material stress gate must verify the complete material-instance success marker."
+}
 if ($windowsCiWorkflowText -notmatch '(?m)check_packaged_sandbox3d_windows\.ps1\s+-NonInteractive\s+-ProductStartupPrimitiveOnly') {
     throw "Hosted Windows validation must execute the packaged clean-default startup gate independently of the gallery workflow."
 }
@@ -118,3 +132,4 @@ if ($windowsCiWorkflowText -notmatch '(?m)check_packaged_sandbox3d_windows\.ps1\
 Write-Output "[pass] Sandbox3D residency fixtures are excluded from normal builds and generated only by the explicit stress target."
 Write-Output "[pass] Visible native modeling explicitly uses the bounded primitive gallery; quote-style parser controls passed."
 Write-Output "[pass] Hosted packaged startup retains an independent clean product-native default-scene gate."
+Write-Output "[pass] Packaged validation executes and verifies the bounded material-instance stress path."
