@@ -55,8 +55,11 @@ If source parsing, path resolution, upload, or another candidate step fails,
 the existing mesh payload and asset metadata remain unchanged. A source failure
 that enters the cache uses a path-specific manager-owned diagnostic mesh rather
 than the manager's shared fallback object. Equivalent canonical path spellings
-therefore return one stable borrowed mesh identity. Failed retry leaves that
-identity, payload, and metadata unchanged and leaves the retry output null.
+therefore return one stable borrowed mesh identity. That canonical mesh path
+is bound to the importer family that first created the cache entry (OBJ or
+glTF); calls through the other mesh load, reload, or retry API are rejected
+instead of aliasing the existing payload. Failed retry leaves that identity,
+payload, and metadata unchanged and leaves the retry output null.
 `henka_assets_retry_failed_obj_mesh` and
 `henka_assets_retry_failed_gltf_mesh` replace the diagnostic payload in place
 after a successful candidate load, so existing scene references observe the
