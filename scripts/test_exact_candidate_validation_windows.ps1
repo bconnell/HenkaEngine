@@ -206,6 +206,11 @@ exit 0
     }
     Write-Host "[pass] Exact-candidate stages terminate their process tree on timeout."
 
+    # The timeout failure is an intentional negative control. Reset the native
+    # process exit status so the enclosing PowerShell regression reports its
+    # own assertion result instead of leaking the expected child failure.
+    $global:LASTEXITCODE = 0
+
     Write-Host "Exact-candidate orchestration regression passed."
 } finally {
     if (Test-Path -LiteralPath $fixture) {
