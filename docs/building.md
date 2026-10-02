@@ -207,10 +207,12 @@ CTest executions use a finite per-test timeout (300 seconds by default), while
 configure/build/test command invocations also have an outer command timeout so
 one deadlocked test or tool cannot consume the entire validation job. Exact
 candidate validation likewise bounds each build, test, and package child stage
-and terminates its process tree on timeout. Hosted Windows CI adds tighter
-step-level budgets around the normally short build, package, graphical smoke,
-Release-test, and external-template stages so failures are localized before the
-whole-job timeout.
+and terminates its process tree on timeout. The normal test path writes fresh
+build provenance after its successful test pass, so hosted CI packages that
+proven artifact directly instead of performing a redundant second Debug build.
+Hosted Windows CI adds tighter step-level budgets around the normally short
+build, package, graphical smoke, Release-test, and external-template stages so
+failures are localized before the whole-job timeout.
 Ambiguous selections and script-backed tests keep the broader build fallback.
 When the existing CMake cache still matches the repository and dependency
 configuration, the explicit configure step is skipped; the normal build
