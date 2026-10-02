@@ -24,7 +24,10 @@ Each mesh owns fixed-capacity physical arrays for vertices, edges, and faces,
 plus active counts. Each component class also owns a bounded open-addressing
 map with entries containing a logical ID, physical slot, and explicit map state.
 The maps are allocated with the mesh, use checked capacity arithmetic, and do
-not grow during normal lookup or editing.
+not grow during normal lookup or editing. Read-only inverse slot queries expose
+that same canonical map to bounded editor caches and scratch algorithms. Those
+slots are transient storage indexes only; logical IDs remain the persisted and
+user-visible identity.
 
 The endpoint-pair lookup for undirected edges remains separate from logical-ID
 resolution. It maps a canonical low/high vertex pair to an edge ID and is
