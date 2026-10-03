@@ -2,6 +2,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#if defined(_WIN32) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
+
 #include "test_suite.h"
 
 #include <henka/memory.h>
@@ -12,6 +16,32 @@
 #include "../examples/sandbox3d/modeling_operator.h"
 #include "../examples/sandbox3d/modeling_selection_commands.h"
 #include "../examples/sandbox3d/object_authoring_tools.h"
+
+static bool henka_test_debug_heap_is_valid(void)
+{
+#if defined(_WIN32) && defined(_DEBUG)
+    static const int report_types[] = {_CRT_WARN, _CRT_ERROR, _CRT_ASSERT};
+    int previous_modes[sizeof(report_types) / sizeof(report_types[0])];
+    _HFILE previous_files[sizeof(report_types) / sizeof(report_types[0])];
+    size_t index;
+    bool valid;
+
+    for (index = 0U; index < sizeof(report_types) / sizeof(report_types[0]); ++index)
+    {
+        previous_files[index] = _CrtSetReportFile(report_types[index], _CRTDBG_FILE_STDERR);
+        previous_modes[index] = _CrtSetReportMode(report_types[index], _CRTDBG_MODE_FILE);
+    }
+    valid = _CrtCheckMemory() != 0;
+    for (index = sizeof(report_types) / sizeof(report_types[0]); index > 0U; --index)
+    {
+        _CrtSetReportMode(report_types[index - 1U], previous_modes[index - 1U]);
+        (void)_CrtSetReportFile(report_types[index - 1U], previous_files[index - 1U]);
+    }
+    return valid;
+#else
+    return true;
+#endif
+}
 
 static size_t henka_test_quad_grid_vertex_index(
     size_t column,
@@ -402,6 +432,88 @@ static void henka_test_sandbox3d_object_authoring_triangulate_face(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_triangulates_closed_face(void)
+{
+    henka_engine_config config = {0};
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    bool passed = false;
+
+    config.application_name = "Henka Closed-Manifold Face Triangulation Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_authoring_mesh_create_box(&desc, 2.0f, 2.0f, 2.0f, &source) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_id_at(source, 0U, &face_id) != HENKA_SUCCESS ||
+        henka_test_create_authoring_object_from_source(
+            engine, scene, source, "Closed-Manifold Triangulation", &entity, &object) !=
+            HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+    if (sandbox3d_authoring_object_select_component(object, face_id, false) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    if (before.vertices != 8U || before.edges != 12U || before.faces != 6U ||
+        sandbox3d_authoring_object_triangulate_selected_face(object) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    if (after.vertices != before.vertices || after.edges != before.edges + 1U ||
+        after.faces != before.faces + 1U ||
+        henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object), face_id) == NULL ||
+        henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object), face_id)->corner_count != 3U ||
+        !henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)) ||
+        sandbox3d_authoring_object_get_selected_component_count(object) != 1U ||
+        sandbox3d_authoring_object_get_selected_component_at(object, 0U, &selected_id) !=
+            HENKA_SUCCESS || selected_id != face_id)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_authoring_object_undo(object) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object)).faces !=
+            before.faces ||
+        sandbox3d_authoring_object_redo(object) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object)).faces !=
+            after.faces ||
+        !henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)))
+    {
+        goto cleanup;
+    }
+    passed = true;
+
+cleanup:
+    if (!passed)
+    {
+        (void)fprintf(stderr,
+            "closed-manifold Sandbox face triangulation, selection, or history failed\n");
+        ++g_henka_test_failures;
+    }
+    if (source != NULL) henka_authoring_mesh_destroy(source);
+    henka_test_destroy_authoring_object(scene, entity, object);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_poke_face(void)
 {
     henka_engine_config config = {0};
@@ -649,10 +761,37 @@ static void henka_test_sandbox3d_modeling_operator_triangulate_faces(void)
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
         &session, object, SANDBOX3D_MODELING_OPERATOR_TRIANGULATE) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
-        &session, 0.0f, false, false) == HENKA_ERROR_INVALID_ARGUMENT);
-    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
-        sandbox3d_authoring_object_get_mesh(object)).faces == before.faces);
-    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
+        &session, 0.0f, false, false) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices);
+    HENKA_TEST_ASSERT(after.edges == before.edges);
+    HENKA_TEST_ASSERT(after.faces == before.faces);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices);
+    HENKA_TEST_ASSERT(after.edges == before.edges + 2U);
+    HENKA_TEST_ASSERT(after.faces == before.faces + 2U);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+        sandbox3d_authoring_object_get_mesh(object), face_ids[0])->corner_count == 3U);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+        sandbox3d_authoring_object_get_mesh(object), shared_vertex_face_id)->corner_count == 3U);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices);
+    HENKA_TEST_ASSERT(after.edges == before.edges);
+    HENKA_TEST_ASSERT(after.faces == before.faces);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+        sandbox3d_authoring_object_get_mesh(object), face_ids[0])->corner_count == 5U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices);
+    HENKA_TEST_ASSERT(after.edges == before.edges + 2U);
+    HENKA_TEST_ASSERT(after.faces == before.faces + 2U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
 
     sandbox3d_modeling_operator_reset(&session);
     henka_test_destroy_authoring_object(scene, entity, object);
@@ -1707,6 +1846,101 @@ static void henka_test_sandbox3d_modeling_operator_bevel_faces(void)
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
 
     sandbox3d_modeling_operator_reset(&session);
+    henka_test_destroy_authoring_object(scene, entity, object);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
+static void henka_test_sandbox3d_face_selection_supports_monotonic_ids_beyond_capacity(void)
+{
+    henka_engine_config config = {0};
+    const henka_authoring_mesh_desc desc = {3U, 3U, 8U, 3U};
+    henka_authoring_vertex_id vertices[3] = {0U, 0U, 0U};
+    henka_authoring_vertex_id face_vertices[3] = {0U, 0U, 0U};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    uint32_t face_selection_id = HENKA_AUTHORING_INVALID_ID;
+    uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    size_t index;
+
+    config.application_name = "Henka Stable Face Selection ID Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f},
+        0U, &vertices[0]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f},
+        0U, &vertices[1]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){0.0f, 1.0f, 0.0f}, (henka_vec2){0.0f, 1.0f},
+        0U, &vertices[2]) == HENKA_SUCCESS);
+    face_vertices[0] = vertices[0];
+    face_vertices[1] = vertices[1];
+    face_vertices[2] = vertices[2];
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+        source, face_vertices, 3U, 0U, true, &face_id) == HENKA_SUCCESS);
+    for (index = 0U; index < 64U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_authoring_mesh_remove_face(source, face_id) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+            source, face_vertices, 3U, 0U, true, &face_id) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT((size_t)face_id > desc.max_faces);
+    HENKA_TEST_ASSERT((size_t)face_id / 64U >= 1U);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(source));
+    HENKA_TEST_ASSERT(henka_test_create_authoring_object_from_source(
+        engine, scene, source, "Monotonic Face Selection", &entity, &object) == HENKA_SUCCESS);
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+    face_selection_id = (uint32_t)face_id;
+    {
+        const henka_result select_result = sandbox3d_authoring_object_select_component(
+            object, face_selection_id, false);
+        if (select_result != HENKA_SUCCESS)
+        {
+            (void)fprintf(stderr,
+                "live face selection rejected monotonic ID %u beyond physical capacity: %d\n",
+                (unsigned int)face_selection_id,
+                (int)select_result);
+            ++g_henka_test_failures;
+            goto cleanup;
+        }
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_replace_component_selection(
+        object, &face_selection_id, 1U, face_selection_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 0U, &selected_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(selected_id == face_selection_id);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_all_components(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 0U, &selected_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(selected_id == face_selection_id);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_invert_component_selection(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_replace_component_selection(
+        object, &face_selection_id, 1U, face_selection_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+        object, 0U, &selected_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(selected_id == face_selection_id);
+    HENKA_TEST_ASSERT(henka_test_debug_heap_is_valid());
+
+cleanup:
+    if (source != NULL) henka_authoring_mesh_destroy(source);
     henka_test_destroy_authoring_object(scene, entity, object);
     henka_scene_destroy(scene);
     henka_engine_destroy(engine);
@@ -12166,6 +12400,7 @@ void henka_test_sandbox3d_object_authoring(void)
 {
     henka_test_sandbox3d_object_authoring_scene_policy();
     henka_test_sandbox3d_object_authoring_triangulate_face();
+    henka_test_sandbox3d_object_authoring_triangulates_closed_face();
     henka_test_sandbox3d_object_authoring_poke_face();
     henka_test_sandbox3d_modeling_operator_triangulate_face();
     henka_test_sandbox3d_modeling_operator_triangulate_faces();
@@ -12230,6 +12465,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_real_obj_import_bridge();
     henka_test_sandbox3d_object_authoring_rejects_unquantizable_position();
     henka_test_sandbox3d_object_authoring_component_selection();
+    henka_test_sandbox3d_face_selection_supports_monotonic_ids_beyond_capacity();
     henka_test_sandbox3d_object_authoring_hover_query_preserves_selection();
     henka_test_sandbox3d_object_authoring_edge_ring_exact_grid();
     henka_test_sandbox3d_object_authoring_edge_loop_exact_grid();

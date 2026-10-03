@@ -2,6 +2,7 @@
 
 #include <float.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,34 @@
 
 #include "../core/checked.h"
 #include "authoring_mesh_internal.h"
+#include "../core/memory_internal.h"
+
+static void modeling_flip_faces_diagnostic(
+    const henka_authoring_mesh* mesh,
+    const char* stage)
+{
+    const char* enabled = getenv("HENKA_AUTOMATION_DIAGNOSTICS");
+    if (enabled != NULL && strcmp(enabled, "1") == 0)
+    {
+        henka_memory_diagnostic_check_heap(stage);
+        const henka_authoring_mesh_counts counts = mesh != NULL
+            ? henka_authoring_mesh_get_counts(mesh)
+            : (henka_authoring_mesh_counts){0};
+        const henka_authoring_mesh_desc desc = mesh != NULL
+            ? henka_authoring_mesh_get_desc(mesh)
+            : (henka_authoring_mesh_desc){0};
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC mesh-face-flip stage=%s active_vertices=%zu active_edges=%zu active_faces=%zu capacity_vertices=%zu capacity_edges=%zu capacity_faces=%zu\n",
+            stage,
+            counts.vertices,
+            counts.edges,
+            counts.faces,
+            desc.max_vertices,
+            desc.max_edges,
+            desc.max_faces);
+        fflush(stdout);
+    }
+}
 
 static henka_authoring_edge_id modeling_find_edge_between_vertices(
     const henka_authoring_mesh* mesh,
@@ -8309,6 +8338,8 @@ henka_result henka_authoring_mesh_flip_faces(
     size_t other_index;
     henka_result result;
 
+    modeling_flip_faces_diagnostic(mesh, "api-enter");
+
     modeling_report_reset(out_report);
     if (mesh == NULL || face_ids == NULL || face_count == 0U)
     {
@@ -8318,10 +8349,12 @@ henka_result henka_authoring_mesh_flip_faces(
     {
         return HENKA_ERROR_LIMIT;
     }
+    modeling_flip_faces_diagnostic(mesh, "source-validate-begin");
     if (!henka_authoring_mesh_validate(mesh))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    modeling_flip_faces_diagnostic(mesh, "source-validate-end");
     for (index = 0U; index < face_count; ++index)
     {
         if (!modeling_face_is_valid(mesh, face_ids[index]))
@@ -8337,22 +8370,28 @@ henka_result henka_authoring_mesh_flip_faces(
         }
     }
     before = henka_authoring_mesh_get_counts(mesh);
+    modeling_flip_faces_diagnostic(mesh, "candidate-clone-begin");
     result = henka_authoring_mesh_clone(mesh, &candidate);
+    modeling_flip_faces_diagnostic(candidate, "candidate-clone-end");
     for (index = 0U; result == HENKA_SUCCESS && index < face_count; ++index)
     {
         result = henka_authoring_mesh_reverse_face_winding_internal(
             candidate, face_ids[index]);
     }
+    modeling_flip_faces_diagnostic(candidate, "candidate-validate-begin");
     if (result == HENKA_SUCCESS &&
         (!henka_authoring_mesh_validate(candidate) ||
          !modeling_face_geometry_is_valid(candidate)))
     {
         result = HENKA_ERROR_INVALID_ARGUMENT;
     }
+    modeling_flip_faces_diagnostic(candidate, "candidate-validate-end");
     if (result == HENKA_SUCCESS)
     {
         after = henka_authoring_mesh_get_counts(candidate);
+        modeling_flip_faces_diagnostic(mesh, "source-copy-begin");
         result = henka_authoring_mesh_copy(mesh, candidate);
+        modeling_flip_faces_diagnostic(mesh, "source-copy-end");
         if (result == HENKA_SUCCESS)
         {
             modeling_report_count_delta(&before, &after, out_report);
@@ -9438,6 +9477,7 @@ henka_result henka_authoring_mesh_extrude_face_region(
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
     henka_authoring_face_id* sorted_face_ids = NULL;
+    size_t* face_corner_offsets = NULL;
     modeling_face_region_face* faces = NULL;
     modeling_face_region_vertex* vertices = NULL;
     henka_authoring_vertex_id* face_vertex_ids = NULL;
@@ -9449,7 +9489,17 @@ henka_result henka_authoring_mesh_extrude_face_region(
     henka_vec3 normal_sum = {0.0f, 0.0f, 0.0f};
     henka_vec3 offset;
     size_t face_corner_capacity;
-    size_t flat_corner_count;
+    size_t flat_corner_count = 0U;
+    size_t face_corner_offset_count;
+    size_t sorted_face_ids_bytes;
+    size_t face_corner_offsets_bytes;
+    size_t faces_bytes;
+    size_t updates_bytes;
+    size_t vertices_bytes;
+    size_t face_vertex_ids_bytes;
+    size_t face_duplicate_ids_bytes;
+    size_t face_uvs_bytes;
+    size_t boundaries_bytes;
     size_t face_index;
     size_t vertex_count = 0U;
     size_t boundary_count = 0U;
@@ -9466,37 +9516,38 @@ henka_result henka_authoring_mesh_extrude_face_region(
     }
     desc = henka_authoring_mesh_get_desc(mesh);
     if (face_count > desc.max_faces || desc.max_face_corners == 0U ||
-        desc.max_face_corners > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+        desc.max_face_corners > HENKA_AUTHORING_MESH_HARD_MAX_VERTICES)
     {
         return HENKA_ERROR_LIMIT;
     }
     face_corner_capacity = desc.max_face_corners;
-    if (!henka_checked_size_multiply(face_count, face_corner_capacity, &flat_corner_count))
+    if (!henka_checked_size_add(face_count, 1U, &face_corner_offset_count) ||
+        !henka_checked_size_multiply(
+            face_count, sizeof(*sorted_face_ids), &sorted_face_ids_bytes) ||
+        !henka_checked_size_multiply(
+            face_corner_offset_count, sizeof(*face_corner_offsets),
+            &face_corner_offsets_bytes) ||
+        !henka_checked_size_multiply(face_count, sizeof(*faces), &faces_bytes) ||
+        !henka_checked_size_multiply(face_count, sizeof(*updates), &updates_bytes))
     {
         return HENKA_ERROR_LIMIT;
     }
-    sorted_face_ids = henka_malloc(face_count * sizeof(*sorted_face_ids));
-    faces = henka_calloc(face_count, sizeof(*faces));
-    vertices = henka_calloc(flat_corner_count, sizeof(*vertices));
-    face_vertex_ids = henka_malloc(flat_corner_count * sizeof(*face_vertex_ids));
-    face_duplicate_ids = henka_malloc(flat_corner_count * sizeof(*face_duplicate_ids));
-    face_uvs = henka_malloc(flat_corner_count * sizeof(*face_uvs));
-    boundaries = henka_calloc(flat_corner_count, sizeof(*boundaries));
-    updates = henka_calloc(face_count, sizeof(*updates));
-    if (sorted_face_ids == NULL || faces == NULL || vertices == NULL ||
-        face_vertex_ids == NULL || face_duplicate_ids == NULL || face_uvs == NULL ||
-        boundaries == NULL || updates == NULL)
+    sorted_face_ids = henka_malloc(sorted_face_ids_bytes);
+    face_corner_offsets = henka_malloc(face_corner_offsets_bytes);
+    faces = henka_calloc(1U, faces_bytes);
+    updates = henka_calloc(1U, updates_bytes);
+    if (sorted_face_ids == NULL || face_corner_offsets == NULL ||
+        faces == NULL || updates == NULL)
     {
         result = HENKA_ERROR_OUT_OF_MEMORY;
         goto cleanup;
     }
-    memcpy(sorted_face_ids, face_ids, face_count * sizeof(*sorted_face_ids));
+    memcpy(sorted_face_ids, face_ids, sorted_face_ids_bytes);
     qsort(sorted_face_ids, face_count, sizeof(*sorted_face_ids), modeling_vertex_id_compare);
     for (face_index = 0U; face_index < face_count; ++face_index)
     {
         const henka_authoring_face* source = henka_authoring_mesh_get_face(
             mesh, sorted_face_ids[face_index]);
-        size_t corner;
         if (source == NULL || source->corner_count < 3U ||
             source->corner_count > face_corner_capacity ||
             (face_index > 0U && sorted_face_ids[face_index] == sorted_face_ids[face_index - 1U]))
@@ -9504,11 +9555,50 @@ henka_result henka_authoring_mesh_extrude_face_region(
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto cleanup;
         }
+        face_corner_offsets[face_index] = flat_corner_count;
+        if (!henka_checked_size_add(
+                flat_corner_count, source->corner_count, &flat_corner_count))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
+    }
+    face_corner_offsets[face_count] = flat_corner_count;
+    if (!henka_checked_size_multiply(
+            flat_corner_count, sizeof(*vertices), &vertices_bytes) ||
+        !henka_checked_size_multiply(
+            flat_corner_count, sizeof(*face_vertex_ids), &face_vertex_ids_bytes) ||
+        !henka_checked_size_multiply(
+            flat_corner_count, sizeof(*face_duplicate_ids), &face_duplicate_ids_bytes) ||
+        !henka_checked_size_multiply(
+            flat_corner_count, sizeof(*face_uvs), &face_uvs_bytes) ||
+        !henka_checked_size_multiply(
+            flat_corner_count, sizeof(*boundaries), &boundaries_bytes))
+    {
+        result = HENKA_ERROR_LIMIT;
+        goto cleanup;
+    }
+    vertices = henka_calloc(1U, vertices_bytes);
+    face_vertex_ids = henka_malloc(face_vertex_ids_bytes);
+    face_duplicate_ids = henka_malloc(face_duplicate_ids_bytes);
+    face_uvs = henka_malloc(face_uvs_bytes);
+    boundaries = henka_calloc(1U, boundaries_bytes);
+    if (vertices == NULL || face_vertex_ids == NULL || face_duplicate_ids == NULL ||
+        face_uvs == NULL || boundaries == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    for (face_index = 0U; face_index < face_count; ++face_index)
+    {
+        const henka_authoring_face* source = henka_authoring_mesh_get_face(
+            mesh, sorted_face_ids[face_index]);
+        size_t corner;
         faces[face_index].face_id = source->id;
         faces[face_index].corner_count = source->corner_count;
-        faces[face_index].vertices = &face_vertex_ids[face_index * face_corner_capacity];
-        faces[face_index].duplicate_vertices = &face_duplicate_ids[face_index * face_corner_capacity];
-        faces[face_index].uvs = &face_uvs[face_index * face_corner_capacity];
+        faces[face_index].vertices = &face_vertex_ids[face_corner_offsets[face_index]];
+        faces[face_index].duplicate_vertices = &face_duplicate_ids[face_corner_offsets[face_index]];
+        faces[face_index].uvs = &face_uvs[face_corner_offsets[face_index]];
         faces[face_index].material_region = source->material_region;
         faces[face_index].smooth = source->smooth;
         for (corner = 0U; corner < source->corner_count; ++corner)
@@ -9745,6 +9835,7 @@ henka_result henka_authoring_mesh_extrude_face_region(
 
 cleanup:
     henka_authoring_mesh_destroy(candidate);
+    henka_free(face_corner_offsets);
     henka_free(updates);
     henka_free(boundaries);
     henka_free(face_uvs);

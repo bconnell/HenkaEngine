@@ -1828,9 +1828,7 @@ static henka_result henka_mesh_create_from_authoring_surface_source(
         {
             continue;
         }
-        if (face->corner_count < 3U ||
-            face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS ||
-            face->corner_count > SIZE_MAX / 3U)
+        if (face->corner_count < 3U || face->corner_count > SIZE_MAX / 3U)
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }

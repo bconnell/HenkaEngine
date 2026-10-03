@@ -3851,7 +3851,7 @@ cleanup:
 
 static int test_face_region_extrude_operation(void)
 {
-    const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 8U};
+    const henka_authoring_mesh_desc desc = {32U, 64U, 32U, 40U};
     const henka_vec3 positions[6] = {
         {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
         {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {2.0f, 1.0f, 0.0f}};
@@ -3867,6 +3867,7 @@ static int test_face_region_extrude_operation(void)
     henka_authoring_mesh_counts after_counts;
     henka_authoring_face_id external_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_vec3 external_before_position = {0.0f, 0.0f, 0.0f};
+    henka_result operation_result;
     size_t index;
     size_t corner;
     int result = 0;
@@ -3903,10 +3904,20 @@ static int test_face_region_extrude_operation(void)
         }
     }
     counts = henka_authoring_mesh_get_counts(mesh);
-    if (counts.vertices != 6U || counts.edges != 7U || counts.faces != 2U ||
-        henka_authoring_mesh_extrude_face_region(
-            mesh, selected_faces, 2U, 0.5f, &report) != HENKA_SUCCESS ||
-        !report.changed || report.created_vertices != 6U || report.created_edges != 13U ||
+    if (counts.vertices != 6U || counts.edges != 7U || counts.faces != 2U)
+    {
+        goto cleanup;
+    }
+    operation_result = henka_authoring_mesh_extrude_face_region(
+        mesh, selected_faces, 2U, 0.5f, &report);
+    if (operation_result != HENKA_SUCCESS)
+    {
+        (void)fprintf(stderr,
+            "face-region extrusion rejected ordinary quad faces in a mesh with %zu-corner capacity: result=%d\n",
+            desc.max_face_corners, (int)operation_result);
+        goto cleanup;
+    }
+    if (!report.changed || report.created_vertices != 6U || report.created_edges != 13U ||
         report.created_faces != 8U || report.primary_face_id == HENKA_AUTHORING_INVALID_ID)
     {
         goto cleanup;

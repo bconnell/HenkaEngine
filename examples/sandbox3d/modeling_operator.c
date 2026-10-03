@@ -3,10 +3,38 @@
 #include <errno.h>
 #include <float.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <henka/memory.h>
+#include "../../engine/src/core/memory_internal.h"
+
+static void sandbox3d_modeling_operator_flip_diagnostic(
+    sandbox3d_modeling_operator_kind kind,
+    const sandbox3d_modeling_operator_session* session,
+    const char* stage)
+{
+    const char* enabled = getenv("HENKA_AUTOMATION_DIAGNOSTICS");
+    const henka_authoring_mesh* mesh = session == NULL ? NULL : session->source_snapshot;
+    const henka_authoring_mesh_counts counts = mesh != NULL
+        ? henka_authoring_mesh_get_counts(mesh)
+        : (henka_authoring_mesh_counts){0};
+
+    if (kind == SANDBOX3D_MODELING_OPERATOR_FLIP_FACE &&
+        enabled != NULL && strcmp(enabled, "1") == 0)
+    {
+        henka_memory_diagnostic_check_heap(stage);
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC face-flip stage=%s selected=%zu vertices=%zu edges=%zu faces=%zu\n",
+            stage,
+            session == NULL ? 0U : session->selection_count,
+            counts.vertices,
+            counts.edges,
+            counts.faces);
+        fflush(stdout);
+    }
+}
 
 static size_t sandbox3d_modeling_operator_selection_limit(
     sandbox3d_authoring_selection_mode mode)
@@ -490,6 +518,8 @@ henka_result sandbox3d_modeling_operator_begin(
     size_t selection_limit;
     henka_result result = HENKA_SUCCESS;
 
+    sandbox3d_modeling_operator_flip_diagnostic(kind, session, "operator-begin-enter");
+
     if (session == NULL || object == NULL || session->active ||
         (kind != SANDBOX3D_MODELING_OPERATOR_MOVE &&
          kind != SANDBOX3D_MODELING_OPERATOR_PROPORTIONAL_MOVE &&
@@ -750,7 +780,9 @@ henka_result sandbox3d_modeling_operator_begin(
             }
         }
     }
+    sandbox3d_modeling_operator_flip_diagnostic(kind, session, "operator-begin-source-clone-begin");
     result = henka_authoring_mesh_clone(source, &session->source_snapshot);
+    sandbox3d_modeling_operator_flip_diagnostic(kind, session, "operator-begin-source-clone-end");
     if (result != HENKA_SUCCESS)
     {
         sandbox3d_modeling_operator_reset(session);
@@ -770,6 +802,7 @@ henka_result sandbox3d_modeling_operator_begin(
         ? 0.5f
         : 0.0f;
     session->preview_rebuild_count = 0U;
+    sandbox3d_modeling_operator_flip_diagnostic(kind, session, "operator-begin-complete");
     session->transform_scale = (henka_vec3){1.0f, 1.0f, 1.0f};
     session->transform_axis = (henka_vec3){0.0f, 1.0f, 0.0f};
     session->transform_radians = 0.0f;
@@ -1513,8 +1546,12 @@ henka_result sandbox3d_modeling_operator_preview(
     }
     else if (result == HENKA_SUCCESS)
     {
+        sandbox3d_modeling_operator_flip_diagnostic(
+            session->kind, session, "operator-preview-candidate-clone-begin");
         result = henka_authoring_mesh_clone(
             session->source_snapshot, &candidate);
+        sandbox3d_modeling_operator_flip_diagnostic(
+            session->kind, session, "operator-preview-candidate-clone-end");
     }
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_FLIP_EDGE)
@@ -1812,11 +1849,15 @@ henka_result sandbox3d_modeling_operator_preview(
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_FLIP_FACE)
     {
+        sandbox3d_modeling_operator_flip_diagnostic(
+            session->kind, session, "operator-preview-flip-api-begin");
         result = henka_authoring_mesh_flip_faces(
             candidate,
             (const henka_authoring_face_id*)session->selection_ids,
             session->selection_count,
             &report);
+        sandbox3d_modeling_operator_flip_diagnostic(
+            session->kind, session, "operator-preview-flip-api-end");
     }
     if (result == HENKA_SUCCESS &&
         session->kind == SANDBOX3D_MODELING_OPERATOR_DELETE_FACES)
@@ -2395,7 +2436,11 @@ henka_result sandbox3d_modeling_operator_preview(
     }
     if (result == HENKA_SUCCESS)
     {
+        sandbox3d_modeling_operator_flip_diagnostic(
+            session->kind, session, "operator-preview-publish-begin");
         result = sandbox3d_authoring_object_preview_candidate(session->object, candidate);
+        sandbox3d_modeling_operator_flip_diagnostic(
+            session->kind, session, "operator-preview-publish-end");
     }
     if (result != HENKA_SUCCESS)
     {
@@ -2612,6 +2657,7 @@ henka_result sandbox3d_modeling_operator_commit(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    henka_memory_diagnostic_check_heap_if_armed("operator-commit-enter");
     if (session->kind == SANDBOX3D_MODELING_OPERATOR_SPLIT_EDGE)
     {
         if (!session->split_configured || session->split_result_count == 0U ||
@@ -2699,7 +2745,12 @@ henka_result sandbox3d_modeling_operator_commit(
         henka_free(replacement_ids);
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    sandbox3d_modeling_operator_flip_diagnostic(
+        session->kind, session, "operator-commit-object-begin");
     result = sandbox3d_authoring_object_commit_preview(session->object);
+    henka_memory_diagnostic_check_heap_if_armed("operator-object-commit-return");
+    sandbox3d_modeling_operator_flip_diagnostic(
+        session->kind, session, "operator-commit-object-end");
     if (result != HENKA_SUCCESS)
     {
         henka_free(replacement_ids);
@@ -2778,11 +2829,13 @@ henka_result sandbox3d_modeling_operator_commit(
     if (session->kind == SANDBOX3D_MODELING_OPERATOR_BEVEL &&
         session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)
     {
+        henka_memory_diagnostic_check_heap_if_armed("operator-bevel-selection-replace-begin");
         result = sandbox3d_authoring_object_replace_component_selection(
             session->object,
             (const uint32_t*)session->bevel_result_faces,
             session->bevel_result_count,
             session->bevel_result_faces[0U]);
+        henka_memory_diagnostic_check_heap_if_armed("operator-bevel-selection-replace-end");
         if (result != HENKA_SUCCESS)
         {
             henka_free(replacement_ids);
@@ -2845,15 +2898,20 @@ henka_result sandbox3d_modeling_operator_commit(
           session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)) ||
         session->kind == SANDBOX3D_MODELING_OPERATOR_RIP_VERTEX_FACE)
     {
+        henka_memory_diagnostic_check_heap_if_armed("operator-record-selection-begin");
         result = sandbox3d_authoring_object_record_current_selection(session->object);
+        henka_memory_diagnostic_check_heap_if_armed("operator-record-selection-end");
         if (result != HENKA_SUCCESS)
         {
             henka_free(replacement_ids);
             return result;
         }
     }
+    henka_memory_diagnostic_check_heap_if_armed("operator-replacement-free-begin");
     henka_free(replacement_ids);
+    henka_memory_diagnostic_check_heap_if_armed("operator-replacement-free-end");
     sandbox3d_modeling_operator_reset(session);
+    henka_memory_diagnostic_check_heap_if_armed("operator-session-reset-end");
     return HENKA_SUCCESS;
 }
 
