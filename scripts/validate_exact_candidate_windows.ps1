@@ -15,6 +15,9 @@ param(
 
     [string]$TestFilter = "",
 
+    [ValidateRange(1000, 3600000)]
+    [int]$StageTimeoutMilliseconds = 1200000,
+
     [switch]$RequirePackage,
 
     [switch]$SkipPackage
@@ -96,13 +99,15 @@ Invoke-HenkaNative `
     -FilePath "powershell.exe" `
     -Arguments (@("-File", $buildScript) + $buildArguments) `
     -WorkingDirectory $candidate `
-    -Label "Build exact Henka candidate"
+    -Label "Build exact Henka candidate" `
+    -TimeoutMilliseconds $StageTimeoutMilliseconds
 
 Invoke-HenkaNative `
     -FilePath "powershell.exe" `
     -Arguments (@("-File", $testScript) + $testArguments) `
     -WorkingDirectory $candidate `
-    -Label "Test exact Henka candidate"
+    -Label "Test exact Henka candidate" `
+    -TimeoutMilliseconds $StageTimeoutMilliseconds
 
 if (-not $SkipPackage -and ([string]::IsNullOrWhiteSpace($BuildTarget) -or $RequirePackage)) {
     Invoke-HenkaNative `
@@ -111,7 +116,8 @@ if (-not $SkipPackage -and ([string]::IsNullOrWhiteSpace($BuildTarget) -or $Requ
             "-File", $packageScript,
             "-Configuration", $Configuration) `
         -WorkingDirectory $candidate `
-        -Label "Package exact Henka candidate"
+        -Label "Package exact Henka candidate" `
+        -TimeoutMilliseconds $StageTimeoutMilliseconds
 }
 
 Write-Host "Exact candidate validation passed."

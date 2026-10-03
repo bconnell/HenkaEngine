@@ -8,6 +8,12 @@ param(
 
     [string]$BuildTarget = "",
 
+    [ValidateRange(30, 3600)]
+    [int]$PerTestTimeoutSeconds = 300,
+
+    [ValidateRange(60, 3600)]
+    [int]$CommandTimeoutSeconds = 1200,
+
     [switch]$SkipBuild
 )
 
@@ -26,9 +32,14 @@ $cmake = Get-HenkaCMakePath
 $ctest = Get-HenkaCTestPath -CMakePath $cmake
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $resolvedDependencyRoot = $DependencyRoot
+$commandTimeoutMilliseconds = $CommandTimeoutSeconds * 1000
 
 if ($SkipBuild) {
-    $ctestArguments = @("--test-dir", $buildRoot, "--output-on-failure", "-C", $Configuration)
+    $ctestArguments = @(
+    "--test-dir", $buildRoot,
+    "--output-on-failure",
+    "--timeout", [string]$PerTestTimeoutSeconds,
+    "-C", $Configuration)
     if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
         $ctestArguments += @("-R", $TestFilter)
     }
@@ -38,7 +49,8 @@ if ($SkipBuild) {
         -FilePath $ctest `
         -Arguments $ctestArguments `
         -WorkingDirectory $repoRoot `
-        -Label "Run Henka Engine tests without rebuild"
+        -Label "Run Henka Engine tests without rebuild" `
+        -TimeoutMilliseconds $commandTimeoutMilliseconds
     exit 0
 }
 
@@ -127,7 +139,8 @@ try {
             -FilePath $cmake `
             -Arguments $configureArguments `
             -WorkingDirectory $repoRoot `
-            -Label "Configure Henka Engine for tests"
+            -Label "Configure Henka Engine for tests" `
+            -TimeoutMilliseconds $commandTimeoutMilliseconds
         $configureStopwatch.Stop()
         $configureSeconds = $configureStopwatch.Elapsed.TotalSeconds
         $validationPlan = Resolve-HenkaValidationPlan `
@@ -146,7 +159,8 @@ try {
         -FilePath $cmake `
         -Arguments $buildArguments `
         -WorkingDirectory $repoRoot `
-        -Label "Build Henka Engine tests"
+        -Label "Build Henka Engine tests" `
+        -TimeoutMilliseconds $commandTimeoutMilliseconds
     $buildStopwatch.Stop()
     $buildSeconds = $buildStopwatch.Elapsed.TotalSeconds
 
@@ -170,7 +184,8 @@ try {
                     "-SourceDirectory", $softwareOpenGLRoot,
                     "-TargetDirectory", $targetDirectory) `
                 -WorkingDirectory $repoRoot `
-                -Label "Install CI-only OpenGL runtime for $Configuration tests and Sandbox3D"
+                -Label "Install CI-only OpenGL runtime for $Configuration tests and Sandbox3D" `
+                -TimeoutMilliseconds $commandTimeoutMilliseconds
         }
     }
 
@@ -178,7 +193,11 @@ try {
     Exit-HenkaBuildStateLock -Lock $buildStateLock
 }
 
-$ctestArguments = @("--test-dir", $buildRoot, "--output-on-failure", "-C", $Configuration)
+$ctestArguments = @(
+    "--test-dir", $buildRoot,
+    "--output-on-failure",
+    "--timeout", [string]$PerTestTimeoutSeconds,
+    "-C", $Configuration)
 if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
     $ctestArguments += @("-R", $TestFilter)
 }
@@ -188,7 +207,8 @@ Invoke-HenkaNative `
     -FilePath $ctest `
     -Arguments $ctestArguments `
     -WorkingDirectory $repoRoot `
-    -Label "Run Henka Engine tests"
+    -Label "Run Henka Engine tests" `
+    -TimeoutMilliseconds $commandTimeoutMilliseconds
 $testStopwatch.Stop()
 $testSeconds = $testStopwatch.Elapsed.TotalSeconds
 
@@ -210,7 +230,8 @@ try {
             "-ExecutablePath", $executablePath,
             "-CMakePath", $cmake) `
         -WorkingDirectory $repoRoot `
-        -Label "Record build provenance"
+        -Label "Record build provenance" `
+        -TimeoutMilliseconds $commandTimeoutMilliseconds
 } finally {
     Exit-HenkaBuildStateLock -Lock $buildStateLock
 }

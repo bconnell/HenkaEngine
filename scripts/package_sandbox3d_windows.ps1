@@ -242,7 +242,8 @@ Invoke-HenkaNative `
         "-OutputDirectory",
         $residencyFixtureSource) `
     -WorkingDirectory $repoRoot `
-    -Label "Generate opt-in Sandbox residency fixtures without rebuilding"
+    -Label "Generate opt-in Sandbox residency fixtures without rebuilding" `
+    -TimeoutMilliseconds 120000
 
 if (-not (Test-Path -LiteralPath $residencyFixtureSource -PathType Container)) {
     throw "The opt-in $Configuration sandbox residency fixtures were not generated."
