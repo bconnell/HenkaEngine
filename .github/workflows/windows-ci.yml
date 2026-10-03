@@ -126,10 +126,12 @@ jobs:
 
       - name: Build Debug
         shell: powershell
+        timeout-minutes: 15
         run: .\scripts\build_windows.ps1 -Configuration Debug
 
       - name: Prepare pinned software OpenGL fallback
         shell: powershell
+        timeout-minutes: 5
         run: .\scripts\setup_windows_software_opengl.ps1 -TargetDirectory @("build\tests\Debug", "build\examples\sandbox3d\Debug")
 
       - name: Check OpenGL capability
@@ -138,14 +140,12 @@ jobs:
 
       - name: Run tests
         shell: powershell
+        timeout-minutes: 15
         run: .\scripts\test_windows.ps1
-
-      - name: Refresh Debug build provenance
-        shell: powershell
-        run: .\scripts\build_windows.ps1 -Configuration Debug
 
       - name: Build packaged sandbox
         shell: powershell
+        timeout-minutes: 5
         run: .\scripts\package_sandbox3d_windows.ps1 -ResetUserData -Configuration Debug
 
       - name: Check packaged sandbox contract
@@ -158,26 +158,27 @@ jobs:
 
       - name: Verify packaged product-native startup primitive
         shell: powershell
+        timeout-minutes: 6
         run: .\scripts\check_packaged_sandbox3d_windows.ps1 -NonInteractive -ProductStartupPrimitiveOnly
 
       - name: Verify visible native modeling workflow
         shell: powershell
+        timeout-minutes: 5
         run: .\scripts\test_visible_native_modeling_windows.ps1
 
       - name: Run bounded packaged soak
         shell: powershell
-        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10
-
-      - name: Run Release tests
-        shell: powershell
-        run: .\scripts\test_windows.ps1 -Configuration Release
+        timeout-minutes: 8
+        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10 -IterationTimeoutMilliseconds 30000
 
       - name: Validate external game template
         shell: powershell
+        timeout-minutes: 10
         run: .\scripts\test_external_game_template_windows.ps1 -NoLocalProviders
 
       - name: Validate external server template
         shell: powershell
+        timeout-minutes: 5
         run: .\scripts\test_external_server_template_windows.ps1 -NoLocalProviders
 
       - name: Check generated output lifecycle
@@ -187,6 +188,27 @@ jobs:
       - name: Test generated artifact lifecycle
         shell: powershell
         run: .\scripts\test_generated_artifact_lifecycle_windows.ps1
+
+  release-tests:
+    # Release validation is independent of the Debug/package workspace. Run it
+    # on its own stable Windows image so it does not extend the Debug critical
+    # path, while retaining the same pinned software OpenGL fallback contract.
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Prepare pinned software OpenGL fallback
+        shell: powershell
+        timeout-minutes: 5
+        run: .\scripts\setup_windows_software_opengl.ps1
+
+      - name: Run Release tests
+        shell: powershell
+        timeout-minutes: 20
+        run: .\scripts\test_windows.ps1 -Configuration Release
 
   sanitizer-runtime:
     runs-on: windows-2022

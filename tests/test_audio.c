@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -5,8 +6,10 @@
 #include <stdint.h>
 
 #if defined(_WIN32)
+#include <direct.h>
 #include <io.h>
 #else
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 #endif
@@ -32,6 +35,15 @@ static const char test_compressed_flac_base64[] =
             return EXIT_FAILURE; \
         } \
     } while (0)
+
+static bool test_make_directory(const char* path)
+{
+#if defined(_WIN32)
+    return _mkdir(path) == 0 || errno == EEXIST;
+#else
+    return mkdir(path, 0700) == 0 || errno == EEXIST;
+#endif
+}
 
 static void test_write_u16(unsigned char* bytes, size_t offset, uint16_t value)
 {
@@ -598,6 +610,8 @@ int main(void)
     henka_audio_diagnostics diagnostics;
     int result = EXIT_FAILURE;
 
+    HENKA_TEST_ASSERT(test_make_directory("build"));
+    HENKA_TEST_ASSERT(test_make_directory("build/test_tmp"));
     HENKA_TEST_ASSERT(test_write_real_wav(wav_path, 128U));
     HENKA_TEST_ASSERT(test_write_real_wav(stream_path, 8192U));
     HENKA_TEST_ASSERT(test_write_real_wav(trailing_wav_path, 8U));

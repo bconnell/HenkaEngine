@@ -9,6 +9,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+
 $sandbox = (Resolve-Path -LiteralPath $SandboxPath).Path
 if (-not (Test-Path -LiteralPath $sandbox -PathType Leaf))
 {
@@ -323,7 +325,7 @@ finally
             try { $process.StandardInput.Close() } catch {}
             if (-not $process.WaitForExit(2000))
             {
-                try { $process.Kill() } catch {}
+                try { Stop-HenkaProcessTree -ProcessId $process.Id } catch {}
                 try { $process.WaitForExit(2000) } catch {}
             }
         }

@@ -1,5 +1,11 @@
 param(
-    [string]$BuildDirectory = ""
+    [string]$BuildDirectory = "",
+
+    [ValidateRange(30, 3600)]
+    [int]$PerTestTimeoutSeconds = 300,
+
+    [ValidateRange(60, 3600)]
+    [int]$CommandTimeoutSeconds = 900
 )
 
 Set-StrictMode -Version Latest
@@ -8,6 +14,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$commandTimeoutMilliseconds = $CommandTimeoutSeconds * 1000
 $toolchain = Get-HenkaToolchain
 $cmake = $toolchain.CMakePath
 $ctest = $toolchain.CTestPath
@@ -75,7 +82,8 @@ Invoke-HenkaNative `
     -FilePath $cmake `
     -Arguments $configureArguments `
     -WorkingDirectory $repoRoot `
-    -Label "Configure first-party sanitizer runtime"
+    -Label "Configure first-party sanitizer runtime" `
+    -TimeoutMilliseconds $commandTimeoutMilliseconds
 
 $asanRuntime = Get-HenkaAddressSanitizerRuntime
 $env:Path = $asanRuntime.DirectoryName + ";" + $env:Path
@@ -85,13 +93,19 @@ Invoke-HenkaNative `
     -FilePath $cmake `
     -Arguments @("--build", $BuildDirectory, "--config", "Debug", "--parallel", "2") `
     -WorkingDirectory $repoRoot `
-    -Label "Build first-party sanitizer runtime"
+    -Label "Build first-party sanitizer runtime" `
+    -TimeoutMilliseconds $commandTimeoutMilliseconds
 
 Invoke-HenkaNative `
     -FilePath $ctest `
-    -Arguments @("--test-dir", $BuildDirectory, "--output-on-failure", "-C", "Debug") `
+    -Arguments @(
+        "--test-dir", $BuildDirectory,
+        "--output-on-failure",
+        "--timeout", [string]$PerTestTimeoutSeconds,
+        "-C", "Debug") `
     -WorkingDirectory $repoRoot `
-    -Label "Run first-party sanitizer runtime tests"
+    -Label "Run first-party sanitizer runtime tests" `
+    -TimeoutMilliseconds $commandTimeoutMilliseconds
 
 Write-Host "[pass] First-party sanitizer runtime gate passed."
 } finally {
