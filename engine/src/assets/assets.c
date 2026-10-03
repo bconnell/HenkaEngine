@@ -4328,6 +4328,9 @@ henka_result henka_assets_load_native_material_asset(
     henka_material_asset* asset;
     henka_material candidate;
     henka_result result;
+    size_t initial_texture_count;
+    uint64_t initial_resident_bytes;
+    uint64_t initial_uploaded_bytes;
 
     if (manager == NULL || manager->engine == NULL || root_path == NULL ||
         path == NULL || shader == NULL || out_asset == NULL || *out_asset != NULL)
@@ -4378,10 +4381,18 @@ henka_result henka_assets_load_native_material_asset(
         return HENKA_SUCCESS;
     }
 
+    initial_texture_count = manager->texture_count;
+    initial_resident_bytes = manager->texture_resident_bytes;
+    initial_uploaded_bytes = manager->texture_uploaded_bytes;
     result = henka_material_asset_file_load(
         manager, resolved_path, shader, &candidate);
     if (result != HENKA_SUCCESS)
     {
+        henka_assets_rollback_texture_transaction(
+            manager,
+            initial_texture_count,
+            initial_resident_bytes,
+            initial_uploaded_bytes);
         henka_free(key);
         henka_free(source_path);
         henka_free(resolved_path);
@@ -4390,6 +4401,11 @@ henka_result henka_assets_load_native_material_asset(
     display_name = henka_asset_copy_display_name(source_path);
     if (display_name == NULL)
     {
+        henka_assets_rollback_texture_transaction(
+            manager,
+            initial_texture_count,
+            initial_resident_bytes,
+            initial_uploaded_bytes);
         henka_free(key);
         henka_free(source_path);
         henka_free(resolved_path);
@@ -4398,6 +4414,11 @@ henka_result henka_assets_load_native_material_asset(
     asset = henka_calloc(1U, sizeof(*asset));
     if (asset == NULL)
     {
+        henka_assets_rollback_texture_transaction(
+            manager,
+            initial_texture_count,
+            initial_resident_bytes,
+            initial_uploaded_bytes);
         henka_free(display_name);
         henka_free(key);
         henka_free(source_path);
@@ -4409,6 +4430,11 @@ henka_result henka_assets_load_native_material_asset(
         result = henka_asset_manager_grow_materials(manager);
         if (result != HENKA_SUCCESS)
         {
+            henka_assets_rollback_texture_transaction(
+                manager,
+                initial_texture_count,
+                initial_resident_bytes,
+                initial_uploaded_bytes);
             henka_free(asset);
             henka_free(display_name);
             henka_free(key);
@@ -5276,6 +5302,9 @@ henka_result henka_assets_reload_native_material_asset(
     henka_material_asset* asset;
     henka_material candidate;
     uint64_t next_revision;
+    size_t initial_texture_count;
+    uint64_t initial_resident_bytes;
+    uint64_t initial_uploaded_bytes;
     henka_result result;
 
     if (out_asset != NULL) *out_asset = NULL;
@@ -5304,10 +5333,18 @@ henka_result henka_assets_reload_native_material_asset(
     {
         return result;
     }
+    initial_texture_count = manager->texture_count;
+    initial_resident_bytes = manager->texture_resident_bytes;
+    initial_uploaded_bytes = manager->texture_uploaded_bytes;
     result = henka_material_asset_file_load(
         manager, asset->resolved_path, asset->material.shader, &candidate);
     if (result != HENKA_SUCCESS)
     {
+        henka_assets_rollback_texture_transaction(
+            manager,
+            initial_texture_count,
+            initial_resident_bytes,
+            initial_uploaded_bytes);
         return result;
     }
     asset->material = candidate;
