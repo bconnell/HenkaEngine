@@ -468,6 +468,7 @@ Manager-owned glTF material definitions create stack-owned instances with:
 - revision-aware refresh after transactional reimport;
 - semantic dependency inspection;
 - transactional reset for one or all overrides;
+- bounded editor undo/redo participation for successful Reset Overrides mutations;
 - transactional application of the validated effective view to a scene entity.
 
 The glTF definition remains the shared material authority. No second JSON material schema is introduced.

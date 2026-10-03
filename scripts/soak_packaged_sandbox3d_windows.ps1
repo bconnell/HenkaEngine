@@ -2,6 +2,9 @@ param(
     [ValidateRange(1, 100)]
     [int]$Iterations = 10,
 
+    [ValidateRange(1000, 300000)]
+    [int]$IterationTimeoutMilliseconds = 30000,
+
     # Hosted Windows runners can build the package without exposing an
     # OpenGL-capable desktop video driver. Keep local runs strict; CI may
     # explicitly record that infrastructure limitation as a skip.
@@ -33,8 +36,15 @@ for ($iteration = 1; $iteration -le $Iterations; ++$iteration) {
             -StdoutPath $stdoutPath `
             -StderrPath $stderrPath `
             -CreateNoWindow
-        if (-not $capturedProcess.WaitForExit(-1)) {
-            throw "Packaged sandbox smoke iteration $iteration did not exit."
+        if (-not $capturedProcess.WaitForExit($IterationTimeoutMilliseconds)) {
+            Stop-HenkaProcessTree -ProcessId $capturedProcess.Process.Id
+            $output = (Read-HenkaSharedText -Path $stdoutPath) +
+                (Read-HenkaSharedText -Path $stderrPath)
+            $diagnostic = (($output -replace "\s+", " ").Trim())
+            if ($diagnostic.Length -gt 512) {
+                $diagnostic = $diagnostic.Substring(0, 512)
+            }
+            throw "Packaged sandbox smoke iteration $iteration exceeded timeout ${IterationTimeoutMilliseconds}ms; its process tree was terminated. Diagnostics: $diagnostic"
         }
         $exitCode = $capturedProcess.Process.ExitCode
         $output = (Read-HenkaSharedText -Path $stdoutPath) + (Read-HenkaSharedText -Path $stderrPath)

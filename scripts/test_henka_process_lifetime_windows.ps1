@@ -79,7 +79,8 @@ exit $LASTEXITCODE
             "-ExecutionPolicy", "Bypass",
             "-File", $launcherScript) `
         -WorkingDirectory $RepositoryRoot `
-        -Label "Run owned child process lifetime regression"
+        -Label "Run owned child process lifetime regression" `
+        -TimeoutMilliseconds 10000
     $waitStopwatch.Stop()
 
     if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf) -or
@@ -114,6 +115,27 @@ exit $LASTEXITCODE
         throw "The expected-failure child process remained alive after the owned command returned: $failurePid."
     }
     Write-Output "[pass] Expected child failure propagated exit code and stdout/stderr capture without an orphan (exit=17)."
+
+    $timeoutStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $timeoutObserved = $false
+    try {
+        Invoke-HenkaNativeCapture `
+            -FilePath "powershell.exe" `
+            -Arguments @("-NoProfile", "-Command", "Write-Output 'timeout-regression-ready'; Start-Sleep -Seconds 30") `
+            -WorkingDirectory $RepositoryRoot `
+            -Label "Run bounded captured-process timeout regression" `
+            -TimeoutMilliseconds 1000 | Out-Null
+    }
+    catch {
+        $timeoutObserved =
+            $_.Exception.Message -match "exceeded timeout 1000ms" -and
+            $_.Exception.Message -match "timeout-regression-ready"
+    }
+    $timeoutStopwatch.Stop()
+    if (-not $timeoutObserved -or $timeoutStopwatch.ElapsedMilliseconds -gt 10000) {
+        throw "Captured-process timeout did not fail closed within its bounded cleanup budget (elapsed=$($timeoutStopwatch.ElapsedMilliseconds)ms)."
+    }
+    Write-Output "[pass] Captured-process timeout fails closed and returns within the bounded cleanup budget."
 } finally {
     $cleanupDeadline = [DateTime]::UtcNow.AddSeconds(5)
     while (-not (Test-Path -LiteralPath $markerPath -PathType Leaf) -and [DateTime]::UtcNow -lt $cleanupDeadline) {
