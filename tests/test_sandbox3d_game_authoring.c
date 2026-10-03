@@ -1853,68 +1853,6 @@ static bool test_prefab_write_text_file(const char* path, const char* text)
     return wrote_all;
 }
 
-static bool test_prefab_copy_file(
-    const char* source_path,
-    const char* destination_path)
-{
-    FILE* source = NULL;
-    FILE* destination = NULL;
-    unsigned char buffer[4096];
-    size_t count;
-    bool copied = true;
-
-    if (source_path == NULL || destination_path == NULL)
-    {
-        return false;
-    }
-#if defined(_WIN32)
-    if (fopen_s(&source, source_path, "rb") != 0)
-    {
-        source = NULL;
-    }
-    if (fopen_s(&destination, destination_path, "wb") != 0)
-    {
-        destination = NULL;
-    }
-#else
-    source = fopen(source_path, "rb");
-    destination = fopen(destination_path, "wb");
-#endif
-    if (source == NULL || destination == NULL)
-    {
-        if (source != NULL)
-        {
-            (void)fclose(source);
-        }
-        if (destination != NULL)
-        {
-            (void)fclose(destination);
-        }
-        return false;
-    }
-    while ((count = fread(buffer, 1U, sizeof(buffer), source)) > 0U)
-    {
-        if (fwrite(buffer, 1U, count, destination) != count)
-        {
-            copied = false;
-            break;
-        }
-    }
-    if (ferror(source))
-    {
-        copied = false;
-    }
-    if (fclose(source) != 0)
-    {
-        copied = false;
-    }
-    if (fclose(destination) != 0)
-    {
-        copied = false;
-    }
-    return copied;
-}
-
 static bool test_prefab_material_override_persists_through_authoring(void)
 {
     const char* project_root = "build/test_tmp";
