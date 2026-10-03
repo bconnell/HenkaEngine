@@ -85,6 +85,10 @@ The template:
 - saves and reloads the authored mesh;
 - creates and picks a real scene entity;
 - creates a linked physics box;
+- loads a manager-owned glTF material definition through the external asset manager;
+- creates and applies a material-instance override to the authored entity;
+- changes a non-overridden source material value, reloads the shared definition in place, and refreshes the instance while retaining its explicit override;
+- resets the instance override, rebinds the scene entity to the shared definition, and verifies that scene refresh no longer treats the entity as overridden;
 - verifies duplicate/delete of a user-owned entity;
 - uses no Sandbox source for those operations.
 
