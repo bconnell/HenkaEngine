@@ -2823,6 +2823,14 @@ static henka_result sandbox3d_material_history_undo(
     *binding->instance = candidate;
     --binding->undo_count;
     sandbox3d_material_history_push_redo(binding, &current);
+    printf(
+        "Material instance history: action=undo entity=%u override_mask=0x%08X texture_override_mask=0x%08X undo_count=%zu redo_count=%zu.\n",
+        (unsigned int)binding->entity,
+        binding->instance->override_mask,
+        binding->instance->texture_override_mask,
+        binding->undo_count,
+        binding->redo_count);
+    fflush(stdout);
     return HENKA_SUCCESS;
 }
 
@@ -4278,6 +4286,25 @@ static void sandbox3d_draw_material_instance_editor(
         const float gap = 6.0f;
         const float action_width =
             (content_bounds.width - gap) * 0.5f;
+        static henka_entity reported_material_action_entity =
+            HENKA_INVALID_ENTITY;
+        static float reported_material_action_y = -FLT_MAX;
+
+        if (reported_material_action_entity != binding->entity ||
+            fabsf(reported_material_action_y - (y + 132.0f)) > 0.5f)
+        {
+            printf(
+                "Material instance editor actions: entity=%u reset_x=%.1f reset_y=%.1f reset_width=%.1f reimport_x=%.1f reimport_width=%.1f height=24.0.\n",
+                (unsigned int)binding->entity,
+                x,
+                y + 132.0f,
+                action_width,
+                x + action_width + gap,
+                action_width);
+            fflush(stdout);
+            reported_material_action_entity = binding->entity;
+            reported_material_action_y = y + 132.0f;
+        }
 
         if (henka_ui_button(
                 state->ui,
@@ -4291,6 +4318,9 @@ static void sandbox3d_draw_material_instance_editor(
         {
             const henka_material_instance previous =
                 *binding->instance;
+            const bool had_overrides =
+                previous.override_mask != 0U ||
+                previous.texture_override_mask != 0U;
 
             if (henka_assets_material_instance_reset_overrides(
                     binding->instance) == HENKA_SUCCESS &&
@@ -4299,6 +4329,22 @@ static void sandbox3d_draw_material_instance_editor(
                     state->scene,
                     binding->entity) == HENKA_SUCCESS)
             {
+                if (had_overrides)
+                {
+                    sandbox3d_material_history_push_undo(
+                        binding,
+                        &previous);
+                }
+                printf(
+                    "Material instance editor reset: entity=%u before_override=0x%08X before_texture_override=0x%08X after_override=0x%08X after_texture_override=0x%08X undo_count=%zu redo_count=%zu.\n",
+                    (unsigned int)binding->entity,
+                    previous.override_mask,
+                    previous.texture_override_mask,
+                    binding->instance->override_mask,
+                    binding->instance->texture_override_mask,
+                    binding->undo_count,
+                    binding->redo_count);
+                fflush(stdout);
                 sandbox3d_set_statusf(
                     state,
                     false,

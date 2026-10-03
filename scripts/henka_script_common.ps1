@@ -1055,15 +1055,6 @@ public sealed class HenkaCapturedProcess : IDisposable
         return exited;
     }
 
-    public void Kill()
-    {
-        if (!Process.HasExited)
-        {
-            Process.Kill();
-            Process.WaitForExit();
-        }
-    }
-
     public void Dispose()
     {
         if (disposed)
@@ -1077,10 +1068,12 @@ public sealed class HenkaCapturedProcess : IDisposable
             if (Process != null && !Process.HasExited)
             {
                 Process.Kill();
-                Process.WaitForExit();
+                Process.WaitForExit(5000);
             }
-            if (Process != null)
+            if (Process != null && Process.HasExited)
             {
+                // Drain redirected async output only after a bounded exit was
+                // observed. Disposal must never become an unbounded wait.
                 Process.WaitForExit();
             }
         }
@@ -1213,9 +1206,21 @@ function Start-HenkaCapturedProcess {
 function Close-HenkaCapturedProcess {
     param($CapturedProcess)
 
-    if ($null -ne $CapturedProcess) {
-        $CapturedProcess.Dispose()
+    if ($null -eq $CapturedProcess) {
+        return
     }
+
+    try {
+        if ($null -ne $CapturedProcess.Process -and
+            -not $CapturedProcess.Process.HasExited) {
+            Stop-HenkaProcessTree -ProcessId $CapturedProcess.Process.Id
+            [void]$CapturedProcess.WaitForExit(5000)
+        }
+    }
+    catch {
+        # Disposal below remains the last bounded cleanup attempt.
+    }
+    $CapturedProcess.Dispose()
 }
 
 function Stop-HenkaProcessTree {
@@ -1267,24 +1272,17 @@ function Invoke-HenkaNative {
     Push-Location $WorkingDirectory
     try {
         if ($TimeoutMilliseconds -gt 0) {
-            $process = $null
-            try {
-                $process = Start-HenkaProcess `
-                    -FilePath $FilePath `
-                    -Arguments $Arguments `
-                    -WorkingDirectory $WorkingDirectory `
-                    -CreateNoWindow
-                if (-not $process.WaitForExit($TimeoutMilliseconds)) {
-                    Stop-HenkaProcessTree -ProcessId $process.Id
-                    throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated."
-                }
-                $exitCode = $process.ExitCode
-            }
-            finally {
-                if ($null -ne $process) {
-                    $process.Dispose()
-                }
-            }
+            # Use the captured path for bounded commands so their diagnostic
+            # output remains visible in CI. The prior plain Process path hid
+            # CTest's failing-test details and reduced a useful failure to only
+            # its exit code.
+            $null = Invoke-HenkaNativeCapture `
+                -FilePath $FilePath `
+                -Arguments $Arguments `
+                -WorkingDirectory $WorkingDirectory `
+                -Label $Label `
+                -TimeoutMilliseconds $TimeoutMilliseconds
+            $exitCode = 0
         }
         else {
             $ErrorActionPreference = "Continue"
@@ -1353,7 +1351,8 @@ function Invoke-HenkaNativeCapture {
         [Parameter(Mandatory = $true)]
         [string]$Label,
 
-        [int]$TimeoutMilliseconds = -1
+        [ValidateRange(1000, 3600000)]
+        [int]$TimeoutMilliseconds = 180000
     )
 
     $captureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-native-" + [Guid]::NewGuid().ToString("N"))
@@ -1377,7 +1376,17 @@ function Invoke-HenkaNativeCapture {
 
         if (-not $capturedProcess.WaitForExit($TimeoutMilliseconds)) {
             Stop-HenkaProcessTree -ProcessId $capturedProcess.Process.Id
-            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated."
+            # Wait for redirected async output callbacks to drain before
+            # snapshotting timeout diagnostics. Without this bounded flush, a
+            # ready marker emitted immediately before termination can be lost.
+            [void]$capturedProcess.WaitForExit(5000)
+            $timeoutOutput = (Read-HenkaSharedText -Path $stdoutPath) + "`n" +
+                (Read-HenkaSharedText -Path $stderrPath)
+            $timeoutDiagnostic = (($timeoutOutput -replace "\\s+", " ").Trim())
+            if ($timeoutDiagnostic.Length -gt 512) {
+                $timeoutDiagnostic = $timeoutDiagnostic.Substring(0, 512)
+            }
+            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated. Diagnostics: $timeoutDiagnostic"
         }
 
         $exitCode = $capturedProcess.Process.ExitCode
@@ -1450,7 +1459,17 @@ function Invoke-HenkaExpectedFailure {
 
         if (-not $capturedProcess.WaitForExit($TimeoutMilliseconds)) {
             Stop-HenkaProcessTree -ProcessId $capturedProcess.Process.Id
-            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated."
+            # Wait for redirected async output callbacks to drain before
+            # snapshotting timeout diagnostics. Without this bounded flush, a
+            # ready marker emitted immediately before termination can be lost.
+            [void]$capturedProcess.WaitForExit(5000)
+            $timeoutOutput = (Read-HenkaSharedText -Path $stdoutPath) + "`n" +
+                (Read-HenkaSharedText -Path $stderrPath)
+            $timeoutDiagnostic = (($timeoutOutput -replace "\\s+", " ").Trim())
+            if ($timeoutDiagnostic.Length -gt 512) {
+                $timeoutDiagnostic = $timeoutDiagnostic.Substring(0, 512)
+            }
+            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated. Diagnostics: $timeoutDiagnostic"
         }
 
         $stdout = Read-HenkaSharedText -Path $stdoutPath

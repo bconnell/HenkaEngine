@@ -73,7 +73,10 @@ $form.add_Shown({
     if ($plainProcess.StartInfo.WindowStyle -ne [System.Diagnostics.ProcessWindowStyle]::Hidden) {
         throw "The ordinary Henka process helper did not select hidden non-activating startup by default."
     }
-    $plainProcess.WaitForExit()
+    if (-not $plainProcess.WaitForExit(5000)) {
+        Stop-HenkaProcessTree -ProcessId $plainProcess.Id
+        throw "The ordinary process-policy fixture exceeded its bounded exit time."
+    }
     $plainProcess.Dispose()
     $plainProcess = $null
 

@@ -1235,6 +1235,8 @@ Remove-Item `
     -ErrorAction SilentlyContinue
 
 $capturedProcess = $null
+$startupRestoreCapture = $null
+$startupRestoreProcess = $null
 $process = $null
 $mainWindowHandle = [System.IntPtr]::Zero
 $uiAutomationVerified = $false
@@ -4295,7 +4297,8 @@ try {
     Write-Step "Checking clean close-window shutdown"
     [NativeMethods]::PostMessage($mainWindowHandle, 0x0010, [System.IntPtr]::Zero, [System.IntPtr]::Zero) | Out-Null
     if (-not $process.WaitForExit(10000)) {
-        throw "The packaged sandbox did not exit within the expected time."
+        Stop-HenkaProcessTree -ProcessId $process.Id
+        throw "The packaged sandbox did not exit within the expected time; its process tree was terminated."
     }
 
     if (Wait-FileContains -Path $stderrPath -Pattern "leaving engine run loop" -TimeoutMilliseconds 3000) {
@@ -4358,8 +4361,12 @@ try {
             [System.IntPtr]::Zero) | Out-Null
     }
     if (-not $startupRestoreProcess.WaitForExit(10000)) {
-        throw "The persisted native authoring relaunch did not close cleanly."
+        Stop-HenkaProcessTree -ProcessId $startupRestoreProcess.Id
+        throw "The persisted native authoring relaunch did not close cleanly; its process tree was terminated."
     }
+    Close-HenkaCapturedProcess -CapturedProcess $startupRestoreCapture
+    $startupRestoreCapture = $null
+    $startupRestoreProcess = $null
     Write-Output "[pass] Persisted native source and owned material restored on normal packaged relaunch"
 
     Write-Step "Checking persisted live workspace settings recovery"
@@ -4417,10 +4424,16 @@ finally {
     else {
         $env:HENKA_AUTOMATION_INPUT_FILE = $previousAutomationFile
     }
+    if ($null -ne $startupRestoreCapture) {
+        Close-HenkaCapturedProcess -CapturedProcess $startupRestoreCapture
+    }
     if ($null -ne $capturedProcess) {
         Close-HenkaCapturedProcess -CapturedProcess $capturedProcess
     }
     elseif ($process -ne $null) {
+        if (-not $process.HasExited) {
+            Stop-HenkaProcessTree -ProcessId $process.Id
+        }
         $process.Dispose()
     }
 }
