@@ -35,6 +35,9 @@ $resolvedDependencyRoot = $DependencyRoot
 $commandTimeoutMilliseconds = $CommandTimeoutSeconds * 1000
 
 if ($SkipBuild) {
+    Assert-HenkaCTestFilterMatchesRegisteredTests `
+        -BuildRoot $buildRoot `
+        -TestFilter $TestFilter
     $ctestArguments = @(
     "--test-dir", $buildRoot,
     "--output-on-failure",
@@ -198,6 +201,9 @@ $ctestArguments = @(
     "--output-on-failure",
     "--timeout", [string]$PerTestTimeoutSeconds,
     "-C", $Configuration)
+Assert-HenkaCTestFilterMatchesRegisteredTests `
+    -BuildRoot $buildRoot `
+    -TestFilter $TestFilter
 if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
     $ctestArguments += @("-R", $TestFilter)
 }

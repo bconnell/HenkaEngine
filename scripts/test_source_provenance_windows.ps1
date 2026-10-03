@@ -77,6 +77,47 @@ Write-Output ("{0}|{1}|{2}" -f $identity.commit_sha,$identity.source_state,$iden
         $crossShellFields[2] -eq $currentIdentity.source_identity) `
         "Source identity must be identical across the repository's supported PowerShell hosts."
 
+    $plainShellProcess = Start-HenkaProcess `
+        -FilePath "powershell.exe" `
+        -Arguments @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", $crossShellScript,
+            "-RepoRoot", $repoRoot,
+            "-CommonPath", (Join-Path $PSScriptRoot "henka_script_common.ps1")) `
+        -WorkingDirectory $repoRoot `
+        -CreateNoWindow
+    try {
+        if (-not $plainShellProcess.WaitForExit(30000)) {
+            Stop-HenkaProcessTree -ProcessId $plainShellProcess.Id
+            throw "The ordinary Windows PowerShell source identity probe exceeded its timeout."
+        }
+        Assert-Test ($plainShellProcess.ExitCode -eq 0) `
+            "Windows PowerShell launched through Start-HenkaProcess must resolve its native utility module (exit=$($plainShellProcess.ExitCode))."
+    }
+    finally {
+        $plainShellProcess.Dispose()
+    }
+
+    $capturedShellResult = Invoke-HenkaNativeCapture `
+        -FilePath "powershell.exe" `
+        -Arguments @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", $crossShellScript,
+            "-RepoRoot", $repoRoot,
+            "-CommonPath", (Join-Path $PSScriptRoot "henka_script_common.ps1")) `
+        -WorkingDirectory $repoRoot `
+        -Label "Check source identity in a captured Windows PowerShell process" `
+        -TimeoutMilliseconds 30000
+    $capturedShellRecord = @(
+        $capturedShellResult.Stdout -split "`r?`n" |
+            Where-Object { $_ -match '^[0-9a-f]{40}\|(clean|working-tree)\|[0-9a-f]{64}$' })
+    Assert-Test ($capturedShellRecord.Count -eq 1) `
+        "The captured Windows PowerShell source identity probe returned an unexpected record: $($capturedShellResult.Stdout)"
+    Assert-Test ($capturedShellRecord[0] -eq $crossShellRecord[0]) `
+        "Captured Windows PowerShell must preserve the same exact source identity as direct Windows PowerShell."
+
     [System.IO.Directory]::CreateDirectory($repoA) | Out-Null
     Invoke-TestGit -WorkingDirectory $repoA -Arguments @("init", "--quiet") | Out-Null
     Invoke-TestGit -WorkingDirectory $repoA -Arguments @("config", "user.name", "Henka provenance test") | Out-Null

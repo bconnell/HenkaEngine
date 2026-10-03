@@ -35,6 +35,34 @@ try {
         $ctestText + [Environment]::NewLine,
         [System.Text.UTF8Encoding]::new($false))
 
+    Assert-HenkaCTestFilterMatchesRegisteredTests `
+        -BuildRoot $buildRoot `
+        -TestFilter '^henka_tests$'
+    $unmatchedFilterRejected = $false
+    try {
+        Assert-HenkaCTestFilterMatchesRegisteredTests `
+            -BuildRoot $buildRoot `
+            -TestFilter '^henka_missing_tests$'
+    }
+    catch {
+        $unmatchedFilterRejected = $_.Exception.Message -match 'matched no registered CTest tests'
+    }
+    Assert-Condition $unmatchedFilterRejected `
+        "A test filter that matches no registered CTest test was not rejected."
+    $wrapperRejectedUnmatchedFilter = $false
+    try {
+        & (Join-Path $repoRoot "scripts\test_windows.ps1") `
+            -Configuration Debug `
+            -TestFilter '^henka_no_such_registered_test$' `
+            -SkipBuild
+    }
+    catch {
+        $wrapperRejectedUnmatchedFilter =
+            $_.Exception.Message -match 'matched no registered CTest tests'
+    }
+    Assert-Condition $wrapperRejectedUnmatchedFilter `
+        "The Windows test wrapper accepted an unmatched CTest filter as a successful empty run."
+
     $plan = Resolve-HenkaValidationPlan `
         -BuildRoot $buildRoot `
         -Configuration Debug `

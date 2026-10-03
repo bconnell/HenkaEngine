@@ -499,6 +499,39 @@ function Get-HenkaCTestCommandRecords {
     }
 }
 
+function Assert-HenkaCTestFilterMatchesRegisteredTests {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TestFilter
+    )
+
+    if ([string]::IsNullOrWhiteSpace($TestFilter)) {
+        return
+    }
+
+    try {
+        $filterRegex = [System.Text.RegularExpressions.Regex]::new($TestFilter)
+    }
+    catch {
+        throw "TestFilter is not a valid regular expression: $TestFilter"
+    }
+
+    $records = @(Get-HenkaCTestCommandRecords -BuildRoot $BuildRoot)
+    if ($records.Count -eq 0) {
+        throw "No registered CTest tests are available under '$BuildRoot'; refusing to report an empty selection as successful."
+    }
+
+    $matchingCount = @($records | Where-Object {
+        $filterRegex.IsMatch([string]$_.Name)
+    }).Count
+    if ($matchingCount -eq 0) {
+        throw "TestFilter '$TestFilter' matched no registered CTest tests."
+    }
+}
+
 function Resolve-HenkaValidationPlan {
     param(
         [Parameter(Mandatory = $true)]
@@ -836,7 +869,8 @@ public sealed class HenkaCapturedProcess : IDisposable
         string stderrPath,
         bool createNoWindow,
         bool startMinimized,
-        bool startVisibleWithoutActivation)
+        bool startVisibleWithoutActivation,
+        string windowsPowerShellModulePath)
     {
         ProcessStartInfo startInfo = new ProcessStartInfo();
         startInfo.FileName = filePath;
@@ -844,6 +878,10 @@ public sealed class HenkaCapturedProcess : IDisposable
         startInfo.WorkingDirectory = workingDirectory;
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = createNoWindow;
+        if (!String.IsNullOrWhiteSpace(windowsPowerShellModulePath))
+        {
+            startInfo.EnvironmentVariables["PSModulePath"] = windowsPowerShellModulePath;
+        }
         if (!createNoWindow && (startMinimized || startVisibleWithoutActivation))
         {
             // Validation may need a native window for PrintWindow or an
@@ -1099,6 +1137,69 @@ public sealed class HenkaCapturedProcess : IDisposable
 '@
 }
 
+function Get-HenkaWindowsPowerShellModulePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+
+    if ([System.IO.Path]::GetFileName($FilePath) -ine "powershell.exe") {
+        return ""
+    }
+
+    $resolvedExecutable = $FilePath
+    if (-not [System.IO.Path]::IsPathRooted($resolvedExecutable)) {
+        $application = Get-Command -Name $FilePath -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($null -eq $application) {
+            return ""
+        }
+        $resolvedExecutable = $application.Source
+    }
+
+    if (-not (Test-Path -LiteralPath $resolvedExecutable -PathType Leaf)) {
+        return ""
+    }
+
+    $nativeModulesPath = Join-Path (Split-Path -Parent $resolvedExecutable) "Modules"
+    if (-not (Test-Path -LiteralPath $nativeModulesPath -PathType Container)) {
+        return ""
+    }
+    $nativeModulesPath = [System.IO.Path]::GetFullPath($nativeModulesPath)
+
+    $orderedPaths = New-Object 'System.Collections.Generic.List[string]'
+    [void]$orderedPaths.Add($nativeModulesPath)
+    $pathSeparator = [System.IO.Path]::PathSeparator
+    $existingModulePath = [System.Environment]::GetEnvironmentVariable("PSModulePath", "Process")
+    if (-not [string]::IsNullOrWhiteSpace($existingModulePath)) {
+        foreach ($entry in $existingModulePath.Split($pathSeparator)) {
+            $trimmedEntry = $entry.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmedEntry)) {
+                continue
+            }
+
+            $entryPath = $trimmedEntry
+            try {
+                $entryPath = [System.IO.Path]::GetFullPath($trimmedEntry)
+            }
+            catch {
+                # Preserve an unusual inherited entry as-is; only the native
+                # Windows PowerShell module path needs explicit precedence.
+            }
+
+            if ([string]::Equals(
+                $entryPath.TrimEnd([char[]]@("\", "/")),
+                $nativeModulesPath.TrimEnd([char[]]@("\", "/")),
+                [System.StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+            [void]$orderedPaths.Add($trimmedEntry)
+        }
+    }
+
+    return ($orderedPaths -join [string]$pathSeparator)
+}
+
 function Start-HenkaProcess {
     param(
         [Parameter(Mandatory = $true)]
@@ -1124,6 +1225,10 @@ function Start-HenkaProcess {
     $startInfo.WorkingDirectory = $WorkingDirectory
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = [bool]$CreateNoWindow
+    $windowsPowerShellModulePath = Get-HenkaWindowsPowerShellModulePath -FilePath $FilePath
+    if (-not [string]::IsNullOrWhiteSpace($windowsPowerShellModulePath)) {
+        $startInfo.EnvironmentVariables["PSModulePath"] = $windowsPowerShellModulePath
+    }
     if (-not $CreateNoWindow -and
         ($StartMinimized -or $StartVisibleWithoutActivation)) {
         # See the captured-process path: hidden creation avoids a transient
@@ -1191,6 +1296,7 @@ function Start-HenkaCapturedProcess {
     if (-not [string]::IsNullOrWhiteSpace($stderrDirectory)) {
         [System.IO.Directory]::CreateDirectory($stderrDirectory) | Out-Null
     }
+    $windowsPowerShellModulePath = Get-HenkaWindowsPowerShellModulePath -FilePath $FilePath
 
     return [HenkaCapturedProcess]::Start(
         $FilePath,
@@ -1200,7 +1306,8 @@ function Start-HenkaCapturedProcess {
         $StderrPath,
         [bool]$CreateNoWindow,
         $StartMinimized,
-        [bool]$StartVisibleWithoutActivation)
+        [bool]$StartVisibleWithoutActivation,
+        $windowsPowerShellModulePath)
 }
 
 function Close-HenkaCapturedProcess {
