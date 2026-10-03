@@ -278,13 +278,22 @@ typedef struct henka_asset_prefab_entry
     henka_asset_metadata metadata;
 } henka_asset_prefab_entry;
 
+typedef enum henka_material_asset_source_kind
+{
+    HENKA_MATERIAL_ASSET_SOURCE_RUNTIME = 0,
+    HENKA_MATERIAL_ASSET_SOURCE_GLTF = 1,
+    HENKA_MATERIAL_ASSET_SOURCE_NATIVE = 2
+} henka_material_asset_source_kind;
+
 struct henka_material_asset
 {
     char* key;
     char* source_path;
+    char* resolved_path;
     char* display_name;
     henka_material material;
     henka_asset_metadata metadata;
+    henka_material_asset_source_kind source_kind;
     uint64_t revision;
 };
 
@@ -895,5 +904,14 @@ henka_result henka_prefab_replace_contents(
     henka_prefab* replacement);
 henka_result henka_asset_manager_create(struct henka_engine* engine, struct henka_asset_manager** out_manager);
 void henka_asset_manager_destroy(struct henka_asset_manager* manager);
+henka_result henka_material_asset_file_save(
+    henka_asset_manager* manager,
+    const char* resolved_path,
+    const henka_material* material);
+henka_result henka_material_asset_file_load(
+    henka_asset_manager* manager,
+    const char* resolved_path,
+    henka_shader* shader,
+    henka_material* out_material);
 
 #endif

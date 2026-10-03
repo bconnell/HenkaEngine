@@ -74,6 +74,7 @@ henka_enable_project_warnings(henka_runtime)
 if(HENKA_BUILD_CLIENT)
     add_library(henka STATIC
         src/assets/assets.c
+        src/assets/material_asset_file.c
         src/core/action.c
         src/assets/model_obj.c
         src/assets/model_gltf.c

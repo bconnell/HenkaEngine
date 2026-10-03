@@ -720,191 +720,6 @@ static henka_result sandbox3d_authoring_asset_set_part_string(
         ? henka_settings_set_string(settings, key, value) : HENKA_ERROR_LIMIT;
 }
 
-static henka_texture_descriptor sandbox3d_authoring_asset_texture_descriptor(
-    henka_material_texture_slot slot)
-{
-    henka_texture_descriptor descriptor;
-
-    switch (slot)
-    {
-        case HENKA_MATERIAL_TEXTURE_SLOT_NORMAL:
-            return henka_texture_descriptor_default_normal();
-        case HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS:
-            descriptor = henka_texture_descriptor_default_data();
-            descriptor.usage = HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS;
-            return descriptor;
-        case HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION:
-            descriptor = henka_texture_descriptor_default_data();
-            descriptor.usage = HENKA_TEXTURE_USAGE_OCCLUSION;
-            return descriptor;
-        case HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE:
-            descriptor = henka_texture_descriptor_default_color();
-            descriptor.usage = HENKA_TEXTURE_USAGE_EMISSIVE;
-            return descriptor;
-        case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
-        case HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS:
-            return henka_texture_descriptor_default_data();
-        case HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR:
-        default:
-            return henka_texture_descriptor_default_color();
-    }
-}
-
-static henka_result sandbox3d_authoring_asset_save_material_texture(
-    const sandbox3d_authoring_asset_document* document,
-    henka_settings* settings,
-    size_t part_index,
-    const char* suffix,
-    const henka_texture* texture)
-{
-    henka_asset_metadata metadata;
-
-    if (document == NULL || document->engine == NULL || settings == NULL || suffix == NULL)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    if (texture == NULL)
-    {
-        return sandbox3d_authoring_asset_set_part_string(settings, part_index, suffix, "");
-    }
-
-    memset(&metadata, 0, sizeof(metadata));
-    if (henka_assets_get_texture_metadata(
-            henka_engine_get_asset_manager(document->engine), texture, &metadata) != HENKA_SUCCESS ||
-        metadata.source_path == NULL || metadata.source_path[0] == '\0' ||
-        !metadata.reload_supported || metadata.fallback)
-    {
-        /* Runtime-only and fallback textures have no durable source identity.
-         * Refuse to publish an asset that cannot be reopened faithfully. */
-        return HENKA_ERROR_ASSET_SOURCE;
-    }
-
-    return sandbox3d_authoring_asset_set_part_string(
-        settings, part_index, suffix, metadata.source_path);
-}
-
-static henka_result sandbox3d_authoring_asset_load_material_texture(
-    henka_engine* engine,
-    const henka_settings* settings,
-    size_t part_index,
-    const char* suffix,
-    henka_material_texture_slot slot,
-    henka_texture** out_texture)
-{
-    char key[64];
-    const char* source_path;
-    henka_texture_descriptor descriptor;
-
-    if (out_texture == NULL)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    *out_texture = NULL;
-    if (engine == NULL || settings == NULL || suffix == NULL ||
-        !sandbox3d_authoring_asset_key(key, sizeof(key), part_index, suffix))
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    source_path = henka_settings_get_string(settings, key, NULL);
-    if (source_path == NULL)
-    {
-        return HENKA_ERROR_ASSET_SOURCE;
-    }
-    if (source_path[0] == '\0')
-    {
-        return HENKA_SUCCESS;
-    }
-
-    descriptor = sandbox3d_authoring_asset_texture_descriptor(slot);
-    return henka_assets_load_texture_with_descriptor(
-        henka_engine_get_asset_manager(engine), source_path, &descriptor, out_texture);
-}
-
-static henka_result sandbox3d_authoring_asset_save_material(
-    const sandbox3d_authoring_asset_document* document,
-    henka_settings* settings,
-    size_t part_index,
-    const henka_material* material)
-{
-    henka_result result;
-
-    if (document == NULL || settings == NULL || material == NULL ||
-        material->terrain_layers_enabled || henka_material_validate(material) != HENKA_SUCCESS)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-
-#define ASSET_MATERIAL_VALUE(field, value) do { \
-    result = sandbox3d_authoring_asset_set_part_value(settings, part_index, field, value); \
-    if (result != HENKA_SUCCESS) return result; \
-} while (0)
-#define ASSET_MATERIAL_FLAG(field, value) do { \
-    result = sandbox3d_authoring_asset_set_part_flag(settings, part_index, field, value); \
-    if (result != HENKA_SUCCESS) return result; \
-} while (0)
-    result = sandbox3d_authoring_asset_set_part_int(settings, part_index, "material.type", (int)material->type);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_set_part_int(settings, part_index, "material.alpha_mode", (int)material->alpha_mode);
-    if (result != HENKA_SUCCESS) return result;
-    ASSET_MATERIAL_VALUE("material.base_color.x", material->base_color.x);
-    ASSET_MATERIAL_VALUE("material.base_color.y", material->base_color.y);
-    ASSET_MATERIAL_VALUE("material.base_color.z", material->base_color.z);
-    ASSET_MATERIAL_VALUE("material.base_color.w", material->base_color.w);
-    ASSET_MATERIAL_VALUE("material.emissive_color.x", material->emissive_color.x);
-    ASSET_MATERIAL_VALUE("material.emissive_color.y", material->emissive_color.y);
-    ASSET_MATERIAL_VALUE("material.emissive_color.z", material->emissive_color.z);
-    ASSET_MATERIAL_VALUE("material.metallic", material->metallic);
-    ASSET_MATERIAL_VALUE("material.roughness", material->roughness);
-    ASSET_MATERIAL_VALUE("material.specular_factor", material->specular_factor);
-    ASSET_MATERIAL_VALUE("material.specular_color.x", material->specular_color.x);
-    ASSET_MATERIAL_VALUE("material.specular_color.y", material->specular_color.y);
-    ASSET_MATERIAL_VALUE("material.specular_color.z", material->specular_color.z);
-    ASSET_MATERIAL_VALUE("material.ior", material->ior);
-    ASSET_MATERIAL_VALUE("material.transmission", material->transmission);
-    ASSET_MATERIAL_VALUE("material.thickness", material->thickness);
-    ASSET_MATERIAL_VALUE("material.attenuation_distance", material->attenuation_distance);
-    ASSET_MATERIAL_VALUE("material.attenuation_color.x", material->attenuation_color.x);
-    ASSET_MATERIAL_VALUE("material.attenuation_color.y", material->attenuation_color.y);
-    ASSET_MATERIAL_VALUE("material.attenuation_color.z", material->attenuation_color.z);
-    ASSET_MATERIAL_VALUE("material.subsurface", material->subsurface);
-    ASSET_MATERIAL_VALUE("material.subsurface_color.x", material->subsurface_color.x);
-    ASSET_MATERIAL_VALUE("material.subsurface_color.y", material->subsurface_color.y);
-    ASSET_MATERIAL_VALUE("material.subsurface_color.z", material->subsurface_color.z);
-    ASSET_MATERIAL_VALUE("material.normal_scale", material->normal_scale);
-    ASSET_MATERIAL_VALUE("material.occlusion_strength", material->occlusion_strength);
-    ASSET_MATERIAL_VALUE("material.emissive_strength", material->emissive_strength);
-    ASSET_MATERIAL_VALUE("material.clearcoat", material->clearcoat);
-    ASSET_MATERIAL_VALUE("material.clearcoat_roughness", material->clearcoat_roughness);
-    ASSET_MATERIAL_VALUE("material.alpha_cutoff", material->alpha_cutoff);
-    ASSET_MATERIAL_VALUE("material.sheen_color.x", material->sheen_color.x);
-    ASSET_MATERIAL_VALUE("material.sheen_color.y", material->sheen_color.y);
-    ASSET_MATERIAL_VALUE("material.sheen_color.z", material->sheen_color.z);
-    ASSET_MATERIAL_VALUE("material.sheen_roughness", material->sheen_roughness);
-    result = sandbox3d_authoring_asset_set_part_int(settings, part_index, "material.base_color_uv_set", material->base_color_uv_set);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_set_part_int(settings, part_index, "material.normal_uv_set", material->normal_uv_set);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_set_part_int(settings, part_index, "material.metallic_roughness_uv_set", material->metallic_roughness_uv_set);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_set_part_int(settings, part_index, "material.occlusion_uv_set", material->occlusion_uv_set);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_set_part_int(settings, part_index, "material.emissive_uv_set", material->emissive_uv_set);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_set_part_int(settings, part_index, "material.transmission_uv_set", material->transmission_uv_set);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_set_part_int(settings, part_index, "material.thickness_uv_set", material->thickness_uv_set);
-    if (result != HENKA_SUCCESS) return result;
-    ASSET_MATERIAL_FLAG("material.use_texture", material->use_texture);
-    ASSET_MATERIAL_FLAG("material.use_lighting", material->use_lighting);
-    ASSET_MATERIAL_FLAG("material.depth_test", material->depth_test);
-    ASSET_MATERIAL_FLAG("material.double_sided", material->double_sided);
-    ASSET_MATERIAL_FLAG("material.cast_shadows", material->cast_shadows);
-    ASSET_MATERIAL_FLAG("material.receive_shadows", material->receive_shadows);
-#undef ASSET_MATERIAL_VALUE
-#undef ASSET_MATERIAL_FLAG
-    result = sandbox3d_authoring_asset_save_material_texture(document, settings, part_index, "material.base_color_texture", material->base_color_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_save_material_texture(document, settings, part_index, "material.normal_texture", material->normal_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_save_material_texture(document, settings, part_index, "material.metallic_roughness_texture", material->metallic_roughness_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_save_material_texture(document, settings, part_index, "material.occlusion_texture", material->occlusion_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_save_material_texture(document, settings, part_index, "material.emissive_texture", material->emissive_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_save_material_texture(document, settings, part_index, "material.transmission_texture", material->transmission_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_save_material_texture(document, settings, part_index, "material.thickness_texture", material->thickness_texture);
-    return result;
-}
-
 static bool sandbox3d_authoring_asset_get_part_value(
     const henka_settings* settings, size_t index, const char* suffix, float* out_value)
 {
@@ -942,173 +757,22 @@ static bool sandbox3d_authoring_asset_get_part_int(
     return *out_value != INT_MIN;
 }
 
-static henka_result sandbox3d_authoring_asset_load_material(
-    henka_engine* engine,
-    const henka_settings* settings,
-    size_t part_index,
-    const henka_material* material_template,
-    henka_material* out_material)
-{
-    henka_material material;
-    int type;
-    int alpha_mode;
-    int base_color_uv_set;
-    int normal_uv_set;
-    int metallic_roughness_uv_set;
-    int occlusion_uv_set;
-    int emissive_uv_set;
-    int transmission_uv_set;
-    int thickness_uv_set;
-    bool use_texture;
-    bool use_lighting;
-    bool depth_test;
-    bool double_sided;
-    bool cast_shadows;
-    bool receive_shadows;
-    henka_result result;
-
-    if (engine == NULL || settings == NULL || out_material == NULL)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    material = material_template == NULL ? henka_material_default() : *material_template;
-
-#define ASSET_MATERIAL_READ(field, target) do { \
-    if (!sandbox3d_authoring_asset_get_part_value(settings, part_index, field, &target)) return HENKA_ERROR_ASSET_SOURCE; \
-} while (0)
-    ASSET_MATERIAL_READ("material.base_color.x", material.base_color.x);
-    ASSET_MATERIAL_READ("material.base_color.y", material.base_color.y);
-    ASSET_MATERIAL_READ("material.base_color.z", material.base_color.z);
-    ASSET_MATERIAL_READ("material.base_color.w", material.base_color.w);
-    ASSET_MATERIAL_READ("material.emissive_color.x", material.emissive_color.x);
-    ASSET_MATERIAL_READ("material.emissive_color.y", material.emissive_color.y);
-    ASSET_MATERIAL_READ("material.emissive_color.z", material.emissive_color.z);
-    ASSET_MATERIAL_READ("material.metallic", material.metallic);
-    ASSET_MATERIAL_READ("material.roughness", material.roughness);
-    ASSET_MATERIAL_READ("material.specular_factor", material.specular_factor);
-    ASSET_MATERIAL_READ("material.specular_color.x", material.specular_color.x);
-    ASSET_MATERIAL_READ("material.specular_color.y", material.specular_color.y);
-    ASSET_MATERIAL_READ("material.specular_color.z", material.specular_color.z);
-    ASSET_MATERIAL_READ("material.ior", material.ior);
-    ASSET_MATERIAL_READ("material.transmission", material.transmission);
-    ASSET_MATERIAL_READ("material.thickness", material.thickness);
-    ASSET_MATERIAL_READ("material.attenuation_distance", material.attenuation_distance);
-    ASSET_MATERIAL_READ("material.attenuation_color.x", material.attenuation_color.x);
-    ASSET_MATERIAL_READ("material.attenuation_color.y", material.attenuation_color.y);
-    ASSET_MATERIAL_READ("material.attenuation_color.z", material.attenuation_color.z);
-    ASSET_MATERIAL_READ("material.subsurface", material.subsurface);
-    ASSET_MATERIAL_READ("material.subsurface_color.x", material.subsurface_color.x);
-    ASSET_MATERIAL_READ("material.subsurface_color.y", material.subsurface_color.y);
-    ASSET_MATERIAL_READ("material.subsurface_color.z", material.subsurface_color.z);
-    ASSET_MATERIAL_READ("material.normal_scale", material.normal_scale);
-    ASSET_MATERIAL_READ("material.occlusion_strength", material.occlusion_strength);
-    ASSET_MATERIAL_READ("material.emissive_strength", material.emissive_strength);
-    ASSET_MATERIAL_READ("material.clearcoat", material.clearcoat);
-    ASSET_MATERIAL_READ("material.clearcoat_roughness", material.clearcoat_roughness);
-    ASSET_MATERIAL_READ("material.alpha_cutoff", material.alpha_cutoff);
-    ASSET_MATERIAL_READ("material.sheen_color.x", material.sheen_color.x);
-    ASSET_MATERIAL_READ("material.sheen_color.y", material.sheen_color.y);
-    ASSET_MATERIAL_READ("material.sheen_color.z", material.sheen_color.z);
-    ASSET_MATERIAL_READ("material.sheen_roughness", material.sheen_roughness);
-#undef ASSET_MATERIAL_READ
-
-    if (!sandbox3d_authoring_asset_get_part_int(settings, part_index, "material.type", &type) ||
-        !sandbox3d_authoring_asset_get_part_int(settings, part_index, "material.alpha_mode", &alpha_mode) ||
-        !sandbox3d_authoring_asset_get_part_int(settings, part_index, "material.base_color_uv_set", &base_color_uv_set) ||
-        !sandbox3d_authoring_asset_get_part_int(settings, part_index, "material.normal_uv_set", &normal_uv_set) ||
-        !sandbox3d_authoring_asset_get_part_int(settings, part_index, "material.metallic_roughness_uv_set", &metallic_roughness_uv_set) ||
-        !sandbox3d_authoring_asset_get_part_int(settings, part_index, "material.occlusion_uv_set", &occlusion_uv_set) ||
-        !sandbox3d_authoring_asset_get_part_int(settings, part_index, "material.emissive_uv_set", &emissive_uv_set) ||
-        !sandbox3d_authoring_asset_get_part_int(settings, part_index, "material.transmission_uv_set", &transmission_uv_set) ||
-        !sandbox3d_authoring_asset_get_part_int(settings, part_index, "material.thickness_uv_set", &thickness_uv_set) ||
-        !sandbox3d_authoring_asset_get_part_flag(settings, part_index, "material.use_texture", &use_texture) ||
-        !sandbox3d_authoring_asset_get_part_flag(settings, part_index, "material.use_lighting", &use_lighting) ||
-        !sandbox3d_authoring_asset_get_part_flag(settings, part_index, "material.depth_test", &depth_test) ||
-        !sandbox3d_authoring_asset_get_part_flag(settings, part_index, "material.double_sided", &double_sided) ||
-        !sandbox3d_authoring_asset_get_part_flag(settings, part_index, "material.cast_shadows", &cast_shadows) ||
-        !sandbox3d_authoring_asset_get_part_flag(settings, part_index, "material.receive_shadows", &receive_shadows) ||
-        type < (int)HENKA_MATERIAL_TYPE_LIT || type > (int)HENKA_MATERIAL_TYPE_VERTEX_COLOR ||
-        alpha_mode < (int)HENKA_MATERIAL_ALPHA_OPAQUE || alpha_mode > (int)HENKA_MATERIAL_ALPHA_BLENDED ||
-        base_color_uv_set < 0 || base_color_uv_set > 1 || normal_uv_set < 0 || normal_uv_set > 1 ||
-        metallic_roughness_uv_set < 0 || metallic_roughness_uv_set > 1 || occlusion_uv_set < 0 || occlusion_uv_set > 1 ||
-        emissive_uv_set < 0 || emissive_uv_set > 1 || transmission_uv_set < 0 || transmission_uv_set > 1 ||
-        thickness_uv_set < 0 || thickness_uv_set > 1)
-    {
-        return HENKA_ERROR_ASSET_SOURCE;
-    }
-
-    material.type = (henka_material_type)type;
-    material.alpha_mode = (henka_material_alpha_mode)alpha_mode;
-    material.base_color_uv_set = base_color_uv_set;
-    material.normal_uv_set = normal_uv_set;
-    material.metallic_roughness_uv_set = metallic_roughness_uv_set;
-    material.occlusion_uv_set = occlusion_uv_set;
-    material.emissive_uv_set = emissive_uv_set;
-    material.transmission_uv_set = transmission_uv_set;
-    material.thickness_uv_set = thickness_uv_set;
-    material.use_texture = use_texture;
-    material.use_lighting = use_lighting;
-    material.depth_test = depth_test;
-    material.double_sided = double_sided;
-    material.cast_shadows = cast_shadows;
-    material.receive_shadows = receive_shadows;
-    material.terrain_layers_enabled = false;
-
-    result = sandbox3d_authoring_asset_load_material_texture(
-        engine, settings, part_index, "material.base_color_texture",
-        HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR, &material.base_color_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_load_material_texture(
-        engine, settings, part_index, "material.normal_texture",
-        HENKA_MATERIAL_TEXTURE_SLOT_NORMAL, &material.normal_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_load_material_texture(
-        engine, settings, part_index, "material.metallic_roughness_texture",
-        HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS, &material.metallic_roughness_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_load_material_texture(
-        engine, settings, part_index, "material.occlusion_texture",
-        HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION, &material.occlusion_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_load_material_texture(
-        engine, settings, part_index, "material.emissive_texture",
-        HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE, &material.emissive_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_load_material_texture(
-        engine, settings, part_index, "material.transmission_texture",
-        HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION, &material.transmission_texture);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_load_material_texture(
-        engine, settings, part_index, "material.thickness_texture",
-        HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS, &material.thickness_texture);
-    if (result != HENKA_SUCCESS ||
-        (material_template != NULL && henka_material_validate(&material) != HENKA_SUCCESS))
-    {
-        return result == HENKA_SUCCESS ? HENKA_ERROR_ASSET_SOURCE : result;
-    }
-
-    *out_material = material;
-    return HENKA_SUCCESS;
-}
-
 static henka_result sandbox3d_authoring_asset_save_material_file(
     const sandbox3d_authoring_asset_document* document,
     const char* project_root,
     const char* relative_material_path,
     const henka_material* material)
 {
-    henka_settings* settings = NULL;
-    char* material_path = NULL;
-    henka_result result;
-
     if (document == NULL || project_root == NULL || relative_material_path == NULL ||
-        material == NULL)
+        material == NULL || document->engine == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = henka_path_resolve_confined(project_root, relative_material_path, &material_path);
-    if (result == HENKA_SUCCESS) result = henka_path_ensure_parent_directory(material_path);
-    if (result == HENKA_SUCCESS) result = henka_settings_create(&settings);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_save_material(
-        document, settings, 0U, material);
-    if (result == HENKA_SUCCESS) result = henka_settings_save_file(settings, material_path);
-    henka_settings_destroy(settings);
-    henka_free(material_path);
-    return result;
+    return henka_assets_save_native_material_file(
+        henka_engine_get_asset_manager(document->engine),
+        project_root,
+        relative_material_path,
+        material);
 }
 
 static henka_result sandbox3d_authoring_asset_load_material_file(
@@ -1116,24 +780,54 @@ static henka_result sandbox3d_authoring_asset_load_material_file(
     const char* project_root,
     const char* relative_material_path,
     const henka_material* material_template,
+    henka_material_asset** out_asset,
     henka_material* out_material)
 {
-    henka_settings* settings = NULL;
-    char* material_path = NULL;
+    henka_material default_material_template;
+    henka_shader* default_shader = NULL;
+    henka_asset_manager* assets;
     henka_result result;
 
     if (engine == NULL || project_root == NULL || relative_material_path == NULL ||
-        out_material == NULL)
+        out_asset == NULL || out_material == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = henka_path_resolve_confined(project_root, relative_material_path, &material_path);
-    if (result == HENKA_SUCCESS) result = henka_settings_create(&settings);
-    if (result == HENKA_SUCCESS) result = henka_settings_load_file(settings, material_path);
-    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_load_material(
-        engine, settings, 0U, material_template, out_material);
-    henka_settings_destroy(settings);
-    henka_free(material_path);
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (material_template == NULL)
+    {
+        result = henka_assets_load_shader(
+            assets,
+            "assets/shaders/basic_lit.vert",
+            "assets/shaders/basic_lit.frag",
+            &default_shader);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        default_material_template = henka_material_default();
+        default_material_template.shader = default_shader;
+        material_template = &default_material_template;
+    }
+    if (material_template->shader == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_asset = NULL;
+    result = henka_assets_load_native_material_asset(
+        assets,
+        project_root,
+        relative_material_path,
+        material_template->shader,
+        out_asset);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_get_material_asset_material(*out_asset, out_material);
+    }
     return result;
 }
 
@@ -1141,24 +835,49 @@ static henka_result sandbox3d_authoring_asset_validate_material(
     const sandbox3d_authoring_asset_document* document,
     const henka_material* material)
 {
-    henka_settings* settings = NULL;
-    henka_result result;
+    const henka_texture* textures[7];
+    henka_asset_manager* assets;
+    size_t index;
 
-    if (document == NULL || material == NULL)
+    if (document == NULL || document->engine == NULL || material == NULL ||
+        material->terrain_layers_enabled || henka_material_validate(material) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    result = henka_settings_create(&settings);
-    if (result == HENKA_SUCCESS)
+    assets = henka_engine_get_asset_manager(document->engine);
+    textures[0] = material->base_color_texture;
+    textures[1] = material->normal_texture;
+    textures[2] = material->metallic_roughness_texture;
+    textures[3] = material->occlusion_texture;
+    textures[4] = material->emissive_texture;
+    textures[5] = material->transmission_texture;
+    textures[6] = material->thickness_texture;
+    for (index = 0U; index < 7U; ++index)
     {
-        /* The temporary settings object validates the complete durable
-         * material contract without publishing a sidecar file. */
-        result = sandbox3d_authoring_asset_save_material(
-            document, settings, 0U, material);
+        henka_asset_metadata metadata;
+        char* confined_source = NULL;
+        henka_result result;
+
+        if (textures[index] == NULL)
+        {
+            continue;
+        }
+        memset(&metadata, 0, sizeof(metadata));
+        result = henka_assets_get_texture_metadata(assets, textures[index], &metadata);
+        if (result != HENKA_SUCCESS || metadata.source_path == NULL ||
+            metadata.source_path[0] == '\0' || !metadata.reload_supported || metadata.fallback)
+        {
+            return HENKA_ERROR_ASSET_SOURCE;
+        }
+        result = henka_path_resolve_confined("", metadata.source_path, &confined_source);
+        henka_free(confined_source);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
     }
-    henka_settings_destroy(settings);
-    return result;
+    return HENKA_SUCCESS;
 }
 
 static henka_result sandbox3d_authoring_asset_validate_part_for_save(
@@ -1426,10 +1145,8 @@ henka_result sandbox3d_authoring_asset_document_load(
         const char* name;
         const char* relative_source;
         const char* relative_material;
-        const henka_material_asset* material_asset = NULL;
-        henka_material_asset* adopted_material_asset = NULL;
+        henka_material_asset* material_asset = NULL;
         henka_asset_manager* assets = henka_engine_get_asset_manager(engine);
-        bool material_asset_needs_adoption = false;
         bool apply_material = false;
         int primitive;
         bool visible;
@@ -1458,43 +1175,20 @@ henka_result sandbox3d_authoring_asset_document_load(
             if (result == HENKA_SUCCESS) result = HENKA_ERROR_ASSET_SOURCE;
             break;
         }
-        if (assets == NULL)
-        {
-            result = HENKA_ERROR_INVALID_ARGUMENT;
-        }
-        else
-        {
-            result = henka_assets_get_material_asset_for_path(
-                assets, expected_material_relative, &material_asset);
-            if (result == HENKA_SUCCESS)
-            {
-                result = henka_assets_get_material_asset_material(
-                    material_asset, &material);
-                apply_material = result == HENKA_SUCCESS;
-            }
-            else if (result == HENKA_ERROR_UNKNOWN)
-            {
-                result = sandbox3d_authoring_asset_load_material_file(
-                    engine, project_root, expected_material_relative,
-                    material_template, &material);
-                material_asset_needs_adoption =
-                    result == HENKA_SUCCESS && material_template != NULL;
-                apply_material = material_asset_needs_adoption;
-            }
-        }
+        result = assets == NULL
+            ? HENKA_ERROR_INVALID_ARGUMENT
+            : sandbox3d_authoring_asset_load_material_file(
+                engine,
+                project_root,
+                expected_material_relative,
+                material_template,
+                &material_asset,
+                &material);
+        apply_material = result == HENKA_SUCCESS;
         if (result != HENKA_SUCCESS) break;
         result = henka_path_resolve_confined(project_root, expected_relative, &source_path);
         if (result == HENKA_SUCCESS) result = sandbox3d_authoring_asset_document_add_loaded_part(candidate, name, (sandbox3d_authoring_primitive_kind)primitive, source_path, transform, visible, material, apply_material, history_steps);
         henka_free(source_path);
-        if (result == HENKA_SUCCESS && material_asset_needs_adoption)
-        {
-            result = henka_assets_adopt_runtime_material(
-                assets,
-                expected_material_relative,
-                &material,
-                &adopted_material_asset);
-            material_asset = adopted_material_asset;
-        }
         if (result == HENKA_SUCCESS && material_asset != NULL)
         {
             const sandbox3d_authoring_asset_part* loaded_part =

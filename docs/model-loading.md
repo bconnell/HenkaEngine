@@ -211,6 +211,26 @@ Texture semantic validation remains centralized in `henka_material_validate`.
 
 `henka_assets_load_gltf_material_asset` caches a material by canonical glTF source identity and returns a stable manager-owned asset.
 
+`henka_assets_save_native_material_file` writes a root-confined `.material`
+file, and `henka_assets_load_native_material_asset` loads it into the same
+manager-owned material cache used by imported definitions. The version-1 file
+stores validated non-terrain material values and manager-owned texture
+dependencies by their reloadable source paths. The runtime shader and material
+name remain runtime authorities and are supplied or assigned outside the file.
+The loader accepts the earlier sidecar schema without a version key as legacy
+version 0; malformed or newer unsupported versions fail closed. Material files
+are limited to 64 KiB.
+
+`henka_assets_reload_native_material_asset` parses and validates a complete
+candidate before updating the existing asset identity. A failed source or
+dependency load leaves the previous material and revision intact. Assigning a
+definition to a scene entity records its borrowed identity; callers then use
+`henka_assets_refresh_scene_material_bindings` to copy the current definition
+into the scene while preserving explicit overrides.
+
+Terrain-layer materials are not serialized by this format. Texture references
+must resolve to manager-owned textures with durable reloadable source paths.
+
 Material loads require an initialized empty output slot. Rejected or failed loads preserve a non-empty caller slot, and composite mesh-plus-material loads commit both outputs only after the complete operation succeeds.
 
 Scenes can copy the current material value through `henka_assets_get_material_asset_material`.
@@ -344,7 +364,9 @@ Current model/import gaps include:
 - production refraction and layered-volume rendering for imported materials;
 - broader cross-backend compressed-texture validation.
 
-A future editor material format may add editor and instance behavior while continuing to use the shared material and dependency model.
+The native `.material` format supplies file-backed definition and reload
+authority. A complete editor material-library and broader end-user material
+authoring workflow remain outside this format's current scope.
 
 ## Sample assets
 

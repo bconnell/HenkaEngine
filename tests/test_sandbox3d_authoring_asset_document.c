@@ -349,9 +349,101 @@ void henka_test_sandbox3d_authoring_asset_document(void)
         henka_engine_get_asset_manager(engine),
         reloaded_material_asset,
         &reloaded_material_metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_material_metadata.reload_supported);
     HENKA_TEST_ASSERT(strcmp(
         reloaded_material_metadata.source_path,
         "authored_assets/test_asset/rev1/cylinder_body.material") == 0);
+    {
+        henka_asset_manager* asset_manager = henka_engine_get_asset_manager(engine);
+        henka_material_asset* failed_reload = NULL;
+        henka_material before_failed_reload;
+        henka_material after_failed_reload;
+        henka_material_dependency_info before_dependencies;
+        henka_material_dependency_info after_dependencies;
+        henka_settings* material_settings = NULL;
+        char* material_file_path = NULL;
+        uint64_t revision_before = 0U;
+        uint64_t revision_after = UINT64_MAX;
+        henka_result reload_result = HENKA_ERROR_UNKNOWN;
+        henka_result recovery_reload_result = HENKA_ERROR_UNKNOWN;
+        bool dependency_file_rejected = false;
+        bool failed_reload_preserved = false;
+        bool fixture_restored = false;
+
+        memset(&before_failed_reload, 0, sizeof(before_failed_reload));
+        memset(&after_failed_reload, 0, sizeof(after_failed_reload));
+        memset(&before_dependencies, 0, sizeof(before_dependencies));
+        memset(&after_dependencies, 0, sizeof(after_dependencies));
+        if (henka_assets_get_material_asset_material(
+                reloaded_material_asset, &before_failed_reload) == HENKA_SUCCESS &&
+            henka_assets_get_material_asset_revision(
+                reloaded_material_asset, &revision_before) == HENKA_SUCCESS &&
+            henka_assets_get_material_asset_dependencies(
+                reloaded_material_asset, &before_dependencies) == HENKA_SUCCESS &&
+            before_dependencies.dependency_count == 1U &&
+            henka_path_resolve_confined(
+                project_root,
+                reloaded_material_metadata.source_path,
+                &material_file_path) == HENKA_SUCCESS &&
+            henka_settings_create(&material_settings) == HENKA_SUCCESS &&
+            henka_settings_load_file(material_settings, material_file_path) == HENKA_SUCCESS &&
+            henka_settings_set_string(
+                material_settings,
+                "part.0.material.base_color_texture",
+                "build/test_tmp/native-material-missing-dependency.png") == HENKA_SUCCESS &&
+            henka_settings_save_file(material_settings, material_file_path) == HENKA_SUCCESS)
+        {
+            reload_result = henka_assets_reload_native_material_asset(
+                asset_manager,
+                reloaded_material_metadata.source_path,
+                &failed_reload);
+            dependency_file_rejected = reload_result == HENKA_ERROR_ASSET_SOURCE &&
+                failed_reload == NULL;
+            failed_reload_preserved =
+                henka_assets_get_material_asset_revision(
+                    reloaded_material_asset, &revision_after) == HENKA_SUCCESS &&
+                revision_after == revision_before &&
+                henka_assets_get_material_asset_material(
+                    reloaded_material_asset, &after_failed_reload) == HENKA_SUCCESS &&
+                after_failed_reload.base_color_texture == before_failed_reload.base_color_texture &&
+                after_failed_reload.base_color.x == before_failed_reload.base_color.x &&
+                after_failed_reload.roughness == before_failed_reload.roughness &&
+                henka_assets_get_material_asset_dependencies(
+                    reloaded_material_asset, &after_dependencies) == HENKA_SUCCESS &&
+                after_dependencies.definition_revision == before_dependencies.definition_revision &&
+                after_dependencies.dependency_count == before_dependencies.dependency_count &&
+                after_dependencies.dependencies[0].texture ==
+                    before_dependencies.dependencies[0].texture;
+        }
+
+        henka_settings_destroy(material_settings);
+        if (material_file_path != NULL)
+        {
+            fixture_restored = henka_assets_save_native_material_file(
+                asset_manager,
+                project_root,
+                reloaded_material_metadata.source_path,
+                &persisted_material) == HENKA_SUCCESS;
+            if (fixture_restored)
+            {
+                henka_material_asset* restored_asset = NULL;
+                recovery_reload_result = henka_assets_reload_native_material_asset(
+                    asset_manager,
+                    reloaded_material_metadata.source_path,
+                    &restored_asset);
+                if (restored_asset != reloaded_material_asset)
+                {
+                    recovery_reload_result = HENKA_ERROR_UNKNOWN;
+                }
+            }
+        }
+        henka_free(material_file_path);
+        HENKA_TEST_ASSERT(reload_result == HENKA_ERROR_ASSET_SOURCE);
+        HENKA_TEST_ASSERT(dependency_file_rejected);
+        HENKA_TEST_ASSERT(failed_reload_preserved);
+        HENKA_TEST_ASSERT(fixture_restored);
+        HENKA_TEST_ASSERT(recovery_reload_result == HENKA_SUCCESS);
+    }
     HENKA_TEST_ASSERT(reloaded_material.normal_uv_set == 1);
     HENKA_TEST_ASSERT(reloaded_material.transmission_uv_set == 1);
     HENKA_TEST_ASSERT(reloaded_material.alpha_mode == HENKA_MATERIAL_ALPHA_MASKED);
@@ -387,7 +479,7 @@ void henka_test_sandbox3d_authoring_asset_document(void)
         project_root,
         "round_trip_second.asset",
         8U,
-        NULL,
+        &persisted_material,
         &second_reloaded_document) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_get_part_count(
         second_reloaded_document) == 2U);
@@ -520,7 +612,7 @@ void henka_test_sandbox3d_authoring_asset_document(void)
         project_root,
         "capacity.asset",
         1U,
-        NULL,
+        &persisted_material,
         &reloaded_document) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_get_part_count(
         reloaded_document) == SANDBOX3D_AUTHORING_ASSET_PART_CAPACITY);
