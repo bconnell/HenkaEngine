@@ -328,7 +328,7 @@ Use either:
 
 or open `out/HenkaSandbox3D` in Explorer and launch `HenkaSandbox3D.exe`.
 
-A first packaged run with no settings file opens the stable `Standard` workspace shell. The Sandbox currently opens a console window. Normal interactive controls live in the in-window workspace.
+A first packaged run with no settings file opens the stable `Standard` workspace shell. The packaged Sandbox opens without a separate console window. Normal interactive controls live in the in-window workspace, and automation can capture diagnostic output through redirected standard streams.
 
 ### Bounded startup soak
 

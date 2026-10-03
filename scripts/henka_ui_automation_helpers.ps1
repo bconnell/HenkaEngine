@@ -45,6 +45,26 @@ public static class HenkaUiAutomationNative
 "@
 }
 
+function Assert-HenkaCaptureDimensions {
+    param(
+        [Parameter(Mandatory = $true)][int]$Width,
+        [Parameter(Mandatory = $true)][int]$Height,
+        [int]$MinimumWidth = 800,
+        [int]$MinimumHeight = 600,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    if ($Width -le 0 -or $Height -le 0 -or
+        $MinimumWidth -le 0 -or $MinimumHeight -le 0) {
+        throw "$Description had non-positive capture dimensions or minimum bounds."
+    }
+    if ($Width -lt $MinimumWidth -or $Height -lt $MinimumHeight) {
+        throw (
+            "$Description measured ${Width}x${Height}, below the minimum capture bounds " +
+            "${MinimumWidth}x${MinimumHeight}.")
+    }
+}
+
 function Set-HenkaAutomationForeground {
     param([Parameter(Mandatory = $true)][System.IntPtr]$Handle)
 
@@ -230,6 +250,42 @@ function Send-HenkaAutomationClick {
     Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("button {0} up {1} {2}" -f $Button, $xText, $yText)
 }
 
+function Get-HenkaViewportShadingControl {
+    param(
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Wireframe", "Solid", "Material Preview", "Rendered")]
+        [string]$ModeName
+    )
+
+    $pattern = 'Viewport shading control: mode=' +
+        [Regex]::Escape($ModeName) +
+        ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+)'
+    $match = Get-LastLogRegexMatch -Path $LogPath -Pattern $pattern
+    if ($null -eq $match) {
+        throw "The application did not report the individual $ModeName viewport shading control bounds."
+    }
+
+    $culture = [Globalization.CultureInfo]::InvariantCulture
+    $control = [pscustomobject]@{
+        X = [double]::Parse($match.Groups["x"].Value, $culture)
+        Y = [double]::Parse($match.Groups["y"].Value, $culture)
+        Width = [double]::Parse($match.Groups["width"].Value, $culture)
+        Height = [double]::Parse($match.Groups["height"].Value, $culture)
+    }
+    if ($control.X -lt 0.0 -or $control.Y -lt 0.0 -or
+        $control.Width -le 0.0 -or $control.Height -le 0.0 -or
+        [double]::IsNaN($control.X) -or [double]::IsInfinity($control.X) -or
+        [double]::IsNaN($control.Y) -or [double]::IsInfinity($control.Y) -or
+        [double]::IsNaN($control.Width) -or [double]::IsInfinity($control.Width) -or
+        [double]::IsNaN($control.Height) -or [double]::IsInfinity($control.Height)) {
+        throw "The application reported invalid bounds for the $ModeName viewport shading control."
+    }
+    return $control
+}
+
+# WheelDelta is expressed in SDL wheel-step units consumed by the engine's
+# automation channel (normally -1 or +1), not Win32's 120-unit wheel message.
 function Send-HenkaAutomationScroll {
     param(
         [Parameter(Mandatory = $true)][string]$EventPath,
@@ -244,6 +300,9 @@ function Send-HenkaAutomationScroll {
         [double]::IsNaN($WheelDelta) -or [double]::IsInfinity($WheelDelta) -or
         $WheelDelta -eq 0.0 -or $WheelDelta -lt -1024.0 -or $WheelDelta -gt 1024.0) {
         throw "The Henka automation wheel delta was invalid."
+    }
+    if ($WheelDelta -eq -120.0 -or $WheelDelta -eq 120.0) {
+        throw "Henka automation scroll uses SDL wheel-step units; Win32's 120-unit wheel delta is not accepted."
     }
     $xText = Format-HenkaAutomationFloat -Value $X
     $yText = Format-HenkaAutomationFloat -Value $Y

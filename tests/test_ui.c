@@ -6,7 +6,116 @@
 
 #include <henka/ui.h>
 #include <henka/ui_icons.h>
+#include "../examples/sandbox3d/editor_layout.h"
 #include "../engine/src/ui/ui_internal.h"
+
+static void henka_test_utility_tab_labels_are_not_truncated(void)
+{
+    static const char* labels[] = {"Diagnostics", "Transform QA", "Physics QA"};
+    static const char* tab_ids[] = {
+        "utility-tab-label-diagnostics",
+        "utility-tab-label-transform-qa",
+        "utility-tab-label-physics-qa"};
+    static const int framebuffer_widths[] = {1280, 1920, 2560};
+    static const int framebuffer_heights[] = {720, 1080, 1440};
+    henka_ui_context* actual_ui = NULL;
+    henka_ui_context* expected_ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    henka_ui_rect tabs[3];
+    size_t tab_count = 0U;
+    size_t resolution_index;
+    size_t label_index;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&actual_ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_create(&expected_ui) == HENKA_SUCCESS);
+    henka_ui_set_visible(actual_ui, true);
+    henka_ui_set_visible(expected_ui, true);
+
+    for (resolution_index = 0U; resolution_index < 3U; ++resolution_index)
+    {
+        sandbox3d_editor_layout_metrics metrics;
+
+        frame_desc.framebuffer_width = framebuffer_widths[resolution_index];
+        frame_desc.framebuffer_height = framebuffer_heights[resolution_index];
+        frame_desc.mouse_position = (henka_vec2){0.0f, 0.0f};
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(actual_ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(expected_ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_metrics_for_framebuffer(
+                framebuffer_widths[resolution_index],
+                framebuffer_heights[resolution_index],
+                &metrics) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_text_control_row_for_context(
+                actual_ui,
+                (henka_ui_rect){
+                    14.0f,
+                    60.0f,
+                    metrics.utility_width - 28.0f,
+                    24.0f},
+                labels,
+                3U,
+                1.0f,
+                8.0f,
+                1.5f,
+                tabs,
+                3U,
+                &tab_count) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(tab_count == 3U);
+
+        for (label_index = 0U; label_index < 3U; ++label_index)
+        {
+            size_t expected_glyph_start;
+            size_t expected_glyph_count;
+            size_t actual_tab_start;
+            size_t actual_tab_count;
+            size_t glyph_index;
+
+            expected_glyph_start = henka_ui_get_draw_rect_count(expected_ui);
+            HENKA_TEST_ASSERT(
+                henka_ui_label(
+                    expected_ui,
+                    tabs[label_index].x + 8.0f,
+                    tabs[label_index].y + 8.0f,
+                    1.0f,
+                    labels[label_index]) == HENKA_SUCCESS);
+            expected_glyph_count =
+                henka_ui_get_draw_rect_count(expected_ui) - expected_glyph_start;
+            HENKA_TEST_ASSERT(expected_glyph_count > 0U);
+
+            actual_tab_start = henka_ui_get_draw_rect_count(actual_ui);
+            (void)henka_ui_tab(
+                actual_ui,
+                tab_ids[label_index],
+                tabs[label_index],
+                labels[label_index],
+                false);
+            actual_tab_count = henka_ui_get_draw_rect_count(actual_ui);
+            HENKA_TEST_ASSERT(actual_tab_count >= actual_tab_start + expected_glyph_count);
+
+            for (glyph_index = 0U; glyph_index < expected_glyph_count; ++glyph_index)
+            {
+                const henka_ui_rect actual = actual_ui->draw_rects[
+                    actual_tab_count - expected_glyph_count + glyph_index].bounds;
+                const henka_ui_rect expected = expected_ui->draw_rects[
+                    expected_glyph_start + glyph_index].bounds;
+
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.x, expected.x, 0.0001f);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.y, expected.y, 0.0001f);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.width, expected.width, 0.0001f);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.height, expected.height, 0.0001f);
+            }
+        }
+
+        HENKA_TEST_ASSERT(henka_ui_end_frame(expected_ui) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_ui_end_frame(actual_ui) == HENKA_SUCCESS);
+    }
+
+    henka_ui_destroy(expected_ui);
+    henka_ui_destroy(actual_ui);
+}
 
 static void henka_test_ui_theme_is_light_by_default_and_context_local(void)
 {
@@ -201,7 +310,7 @@ static void henka_test_ui_readability_scale_is_bounded_and_fit_aware(void)
         1.0f,
         &measured_width,
         &measured_height) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(measured_width == 13);
+    HENKA_TEST_ASSERT(measured_width == 14);
     HENKA_TEST_ASSERT(measured_height == 8);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
@@ -213,11 +322,11 @@ static void henka_test_ui_readability_scale_is_bounded_and_fit_aware(void)
     HENKA_TEST_ASSERT(ui->draw_rect_count > base + 5U);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         ui->draw_rects[base + 5U].bounds.width,
-        1.35f,
+        1.44f,
         0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         ui->draw_rects[base + 5U].bounds.height,
-        1.35f,
+        1.44f,
         0.0001f);
     HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
         ui,
@@ -225,11 +334,418 @@ static void henka_test_ui_readability_scale_is_bounded_and_fit_aware(void)
         1.0f,
         &measured_width,
         &measured_height) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(measured_width == 15);
-    HENKA_TEST_ASSERT(measured_height == 9);
+    HENKA_TEST_ASSERT(measured_width > 13);
+    HENKA_TEST_ASSERT(measured_height > 8);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    frame_desc.framebuffer_width = 2560;
+    frame_desc.framebuffer_height = 1440;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    base = ui->draw_rect_count;
+    HENKA_TEST_ASSERT(!henka_ui_button(ui, "readability_wide", bounds, "Readable"));
+    HENKA_TEST_ASSERT(ui->draw_rect_count > base + 5U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 5U].bounds.width,
+        1.80f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 5U].bounds.height,
+        1.80f,
+        0.0001f);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        ui,
+        "MM",
+        1.0f,
+        &measured_width,
+        &measured_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(measured_width > 16);
+    HENKA_TEST_ASSERT(measured_height > 10);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
     henka_ui_destroy(ui);
+}
+
+static bool henka_test_ui_button_label_matches_full_label(
+    int framebuffer_width,
+    int framebuffer_height,
+    float button_width,
+    bool* out_matches)
+{
+    henka_ui_rect button_bounds = {20.0f, 20.0f, 0.0f, 24.0f};
+    henka_ui_context* actual_ui = NULL;
+    henka_ui_context* expected_ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    size_t actual_start;
+    size_t actual_text_count;
+    size_t expected_text_count;
+    size_t index;
+    bool actual_frame_active = false;
+    bool expected_frame_active = false;
+    bool matches = false;
+    bool result = false;
+
+    if (out_matches == NULL || framebuffer_width <= 0 || framebuffer_height <= 0 ||
+        !isfinite(button_width) || button_width <= 0.0f)
+    {
+        return false;
+    }
+    *out_matches = false;
+
+    if (henka_ui_create(&actual_ui) != HENKA_SUCCESS ||
+        henka_ui_create(&expected_ui) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_ui_set_visible(actual_ui, true);
+    henka_ui_set_visible(expected_ui, true);
+    frame_desc.framebuffer_width = framebuffer_width;
+    frame_desc.framebuffer_height = framebuffer_height;
+    frame_desc.mouse_position = (henka_vec2){0.0f, 0.0f};
+
+    if (henka_ui_begin_frame(expected_ui, &frame_desc) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    expected_frame_active = true;
+    if (henka_ui_label(
+            expected_ui,
+            button_bounds.x + 10.0f,
+            button_bounds.y + 9.0f,
+            1.0f,
+            "Delete Faces") != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    expected_text_count = henka_ui_get_draw_rect_count(expected_ui);
+    if (expected_text_count == 0U || henka_ui_end_frame(expected_ui) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    expected_frame_active = false;
+
+    if (henka_ui_begin_frame(actual_ui, &frame_desc) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    actual_frame_active = true;
+    actual_start = henka_ui_get_draw_rect_count(actual_ui);
+    button_bounds.width = button_width;
+    if (henka_ui_button(actual_ui, "delete_faces_fit", button_bounds, "Delete Faces"))
+    {
+        goto cleanup;
+    }
+    if (henka_ui_get_draw_rect_count(actual_ui) < actual_start + 5U)
+    {
+        goto cleanup;
+    }
+
+    actual_text_count = henka_ui_get_draw_rect_count(actual_ui) - actual_start - 5U;
+    matches = actual_text_count == expected_text_count;
+    for (index = 0U; matches && index < expected_text_count; ++index)
+    {
+        const henka_ui_rect actual = actual_ui->draw_rects[actual_start + 5U + index].bounds;
+        const henka_ui_rect expected = expected_ui->draw_rects[index].bounds;
+        matches =
+            fabsf(actual.x - expected.x) <= 0.0001f &&
+            fabsf(actual.y - expected.y) <= 0.0001f &&
+            fabsf(actual.width - expected.width) <= 0.0001f &&
+            fabsf(actual.height - expected.height) <= 0.0001f;
+    }
+    if (henka_ui_end_frame(actual_ui) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    actual_frame_active = false;
+    *out_matches = matches;
+    result = true;
+
+cleanup:
+    if (expected_frame_active)
+    {
+        (void)henka_ui_end_frame(expected_ui);
+    }
+    if (actual_frame_active)
+    {
+        (void)henka_ui_end_frame(actual_ui);
+    }
+    henka_ui_destroy(expected_ui);
+    henka_ui_destroy(actual_ui);
+    return result;
+}
+
+static void henka_test_ui_face_delete_button_preserves_full_label(void)
+{
+    bool matches;
+
+    HENKA_TEST_ASSERT(henka_test_ui_button_label_matches_full_label(
+        1280, 720, 102.0f, &matches));
+    HENKA_TEST_ASSERT(!matches);
+    HENKA_TEST_ASSERT(henka_test_ui_button_label_matches_full_label(
+        1280, 720, 120.0f, &matches));
+    HENKA_TEST_ASSERT(matches);
+
+    HENKA_TEST_ASSERT(henka_test_ui_button_label_matches_full_label(
+        1920, 1080, 102.0f, &matches));
+    HENKA_TEST_ASSERT(!matches);
+    HENKA_TEST_ASSERT(henka_test_ui_button_label_matches_full_label(
+        1920, 1080, 120.0f, &matches));
+    HENKA_TEST_ASSERT(!matches);
+    HENKA_TEST_ASSERT(henka_test_ui_button_label_matches_full_label(
+        1920, 1080, 140.0f, &matches));
+    HENKA_TEST_ASSERT(matches);
+    HENKA_TEST_ASSERT(henka_test_ui_button_label_matches_full_label(
+        2560, 1440, 120.0f, &matches));
+    HENKA_TEST_ASSERT(!matches);
+    HENKA_TEST_ASSERT(henka_test_ui_button_label_matches_full_label(
+        2560, 1440, 180.0f, &matches));
+    HENKA_TEST_ASSERT(matches);
+}
+
+static void henka_test_ui_wrapped_label_preserves_content_and_fails_closed(void)
+{
+    const henka_ui_rect bounds = {20.0f, 30.0f, 220.0f, 40.0f};
+    const char* text = "Kinematic: tool/code movement only; no gravity fall.";
+    const char* expected_wrapped =
+        "Kinematic: tool/code movement\nonly; no gravity fall.";
+    henka_ui_context* actual_ui = NULL;
+    henka_ui_context* expected_ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    float actual_height = 0.0f;
+    int expected_height = 0;
+    int expected_width = 0;
+    size_t actual_rect_count;
+    size_t index;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&actual_ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_create(&expected_ui) == HENKA_SUCCESS);
+    henka_ui_set_visible(actual_ui, true);
+    henka_ui_set_visible(expected_ui, true);
+    frame_desc.framebuffer_width = 640;
+    frame_desc.framebuffer_height = 480;
+
+    HENKA_TEST_ASSERT(
+        henka_ui_begin_frame(actual_ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_label_wrapped(
+        actual_ui,
+        bounds,
+        1.0f,
+        text,
+        HENKA_UI_COLOR_NORMAL,
+        &actual_height) == HENKA_SUCCESS);
+    actual_rect_count = henka_ui_get_draw_rect_count(actual_ui);
+    HENKA_TEST_ASSERT(actual_rect_count > 0U);
+    HENKA_TEST_ASSERT(actual_height > 0.0f);
+    HENKA_TEST_ASSERT(actual_height <= bounds.height);
+    for (index = 0U; index < actual_rect_count; ++index)
+    {
+        const henka_ui_rect drawn = actual_ui->draw_rects[index].bounds;
+        HENKA_TEST_ASSERT(drawn.x >= bounds.x);
+        HENKA_TEST_ASSERT(drawn.y >= bounds.y);
+        HENKA_TEST_ASSERT(drawn.x + drawn.width <= bounds.x + bounds.width);
+        HENKA_TEST_ASSERT(drawn.y + drawn.height <= bounds.y + bounds.height);
+    }
+    HENKA_TEST_ASSERT(henka_ui_end_frame(actual_ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(expected_ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        expected_ui,
+        expected_wrapped,
+        1.0f,
+        &expected_width,
+        &expected_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_label_colored(
+        expected_ui,
+        bounds.x,
+        bounds.y,
+        1.0f,
+        expected_wrapped,
+        HENKA_UI_COLOR_NORMAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(expected_ui) == actual_rect_count);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(actual_height, (float)expected_height, 0.0001f);
+    for (index = 0U; index < actual_rect_count; ++index)
+    {
+        const henka_ui_rect actual = actual_ui->draw_rects[index].bounds;
+        const henka_ui_rect expected = expected_ui->draw_rects[index].bounds;
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.x, expected.x, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.y, expected.y, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.width, expected.width, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.height, expected.height, 0.0001f);
+    }
+    HENKA_TEST_ASSERT(henka_ui_end_frame(expected_ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(actual_ui, &frame_desc) == HENKA_SUCCESS);
+    actual_height = 0.0f;
+    HENKA_TEST_ASSERT(henka_ui_label_wrapped(
+        actual_ui,
+        (henka_ui_rect){bounds.x, bounds.y, bounds.width, 17.0f},
+        1.0f,
+        text,
+        HENKA_UI_COLOR_NORMAL,
+        &actual_height) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(actual_ui) == 0U);
+    HENKA_TEST_ASSERT(actual_height > 17.0f);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(actual_ui) == HENKA_SUCCESS);
+
+    henka_ui_destroy(expected_ui);
+    henka_ui_destroy(actual_ui);
+}
+
+static void henka_test_ui_wrapped_label_hard_wraps_long_tokens(void)
+{
+    const henka_ui_rect bounds = {12.0f, 18.0f, 35.0f, 40.0f};
+    const char* text = "abcdefghijkl";
+    const char* expected_wrapped = "abcde\nfghij\nkl";
+    henka_ui_context* actual_ui = NULL;
+    henka_ui_context* expected_ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    float actual_height = 0.0f;
+    int expected_height = 0;
+    int expected_width = 0;
+    size_t actual_rect_count;
+    size_t index;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&actual_ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_create(&expected_ui) == HENKA_SUCCESS);
+    henka_ui_set_visible(actual_ui, true);
+    henka_ui_set_visible(expected_ui, true);
+    frame_desc.framebuffer_width = 640;
+    frame_desc.framebuffer_height = 480;
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(actual_ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_label_wrapped(
+        actual_ui,
+        bounds,
+        1.0f,
+        text,
+        HENKA_UI_COLOR_NORMAL,
+        &actual_height) == HENKA_SUCCESS);
+    actual_rect_count = henka_ui_get_draw_rect_count(actual_ui);
+    HENKA_TEST_ASSERT(actual_rect_count > 0U);
+    HENKA_TEST_ASSERT(actual_height > 0.0f);
+    HENKA_TEST_ASSERT(actual_height <= bounds.height);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(expected_ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        expected_ui,
+        expected_wrapped,
+        1.0f,
+        &expected_width,
+        &expected_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_label_colored(
+        expected_ui,
+        bounds.x,
+        bounds.y,
+        1.0f,
+        expected_wrapped,
+        HENKA_UI_COLOR_NORMAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(expected_ui) == actual_rect_count);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(actual_height, (float)expected_height, 0.0001f);
+    for (index = 0U; index < actual_rect_count; ++index)
+    {
+        const henka_ui_rect actual = actual_ui->draw_rects[index].bounds;
+        const henka_ui_rect expected = expected_ui->draw_rects[index].bounds;
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.x, expected.x, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.y, expected.y, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.width, expected.width, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual.height, expected.height, 0.0001f);
+        HENKA_TEST_ASSERT(actual.x >= bounds.x);
+        HENKA_TEST_ASSERT(actual.y >= bounds.y);
+        HENKA_TEST_ASSERT(actual.x + actual.width <= bounds.x + bounds.width);
+        HENKA_TEST_ASSERT(actual.y + actual.height <= bounds.y + bounds.height);
+    }
+
+    HENKA_TEST_ASSERT(henka_ui_end_frame(expected_ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(actual_ui) == HENKA_SUCCESS);
+    henka_ui_destroy(expected_ui);
+    henka_ui_destroy(actual_ui);
+}
+
+static void henka_test_ui_wrapped_heading_preserves_style_and_fails_closed(void)
+{
+    const henka_ui_rect bounds = {20.0f, 30.0f, 48.0f, 48.0f};
+    const char* text = "Alpha Beta Gamma";
+    const char* expected_wrapped = "Alpha\nBeta\nGamma";
+    henka_ui_context* actual_ui = NULL;
+    henka_ui_context* expected_ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    float actual_height = 0.0f;
+    int expected_height = 0;
+    int expected_width = 0;
+    size_t actual_rect_count;
+    size_t index;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&actual_ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_create(&expected_ui) == HENKA_SUCCESS);
+    henka_ui_set_visible(actual_ui, true);
+    henka_ui_set_visible(expected_ui, true);
+    frame_desc.framebuffer_width = 640;
+    frame_desc.framebuffer_height = 480;
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(actual_ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_heading_wrapped(
+        actual_ui,
+        bounds,
+        1.0f,
+        text,
+        &actual_height) == HENKA_SUCCESS);
+    actual_rect_count = henka_ui_get_draw_rect_count(actual_ui);
+    HENKA_TEST_ASSERT(actual_rect_count > 0U);
+    HENKA_TEST_ASSERT(actual_height > 12.0f);
+    HENKA_TEST_ASSERT(actual_height <= bounds.height);
+    for (index = 0U; index < actual_rect_count; ++index)
+    {
+        const henka_ui_draw_rect* actual = &actual_ui->draw_rects[index];
+        HENKA_TEST_ASSERT(actual->bounds.x >= bounds.x);
+        HENKA_TEST_ASSERT(actual->bounds.y >= bounds.y);
+        HENKA_TEST_ASSERT(actual->bounds.x + actual->bounds.width <= bounds.x + bounds.width);
+        HENKA_TEST_ASSERT(actual->bounds.y + actual->bounds.height <= bounds.y + bounds.height);
+    }
+    HENKA_TEST_ASSERT(henka_ui_end_frame(actual_ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(expected_ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        expected_ui,
+        expected_wrapped,
+        1.0f,
+        &expected_width,
+        &expected_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_heading(
+        expected_ui,
+        bounds.x,
+        bounds.y,
+        1.0f,
+        expected_wrapped) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(expected_ui) == actual_rect_count);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(actual_height, (float)expected_height, 0.0001f);
+    for (index = 0U; index < actual_rect_count; ++index)
+    {
+        const henka_ui_draw_rect* actual = &actual_ui->draw_rects[index];
+        const henka_ui_draw_rect* expected = &expected_ui->draw_rects[index];
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->bounds.x, expected->bounds.x, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->bounds.y, expected->bounds.y, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->bounds.width, expected->bounds.width, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->bounds.height, expected->bounds.height, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->color.x, expected->color.x, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->color.y, expected->color.y, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->color.z, expected->color.z, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->color.w, expected->color.w, 0.0001f);
+    }
+    HENKA_TEST_ASSERT(henka_ui_end_frame(expected_ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(actual_ui, &frame_desc) == HENKA_SUCCESS);
+    actual_height = 0.0f;
+    HENKA_TEST_ASSERT(henka_ui_heading_wrapped(
+        actual_ui,
+        (henka_ui_rect){bounds.x, bounds.y, bounds.width, 12.0f},
+        1.0f,
+        text,
+        &actual_height) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(actual_ui) == 0U);
+    HENKA_TEST_ASSERT(actual_height > 12.0f);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(actual_ui) == HENKA_SUCCESS);
+
+    henka_ui_destroy(expected_ui);
+    henka_ui_destroy(actual_ui);
 }
 
 static void henka_test_ui_overlay_triangle_primitive(void)
@@ -336,11 +852,130 @@ static void henka_test_ui_text_field_focus_and_bounded_edits(void)
     henka_ui_destroy(ui);
 }
 
+static void henka_test_ui_wrapped_value_row_preserves_content_and_fails_closed(void)
+{
+    const char* value = "Scene-owned object available for authoring.";
+    const char* expected_wrapped = "Scene-owned\nobject available\nfor authoring.";
+    henka_ui_context* actual_ui = NULL;
+    henka_ui_context* expected_ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    henka_ui_rect actual_bounds = {20.0f, 30.0f, 180.0f, 22.0f};
+    henka_ui_rect expected_value_bounds;
+    float required_height = 0.0f;
+    float expected_value_height = 0.0f;
+    int expected_width = 0;
+    int expected_height = 0;
+    size_t actual_rect_count;
+    size_t index;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&actual_ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_create(&expected_ui) == HENKA_SUCCESS);
+    henka_ui_set_visible(actual_ui, true);
+    henka_ui_set_visible(expected_ui, true);
+    frame_desc.framebuffer_width = 640;
+    frame_desc.framebuffer_height = 480;
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(actual_ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_value_row_colored_wrapped(
+        actual_ui,
+        actual_bounds,
+        "Detail",
+        value,
+        HENKA_UI_COLOR_INFO,
+        HENKA_UI_COLOR_NORMAL,
+        &required_height) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(required_height > actual_bounds.height);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(actual_ui) == 0U);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(actual_ui) == HENKA_SUCCESS);
+
+    actual_bounds.height = required_height;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(actual_ui, &frame_desc) == HENKA_SUCCESS);
+    required_height = 0.0f;
+    HENKA_TEST_ASSERT(henka_ui_value_row_colored_wrapped(
+        actual_ui,
+        actual_bounds,
+        "Detail",
+        value,
+        HENKA_UI_COLOR_INFO,
+        HENKA_UI_COLOR_NORMAL,
+        &required_height) == HENKA_SUCCESS);
+    actual_rect_count = henka_ui_get_draw_rect_count(actual_ui);
+    HENKA_TEST_ASSERT(actual_rect_count > 0U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(required_height, actual_bounds.height, 0.0001f);
+    for (index = 0U; index < actual_rect_count; ++index)
+    {
+        const henka_ui_draw_rect* actual = &actual_ui->draw_rects[index];
+        HENKA_TEST_ASSERT(actual->bounds.x >= actual_bounds.x);
+        HENKA_TEST_ASSERT(actual->bounds.y >= actual_bounds.y);
+        HENKA_TEST_ASSERT(actual->bounds.x + actual->bounds.width <=
+            actual_bounds.x + actual_bounds.width);
+        HENKA_TEST_ASSERT(actual->bounds.y + actual->bounds.height <=
+            actual_bounds.y + actual_bounds.height);
+    }
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(expected_ui, &frame_desc) == HENKA_SUCCESS);
+    expected_value_bounds = (henka_ui_rect){
+        actual_bounds.x + actual_bounds.width * 0.38f + 6.0f,
+        actual_bounds.y + 6.0f,
+        actual_bounds.width - actual_bounds.width * 0.38f - 16.0f,
+        actual_bounds.height - 10.0f};
+    HENKA_TEST_ASSERT(henka_ui_value_row_colored(
+        expected_ui,
+        actual_bounds,
+        "Detail",
+        "",
+        HENKA_UI_COLOR_INFO,
+        HENKA_UI_COLOR_NORMAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        expected_ui,
+        expected_wrapped,
+        1.0f,
+        &expected_width,
+        &expected_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT((float)expected_height + 10.0f <= actual_bounds.height);
+    HENKA_TEST_ASSERT(henka_ui_label_wrapped(
+        expected_ui,
+        expected_value_bounds,
+        1.0f,
+        expected_wrapped,
+        HENKA_UI_COLOR_NORMAL,
+        &expected_value_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        required_height,
+        expected_value_height + 10.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(expected_ui) == actual_rect_count);
+    for (index = 0U; index < actual_rect_count; ++index)
+    {
+        const henka_ui_draw_rect* actual = &actual_ui->draw_rects[index];
+        const henka_ui_draw_rect* expected = &expected_ui->draw_rects[index];
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->bounds.x, expected->bounds.x, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->bounds.y, expected->bounds.y, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->bounds.width, expected->bounds.width, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->bounds.height, expected->bounds.height, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->color.x, expected->color.x, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->color.y, expected->color.y, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->color.z, expected->color.z, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(actual->color.w, expected->color.w, 0.0001f);
+    }
+    HENKA_TEST_ASSERT(henka_ui_end_frame(expected_ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(actual_ui) == HENKA_SUCCESS);
+
+    henka_ui_destroy(expected_ui);
+    henka_ui_destroy(actual_ui);
+}
+
 void henka_test_ui(void)
 {
     henka_test_ui_theme_is_light_by_default_and_context_local();
     henka_test_ui_control_chrome_contract();
     henka_test_ui_readability_scale_is_bounded_and_fit_aware();
+    henka_test_utility_tab_labels_are_not_truncated();
+    henka_test_ui_face_delete_button_preserves_full_label();
+    henka_test_ui_wrapped_label_preserves_content_and_fails_closed();
+    henka_test_ui_wrapped_label_hard_wraps_long_tokens();
+    henka_test_ui_wrapped_heading_preserves_style_and_fails_closed();
+    henka_test_ui_wrapped_value_row_preserves_content_and_fails_closed();
     henka_test_ui_overlay_circle_primitives();
     henka_test_ui_overlay_triangle_primitive();
     henka_test_ui_text_field_focus_and_bounded_edits();

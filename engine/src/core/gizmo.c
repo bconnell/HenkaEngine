@@ -852,6 +852,52 @@ henka_result henka_gizmo_build_model(
             henka_gizmo_append_handle(&model, scale_handle);
             model.dead_zone_radius = fmaxf(scale_handle.screen_half_extents.x, scale_handle.screen_half_extents.y) + 18.0f;
         }
+
+        for (index = 0U; index < 3U; ++index)
+        {
+            const henka_gizmo_axis axis = (henka_gizmo_axis)(index + 1U);
+            henka_gizmo_handle_model axis_handle;
+            henka_vec3 axis_direction;
+            henka_vec3 world_end;
+            henka_vec2 screen_end;
+            henka_vec2 projected_axis;
+            henka_vec2 screen_direction;
+            float projected_length;
+
+            if (henka_gizmo_get_axis_direction(axis, &axis_direction) != HENKA_SUCCESS)
+            {
+                continue;
+            }
+            world_end = henka_vec3_add(
+                target_transform.position,
+                henka_vec3_scale(axis_direction, model.gizmo_size));
+            if (henka_gizmo_project_handle_point(camera, viewport, world_end, &screen_end) != HENKA_SUCCESS)
+            {
+                continue;
+            }
+
+            projected_axis = henka_gizmo_vec2_subtract(screen_end, model.screen_center);
+            projected_length = henka_gizmo_vec2_length(projected_axis);
+            if (projected_length <= model.dead_zone_radius + 8.0f)
+            {
+                continue;
+            }
+
+            memset(&axis_handle, 0, sizeof(axis_handle));
+            screen_direction = henka_gizmo_vec2_normalize(projected_axis);
+            axis_handle.visible = true;
+            axis_handle.mode = mode;
+            axis_handle.axis = axis;
+            axis_handle.type = HENKA_GIZMO_HANDLE_SCALE_AXIS;
+            axis_handle.world_start = target_transform.position;
+            axis_handle.world_end = world_end;
+            axis_handle.screen_start = (henka_vec2){
+                model.screen_center.x + screen_direction.x * (model.dead_zone_radius + 4.0f),
+                model.screen_center.y + screen_direction.y * (model.dead_zone_radius + 4.0f)};
+            axis_handle.screen_end = screen_end;
+            axis_handle.hit_tolerance = 9.0f;
+            henka_gizmo_append_handle(&model, axis_handle);
+        }
     }
     else
     {
@@ -917,6 +963,7 @@ henka_result henka_gizmo_hit_test_model(
                 }
                 break;
             case HENKA_GIZMO_HANDLE_MOVE_AXIS:
+            case HENKA_GIZMO_HANDLE_SCALE_AXIS:
                 if (henka_gizmo_hit_test_segment_2d(model->mouse_local, handle->screen_start, handle->screen_end, handle->hit_tolerance, &hit_distance) != HENKA_SUCCESS)
                 {
                     continue;
@@ -980,6 +1027,7 @@ henka_result henka_gizmo_build_overlay_model(
         switch (handle->type)
         {
             case HENKA_GIZMO_HANDLE_MOVE_AXIS:
+            case HENKA_GIZMO_HANDLE_SCALE_AXIS:
                 primitive.type = HENKA_GIZMO_OVERLAY_PRIMITIVE_LINE;
                 primitive.start = handle->screen_start;
                 primitive.end = handle->screen_end;
@@ -1053,6 +1101,31 @@ henka_result henka_gizmo_begin_drag(
                 out_drag->drag_axis_screen_direction = henka_gizmo_vec2_normalize(axis_delta);
                 break;
             }
+        }
+    }
+    else if (hit->type == HENKA_GIZMO_HANDLE_SCALE_AXIS)
+    {
+        for (handle_index = 0U; handle_index < model->handle_count; ++handle_index)
+        {
+            const henka_gizmo_handle_model* handle = &model->handles[handle_index];
+            if (handle->axis == hit->axis && handle->type == HENKA_GIZMO_HANDLE_SCALE_AXIS)
+            {
+                const henka_vec2 axis_delta = henka_gizmo_vec2_subtract(handle->screen_end, handle->screen_start);
+                out_drag->drag_axis_screen_length = henka_gizmo_vec2_length(axis_delta);
+                out_drag->drag_axis_screen_direction = henka_gizmo_vec2_normalize(axis_delta);
+                out_drag->drag_start_projection = henka_gizmo_vec2_dot(
+                    henka_gizmo_vec2_subtract(out_drag->drag_start_mouse_local, out_drag->drag_center_screen),
+                    out_drag->drag_axis_screen_direction);
+                if (out_drag->drag_axis_screen_length <= 1.0f || out_drag->drag_start_projection <= 1.0f)
+                {
+                    return HENKA_ERROR_INVALID_ARGUMENT;
+                }
+                break;
+            }
+        }
+        if (handle_index == model->handle_count)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
         }
     }
     else if (hit->type == HENKA_GIZMO_HANDLE_SCALE_UNIFORM)
@@ -1182,13 +1255,28 @@ henka_result henka_gizmo_apply_drag_to_transform(
         case HENKA_GIZMO_MODE_SCALE:
         {
             henka_vec2 current_from_center;
+            float* constrained_scale;
             float current_projection;
             float scale_factor;
             float minimum_scale;
 
-            if (drag->active_axis != HENKA_GIZMO_AXIS_UNIFORM)
+            constrained_scale = NULL;
+            switch (drag->active_axis)
             {
-                return HENKA_ERROR_INVALID_ARGUMENT;
+                case HENKA_GIZMO_AXIS_X:
+                    constrained_scale = &transform.scale.x;
+                    break;
+                case HENKA_GIZMO_AXIS_Y:
+                    constrained_scale = &transform.scale.y;
+                    break;
+                case HENKA_GIZMO_AXIS_Z:
+                    constrained_scale = &transform.scale.z;
+                    break;
+                case HENKA_GIZMO_AXIS_UNIFORM:
+                    break;
+                case HENKA_GIZMO_AXIS_NONE:
+                default:
+                    return HENKA_ERROR_INVALID_ARGUMENT;
             }
 
             current_from_center = henka_gizmo_vec2_subtract(current_mouse_local, drag->drag_center_screen);
@@ -1199,25 +1287,57 @@ henka_result henka_gizmo_apply_drag_to_transform(
                 scale_factor = 0.05f;
             }
 
-            transform.scale.x = drag->drag_start_transform.scale.x * scale_factor;
-            transform.scale.y = drag->drag_start_transform.scale.y * scale_factor;
-            transform.scale.z = drag->drag_start_transform.scale.z * scale_factor;
+            if (constrained_scale == NULL)
+            {
+                transform.scale.x = drag->drag_start_transform.scale.x * scale_factor;
+                transform.scale.y = drag->drag_start_transform.scale.y * scale_factor;
+                transform.scale.z = drag->drag_start_transform.scale.z * scale_factor;
+            }
+            else if (drag->active_axis == HENKA_GIZMO_AXIS_X)
+            {
+                transform.scale.x = drag->drag_start_transform.scale.x * scale_factor;
+            }
+            else if (drag->active_axis == HENKA_GIZMO_AXIS_Y)
+            {
+                transform.scale.y = drag->drag_start_transform.scale.y * scale_factor;
+            }
+            else
+            {
+                transform.scale.z = drag->drag_start_transform.scale.z * scale_factor;
+            }
+
             minimum_scale = (snap_settings != NULL && snap_settings->minimum_scale > 0.0f) ? snap_settings->minimum_scale : 0.01f;
             if (snap_settings != NULL && snap_settings->enabled)
             {
-                snap_result = henka_gizmo_snap_scale(
-                    transform.scale.x,
-                    snap_settings->scale_snap_increment,
-                    minimum_scale,
-                    &snapped_value);
-                if (snap_result != HENKA_SUCCESS)
+                if (constrained_scale != NULL)
                 {
-                    return snap_result;
+                    snap_result = henka_gizmo_snap_scale(
+                        *constrained_scale,
+                        snap_settings->scale_snap_increment,
+                        minimum_scale,
+                        &snapped_value);
+                    if (snap_result != HENKA_SUCCESS)
+                    {
+                        return snap_result;
+                    }
+                    *constrained_scale = snapped_value;
                 }
+                else
+                {
+                    snap_result = henka_gizmo_snap_scale(
+                        transform.scale.x,
+                        snap_settings->scale_snap_increment,
+                        minimum_scale,
+                        &snapped_value);
+                    if (snap_result != HENKA_SUCCESS)
+                    {
+                        return snap_result;
+                    }
 
-                transform.scale.x = snapped_value;
-                transform.scale.y = snapped_value;
-                transform.scale.z = snapped_value;
+                    transform.scale.x = snapped_value;
+                    transform.scale.y = snapped_value;
+                    transform.scale.z = snapped_value;
+                }
             }
             break;
         }

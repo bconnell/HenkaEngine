@@ -6,12 +6,15 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
+. (Join-Path $PSScriptRoot "henka_ui_automation_helpers.ps1")
 
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 } else {
     $RepositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
 }
+$packagedCheckerPath = Join-Path $RepositoryRoot "scripts/check_packaged_sandbox3d_windows.ps1"
+$checkerSource = Get-Content -Raw -LiteralPath $packagedCheckerPath
 
 if (-not ("HenkaWindowPolicyNative" -as [type])) {
     Add-Type -TypeDefinition @"
@@ -48,9 +51,137 @@ $nonActivatingVisibleProcess = $null
 $plainProcess = $null
 $previousForeground = [HenkaWindowPolicyNative]::GetForegroundWindow()
 
+Assert-HenkaCaptureDimensions `
+    -Width 1296 `
+    -Height 759 `
+    -MinimumWidth 800 `
+    -MinimumHeight 600 `
+    -Description "Restored 1280x720 validation window"
+$tinyCaptureFailure = $null
+try {
+    Assert-HenkaCaptureDimensions `
+        -Width 160 `
+        -Height 28 `
+        -MinimumWidth 800 `
+        -MinimumHeight 600 `
+        -Description "Minimized validation window"
+} catch {
+    $tinyCaptureFailure = $_
+}
+if ($null -eq $tinyCaptureFailure -or
+    $tinyCaptureFailure.Exception.Message -notmatch "below the minimum capture bounds") {
+    throw "The capture-bound regression did not reject the minimized 160x28 title-bar image."
+}
+Write-Output "[pass] Capture bounds reject minimized title-bar-only evidence."
+
+Assert-HenkaCaptureDimensions `
+    -Width 436 `
+    -Height 339 `
+    -MinimumWidth 320 `
+    -MinimumHeight 240 `
+    -Description "Restored native tool window"
+$nativeWindowCallOffset = $checkerSource.IndexOf('-Path $nativeScreenshotPath', [System.StringComparison]::Ordinal)
+if ($nativeWindowCallOffset -lt 0) {
+    throw "The packaged checker no longer captures the native tool window through the expected path."
+}
+$nativeWindowCallStart = $checkerSource.LastIndexOf('Save-WindowScreenshot', $nativeWindowCallOffset, [System.StringComparison]::Ordinal)
+$nativeWindowCallEnd = $checkerSource.IndexOf('Set-HenkaAutomationForeground -Handle $mainWindowHandle', $nativeWindowCallOffset, [System.StringComparison]::Ordinal)
+if ($nativeWindowCallStart -lt 0 -or $nativeWindowCallEnd -le $nativeWindowCallStart) {
+    throw "The native tool screenshot call could not be isolated for its capture-size contract."
+}
+$nativeWindowCall = $checkerSource.Substring($nativeWindowCallStart, $nativeWindowCallEnd - $nativeWindowCallStart)
+if ($nativeWindowCall -notmatch '(?m)^\s+-MinimumWidth\s+320\b' -or
+    $nativeWindowCall -notmatch '(?m)^\s+-MinimumHeight\s+240\b') {
+    throw "The native tool screenshot must use its bounded 320x240 minimum instead of the main-editor capture bound."
+}
+Write-Output "[pass] Restored native tool windows retain a bounded capture minimum without relaxing minimized-window rejection."
+
 New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
 
 try {
+    $shadingGeometryPath = Join-Path $fixtureRoot "shading-geometry.log"
+    Write-HenkaUtf8NoBom -Path $shadingGeometryPath -Text @'
+Viewport shading control: mode=Wireframe x=24.0 y=8.0 width=48.0 height=22.0
+Viewport shading control: mode=Solid x=75.0 y=8.0 width=60.0 height=22.0
+Viewport shading control: mode=Material Preview x=138.0 y=8.0 width=80.0 height=22.0
+Viewport shading control: mode=Rendered x=221.0 y=8.0 width=82.0 height=22.0
+'@
+    $renderedShadingControl = Get-HenkaViewportShadingControl `
+        -LogPath $shadingGeometryPath `
+        -ModeName "Rendered"
+    if ($renderedShadingControl.X -ne 221.0 -or
+        $renderedShadingControl.Y -ne 8.0 -or
+        $renderedShadingControl.Width -ne 82.0 -or
+        $renderedShadingControl.Height -ne 22.0) {
+        throw "The exact viewport shading control geometry was not parsed from its per-control record."
+    }
+    $missingShadingGeometryPath = Join-Path $fixtureRoot "missing-shading-geometry.log"
+    Write-HenkaUtf8NoBom -Path $missingShadingGeometryPath -Text @'
+Viewport shading control: mode=Wireframe x=24.0 y=8.0 width=48.0 height=22.0
+Viewport shading control: mode=Solid x=75.0 y=8.0 width=60.0 height=22.0
+'@
+    $missingShadingControlFailure = $null
+    try {
+        $null = Get-HenkaViewportShadingControl `
+            -LogPath $missingShadingGeometryPath `
+            -ModeName "Rendered"
+    } catch {
+        $missingShadingControlFailure = $_
+    }
+    if ($null -eq $missingShadingControlFailure) {
+        throw "A missing viewport shading control geometry record was accepted."
+    }
+    $invalidShadingGeometryPath = Join-Path $fixtureRoot "invalid-shading-geometry.log"
+    Write-HenkaUtf8NoBom -Path $invalidShadingGeometryPath -Text `
+        "Viewport shading control: mode=Rendered x=-1.0 y=8.0 width=82.0 height=22.0"
+    $invalidShadingControlFailure = $null
+    try {
+        $null = Get-HenkaViewportShadingControl `
+            -LogPath $invalidShadingGeometryPath `
+            -ModeName "Rendered"
+    } catch {
+        $invalidShadingControlFailure = $_
+    }
+    if ($null -eq $invalidShadingControlFailure) {
+        throw "Negative viewport shading control geometry was accepted."
+    }
+    Write-Output "[pass] Shading-mode automation uses actual per-control geometry and rejects missing or invalid bounds."
+
+    $scrollEventsPath = Join-Path $fixtureRoot "scroll-events.txt"
+    Send-HenkaAutomationScroll `
+        -EventPath $scrollEventsPath `
+        -X 24 `
+        -Y 36 `
+        -WheelDelta -1
+    $scrollEvents = @(Get-Content -LiteralPath $scrollEventsPath)
+    if ($scrollEvents.Count -ne 2 -or
+        $scrollEvents[0] -ne "move 24 36" -or
+        $scrollEvents[1] -ne "wheel 0 -1") {
+        throw "SDL wheel-step automation did not serialize its pointer and one-step wheel records."
+    }
+    $win32WheelDeltaFailure = $null
+    try {
+        Send-HenkaAutomationScroll `
+            -EventPath $scrollEventsPath `
+            -X 24 `
+            -Y 36 `
+            -WheelDelta -120
+    } catch {
+        $win32WheelDeltaFailure = $_
+    }
+    if ($null -eq $win32WheelDeltaFailure -or
+        $win32WheelDeltaFailure.Exception.Message -notmatch "SDL wheel-step units") {
+        throw "The SDL wheel automation contract did not reject Win32's 120-unit delta."
+    }
+    $staleWin32WheelCall = Select-String `
+        -LiteralPath $packagedCheckerPath `
+        -Pattern '(?m)^\s+-WheelDelta\s+[-+]?120(?:\.0+)?\s*$' |
+        Select-Object -First 1
+    if ($null -ne $staleWin32WheelCall) {
+        throw "The packaged UI checker still passes a Win32 120-unit delta at ${packagedCheckerPath}:$($staleWin32WheelCall.LineNumber)."
+    }
+    Write-Output "[pass] Automation scroll serializes SDL wheel steps and rejects Win32 120-unit deltas."
+
     $fixtureText = @'
 param([Parameter(Mandatory = $true)][string]$ReadyPath)
 Add-Type -AssemblyName System.Windows.Forms

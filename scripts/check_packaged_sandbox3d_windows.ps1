@@ -7,6 +7,8 @@ param(
 
     [switch]$ProductStartupPrimitiveOnly,
 
+    [string]$PackageRootOverride,
+
     # Ordinary packaged validation is application-local and must not take
     # ownership of the user's foreground window.  Use this only for a test
     # that explicitly covers Windows foreground integration itself.
@@ -195,6 +197,52 @@ function Assert-PathExists {
     Write-Output "[pass] $Description"
 }
 
+function Get-HenkaWindowsExecutableSubsystem {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    $reader = [System.IO.BinaryReader]::new($stream)
+    try {
+        if ($stream.Length -lt 64) {
+            throw "The executable is too small to contain a PE header: $Path"
+        }
+
+        $stream.Position = 0x3c
+        $peOffset = $reader.ReadInt32()
+        if ($peOffset -lt 0 -or $peOffset -gt ($stream.Length - 24)) {
+            throw "The executable has an invalid PE header offset: $Path"
+        }
+
+        $stream.Position = $peOffset
+        if ($reader.ReadUInt32() -ne 0x00004550) {
+            throw "The executable is missing the PE signature: $Path"
+        }
+
+        $null = $reader.ReadUInt16()
+        $null = $reader.ReadUInt16()
+        $stream.Position += 12
+        $optionalHeaderSize = $reader.ReadUInt16()
+        $stream.Position += 2
+        $optionalHeaderOffset = $stream.Position
+        if ($optionalHeaderSize -lt 70 -or
+            ($optionalHeaderOffset + $optionalHeaderSize) -gt $stream.Length) {
+            throw "The executable has an invalid PE optional header: $Path"
+        }
+
+        $optionalHeaderMagic = $reader.ReadUInt16()
+        if ($optionalHeaderMagic -ne 0x010b -and $optionalHeaderMagic -ne 0x020b) {
+            throw "The executable has an unsupported PE optional-header format: $Path"
+        }
+
+        $stream.Position = $optionalHeaderOffset + 68
+        return [int]$reader.ReadUInt16()
+    }
+    finally {
+        $reader.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Assert-FileContains {
     param(
         [string]$Path,
@@ -350,6 +398,396 @@ function Get-WindowRect {
     return $rect
 }
 
+function Get-PackagedClientSize {
+    param([Parameter(Mandatory = $true)][System.IntPtr]$Handle)
+
+    $rect = New-Object NativeMethods+RECT
+    if (-not [NativeMethods]::GetClientRect($Handle, [ref]$rect)) {
+        throw "The packaged sandbox client bounds could not be read."
+    }
+
+    return [pscustomobject]@{
+        Width = $rect.Right - $rect.Left
+        Height = $rect.Bottom - $rect.Top
+    }
+}
+
+function Set-PackagedClientSize {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$Width,
+        [Parameter(Mandatory = $true)][int]$Height,
+        [int]$PositionX = [int]::MinValue,
+        [int]$PositionY = [int]::MinValue
+    )
+
+    if ($Width -lt 800 -or $Height -lt 600) {
+        throw "Responsive-layout validation requested an unsupported client size ${Width}x${Height}."
+    }
+
+    $currentClient = Get-PackagedClientSize -Handle $Handle
+    $window = Get-WindowRect -Handle $Handle
+    $outerWidth = $window.Right - $window.Left
+    $outerHeight = $window.Bottom - $window.Top
+    $targetOuterWidth = $outerWidth + ($Width - $currentClient.Width)
+    $targetOuterHeight = $outerHeight + ($Height - $currentClient.Height)
+    $targetX = $window.Left
+    $targetY = $window.Top
+    $screenBounds = [System.Windows.Forms.Screen]::FromHandle($Handle).Bounds
+    if ($targetOuterWidth -gt $screenBounds.Width) {
+        $targetX = $screenBounds.Left + [int][Math]::Floor(($screenBounds.Width - $targetOuterWidth) / 2.0)
+    }
+    if ($targetOuterHeight -gt $screenBounds.Height) {
+        $targetY = $screenBounds.Bottom - $targetOuterHeight
+    }
+    if ($PositionX -ne [int]::MinValue) {
+        $targetX = $PositionX
+    }
+    if ($PositionY -ne [int]::MinValue) {
+        $targetY = $PositionY
+    }
+
+    # SWP_NOZORDER | SWP_NOACTIVATE: resizing must not raise or focus the app.
+    if (-not [NativeMethods]::SetWindowPos(
+            $Handle,
+            [System.IntPtr]::Zero,
+            $targetX,
+            $targetY,
+            $targetOuterWidth,
+            $targetOuterHeight,
+            0x14)) {
+        $win32Error = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        throw "The packaged sandbox could not be resized to ${Width}x${Height} client pixels (Win32 error $win32Error)."
+    }
+
+    $deadline = (Get-Date).AddSeconds(5)
+    do {
+        $actual = Get-PackagedClientSize -Handle $Handle
+        if ($actual.Width -eq $Width -and $actual.Height -eq $Height) {
+            return
+        }
+        Start-Sleep -Milliseconds 100
+    } while ((Get-Date) -lt $deadline)
+
+    throw "The packaged sandbox client did not reach ${Width}x${Height}; actual size was $($actual.Width)x$($actual.Height)."
+}
+
+function Set-PackagedWindowStyle {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][System.IntPtr]$Style
+    )
+
+    if (-not [NativeMethods]::SetWindowStyle($Handle, $Style)) {
+        throw "The packaged sandbox window style could not be updated for responsive-layout capture."
+    }
+
+    $window = Get-WindowRect -Handle $Handle
+    if (-not [NativeMethods]::SetWindowPos(
+            $Handle,
+            [System.IntPtr]::Zero,
+            $window.Left,
+            $window.Top,
+            $window.Right - $window.Left,
+            $window.Bottom - $window.Top,
+            0x34)) {
+        $win32Error = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        throw "The packaged sandbox non-client frame could not be recalculated (Win32 error $win32Error)."
+    }
+}
+
+function Assert-PackagedResponsiveLayout {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][string]$EventPath,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][int]$Width,
+        [Parameter(Mandatory = $true)][int]$Height,
+        [string]$ScreenshotPath,
+        [int]$PositionX = [int]::MinValue,
+        [int]$PositionY = [int]::MinValue
+    )
+
+    Set-PackagedClientSize `
+        -Handle $Handle `
+        -Width $Width `
+        -Height $Height `
+        -PositionX $PositionX `
+        -PositionY $PositionY
+
+    # Reopen the real editor panels to make the Sandbox process report geometry
+    # calculated after this resize, rather than accepting stale startup output.
+    $hideOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaAutomationKey -EventPath $EventPath -KeyName "F4"
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern 'Sandbox panel: hidden' `
+            -StartingOffset $hideOffset `
+            -TimeoutMilliseconds 5000)) {
+        throw "$Name resize did not consume the panel-hide action."
+    }
+
+    $showOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaAutomationKey -EventPath $EventPath -KeyName "F4"
+    $readinessPattern = "Sandbox UI ready:.*framebuffer ${Width}x${Height}"
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern $readinessPattern `
+            -StartingOffset $showOffset `
+            -TimeoutMilliseconds 5000) -or
+        -not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern 'Workspace UI geometry:' `
+            -StartingOffset $showOffset `
+            -TimeoutMilliseconds 5000)) {
+        throw "$Name resize did not produce fresh application-owned layout telemetry at ${Width}x${Height}."
+    }
+
+    $framebufferMatch = Get-LastLogRegexMatch `
+        -Path $stdoutPath `
+        -Pattern 'Sandbox UI ready:.*framebuffer ([0-9]+)x([0-9]+)'
+    $geometryMatch = Get-LastLogRegexMatch `
+        -Path $stdoutPath `
+        -Pattern 'Workspace UI geometry: left=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) right=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+)'
+    if ($null -eq $framebufferMatch -or $null -eq $geometryMatch) {
+        throw "$Name resize telemetry could not be parsed."
+    }
+
+    $framebufferWidth = [int]$framebufferMatch.Groups[1].Value
+    $framebufferHeight = [int]$framebufferMatch.Groups[2].Value
+    if ($framebufferWidth -ne $Width -or $framebufferHeight -ne $Height) {
+        throw "$Name requested ${Width}x${Height} but the app reported ${framebufferWidth}x${framebufferHeight}."
+    }
+
+    $leftX = [double]$geometryMatch.Groups[1].Value
+    $leftY = [double]$geometryMatch.Groups[2].Value
+    $leftWidth = [double]$geometryMatch.Groups[3].Value
+    $leftHeight = [double]$geometryMatch.Groups[4].Value
+    $rightX = [double]$geometryMatch.Groups[5].Value
+    $rightY = [double]$geometryMatch.Groups[6].Value
+    $rightWidth = [double]$geometryMatch.Groups[7].Value
+    $rightHeight = [double]$geometryMatch.Groups[8].Value
+
+    if ($leftX -lt 0.0 -or $leftY -lt 0.0 -or
+        $leftWidth -lt 300.0 -or $leftHeight -le 0.0 -or
+        $leftX + $leftWidth -gt $framebufferWidth -or
+        $leftY + $leftHeight -gt $framebufferHeight) {
+        throw "$Name left Scene Objects panel is clipped, undersized, or outside the framebuffer."
+    }
+    if ($rightX -lt 0.0 -or $rightY -lt 0.0 -or
+        $rightWidth -lt 344.0 -or $rightHeight -le 0.0 -or
+        $rightX + $rightWidth -gt $framebufferWidth -or
+        $rightY + $rightHeight -gt $framebufferHeight) {
+        throw "$Name right Object Details panel is clipped, undersized, or outside the framebuffer."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
+        Save-WindowScreenshot `
+            -Handle $Handle `
+            -Path $ScreenshotPath `
+            -Description "$Name packaged workspace screenshot"
+    }
+
+    Write-Output ("[pass] {0}: client/framebuffer {1}x{2}; Scene Objects {3:N0}px, Object Details {4:N0}px; both panels remain in bounds." -f `
+        $Name,$framebufferWidth,$framebufferHeight,$leftWidth,$rightWidth)
+}
+
+function Invoke-PackagedWorkspaceFramebufferCapture {
+    param(
+        [Parameter(Mandatory = $true)][int]$Width,
+        [Parameter(Mandatory = $true)][int]$Height,
+        [Parameter(Mandatory = $true)][string]$BitmapPath,
+        [Parameter(Mandatory = $true)][string]$PngPath,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][string]$StderrPath
+    )
+
+    foreach ($path in @($BitmapPath, $PngPath, $StdoutPath, $StderrPath)) {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    }
+
+    $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
+    $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
+    $previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
+    $captured = $null
+    try {
+        Remove-Item Env:HENKA_AUTOMATION_INPUT_OWNED -ErrorAction SilentlyContinue
+        Remove-Item Env:HENKA_AUTOMATION_INPUT_FILE -ErrorAction SilentlyContinue
+        Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTICS -ErrorAction SilentlyContinue
+
+        $captured = Start-HenkaCapturedProcess `
+            -FilePath $packagedExe `
+            -WorkingDirectory $packageRoot `
+            -Arguments @(
+                "--capture-workspace-layout",
+                $Width.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+                $Height.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+                $BitmapPath) `
+            -StdoutPath $StdoutPath `
+            -StderrPath $StderrPath
+        $process = $captured.Process
+        if (-not $process.WaitForExit(120000)) {
+            Stop-HenkaProcessTree -ProcessId $process.Id
+            throw "The packaged application-owned ${Width}x${Height} framebuffer capture exceeded its 120 second bound."
+        }
+
+        $captureExitCode = $process.ExitCode
+        Close-HenkaCapturedProcess -CapturedProcess $captured
+        $captured = $null
+        $stdout = [System.IO.File]::ReadAllText($StdoutPath)
+        $stderr = [System.IO.File]::ReadAllText($StderrPath)
+        if ($captureExitCode -ne 0) {
+            throw "The packaged ${Width}x${Height} framebuffer capture exited $captureExitCode. stdout=$stdout stderr=$stderr"
+        }
+        if ($stdout -notmatch ("WORKSPACE_FRAME_CAPTURE_READY requested={0}x{1} framebuffer={0}x{1} .*draw_expected=1" -f $Width, $Height) -or
+            $stdout -notmatch "DEFAULT_SCENE_READY ground=1 ground_editable=1 camera=1 showcase_assets=0 diagnostic_entities=0 scene_content=product_native") {
+            throw "The packaged ${Width}x${Height} capture did not prove application readiness on the clean product-native default scene. stdout=$stdout"
+        }
+        if (-not (Test-Path -LiteralPath $BitmapPath -PathType Leaf)) {
+            throw "The Sandbox renderer did not create the ${Width}x${Height} application-owned framebuffer capture."
+        }
+
+        $bytes = [System.IO.File]::ReadAllBytes($BitmapPath)
+        if ($bytes.Length -lt 54 -or
+            [char]$bytes[0] -ne 'B' -or
+            [char]$bytes[1] -ne 'M') {
+            throw "The ${Width}x${Height} application-owned capture is not a complete BMP file."
+        }
+        $declaredFileSize = [BitConverter]::ToUInt32($bytes, 2)
+        $pixelOffset = [BitConverter]::ToUInt32($bytes, 10)
+        $bitmapWidth = [BitConverter]::ToInt32($bytes, 18)
+        $signedBitmapHeight = [BitConverter]::ToInt32($bytes, 22)
+        $bitsPerPixel = [BitConverter]::ToUInt16($bytes, 28)
+        $compression = [BitConverter]::ToUInt32($bytes, 30)
+        $bitmapHeight = [Math]::Abs([long]$signedBitmapHeight)
+        $rowStride = (([long]$bitmapWidth * 3L + 3L) -band 0xFFFFFFFCL)
+        $expectedFileSize = [long]$pixelOffset + $rowStride * $bitmapHeight
+        if ($bitmapWidth -ne $Width -or
+            $bitmapHeight -ne $Height -or
+            $signedBitmapHeight -ge 0 -or
+            $pixelOffset -ne 54 -or
+            $bitsPerPixel -ne 24 -or
+            $compression -ne 0 -or
+            $declaredFileSize -ne $bytes.Length -or
+            $expectedFileSize -ne $bytes.Length) {
+            throw "The app-owned BMP header/payload does not match the requested ${Width}x${Height} complete framebuffer."
+        }
+
+        $bitmap = [System.Drawing.Bitmap]::new($BitmapPath)
+        try {
+            $sampledColors = [System.Collections.Generic.HashSet[int]]::new()
+            for ($sampleY = 0; $sampleY -lt 8; ++$sampleY) {
+                for ($sampleX = 0; $sampleX -lt 8; ++$sampleX) {
+                    $x = [int][Math]::Floor(($sampleX + 0.5) * $Width / 8.0)
+                    $y = [int][Math]::Floor(($sampleY + 0.5) * $Height / 8.0)
+                    $sampledColors.Add($bitmap.GetPixel($x, $y).ToArgb()) | Out-Null
+                }
+            }
+            if ($sampledColors.Count -lt 8) {
+                throw "The ${Width}x${Height} app-owned capture is blank or nearly uniform."
+            }
+            $bitmap.Save($PngPath, [System.Drawing.Imaging.ImageFormat]::Png)
+        }
+        finally {
+            $bitmap.Dispose()
+        }
+
+        Write-Output "[pass] Application-owned workspace framebuffer capture: ${Width}x${Height}; complete top-down 24-bit BMP validated and PNG review image written."
+    }
+    finally {
+        if ($null -ne $captured) {
+            Close-HenkaCapturedProcess -CapturedProcess $captured
+        }
+        if ($null -eq $previousAutomationOwned) {
+            Remove-Item Env:HENKA_AUTOMATION_INPUT_OWNED -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_INPUT_OWNED = $previousAutomationOwned
+        }
+        if ($null -eq $previousAutomationFile) {
+            Remove-Item Env:HENKA_AUTOMATION_INPUT_FILE -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_INPUT_FILE = $previousAutomationFile
+        }
+        if ($null -eq $previousAutomationDiagnostics) {
+            Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTICS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_DIAGNOSTICS = $previousAutomationDiagnostics
+        }
+    }
+}
+
+function Assert-PackagedWorkspaceFramebufferCaptureRejectsInvalidDimensions {
+    param(
+        [Parameter(Mandatory = $true)][string]$BitmapPath,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][string]$StderrPath
+    )
+
+    foreach ($path in @($BitmapPath, $StdoutPath, $StderrPath)) {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    }
+
+    $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
+    $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
+    $previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
+    $captured = $null
+    try {
+        Remove-Item Env:HENKA_AUTOMATION_INPUT_OWNED -ErrorAction SilentlyContinue
+        Remove-Item Env:HENKA_AUTOMATION_INPUT_FILE -ErrorAction SilentlyContinue
+        Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTICS -ErrorAction SilentlyContinue
+
+        $captured = Start-HenkaCapturedProcess `
+            -FilePath $packagedExe `
+            -WorkingDirectory $packageRoot `
+            -Arguments @("--capture-workspace-layout", "5000", "1440", $BitmapPath) `
+            -StdoutPath $StdoutPath `
+            -StderrPath $StderrPath
+        $process = $captured.Process
+        if (-not $process.WaitForExit(10000)) {
+            Stop-HenkaProcessTree -ProcessId $process.Id
+            throw "Invalid workspace capture dimensions did not fail within the 10 second no-window bound."
+        }
+        $captureExitCode = $process.ExitCode
+        Close-HenkaCapturedProcess -CapturedProcess $captured
+        $captured = $null
+        $stdout = [System.IO.File]::ReadAllText($StdoutPath)
+        $stderr = [System.IO.File]::ReadAllText($StderrPath)
+        if ($captureExitCode -ne 2 -or
+            $stderr -notmatch 'Usage:.*--capture-workspace-layout' -or
+            (Test-Path -LiteralPath $BitmapPath -PathType Leaf)) {
+            throw "The packaged capture CLI did not fail closed for width 5000. exit=$captureExitCode stdout=$stdout stderr=$stderr"
+        }
+
+        Write-Output "[pass] Invalid 5000x1440 workspace capture dimensions fail closed before creating a window or image."
+    }
+    finally {
+        if ($null -ne $captured) {
+            Close-HenkaCapturedProcess -CapturedProcess $captured
+        }
+        if ($null -eq $previousAutomationOwned) {
+            Remove-Item Env:HENKA_AUTOMATION_INPUT_OWNED -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_INPUT_OWNED = $previousAutomationOwned
+        }
+        if ($null -eq $previousAutomationFile) {
+            Remove-Item Env:HENKA_AUTOMATION_INPUT_FILE -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_INPUT_FILE = $previousAutomationFile
+        }
+        if ($null -eq $previousAutomationDiagnostics) {
+            Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTICS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_DIAGNOSTICS = $previousAutomationDiagnostics
+        }
+    }
+}
+
 function Write-Utf8NoBom {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -368,7 +806,9 @@ function Write-Utf8NoBom {
 function New-HenkaCapturedWindowBitmap {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
-        [Parameter(Mandatory = $true)][string]$Description
+        [Parameter(Mandatory = $true)][string]$Description,
+        [int]$MinimumWidth = 800,
+        [int]$MinimumHeight = 600
     )
 
     $rect = Get-WindowRect -Handle $Handle
@@ -377,17 +817,30 @@ function New-HenkaCapturedWindowBitmap {
     if ($width -le 0 -or $height -le 0) {
         throw "$Description window bounds are invalid for screenshot capture."
     }
+    Assert-HenkaCaptureDimensions `
+        -Width $width `
+        -Height $height `
+        -MinimumWidth $MinimumWidth `
+        -MinimumHeight $MinimumHeight `
+        -Description "$Description window"
 
     $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $width, $height
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
-        # A window that is already foreground can be sampled directly without
-        # changing focus. This keeps ordinary validation application-local,
-        # while avoiding stale OpenGL pixels from background PrintWindow when
-        # Windows has naturally foregrounded the newly launched test window.
+        # Desktop sampling is valid only when the entire window lies inside
+        # the virtual screen. Responsive-layout checks deliberately resize
+        # beyond the physical display, where CopyFromScreen would silently
+        # produce clipped desktop evidence. Use window-local capture there.
         $window_already_foreground =
             [HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle
-        if ($script:allowForegroundIntegration -or $window_already_foreground) {
+        $virtualScreen = [System.Windows.Forms.SystemInformation]::VirtualScreen
+        $window_fully_on_virtual_screen =
+            $rect.Left -ge $virtualScreen.Left -and
+            $rect.Top -ge $virtualScreen.Top -and
+            $rect.Right -le $virtualScreen.Right -and
+            $rect.Bottom -le $virtualScreen.Bottom
+        if (($script:allowForegroundIntegration -or $window_already_foreground) -and
+            $window_fully_on_virtual_screen) {
             $size = New-Object System.Drawing.Size -ArgumentList $width, $height
             $graphics.CopyFromScreen(
                 $rect.Left,
@@ -397,6 +850,11 @@ function New-HenkaCapturedWindowBitmap {
                 $size)
         }
         else {
+            if (-not $window_fully_on_virtual_screen) {
+                Write-Host (
+                    "[capture] {0}: window extends beyond virtual screen; " -f $Description +
+                    "using window-local PrintWindow instead of clipped desktop pixels.")
+            }
             $deviceContext = $graphics.GetHdc()
             try {
                 if (-not [NativeMethods]::PrintWindow(
@@ -429,13 +887,17 @@ function Save-WindowScreenshot {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Description
+        [Parameter(Mandatory = $true)][string]$Description,
+        [int]$MinimumWidth = 800,
+        [int]$MinimumHeight = 600
     )
 
     Set-HenkaAutomationForeground -Handle $Handle
     $bitmap = New-HenkaCapturedWindowBitmap `
         -Handle $Handle `
-        -Description $Description
+        -Description $Description `
+        -MinimumWidth $MinimumWidth `
+        -MinimumHeight $MinimumHeight
     try {
         $bitmap.Save(
             $Path,
@@ -491,9 +953,13 @@ function Click-WindowPoint {
 function Get-LastLogRegexMatch {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Pattern
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [long]$StartingOffset = 0
     )
 
+    if ($StartingOffset -lt 0) {
+        throw "A log scan starting offset cannot be negative: $StartingOffset"
+    }
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         return $null
     }
@@ -512,6 +978,12 @@ function Get-LastLogRegexMatch {
                 [System.IO.FileMode]::Open,
                 [System.IO.FileAccess]::Read,
                 $shareMode)
+            if ($StartingOffset -gt $stream.Length) {
+                throw "The packaged-sandbox log became shorter than its requested scan offset."
+            }
+            if ($StartingOffset -gt 0) {
+                $stream.Position = $StartingOffset
+            }
             $reader = [System.IO.StreamReader]::new(
                 $stream,
                 [System.Text.Encoding]::UTF8,
@@ -716,6 +1188,101 @@ function Scroll-FramebufferPoint {
         -Y $windowPoint.Y `
         -WheelDelta $WheelDelta
 }
+
+function Scroll-DetailsUntilReported {
+    param(
+        [Parameter(Mandatory = $true)][string]$PostconditionPattern,
+        [Parameter(Mandatory = $true)][string]$Description,
+        [long]$StartingOffset = 0
+    )
+
+    $scrollPattern = 'HENKA_AUTOMATION_DIAGNOSTIC details-scroll seq=(?<sequence>\d+) frame=(?<frame>\d+) before=(?<before>[-0-9.]+) after=(?<after>[-0-9.]+) content=(?<content>[-0-9.]+) viewport=(?<viewport>[-0-9.]+) delta=(?<delta>[-0-9.]+) accepted=(?<accepted>[01])'
+    $attemptLimit = 128
+    $lastProgress = $null
+    for ($attempt = 0; $attempt -lt $attemptLimit; ++$attempt) {
+        $postcondition = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $PostconditionPattern `
+            -StartingOffset $StartingOffset
+        if ($null -ne $postcondition) {
+            return $postcondition
+        }
+
+        $previousScroll = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $scrollPattern `
+            -StartingOffset $StartingOffset
+        $previousSequence = if ($null -ne $previousScroll) {
+            [int]$previousScroll.Groups['sequence'].Value
+        } else {
+            0
+        }
+        Scroll-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+            -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+            -WheelDelta -1
+
+        $deadline = [DateTime]::UtcNow.AddSeconds(3)
+        $lastProgress = $null
+        do {
+            $latestScroll = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $scrollPattern `
+                -StartingOffset $StartingOffset
+            if ($null -ne $latestScroll -and
+                [int]$latestScroll.Groups['sequence'].Value -gt $previousSequence) {
+                $lastProgress = $latestScroll
+                break
+            }
+            Start-Sleep -Milliseconds 40
+        } while ([DateTime]::UtcNow -lt $deadline)
+
+        if ($null -eq $lastProgress) {
+            throw "The packaged app did not report consuming a Details-panel scroll while searching for $Description."
+        }
+
+        $before = [double]$lastProgress.Groups['before'].Value
+        $after = [double]$lastProgress.Groups['after'].Value
+        $contentHeight = [double]$lastProgress.Groups['content'].Value
+        $viewportHeight = [double]$lastProgress.Groups['viewport'].Value
+        $maximumOffset = [Math]::Max(0.0, $contentHeight - $viewportHeight)
+        if ($lastProgress.Groups['accepted'].Value -ne '1') {
+            if ($maximumOffset -gt 0.5) {
+                throw "The Details panel rejected a scroll with $([Math]::Round($maximumOffset, 1)) px of content overflow while searching for $Description."
+            }
+            break
+        }
+        if ($after -le $before + 0.5) {
+            if ($before -ge $maximumOffset - 0.5) {
+                break
+            }
+            throw "The Details-panel scroll was consumed but made no progress (offset=$after, maximum=$maximumOffset) while searching for $Description."
+        }
+        if ($maximumOffset -gt 0.5) {
+            $remainingSteps = [int][Math]::Ceiling(($maximumOffset - $after) / 48.0) + 1
+            $attemptLimit = [Math]::Min(128, $attempt + 1 + [Math]::Max(1, $remainingSteps))
+        }
+        if ($after -ge $maximumOffset - 0.5) {
+            break
+        }
+    }
+
+    $postcondition = Get-LastLogRegexMatch `
+        -Path $stdoutPath `
+        -Pattern $PostconditionPattern `
+        -StartingOffset $StartingOffset
+    if ($null -ne $postcondition) {
+        return $postcondition
+    }
+    if ($null -ne $lastProgress) {
+        throw "The Details panel reached its reported scroll boundary without exposing $Description (offset=$($lastProgress.Groups['after'].Value), content=$($lastProgress.Groups['content'].Value), viewport=$($lastProgress.Groups['viewport'].Value))."
+    }
+    throw "The Details panel could not expose $Description; no app-reported scroll progress was available."
+}
+
 function Click-FramebufferPointRight {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
@@ -854,7 +1421,12 @@ function Assert-SceneFramesStable {
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $gitCommand = Get-HenkaGitPath
-$packageRoot = Join-Path $repoRoot "out\HenkaSandbox3D"
+$packageRoot = if ([string]::IsNullOrWhiteSpace($PackageRootOverride)) {
+    Join-Path $repoRoot "out\HenkaSandbox3D"
+}
+else {
+    [System.IO.Path]::GetFullPath($PackageRootOverride)
+}
 $packagedExe = Join-Path $packageRoot "HenkaSandbox3D.exe"
 $assetsDir = Join-Path $packageRoot "assets"
 $showcaseModelsDir = Join-Path $assetsDir "models"
@@ -866,14 +1438,44 @@ $logDir = Join-Path $repoRoot "build\test_tmp"
 $stdoutPath = Join-Path $logDir "check_packaged_sandbox3d_stdout.log"
 $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
 $startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png"
+$wideLayoutScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_layout_1920x1080.png"
+$expandedLayoutScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_layout_2560x1440.png"
+$wideLayoutFramebufferPath = Join-Path $logDir "check_packaged_sandbox3d_layout_1920x1080.bmp"
+$expandedLayoutFramebufferPath = Join-Path $logDir "check_packaged_sandbox3d_layout_2560x1440.bmp"
+$wideLayoutCaptureStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_layout_1920x1080.stdout.log"
+$wideLayoutCaptureStderrPath = Join-Path $logDir "check_packaged_sandbox3d_layout_1920x1080.stderr.log"
+$expandedLayoutCaptureStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_layout_2560x1440.stdout.log"
+$expandedLayoutCaptureStderrPath = Join-Path $logDir "check_packaged_sandbox3d_layout_2560x1440.stderr.log"
+$invalidLayoutFramebufferPath = Join-Path $logDir "check_packaged_sandbox3d_layout_invalid.bmp"
+$invalidLayoutCaptureStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_layout_invalid.stdout.log"
+$invalidLayoutCaptureStderrPath = Join-Path $logDir "check_packaged_sandbox3d_layout_invalid.stderr.log"
 $productStartupPrimitiveScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_product_startup_add_cube.png"
+$productStartupTransformScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_product_startup_transform_fields_1280x720.png"
+$physicsQaTopScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_physics_qa_top_1280x720.png"
+$utilityHelpTopScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_utility_help_top_1280x720.png"
+$utilityHelpScrolledScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_utility_help_scrolled_1280x720.png"
+$utilitySettingsTopScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_utility_settings_top_1280x720.png"
+$utilitySettingsScrolledScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_utility_settings_scrolled_1280x720.png"
+$utilityDiagnosticsTopScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_utility_diagnostics_top_1280x720.png"
+$utilityDiagnosticsScrolledScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_utility_diagnostics_scrolled_1280x720.png"
+$utilityTransformQaTopScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_utility_transform_qa_top_1280x720.png"
+$utilityTransformQaScrolledScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_utility_transform_qa_scrolled_1280x720.png"
+$physicsQaCounterScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_physics_qa_counters_1280x720.png"
+$physicsQaScrolledScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_physics_qa_scrolled_1280x720.png"
+$sceneObjectNameScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_scene_object_full_name_1280x720.png"
+$objectDetailsTitleScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_object_details_full_name_1280x720.png"
+$objectDetailsValueScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_object_details_value_wrapped_1280x720.png"
+$objectDetailsSourceScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_object_details_source_wrapped_1280x720.png"
 $terrainUiBeforeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_before_create.png"
 $terrainUiAfterScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_after_create.png"
+$terrainUiScrolledScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_scrolled_1280x720.png"
 $qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
 $nativeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_panel.png"
 $nativeAuthoringScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_authoring.png"
 $selectionOutlineScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_selection_outline.png"
 $nativeAuthoredScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_authored_rocket.png"
+$scaleGizmoScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_scale_gizmo_1280x720.png"
+$scaledGizmoScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_scale_gizmo_result_1280x720.png"
 $contextMenuScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_context_menu.png"
 $stabilityFirstPath = Join-Path $logDir "check_packaged_sandbox3d_stability_a.png"
 $stabilitySecondPath = Join-Path $logDir "check_packaged_sandbox3d_stability_b.png"
@@ -886,6 +1488,7 @@ $automationInputPath = Join-Path $logDir "check_packaged_sandbox3d_automation.ev
 
 if (-not $NonInteractive) {
     Add-Type -AssemblyName System.Drawing
+    Add-Type -AssemblyName System.Windows.Forms
     Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -920,6 +1523,39 @@ public static class NativeMethods {
 
     [DllImport("user32.dll")]
     public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint uFlags);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr value);
+
+    public static IntPtr CreateBorderlessPopupStyle(IntPtr originalStyle) {
+        uint style = unchecked((uint)originalStyle.ToInt64());
+        uint popupStyle = (style & ~0x00CF0000u) | 0x80000000u;
+        return new IntPtr(unchecked((int)popupStyle));
+    }
+
+    public static bool SetWindowStyle(IntPtr hWnd, IntPtr style) {
+        uint requested = unchecked((uint)style.ToInt64());
+        uint current = unchecked((uint)GetWindowLongPtr(hWnd, -16).ToInt64());
+        if (current == requested) {
+            return true;
+        }
+        SetWindowLongPtr(hWnd, -16, new IntPtr(unchecked((int)requested)));
+        uint actual = unchecked((uint)GetWindowLongPtr(hWnd, -16).ToInt64());
+        return actual == requested;
+    }
 
     [DllImport("user32.dll")]
     public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
@@ -964,6 +1600,11 @@ public static class NativeMethods {
 Write-Step "Checking packaged sandbox contents"
 Assert-PathExists -Path $packageRoot -Description "Packaged sandbox folder"
 Assert-PathExists -Path $packagedExe -Description "Packaged sandbox executable"
+$packagedSubsystem = Get-HenkaWindowsExecutableSubsystem -Path $packagedExe
+if ($packagedSubsystem -ne 2) {
+    throw "Packaged Sandbox must use the Windows GUI subsystem (2); found subsystem $packagedSubsystem."
+}
+Write-Output "[pass] Packaged Sandbox uses the Windows GUI subsystem and does not create a console window."
 Assert-PathExists -Path $assetsDir -Description "Packaged assets folder"
 Assert-PathExists -Path (Join-Path $assetsDir "branding\henka_engine_emblem.png") -Description "Packaged Henka emblem branding"
 Assert-PathExists -Path (Join-Path $assetsDir "branding\henka_engine_lockup.png") -Description "Packaged Henka lockup branding"
@@ -1040,6 +1681,7 @@ Assert-FileContains -Path $readmePath -Pattern "Open Native Panel Test from the 
 Assert-FileContains -Path $readmePath -Pattern "If saved live workspace geometry is incompatible, Henka restores current safe defaults and rewrites them after a clean shutdown" -Description "Packaged workspace recovery guidance"
 Assert-FileContains -Path $readmePath -Pattern "Close a detached tool window to return its panel to the last valid dock" -Description "Packaged workspace limitation guidance"
 Assert-FileContains -Path $readmePath -Pattern "Use M or G, R, and S for action-based transforms" -Description "Packaged transform hotkey guidance"
+Assert-FileContains -Path $readmePath -Pattern "Selected editable objects expose Position, Rotation \(Euler degrees\), and Scale as X/Y/Z fields in Object Details; each field group has its own Apply action" -Description "Packaged numeric transform editing guidance"
 Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packaged status guidance"
 Assert-FileContains -Path $helpPath -Pattern "Utility > Settings controls:" -Description "Packaged utility help"
 Assert-FileContains -Path $helpPath -Pattern "Perspective 3D|Side 2.5D|Top-down 2.5D|Isometric 2.5D" -Description "Packaged camera preset help"
@@ -1211,6 +1853,29 @@ if ($NonInteractive) {
     return
 }
 
+if (-not $TerrainStartupOnly -and -not $ProductStartupPrimitiveOnly) {
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    Write-Step "Verifying full-resolution app-owned workspace framebuffer captures"
+    Invoke-PackagedWorkspaceFramebufferCapture `
+        -Width 1920 `
+        -Height 1080 `
+        -BitmapPath $wideLayoutFramebufferPath `
+        -PngPath $wideLayoutScreenshotPath `
+        -StdoutPath $wideLayoutCaptureStdoutPath `
+        -StderrPath $wideLayoutCaptureStderrPath
+    Invoke-PackagedWorkspaceFramebufferCapture `
+        -Width 2560 `
+        -Height 1440 `
+        -BitmapPath $expandedLayoutFramebufferPath `
+        -PngPath $expandedLayoutScreenshotPath `
+        -StdoutPath $expandedLayoutCaptureStdoutPath `
+        -StderrPath $expandedLayoutCaptureStderrPath
+    Assert-PackagedWorkspaceFramebufferCaptureRejectsInvalidDimensions `
+        -BitmapPath $invalidLayoutFramebufferPath `
+        -StdoutPath $invalidLayoutCaptureStdoutPath `
+        -StderrPath $invalidLayoutCaptureStderrPath
+}
+
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Remove-Item `
     -LiteralPath @(
@@ -1218,9 +1883,13 @@ Remove-Item `
         $stderrPath,
         $startupScreenshotPath,
         $productStartupPrimitiveScreenshotPath,
+        $sceneObjectNameScreenshotPath,
         $qaScreenshotPath,
         $nativeScreenshotPath,
         $nativeAuthoringScreenshotPath,
+        $scaleGizmoScreenshotPath,
+        $scaledGizmoScreenshotPath,
+        $objectDetailsSourceScreenshotPath,
         $nativeAuthoredScreenshotPath,
         $persistenceStdoutPath,
         $persistenceStderrPath,
@@ -1236,10 +1905,12 @@ $uiAutomationVerified = $false
 $sandboxPanelsVisible = $false
 $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
 $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
+$previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
 try {
     New-Item -ItemType File -Path $automationInputPath -Force | Out-Null
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
+    $env:HENKA_AUTOMATION_DIAGNOSTICS = "1"
     Write-Step "Launching the packaged sandbox"
     # The native authoring workflow is an explicit reference-asset path.
     # Ordinary no-argument startup is validated separately as the clean
@@ -1249,7 +1920,9 @@ try {
             -FilePath $packagedExe `
             -WorkingDirectory $packageRoot `
             -StdoutPath $stdoutPath `
-            -StderrPath $stderrPath
+            -StderrPath $stderrPath `
+            -StartMinimized:$false `
+            -StartVisibleWithoutActivation
     }
     else {
         $capturedProcess = Start-HenkaCapturedProcess `
@@ -1257,7 +1930,9 @@ try {
             -WorkingDirectory $packageRoot `
             -Arguments @("--capture-showcase-view", "wide", "solid") `
             -StdoutPath $stdoutPath `
-            -StderrPath $stderrPath
+            -StderrPath $stderrPath `
+            -StartMinimized:$false `
+            -StartVisibleWithoutActivation
     }
     $process = $capturedProcess.Process
 
@@ -1332,13 +2007,140 @@ try {
     }
 
     if ($uiAutomationVerified) {
-        Write-Step "Capturing packaged startup workspace visual proof"
-        Set-HenkaAutomationForeground -Handle $mainWindowHandle
-        Start-Sleep -Milliseconds 350
-        Save-WindowScreenshot `
+        Write-Step "Checking responsive packaged workspace at 1280x720, 1920x1080, and 2560x1440"
+        $originalWorkspaceWindow = Get-WindowRect -Handle $mainWindowHandle
+        Assert-PackagedResponsiveLayout `
             -Handle $mainWindowHandle `
-            -Path $startupScreenshotPath `
-            -Description "Packaged startup workspace screenshot"
+            -EventPath $automationInputPath `
+            -Name "Minimum supported desktop layout" `
+            -Width 1280 `
+            -Height 720 `
+            -ScreenshotPath $startupScreenshotPath
+        $emptyDetailsPattern = 'HENKA_AUTOMATION_DIAGNOSTIC details-empty-message framebuffer=(?<framebufferWidth>\d+)x(?<framebufferHeight>\d+) full_bytes=(?<bytes>\d+) single_line_width=(?<lineWidth>[-0-9.]+) available_width=(?<availableWidth>[-0-9.]+) available_height=(?<availableHeight>[-0-9.]+) wrapped_height=(?<wrappedHeight>[-0-9.]+) visible=(?<visible>[01])'
+        $emptyDetailsMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $emptyDetailsPattern
+        if ($null -eq $emptyDetailsMatch) {
+            throw "The packaged Object Details empty-state instruction did not report its wrapped layout at 1280x720."
+        }
+        $emptyDetailsWidth = [double]$emptyDetailsMatch.Groups['availableWidth'].Value
+        $emptyDetailsFramebufferWidth = [int]$emptyDetailsMatch.Groups['framebufferWidth'].Value
+        $emptyDetailsFramebufferHeight = [int]$emptyDetailsMatch.Groups['framebufferHeight'].Value
+        $emptyDetailsSingleLineWidth = [double]$emptyDetailsMatch.Groups['lineWidth'].Value
+        $emptyDetailsAvailableHeight = [double]$emptyDetailsMatch.Groups['availableHeight'].Value
+        $emptyDetailsWrappedHeight = [double]$emptyDetailsMatch.Groups['wrappedHeight'].Value
+        if ($emptyDetailsMatch.Groups['visible'].Value -ne '1' -or
+            [int]$emptyDetailsMatch.Groups['bytes'].Value -lt 40 -or
+            $emptyDetailsFramebufferWidth -ne 1280 -or
+            $emptyDetailsFramebufferHeight -ne 720 -or
+            $emptyDetailsWidth -lt 280.0 -or $emptyDetailsWidth -gt 340.0 -or
+            $emptyDetailsSingleLineWidth -le $emptyDetailsWidth -or
+            $emptyDetailsWrappedHeight -le 0.0 -or
+            $emptyDetailsWrappedHeight -gt $emptyDetailsAvailableHeight) {
+            throw (
+                "The packaged Object Details empty-state instruction did not wrap its complete text within the 1280x720 panel: " +
+                "visible=$($emptyDetailsMatch.Groups['visible'].Value), " +
+                "framebuffer=${emptyDetailsFramebufferWidth}x${emptyDetailsFramebufferHeight}, " +
+                "textWidth=$emptyDetailsSingleLineWidth, availableWidth=$emptyDetailsWidth, " +
+                "wrappedHeight=$emptyDetailsWrappedHeight, availableHeight=$emptyDetailsAvailableHeight.")
+        }
+        Write-Output "[pass] Packaged Object Details empty-state instruction wraps visibly within its 1280x720 panel."
+        if (-not $TerrainStartupOnly -and -not $ProductStartupPrimitiveOnly) {
+            $wrappedSceneLabel = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene-object-label entity=(?<entity>\d+) name_bytes=(?<name>\d+) label_bytes=(?<label>\d+) wrapped=1 drawn=1 name_preserved=1 x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+)'
+            if ($null -eq $wrappedSceneLabel) {
+                throw "The packaged Showcase hierarchy did not draw a complete wrapped long name in its 1280x720 row."
+            }
+
+            $hoverEntity = $wrappedSceneLabel.Groups["entity"].Value
+            $hoverX = [double]::Parse(
+                $wrappedSceneLabel.Groups["x"].Value,
+                [Globalization.CultureInfo]::InvariantCulture) +
+                [double]::Parse(
+                    $wrappedSceneLabel.Groups["width"].Value,
+                    [Globalization.CultureInfo]::InvariantCulture) * 0.5
+            $hoverY = [double]::Parse(
+                $wrappedSceneLabel.Groups["y"].Value,
+                [Globalization.CultureInfo]::InvariantCulture) +
+                [double]::Parse(
+                    $wrappedSceneLabel.Groups["height"].Value,
+                    [Globalization.CultureInfo]::InvariantCulture) * 0.5
+            $tooltipOffset = Get-FileLengthSafe -Path $stdoutPath
+            $framePattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC frame seq=(?<sequence>[0-9]+) phase=render-complete(?:\s[^\r\n]*)?$'
+            $completedFrameMatches = [System.Text.RegularExpressions.Regex]::Matches(
+                (Get-HenkaPackagedStartupLogText -Path $stdoutPath),
+                $framePattern)
+            $afterFrameSequence = 0L
+            foreach ($completedFrameMatch in $completedFrameMatches) {
+                $reportedSequence = [long]$completedFrameMatch.Groups['sequence'].Value
+                if ($reportedSequence -gt $afterFrameSequence) {
+                    $afterFrameSequence = $reportedSequence
+                }
+            }
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("move {0} {1}" -f
+                    (Format-HenkaAutomationFloat -Value $hoverX),
+                    (Format-HenkaAutomationFloat -Value $hoverY))
+            $hoverFrame = Wait-HenkaPackagedFrameRenderComplete `
+                -StdoutPath $stdoutPath `
+                -ProcessId $process.Id `
+                -StartingOffset $tooltipOffset `
+                -AfterFrameSequence $afterFrameSequence `
+                -HardTimeoutMilliseconds 30000 `
+                -NoProgressTimeoutMilliseconds 8000 `
+                -PollMilliseconds 150
+            $hoverFrameOutput = Get-HenkaPackagedStartupLogText -Path $stdoutPath
+            if ([regex]::IsMatch(
+                    $hoverFrameOutput,
+                    ("HENKA_AUTOMATION_DIAGNOSTIC scene-object-name-tooltip entity={0} full_bytes=\d+ visible=1" -f [regex]::Escape($hoverEntity)))) {
+                throw "Hovering a complete wrapped Showcase row drew a duplicate full-name tooltip over the Scene View (frame $($hoverFrame.FrameSequence))."
+            }
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $sceneObjectNameScreenshotPath `
+                -Description "1280x720 full scene-object name wrapped in its own row without a viewport tooltip"
+            Write-Output "[pass] A complete long Showcase name remains readable in its wrapped row; hovering does not cover the Scene View."
+        }
+        $originalWindowStyle = [NativeMethods]::GetWindowLongPtr($mainWindowHandle, -16)
+        $borderlessPopupStyle = [NativeMethods]::CreateBorderlessPopupStyle(
+            $originalWindowStyle)
+        try {
+            # The local display is 1920x1080. A borderless popup lets the
+            # actual Sandbox client render beyond host monitor tracking limits
+            # without changing display settings or acquiring foreground.
+            Set-PackagedWindowStyle `
+                -Handle $mainWindowHandle `
+                -Style $borderlessPopupStyle
+            Assert-PackagedResponsiveLayout `
+                -Handle $mainWindowHandle `
+                -EventPath $automationInputPath `
+                -Name "Standard desktop layout" `
+                -Width 1920 `
+                -Height 1080
+            Assert-PackagedResponsiveLayout `
+                -Handle $mainWindowHandle `
+                -EventPath $automationInputPath `
+                -Name "Expanded desktop layout" `
+                -Width 2560 `
+                -Height 1440
+        }
+        finally {
+            Set-PackagedWindowStyle `
+                -Handle $mainWindowHandle `
+                -Style $originalWindowStyle
+        }
+        # Restore the minimum viewport so the existing interaction scenario
+        # continues to exercise the approved minimum-width boundary.
+        Assert-PackagedResponsiveLayout `
+            -Handle $mainWindowHandle `
+            -EventPath $automationInputPath `
+            -Name "Restored minimum desktop layout" `
+            -Width 1280 `
+            -Height 720 `
+            -PositionX $originalWorkspaceWindow.Left `
+            -PositionY $originalWorkspaceWindow.Top
 
         Write-Step "Checking packaged UI click controls"
 
@@ -1397,7 +2199,7 @@ try {
             "Workspace UI geometry:",
             "Workspace header chrome:",
             "Tools QA tab:",
-            "Viewport shading controls:")) {
+            "Viewport shading control: mode=Wireframe")) {
             if (-not (Wait-FileContains `
                     -Path $stdoutPath `
                     -Pattern $requiredPattern `
@@ -1424,16 +2226,11 @@ try {
         $toolsHeaderMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Tools panel header: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
-        $shadingMatch = Get-LastLogRegexMatch `
-            -Path $stdoutPath `
-            -Pattern 'Viewport shading controls: x=([-0-9.]+) y=([-0-9.]+) button=([-0-9.]+) gap=([-0-9.]+)'
-
         if ($null -eq $framebufferMatch -or
             $null -eq $viewportMatch -or
             $null -eq $workspaceGeometryMatch -or
             $null -eq $qaTabMatch -or
-            $null -eq $toolsHeaderMatch -or
-            $null -eq $shadingMatch) {
+            $null -eq $toolsHeaderMatch) {
             throw "Packaged UI automation geometry could not be parsed."
         }
 
@@ -1537,18 +2334,6 @@ try {
             -Y $toolsHeaderY `
             -Width $toolsHeaderWidth `
             -Height $toolsHeaderHeight
-
-        $shadingX =
-            [double]$shadingMatch.Groups[1].Value
-        $shadingY =
-            [double]$shadingMatch.Groups[2].Value
-        $shadingButtonWidth =
-            [double]$shadingMatch.Groups[3].Value
-        $shadingGap =
-            [double]$shadingMatch.Groups[4].Value
-        $shadingGroupWidth =
-            $shadingButtonWidth * 4.0 +
-            $shadingGap * 3.0
 
         $currentLayoutMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
@@ -1759,13 +2544,1271 @@ try {
             }
             Write-Output "[pass] Default-scene Add Cube reached the canonical scene operation and Scene Document binding"
             Set-HenkaAutomationForeground -Handle $mainWindowHandle
+
+            $createdEntityMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'DEFAULT_SCENE_ADD_CUBE_READY entity=(?<entity>\d+) document_id=\d+ source=primitive canonical_document=1\.'
+            if ($null -eq $createdEntityMatch) {
+                throw "The product-native Add Cube result did not identify its live scene entity for Object Details validation."
+            }
+            $createdEntity = [UInt64]::Parse(
+                $createdEntityMatch.Groups['entity'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $entityPattern = [Regex]::Escape(
+                $createdEntity.ToString([Globalization.CultureInfo]::InvariantCulture))
+
+            $transformDisclosurePattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC object-transform-disclosure entity=' +
+                $entityPattern +
+                ' expanded=(?<expanded>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) frame=\d+'
+            $transformDisclosure = Scroll-DetailsUntilReported `
+                -PostconditionPattern $transformDisclosurePattern `
+                -Description "the selected object's Transform disclosure"
+            if ($transformDisclosure.Groups['expanded'].Value -ne '1') {
+                $disclosureOffset = Get-FileLengthSafe -Path $stdoutPath
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ([double]$transformDisclosure.Groups['x'].Value + 40.0) `
+                    -FramebufferY ([double]$transformDisclosure.Groups['y'].Value + 14.0)
+                $expandedDisclosurePattern =
+                    'HENKA_AUTOMATION_DIAGNOSTIC object-transform-disclosure entity=' +
+                    $entityPattern +
+                    ' expanded=1 x=[-0-9.]+ y=[-0-9.]+ width=[-0-9.]+ height=[-0-9.]+ frame=\d+'
+                if (-not (Wait-FileContainsAfterOffset `
+                        -Path $stdoutPath `
+                        -Pattern $expandedDisclosurePattern `
+                        -StartingOffset $disclosureOffset `
+                        -TimeoutMilliseconds 4000)) {
+                    throw "The real Object Details Transform disclosure did not open for the selected scene object."
+                }
+            }
+
+            $positionFieldPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC object-transform-field entity=' +
+                $entityPattern +
+                ' group=position submitted=1 row_x=(?<rowX>[-0-9.]+) row_y=(?<rowY>[-0-9.]+) row_width=(?<rowWidth>[-0-9.]+) row_height=(?<rowHeight>[-0-9.]+) field_x=(?<fieldX>[-0-9.]+) field_y=(?<fieldY>[-0-9.]+) field_width=(?<fieldWidth>[-0-9.]+) field_height=(?<fieldHeight>[-0-9.]+) value_x=(?<valueX>[-+0-9.eE]+) source_x=(?<sourceX>[-+0-9.eE]+) frame=\d+'
+            $positionField = Scroll-DetailsUntilReported `
+                -PostconditionPattern $positionFieldPattern `
+                -Description "the selected object's Position component fields"
+            $positionFieldX = [double]::Parse(
+                $positionField.Groups['fieldX'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $positionFieldY = [double]::Parse(
+                $positionField.Groups['fieldY'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $positionFieldWidth = [double]::Parse(
+                $positionField.Groups['fieldWidth'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $positionFieldHeight = [double]::Parse(
+                $positionField.Groups['fieldHeight'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ($positionFieldWidth -lt 45.0 -or $positionFieldHeight -lt 20.0 -or
+                $positionFieldX -lt $detailsX -or
+                $positionFieldY -lt $detailsY -or
+                $positionFieldX + $positionFieldWidth -gt $detailsX + $detailsWidth -or
+                $positionFieldY + $positionFieldHeight -gt $detailsY + $detailsHeight) {
+                throw "The Object Details Position X field was not fully readable and in-bounds at 1280x720."
+            }
+
+            $positionApplyPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC object-transform-apply-button entity=' +
+                $entityPattern +
+                ' group=position submitted=1 x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) frame=\d+'
+            $positionApply = Scroll-DetailsUntilReported `
+                -PostconditionPattern $positionApplyPattern `
+                -Description "the visible Apply Position action"
+            $positionApplyX = [double]::Parse(
+                $positionApply.Groups['x'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $positionApplyY = [double]::Parse(
+                $positionApply.Groups['y'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $positionApplyWidth = [double]::Parse(
+                $positionApply.Groups['width'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $positionApplyHeight = [double]::Parse(
+                $positionApply.Groups['height'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ($positionApplyWidth -lt 80.0 -or $positionApplyHeight -lt 20.0 -or
+                $positionApplyX -lt $detailsX -or $positionApplyY -lt $detailsY -or
+                $positionApplyX + $positionApplyWidth -gt $detailsX + $detailsWidth -or
+                $positionApplyY + $positionApplyHeight -gt $detailsY + $detailsHeight) {
+                throw "Apply Position was not fully visible and in-bounds at 1280x720."
+            }
+
+            $positionField = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $positionFieldPattern
+            if ($null -eq $positionField) {
+                throw "The currently visible Position field geometry was not available after scrolling to Apply Position."
+            }
+            $positionFieldX = [double]::Parse(
+                $positionField.Groups['fieldX'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $positionFieldY = [double]::Parse(
+                $positionField.Groups['fieldY'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $positionFieldWidth = [double]::Parse(
+                $positionField.Groups['fieldWidth'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $positionFieldHeight = [double]::Parse(
+                $positionField.Groups['fieldHeight'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+
+            $initialPositionX = [double]::Parse(
+                $positionField.Groups['sourceX'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $initialPositionText = $positionField.Groups['valueX'].Value
+            $updatedPositionX = $initialPositionX + 0.375
+            $updatedPositionText = Format-HenkaAutomationFloat -Value $updatedPositionX
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($positionFieldX + $positionFieldWidth * 0.5) `
+                -FramebufferY ($positionFieldY + $positionFieldHeight * 0.5)
+            for ($backspaceIndex = 0; $backspaceIndex -lt $initialPositionText.Length; ++$backspaceIndex) {
+                Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "Backspace"
+            }
+            Send-HenkaAutomationText -EventPath $automationInputPath -Text $updatedPositionText
+            $positionResultOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($positionApplyX + $positionApplyWidth * 0.5) `
+                -FramebufferY ($positionApplyY + $positionApplyHeight * 0.5)
+            $positionResultPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC object-transform-result entity=' +
+                $entityPattern +
+                ' group=position accepted=1 state_valid=1 position_x=(?<positionX>[-+0-9.eE]+) '
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $positionResultPattern `
+                    -StartingOffset $positionResultOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "Apply Position did not change the live selected entity through the packaged editor action path."
+            }
+            $positionResult = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $positionResultPattern
+            $actualPositionX = [double]::Parse(
+                $positionResult.Groups['positionX'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ([Math]::Abs($actualPositionX - $updatedPositionX) -gt 0.00005 -or
+                [Math]::Abs($actualPositionX - $initialPositionX) -lt 0.00005) {
+                throw "Apply Position did not publish the requested changed live X value. expected=$updatedPositionX actual=$actualPositionX"
+            }
+            Write-Output "[pass] Object Details Position input and Apply changed the real selected entity through the packaged action path"
+
+            $scaleFieldPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC object-transform-field entity=' +
+                $entityPattern +
+                ' group=scale submitted=1 row_x=(?<rowX>[-0-9.]+) row_y=(?<rowY>[-0-9.]+) row_width=(?<rowWidth>[-0-9.]+) row_height=(?<rowHeight>[-0-9.]+) field_x=(?<fieldX>[-0-9.]+) field_y=(?<fieldY>[-0-9.]+) field_width=(?<fieldWidth>[-0-9.]+) field_height=(?<fieldHeight>[-0-9.]+) value_x=(?<valueX>[-+0-9.eE]+) source_x=(?<sourceX>[-+0-9.eE]+) frame=\d+'
+            $scaleField = Scroll-DetailsUntilReported `
+                -PostconditionPattern $scaleFieldPattern `
+                -Description "the selected object's Scale component fields"
+            $scaleApplyPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC object-transform-apply-button entity=' +
+                $entityPattern +
+                ' group=scale submitted=1 x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) frame=\d+'
+            $scaleApply = Scroll-DetailsUntilReported `
+                -PostconditionPattern $scaleApplyPattern `
+                -Description "the visible Apply Scale action"
+            $scaleFieldMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $scaleFieldPattern
+            if ($null -eq $scaleFieldMatch) {
+                throw "The currently visible Scale field geometry was not available after scrolling to Apply Scale."
+            }
+            $scaleValueText = $scaleFieldMatch.Groups['valueX'].Value
+            $initialScaleX = [double]::Parse(
+                $scaleFieldMatch.Groups['sourceX'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $scaleApplyX = [double]::Parse(
+                $scaleApply.Groups['x'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $scaleApplyY = [double]::Parse(
+                $scaleApply.Groups['y'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $scaleApplyWidth = [double]::Parse(
+                $scaleApply.Groups['width'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $scaleApplyHeight = [double]::Parse(
+                $scaleApply.Groups['height'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $scaleFieldX = [double]::Parse(
+                $scaleFieldMatch.Groups['fieldX'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $scaleFieldY = [double]::Parse(
+                $scaleFieldMatch.Groups['fieldY'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $scaleFieldWidth = [double]::Parse(
+                $scaleFieldMatch.Groups['fieldWidth'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $scaleFieldHeight = [double]::Parse(
+                $scaleFieldMatch.Groups['fieldHeight'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ($scaleFieldWidth -lt 45.0 -or $scaleFieldHeight -lt 20.0 -or
+                $scaleFieldX -lt $detailsX -or
+                $scaleFieldY -lt $detailsY -or
+                $scaleFieldX + $scaleFieldWidth -gt $detailsX + $detailsWidth -or
+                $scaleFieldY + $scaleFieldHeight -gt $detailsY + $detailsHeight) {
+                throw "The Object Details Scale X field was not fully readable and in-bounds at 1280x720."
+            }
+            if ($scaleApplyWidth -lt 80.0 -or $scaleApplyHeight -lt 20.0 -or
+                $scaleApplyX -lt $detailsX -or $scaleApplyY -lt $detailsY -or
+                $scaleApplyX + $scaleApplyWidth -gt $detailsX + $detailsWidth -or
+                $scaleApplyY + $scaleApplyHeight -gt $detailsY + $detailsHeight) {
+                throw "The Object Details Apply Scale action was not fully reachable at 1280x720."
+            }
+            Start-Sleep -Milliseconds 250
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $productStartupTransformScreenshotPath `
+                -Description "Packaged Object Details numeric transform controls at 1280x720"
+            Write-Output "[pass] Packaged Object Details transform-control visual proof captured at 1280x720"
             Start-Sleep -Milliseconds 700
             Save-WindowScreenshot `
                 -Handle $mainWindowHandle `
                 -Path $productStartupPrimitiveScreenshotPath `
                 -Description "Packaged product-native Add Cube"
             Write-Output "[pass] Product-native Add Cube visual proof captured"
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($scaleFieldX + $scaleFieldWidth * 0.5) `
+                -FramebufferY ($scaleFieldY + $scaleFieldHeight * 0.5)
+            for ($backspaceIndex = 0; $backspaceIndex -lt $scaleValueText.Length; ++$backspaceIndex) {
+                Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "Backspace"
+            }
+            Send-HenkaAutomationText -EventPath $automationInputPath -Text "0"
+            $scaleResultOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($scaleApplyX + $scaleApplyWidth * 0.5) `
+                -FramebufferY ($scaleApplyY + $scaleApplyHeight * 0.5)
+            $scaleResultPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC object-transform-result entity=' +
+                $entityPattern +
+                ' group=scale accepted=0 state_valid=1 position_x=(?<positionX>[-+0-9.eE]+) position_y=[-+0-9.eE]+ position_z=[-+0-9.eE]+ scale_x=(?<scaleX>[-+0-9.eE]+) scale_y=(?<scaleY>[-+0-9.eE]+) scale_z=(?<scaleZ>[-+0-9.eE]+)'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $scaleResultPattern `
+                    -StartingOffset $scaleResultOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The packaged editor did not reject zero scale through the real action path."
+            }
+            $scaleResult = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $scaleResultPattern
+            $actualScaleX = [double]::Parse(
+                $scaleResult.Groups['scaleX'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $actualPositionAfterReject = [double]::Parse(
+                $scaleResult.Groups['positionX'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ([Math]::Abs($actualScaleX - $initialScaleX) -gt 0.00005 -or
+                [Math]::Abs($actualPositionAfterReject - $updatedPositionX) -gt 0.00005) {
+                throw "Rejected zero scale partially changed the live transform. scaleBefore=$initialScaleX scaleAfter=$actualScaleX positionExpected=$updatedPositionX positionAfter=$actualPositionAfterReject"
+            }
+            Write-Output "[pass] Zero Scale was rejected through the real UI action without changing the live transform"
+
+            Write-Step "Checking per-axis Scale gizmo through packaged editor drag at 1280x720"
+            $scaleGeometryOffset = Get-FileLengthSafe -Path $stdoutPath
+            Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "S"
+            $scaleAxisPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC gizmo-scale-axis entity=' +
+                $entityPattern +
+                ' axis=(?<axis>X) viewport_x=(?<viewportX>-?\d+) viewport_y=(?<viewportY>-?\d+) x0=(?<x0>[-+0-9.eE]+) y0=(?<y0>[-+0-9.eE]+) x1=(?<x1>[-+0-9.eE]+) y1=(?<y1>[-+0-9.eE]+)'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $scaleAxisPattern `
+                    -StartingOffset $scaleGeometryOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "The packaged Scale gizmo did not report visible axis handles from the product model."
+            }
+            $scaleAxisGeometry = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $scaleAxisPattern
+            if ($null -eq $scaleAxisGeometry -or $scaleAxisGeometry.Groups['axis'].Value -ne 'X') {
+                throw "The packaged Scale gizmo did not expose the expected X-axis handle in its stable reference view."
+            }
+            Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "Escape"
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $scaleGizmoScreenshotPath `
+                -Description "Packaged per-axis Scale gizmo at 1280x720"
+
+            $scaleAxisViewportX = [double]$scaleAxisGeometry.Groups['viewportX'].Value
+            $scaleAxisViewportY = [double]$scaleAxisGeometry.Groups['viewportY'].Value
+            $scaleAxisX0 = [double]$scaleAxisGeometry.Groups['x0'].Value
+            $scaleAxisY0 = [double]$scaleAxisGeometry.Groups['y0'].Value
+            $scaleAxisX1 = [double]$scaleAxisGeometry.Groups['x1'].Value
+            $scaleAxisY1 = [double]$scaleAxisGeometry.Groups['y1'].Value
+            $scaleAxisDeltaX = $scaleAxisX1 - $scaleAxisX0
+            $scaleAxisDeltaY = $scaleAxisY1 - $scaleAxisY0
+            $scaleAxisLength = [Math]::Sqrt(
+                $scaleAxisDeltaX * $scaleAxisDeltaX +
+                $scaleAxisDeltaY * $scaleAxisDeltaY)
+            if ($scaleAxisLength -lt 18.0) {
+                throw "The packaged X Scale gizmo handle was too short for a reliable interaction. length=$scaleAxisLength"
+            }
+            $scaleAxisStartX = $scaleAxisViewportX + ($scaleAxisX0 + $scaleAxisX1) * 0.5
+            $scaleAxisStartY = $scaleAxisViewportY + ($scaleAxisY0 + $scaleAxisY1) * 0.5
+            $scaleAxisEndX = $scaleAxisStartX + $scaleAxisDeltaX / $scaleAxisLength * 18.0
+            $scaleAxisEndY = $scaleAxisStartY + $scaleAxisDeltaY / $scaleAxisLength * 18.0
+            Assert-FramebufferRect `
+                -Name "Scale gizmo drag target" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $scaleAxisStartX `
+                -Y $scaleAxisStartY `
+                -Width 1.0 `
+                -Height 1.0
+            Assert-FramebufferRect `
+                -Name "Scale gizmo drag destination" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $scaleAxisEndX `
+                -Y $scaleAxisEndY `
+                -Width 1.0 `
+                -Height 1.0
+
+            $scaleGizmoClientRect = New-Object NativeMethods+RECT
+            if (-not [NativeMethods]::GetClientRect(
+                    $mainWindowHandle,
+                    [ref]$scaleGizmoClientRect)) {
+                throw "The packaged Sandbox client bounds could not be read for the Scale gizmo drag."
+            }
+            $scaleGizmoClientWidth = $scaleGizmoClientRect.Right - $scaleGizmoClientRect.Left
+            $scaleGizmoClientHeight = $scaleGizmoClientRect.Bottom - $scaleGizmoClientRect.Top
+            $scaleGizmoStartPoint = Convert-HenkaFramebufferPointToWindowPoint `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -WindowWidth $scaleGizmoClientWidth `
+                -WindowHeight $scaleGizmoClientHeight `
+                -FramebufferX $scaleAxisStartX `
+                -FramebufferY $scaleAxisStartY
+            $scaleGizmoEndPoint = Convert-HenkaFramebufferPointToWindowPoint `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -WindowWidth $scaleGizmoClientWidth `
+                -WindowHeight $scaleGizmoClientHeight `
+                -FramebufferX $scaleAxisEndX `
+                -FramebufferY $scaleAxisEndY
+            $gizmoScaleResultOffset = Get-FileLengthSafe -Path $stdoutPath
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("move {0} {1}" -f `
+                    (Format-HenkaAutomationFloat -Value $scaleGizmoStartPoint.X), `
+                    (Format-HenkaAutomationFloat -Value $scaleGizmoStartPoint.Y))
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("button left down {0} {1}" -f `
+                    (Format-HenkaAutomationFloat -Value $scaleGizmoStartPoint.X), `
+                    (Format-HenkaAutomationFloat -Value $scaleGizmoStartPoint.Y))
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("move {0} {1}" -f `
+                    (Format-HenkaAutomationFloat -Value $scaleGizmoEndPoint.X), `
+                    (Format-HenkaAutomationFloat -Value $scaleGizmoEndPoint.Y))
+            Send-HenkaAutomationEvent `
+                -EventPath $automationInputPath `
+                -EventLine ("button left up {0} {1}" -f `
+                    (Format-HenkaAutomationFloat -Value $scaleGizmoEndPoint.X), `
+                    (Format-HenkaAutomationFloat -Value $scaleGizmoEndPoint.Y))
+            $gizmoScaleResultPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC object-transform-result entity=' +
+                $entityPattern +
+                ' group=gizmo-scale-X accepted=1 state_valid=1 position_x=[-+0-9.eE]+ position_y=[-+0-9.eE]+ position_z=[-+0-9.eE]+ scale_x=(?<scaleX>[-+0-9.eE]+) scale_y=(?<scaleY>[-+0-9.eE]+) scale_z=(?<scaleZ>[-+0-9.eE]+)'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $gizmoScaleResultPattern `
+                    -StartingOffset $gizmoScaleResultOffset `
+                    -TimeoutMilliseconds 8000)) {
+                throw "A real packaged X-axis Scale gizmo drag did not produce an accepted live transform."
+            }
+            $gizmoScaleResult = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $gizmoScaleResultPattern
+            $gizmoScaleX = [double]::Parse(
+                $gizmoScaleResult.Groups['scaleX'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $gizmoScaleY = [double]::Parse(
+                $gizmoScaleResult.Groups['scaleY'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $gizmoScaleZ = [double]::Parse(
+                $gizmoScaleResult.Groups['scaleZ'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $gizmoStartScaleY = [double]::Parse(
+                $scaleResult.Groups['scaleY'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $gizmoStartScaleZ = [double]::Parse(
+                $scaleResult.Groups['scaleZ'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ([Math]::Abs($gizmoScaleX - $actualScaleX) -le 0.00005 -or
+                [Math]::Abs($gizmoScaleY - $gizmoStartScaleY) -gt 0.00005 -or
+                [Math]::Abs($gizmoScaleZ - $gizmoStartScaleZ) -gt 0.00005) {
+                throw "The packaged X Scale gizmo failed its component-isolation contract. before=($actualScaleX,$gizmoStartScaleY,$gizmoStartScaleZ) after=($gizmoScaleX,$gizmoScaleY,$gizmoScaleZ)"
+            }
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $scaledGizmoScreenshotPath `
+                -Description "Packaged object after X-axis Scale gizmo drag at 1280x720"
+            Assert-PathExists `
+                -Path $scaleGizmoScreenshotPath `
+                -Description "Packaged 1280x720 Scale gizmo visual proof"
+            Assert-PathExists `
+                -Path $scaledGizmoScreenshotPath `
+                -Description "Packaged 1280x720 per-axis Scale result visual proof"
+            Write-Output "[pass] Packaged X-axis Scale gizmo changed only the selected scale component through the normal editor drag path"
+
+            # The following hierarchy check uses this cube as a real parent.
+            # Henka intentionally rejects non-uniformly scaled parents, so
+            # restore the gizmo-edited X component through the same Object
+            # Details action before exercising parenting.
+            $restoreScaleText = Format-HenkaAutomationFloat -Value $initialScaleX
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($scaleFieldX + $scaleFieldWidth * 0.5) `
+                -FramebufferY ($scaleFieldY + $scaleFieldHeight * 0.5)
+            $gizmoScaleText = Format-HenkaAutomationFloat -Value $gizmoScaleX
+            for ($backspaceIndex = 0; $backspaceIndex -lt $gizmoScaleText.Length; ++$backspaceIndex) {
+                Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "Backspace"
+            }
+            Send-HenkaAutomationText -EventPath $automationInputPath -Text $restoreScaleText
+            $restoreScaleResultOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($scaleApplyX + $scaleApplyWidth * 0.5) `
+                -FramebufferY ($scaleApplyY + $scaleApplyHeight * 0.5)
+            $restoreScaleResultPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC object-transform-result entity=' +
+                $entityPattern +
+                ' group=scale accepted=1 state_valid=1 position_x=[-+0-9.eE]+ position_y=[-+0-9.eE]+ position_z=[-+0-9.eE]+ scale_x=(?<scaleX>[-+0-9.eE]+) scale_y=(?<scaleY>[-+0-9.eE]+) scale_z=(?<scaleZ>[-+0-9.eE]+)'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $restoreScaleResultPattern `
+                    -StartingOffset $restoreScaleResultOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "Restoring a valid uniform hierarchy-parent scale through Object Details failed."
+            }
+            $restoredScaleResult = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $restoreScaleResultPattern
+            foreach ($component in @('scaleX', 'scaleY', 'scaleZ')) {
+                $restoredComponent = [double]::Parse(
+                    $restoredScaleResult.Groups[$component].Value,
+                    [Globalization.CultureInfo]::InvariantCulture)
+                if ([Math]::Abs($restoredComponent - 1.0) -gt 0.00005) {
+                    throw "The hierarchy parent must have unit uniform scale before parenting. $component=$restoredComponent"
+                }
+            }
+            Write-Output "[pass] Restored unit uniform parent scale through the real Object Details action"
+
+            Write-Step "Checking Game Authoring hierarchy through Object Details"
+            $hierarchyParentEntity = $createdEntity
+            $hierarchyAddCubeButtonRequiredWidths = @(
+                (6.0 * 8.0 - 1.0 + 24.0), # Add Cube: measured text plus horizontal padding.
+                (6.0 * 5.0 - 1.0 + 24.0), # Clone.
+                (6.0 * 6.0 - 1.0 + 24.0)) # Delete.
+            $hierarchyAddCubeAvailableWidth = ($sceneObjectsWidth - 28.0) - 12.0
+            $hierarchyAddCubeExtraWidth = (
+                $hierarchyAddCubeAvailableWidth -
+                ($hierarchyAddCubeButtonRequiredWidths | Measure-Object -Sum).Sum) / 3.0
+            if ($hierarchyAddCubeExtraWidth -lt 0.0) {
+                throw "The selected Scene Objects Add Cube row cannot fit at the supported layout width."
+            }
+            $hierarchyAddCubeX = $sceneObjectsX + 14.0 +
+                (($hierarchyAddCubeButtonRequiredWidths[0] + $hierarchyAddCubeExtraWidth) / 2.0)
+            $hierarchyChildOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX $hierarchyAddCubeX `
+                -FramebufferY ($addCubeY + $addCubeHeight * 0.5)
+            $hierarchyChildPattern = 'DEFAULT_SCENE_ADD_CUBE_READY entity=(?<entity>\d+) document_id=\d+ source=primitive canonical_document=1\.'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $hierarchyChildPattern `
+                    -StartingOffset $hierarchyChildOffset `
+                    -TimeoutMilliseconds 6000)) {
+                throw "The second visible Add Cube action did not create a Game Authoring child candidate."
+            }
+            $hierarchyChildMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $hierarchyChildPattern
+            if ($null -eq $hierarchyChildMatch) {
+                throw "The product-authored hierarchy child did not retain its live entity identity."
+            }
+            $hierarchyChildEntity = [UInt64]::Parse(
+                $hierarchyChildMatch.Groups['entity'].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ($hierarchyChildEntity -eq $hierarchyParentEntity) {
+                throw "Two visible Add Cube actions returned the same scene entity identity."
+            }
+            $hierarchyChildPattern = [Regex]::Escape(
+                $hierarchyChildEntity.ToString([Globalization.CultureInfo]::InvariantCulture))
+
+            $hierarchyDisclosurePattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC game-authoring-hierarchy-disclosure entity=' +
+                $hierarchyChildPattern +
+                ' expanded=(?<expanded>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 frame=\d+'
+            $hierarchyDisclosure = Scroll-DetailsUntilReported `
+                -PostconditionPattern $hierarchyDisclosurePattern `
+                -Description "the selected object's Game Authoring Hierarchy disclosure"
+            Assert-FramebufferRect `
+                -Name "Game Authoring Hierarchy disclosure" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X ([double]$hierarchyDisclosure.Groups['x'].Value) `
+                -Y ([double]$hierarchyDisclosure.Groups['y'].Value) `
+                -Width ([double]$hierarchyDisclosure.Groups['width'].Value) `
+                -Height 28.0
+            if ($hierarchyDisclosure.Groups['expanded'].Value -eq '0') {
+                $hierarchyDisclosureOffset = Get-FileLengthSafe -Path $stdoutPath
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ([double]$hierarchyDisclosure.Groups['x'].Value + 40.0) `
+                    -FramebufferY ([double]$hierarchyDisclosure.Groups['y'].Value + 14.0)
+                $expandedHierarchyPattern =
+                    'HENKA_AUTOMATION_DIAGNOSTIC game-authoring-hierarchy-disclosure entity=' +
+                    $hierarchyChildPattern +
+                    ' expanded=1 x=[-0-9.]+ y=[-0-9.]+ width=[-0-9.]+ height=28.0 frame=\d+'
+                if (-not (Wait-FileContainsAfterOffset `
+                        -Path $stdoutPath `
+                        -Pattern $expandedHierarchyPattern `
+                        -StartingOffset $hierarchyDisclosureOffset `
+                        -TimeoutMilliseconds 4000)) {
+                    throw "The selected object's real Object Details Hierarchy disclosure did not expand."
+                }
+            }
+
+            $hierarchyControlsPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC game-authoring-hierarchy-controls child=' +
+                $hierarchyChildPattern +
+                ' root=(?<root>[01]) parent_entity=(?<parent>\d+) picker_open=(?<picker>[01]) choose_x=(?<chooseX>[-0-9.]+) choose_y=(?<chooseY>[-0-9.]+) choose_width=(?<chooseWidth>[-0-9.]+) unparent_x=(?<unparentX>[-0-9.]+) unparent_width=(?<unparentWidth>[-0-9.]+) height=28.0 viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) scroll=(?<scroll>[-0-9.]+) frame=\d+'
+            $hierarchyControls = Scroll-DetailsUntilReported `
+                -PostconditionPattern $hierarchyControlsPattern `
+                -Description "the selected object's visible Game Authoring parent controls"
+            if ($hierarchyControls.Groups['root'].Value -ne '1' -or
+                $hierarchyControls.Groups['picker'].Value -ne '0') {
+                throw "A newly created Game Authoring object did not begin at the scene root."
+            }
+            Assert-FramebufferRect `
+                -Name "Game Authoring Choose Parent control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X ([double]$hierarchyControls.Groups['chooseX'].Value) `
+                -Y ([double]$hierarchyControls.Groups['chooseY'].Value) `
+                -Width ([double]$hierarchyControls.Groups['chooseWidth'].Value) `
+                -Height 28.0
+            $pickerToggleOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ([double]$hierarchyControls.Groups['chooseX'].Value + [double]$hierarchyControls.Groups['chooseWidth'].Value * 0.5) `
+                -FramebufferY ([double]$hierarchyControls.Groups['chooseY'].Value + 14.0)
+            $hierarchyPickerOpenPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC game-authoring-hierarchy-picker child=' +
+                $hierarchyChildPattern + ' open=1'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $hierarchyPickerOpenPattern `
+                    -StartingOffset $pickerToggleOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "Choose Parent did not open the real hierarchy candidate list."
+            }
+
+            $hierarchyCandidatePattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC game-authoring-hierarchy-candidate child=' +
+                $hierarchyChildPattern +
+                ' entity=' +
+                [Regex]::Escape($hierarchyParentEntity.ToString([Globalization.CultureInfo]::InvariantCulture)) +
+                ' submitted=1 x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) scroll=(?<scroll>[-0-9.]+) frame=\d+'
+            $hierarchyCandidate = Scroll-DetailsUntilReported `
+                -PostconditionPattern $hierarchyCandidatePattern `
+                -Description "the original product-authored parent candidate"
+            $candidateX = [double]$hierarchyCandidate.Groups['x'].Value
+            $candidateY = [double]$hierarchyCandidate.Groups['y'].Value
+            $candidateWidth = [double]$hierarchyCandidate.Groups['width'].Value
+            $candidateViewportX = [double]$hierarchyCandidate.Groups['viewportX'].Value
+            $candidateViewportY = [double]$hierarchyCandidate.Groups['viewportY'].Value
+            $candidateViewportWidth = [double]$hierarchyCandidate.Groups['viewportWidth'].Value
+            $candidateViewportHeight = [double]$hierarchyCandidate.Groups['viewportHeight'].Value
+            Assert-FramebufferRect `
+                -Name "Game Authoring parent candidate" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $candidateX `
+                -Y $candidateY `
+                -Width $candidateWidth `
+                -Height 26.0
+            if ($candidateX -lt $candidateViewportX -or
+                $candidateY -lt $candidateViewportY -or
+                $candidateX + $candidateWidth -gt $candidateViewportX + $candidateViewportWidth -or
+                $candidateY + 26.0 -gt $candidateViewportY + $candidateViewportHeight) {
+                throw "The parent candidate was submitted outside the visible Object Details content viewport."
+            }
+            $parentActionOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($candidateX + $candidateWidth * 0.5) `
+                -FramebufferY ($candidateY + 13.0)
+            $parentActionPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC game-authoring-hierarchy-action child=' +
+                $hierarchyChildPattern + ' kind=parent target=' +
+                [Regex]::Escape($hierarchyParentEntity.ToString([Globalization.CultureInfo]::InvariantCulture)) +
+                ' accepted=1 result=success'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $parentActionPattern `
+                    -StartingOffset $parentActionOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "Selecting the visible parent candidate did not reparent the selected live Scene Document object."
+            }
+            $parentedControlsPattern = $hierarchyControlsPattern.Replace(
+                'root=(?<root>[01]) parent_entity=(?<parent>\d+)',
+                'root=0 parent_entity=' + [Regex]::Escape(
+                    $hierarchyParentEntity.ToString([Globalization.CultureInfo]::InvariantCulture)))
+            $parentedControls = Scroll-DetailsUntilReported `
+                -PostconditionPattern $parentedControlsPattern `
+                -Description "the selected object's updated parent state" `
+                -StartingOffset $parentActionOffset
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path (Join-Path $logDir "check_packaged_sandbox3d_hierarchy_parented_1280x720.png") `
+                -Description "Game Authoring hierarchy with a real parent"
+
+            $unparentOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ([double]$parentedControls.Groups['unparentX'].Value + [double]$parentedControls.Groups['unparentWidth'].Value * 0.5) `
+                -FramebufferY ([double]$parentedControls.Groups['chooseY'].Value + 14.0)
+            $unparentActionPattern =
+                'HENKA_AUTOMATION_DIAGNOSTIC game-authoring-hierarchy-action child=' +
+                $hierarchyChildPattern + ' kind=unparent accepted=1 result=success'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $unparentActionPattern `
+                    -StartingOffset $unparentOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The visible Unparent action did not return the live Scene Document object to the root."
+            }
+            $unparentedControlsPattern = $hierarchyControlsPattern.Replace(
+                'root=(?<root>[01]) parent_entity=(?<parent>\d+)',
+                'root=1 parent_entity=\d+')
+            $null = Scroll-DetailsUntilReported `
+                -PostconditionPattern $unparentedControlsPattern `
+                -Description "the selected object's restored root state" `
+                -StartingOffset $unparentOffset
+            Write-Output "[pass] Game Authoring reparent and Unparent used the visible Object Details controls and preserved live entity identity"
             return
+        }
+
+        if ($TerrainStartupOnly) {
+            Write-Step "Checking Settings Utility clipping at the 1280x720 minimum layout"
+            $settingsDiagnosticOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($utilityX + $utilityWidth - 45.0) `
+                -FramebufferY ($utilityY + 80.0)
+            $settingsControlPattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-settings-control id=compass_smooth visible=(?<visible>[01]) submitted=(?<submitted>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) scroll=(?<scroll>[-0-9.]+)'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $settingsControlPattern `
+                    -StartingOffset $settingsDiagnosticOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "Packaged Settings did not report the Smooth Snap control submission boundary."
+            }
+            $settingsInitial = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $settingsControlPattern
+            if ($settingsInitial.Groups['visible'].Value -ne '0' -or
+                $settingsInitial.Groups['submitted'].Value -ne '0') {
+                throw "An off-viewport Settings control was submitted into the packaged Utility UI."
+            }
+            Write-Output "[pass] Off-viewport Smooth Snap was not submitted at 1280x720"
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $utilitySettingsTopScreenshotPath `
+                -Description "Packaged Utility Settings top at 1280x720"
+            $settingsViewportY = [double]$settingsInitial.Groups['viewportY'].Value
+            $settingsViewportHeight = [double]$settingsInitial.Groups['viewportHeight'].Value
+            $settingsReachedBottom = $false
+            for ($settingsScrollAttempt = 0; $settingsScrollAttempt -lt 20; ++$settingsScrollAttempt) {
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($utilityX + 30.0) `
+                    -FramebufferY ($settingsViewportY + 12.0) `
+                    -WheelDelta -1
+                Start-Sleep -Milliseconds 90
+                $settingsCurrent = Get-LastLogRegexMatch `
+                    -Path $stdoutPath `
+                    -Pattern $settingsControlPattern
+                if ($null -ne $settingsCurrent -and
+                    $settingsCurrent.Groups['visible'].Value -eq '1' -and
+                    $settingsCurrent.Groups['submitted'].Value -eq '1' -and
+                    [double]$settingsCurrent.Groups['scroll'].Value -gt 0.0) {
+                    $settingsControlY = [double]$settingsCurrent.Groups['y'].Value
+                    $settingsControlHeight = [double]$settingsCurrent.Groups['height'].Value
+                    if ($settingsControlY -lt $settingsViewportY -or
+                        $settingsControlY + $settingsControlHeight -gt
+                            $settingsViewportY + $settingsViewportHeight + 0.1) {
+                        throw "The submitted Smooth Snap hit rectangle extends outside visible Settings content."
+                    }
+                    $settingsReachedBottom = $true
+                    break
+                }
+            }
+            if (-not $settingsReachedBottom) {
+                throw "The bottom Settings control never became visible and submitted through Utility scrolling."
+            }
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $utilitySettingsScrolledScreenshotPath `
+                -Description "Packaged Utility Settings bottom at 1280x720"
+            Write-Output "[pass] Bottom Settings control is reachable and bounded at 1280x720"
+
+            Write-Step "Checking Help Utility content at the 1280x720 minimum layout"
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($utilityX + 42.0) `
+                -FramebufferY ($utilityY + 50.0)
+            $helpPattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-help scroll=(?<scroll>[-0-9.]+) content=(?<content>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) terrain_bottom=(?<terrainBottom>[-0-9.]+) heading_visible=(?<heading>[01]) fine_visible=(?<fine>[01])'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $helpPattern `
+                    -StartingOffset 0 `
+                    -TimeoutMilliseconds 4000)) {
+                throw "Packaged Help did not report a bounded Utility content viewport."
+            }
+            $helpInitial = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $helpPattern
+            if ($null -eq $helpInitial) {
+                throw "Packaged Help did not report a bounded Utility content viewport."
+            }
+            $helpViewportY = [double]$helpInitial.Groups['viewportY'].Value
+            $helpViewportHeight = [double]$helpInitial.Groups['viewportHeight'].Value
+            $helpContentHeight = [double]$helpInitial.Groups['content'].Value
+            if ($helpViewportY -lt [double]$helpInitial.Groups['terrainBottom'].Value + 3.0 -or
+                $helpContentHeight -le $helpViewportHeight -or
+                $helpInitial.Groups['heading'].Value -ne '1' -or
+                $helpInitial.Groups['fine'].Value -ne '0') {
+                throw "Packaged Help did not begin below Terrain with bounded overflowing content."
+            }
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $utilityHelpTopScreenshotPath `
+                -Description "Packaged Utility Help top at 1280x720"
+            $helpReachedBottom = $false
+            for ($helpScrollAttempt = 0; $helpScrollAttempt -lt 16; ++$helpScrollAttempt) {
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($utilityX + 30.0) `
+                    -FramebufferY ($helpViewportY + 12.0) `
+                    -WheelDelta -1
+                Start-Sleep -Milliseconds 90
+                $helpCurrent = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $helpPattern
+                if ($null -ne $helpCurrent -and
+                    $helpCurrent.Groups['fine'].Value -eq '1' -and
+                    [double]$helpCurrent.Groups['scroll'].Value -gt 0.0) {
+                    $helpReachedBottom = $true
+                    break
+                }
+            }
+            if (-not $helpReachedBottom) {
+                throw "Packaged Help could not scroll its final Fine row into the Utility viewport."
+            }
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $utilityHelpScrolledScreenshotPath `
+                -Description "Packaged Utility Help bottom at 1280x720"
+            Write-Output "[pass] Help rows stay below fixed Utility tabs and the last row is reachable by wheel at 1280x720"
+
+            Write-Step "Checking Physics QA Utility scrolling at the 1280x720 minimum layout"
+            if ($utilityWidth -le 0.0 -or $utilityHeight -le 138.0) {
+                throw "The packaged Physics QA scroll check requires a visible Utility panel with a content viewport."
+            }
+
+            # Physics QA is the rightmost Utility destination in the third
+            # 24px tab row (panel inset 14px, row y offset 98px). Click its
+            # interior so the test proves the normal tab interaction path.
+            $physicsQaTabX = $utilityX + $utilityWidth - 40.0
+            $physicsQaTabY = $utilityY + 110.0
+            $utilityActionOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX $physicsQaTabX `
+                -FramebufferY $physicsQaTabY
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC utility action_seq=\d+ frame=\d+ before=.* requested=Physics QA after=Physics QA changed=\d' `
+                    -StartingOffset $utilityActionOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "The Physics QA Utility tab did not report an app-consumed selection at the minimum layout."
+            }
+
+            $physicsCounterPattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-counter id=(?<id>bodies|contacts|events) label=(?<label>[A-Za-z]+) value=(?<value>\d+) visible=(?<visible>[01]) submitted=(?<submitted>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) frame=(?<frame>\d+) scroll=(?<scroll>[-0-9.]+)'
+
+            $utilityScrollPattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-scroll seq=(?<sequence>\d+) frame=(?<frame>\d+) before=(?<before>[-0-9.]+) after=(?<after>[-0-9.]+) content=(?<content>[-0-9.]+) viewport=(?<viewport>[-0-9.]+) delta=(?<delta>[-0-9.]+) accepted=(?<accepted>[01])'
+            $utilityControlPattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-control id=physics_raycast visible=(?<visible>[01]) submitted=(?<submitted>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) scroll=(?<scroll>[-0-9.]+)'
+            $physicsControlDeadline = [DateTime]::UtcNow.AddSeconds(4)
+            $physicsControl = $null
+            do {
+                $physicsControl = Get-LastLogRegexMatch `
+                    -Path $stdoutPath `
+                    -Pattern $utilityControlPattern
+                if ($null -ne $physicsControl) {
+                    break
+                }
+                Start-Sleep -Milliseconds 40
+            } while ([DateTime]::UtcNow -lt $physicsControlDeadline)
+            if ($null -eq $physicsControl) {
+                throw "The Sandbox did not report whether the lower Physics QA control was inside the Utility viewport."
+            }
+            $physicsControlVisible = $physicsControl.Groups['visible'].Value -eq '1'
+            $physicsControlSubmitted = $physicsControl.Groups['submitted'].Value -eq '1'
+            if ($physicsControlVisible -or $physicsControlSubmitted) {
+                throw "The lower Camera Raycast control was reported visible/submitted before scrolling into the Utility viewport."
+            }
+            $physicsControlX = [double]$physicsControl.Groups['x'].Value
+            $physicsControlY = [double]$physicsControl.Groups['y'].Value
+            $physicsControlWidth = [double]$physicsControl.Groups['width'].Value
+            $physicsControlHeight = [double]$physicsControl.Groups['height'].Value
+            $physicsViewportX = [double]$physicsControl.Groups['viewportX'].Value
+            $physicsViewportY = [double]$physicsControl.Groups['viewportY'].Value
+            $physicsViewportWidth = [double]$physicsControl.Groups['viewportWidth'].Value
+            $physicsViewportHeight = [double]$physicsControl.Groups['viewportHeight'].Value
+            $terrainTabPattern = 'Terrain utility tab: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+)\.'
+            $terrainTab = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $terrainTabPattern
+            if ($null -eq $terrainTab) {
+                throw "The packaged Utility navigation did not report its fixed Terrain tab geometry."
+            }
+            $terrainTabBottom =
+                [double]$terrainTab.Groups['y'].Value +
+                [double]$terrainTab.Groups['height'].Value
+            if ($physicsViewportY -lt $terrainTabBottom + 4.0) {
+                throw (
+                    "Physics QA content viewport overlaps the fixed Terrain Utility tab: " +
+                    "viewport_y=$physicsViewportY, terrain_bottom=$terrainTabBottom, " +
+                    "required_gap=4.0.")
+            }
+            Write-Output "[pass] Physics QA content viewport starts below the fixed Terrain Utility tab"
+            if ($physicsControlX -ge $physicsViewportX -and
+                $physicsControlY -ge $physicsViewportY -and
+                $physicsControlX + $physicsControlWidth -le $physicsViewportX + $physicsViewportWidth -and
+                $physicsControlY + $physicsControlHeight -le $physicsViewportY + $physicsViewportHeight) {
+                throw "The Camera Raycast control was classified hidden despite lying wholly inside the visible Utility content rectangle."
+            }
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $physicsQaTopScreenshotPath `
+                -Description "Packaged Physics QA Utility at 1280x720 before scrolling"
+
+            # A click at the last two pixels of the visible content viewport
+            # cannot intersect a fully-contained 28px control. The application
+            # must not route the off-screen Raycast button through this blank
+            # Utility strip.
+            $noRaycastActionPattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-action id=physics_raycast'
+            $noRaycastActionCountBefore = [regex]::Matches(
+                (Get-HenkaPackagedStartupLogText -Path $stdoutPath),
+                $noRaycastActionPattern).Count
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($physicsViewportX + ($physicsViewportWidth * 0.5)) `
+                -FramebufferY ($physicsViewportY + $physicsViewportHeight - 2.0)
+            Start-Sleep -Milliseconds 300
+            $noRaycastActionCountAfter = [regex]::Matches(
+                (Get-HenkaPackagedStartupLogText -Path $stdoutPath),
+                $noRaycastActionPattern).Count
+            if ($noRaycastActionCountAfter -ne $noRaycastActionCountBefore) {
+                throw "A click in the visible Utility viewport's blank lower edge activated the off-screen Camera Raycast control."
+            }
+            Write-Output "[pass] Off-viewport Camera Raycast was not submitted or activated by a click inside blank visible Utility content"
+
+            $previousUtilityScroll = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $utilityScrollPattern
+            $previousUtilitySequence = if ($null -ne $previousUtilityScroll) {
+                [int]$previousUtilityScroll.Groups['sequence'].Value
+            }
+            else {
+                0
+            }
+            $utilityScroll = $null
+            $physicsQaCounterScreenshotCaptured = $false
+            for ($scrollAttempt = 0; $scrollAttempt -lt 20 -and -not $physicsControlVisible; $scrollAttempt++) {
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($physicsViewportX + 12.0) `
+                    -FramebufferY ($physicsViewportY + 12.0) `
+                    -WheelDelta -1
+                $utilityScrollDeadline = [DateTime]::UtcNow.AddSeconds(4)
+                $utilityScroll = $null
+                do {
+                    $latestUtilityScroll = Get-LastLogRegexMatch `
+                        -Path $stdoutPath `
+                        -Pattern $utilityScrollPattern
+                    if ($null -ne $latestUtilityScroll -and
+                        [int]$latestUtilityScroll.Groups['sequence'].Value -gt $previousUtilitySequence) {
+                        $utilityScroll = $latestUtilityScroll
+                        break
+                    }
+                    Start-Sleep -Milliseconds 40
+                } while ([DateTime]::UtcNow -lt $utilityScrollDeadline)
+
+                if ($null -eq $utilityScroll) {
+                    throw "The Sandbox process did not report consuming Physics QA Utility scroll input $($scrollAttempt + 1)."
+                }
+                $previousUtilitySequence = [int]$utilityScroll.Groups['sequence'].Value
+                $utilityScrollBefore = [double]$utilityScroll.Groups['before'].Value
+                $utilityScrollAfter = [double]$utilityScroll.Groups['after'].Value
+                $utilityContentHeight = [double]$utilityScroll.Groups['content'].Value
+                $utilityViewportHeight = [double]$utilityScroll.Groups['viewport'].Value
+                if ($utilityScroll.Groups['accepted'].Value -ne '1' -or
+                    $utilityScrollAfter -le $utilityScrollBefore + 0.5 -or
+                    $utilityContentHeight -le $utilityViewportHeight + 0.5) {
+                    break
+                }
+
+                $physicsControlDeadline = [DateTime]::UtcNow.AddSeconds(4)
+                do {
+                    $latestPhysicsControl = Get-LastLogRegexMatch `
+                        -Path $stdoutPath `
+                        -Pattern $utilityControlPattern
+                    if ($null -ne $latestPhysicsControl -and
+                        [Math]::Abs(
+                            [double]$latestPhysicsControl.Groups['scroll'].Value -
+                            $utilityScrollAfter) -le 0.6) {
+                        $physicsControl = $latestPhysicsControl
+                        break
+                    }
+                    Start-Sleep -Milliseconds 40
+                } while ([DateTime]::UtcNow -lt $physicsControlDeadline)
+                if ($null -eq $physicsControl -or
+                    [Math]::Abs(
+                        [double]$physicsControl.Groups['scroll'].Value -
+                        $utilityScrollAfter) -gt 0.6) {
+                    throw "The Sandbox did not report Camera Raycast geometry for the consumed Utility scroll offset $utilityScrollAfter."
+                }
+                $physicsControlVisible = $physicsControl.Groups['visible'].Value -eq '1'
+                $physicsControlSubmitted = $physicsControl.Groups['submitted'].Value -eq '1'
+
+                if (-not $physicsQaCounterScreenshotCaptured) {
+                    $counterFrameMatches = [System.Text.RegularExpressions.Regex]::Matches(
+                        (Get-HenkaPackagedStartupLogText -Path $stdoutPath),
+                        $physicsCounterPattern)
+                    $counterRowsByFrame = @{}
+                    foreach ($counterFrameMatch in $counterFrameMatches) {
+                        $counterFrameKey = "{0}|{1}" -f `
+                            $counterFrameMatch.Groups['frame'].Value, `
+                            $counterFrameMatch.Groups['scroll'].Value
+                        if (-not $counterRowsByFrame.ContainsKey($counterFrameKey)) {
+                            $counterRowsByFrame[$counterFrameKey] = @{}
+                        }
+                        $counterRowsByFrame[$counterFrameKey][
+                            $counterFrameMatch.Groups['id'].Value] = $counterFrameMatch
+                    }
+                    foreach ($counterRows in $counterRowsByFrame.Values) {
+                        if ($counterRows.Count -eq 3) {
+                            Save-WindowScreenshot `
+                                -Handle $mainWindowHandle `
+                                -Path $physicsQaCounterScreenshotPath `
+                                -Description "Packaged Physics QA counters together at 1280x720"
+                            $physicsQaCounterScreenshotCaptured = $true
+                            break
+                        }
+                    }
+                }
+            }
+
+            if ($null -eq $utilityScroll) {
+                throw "The Sandbox did not consume a Physics QA Utility scroll input."
+            }
+            if (-not $physicsControlVisible -or -not $physicsControlSubmitted) {
+                throw "The lower Camera Raycast control never became visible and submitted after scrolling through overflowing Physics QA content."
+            }
+
+            $physicsControlX = [double]$physicsControl.Groups['x'].Value
+            $physicsControlY = [double]$physicsControl.Groups['y'].Value
+            $physicsControlWidth = [double]$physicsControl.Groups['width'].Value
+            $physicsControlHeight = [double]$physicsControl.Groups['height'].Value
+            $physicsViewportX = [double]$physicsControl.Groups['viewportX'].Value
+            $physicsViewportY = [double]$physicsControl.Groups['viewportY'].Value
+            $physicsViewportWidth = [double]$physicsControl.Groups['viewportWidth'].Value
+            $physicsViewportHeight = [double]$physicsControl.Groups['viewportHeight'].Value
+            if ($physicsControlX -lt $physicsViewportX -or
+                $physicsControlY -lt $physicsViewportY -or
+                $physicsControlX + $physicsControlWidth -gt $physicsViewportX + $physicsViewportWidth -or
+                $physicsControlY + $physicsControlHeight -gt $physicsViewportY + $physicsViewportHeight) {
+                throw "The submitted Camera Raycast hit target extends outside the visible Utility content viewport."
+            }
+
+            if (-not $physicsQaCounterScreenshotCaptured) {
+                throw "Packaged scrolling did not present all three Physics QA counter rows in one captured frame."
+            }
+            $counterMatches = [System.Text.RegularExpressions.Regex]::Matches(
+                (Get-HenkaPackagedStartupLogText -Path $stdoutPath),
+                $physicsCounterPattern)
+            $counterRowsByFrame = @{}
+            foreach ($counterMatch in $counterMatches) {
+                $counterFrameKey = "{0}|{1}" -f `
+                    $counterMatch.Groups['frame'].Value, `
+                    $counterMatch.Groups['scroll'].Value
+                if (-not $counterRowsByFrame.ContainsKey($counterFrameKey)) {
+                    $counterRowsByFrame[$counterFrameKey] = @{}
+                }
+                $counterRowsByFrame[$counterFrameKey][
+                    $counterMatch.Groups['id'].Value] = $counterMatch
+            }
+            $physicsCounters = $null
+            foreach ($counterRows in $counterRowsByFrame.Values) {
+                if ($counterRows.Count -eq 3) {
+                    $physicsCounters = $counterRows
+                    break
+                }
+            }
+            if ($null -eq $physicsCounters) {
+                throw "Packaged scrolling did not report Bodies, Contacts, and Events together in one frame/scroll state."
+            }
+            $expectedPhysicsCounterLabels = @{
+                bodies = 'Bodies'
+                contacts = 'Contacts'
+                events = 'Events'
+            }
+            foreach ($counterId in @('bodies', 'contacts', 'events')) {
+                $counter = $physicsCounters[$counterId]
+                $counterLabel = $counter.Groups['label'].Value
+                $counterValue = $counter.Groups['value'].Value
+                $counterWidth = [double]$counter.Groups['width'].Value
+                $counterX = [double]$counter.Groups['x'].Value
+                $counterY = [double]$counter.Groups['y'].Value
+                $counterHeight = [double]$counter.Groups['height'].Value
+                $counterViewportX = [double]$counter.Groups['viewportX'].Value
+                $counterViewportY = [double]$counter.Groups['viewportY'].Value
+                $counterViewportWidth = [double]$counter.Groups['viewportWidth'].Value
+                $counterViewportHeight = [double]$counter.Groups['viewportHeight'].Value
+                $labelCapacity = [Math]::Floor(($counterWidth * 0.34) / 6.0)
+                $valueCapacity = [Math]::Floor((($counterWidth * 0.62) - 4.0 - 12.0) / 6.0)
+                if ($counterLabel -ne $expectedPhysicsCounterLabels[$counterId] -or
+                    $counterLabel.Length -gt $labelCapacity -or
+                    $counterValue.Length -gt $valueCapacity) {
+                    throw "Physics QA counter '$counterId' does not fit its 1280x720 value-row allocation."
+                }
+                if ($counter.Groups['visible'].Value -ne '1' -or
+                    $counter.Groups['submitted'].Value -ne '1') {
+                    throw "Physics QA counter '$counterId' was not observed as visible and submitted."
+                }
+                if ($counterX -lt $counterViewportX -or
+                    $counterY -lt $counterViewportY -or
+                    $counterX + $counterWidth -gt $counterViewportX + $counterViewportWidth -or
+                    $counterY + $counterHeight -gt $counterViewportY + $counterViewportHeight) {
+                    throw "Submitted Physics QA counter '$counterId' extends outside the visible Utility content viewport."
+                }
+            }
+            Write-Output "[pass] Physics QA Bodies, Contacts, and Events values each fit visible, submitted 1280x720 value rows"
+
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $physicsQaScrolledScreenshotPath `
+                -Description "Packaged Physics QA Utility at 1280x720 with lower control reachable"
+
+            $raycastActionOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($physicsControlX + $physicsControlWidth * 0.5) `
+                -FramebufferY ($physicsControlY + $physicsControlHeight * 0.5)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC utility-action id=physics_raycast frame=\d+ hit=[01]' `
+                    -StartingOffset $raycastActionOffset `
+                    -TimeoutMilliseconds 6000)) {
+                throw "The visible Camera Raycast button did not activate through the packaged Physics QA UI."
+            }
+            Write-Output "[pass] Scrolled Camera Raycast became fully visible, remained inside the Utility viewport, and activated through the real packaged button"
+
+            # Drag the Utility-owned scrollbar thumb back toward mid-content.
+            # This uses the app-local automation stream, so ordinary packaged
+            # validation does not acquire desktop foreground focus.
+            $dragControlBefore = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $utilityControlPattern
+            if ($null -eq $dragControlBefore -or
+                $dragControlBefore.Groups['visible'].Value -ne '1' -or
+                $dragControlBefore.Groups['submitted'].Value -ne '1') {
+                throw "The lower Physics QA control was not visible before the scrollbar drag check."
+            }
+            $dragOffsetBefore = [double]$dragControlBefore.Groups['scroll'].Value
+            $dragContentHeight = [double]$utilityScroll.Groups['content'].Value
+            $dragViewportHeight = [double]$utilityScroll.Groups['viewport'].Value
+            $dragTrackHeight = $physicsViewportHeight
+            if ($dragContentHeight -le $dragViewportHeight -or
+                $dragTrackHeight -le 24.0) {
+                throw "The packaged Utility scrollbar did not have a draggable overflowing track."
+            }
+            $dragThumbHeight = [Math]::Min(
+                $dragTrackHeight,
+                [Math]::Max(
+                    24.0,
+                    $dragTrackHeight * $dragViewportHeight / $dragContentHeight))
+            $dragMaximumOffset = $dragContentHeight - $dragViewportHeight
+            $dragThumbTravel = $dragTrackHeight - $dragThumbHeight
+            if ($dragMaximumOffset -le 0.0 -or $dragThumbTravel -le 0.0) {
+                throw "The packaged Utility scrollbar geometry could not represent the overflowing content range."
+            }
+            $dragThumbOffset =
+                $dragThumbTravel * $dragOffsetBefore / $dragMaximumOffset
+            $dragTrackX = $physicsViewportX + $physicsViewportWidth + 9.0
+            $dragStartY = $physicsViewportY + $dragThumbOffset + ($dragThumbHeight * 0.5)
+            $dragEndY = $physicsViewportY + ($dragTrackHeight * 0.5)
+            $dragClientSize = Get-PackagedClientSize -Handle $mainWindowHandle
+            $dragStartClient = Convert-HenkaFramebufferPointToWindowPoint `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -WindowWidth $dragClientSize.Width `
+                -WindowHeight $dragClientSize.Height `
+                -FramebufferX $dragTrackX `
+                -FramebufferY $dragStartY
+            $dragEndClient = Convert-HenkaFramebufferPointToWindowPoint `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -WindowWidth $dragClientSize.Width `
+                -WindowHeight $dragClientSize.Height `
+                -FramebufferX $dragTrackX `
+                -FramebufferY $dragEndY
+            $dragXText = Format-HenkaAutomationFloat -Value $dragStartClient.X
+            $dragStartYText = Format-HenkaAutomationFloat -Value $dragStartClient.Y
+            $dragEndYText = Format-HenkaAutomationFloat -Value $dragEndClient.Y
+            $dragLogOffset = Get-FileLengthSafe -Path $stdoutPath
+            foreach ($dragEvent in @(
+                "move $dragXText $dragStartYText",
+                "button left down $dragXText $dragStartYText",
+                "move $dragXText $dragEndYText",
+                "button left up $dragXText $dragEndYText")) {
+                Send-HenkaAutomationEvent `
+                    -EventPath $automationInputPath `
+                    -EventLine $dragEvent
+            }
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $utilityControlPattern `
+                    -StartingOffset $dragLogOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The packaged Sandbox did not report Utility control geometry after dragging the scrollbar thumb."
+            }
+            $dragControlAfter = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $utilityControlPattern
+            if ($null -eq $dragControlAfter) {
+                throw "The packaged Sandbox did not report the post-drag Utility state."
+            }
+            $dragOffsetAfter = [double]$dragControlAfter.Groups['scroll'].Value
+            if ([Math]::Abs($dragOffsetAfter - $dragOffsetBefore) -le 1.0 -or
+                $dragOffsetAfter -lt ($dragMaximumOffset * 0.35) -or
+                $dragOffsetAfter -gt ($dragMaximumOffset * 0.65)) {
+                throw (
+                    "Dragging the Utility scrollbar did not move its independent scroll state to the requested middle range: " +
+                    "before=$dragOffsetBefore after=$dragOffsetAfter max=$dragMaximumOffset.")
+            }
+            if ($dragControlAfter.Groups['visible'].Value -ne '0' -or
+                $dragControlAfter.Groups['submitted'].Value -ne '0') {
+                throw "The off-viewport Camera Raycast control remained visible or interactable after dragging the Utility scrollbar."
+            }
+            $raycastActionCountBeforeReleaseCheck = [regex]::Matches(
+                (Get-HenkaPackagedStartupLogText -Path $stdoutPath),
+                $noRaycastActionPattern).Count
+
+            # A wheel event after the mouse-up must operate on Utility content,
+            # proving the drag release did not leave the scrollbar capture stuck.
+            $releaseScrollSequence = [int]$previousUtilitySequence
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($physicsViewportX + 12.0) `
+                -FramebufferY ($physicsViewportY + 12.0) `
+                -WheelDelta 1
+            $releaseScroll = $null
+            $releaseScrollDeadline = [DateTime]::UtcNow.AddSeconds(5)
+            do {
+                $latestReleaseScroll = Get-LastLogRegexMatch `
+                    -Path $stdoutPath `
+                    -Pattern $utilityScrollPattern
+                if ($null -ne $latestReleaseScroll -and
+                    [int]$latestReleaseScroll.Groups['sequence'].Value -gt $releaseScrollSequence -and
+                    [double]$latestReleaseScroll.Groups['before'].Value -ge $dragOffsetAfter - 0.5) {
+                    $releaseScroll = $latestReleaseScroll
+                    break
+                }
+                Start-Sleep -Milliseconds 40
+            } while ([DateTime]::UtcNow -lt $releaseScrollDeadline)
+            if ($null -eq $releaseScroll -or
+                $releaseScroll.Groups['accepted'].Value -ne '1' -or
+                [double]$releaseScroll.Groups['after'].Value -ge $dragOffsetAfter - 0.5) {
+                throw "The Utility scrollbar did not release cleanly back to independent wheel scrolling."
+            }
+            $raycastActionCountAfterReleaseCheck = [regex]::Matches(
+                (Get-HenkaPackagedStartupLogText -Path $stdoutPath),
+                $noRaycastActionPattern).Count
+            if ($raycastActionCountAfterReleaseCheck -ne $raycastActionCountBeforeReleaseCheck) {
+                throw "Moving or scrolling the Utility scrollbar activated the off-viewport Camera Raycast control."
+            }
+            Write-Output ("[pass] Packaged Utility scrollbar drag moved its owned scroll offset from {0:N1} to {1:N1}, kept Camera Raycast clipped, released cleanly, and preserved wheel input" -f `
+                $dragOffsetBefore,
+                $dragOffsetAfter)
+
+            $utilityScrollBefore = [double]$utilityScroll.Groups['before'].Value
+            $utilityScrollAfter = [double]$utilityScroll.Groups['after'].Value
+            $utilityContentHeight = [double]$utilityScroll.Groups['content'].Value
+            $utilityViewportHeight = [double]$utilityScroll.Groups['viewport'].Value
+            if ($utilityScroll.Groups['accepted'].Value -ne '1' -or
+                $utilityScrollAfter -le $utilityScrollBefore + 0.5 -or
+                $utilityContentHeight -le $utilityViewportHeight + 0.5) {
+                throw (
+                    "Physics QA Utility scroll did not advance through overflowing content: " +
+                    "accepted=$($utilityScroll.Groups['accepted'].Value), " +
+                    "offset=$utilityScrollAfter/$utilityScrollBefore, " +
+                    "content=$utilityContentHeight, viewport=$utilityViewportHeight.")
+            }
+            Write-Output ("[pass] Packaged Physics QA Utility scroll advanced from {0:N1} to {1:N1} over {2:N1}px of content in a {3:N1}px viewport" -f `
+                $utilityScrollBefore,
+                $utilityScrollAfter,
+                $utilityContentHeight,
+                $utilityViewportHeight)
         }
 
         Write-Step "Checking packaged Terrain creation through the visible Utility UI"
@@ -1851,6 +3894,123 @@ try {
             throw "The visible Create Terrain action did not initialize the production Terrain render path."
         }
         Write-Output "[pass] Create Terrain activated the production streaming, render, and collision path"
+        if ($TerrainStartupOnly) {
+            $terrainRedoPattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-terrain-control id=terrain_redo visible=(?<visible>[01]) submitted=(?<submitted>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) scroll=(?<scroll>[-0-9.]+)'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $terrainRedoPattern `
+                    -StartingOffset $terrainCreateOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "Packaged Terrain did not report the Redo control submission boundary."
+            }
+            $terrainRedoInitial = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $terrainRedoPattern
+            if ($terrainRedoInitial.Groups['visible'].Value -ne '0' -or
+                $terrainRedoInitial.Groups['submitted'].Value -ne '0') {
+                throw "An off-viewport Terrain Redo control was submitted into the packaged Utility UI."
+            }
+            Write-Output "[pass] Off-viewport Terrain Redo was not submitted at 1280x720"
+            $terrainViewportX = [double]$terrainRedoInitial.Groups['viewportX'].Value
+            $terrainViewportY = [double]$terrainRedoInitial.Groups['viewportY'].Value
+            $terrainViewportWidth = [double]$terrainRedoInitial.Groups['viewportWidth'].Value
+            $terrainViewportHeight = [double]$terrainRedoInitial.Groups['viewportHeight'].Value
+            $terrainBlankAreaOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($terrainViewportX + 126.0) `
+                -FramebufferY ($terrainViewportY + $terrainViewportHeight - 12.0)
+            if (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern 'Terrain redo unavailable:' `
+                    -StartingOffset $terrainBlankAreaOffset `
+                    -TimeoutMilliseconds 600) {
+                throw "A click in blank visible Terrain content activated the off-viewport Redo action."
+            }
+            Write-Output "[pass] Blank visible Terrain content did not activate the clipped Redo action"
+            $terrainRedoReached = $false
+            for ($terrainScrollAttempt = 0; $terrainScrollAttempt -lt 20; ++$terrainScrollAttempt) {
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($terrainViewportX + 30.0) `
+                    -FramebufferY ($terrainViewportY + 12.0) `
+                    -WheelDelta -1
+                Start-Sleep -Milliseconds 90
+                $terrainRedoCurrent = Get-LastLogRegexMatch `
+                    -Path $stdoutPath `
+                    -Pattern $terrainRedoPattern
+                if ($null -ne $terrainRedoCurrent -and
+                    $terrainRedoCurrent.Groups['visible'].Value -eq '1' -and
+                    $terrainRedoCurrent.Groups['submitted'].Value -eq '1' -and
+                    [double]$terrainRedoCurrent.Groups['scroll'].Value -gt 0.0) {
+                    $terrainRedoX = [double]$terrainRedoCurrent.Groups['x'].Value
+                    $terrainRedoY = [double]$terrainRedoCurrent.Groups['y'].Value
+                    $terrainRedoWidth = [double]$terrainRedoCurrent.Groups['width'].Value
+                    $terrainRedoHeight = [double]$terrainRedoCurrent.Groups['height'].Value
+                    if ($terrainRedoX -lt $terrainViewportX -or
+                        $terrainRedoX + $terrainRedoWidth -gt $terrainViewportX + $terrainViewportWidth + 0.1 -or
+                        $terrainRedoY -lt $terrainViewportY -or
+                        $terrainRedoY + $terrainRedoHeight -gt $terrainViewportY + $terrainViewportHeight + 0.1) {
+                        throw "Terrain Redo was submitted beyond the visible Utility content area."
+                    }
+                    $terrainRedoReached = $true
+                    break
+                }
+            }
+            if (-not $terrainRedoReached) {
+                throw "Terrain Redo never became visible and submitted through Utility scrolling."
+            }
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $terrainUiScrolledScreenshotPath `
+                -Description "Packaged Terrain Utility scrolled at 1280x720"
+            $terrainRedoActionOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($terrainRedoX + $terrainRedoWidth * 0.5) `
+                -FramebufferY ($terrainRedoY + $terrainRedoHeight * 0.5)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern 'Terrain redo unavailable:' `
+                    -StartingOffset $terrainRedoActionOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "The visible Terrain Redo button did not route through the real history action."
+            }
+            Write-Output "[pass] Terrain Redo became bounded and activated through the packaged UI"
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($terrainViewportX + 30.0) `
+                -FramebufferY ($terrainViewportY + 12.0) `
+                -WheelDelta -1
+            $terrainStorageScrollPattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-terrain-control id=terrain_redo visible=(?<visible>[01]) submitted=(?<submitted>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) scroll=(?<scroll>[-0-9.]+)'
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $terrainStorageScrollPattern `
+                    -StartingOffset $terrainRedoActionOffset `
+                    -TimeoutMilliseconds 3000)) {
+                throw "The packaged Terrain view did not report app-side progress after moving to storage controls."
+            }
+            $terrainStorageScroll = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $terrainStorageScrollPattern
+            $terrainSaveY = $terrainViewportY + 406.0 -
+                [double]$terrainStorageScroll.Groups['scroll'].Value
+            if ($terrainSaveY -lt $terrainViewportY -or
+                $terrainSaveY + 24.0 -gt $terrainViewportY + $terrainViewportHeight + 0.1) {
+                throw "Terrain Save does not fit in the visible Utility viewport at the captured storage offset."
+            }
+            Start-Sleep -Milliseconds 400
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $terrainUiScrolledScreenshotPath `
+                -Description "Packaged Terrain Utility storage controls at 1280x720"
+        }
         Set-HenkaAutomationForeground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 700
         Save-WindowScreenshot `
@@ -1859,9 +4019,329 @@ try {
             -Description "Packaged Terrain Utility after Create Terrain"
 
         if ($TerrainStartupOnly) {
+            Write-Step "Checking Diagnostics and Transform QA Utility overflow at 1280x720"
+            $diagnosticsPattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-diagnostics-control id=native visible=(?<visible>[01]) submitted=(?<submitted>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) content=(?<content>[-0-9.]+) scroll=(?<scroll>[-0-9.]+)'
+            $transformQaPattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-transform-qa-control id=reset_test_object visible=(?<visible>[01]) submitted=(?<submitted>[01]) activated=(?<activated>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) content=(?<content>[-0-9.]+) scroll=(?<scroll>[-0-9.]+)'
+            $transformQaTestMovePattern = 'HENKA_AUTOMATION_DIAGNOSTIC utility-transform-qa-control id=test_move visible=(?<visible>[01]) submitted=(?<submitted>[01]) activated=(?<activated>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) content=(?<content>[-0-9.]+) scroll=(?<scroll>[-0-9.]+)'
+            $diagnosticsTabOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($utilityX + 50.0) `
+                -FramebufferY ($utilityY + 110.0)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $diagnosticsPattern `
+                    -StartingOffset $diagnosticsTabOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "Packaged Diagnostics did not report its actual Utility content geometry."
+            }
+            $diagnosticsInitial = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $diagnosticsPattern
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $utilityDiagnosticsTopScreenshotPath `
+                -Description "Packaged Utility Diagnostics top at 1280x720"
+
+            $transformQaTabOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($utilityX + 155.0) `
+                -FramebufferY ($utilityY + 110.0)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $transformQaPattern `
+                    -StartingOffset $transformQaTabOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "Packaged Transform QA did not report its actual Utility content geometry."
+            }
+            $transformQaInitial = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $transformQaPattern
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $utilityTransformQaTopScreenshotPath `
+                -Description "Packaged Utility Transform QA top at 1280x720"
+
+            foreach ($utilityControlCase in @(
+                    @{ Name = "Diagnostics Native"; Match = $diagnosticsInitial },
+                    @{ Name = "Transform QA Reset Test Object"; Match = $transformQaInitial })) {
+                $control = $utilityControlCase.Match
+                $controlX = [double]$control.Groups['x'].Value
+                $controlY = [double]$control.Groups['y'].Value
+                $controlWidth = [double]$control.Groups['width'].Value
+                $controlHeight = [double]$control.Groups['height'].Value
+                $viewportX = [double]$control.Groups['viewportX'].Value
+                $viewportY = [double]$control.Groups['viewportY'].Value
+                $viewportWidth = [double]$control.Groups['viewportWidth'].Value
+                $viewportHeight = [double]$control.Groups['viewportHeight'].Value
+                $expectedVisible =
+                    $controlX -ge $viewportX -and
+                    $controlY -ge $viewportY -and
+                    $controlX + $controlWidth -le $viewportX + $viewportWidth + 0.1 -and
+                    $controlY + $controlHeight -le $viewportY + $viewportHeight + 0.1
+                if (($control.Groups['visible'].Value -eq '1') -ne $expectedVisible -or
+                    ($control.Groups['submitted'].Value -eq '1') -ne $expectedVisible) {
+                    throw (
+                        "{0} visibility/submission disagreed with the visible Utility content rectangle: " -f
+                        $utilityControlCase.Name) +
+                        "visible=$($control.Groups['visible'].Value) submitted=$($control.Groups['submitted'].Value) " +
+                        "rect=($controlX,$controlY,$controlWidth,$controlHeight) " +
+                        "viewport=($viewportX,$viewportY,$viewportWidth,$viewportHeight)."
+                }
+                if ([double]$control.Groups['content'].Value -le $viewportHeight) {
+                    throw "The 1280x720 $($utilityControlCase.Name) case no longer exercises Utility content overflow."
+                }
+            }
+            Write-Output "[pass] Diagnostics and Transform QA exclude controls outside their visible Utility content areas"
+
+            $diagnosticsTabOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($utilityX + 50.0) `
+                -FramebufferY ($utilityY + 110.0)
+            Start-Sleep -Milliseconds 250
+            $diagnosticsCurrent = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $diagnosticsPattern
+            if ([double]$diagnosticsCurrent.Groups['scroll'].Value -gt 0.5) {
+                throw "Diagnostics did not retain its own unscrolled starting position."
+            }
+
+            $diagnosticsViewportX = [double]$diagnosticsInitial.Groups['viewportX'].Value
+            $diagnosticsViewportY = [double]$diagnosticsInitial.Groups['viewportY'].Value
+            $diagnosticsViewportHeight = [double]$diagnosticsInitial.Groups['viewportHeight'].Value
+            $diagnosticsReachedBottom = $false
+            for ($diagnosticsScrollAttempt = 0; $diagnosticsScrollAttempt -lt 32; ++$diagnosticsScrollAttempt) {
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($diagnosticsViewportX + 20.0) `
+                    -FramebufferY ($diagnosticsViewportY + 10.0) `
+                    -WheelDelta -1
+                Start-Sleep -Milliseconds 90
+                $diagnosticsCurrent = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $diagnosticsPattern
+                if ($null -ne $diagnosticsCurrent -and
+                    $diagnosticsCurrent.Groups['visible'].Value -eq '1' -and
+                    $diagnosticsCurrent.Groups['submitted'].Value -eq '1' -and
+                    [double]$diagnosticsCurrent.Groups['scroll'].Value -gt 0.0) {
+                    $nativeY = [double]$diagnosticsCurrent.Groups['y'].Value
+                    $nativeHeight = [double]$diagnosticsCurrent.Groups['height'].Value
+                    if ($nativeY -lt $diagnosticsViewportY -or
+                        $nativeY + $nativeHeight -gt $diagnosticsViewportY + $diagnosticsViewportHeight + 0.1) {
+                        throw "The submitted Diagnostics Native row extends outside visible Utility content."
+                    }
+                    $diagnosticsReachedBottom = $true
+                    break
+                }
+            }
+            if (-not $diagnosticsReachedBottom) {
+                throw "The Diagnostics Native row never became visible through Utility scrolling."
+            }
+            Start-Sleep -Milliseconds 350
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $utilityDiagnosticsScrolledScreenshotPath `
+                -Description "Packaged Utility Diagnostics scrolled at 1280x720"
+
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($utilityX + 155.0) `
+                -FramebufferY ($utilityY + 110.0)
+            Start-Sleep -Milliseconds 250
+            $transformQaCurrent = $transformQaInitial
+            $transformQaViewportX = [double]$transformQaCurrent.Groups['viewportX'].Value
+            $transformQaViewportY = [double]$transformQaCurrent.Groups['viewportY'].Value
+            $transformQaViewportHeight = [double]$transformQaCurrent.Groups['viewportHeight'].Value
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($transformQaViewportX + 20.0) `
+                -FramebufferY ($transformQaViewportY + 10.0) `
+                -WheelDelta -1
+            Start-Sleep -Milliseconds 90
+            $testMoveAfterFirstWheel = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $transformQaTestMovePattern
+            if ($null -eq $testMoveAfterFirstWheel -or
+                [Math]::Abs([double]$testMoveAfterFirstWheel.Groups['scroll'].Value - 48.0) -gt 0.5 -or
+                $testMoveAfterFirstWheel.Groups['visible'].Value -ne '0' -or
+                $testMoveAfterFirstWheel.Groups['submitted'].Value -ne '0') {
+                throw "Transform QA did not resume its independent top offset after Diagnostics scrolling."
+            }
+            for ($testMoveScrollAttempt = 0; $testMoveScrollAttempt -lt 3; ++$testMoveScrollAttempt) {
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($transformQaViewportX + 20.0) `
+                    -FramebufferY ($transformQaViewportY + 10.0) `
+                    -WheelDelta -1
+                Start-Sleep -Milliseconds 90
+            }
+            $testMoveVisible = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $transformQaTestMovePattern
+            if ($null -eq $testMoveVisible -or
+                $testMoveVisible.Groups['visible'].Value -ne '1' -or
+                $testMoveVisible.Groups['submitted'].Value -ne '1') {
+                throw "The Transform QA Test Move action did not become reachable inside the visible Utility viewport."
+            }
+            $testMoveActivationOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ([double]$testMoveVisible.Groups['x'].Value +
+                    [double]$testMoveVisible.Groups['width'].Value * 0.5) `
+                -FramebufferY ([double]$testMoveVisible.Groups['y'].Value +
+                    [double]$testMoveVisible.Groups['height'].Value * 0.5)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern ($transformQaTestMovePattern.Replace('activated=(?<activated>[01])', 'activated=1')) `
+                    -StartingOffset $testMoveActivationOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "The visible Transform QA Test Move action did not activate through the packaged UI."
+            }
+
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($transformQaViewportX + 20.0) `
+                -FramebufferY ($transformQaViewportY + 10.0) `
+                -WheelDelta 1
+            Start-Sleep -Milliseconds 90
+            $testMoveOffPanel = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $transformQaTestMovePattern
+            if ($null -eq $testMoveOffPanel -or
+                $testMoveOffPanel.Groups['visible'].Value -ne '0' -or
+                $testMoveOffPanel.Groups['submitted'].Value -ne '0') {
+                throw "The Transform QA Test Move action remained visible or submitted after scrolling outside the Utility content area."
+            }
+            $testMoveOffPanelX = [double]$testMoveOffPanel.Groups['x'].Value
+            $testMoveOffPanelY = [double]$testMoveOffPanel.Groups['y'].Value
+            $testMoveOffPanelWidth = [double]$testMoveOffPanel.Groups['width'].Value
+            $testMoveOffPanelHeight = [double]$testMoveOffPanel.Groups['height'].Value
+            $testMoveOffPanelCenterX = $testMoveOffPanelX + $testMoveOffPanelWidth * 0.5
+            $testMoveOffPanelCenterY = $testMoveOffPanelY + $testMoveOffPanelHeight * 0.5
+            if ($testMoveOffPanelX + $testMoveOffPanelWidth -gt
+                    [double]$testMoveOffPanel.Groups['viewportX'].Value +
+                    [double]$testMoveOffPanel.Groups['viewportWidth'].Value + 0.1 -or
+                $testMoveOffPanelCenterY -lt $transformQaViewportY + $transformQaViewportHeight - 0.1 -or
+                $testMoveOffPanelCenterX -lt 0.0 -or
+                $testMoveOffPanelCenterX -ge $framebufferWidth -or
+                $testMoveOffPanelCenterY -lt 0.0 -or
+                $testMoveOffPanelCenterY -ge $framebufferHeight) {
+                throw "The Transform QA off-panel hit target was not outside the Utility content viewport while inside the framebuffer."
+            }
+            $testMoveActivationPattern = 'utility-transform-qa-control id=test_move visible=1 submitted=1 activated=1'
+            $testMoveActivationsBefore = [regex]::Matches(
+                (Get-HenkaPackagedStartupLogText -Path $stdoutPath),
+                $testMoveActivationPattern).Count
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX $testMoveOffPanelCenterX `
+                -FramebufferY $testMoveOffPanelCenterY
+            Start-Sleep -Milliseconds 250
+            $testMoveActivationsAfter = [regex]::Matches(
+                (Get-HenkaPackagedStartupLogText -Path $stdoutPath),
+                $testMoveActivationPattern).Count
+            if ($testMoveActivationsAfter -ne $testMoveActivationsBefore) {
+                throw "The off-panel Transform QA action remained interactable outside its visible Utility content area."
+            }
+            Write-Output "[pass] Transform QA Test Move activates only while fully visible; its stale off-panel hit location does not activate"
+
+            $transformQaCurrent = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $transformQaPattern
+            $transformQaReachedBottom = $transformQaCurrent.Groups['visible'].Value -eq '1'
+            for ($transformQaScrollAttempt = 0; $transformQaScrollAttempt -lt 24 -and -not $transformQaReachedBottom; ++$transformQaScrollAttempt) {
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($transformQaViewportX + 20.0) `
+                    -FramebufferY ($transformQaViewportY + 10.0) `
+                    -WheelDelta -1
+                Start-Sleep -Milliseconds 90
+                $transformQaCurrent = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $transformQaPattern
+                if ($null -ne $transformQaCurrent -and
+                    $transformQaCurrent.Groups['visible'].Value -eq '1' -and
+                    $transformQaCurrent.Groups['submitted'].Value -eq '1' -and
+                    [double]$transformQaCurrent.Groups['scroll'].Value -gt 0.0) {
+                    $resetY = [double]$transformQaCurrent.Groups['y'].Value
+                    $resetHeight = [double]$transformQaCurrent.Groups['height'].Value
+                    if ($resetY -lt $transformQaViewportY -or
+                        $resetY + $resetHeight -gt $transformQaViewportY + $transformQaViewportHeight + 0.1) {
+                        throw "The submitted Transform QA Reset Test Object action extends outside visible Utility content."
+                    }
+                    $transformQaReachedBottom = $true
+                }
+            }
+            if (-not $transformQaReachedBottom) {
+                throw "The Transform QA Reset Test Object action never became visible through Utility scrolling."
+            }
+            Start-Sleep -Milliseconds 350
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $utilityTransformQaScrolledScreenshotPath `
+                -Description "Packaged Utility Transform QA scrolled at 1280x720"
+            $activationOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ([double]$transformQaCurrent.Groups['x'].Value +
+                    [double]$transformQaCurrent.Groups['width'].Value * 0.5) `
+                -FramebufferY ([double]$transformQaCurrent.Groups['y'].Value +
+                    [double]$transformQaCurrent.Groups['height'].Value * 0.5)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern ($transformQaPattern.Replace('activated=(?<activated>[01])', 'activated=1')) `
+                    -StartingOffset $activationOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "The scrolled Transform QA control did not receive a real packaged pointer activation."
+            }
+            Write-Output "[pass] Diagnostics and Transform QA scroll independently; the clipped QA action is reachable only inside the visible Utility viewport"
+
             Write-Output "[pass] Packaged product-startup/Terrain gate completed without entering the explicit showcase authoring suite"
             return
         }
+
+        Write-Step "Leaving Terrain Utility before viewport component authoring"
+        $helpUtilityTabMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Utility Help tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)\.'
+        if ($null -eq $helpUtilityTabMatch) {
+            throw "The packaged Utility Help tab geometry was not reported after Terrain creation."
+        }
+        $helpUtilityTabX = [double]$helpUtilityTabMatch.Groups[1].Value
+        $helpUtilityTabY = [double]$helpUtilityTabMatch.Groups[2].Value
+        $helpUtilityTabWidth = [double]$helpUtilityTabMatch.Groups[3].Value
+        $helpUtilityTabHeight = [double]$helpUtilityTabMatch.Groups[4].Value
+        Assert-FramebufferRect `
+            -Name "Utility Help tab used to leave Terrain editing" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $helpUtilityTabX `
+            -Y $helpUtilityTabY `
+            -Width $helpUtilityTabWidth `
+            -Height $helpUtilityTabHeight
+        $leaveTerrainOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($helpUtilityTabX + $helpUtilityTabWidth * 0.5) `
+            -FramebufferY ($helpUtilityTabY + $helpUtilityTabHeight * 0.5)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC utility action_seq=[0-9]+ frame=[0-9]+ before=Terrain requested=Help after=Help changed=1' `
+                -StartingOffset $leaveTerrainOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The packaged workflow did not leave Terrain editing through a verified visible Utility transition before viewport authoring."
+        }
+        Write-Output "[pass] Visible Utility transition cleared Terrain viewport ownership before native component authoring"
 
         Write-Step "Checking imported showcase native authoring bridge"
 
@@ -1993,6 +4473,142 @@ try {
         if (-not $nativeSelectionObserved) {
             throw "Selecting the showcase row did not expose Object Details > Authoring > Make Editable."
         }
+        $detailsTitleMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC details-title entity=(?<entity>\d+) framebuffer=(?<framebufferWidth>\d+)x(?<framebufferHeight>\d+) name_bytes=(?<nameBytes>\d+) single_line_width=(?<singleLineWidth>[-0-9.]+) available_width=(?<availableWidth>[-0-9.]+) wrapped_height=(?<wrappedHeight>[-0-9.]+) row_height=(?<rowHeight>[-0-9.]+) wrapped=(?<wrapped>[01]) drawn=(?<drawn>[01]) name_preserved=(?<namePreserved>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+)'
+        if ($null -eq $detailsTitleMatch) {
+            throw "Selecting the showcase row did not report a complete wrapped Object Details title at 1280x720."
+        }
+        $detailsTitleFramebufferWidth = [int]$detailsTitleMatch.Groups['framebufferWidth'].Value
+        $detailsTitleFramebufferHeight = [int]$detailsTitleMatch.Groups['framebufferHeight'].Value
+        $detailsTitleNameBytes = [int]$detailsTitleMatch.Groups['nameBytes'].Value
+        $detailsTitleSingleLineWidth = [double]::Parse(
+            $detailsTitleMatch.Groups['singleLineWidth'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsTitleAvailableWidth = [double]::Parse(
+            $detailsTitleMatch.Groups['availableWidth'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsTitleWrappedHeight = [double]::Parse(
+            $detailsTitleMatch.Groups['wrappedHeight'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsTitleRowHeight = [double]::Parse(
+            $detailsTitleMatch.Groups['rowHeight'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsTitleX = [double]::Parse(
+            $detailsTitleMatch.Groups['x'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsTitleY = [double]::Parse(
+            $detailsTitleMatch.Groups['y'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsTitleWidth = [double]::Parse(
+            $detailsTitleMatch.Groups['width'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsTitleHeight = [double]::Parse(
+            $detailsTitleMatch.Groups['height'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsViewportX = [double]::Parse(
+            $detailsTitleMatch.Groups['viewportX'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsViewportY = [double]::Parse(
+            $detailsTitleMatch.Groups['viewportY'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsViewportWidth = [double]::Parse(
+            $detailsTitleMatch.Groups['viewportWidth'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsViewportHeight = [double]::Parse(
+            $detailsTitleMatch.Groups['viewportHeight'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        if ($detailsTitleFramebufferWidth -ne 1280 -or
+            $detailsTitleFramebufferHeight -ne 720 -or
+            $detailsTitleNameBytes -lt 24 -or
+            $detailsTitleSingleLineWidth -le $detailsTitleAvailableWidth -or
+            $detailsTitleMatch.Groups['wrapped'].Value -ne '1' -or
+            $detailsTitleMatch.Groups['drawn'].Value -ne '1' -or
+            $detailsTitleMatch.Groups['namePreserved'].Value -ne '1' -or
+            $detailsTitleWrappedHeight -le 12.0 -or
+            $detailsTitleHeight -lt $detailsTitleWrappedHeight -or
+            $detailsTitleRowHeight -lt $detailsTitleHeight -or
+            $detailsTitleX -lt $detailsViewportX -or
+            $detailsTitleY -lt $detailsViewportY -or
+            $detailsTitleX + $detailsTitleWidth -gt $detailsViewportX + $detailsViewportWidth -or
+            $detailsTitleY + $detailsTitleHeight -gt $detailsViewportY + $detailsViewportHeight) {
+            throw (
+                "The selected Object Details title was not fully wrapped inside its visible 1280x720 content region: " +
+                "framebuffer=${detailsTitleFramebufferWidth}x${detailsTitleFramebufferHeight}, " +
+                "nameBytes=$detailsTitleNameBytes, textWidth=$detailsTitleSingleLineWidth, " +
+                "availableWidth=$detailsTitleAvailableWidth, wrappedHeight=$detailsTitleWrappedHeight, " +
+                "row=${detailsTitleX},${detailsTitleY},${detailsTitleWidth},${detailsTitleHeight}, " +
+                "viewport=${detailsViewportX},${detailsViewportY},${detailsViewportWidth},${detailsViewportHeight}.")
+        }
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $objectDetailsTitleScreenshotPath `
+            -Description "1280x720 selected Object Details full-name title"
+        Write-Output "[pass] Selected Object Details title wraps in full inside its 1280x720 content region."
+        $detailsValueMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC details-value entity=(?<entity>\d+) framebuffer=(?<framebufferWidth>\d+)x(?<framebufferHeight>\d+) value_bytes=(?<valueBytes>\d+) single_line_width=(?<singleLineWidth>[-0-9.]+) available_width=(?<availableWidth>[-0-9.]+) row_height=(?<rowHeight>[-0-9.]+) wrapped=(?<wrapped>[01]) drawn=(?<drawn>[01]) value_preserved=(?<valuePreserved>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+)'
+        if ($null -eq $detailsValueMatch) {
+            throw "The selected Object Details long value did not report a complete wrapped row at 1280x720."
+        }
+        $detailsValueFramebufferWidth = [int]$detailsValueMatch.Groups['framebufferWidth'].Value
+        $detailsValueFramebufferHeight = [int]$detailsValueMatch.Groups['framebufferHeight'].Value
+        $detailsValueBytes = [int]$detailsValueMatch.Groups['valueBytes'].Value
+        $detailsValueSingleLineWidth = [double]::Parse(
+            $detailsValueMatch.Groups['singleLineWidth'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsValueAvailableWidth = [double]::Parse(
+            $detailsValueMatch.Groups['availableWidth'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsValueRowX = [double]::Parse(
+            $detailsValueMatch.Groups['x'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsValueRowY = [double]::Parse(
+            $detailsValueMatch.Groups['y'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsValueRowWidth = [double]::Parse(
+            $detailsValueMatch.Groups['width'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsValueRowHeight = [double]::Parse(
+            $detailsValueMatch.Groups['height'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsValueViewportX = [double]::Parse(
+            $detailsValueMatch.Groups['viewportX'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsValueViewportY = [double]::Parse(
+            $detailsValueMatch.Groups['viewportY'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsValueViewportWidth = [double]::Parse(
+            $detailsValueMatch.Groups['viewportWidth'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsValueViewportHeight = [double]::Parse(
+            $detailsValueMatch.Groups['viewportHeight'].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        if ($detailsValueFramebufferWidth -ne 1280 -or
+            $detailsValueFramebufferHeight -ne 720 -or
+            $detailsValueBytes -lt 30 -or
+            $detailsValueSingleLineWidth -le $detailsValueAvailableWidth -or
+            $detailsValueMatch.Groups['wrapped'].Value -ne '1' -or
+            $detailsValueMatch.Groups['drawn'].Value -ne '1' -or
+            $detailsValueMatch.Groups['valuePreserved'].Value -ne '1' -or
+            $detailsValueRowHeight -le 22.0 -or
+            $detailsValueRowX -lt $detailsValueViewportX -or
+            $detailsValueRowY -lt $detailsValueViewportY -or
+            $detailsValueRowX + $detailsValueRowWidth -gt $detailsValueViewportX + $detailsValueViewportWidth -or
+            $detailsValueRowY + $detailsValueRowHeight -gt $detailsValueViewportY + $detailsValueViewportHeight) {
+            throw (
+                "The selected Object Details value did not wrap completely inside its visible 1280x720 row: " +
+                "framebuffer=${detailsValueFramebufferWidth}x${detailsValueFramebufferHeight}, " +
+                "valueBytes=$detailsValueBytes, textWidth=$detailsValueSingleLineWidth, " +
+                "availableWidth=$detailsValueAvailableWidth, " +
+                "row=${detailsValueRowX},${detailsValueRowY},${detailsValueRowWidth},${detailsValueRowHeight}, " +
+                "viewport=${detailsValueViewportX},${detailsValueViewportY},${detailsValueViewportWidth},${detailsValueViewportHeight}.")
+        }
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $objectDetailsValueScreenshotPath `
+            -Description "1280x720 selected Object Details wrapped value"
+        Write-Output "[pass] Selected Object Details long value wraps in full inside its 1280x720 row."
         $nativeDisclosureMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring disclosure: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=28.0 expanded=([01])\.'
@@ -2028,6 +4644,78 @@ try {
                 throw "The selected showcase Authoring disclosure did not open."
             }
         }
+        if (-not (Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC details-source-value ' `
+                -TimeoutMilliseconds 2500)) {
+            throw "The selected Object Details Source value did not provide product-origin wrapped-row evidence."
+        }
+        $detailsSourceMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC details-source-value entity=(?<entity>\d+) framebuffer=(?<framebufferWidth>\d+)x(?<framebufferHeight>\d+) value_bytes=(?<valueBytes>\d+) material_owned=(?<materialOwned>[01]) action_reserve=(?<actionReserve>[-0-9.]+) single_line_width=(?<singleLineWidth>[-0-9.]+) available_width=(?<availableWidth>[-0-9.]+) measured_height=(?<measuredHeight>[-0-9.]+) row_height=(?<rowHeight>[-0-9.]+) wrapped=(?<wrapped>[01]) drawn=(?<drawn>[01]) value_preserved=(?<valuePreserved>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) viewport_x=(?<viewportX>[-0-9.]+) viewport_y=(?<viewportY>[-0-9.]+) viewport_width=(?<viewportWidth>[-0-9.]+) viewport_height=(?<viewportHeight>[-0-9.]+) scroll_offset=(?<scrollOffset>[-0-9.]+)'
+        if ($null -eq $detailsSourceMatch) {
+            throw "The selected Object Details Source value did not report its wrapped row geometry."
+        }
+        $detailsSourceNumber = {
+            param([string]$Name)
+            [double]::Parse(
+                $detailsSourceMatch.Groups[$Name].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+        }
+        $detailsSourceFramebufferWidth = [int]$detailsSourceMatch.Groups['framebufferWidth'].Value
+        $detailsSourceFramebufferHeight = [int]$detailsSourceMatch.Groups['framebufferHeight'].Value
+        $detailsSourceValueBytes = [int]$detailsSourceMatch.Groups['valueBytes'].Value
+        $detailsSourceMaterialOwned = [int]$detailsSourceMatch.Groups['materialOwned'].Value
+        $detailsSourceExpectedText = if ($detailsSourceMaterialOwned -eq 1) {
+            "Authoring mesh + material instance"
+        } else {
+            "Authoring mesh (per-object user slot)"
+        }
+        $detailsSourceExpectedActionReserve = if ($detailsSourceMaterialOwned -eq 1) { 0.0 } else { 112.0 }
+        $detailsSourceActionReserve = & $detailsSourceNumber 'actionReserve'
+        $detailsSourceSingleLineWidth = & $detailsSourceNumber 'singleLineWidth'
+        $detailsSourceAvailableWidth = & $detailsSourceNumber 'availableWidth'
+        $detailsSourceMeasuredHeight = & $detailsSourceNumber 'measuredHeight'
+        $detailsSourceRowHeight = & $detailsSourceNumber 'rowHeight'
+        $detailsSourceX = & $detailsSourceNumber 'x'
+        $detailsSourceY = & $detailsSourceNumber 'y'
+        $detailsSourceWidth = & $detailsSourceNumber 'width'
+        $detailsSourceHeight = & $detailsSourceNumber 'height'
+        $detailsSourceViewportX = & $detailsSourceNumber 'viewportX'
+        $detailsSourceViewportY = & $detailsSourceNumber 'viewportY'
+        $detailsSourceViewportWidth = & $detailsSourceNumber 'viewportWidth'
+        $detailsSourceViewportHeight = & $detailsSourceNumber 'viewportHeight'
+        if ($detailsSourceFramebufferWidth -ne 1280 -or
+            $detailsSourceFramebufferHeight -ne 720 -or
+            $detailsSourceValueBytes -ne $detailsSourceExpectedText.Length -or
+            $detailsSourceActionReserve -ne $detailsSourceExpectedActionReserve -or
+            $detailsSourceSingleLineWidth -le $detailsSourceAvailableWidth -or
+            $detailsSourceAvailableWidth -le 0.0 -or
+            $detailsSourceMatch.Groups['wrapped'].Value -ne '1' -or
+            $detailsSourceMatch.Groups['drawn'].Value -ne '1' -or
+            $detailsSourceMatch.Groups['valuePreserved'].Value -ne '1' -or
+            $detailsSourceMeasuredHeight -le 22.0 -or
+            $detailsSourceRowHeight -lt $detailsSourceMeasuredHeight -or
+            $detailsSourceHeight -lt $detailsSourceMeasuredHeight -or
+            $detailsSourceX -lt $detailsSourceViewportX -or
+            $detailsSourceY -lt $detailsSourceViewportY -or
+            $detailsSourceX + $detailsSourceWidth -gt $detailsSourceViewportX + $detailsSourceViewportWidth -or
+            $detailsSourceY + $detailsSourceHeight -gt $detailsSourceViewportY + $detailsSourceViewportHeight) {
+            throw (
+                "The selected Object Details Source value did not wrap completely inside its visible 1280x720 row: " +
+                "framebuffer=${detailsSourceFramebufferWidth}x${detailsSourceFramebufferHeight}, " +
+                "valueBytes=$detailsSourceValueBytes, materialOwned=$detailsSourceMaterialOwned, " +
+                "actionReserve=$detailsSourceActionReserve, textWidth=$detailsSourceSingleLineWidth, " +
+                "availableWidth=$detailsSourceAvailableWidth, measuredHeight=$detailsSourceMeasuredHeight, " +
+                "flowHeight=$detailsSourceRowHeight, " +
+                "row=${detailsSourceX},${detailsSourceY},${detailsSourceWidth},${detailsSourceHeight}, " +
+                "viewport=${detailsSourceViewportX},${detailsSourceViewportY},${detailsSourceViewportWidth},${detailsSourceViewportHeight}.")
+        }
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $objectDetailsSourceScreenshotPath `
+            -Description "1280x720 Object Details Source value wrapped in full"
+        Write-Output "[pass] Object Details Source value wraps in full inside its visible 1280x720 row."
         # A checked-in source may be restored either by the HAMS load path or
         # by the startup authoring-state restore path.  Both paths establish
         # the same editor-owned native source; the gate must recognize both
@@ -2206,12 +4894,26 @@ try {
             Write-Output "[pass] Fresh native material ownership promotion completed"
         }
 
-        if (-not (Wait-FileContains `
-                -Path $stdoutPath `
-                -Pattern "Native authoring material controls:" `
-                -TimeoutMilliseconds 3000)) {
-
-            throw "The native material editor controls did not become visible in the resolved ownership state."
+        $nativeMaterialControlsVisible = Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern "Native authoring material controls:" `
+            -TimeoutMilliseconds 3000
+        if (-not $nativeMaterialControlsVisible) {
+            # The short-window split preserves a usable Utility viewport by
+            # making the Details content independently scrollable. Material
+            # controls below the source row therefore need not be visible at
+            # scroll offset zero; prove they become visible after the app
+            # reports consuming a real Details-panel scroll.
+            $scrolledMaterialControlsPattern =
+                'Native authoring material controls:.*scroll_offset=(?<scrollOffset>(?:[1-9][0-9]*)(?:\.[0-9]+)?)\.'
+            $scrolledMaterialControls = Scroll-DetailsUntilReported `
+                -PostconditionPattern $scrolledMaterialControlsPattern `
+                -Description "the native material controls below the source row"
+            if ($null -eq $scrolledMaterialControls -or
+                [double]$scrolledMaterialControls.Groups['scrollOffset'].Value -le 0.0) {
+                throw "The native material editor controls were not revealed by a product-reported Details scroll."
+            }
+            Write-Output "[pass] Native material controls became reachable after product-reported Details scrolling"
         }
         $opticalGeometryStartingOffset = Get-FileLengthSafe -Path $stdoutPath
         $opticalGeometryObserved = $false
@@ -2355,21 +5057,91 @@ try {
         }
         Write-Output "[pass] User-facing native subsurface tint edit completed"
         # The optical controls are below the general material controls. Return
-        # to the top of the details flow before using the earlier material
-        # geometry record; otherwise the click lands in the scrolled layout.
-        Scroll-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
-            -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-            -WheelDelta 1
-        $nativeMaterialControlsMatch = Get-LastLogRegexMatch `
+        # only far enough to get a fresh product geometry report for the visible
+        # general controls. At offset zero their second row can be clipped, so
+        # reusing geometry from a previous scroll position would target stale
+        # screen coordinates.
+        $detailsScrollPattern = '^HENKA_AUTOMATION_DIAGNOSTIC details-scroll seq=\d+ frame=\d+ before=([-0-9.]+) after=([-0-9.]+) content=([-0-9.]+) viewport=([-0-9.]+) delta=[-0-9.]+ accepted=1\r?$'
+        $detailsScrollMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
-        if ($null -eq $nativeMaterialControlsMatch) {
-            throw "The native material editor control geometry could not be parsed."
+            -Pattern $detailsScrollPattern
+        if ($null -eq $detailsScrollMatch) {
+            throw "The product did not report current Object Details scroll state."
         }
+        $detailsScrollOffset = [double]::Parse(
+            $detailsScrollMatch.Groups[2].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $nativeMaterialControlsPattern = 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0 scroll_offset=(?<scrollOffset>[-0-9.]+)\.'
+        $nativeMaterialControlsMatch = $null
+        for ($detailsScrollAttempt = 0;
+             $detailsScrollAttempt -lt 16 -and
+             $null -eq $nativeMaterialControlsMatch -and
+             $detailsScrollOffset -gt 0.5;
+             $detailsScrollAttempt++) {
+            $scrollOutputOffset = Get-FileLengthSafe -Path $stdoutPath
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta 1
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $detailsScrollPattern `
+                    -StartingOffset $scrollOutputOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The Sandbox did not report Object Details scroll progress after a wheel event."
+            }
+            $detailsScrollMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $detailsScrollPattern
+            if ($null -eq $detailsScrollMatch) {
+                throw "The latest product Object Details scroll state could not be read."
+            }
+            $nextDetailsScrollOffset = [double]::Parse(
+                $detailsScrollMatch.Groups[2].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ($nextDetailsScrollOffset -ge ($detailsScrollOffset - 0.5)) {
+                throw "Object Details did not move toward the top (offset $detailsScrollOffset -> $nextDetailsScrollOffset)."
+            }
+            $detailsScrollOffset = $nextDetailsScrollOffset
+            if (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $nativeMaterialControlsPattern `
+                    -StartingOffset $scrollOutputOffset `
+                    -TimeoutMilliseconds 3000) {
+                $candidateMaterialGeometry = Get-LastLogRegexMatch `
+                    -Path $stdoutPath `
+                    -Pattern $nativeMaterialControlsPattern
+                if ($null -ne $candidateMaterialGeometry -and
+                    [Math]::Abs(
+                        [double]$candidateMaterialGeometry.Groups['scrollOffset'].Value -
+                        $detailsScrollOffset) -le 0.5) {
+                    $nativeMaterialControlsMatch = $candidateMaterialGeometry
+                }
+            }
+        }
+        if ($null -eq $nativeMaterialControlsMatch) {
+            throw "The native material editor did not report fresh visible control geometry after bounded Object Details scrolling."
+        }
+        Write-Output "[pass] Fresh native material control geometry matches the visible Details scroll offset $detailsScrollOffset"
+        $detailsSourceRowY = [double]$detailsSourceMatch.Groups['y'].Value
+        $detailsSourceScroll = [double]$detailsSourceMatch.Groups['scrollOffset'].Value
+        $detailsSourceRowHeight = [double]$detailsSourceMatch.Groups['height'].Value
+        $nativeMaterialFirstRowY = [double]$nativeMaterialControlsMatch.Groups[8].Value
+        $nativeMaterialScroll = [double]$nativeMaterialControlsMatch.Groups['scrollOffset'].Value
+        $sourceContentY = $detailsSourceRowY + $detailsSourceScroll
+        $materialContentY = $nativeMaterialFirstRowY + $nativeMaterialScroll
+        if ($materialContentY -lt ($sourceContentY + $detailsSourceRowHeight + 4.0)) {
+            throw (
+                "Native material controls overlap the Object Details Source row: " +
+                "source_content=[{0:N1},{1:N1}], material_first_content_y={2:N1}." -f
+                    $sourceContentY,
+                    ($sourceContentY + $detailsSourceRowHeight),
+                    $materialContentY)
+        }
+        Write-Output "[pass] Native material controls occupy a distinct row below the Source value"
         $nativeMaterialTintX = [double]$nativeMaterialControlsMatch.Groups[2].Value
         $nativeMaterialMetalX = [double]$nativeMaterialControlsMatch.Groups[3].Value
         $nativeMaterialRoughX = [double]$nativeMaterialControlsMatch.Groups[4].Value
@@ -2387,14 +5159,19 @@ try {
             -Y $nativeMaterialY `
             -Width $nativeMaterialWidth `
             -Height 28.0
+        $nativeMaterialTintLogOffset = Get-FileLengthSafe -Path $stdoutPath
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -FramebufferX ($nativeMaterialTintX + ($nativeMaterialWidth * 0.5)) `
             -FramebufferY ($nativeMaterialY + 14.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material edited" -TimeoutMilliseconds 5000)) {
-            throw "The user-facing native material parameter edit did not complete."
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring material edited:.*parameter=Base Color' `
+                -StartingOffset $nativeMaterialTintLogOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native Base Color edit did not complete after its click."
         }
         Assert-FramebufferRect `
             -Name "Native authoring metallic control" `
@@ -2404,14 +5181,19 @@ try {
             -Y $nativeMaterialY `
             -Width $nativeMaterialWidth `
             -Height 28.0
+        $nativeMaterialMetalLogOffset = Get-FileLengthSafe -Path $stdoutPath
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -FramebufferX ($nativeMaterialMetalX + ($nativeMaterialWidth * 0.5)) `
             -FramebufferY ($nativeMaterialY + 14.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "parameter=Metallic" -TimeoutMilliseconds 5000)) {
-            throw "The user-facing native metallic edit did not complete."
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring material edited:.*parameter=Metallic' `
+                -StartingOffset $nativeMaterialMetalLogOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native Metallic edit did not complete after its click."
         }
         Write-Output "[pass] User-facing native metallic edit completed"
         foreach ($scalarControl in @(
@@ -2428,7 +5210,7 @@ try {
             )) {
                 $latestNativeMaterialControlsMatch = Get-LastLogRegexMatch `
                     -Path $stdoutPath `
-                    -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
+                    -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0 scroll_offset=(?<scrollOffset>[-0-9.]+)\.'
                 if ($null -ne $latestNativeMaterialControlsMatch) {
                     if ($scalarControl.Name -eq "roughness") {
                         $scalarControl.X = [double]$latestNativeMaterialControlsMatch.Groups[4].Value
@@ -2515,33 +5297,129 @@ try {
             throw "The user-facing native metallic-roughness texture authoring did not complete."
         }
         Write-Output "[pass] User-facing native material and texture edits completed"
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material history:" -TimeoutMilliseconds 1200)) {
-            for ($scrollAttempt = 0; $scrollAttempt -lt 12; ++$scrollAttempt) {
-                Scroll-FramebufferPoint `
-                    -Handle $mainWindowHandle `
-                    -FramebufferWidth $framebufferWidth `
-                    -FramebufferHeight $framebufferHeight `
-                    -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
-                    -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                    -WheelDelta -120
-                if (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material history:" -TimeoutMilliseconds 1000) {
-                    break
-                }
-            }
-        }
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material history:" -TimeoutMilliseconds 2500)) {
-            throw "The converted showcase did not expose the native material undo/redo controls."
-        }
+        # The history row is below several authored material controls and may
+        # not have been drawn at the current scroll offset. Scroll through the
+        # real Object Details viewport until the product reports that row as
+        # visible; retain the hard bound derived from the product-reported
+        # content and viewport heights, then reposition to its exact offset.
+        $nativeMaterialHistoryPattern = 'Native authoring material history: name=(.+) undo_x=([-0-9.]+) redo_x=([-0-9.]+) y=([-0-9.]+) scroll=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
         $nativeMaterialHistoryMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring material history: name=(.+) undo_x=([-0-9.]+) redo_x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
+            -Pattern $nativeMaterialHistoryPattern
+        $detailsScrollMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $detailsScrollPattern
+        if ($null -eq $detailsScrollMatch) {
+            throw "The product did not report current Object Details scroll state before revealing material history."
+        }
+        $detailsScrollOffset = [double]::Parse(
+            $detailsScrollMatch.Groups[2].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $detailsScrollAttempts = 0
+        while ($null -eq $nativeMaterialHistoryMatch -and $detailsScrollAttempts -lt 64) {
+            $detailsContentHeight = [double]::Parse(
+                $detailsScrollMatch.Groups[3].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $detailsViewportHeight = [double]::Parse(
+                $detailsScrollMatch.Groups[4].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $detailsMaximumScroll = [Math]::Max(0.0, $detailsContentHeight - $detailsViewportHeight)
+            if ($detailsScrollOffset -ge ($detailsMaximumScroll - 0.5)) {
+                break
+            }
+
+            $scrollOutputOffset = Get-FileLengthSafe -Path $stdoutPath
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta -1
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $detailsScrollPattern `
+                    -StartingOffset $scrollOutputOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The Sandbox did not report Object Details scroll progress while revealing native material history."
+            }
+            $detailsScrollMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $detailsScrollPattern
+            if ($null -eq $detailsScrollMatch) {
+                throw "The latest product Object Details scroll state could not be read while revealing native material history."
+            }
+            $nextDetailsScrollOffset = [double]::Parse(
+                $detailsScrollMatch.Groups[2].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ($nextDetailsScrollOffset -le ($detailsScrollOffset + 0.5)) {
+                throw "Object Details failed to advance toward native material history ($detailsScrollOffset -> $nextDetailsScrollOffset)."
+            }
+            $detailsScrollOffset = $nextDetailsScrollOffset
+            $detailsScrollAttempts++
+            $nativeMaterialHistoryMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $nativeMaterialHistoryPattern
+        }
         if ($null -eq $nativeMaterialHistoryMatch) {
-            throw "The native material undo/redo control geometry could not be parsed."
+            throw "Native material undo/redo geometry remained undiscoverable after $detailsScrollAttempts bounded scroll steps (offset $detailsScrollOffset of $detailsMaximumScroll)."
+        }
+        if ($detailsScrollAttempts -gt 0) {
+            Write-Output "[pass] Native material history became visible after $detailsScrollAttempts product-reported Object Details scroll steps"
         }
         $nativeMaterialUndoX = [double]$nativeMaterialHistoryMatch.Groups[2].Value
         $nativeMaterialRedoX = [double]$nativeMaterialHistoryMatch.Groups[3].Value
         $nativeMaterialHistoryY = [double]$nativeMaterialHistoryMatch.Groups[4].Value
-        $nativeMaterialHistoryWidth = [double]$nativeMaterialHistoryMatch.Groups[5].Value
+        $nativeMaterialHistoryScrollOffset = [double]$nativeMaterialHistoryMatch.Groups[5].Value
+        $nativeMaterialHistoryWidth = [double]$nativeMaterialHistoryMatch.Groups[6].Value
+        $detailsScrollMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $detailsScrollPattern
+        if ($null -eq $detailsScrollMatch) {
+            throw "The product did not report current Object Details scroll state for material history."
+        }
+        $detailsScrollOffset = [double]::Parse(
+            $detailsScrollMatch.Groups[2].Value,
+            [Globalization.CultureInfo]::InvariantCulture)
+        for ($detailsScrollAttempt = 0;
+             $detailsScrollAttempt -lt 16 -and
+             [Math]::Abs($detailsScrollOffset - $nativeMaterialHistoryScrollOffset) -gt 0.5;
+             $detailsScrollAttempt++) {
+            $wheelDelta = if ($detailsScrollOffset -lt $nativeMaterialHistoryScrollOffset) { -1 } else { 1 }
+            $scrollOutputOffset = Get-FileLengthSafe -Path $stdoutPath
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta $wheelDelta
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $detailsScrollPattern `
+                    -StartingOffset $scrollOutputOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The Sandbox did not report Object Details scroll progress while revealing material history."
+            }
+            $detailsScrollMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $detailsScrollPattern
+            if ($null -eq $detailsScrollMatch) {
+                throw "The latest product Object Details scroll state could not be read for material history."
+            }
+            $nextDetailsScrollOffset = [double]::Parse(
+                $detailsScrollMatch.Groups[2].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if (($wheelDelta -lt 0 -and $nextDetailsScrollOffset -le ($detailsScrollOffset + 0.5)) -or
+                ($wheelDelta -gt 0 -and $nextDetailsScrollOffset -ge ($detailsScrollOffset - 0.5))) {
+                throw "Object Details did not progress toward the material history offset ($detailsScrollOffset -> $nextDetailsScrollOffset; target $nativeMaterialHistoryScrollOffset)."
+            }
+            $detailsScrollOffset = $nextDetailsScrollOffset
+        }
+        if ([Math]::Abs($detailsScrollOffset - $nativeMaterialHistoryScrollOffset) -gt 0.5) {
+            throw "Object Details offset $detailsScrollOffset does not match the material history geometry offset $nativeMaterialHistoryScrollOffset."
+        }
+        Write-Output "[pass] Product-reported Object Details offset matches native material history geometry"
         Assert-FramebufferRect `
             -Name "Native authoring material undo control" `
             -FramebufferWidth $framebufferWidth `
@@ -2767,7 +5645,7 @@ try {
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
                 -FramebufferY ($detailsY + 42.0) `
-                -WheelDelta 120
+                -WheelDelta 1
             Start-Sleep -Milliseconds 120
             $visibleFaceMatch = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
@@ -2899,6 +5777,9 @@ try {
         $bevelControlCountBefore = @(
             Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
         ).Count
+        $bevelActionCountBeforeFaceMode = @(
+            Select-String -LiteralPath $stdoutPath -Pattern 'Native authoring bevel operator:' -ErrorAction SilentlyContinue
+        ).Count
         $nativeFaceModeObserved = $false
         foreach ($faceSelectionOffset in @(
             @(44.0, 12.0),
@@ -2925,6 +5806,7 @@ try {
                 -Y $nativeFaceY `
                 -Width 88.0 `
                 -Height 24.0
+            $nativeFaceModeLogOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
@@ -2932,15 +5814,16 @@ try {
                 -FramebufferX ($nativeFaceX + [double]$faceSelectionOffset[0]) `
                 -FramebufferY ($nativeFaceY + [double]$faceSelectionOffset[1])
             Start-Sleep -Milliseconds 150
-            $nativeFaceModeObserved = Wait-FileContains `
+            $nativeFaceModeObserved = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring topology mode:.*mode=Face" `
+                -StartingOffset $nativeFaceModeLogOffset `
                 -TimeoutMilliseconds 1000
         }
         $nativeFaceModeStableMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring face mode control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
-        if ($null -ne $nativeFaceModeStableMatch) {
+        if (-not $nativeFaceModeObserved -and $null -ne $nativeFaceModeStableMatch) {
             $nativeFaceModeStableX = [double]$nativeFaceModeStableMatch.Groups[2].Value
             $nativeFaceModeStableY = [double]$nativeFaceModeStableMatch.Groups[3].Value
             Assert-FramebufferRect `
@@ -2995,13 +5878,20 @@ try {
             # bounded wait intentionally does not depend on a stale byte
             # offset from before a layout refresh.
             Start-Sleep -Milliseconds 150
-            $nativeFaceModeObserved = Wait-FileContains `
+            $nativeFaceModeObserved = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring topology mode:.*mode=Face" `
+                -StartingOffset $nativeFaceModeLogOffset `
                 -TimeoutMilliseconds 700
         }
         if (-not $nativeFaceModeObserved) {
             throw "The user-facing Face selection mode did not become active."
+        }
+        $bevelActionCountAfterFaceMode = @(
+            Select-String -LiteralPath $stdoutPath -Pattern 'Native authoring bevel operator:' -ErrorAction SilentlyContinue
+        ).Count
+        if ($bevelActionCountAfterFaceMode -ne $bevelActionCountBeforeFaceMode) {
+            throw "The Face-mode transition invoked Bevel before a viewport face was selected."
         }
         $nativeFacePickPoints = @(
             @(0.12, 0.50),
@@ -3051,6 +5941,58 @@ try {
         if (-not $nativeFacePicked) {
             throw "The user-facing Face mode did not select a viewport face before Bevel."
         }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring face normal controls:" -TimeoutMilliseconds 3000)) {
+            throw "The responsive Face-edit action layout did not report its packaged geometry."
+        }
+        $nativeFaceEditToolsMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring face edit tools: name=(.+) preview_x=([-0-9.]+) inset_x=([-0-9.]+) y=([-0-9.]+) preview_width=([-0-9.]+) inset_width=([-0-9.]+) height=24.0\.'
+        $nativeFaceNormalControlsMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring face normal controls: name=(.+) positive_x=([-0-9.]+) positive_y=([-0-9.]+) negative_x=([-0-9.]+) negative_y=([-0-9.]+) positive_width=([-0-9.]+) negative_width=([-0-9.]+) panel_x=([-0-9.]+) panel_y=([-0-9.]+) panel_width=([-0-9.]+) panel_height=([-0-9.]+)\.'
+        if ($null -eq $nativeFaceEditToolsMatch -or $null -eq $nativeFaceNormalControlsMatch) {
+            throw "The packaged Face-edit action geometry could not be parsed."
+        }
+        $faceEditRowY = [double]$nativeFaceEditToolsMatch.Groups[4].Value
+        $faceActionRects = @(
+            [pscustomobject]@{
+                X = [double]$nativeFaceEditToolsMatch.Groups[2].Value
+                Y = $faceEditRowY
+                Width = [double]$nativeFaceEditToolsMatch.Groups[5].Value
+            },
+            [pscustomobject]@{
+                X = [double]$nativeFaceEditToolsMatch.Groups[3].Value
+                Y = $faceEditRowY
+                Width = [double]$nativeFaceEditToolsMatch.Groups[6].Value
+            },
+            [pscustomobject]@{
+                X = [double]$nativeFaceNormalControlsMatch.Groups[2].Value
+                Y = [double]$nativeFaceNormalControlsMatch.Groups[3].Value
+                Width = [double]$nativeFaceNormalControlsMatch.Groups[6].Value
+            },
+            [pscustomobject]@{
+                X = [double]$nativeFaceNormalControlsMatch.Groups[4].Value
+                Y = [double]$nativeFaceNormalControlsMatch.Groups[5].Value
+                Width = [double]$nativeFaceNormalControlsMatch.Groups[7].Value
+            })
+        $faceActionPanelX = [double]$nativeFaceNormalControlsMatch.Groups[8].Value
+        $faceActionPanelY = [double]$nativeFaceNormalControlsMatch.Groups[9].Value
+        $faceActionPanelWidth = [double]$nativeFaceNormalControlsMatch.Groups[10].Value
+        $faceActionPanelHeight = [double]$nativeFaceNormalControlsMatch.Groups[11].Value
+        foreach ($faceActionRect in $faceActionRects) {
+            if ($faceActionRect.X -lt $faceActionPanelX -or
+                $faceActionRect.X + $faceActionRect.Width -gt ($faceActionPanelX + $faceActionPanelWidth) -or
+                $faceActionRect.Y -lt $faceActionPanelY -or
+                $faceActionRect.Y + 24.0 -gt ($faceActionPanelY + $faceActionPanelHeight) -or
+                $faceActionRect.Width -le 82.0) {
+                throw "A Face-edit action is truncated or outside the visible Object Details content region."
+            }
+        }
+        if ([double]$nativeFaceNormalControlsMatch.Groups[3].Value -le $faceEditRowY -or
+            [double]$nativeFaceNormalControlsMatch.Groups[5].Value -le $faceEditRowY) {
+            throw "The Face-edit actions did not reflow into a second readable row."
+        }
+        Write-Output "[pass] Packaged Face-edit actions use full-width measured buttons in two rows inside Object Details"
         # Capture the face while its freshly picked stable handle is still
         # authoritative. Later bevel/flip transactions may intentionally
         # remap component identities, so their proof must not be responsible
@@ -3209,41 +6151,45 @@ try {
         if ($null -eq $nativeFlipMatch) {
             throw "The native Face-mode Flip control geometry could not be parsed."
         }
-        $nativeFlipObserved = $false
-        for ($flipAttempt = 0; $flipAttempt -lt 5 -and -not $nativeFlipObserved; ++$flipAttempt) {
-            $latestFlipMatch = Get-LastLogRegexMatch `
-                -Path $stdoutPath `
-                -Pattern 'Native authoring face flip control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
-            if ($null -ne $latestFlipMatch) {
-                $nativeFlipX = [double]$latestFlipMatch.Groups[2].Value
-                $nativeFlipY = [double]$latestFlipMatch.Groups[3].Value
-            }
-            Assert-FramebufferRect `
-                -Name "Native authoring Flip control retry" `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -X $nativeFlipX `
-                -Y $nativeFlipY `
-                -Width 88.0 `
-                -Height 24.0
-            $flipXOffset = @(20.0, 44.0, 68.0)[$flipAttempt % 3]
-            $flipYOffset = @(6.0, 12.0, 18.0)[$flipAttempt % 3]
-            $nativeFlipLogOffset = Get-FileLengthSafe -Path $stdoutPath
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeFlipX + $flipXOffset) `
-                -FramebufferY ($nativeFlipY + $flipYOffset)
-            Start-Sleep -Milliseconds 150
-            $nativeFlipObserved = Wait-FileContainsAfterOffset `
-                -Path $stdoutPath `
-                -Pattern "Native authoring workflow: face winding flipped for" `
-                -StartingOffset $nativeFlipLogOffset `
-                -TimeoutMilliseconds 2500
-        }
+        $nativeFlipX = [double]$nativeFlipMatch.Groups[2].Value
+        $nativeFlipY = [double]$nativeFlipMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring Flip control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeFlipX `
+            -Y $nativeFlipY `
+            -Width 88.0 `
+            -Height 24.0
+        $flipHeartbeatBefore = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC frame seq=([0-9]+) phase=render-complete'
+        $nativeFlipLogOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeFlipX + 44.0) `
+            -FramebufferY ($nativeFlipY + 12.0)
+        $nativeFlipObserved = Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern "Native authoring workflow: face winding flipped for" `
+            -StartingOffset $nativeFlipLogOffset `
+            -TimeoutMilliseconds 2500
         if (-not $nativeFlipObserved) {
-            throw "The user-facing native Face-mode Flip operation did not update the showcase source."
+            $flipHeartbeatAfter = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC frame seq=([0-9]+) phase=render-complete'
+            $beforeSequence = if ($null -ne $flipHeartbeatBefore) {
+                $flipHeartbeatBefore.Groups[1].Value
+            } else { "unavailable" }
+            $afterSequence = if ($null -ne $flipHeartbeatAfter) {
+                $flipHeartbeatAfter.Groups[1].Value
+            } else { "unavailable" }
+            throw (
+                "The user-facing native Face-mode Flip operation did not update the showcase source " +
+                "after one click within 2500 ms (application frame seq before={0}, after={1})." -f
+                $beforeSequence, $afterSequence)
         }
         Write-Output "[pass] User-facing Face-mode winding flip changed the native showcase source"
         $nativeDeleteFaceObserved = $false
@@ -3269,19 +6215,23 @@ try {
         }
         $nativeDeleteMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=102.0 height=24.0\.'
+            -Pattern 'Native authoring face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
         if ($null -eq $nativeDeleteMatch) {
             throw "The native Face-mode delete control geometry could not be parsed."
         }
         $nativeDeleteX = [double]$nativeDeleteMatch.Groups[2].Value
         $nativeDeleteY = [double]$nativeDeleteMatch.Groups[3].Value
+        $nativeDeleteWidth = [double]$nativeDeleteMatch.Groups[4].Value
+        if ($nativeDeleteWidth -lt 120.0) {
+            throw "The native Face-mode Delete Faces control is only $nativeDeleteWidth pixels wide; it needs at least 120 pixels to retain its full label at the supported readability scale."
+        }
         Assert-FramebufferRect `
             -Name "Native authoring Delete Faces control" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeDeleteX `
             -Y $nativeDeleteY `
-            -Width 102.0 `
+            -Width $nativeDeleteWidth `
             -Height 24.0
         $nativeDeleteObserved = $false
         $nativeDeleteOffsets = @(
@@ -3296,10 +6246,14 @@ try {
              ++$deleteAttempt) {
             $latestDeleteMatch = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
-                -Pattern 'Native authoring face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=102.0 height=24.0\.'
+                -Pattern 'Native authoring face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
             if ($null -ne $latestDeleteMatch) {
                 $nativeDeleteX = [double]$latestDeleteMatch.Groups[2].Value
                 $nativeDeleteY = [double]$latestDeleteMatch.Groups[3].Value
+                $nativeDeleteWidth = [double]$latestDeleteMatch.Groups[4].Value
+                if ($nativeDeleteWidth -lt 120.0) {
+                    throw "The refreshed Face-mode Delete Faces control no longer preserves its full label."
+                }
             }
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
@@ -3425,24 +6379,53 @@ try {
             -Path $nativeAuthoringScreenshotPath `
             -Description "Packaged native authoring screenshot"
 
-        Write-Step "Checking Game Authoring Play lifecycle"
-        $gamePhysicsDisclosure = $null
-        for ($scrollAttempt = 0; $scrollAttempt -lt 20 -and $null -eq $gamePhysicsDisclosure; ++$scrollAttempt) {
-            $gamePhysicsDisclosure = Get-LastLogRegexMatch `
-                -Path $stdoutPath `
-                -Pattern 'Game authoring physics disclosure: name=(?<name>.+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=(?<expanded>[01])\.'
-            if ($null -eq $gamePhysicsDisclosure) {
-                Scroll-FramebufferPoint `
-                    -Handle $mainWindowHandle `
-                    -FramebufferWidth $framebufferWidth `
-                    -FramebufferHeight $framebufferHeight `
-                    -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
-                    -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                    -WheelDelta -120
-            }
+        Write-Step "Preparing a product-authored object for Game Authoring lifecycle"
+        $addCubeBoundsWidth = $sceneObjectsWidth - 28.0
+        $addCubeButtonRequiredWidths = @(
+            (6.0 * 8.0 - 1.0 + 24.0), # Add Cube: measured text plus horizontal padding.
+            (6.0 * 5.0 - 1.0 + 24.0), # Clone.
+            (6.0 * 6.0 - 1.0 + 24.0)) # Delete.
+        $addCubeAvailableWidth = $addCubeBoundsWidth - 12.0
+        $addCubeRequiredWidth = ($addCubeButtonRequiredWidths | Measure-Object -Sum).Sum
+        $addCubeExtraWidth = ($addCubeAvailableWidth - $addCubeRequiredWidth) / 3.0
+        if ($addCubeExtraWidth -lt 0.0) {
+            throw "The visible Scene Objects Add Cube row cannot fit at the current supported layout width."
         }
-        if ($null -eq $gamePhysicsDisclosure) {
-            throw "The selected authored object did not expose the Game Authoring Physics disclosure."
+        $gameAuthoringAddCubeX = $sceneObjectsX + 14.0 +
+            (($addCubeButtonRequiredWidths[0] + $addCubeExtraWidth) / 2.0)
+        $gameAuthoringAddCubeY = $sceneObjectsY + 60.0
+        Assert-FramebufferRect `
+            -Name "Game Authoring fixture Add Cube control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $gameAuthoringAddCubeX `
+            -Y $gameAuthoringAddCubeY `
+            -Width ($addCubeButtonRequiredWidths[0] + $addCubeExtraWidth) `
+            -Height 24.0
+        $gameAuthoringObjectOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX $gameAuthoringAddCubeX `
+            -FramebufferY ($gameAuthoringAddCubeY + 12.0)
+        $gameAuthoringObjectPattern = '(?:DEFAULT_SCENE_ADD_CUBE_READY entity=[0-9]+ document_id=[0-9]+ source=primitive canonical_document=1\.|Native asset document: name=.+ action=part-added parts=[0-9]+\.)'
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $gameAuthoringObjectPattern `
+                -StartingOffset $gameAuthoringObjectOffset `
+                -TimeoutMilliseconds 6000)) {
+            throw "The visible Scene Objects Add Cube path did not create and register a product-authored Game Authoring object."
+        }
+        Write-Output "[pass] Game Authoring lifecycle fixture was created and registered through the visible Henka Add Cube path"
+
+        Write-Step "Checking Game Authoring Play lifecycle"
+        $physicsDisclosurePattern = 'Game authoring physics disclosure: name=(?<name>.+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=(?<expanded>[01])\.'
+        $gamePhysicsDisclosure = Scroll-DetailsUntilReported `
+            -PostconditionPattern $physicsDisclosurePattern `
+            -Description "the Game Authoring Physics disclosure"
+        if ($gamePhysicsDisclosure.Groups["name"].Value -match 'Showcase (?:Giraffe|Rocket)') {
+            throw "Game Authoring Physics remained bound to a Showcase reference entity instead of the newly selected authored primitive."
         }
         $gamePhysicsDisclosureX = [double]$gamePhysicsDisclosure.Groups["x"].Value
         $gamePhysicsDisclosureY = [double]$gamePhysicsDisclosure.Groups["y"].Value
@@ -3460,7 +6443,7 @@ try {
             foreach ($physicsDisclosureFraction in @(0.25, 0.50, 0.75)) {
                 $latestGamePhysicsDisclosure = Get-LastLogRegexMatch `
                     -Path $stdoutPath `
-                    -Pattern 'Game authoring physics disclosure: name=(?<name>.+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=(?<expanded>[01])\.'
+                    -Pattern $physicsDisclosurePattern
                 if ($null -ne $latestGamePhysicsDisclosure) {
                     $gamePhysicsDisclosureX = [double]$latestGamePhysicsDisclosure.Groups["x"].Value
                     $gamePhysicsDisclosureY = [double]$latestGamePhysicsDisclosure.Groups["y"].Value
@@ -3486,24 +6469,10 @@ try {
                 throw "The Game Authoring Physics disclosure did not report expansion after bounded click retries."
             }
         }
-        $gamePlayMatch = $null
-        for ($scrollAttempt = 0; $scrollAttempt -lt 20 -and $null -eq $gamePlayMatch; ++$scrollAttempt) {
-            $gamePlayMatch = Get-LastLogRegexMatch `
-                -Path $stdoutPath `
-                -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
-            if ($null -eq $gamePlayMatch) {
-                Scroll-FramebufferPoint `
-                    -Handle $mainWindowHandle `
-                    -FramebufferWidth $framebufferWidth `
-                    -FramebufferHeight $framebufferHeight `
-                    -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
-                    -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                    -WheelDelta -120
-            }
-        }
-        if ($null -eq $gamePlayMatch) {
-            throw "The Game Authoring Physics disclosure did not expose Play controls."
-        }
+        $gamePlayPattern = 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
+        $gamePlayMatch = Scroll-DetailsUntilReported `
+            -PostconditionPattern $gamePlayPattern `
+            -Description "the Game Authoring Play controls"
         $gamePlayX = [double]$gamePlayMatch.Groups["playX"].Value
         $gamePlayY = [double]$gamePlayMatch.Groups["y"].Value
         $gamePlayWidth = [double]$gamePlayMatch.Groups["width"].Value
@@ -3526,7 +6495,7 @@ try {
         }
         $gamePlayMatch = Wait-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.' `
+            -Pattern $gamePlayPattern `
             -GroupName "state" `
             -ExpectedValue "1"
         if ($null -eq $gamePlayMatch) {
@@ -3583,7 +6552,10 @@ try {
         if ($null -eq $gamePlayMatch) {
             throw "Game Authoring pause before Step did not reach Paused state."
         }
-        $gameStepMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring step controls: name=(?<name>.+) step_x=(?<stepX>[-0-9.]+) stop_x=(?<stopX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0\.'
+        $gameStepPattern = 'Game authoring step controls: name=(?<name>.+) step_x=(?<stepX>[-0-9.]+) stop_x=(?<stopX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0\.'
+        $gameStepMatch = Scroll-DetailsUntilReported `
+            -PostconditionPattern $gameStepPattern `
+            -Description "the Game Authoring Step/Stop controls"
         if ($null -eq $gameStepMatch) {
             throw "The Game Authoring Step/Stop control geometry could not be parsed."
         }
@@ -3729,14 +6701,19 @@ try {
             -Y $qaTabY `
             -Width $qaTabWidth `
             -Height $qaTabHeight
-        Assert-FramebufferRect `
-            -Name "Viewport shading controls" `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $shadingX `
-            -Y $shadingY `
-            -Width $shadingGroupWidth `
-            -Height 22.0
+        foreach ($shadingModeName in @("Wireframe", "Solid", "Material Preview", "Rendered")) {
+            $shadingControl = Get-HenkaViewportShadingControl `
+                -LogPath $stdoutPath `
+                -ModeName $shadingModeName
+            Assert-FramebufferRect `
+                -Name ("Viewport shading " + $shadingModeName + " control") `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $shadingControl.X `
+                -Y $shadingControl.Y `
+                -Width $shadingControl.Width `
+                -Height $shadingControl.Height
+        }
 
         if ($gridAvailable) {
             Click-FramebufferPoint `
@@ -3897,7 +6874,9 @@ try {
         Save-WindowScreenshot `
             -Handle $nativeWindowHandle `
             -Path $nativeScreenshotPath `
-            -Description "Packaged native panel screenshot"
+            -Description "Packaged native panel screenshot" `
+            -MinimumWidth 320 `
+            -MinimumHeight 240
         Set-HenkaAutomationForeground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 250
 
@@ -3962,14 +6941,6 @@ try {
         # status line cannot satisfy the check, and the bounded retries remain
         # safe when the operator is using the desktop concurrently.
         Start-Sleep -Milliseconds 1000
-        $shadingX =
-            [double]$shadingMatch.Groups[1].Value
-        $shadingY =
-            [double]$shadingMatch.Groups[2].Value
-        $shadingButtonWidth =
-            [double]$shadingMatch.Groups[3].Value
-        $shadingGap =
-            [double]$shadingMatch.Groups[4].Value
         $shadingNames = @(
             "Wireframe",
             "Solid",
@@ -3979,13 +6950,11 @@ try {
         for ($modeIndex = 0;
              $modeIndex -lt $shadingNames.Count;
              ++$modeIndex) {
-            $modeCenterX =
-                $shadingX +
-                ($shadingButtonWidth + $shadingGap) *
-                [double]$modeIndex +
-                $shadingButtonWidth * 0.5
-            $modeCenterY =
-                $shadingY + 11.0
+            $shadingControl = Get-HenkaViewportShadingControl `
+                -LogPath $stdoutPath `
+                -ModeName $shadingNames[$modeIndex]
+            $modeCenterX = $shadingControl.X + $shadingControl.Width * 0.5
+            $modeCenterY = $shadingControl.Y + $shadingControl.Height * 0.5
 
             $expectedModePattern =
                 "Viewport shading: " +
@@ -4012,6 +6981,37 @@ try {
             if (-not $modeObserved) {
                 throw "Viewport shading mode could not be confirmed: $($shadingNames[$modeIndex])"
             }
+
+            # The mode status is emitted during the update callback, before
+            # its frame is rendered. Wait for a later engine-owned render
+            # completion before sending the next mode input; otherwise a slow
+            # software-rendered preview can leave the automation queue ahead
+            # of a blocked frame and make the next click look like a UI miss.
+            $renderBoundaryOffset = Get-FileLengthSafe -Path $stdoutPath
+            $framePattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC frame seq=(?<sequence>[0-9]+) phase=render-complete(?:\s[^\r\n]*)?$'
+            $completedFrameMatches = [System.Text.RegularExpressions.Regex]::Matches(
+                (Get-HenkaPackagedStartupLogText -Path $stdoutPath),
+                $framePattern)
+            $afterFrameSequence = 0L
+            foreach ($completedFrameMatch in $completedFrameMatches) {
+                $reportedSequence = [long]$completedFrameMatch.Groups['sequence'].Value
+                if ($reportedSequence -gt $afterFrameSequence) {
+                    $afterFrameSequence = $reportedSequence
+                }
+            }
+            $renderedFrame = Wait-HenkaPackagedFrameRenderComplete `
+                -StdoutPath $stdoutPath `
+                -ProcessId $process.Id `
+                -StartingOffset $renderBoundaryOffset `
+                -AfterFrameSequence $afterFrameSequence `
+                -HardTimeoutMilliseconds 30000 `
+                -NoProgressTimeoutMilliseconds 8000 `
+                -PollMilliseconds 150
+            Write-Output (
+                "[pass] Viewport shading {0} completed application render frame {1} after {2} ms." -f `
+                    $shadingNames[$modeIndex],
+                    $renderedFrame.FrameSequence,
+                    $renderedFrame.ElapsedMilliseconds)
         }
         $bevelControlCount = @(
             Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
@@ -4187,7 +7187,8 @@ try {
     # a unique suffix instead of queueing dozens of erase events through the
     # one-event-per-frame automation stream on a slow Debug renderer. The
     # click and text event still exercise the real editable asset-name field.
-    $genericAssetName = "NativeAsset_" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
+    $genericAssetNameSuffix = "_" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
+    $genericAssetName = "NativeAsset" + $genericAssetNameSuffix
     $genericAssetNamePattern = [Regex]::Escape($genericAssetName)
     $genericAssetNameX = $genericPanelX + 14.0 + ($genericActionWidth * 2.0 + 6.0) / 2.0
     $genericNewAssetX = $genericPanelX + 14.0 + $genericActionWidth / 2.0
@@ -4198,11 +7199,52 @@ try {
         ($genericPanelX + 20.0 + $genericPrimitiveActionWidth + $genericPrimitiveActionWidth / 2.0))
     $genericOpenAssetX = $genericPrimitiveX[2]
 
+    # The preceding visible-authoring checks can leave their NativeAsset
+    # document open in this same Sandbox process. In that state the production
+    # panel intentionally replaces the New Asset/name controls with Save/Close;
+    # clicking the no-document coordinates would test the wrong UI contract.
+    # Close that completed test document through the real editor control before
+    # starting the independent generic New Asset workflow.
+    $priorAssetEvent = Get-LastLogRegexMatch `
+        -Path $stdoutPath `
+        -Pattern 'Native asset document: name=(?<name>.+?) action=(?<action>created|part-added|saved|opened|closed) parts=(?<parts>\d+)\.'
+    if ($null -eq $priorAssetEvent) {
+        throw "The preceding packaged authoring workflow did not report native asset document state before generic asset authoring."
+    }
+    if ($priorAssetEvent.Groups['action'].Value -ne 'closed') {
+        $priorAssetName = $priorAssetEvent.Groups['name'].Value
+        $priorAssetNamePattern = [Regex]::Escape($priorAssetName)
+        $priorAssetParts = $priorAssetEvent.Groups['parts'].Value
+        Write-Step "Closing the completed prior asset document '$priorAssetName' before generic New Asset"
+        $priorAssetCloseOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-AuthoringWindowPoint `
+            -Handle $mainWindowHandle `
+            -X $genericOpenAssetX `
+            -Y ($genericSaveAssetY + 12.0)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native asset document: name=$priorAssetNamePattern action=closed parts=$priorAssetParts\." `
+                -StartingOffset $priorAssetCloseOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The prior native asset document '$priorAssetName' did not close through the visible Close Asset control; generic New Asset was not attempted."
+        }
+        Write-Output "[pass] Closed the prior packaged test asset through the visible editor control"
+        Start-Sleep -Milliseconds 350
+    }
+
     Assert-FramebufferRect -Name "Generic asset name field" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X $genericAssetNameX -Y $genericNameFieldY -Width ($genericActionWidth * 2.0 + 6.0) -Height 24.0
     Assert-FramebufferRect -Name "Generic New Asset control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0) -Y $genericNewAssetY -Width $genericActionWidth -Height 24.0
     Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAssetNameX -Y ($genericNameFieldY + 12.0)
     Start-Sleep -Milliseconds 600
-    Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetName
+    $genericNameInputOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetNameSuffix
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern "Native authoring asset name accepted: value=$genericAssetNamePattern\." `
+            -StartingOffset $genericNameInputOffset `
+            -TimeoutMilliseconds 5000)) {
+        throw "The packaged asset-name field did not accept the expected unique suffix '$genericAssetNameSuffix'."
+    }
     Start-Sleep -Milliseconds 600
     $genericCreationOffset = Get-FileLengthSafe -Path $stdoutPath
     Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetX -Y ($genericNewAssetY + 12.0)
@@ -4218,10 +7260,6 @@ try {
                 -TimeoutMilliseconds 250) {
             throw "The generic New Asset action created a document with an unexpected name."
         }
-        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAssetNameX -Y ($genericNameFieldY + 12.0)
-        Start-Sleep -Milliseconds 600
-        Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetName
-        Start-Sleep -Milliseconds 600
         $genericCreationRetryOffset = Get-FileLengthSafe -Path $stdoutPath
         Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetX -Y ($genericNewAssetY + 12.0)
         if (-not (Wait-FileContainsAfterOffset `
@@ -4304,16 +7342,65 @@ try {
     }
 
     Write-Step "Checking persisted native authoring relaunch"
-    $startupRestoreCapture = Start-HenkaCapturedProcess `
-        -FilePath $packagedExe `
-        -WorkingDirectory $packageRoot `
-        -StdoutPath $startupRestoreStdoutPath `
-        -StderrPath $startupRestoreStderrPath
+    # Relaunch the same explicitly selected Showcase scene that owns the saved
+    # per-entity authoring document. The clean default scene is validated
+    # separately; it intentionally contains no Showcase entity to restore here.
+    # This remains a normal product launch, not another automation session.
+    # A child inherits the current process environment, so remove the
+    # interactive test's event-file/diagnostic switches only while creating
+    # this process, then restore the parent environment for the remaining gate.
+    $startupRestoreAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
+    $startupRestoreAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
+    $startupRestoreAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
+    try {
+        Remove-Item Env:HENKA_AUTOMATION_INPUT_OWNED -ErrorAction SilentlyContinue
+        Remove-Item Env:HENKA_AUTOMATION_INPUT_FILE -ErrorAction SilentlyContinue
+        Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTICS -ErrorAction SilentlyContinue
+        $startupRestoreCapture = Start-HenkaCapturedProcess `
+            -FilePath $packagedExe `
+            -WorkingDirectory $packageRoot `
+            -Arguments @("--capture-showcase-view", "wide", "solid") `
+            -StdoutPath $startupRestoreStdoutPath `
+            -StderrPath $startupRestoreStderrPath
+    }
+    finally {
+        if ($null -eq $startupRestoreAutomationOwned) {
+            Remove-Item Env:HENKA_AUTOMATION_INPUT_OWNED -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_INPUT_OWNED = $startupRestoreAutomationOwned
+        }
+        if ($null -eq $startupRestoreAutomationFile) {
+            Remove-Item Env:HENKA_AUTOMATION_INPUT_FILE -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_INPUT_FILE = $startupRestoreAutomationFile
+        }
+        if ($null -eq $startupRestoreAutomationDiagnostics) {
+            Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTICS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_DIAGNOSTICS = $startupRestoreAutomationDiagnostics
+        }
+    }
     $startupRestoreProcess = $startupRestoreCapture.Process
-    if (-not (Wait-FileContains `
-            -Path $startupRestoreStdoutPath `
-            -Pattern "Native authoring startup restore: name=" `
-            -TimeoutMilliseconds 15000)) {
+    if (Select-String `
+            -LiteralPath $startupRestoreStdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC|HENKA_AUTOMATION_INPUT' `
+            -Quiet `
+            -ErrorAction SilentlyContinue) {
+        throw "The normal packaged relaunch inherited test automation state."
+    }
+    try {
+        $startupRestoreReadiness = Wait-HenkaPackagedNativeAuthoringRestore `
+            -StdoutPath $startupRestoreStdoutPath `
+            -StderrPath $startupRestoreStderrPath `
+            -ProcessId $startupRestoreProcess.Id `
+            -HardTimeoutMilliseconds 120000 `
+            -NoProgressTimeoutMilliseconds 45000 `
+            -PollMilliseconds 150
+    }
+    catch {
         $restoreWindow = [NativeMethods]::FindProcessWindow(
             [uint32]$startupRestoreProcess.Id,
             "Henka Engine Sandbox 3D")
@@ -4324,24 +7411,24 @@ try {
                 [System.IntPtr]::Zero,
                 [System.IntPtr]::Zero) | Out-Null
         }
-        throw "A normal packaged relaunch did not restore the saved native showcase source."
-    }
-    if (-not (Wait-FileContains `
-            -Path $startupRestoreStdoutPath `
-            -Pattern "Native authoring startup restore: material state restored.*pbr_state=restored" `
-            -TimeoutMilliseconds 3000)) {
-        $restoreWindow = [NativeMethods]::FindProcessWindow(
-            [uint32]$startupRestoreProcess.Id,
-            "Henka Engine Sandbox 3D")
-        if ($restoreWindow -ne [System.IntPtr]::Zero) {
-            [NativeMethods]::PostMessage(
-                $restoreWindow,
-                0x0010,
-                [System.IntPtr]::Zero,
-                [System.IntPtr]::Zero) | Out-Null
+        if (-not $startupRestoreProcess.HasExited) {
+            $null = $startupRestoreProcess.WaitForExit(10000)
         }
-        throw "A normal packaged relaunch did not restore the saved native material sidecar."
+        throw (
+            "A normal packaged relaunch did not complete persisted native authoring " +
+            "restore: $($_.Exception.Message)")
     }
+    if (-not $startupRestoreReadiness.Ready -or
+        $startupRestoreReadiness.LastProgressStage -ne "persisted native authoring source" -or
+        $startupRestoreReadiness.ProgressStagesObserved -ne 6) {
+        throw "The packaged relaunch readiness result omitted a required native source/material restore stage."
+    }
+    Write-Output (
+        "[pass] Persisted native authoring stages reached {0} after {1} ms " +
+        "({2} application stages observed)." -f
+        $startupRestoreReadiness.LastProgressStage,
+        $startupRestoreReadiness.ElapsedMilliseconds,
+        $startupRestoreReadiness.ProgressStagesObserved)
     $restoreWindow = [NativeMethods]::FindProcessWindow(
         [uint32]$startupRestoreProcess.Id,
         "Henka Engine Sandbox 3D")
@@ -4385,6 +7472,12 @@ try {
         -Path $startupScreenshotPath `
         -Description "Packaged startup workspace visual proof"
     Assert-PathExists `
+        -Path $wideLayoutScreenshotPath `
+        -Description "Packaged 1920x1080 responsive-layout visual proof"
+    Assert-PathExists `
+        -Path $expandedLayoutScreenshotPath `
+        -Description "Packaged 2560x1440 responsive-layout visual proof"
+    Assert-PathExists `
         -Path $qaScreenshotPath `
         -Description "Packaged Tools QA visual proof"
     Assert-PathExists `
@@ -4411,6 +7504,12 @@ finally {
     }
     else {
         $env:HENKA_AUTOMATION_INPUT_FILE = $previousAutomationFile
+    }
+    if ($null -eq $previousAutomationDiagnostics) {
+        Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTICS -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_DIAGNOSTICS = $previousAutomationDiagnostics
     }
     if ($null -ne $capturedProcess) {
         Close-HenkaCapturedProcess -CapturedProcess $capturedProcess

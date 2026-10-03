@@ -1,12 +1,93 @@
 #include "test_suite.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <henka/persistence.h>
 
 #include "../examples/sandbox3d/editor_ui_state.h"
 #include "../examples/sandbox3d/modeling_toolbar.h"
+
+static void henka_test_sandbox3d_editor_transform_fields(void)
+{
+    henka_vec3 vector = {91.0f, 92.0f, 93.0f};
+    henka_quat rotation = {4.0f, 5.0f, 6.0f, 7.0f};
+    henka_quat round_trip;
+    sandbox3d_editor_transform_fields fields;
+    henka_transform source_transform;
+    henka_transform changed_transform;
+    char vector_text[3][SANDBOX3D_EDITOR_TRANSFORM_COMPONENT_TEXT_CAPACITY];
+    char rotation_text[3][SANDBOX3D_EDITOR_TRANSFORM_COMPONENT_TEXT_CAPACITY];
+
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_parse_transform_vector(
+        "-12.5", "0", "3.25", &vector));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(vector.x, -12.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(vector.y, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(vector.z, 3.25f, 0.0001f);
+
+    vector = (henka_vec3){91.0f, 92.0f, 93.0f};
+    HENKA_TEST_ASSERT(!sandbox3d_editor_ui_parse_transform_vector(
+        "1", "2trailing", "3", &vector));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(vector.x, 91.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(vector.y, 92.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(vector.z, 93.0f, 0.0001f);
+
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_parse_transform_euler_degrees(
+        "20", "-35", "120", &rotation));
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_format_transform_euler_degrees(
+        rotation, rotation_text));
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_parse_transform_euler_degrees(
+        rotation_text[0], rotation_text[1], rotation_text[2], &round_trip));
+    HENKA_TEST_ASSERT(fabsf(
+        rotation.x * round_trip.x + rotation.y * round_trip.y +
+        rotation.z * round_trip.z + rotation.w * round_trip.w) > 0.99999f);
+
+    rotation = (henka_quat){4.0f, 5.0f, 6.0f, 7.0f};
+    HENKA_TEST_ASSERT(!sandbox3d_editor_ui_parse_transform_euler_degrees(
+        "nan", "0", "0", &rotation));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(rotation.x, 4.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(rotation.w, 7.0f, 0.0001f);
+
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_format_transform_vector(
+        (henka_vec3){-1.25f, 0.0f, 2.5f}, vector_text));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(strtof(vector_text[0], NULL), -1.25f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(strtof(vector_text[1], NULL), 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(strtof(vector_text[2], NULL), 2.5f, 0.0001f);
+
+    sandbox3d_editor_transform_fields_reset(&fields);
+    source_transform = henka_transform_identity();
+    HENKA_TEST_ASSERT(sandbox3d_editor_transform_fields_sync(
+        &fields, (henka_entity)1U, source_transform));
+    HENKA_TEST_ASSERT(strcmp(fields.position[0], "0") == 0);
+    HENKA_TEST_ASSERT(strcmp(fields.rotation_degrees[2], "0") == 0);
+    HENKA_TEST_ASSERT(strcmp(fields.scale[1], "1") == 0);
+
+    memcpy(fields.position[0], "99", sizeof("99"));
+    HENKA_TEST_ASSERT(sandbox3d_editor_transform_fields_sync(
+        &fields, (henka_entity)1U, source_transform));
+    HENKA_TEST_ASSERT(strcmp(fields.position[0], "99") == 0);
+
+    changed_transform = source_transform;
+    changed_transform.position.x = 1.25f;
+    changed_transform.scale.y = 2.0f;
+    HENKA_TEST_ASSERT(sandbox3d_editor_transform_fields_sync(
+        &fields, (henka_entity)1U, changed_transform));
+    HENKA_TEST_ASSERT(strcmp(fields.position[0], "1.25") == 0);
+    HENKA_TEST_ASSERT(strcmp(fields.scale[1], "2") == 0);
+
+    changed_transform.position.y = NAN;
+    HENKA_TEST_ASSERT(!sandbox3d_editor_transform_fields_sync(
+        &fields, (henka_entity)1U, changed_transform));
+    HENKA_TEST_ASSERT(strcmp(fields.position[0], "1.25") == 0);
+    HENKA_TEST_ASSERT(strcmp(fields.position[1], "0") == 0);
+
+    changed_transform = source_transform;
+    HENKA_TEST_ASSERT(sandbox3d_editor_transform_fields_sync(
+        &fields, (henka_entity)2U, changed_transform));
+    HENKA_TEST_ASSERT(strcmp(fields.position[0], "0") == 0);
+    HENKA_TEST_ASSERT(strcmp(fields.scale[1], "1") == 0);
+}
 
 void henka_test_sandbox3d_editor_ui(void)
 {
@@ -20,6 +101,8 @@ void henka_test_sandbox3d_editor_ui(void)
     settings = NULL;
     HENKA_TEST_ASSERT(
         henka_settings_create(&settings) == HENKA_SUCCESS);
+
+    henka_test_sandbox3d_editor_transform_fields();
 
     sandbox3d_modeling_toolbar_state_reset(&toolbar);
     HENKA_TEST_ASSERT(
@@ -104,6 +187,10 @@ void henka_test_sandbox3d_editor_ui(void)
         state.details_scroll_offset, 0.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         state.details_content_height, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.utility_scroll_offset, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.utility_content_height, 0.0f, 0.0001f);
 
     HENKA_TEST_ASSERT(
         henka_settings_set_bool(
@@ -577,5 +664,98 @@ void henka_test_sandbox3d_editor_ui(void)
             NULL,
             100.0f,
             1));
+
+    sandbox3d_editor_ui_state_reset(&state);
+    state.controls_scroll_offset = 12.0f;
+    state.controls_content_height = 500.0f;
+    state.details_scroll_offset = 24.0f;
+    state.details_content_height = 600.0f;
+    state.utility_content_height = 320.0f;
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_utility_by(
+            &state,
+            100.0f,
+            48.0f));
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_state_store(settings, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(
+            settings,
+            "ui.utility.scroll.offset",
+            -1.0f),
+        48.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(
+            settings,
+            "ui.controls.scroll.offset",
+            -1.0f),
+        12.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(
+            settings,
+            "ui.object_details.scroll.offset",
+            -1.0f),
+        24.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_utility_by(
+            &state,
+            100.0f,
+            1000.0f));
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_state_store(settings, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(
+            settings,
+            "ui.utility.scroll.offset",
+            -1.0f),
+        220.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_utility_by(
+            &state,
+            100.0f,
+            -48.0f));
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_state_store(settings, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(
+            settings,
+            "ui.utility.scroll.offset",
+            -1.0f),
+        172.0f,
+        0.0001f);
+    state.utility_content_height = 80.0f;
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_utility_by(
+            &state,
+            100.0f,
+            48.0f));
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_state_store(settings, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(
+            settings,
+            "ui.utility.scroll.offset",
+            -1.0f),
+        0.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_utility_by(
+            NULL,
+            100.0f,
+            48.0f));
+    state.utility_scroll_offset = 86.0f;
+    state.utility_content_height = 320.0f;
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_state_store(settings, &state) == HENKA_SUCCESS);
+    sandbox3d_editor_ui_state_reset(&stored);
+    sandbox3d_editor_ui_state_load(settings, &stored);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        stored.utility_scroll_offset,
+        86.0f,
+        0.0001f);
     henka_settings_destroy(settings);
 }

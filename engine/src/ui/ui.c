@@ -4,6 +4,7 @@
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <henka/core.h>
@@ -957,7 +958,7 @@ static henka_result henka_ui_push_border(
 }
 
 #define HENKA_UI_READABILITY_TEXT_SCALE 1.20f
-#define HENKA_UI_MAX_READABILITY_DISPLAY_SCALE 1.125f
+#define HENKA_UI_MAX_READABILITY_DISPLAY_SCALE 1.50f
 
 static float henka_ui_effective_text_scale(
     const henka_ui_context* context,
@@ -1178,7 +1179,9 @@ static henka_result henka_ui_draw_fit_text(
     }
 
     max_characters = henka_ui_clamped_character_count(
-        (float)available_width,
+        (float)fmin(
+            available_width + (double)effective_scale,
+            (double)FLT_MAX),
         6.0f * effective_scale,
         4U,
         sizeof(buffer) - 1U);
@@ -2376,8 +2379,8 @@ static henka_result henka_ui_measure_text_raw(
     int* out_width,
     int* out_height)
 {
-    int current_width;
-    int line_width;
+    double current_width;
+    double line_width;
     int lines;
     size_t index;
     size_t text_length;
@@ -2398,8 +2401,8 @@ static henka_result henka_ui_measure_text_raw(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    line_width = 0;
-    current_width = 0;
+    line_width = 0.0;
+    current_width = 0.0;
     lines = 1;
 
     for (index = 0U; index < text_length; ++index)
@@ -2415,7 +2418,7 @@ static henka_result henka_ui_measure_text_raw(
             continue;
         }
 
-        line_width += (int)(6.0f * scale);
+        line_width += 6.0 * (double)scale;
     }
 
     if (line_width > current_width)
@@ -2423,7 +2426,9 @@ static henka_result henka_ui_measure_text_raw(
         current_width = line_width;
     }
 
-    *out_width = current_width > 0 ? current_width - (int)scale : 0;
+    *out_width = current_width > 0.0
+        ? (int)ceil(current_width - (double)scale)
+        : 0;
     *out_height = (int)(lines * 7.0f * scale + (lines - 1) * scale);
     return HENKA_SUCCESS;
 }
@@ -2656,6 +2661,306 @@ henka_result henka_ui_label(henka_ui_context* context, float x, float y, float s
 {
     return henka_ui_label_colored(context, x, y, scale, text, HENKA_UI_COLOR_NORMAL);
 }
+
+static bool henka_ui_append_text_range(
+    char* buffer,
+    size_t buffer_capacity,
+    size_t* io_length,
+    const char* source,
+    size_t start,
+    size_t end,
+    bool append_newline)
+{
+    size_t index;
+
+    if (buffer == NULL || io_length == NULL || source == NULL ||
+        buffer_capacity == 0U || *io_length >= buffer_capacity || end < start ||
+        end - start > buffer_capacity - 1U - *io_length ||
+        (append_newline && end - start == buffer_capacity - 1U - *io_length))
+    {
+        return false;
+    }
+
+    for (index = start; index < end; ++index)
+    {
+        buffer[*io_length] = source[index];
+        *io_length += 1U;
+    }
+    if (append_newline)
+    {
+        buffer[*io_length] = '\n';
+        *io_length += 1U;
+    }
+    buffer[*io_length] = '\0';
+    return true;
+}
+
+static bool henka_ui_wrap_text(
+    const char* text,
+    size_t text_length,
+    size_t maximum_columns,
+    char* out_wrapped,
+    size_t wrapped_capacity)
+{
+    size_t source_index = 0U;
+    size_t output_length = 0U;
+
+    if (text == NULL || out_wrapped == NULL || wrapped_capacity == 0U ||
+        maximum_columns == 0U)
+    {
+        return false;
+    }
+    out_wrapped[0] = '\0';
+
+    while (source_index < text_length)
+    {
+        size_t line_limit;
+        size_t scan_index;
+        size_t last_space = SIZE_MAX;
+        size_t explicit_newline = SIZE_MAX;
+        size_t line_end;
+        size_t next_source_index;
+        bool append_newline;
+
+        if (text[source_index] == '\n')
+        {
+            if (!henka_ui_append_text_range(
+                    out_wrapped,
+                    wrapped_capacity,
+                    &output_length,
+                    text,
+                    source_index,
+                    source_index,
+                    true))
+            {
+                return false;
+            }
+            source_index += 1U;
+            continue;
+        }
+        while (source_index < text_length &&
+            text[source_index] != '\n' &&
+            isspace((unsigned char)text[source_index]))
+        {
+            source_index += 1U;
+        }
+        if (source_index >= text_length)
+        {
+            break;
+        }
+        if (text[source_index] == '\n')
+        {
+            continue;
+        }
+
+        line_limit = source_index + maximum_columns;
+        if (line_limit < source_index || line_limit > text_length)
+        {
+            line_limit = text_length;
+        }
+        for (scan_index = source_index; scan_index < line_limit; ++scan_index)
+        {
+            if (text[scan_index] == '\n')
+            {
+                explicit_newline = scan_index;
+                break;
+            }
+            if (isspace((unsigned char)text[scan_index]))
+            {
+                last_space = scan_index;
+            }
+        }
+
+        if (explicit_newline != SIZE_MAX)
+        {
+            line_end = explicit_newline;
+            next_source_index = explicit_newline + 1U;
+            append_newline = true;
+        }
+        else if (line_limit < text_length && text[line_limit] == '\n')
+        {
+            line_end = line_limit;
+            next_source_index = line_limit + 1U;
+            append_newline = true;
+        }
+        else if (line_limit < text_length)
+        {
+            if (last_space != SIZE_MAX)
+            {
+                line_end = last_space;
+                next_source_index = last_space + 1U;
+                while (next_source_index < text_length &&
+                    text[next_source_index] != '\n' &&
+                    isspace((unsigned char)text[next_source_index]))
+                {
+                    next_source_index += 1U;
+                }
+            }
+            else
+            {
+                line_end = line_limit;
+                next_source_index = line_limit;
+            }
+            append_newline = true;
+        }
+        else
+        {
+            line_end = text_length;
+            next_source_index = text_length;
+            append_newline = false;
+        }
+
+        if (!henka_ui_append_text_range(
+                out_wrapped,
+                wrapped_capacity,
+                &output_length,
+                text,
+                source_index,
+                line_end,
+                append_newline))
+        {
+            return false;
+        }
+        source_index = next_source_index;
+    }
+    return true;
+}
+
+static henka_result henka_ui_draw_wrapped_text(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    float scale,
+    const char* text,
+    henka_ui_semantic_color color,
+    bool use_heading_color,
+    float* out_height)
+{
+    char wrapped[HENKA_UI_MAX_TEXT_BYTES + 1U] = {0};
+    const float effective_scale =
+        context != NULL ? henka_ui_effective_text_scale(context, scale) : 0.0f;
+    double maximum_columns_value;
+    size_t maximum_columns;
+    size_t source_length;
+    int measured_width = 0;
+    int measured_height = 0;
+    henka_vec4 draw_color;
+    henka_result result;
+
+    if (out_height != NULL)
+    {
+        *out_height = 0.0f;
+    }
+    if (context == NULL || text == NULL || out_height == NULL ||
+        !context->frame_active || !henka_ui_rect_is_finite(bounds) ||
+        bounds.width <= 0.0f || bounds.height <= 0.0f ||
+        !henka_ui_float_is_finite(scale) || scale <= 0.0f ||
+        scale > HENKA_UI_MAX_SCALE ||
+        (!use_heading_color &&
+         (color < HENKA_UI_COLOR_NORMAL || color > HENKA_UI_COLOR_DISABLED)) ||
+        !henka_ui_float_is_finite(effective_scale) || effective_scale <= 0.0f ||
+        !henka_checked_c_string_length(text, HENKA_UI_MAX_TEXT_BYTES, &source_length))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    maximum_columns_value = floor(
+        ((double)bounds.width + (double)effective_scale) /
+        (6.0 * (double)effective_scale));
+    if (!isfinite(maximum_columns_value))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    maximum_columns = maximum_columns_value < 1.0
+        ? 1U
+        : (maximum_columns_value > (double)HENKA_UI_MAX_TEXT_BYTES
+        ? HENKA_UI_MAX_TEXT_BYTES
+        : (size_t)maximum_columns_value);
+    if (!henka_ui_wrap_text(
+            text,
+            source_length,
+            maximum_columns,
+            wrapped,
+            sizeof(wrapped)))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    result = henka_ui_measure_text_raw(
+        wrapped,
+        effective_scale,
+        &measured_width,
+        &measured_height);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    *out_height = (float)measured_height;
+    if ((float)measured_width > bounds.width ||
+        (float)measured_height > bounds.height)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    draw_color = use_heading_color
+        ? g_ui_heading_color
+        : henka_ui_semantic_color_to_vec4(context, color);
+    if (!context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    {
+        henka_ui_draw_checkpoint checkpoint;
+        henka_ui_capture_checkpoint(context, &checkpoint);
+        result = henka_ui_draw_text(
+            context,
+            bounds.x,
+            bounds.y,
+            scale,
+            wrapped,
+            draw_color);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_ui_restore_checkpoint(context, &checkpoint);
+        }
+    }
+    return result;
+}
+
+henka_result henka_ui_heading_wrapped(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    float scale,
+    const char* text,
+    float* out_height)
+{
+    return henka_ui_draw_wrapped_text(
+        context,
+        bounds,
+        scale,
+        text,
+        HENKA_UI_COLOR_NORMAL,
+        true,
+        out_height);
+}
+
+henka_result henka_ui_label_wrapped(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    float scale,
+    const char* text,
+    henka_ui_semantic_color color,
+    float* out_height)
+{
+    return henka_ui_draw_wrapped_text(
+        context,
+        bounds,
+        scale,
+        text,
+        color,
+        false,
+        out_height);
+}
+
 henka_result henka_ui_value_row_colored(
     henka_ui_context* context,
     henka_ui_rect bounds,
@@ -2777,6 +3082,109 @@ henka_result henka_ui_value_row_colored(
             henka_ui_semantic_color_to_vec4(context, value_color));
     }
 
+    if (result != HENKA_SUCCESS)
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+    }
+    return result;
+}
+
+henka_result henka_ui_value_row_colored_wrapped(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    const char* label,
+    const char* value,
+    henka_ui_semantic_color label_color,
+    henka_ui_semantic_color value_color,
+    float* out_height)
+{
+    henka_ui_draw_checkpoint checkpoint;
+    henka_ui_rect value_bounds;
+    henka_ui_rect value_text_bounds;
+    henka_ui_rect measure_bounds;
+    float measured_value_height = 0.0f;
+    float drawn_value_height = 0.0f;
+    float required_height;
+    henka_result measure_result;
+    henka_result result;
+
+    if (out_height != NULL)
+    {
+        *out_height = 0.0f;
+    }
+    if (context == NULL || label == NULL || value == NULL || out_height == NULL ||
+        !context->frame_active || !henka_ui_rect_is_finite(bounds) ||
+        bounds.width <= 0.0f || bounds.height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    value_bounds = (henka_ui_rect){
+        bounds.x + bounds.width * 0.38f,
+        bounds.y + 2.0f,
+        bounds.width - bounds.width * 0.38f - 4.0f,
+        bounds.height - 4.0f};
+    value_text_bounds = (henka_ui_rect){
+        value_bounds.x + 6.0f,
+        bounds.y + 6.0f,
+        value_bounds.width - 12.0f,
+        bounds.height - 10.0f};
+    if (value_text_bounds.width <= 0.0f)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    measure_bounds = value_text_bounds;
+    measure_bounds.height = 0.25f;
+    measure_result = henka_ui_draw_wrapped_text(
+        context,
+        measure_bounds,
+        1.0f,
+        value,
+        value_color,
+        false,
+        &measured_value_height);
+    if ((measure_result != HENKA_ERROR_LIMIT && measure_result != HENKA_SUCCESS) ||
+        !henka_ui_float_is_finite(measured_value_height) ||
+        measured_value_height < 0.0f ||
+        (value[0] != '\0' && measured_value_height <= 0.0f))
+    {
+        return measure_result == HENKA_SUCCESS || measure_result == HENKA_ERROR_LIMIT
+            ? HENKA_ERROR_LIMIT
+            : measure_result;
+    }
+
+    required_height = fmaxf(22.0f, measured_value_height + 10.0f);
+    if (!henka_ui_float_is_finite(required_height))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    *out_height = required_height;
+    if (bounds.height < required_height)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    value_text_bounds.height = bounds.height - 10.0f;
+    henka_ui_capture_checkpoint(context, &checkpoint);
+    result = henka_ui_value_row_colored(
+        context,
+        bounds,
+        label,
+        "",
+        label_color,
+        value_color);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_draw_wrapped_text(
+            context,
+            value_text_bounds,
+            1.0f,
+            value,
+            value_color,
+            false,
+            &drawn_value_height);
+    }
     if (result != HENKA_SUCCESS)
     {
         henka_ui_restore_checkpoint(context, &checkpoint);
@@ -3037,7 +3445,7 @@ bool henka_ui_tab(
         result = henka_ui_draw_fit_text(
             context,
             bounds,
-            10.0f,
+            8.0f,
             bounds.y + 8.0f,
             1.0f,
             label,

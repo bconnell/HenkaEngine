@@ -35,6 +35,53 @@ static bool henka_test_workspace_dock_contains_section(
     return false;
 }
 
+static bool henka_test_controls_page_tab_label_fits(
+    sandbox3d_controls_page page,
+    int framebuffer_width,
+    int framebuffer_height,
+    float panel_width,
+    int* out_label_width,
+    float* out_available_width)
+{
+    henka_ui_context* ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    const henka_ui_rect panel_bounds = {0.0f, 0.0f, panel_width, 180.0f};
+    const henka_ui_rect tab_bounds =
+        sandbox3d_workspace_controls_page_tab_rect(
+            panel_bounds,
+            (size_t)page);
+    const char* label =
+        sandbox3d_workspace_controls_page_tab_label(page);
+    int label_height = 0;
+    bool fits = false;
+
+    if (label == NULL || label[0] == '\0' ||
+        out_label_width == NULL || out_available_width == NULL ||
+        framebuffer_width <= 0 || framebuffer_height <= 0 ||
+        tab_bounds.width <= 20.0f ||
+        henka_ui_create(&ui) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    frame_desc.framebuffer_width = framebuffer_width;
+    frame_desc.framebuffer_height = framebuffer_height;
+    if (henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS &&
+        henka_ui_measure_text_for_context(
+            ui,
+            label,
+            1.0f,
+            out_label_width,
+            &label_height) == HENKA_SUCCESS)
+    {
+        *out_available_width = tab_bounds.width - 20.0f;
+        fits = (float)*out_label_width <= *out_available_width;
+        (void)henka_ui_end_frame(ui);
+    }
+    henka_ui_destroy(ui);
+    return fits;
+}
+
 static void henka_test_sandbox3d_workspace_persistence(void)
 {
     henka_settings* settings = NULL;
@@ -405,6 +452,28 @@ void henka_test_sandbox3d_workspace(void)
         sandbox3d_workspace_clamp_controls_page(99) ==
         SANDBOX3D_CONTROLS_PAGE_QA);
 
+    {
+        int camera_label_width = 0;
+        float camera_label_available_width = 0.0f;
+        const bool camera_label_fits =
+            henka_test_controls_page_tab_label_fits(
+                SANDBOX3D_CONTROLS_PAGE_CAMERA_STATUS,
+                1280,
+                720,
+                300.0f,
+                &camera_label_width,
+                &camera_label_available_width);
+        if (!camera_label_fits)
+        {
+            fprintf(
+                stderr,
+                "Camera/Status tab text width %d exceeds its 1280x720 padded width %.1f.\n",
+                camera_label_width,
+                camera_label_available_width);
+        }
+        HENKA_TEST_ASSERT(camera_label_fits);
+    }
+
     controls_panel_bounds =
         (henka_ui_rect){16.0f, 16.0f, 320.0f, 180.0f};
     for (controls_index = 0U;
@@ -560,6 +629,8 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(topology_layout.divider_count == 3U);
     HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_CONTROLS].width >= 180.0f);
     HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_UTILITY].height >= 180.0f);
+    HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS].height >= 390.0f);
+    HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_UTILITY].height >= 300.0f);
     HENKA_TEST_ASSERT(topology_layout.divider_hit_rects[0].width == 10.0f);
     sandbox3d_workspace_set_ui_scale(&model, 2.0f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(sandbox3d_workspace_get_ui_scale(&model), 2.0f, 0.0001f);
@@ -1125,14 +1196,16 @@ void henka_test_sandbox3d_workspace(void)
     sandbox3d_workspace_begin_dock_resize(
         &model,
         SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK,
-        (henka_vec2){320.0f, 200.0f});
+        (henka_vec2){320.0f, 200.0f},
+        model.left_dock_width);
     sandbox3d_workspace_update_dock_resize(&model, (henka_vec2){370.0f, 200.0f}, 1280, 520.0f, 300.0f, model.right_dock_width);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.left_dock_width, 334.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.right_dock_width, 356.0f, 0.0001f);
     sandbox3d_workspace_begin_dock_resize(
         &model,
         SANDBOX3D_WORKSPACE_RESIZE_RIGHT_DOCK,
-        (henka_vec2){948.0f, 200.0f});
+        (henka_vec2){948.0f, 200.0f},
+        model.right_dock_width);
     sandbox3d_workspace_update_dock_resize(&model, (henka_vec2){898.0f, 200.0f}, 1280, 520.0f, 332.0f, model.left_dock_width);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.right_dock_width, 356.0f, 0.0001f);
 

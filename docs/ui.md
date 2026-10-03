@@ -101,14 +101,16 @@ Henka currently renders text from a small built-in glyph table stored in source 
 - fixed-size glyph rendering;
 - mixed-case labels used by the Sandbox;
 - ASCII-oriented coverage for current engine labels;
+- bounded word wrapping through `henka_ui_label_wrapped`, including hard-wrapping long tokens;
+- required-height reporting with no text draw when the wrapped result exceeds its supplied bounds;
 - self-contained packaging.
 
 ### Current text limitations
 
 - no kerning;
 - no text shaping;
-- no general word-wrapping system;
 - no Unicode layout support;
+- wrapping uses fixed glyph advances and does not provide rich-text layout;
 - no production font stack.
 
 A broader font/text system belongs to the future Runtime Game UI / HUD roadmap work.
@@ -177,6 +179,8 @@ Divider dragging is transactional. Minimum section extents are enforced. Direct 
 Double-clicking a divider equalizes that immediate split through the same topology transaction path.
 
 System horizontal/vertical resize cursors appear on divider and dock-splitter hit regions.
+
+The reset/default dock widths follow the workspace breakpoint at desktop sizes. At 1280×720, Scene Objects uses a 300-pixel dock and Object Details uses a 344-pixel dock. At the wide breakpoint, default Scene Objects and Object Details widths scale with framebuffer width at 15% and 19%, respectively, clamped to 304–480 pixels and 344–560 pixels. Explicit widths set by resizing or a saved workspace layout remain the user's preference. At the narrow breakpoint, the layout clamps the rendered widths to fit without replacing those stored values.
 
 ### Section context menu
 
@@ -271,12 +275,14 @@ The Scene Objects panel can:
 - show hidden state;
 - select one logical object at a time;
 - page through the list in short docks;
+- wrap complete object names into measured-height rows and paginate by available panel height, keeping long-name presentation within the Scene Objects panel;
 - stay aligned with scene tags and bounds.
 
 ### Object Details
 
 The Object Details panel can display:
 
+- a no-selection instruction wrapped to the visible panel width;
 - name;
 - scene tag;
 - visibility;
@@ -295,10 +301,13 @@ Available actions include:
 - visibility change;
 - camera focus;
 - transform reset;
+- component-wise numeric Position, Euler Rotation (degrees), and Scale editing through separate Apply actions;
 - Object Info utility;
 - console object info;
 - supported material-instance editing/reimport/reset;
 - bounded Lua/HenkaScript attachment and source editing in the Game Authoring workflow.
+
+The primary Face-edit operations use measured button widths. They reflow into two columns at ordinary dock widths and stack when the Object Details content region is narrower, without shortening labels or extending controls outside the visible panel body.
 
 ## Panel scrolling and presentation state
 
@@ -368,6 +377,8 @@ Active drags cancel safely when:
 ### Transform hotkeys
 
 The editor-control profile provides action-based Move, Rotate, Scale, axis constraint, confirm, cancel, stepped-adjustment, and fine-adjustment commands.
+
+The Scale gizmo exposes per-axis line handles for changing one scale component and a center handle for uniform scale. Projected axes too short to target reliably are omitted from the current view.
 
 See [editor-controls.md](editor-controls.md) for the current bindings and profile format.
 
@@ -453,7 +464,13 @@ The current Utility panel provides:
 - Settings;
 - Diagnostics;
 - Transform QA;
-- Physics QA.
+- Physics QA;
+- Terrain.
+
+Help, Settings, Physics QA, Terrain, Diagnostics, and Transform QA have
+independent scroll positions below the fixed Utility tabs. Their rows and
+controls are drawn or submitted for pointer interaction only when their full
+bounds fit inside the visible content area.
 
 ### Diagnostics
 
@@ -494,6 +511,10 @@ Physics QA exposes:
 - camera raycast.
 
 Static bodies remain unaffected by gravity/forces/impulses. Dynamic bodies participate in gravity and collision response. Kinematic bodies move through explicit tool or code movement.
+
+The Body Rule explanation wraps within the Utility panel. Body, contact, and event counts use separately labeled rows.
+
+The Physics QA control list scrolls inside the content viewport below the fixed Utility tabs. A control is drawn and hit-tested only while its full row is inside that viewport. Utility scrolling keeps its own offset, separate from Tools and Object Details.
 
 Collider overlays are generated from the same collider descriptions used by physics and are clipped to Scene View.
 
@@ -580,14 +601,12 @@ Picking and gizmo dragging use viewport-relative coordinates. Docked panel and d
 ## Current limitations
 
 - Text rendering is ASCII-oriented and lacks shaping, kerning, Unicode layout, and general wrapping.
-- Scale gizmo interaction is currently uniform-only in the Sandbox path.
 - Scene View cannot detach into a native window yet.
 - Full hierarchy editing is planned separately.
 - Full asset browsing is planned separately.
-- Complete numeric property editing is planned separately.
+- Numeric property editing beyond Position, Rotation, and Scale transforms remains planned separately.
 - Runtime game UI/HUD is a separate future system.
 - Human desktop QA remains required for readability, drag feel, handle clarity, panel balance, and overall workspace presentation.
-- The packaged Sandbox still opens a console window.
 
 ## Future direction
 

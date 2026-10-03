@@ -168,7 +168,7 @@ A missing navigation target disables target-dependent snap/projection actions an
 
 ### Camera presets
 
-`Camera/Status` exposes:
+The compact Tools tab labeled `Camera` opens the Camera/Status page, which exposes:
 
 - Perspective 3D;
 - Side 2.5D;
@@ -417,7 +417,7 @@ The Viewport Tool section exposes:
 
 **Rotate** rotates the selected object around a world axis.
 
-**Scale** uses the center square for uniform scale in the current Sandbox path.
+**Scale** provides one visible line handle per projected world axis for per-axis scaling. The center square applies uniform scale.
 
 The Tools panel also provides snapping state and current move, rotate, and scale snap values.
 
@@ -473,7 +473,7 @@ The Tools panel currently provides:
 - Frame Selected;
 - Reset View;
 - Zoom In / Zoom Out;
-- Camera/Status;
+- Camera tab (Camera/Status page);
 - Perspective / Side / Top-down / Isometric camera presets;
 - Select / Orbit / Pan / Move / Rotate / Scale viewport tools;
 - snap controls;
@@ -516,6 +516,7 @@ Object Details reports:
 - tag when available;
 - visibility;
 - position;
+- rotation;
 - scale;
 - object purpose;
 - mesh summary;
@@ -537,6 +538,11 @@ Safe object actions include:
 - Focus Camera;
 - Reset Transform;
 - Print Object Info.
+
+Selected editable objects expose Position, Rotation (Euler degrees), and Scale as X/Y/Z fields in Object Details; each field group has its own Apply action.
+Inputs are validated before their group is applied; a zero Scale component is
+rejected without changing the live transform. Scroll the Object Details body
+to reach these controls in short windows.
 
 ## Game authoring and Play
 
@@ -664,6 +670,8 @@ Utility > Terrain exposes current Terrain editing and dependency inspection.
 The starter scene reports no terrain content until `Create Terrain` is chosen.
 That action is the ordinary user-facing entry point for creating terrain and
 activating its streaming, rendering, collision, and editing services.
+On short desktop layouts, scroll within the Terrain content area below the
+fixed Utility tabs to reach editing, history, and storage controls.
 
 ### Material layers
 
@@ -769,6 +777,11 @@ Scene View remains the main viewport and is not detachable yet.
 ### Scroll behavior
 
 Tools Main and Object Details use fixed headers with bounded scrollable bodies.
+The Help, Settings, Physics QA, Terrain, Diagnostics, and Transform QA Utility pages scroll
+independently below the fixed Utility tabs when their content exceeds the available height.
+
+Rows and controls on these Utility pages are drawn and hit-tested only while their complete bounds
+fit inside the visible content viewport.
 
 Property groups have:
 
@@ -1032,8 +1045,7 @@ The current Sandbox remains an early engine/editor workspace.
 
 - Production panels can detach into native windows.
 - Scene View is not detachable yet.
-- Current viewport gizmo scope covers world-axis move, rotate, and uniform scale.
-- Per-axis scale handles remain unavailable.
+- The viewport gizmo supports world-axis move and rotate, per-axis scale, and uniform scale from the center handle.
 - Numeric transform editing remains future work.
 - Manual desktop QA remains required for gizmo feel, hover clarity, orbit/pan feel, detached-window interaction, and general viewport ergonomics.
 
@@ -1045,7 +1057,7 @@ The current Sandbox remains an early engine/editor workspace.
 
 ### Console
 
-The packaged Sandbox currently opens a console window. In-window utilities and status provide the primary viewer workflow. Console output remains available for logs, warnings, and automated checks.
+The packaged Sandbox opens without a separate console window. In-window utilities and status provide the primary viewer workflow. When automation launches the application with redirected standard streams, diagnostic and readiness output remains available to the caller.
 
 More UI detail is available in [ui.md](../ui.md).
 

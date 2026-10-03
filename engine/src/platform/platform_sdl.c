@@ -37,6 +37,25 @@ static bool henka_platform_automation_diagnostics_enabled(void)
 #endif
 }
 
+static bool henka_platform_automated_test_windows_hidden(void)
+{
+#if defined(_WIN32)
+    char* value = NULL;
+    size_t value_length = 0U;
+    bool hidden = false;
+    if (_dupenv_s(&value, &value_length, "HENKA_AUTOMATED_TEST_WINDOWS_HIDDEN") == 0 &&
+        value != NULL)
+    {
+        hidden = strcmp(value, "1") == 0;
+    }
+    free(value);
+    return hidden;
+#else
+    const char* value = getenv("HENKA_AUTOMATED_TEST_WINDOWS_HIDDEN");
+    return value != NULL && strcmp(value, "1") == 0;
+#endif
+}
+
 static bool henka_platform_append_text_input(
     henka_input_state* input,
     const char* text);
@@ -1023,6 +1042,10 @@ henka_result henka_platform_create(
     }
 
     window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+    if (henka_platform_automated_test_windows_hidden())
+    {
+        window_flags |= SDL_WINDOW_HIDDEN;
+    }
     platform->window = SDL_CreateWindow(
         desc->application_name,
         desc->window_width,
@@ -1185,11 +1208,18 @@ henka_result henka_platform_create_tool_window(
     }
 
     memset(slot, 0, sizeof(*slot));
-    slot->window = SDL_CreateWindow(
+    {
+        Uint32 window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+        if (henka_platform_automated_test_windows_hidden())
+        {
+            window_flags |= SDL_WINDOW_HIDDEN;
+        }
+        slot->window = SDL_CreateWindow(
         desc->title,
         desc->width,
         desc->height,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+            window_flags);
+    }
     if (slot->window == NULL)
     {
         platform->multi_window_available = false;

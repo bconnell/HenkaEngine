@@ -6,6 +6,7 @@
 
 #include <henka/persistence.h>
 #include <henka/result.h>
+#include <henka/scene.h>
 #include <henka/ui.h>
 
 /* Presentation-only scroll state. It deliberately does not carry any engine
@@ -50,11 +51,57 @@ typedef struct sandbox3d_editor_ui_state
     float controls_content_height;
     float details_scroll_offset;
     float details_content_height;
+    float utility_scroll_offset;
+    float utility_content_height;
     bool controls_scroll_dragging;
     bool details_scroll_dragging;
+    bool utility_scroll_dragging;
     float controls_scroll_grab_offset;
     float details_scroll_grab_offset;
+    float utility_scroll_grab_offset;
 } sandbox3d_editor_ui_state;
+
+#define SANDBOX3D_EDITOR_TRANSFORM_COMPONENT_TEXT_CAPACITY 24U
+
+typedef struct sandbox3d_editor_transform_fields
+{
+    bool initialized;
+    henka_entity entity;
+    henka_vec3 source_position;
+    henka_quat source_rotation;
+    henka_vec3 source_scale;
+    char position[3][SANDBOX3D_EDITOR_TRANSFORM_COMPONENT_TEXT_CAPACITY];
+    char rotation_degrees[3][SANDBOX3D_EDITOR_TRANSFORM_COMPONENT_TEXT_CAPACITY];
+    char scale[3][SANDBOX3D_EDITOR_TRANSFORM_COMPONENT_TEXT_CAPACITY];
+} sandbox3d_editor_transform_fields;
+
+void sandbox3d_editor_transform_fields_reset(
+    sandbox3d_editor_transform_fields* fields);
+
+bool sandbox3d_editor_transform_fields_sync(
+    sandbox3d_editor_transform_fields* fields,
+    henka_entity entity,
+    henka_transform transform);
+
+bool sandbox3d_editor_ui_parse_transform_vector(
+    const char* x_text,
+    const char* y_text,
+    const char* z_text,
+    henka_vec3* out_value);
+
+bool sandbox3d_editor_ui_parse_transform_euler_degrees(
+    const char* x_text,
+    const char* y_text,
+    const char* z_text,
+    henka_quat* out_value);
+
+bool sandbox3d_editor_ui_format_transform_vector(
+    henka_vec3 value,
+    char output[3][SANDBOX3D_EDITOR_TRANSFORM_COMPONENT_TEXT_CAPACITY]);
+
+bool sandbox3d_editor_ui_format_transform_euler_degrees(
+    henka_quat value,
+    char output[3][SANDBOX3D_EDITOR_TRANSFORM_COMPONENT_TEXT_CAPACITY]);
 
 void sandbox3d_editor_ui_state_reset(
     sandbox3d_editor_ui_state* state);
@@ -111,6 +158,11 @@ bool sandbox3d_editor_ui_scroll_controls_by(
     float delta_pixels);
 
 bool sandbox3d_editor_ui_scroll_details_by(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    float delta_pixels);
+
+bool sandbox3d_editor_ui_scroll_utility_by(
     sandbox3d_editor_ui_state* state,
     float viewport_height,
     float delta_pixels);

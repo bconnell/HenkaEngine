@@ -378,6 +378,12 @@ endif()
 
 if(WIN32)
     add_test(
+        NAME henka_sandbox3d_authoring_diagnostics_contract_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_sandbox3d_authoring_diagnostics_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_fullscreen_presentation_mapping_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_fullscreen_presentation_windows.ps1
@@ -1077,6 +1083,8 @@ endif()
 henka_enable_project_warnings(henka_tests)
 
 add_test(NAME henka_tests COMMAND henka_tests)
+set_tests_properties(henka_tests PROPERTIES
+    ENVIRONMENT "HENKA_AUTOMATED_TEST_WINDOWS_HIDDEN=1")
 endif()
 
 add_executable(henka_authoring_quad_recovery_tests

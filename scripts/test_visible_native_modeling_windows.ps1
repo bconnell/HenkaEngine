@@ -1043,18 +1043,14 @@ try {
     # exists, making a valid mesh appear like an overexposed white silhouette.
     # Use the reported Scene View control geometry and verify the app-owned
     # shading transition rather than assuming a coordinate or mode.
-    $shadingControls = Get-LastMatch `
-        -Path $stdoutPath `
-        -Pattern 'Viewport shading controls: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) button=(?<button>[-0-9.]+) gap=(?<gap>[-0-9.]+)'
-    $shadingX = [double]::Parse($shadingControls.Groups["x"].Value, [Globalization.CultureInfo]::InvariantCulture)
-    $shadingY = [double]::Parse($shadingControls.Groups["y"].Value, [Globalization.CultureInfo]::InvariantCulture)
-    $shadingButtonWidth = [double]::Parse($shadingControls.Groups["button"].Value, [Globalization.CultureInfo]::InvariantCulture)
-    $shadingGap = [double]::Parse($shadingControls.Groups["gap"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $solidShadingControl = Get-HenkaViewportShadingControl `
+        -LogPath $stdoutPath `
+        -ModeName "Solid"
     $solidModeCount = Get-LogMatchCount -Path $stdoutPath -Pattern 'Viewport shading: Solid\.'
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
-        -X ($shadingX + ($shadingButtonWidth + $shadingGap) + ($shadingButtonWidth * 0.5)) `
-        -Y ($shadingY + 11.0)
+        -X ($solidShadingControl.X + ($solidShadingControl.Width * 0.5)) `
+        -Y ($solidShadingControl.Y + ($solidShadingControl.Height * 0.5))
     if (-not (Wait-LogMatchCountIncrease `
             -Path $stdoutPath `
             -InitialCount $solidModeCount `

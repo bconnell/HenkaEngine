@@ -334,6 +334,7 @@ The scene renders inside its own docked viewport when panels are visible.
 Starts have no selected scene object until you select one.
 Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale from the Viewport Tool section.
 Use M or G, R, and S for action-based transforms. X, Y, and Z constrain an active transform; Enter applies it and Escape cancels it.
+Selected editable objects expose Position, Rotation (Euler degrees), and Scale as X/Y/Z fields in Object Details; each field group has its own Apply action.
 Use the in-window utilities for help, legend, paths, settings, diagnostics, Transform QA, and Physics QA.
 Editable selected scene objects show a viewport transform highlight until selection is cleared.
 While native mesh editing is active, the most recently picked vertex, edge, or face receives a stronger mode-specific highlight while multi-selection remains visible.

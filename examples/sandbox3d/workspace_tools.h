@@ -28,6 +28,8 @@ typedef enum sandbox3d_workspace_dock_zone
 
 #define SANDBOX3D_WORKSPACE_DOCK_MASK_LEFT (1U << SANDBOX3D_WORKSPACE_DOCK_LEFT)
 #define SANDBOX3D_WORKSPACE_DOCK_MASK_RIGHT (1U << SANDBOX3D_WORKSPACE_DOCK_RIGHT)
+#define SANDBOX3D_WORKSPACE_RESET_LEFT_DOCK_WIDTH 320.0f
+#define SANDBOX3D_WORKSPACE_RESET_RIGHT_DOCK_WIDTH 540.0f
 
 #define SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES 16U
 #define SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS SANDBOX3D_WORKSPACE_PANEL_COUNT
@@ -406,7 +408,8 @@ void sandbox3d_workspace_update_panel_resize(
 void sandbox3d_workspace_begin_dock_resize(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_resize_target target,
-    henka_vec2 pointer);
+    henka_vec2 pointer,
+    float rendered_dock_width);
 void sandbox3d_workspace_update_dock_resize(
     sandbox3d_workspace_model* model,
     henka_vec2 pointer,
@@ -567,6 +570,7 @@ sandbox3d_workspace_dock_zone sandbox3d_workspace_evaluate_dock_zone(
     henka_ui_rect right_dock,
     float dock_margin);
 int sandbox3d_workspace_clamp_controls_page(int page);
+const char* sandbox3d_workspace_controls_page_tab_label(int page);
 henka_ui_rect sandbox3d_workspace_controls_page_tab_rect(
     henka_ui_rect panel_bounds,
     size_t page_index);

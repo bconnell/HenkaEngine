@@ -32,6 +32,20 @@ int sandbox3d_workspace_clamp_controls_page(int page)
     return page;
 }
 
+const char* sandbox3d_workspace_controls_page_tab_label(int page)
+{
+    switch (sandbox3d_workspace_clamp_controls_page(page))
+    {
+        case SANDBOX3D_CONTROLS_PAGE_CAMERA_STATUS:
+            return "Camera";
+        case SANDBOX3D_CONTROLS_PAGE_QA:
+            return "QA";
+        case SANDBOX3D_CONTROLS_PAGE_MAIN:
+        default:
+            return "Main";
+    }
+}
+
 henka_ui_rect sandbox3d_workspace_controls_page_tab_rect(
     henka_ui_rect panel_bounds,
     size_t page_index)
@@ -431,7 +445,7 @@ static void sandbox3d_workspace_topology_initialize(
         5U,
         6U,
         SANDBOX3D_WORKSPACE_SPLIT_VERTICAL,
-        0.62f);
+        0.56f);
     sandbox3d_workspace_topology_make_section(
         &model->topology_nodes[5], SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
     sandbox3d_workspace_topology_make_section(
@@ -1509,8 +1523,8 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
     model->right_dock_panels[1] = SANDBOX3D_WORKSPACE_PANEL_UTILITY;
     model->left_dock_panel_count = 2U;
     model->right_dock_panel_count = 2U;
-    model->left_dock_width = 320.0f;
-    model->right_dock_width = 540.0f;
+    model->left_dock_width = SANDBOX3D_WORKSPACE_RESET_LEFT_DOCK_WIDTH;
+    model->right_dock_width = SANDBOX3D_WORKSPACE_RESET_RIGHT_DOCK_WIDTH;
     model->ui_scale = 1.0f;
     model->hovered_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->keyboard_focus_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
@@ -1975,19 +1989,19 @@ void sandbox3d_workspace_update_panel_resize(
 void sandbox3d_workspace_begin_dock_resize(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_resize_target target,
-    henka_vec2 pointer)
+    henka_vec2 pointer,
+    float rendered_dock_width)
 {
     if (model == NULL ||
         (target != SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK &&
-         target != SANDBOX3D_WORKSPACE_RESIZE_RIGHT_DOCK))
+         target != SANDBOX3D_WORKSPACE_RESIZE_RIGHT_DOCK) ||
+        !isfinite(rendered_dock_width) || rendered_dock_width <= 0.0f)
     {
         return;
     }
     model->resize_target = target;
     model->resize_start_mouse = pointer;
-    model->resize_start_width = target == SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK
-        ? model->left_dock_width
-        : model->right_dock_width;
+    model->resize_start_width = rendered_dock_width;
     snprintf(model->last_action, sizeof(model->last_action), "%s dock resizing", target == SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK ? "Left" : "Right");
 }
 

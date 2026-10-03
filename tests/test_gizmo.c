@@ -62,6 +62,26 @@ void henka_test_gizmo(void)
         &transformed) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transformed.position.x, 123.0f, 0.0001f);
 
+    memset(&drag, 0, sizeof(drag));
+    drag.dragging = true;
+    drag.active_mode = HENKA_GIZMO_MODE_SCALE;
+    drag.active_axis = HENKA_GIZMO_AXIS_X;
+    drag.drag_start_transform = henka_transform_identity();
+    drag.drag_start_transform.scale = (henka_vec3){1.0f, 2.0f, 3.0f};
+    drag.drag_center_screen = (henka_vec2){100.0f, 100.0f};
+    drag.drag_axis_screen_direction = (henka_vec2){1.0f, 0.0f};
+    drag.drag_start_projection = 40.0f;
+    snap.enabled = false;
+    transformed = drag.drag_start_transform;
+    HENKA_TEST_ASSERT(henka_gizmo_apply_drag_to_transform(
+        &drag,
+        (henka_vec2){160.0f, 100.0f},
+        &snap,
+        &transformed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transformed.scale.x, 1.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transformed.scale.y, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transformed.scale.z, 3.0f, 0.0001f);
+
     HENKA_TEST_ASSERT(
         henka_gizmo_hit_test_axis(
             (henka_vec3){0.0f, 0.0f, 0.0f},
@@ -324,6 +344,72 @@ void henka_test_gizmo(void)
         (henka_vec2){(float)viewport.x + screen_point.x, (float)viewport.y + screen_point.y},
         1.0f,
         &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.handle_count >= 2U);
+    HENKA_TEST_ASSERT(model.handle_count <= 4U);
+
+    for (handle_index = 0U; handle_index < model.handle_count; ++handle_index)
+    {
+        if (model.handles[handle_index].axis == HENKA_GIZMO_AXIS_X &&
+            model.handles[handle_index].type == HENKA_GIZMO_HANDLE_SCALE_AXIS)
+        {
+            screen_point = (henka_vec2){
+                (model.handles[handle_index].screen_start.x + model.handles[handle_index].screen_end.x) * 0.5f,
+                (model.handles[handle_index].screen_start.y + model.handles[handle_index].screen_end.y) * 0.5f};
+            break;
+        }
+    }
+    HENKA_TEST_ASSERT(handle_index < model.handle_count);
+    HENKA_TEST_ASSERT(henka_gizmo_build_model(
+        &camera,
+        viewport,
+        cube,
+        transform,
+        HENKA_GIZMO_MODE_SCALE,
+        (henka_vec2){(float)viewport.x + screen_point.x, (float)viewport.y + screen_point.y},
+        1.0f,
+        &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_gizmo_hit_test_model(&model, &hit) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(hit.hit);
+    HENKA_TEST_ASSERT(hit.axis == HENKA_GIZMO_AXIS_X);
+    HENKA_TEST_ASSERT(hit.type == HENKA_GIZMO_HANDLE_SCALE_AXIS);
+    HENKA_TEST_ASSERT(henka_gizmo_begin_drag(&model, &hit, &drag) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_gizmo_apply_drag_to_transform(
+        &drag,
+        (henka_vec2){
+            drag.drag_start_mouse_local.x + drag.drag_axis_screen_direction.x * 20.0f,
+            drag.drag_start_mouse_local.y + drag.drag_axis_screen_direction.y * 20.0f},
+        &snap,
+        &transformed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(transformed.scale.x != transform.scale.x);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transformed.scale.y, transform.scale.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transformed.scale.z, transform.scale.z, 0.0001f);
+
+    for (handle_index = 0U; handle_index < model.handle_count; ++handle_index)
+    {
+        if (model.handles[handle_index].type == HENKA_GIZMO_HANDLE_SCALE_UNIFORM)
+        {
+            screen_point = model.handles[handle_index].screen_center;
+            break;
+        }
+    }
+    HENKA_TEST_ASSERT(handle_index < model.handle_count);
+    HENKA_TEST_ASSERT(henka_gizmo_build_model(
+        &camera,
+        viewport,
+        cube,
+        transform,
+        HENKA_GIZMO_MODE_SCALE,
+        (henka_vec2){(float)viewport.x + screen_point.x, (float)viewport.y + screen_point.y},
+        1.0f,
+        &model) == HENKA_SUCCESS);
+    for (handle_index = 0U; handle_index < model.handle_count; ++handle_index)
+    {
+        if (model.handles[handle_index].type == HENKA_GIZMO_HANDLE_SCALE_UNIFORM)
+        {
+            break;
+        }
+    }
+    HENKA_TEST_ASSERT(handle_index < model.handle_count);
     HENKA_TEST_ASSERT(henka_gizmo_hit_test_model(&model, &hit) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(hit.hit);
     HENKA_TEST_ASSERT(hit.axis == HENKA_GIZMO_AXIS_UNIFORM);

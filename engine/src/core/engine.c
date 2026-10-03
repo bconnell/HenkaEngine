@@ -699,7 +699,6 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
         }
         return result;
     }
-
     henka_renderer_clear_frame(engine->renderer);
 
     /*
@@ -819,7 +818,6 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
             result,
             "main-window presentation");
     }
-
     if (engine->asset_manager != NULL)
     {
         result = henka_assets_end_texture_residency_frame(
@@ -1094,7 +1092,6 @@ henka_result henka_engine_run(henka_engine* engine)
     henka_result run_result;
     char automation_diagnostics_value[8];
     bool automation_diagnostics_enabled;
-    uint32_t automation_diagnostic_frame_report_count;
 
     result = henka_engine_begin_run_transition(engine);
     if (result != HENKA_SUCCESS)
@@ -1126,7 +1123,6 @@ henka_result henka_engine_run(henka_engine* engine)
             automation_diagnostics_value,
             sizeof(automation_diagnostics_value)) &&
         strcmp(automation_diagnostics_value, "1") == 0;
-    automation_diagnostic_frame_report_count = 0U;
     HENKA_LOG_INFO("entering engine run loop");
 
     while (henka_engine_should_continue_run(engine))
@@ -1134,12 +1130,10 @@ henka_result henka_engine_run(henka_engine* engine)
         bool report_automation_frame;
         henka_time_tick(&engine->time);
         report_automation_frame = automation_diagnostics_enabled &&
-            automation_diagnostic_frame_report_count < 256U &&
             (engine->time.frame_index <= 5U ||
              engine->time.frame_index % 30U == 0U);
         if (report_automation_frame)
         {
-            ++automation_diagnostic_frame_report_count;
             printf(
                 "HENKA_AUTOMATION_DIAGNOSTIC frame seq=%llu phase=loop-begin records=%llu\n",
                 (unsigned long long)engine->time.frame_index,

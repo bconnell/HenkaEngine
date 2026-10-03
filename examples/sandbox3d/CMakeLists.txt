@@ -35,10 +35,22 @@ add_executable(henka_sandbox3d
     main.c
 )
 
+if(WIN32)
+    set_target_properties(henka_sandbox3d PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
+
 target_link_libraries(henka_sandbox3d
     PRIVATE
         henka
 )
+
+if(TARGET SDL3::SDL3)
+    target_link_libraries(henka_sandbox3d PRIVATE SDL3::SDL3)
+elseif(TARGET SDL3::SDL3-static)
+    target_link_libraries(henka_sandbox3d PRIVATE SDL3::SDL3-static)
+else()
+    message(FATAL_ERROR "SDL3 target was not created or supplied for the Sandbox entry point.")
+endif()
 
 if(HENKA_ENABLE_KTX2_TRANSCODER)
     target_compile_definitions(henka_sandbox3d PRIVATE HENKA_WITH_KTX2_TRANSCODER=1)
