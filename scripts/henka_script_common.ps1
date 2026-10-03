@@ -468,34 +468,112 @@ function Test-HenkaCMakeConfigurationReady {
 function Get-HenkaCTestCommandRecords {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$BuildRoot
+        [string]$BuildRoot,
+
+        [ValidateSet("Debug", "Release")]
+        [string]$Configuration = "Debug",
+
+        [string]$TestFilter = ""
     )
 
-    if (-not (Test-Path -LiteralPath $BuildRoot -PathType Container)) {
+    $testManifest = Join-Path $BuildRoot "CTestTestfile.cmake"
+    if (-not (Test-Path -LiteralPath $BuildRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $testManifest -PathType Leaf)) {
         return @()
     }
 
-    $testFilePaths = @(
-        (Join-Path $BuildRoot "CTestTestfile.cmake"),
-        (Join-Path $BuildRoot "tests\CTestTestfile.cmake")
+    $cmake = Get-HenkaCMakePath
+    $ctest = Get-HenkaCTestPath -CMakePath $cmake
+    $arguments = @(
+        "--test-dir", [System.IO.Path]::GetFullPath($BuildRoot),
+        "-C", $Configuration,
+        "--show-only=json-v1")
+    if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
+        $arguments += @("-R", $TestFilter)
+    }
+
+    $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+    $capture = Invoke-HenkaNativeCapture `
+        -FilePath $ctest `
+        -Arguments $arguments `
+        -WorkingDirectory $repoRoot `
+        -Label "List CTest tests for validation planning" `
+        -TimeoutMilliseconds 120000 `
+        -Quiet
+    $combinedOutput = [string]$capture.Stdout + "`n" + [string]$capture.Stderr
+    if (-not [string]::IsNullOrWhiteSpace($TestFilter) -and
+        $combinedOutput -match '(?im)RegularExpression::compile\(\)|Error in compile|regular expression.{0,80}compile') {
+        $diagnostic = ([string]$capture.Stderr).Trim()
+        if ([string]::IsNullOrWhiteSpace($diagnostic)) {
+            $diagnostic = ([string]$capture.Stdout).Trim()
+        }
+        if ($diagnostic.Length -gt 512) {
+            $diagnostic = $diagnostic.Substring(0, 512)
+        }
+        throw "CTest rejected test filter '$TestFilter'. CTest diagnostics: $diagnostic"
+    }
+
+    $jsonStart = ([string]$capture.Stdout).IndexOf('{')
+    $jsonEnd = ([string]$capture.Stdout).LastIndexOf('}')
+    if ($jsonStart -lt 0 -or $jsonEnd -lt $jsonStart) {
+        throw "CTest did not return a JSON test listing for '$BuildRoot'."
+    }
+    $jsonText = ([string]$capture.Stdout).Substring(
+        $jsonStart, $jsonEnd - $jsonStart + 1)
+    try {
+        $listing = ConvertFrom-Json -InputObject $jsonText -ErrorAction Stop
+    }
+    catch {
+        throw "CTest returned an invalid JSON test listing for '$BuildRoot': $($_.Exception.Message)"
+    }
+    if ([string]$listing.kind -ne "ctestInfo") {
+        throw "CTest returned an unexpected JSON listing kind for '$BuildRoot'."
+    }
+
+    $tests = @($listing.tests | Where-Object { $null -ne $_ })
+    foreach ($test in $tests) {
+        $nameProperty = $test.PSObject.Properties["name"]
+        $commandProperty = $test.PSObject.Properties["command"]
+        if ($null -eq $nameProperty -or $null -eq $commandProperty -or
+            [string]::IsNullOrWhiteSpace([string]$nameProperty.Value)) {
+            $recordSummary = ConvertTo-Json -InputObject $test -Compress -Depth 8
+            throw "CTest returned a test record without a name or command for '$BuildRoot': $recordSummary"
+        }
+        $commandParts = @($commandProperty.Value | Where-Object { $null -ne $_ })
+        if ($commandParts.Count -eq 0 -or
+            [string]::IsNullOrWhiteSpace([string]$commandParts[0])) {
+            throw "CTest returned an empty test command for '$($nameProperty.Value)'."
+        }
+        [pscustomobject]@{
+            Name = [string]$nameProperty.Value
+            Command = [string]$commandParts[0]
+        }
+    }
+}
+
+function Assert-HenkaCTestFilterMatchesRegisteredTests {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildRoot,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$TestFilter,
+
+        [ValidateSet("Debug", "Release")]
+        [string]$Configuration = "Debug"
     )
-    $testFiles = @($testFilePaths | ForEach-Object {
-        if (Test-Path -LiteralPath $_ -PathType Leaf) {
-            Get-Item -LiteralPath $_
-        }
-    })
-    foreach ($testFile in $testFiles) {
-        $text = [System.IO.File]::ReadAllText($testFile.FullName)
-        $matches = [System.Text.RegularExpressions.Regex]::Matches(
-            $text,
-            'add_test\(\[=\[(?<name>[^\]]+)\]=\]\s+"(?<command>[^"]+)"')
-        foreach ($match in $matches) {
-            $command = $match.Groups["command"].Value
-            [pscustomobject]@{
-                Name = $match.Groups["name"].Value
-                Command = $command
-            }
-        }
+
+    if ([string]::IsNullOrWhiteSpace($TestFilter)) {
+        return
+    }
+
+    $records = @(Get-HenkaCTestCommandRecords `
+        -BuildRoot $BuildRoot `
+        -Configuration $Configuration `
+        -TestFilter $TestFilter)
+    if ($records.Count -eq 0) {
+        throw "TestFilter '$TestFilter' matched no registered CTest tests in configuration '$Configuration'."
     }
 }
 
@@ -512,6 +590,14 @@ function Resolve-HenkaValidationPlan {
 
         [string]$BuildTarget = ""
     )
+
+    $matchingTests = @()
+    if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
+        $matchingTests = @(Get-HenkaCTestCommandRecords `
+            -BuildRoot $BuildRoot `
+            -Configuration $Configuration `
+            -TestFilter $TestFilter)
+    }
 
     $explicitTarget = $BuildTarget.Trim()
     if (-not [string]::IsNullOrWhiteSpace($explicitTarget)) {
@@ -538,22 +624,6 @@ function Resolve-HenkaValidationPlan {
         }
     }
 
-    try {
-        $filterRegex = [System.Text.RegularExpressions.Regex]::new($TestFilter)
-    }
-    catch {
-        throw "TestFilter is not a valid regular expression: $TestFilter"
-    }
-
-    $matchingTests = @(Get-HenkaCTestCommandRecords -BuildRoot $BuildRoot |
-        Where-Object { $filterRegex.IsMatch([string]$_.Name) })
-    $configurationMarker = "[\\/]$([System.Text.RegularExpressions.Regex]::Escape($Configuration))[\\/]"
-    $configuredMatches = @($matchingTests | Where-Object {
-        ([string]$_.Command) -match $configurationMarker
-    })
-    if ($configuredMatches.Count -gt 0) {
-        $matchingTests = $configuredMatches
-    }
     if ($matchingTests.Count -ne 1) {
         return [pscustomobject]@{
             TestFilter = $TestFilter
@@ -836,7 +906,8 @@ public sealed class HenkaCapturedProcess : IDisposable
         string stderrPath,
         bool createNoWindow,
         bool startMinimized,
-        bool startVisibleWithoutActivation)
+        bool startVisibleWithoutActivation,
+        string windowsPowerShellModulePath)
     {
         ProcessStartInfo startInfo = new ProcessStartInfo();
         startInfo.FileName = filePath;
@@ -844,6 +915,10 @@ public sealed class HenkaCapturedProcess : IDisposable
         startInfo.WorkingDirectory = workingDirectory;
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = createNoWindow;
+        if (!String.IsNullOrWhiteSpace(windowsPowerShellModulePath))
+        {
+            startInfo.EnvironmentVariables["PSModulePath"] = windowsPowerShellModulePath;
+        }
         if (!createNoWindow && (startMinimized || startVisibleWithoutActivation))
         {
             // Validation may need a native window for PrintWindow or an
@@ -1099,6 +1174,69 @@ public sealed class HenkaCapturedProcess : IDisposable
 '@
 }
 
+function Get-HenkaWindowsPowerShellModulePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+
+    if ([System.IO.Path]::GetFileName($FilePath) -ine "powershell.exe") {
+        return ""
+    }
+
+    $resolvedExecutable = $FilePath
+    if (-not [System.IO.Path]::IsPathRooted($resolvedExecutable)) {
+        $application = Get-Command -Name $FilePath -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($null -eq $application) {
+            return ""
+        }
+        $resolvedExecutable = $application.Source
+    }
+
+    if (-not (Test-Path -LiteralPath $resolvedExecutable -PathType Leaf)) {
+        return ""
+    }
+
+    $nativeModulesPath = Join-Path (Split-Path -Parent $resolvedExecutable) "Modules"
+    if (-not (Test-Path -LiteralPath $nativeModulesPath -PathType Container)) {
+        return ""
+    }
+    $nativeModulesPath = [System.IO.Path]::GetFullPath($nativeModulesPath)
+
+    $orderedPaths = New-Object 'System.Collections.Generic.List[string]'
+    [void]$orderedPaths.Add($nativeModulesPath)
+    $pathSeparator = [System.IO.Path]::PathSeparator
+    $existingModulePath = [System.Environment]::GetEnvironmentVariable("PSModulePath", "Process")
+    if (-not [string]::IsNullOrWhiteSpace($existingModulePath)) {
+        foreach ($entry in $existingModulePath.Split($pathSeparator)) {
+            $trimmedEntry = $entry.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmedEntry)) {
+                continue
+            }
+
+            $entryPath = $trimmedEntry
+            try {
+                $entryPath = [System.IO.Path]::GetFullPath($trimmedEntry)
+            }
+            catch {
+                # Preserve an unusual inherited entry as-is; only the native
+                # Windows PowerShell module path needs explicit precedence.
+            }
+
+            if ([string]::Equals(
+                $entryPath.TrimEnd([char[]]@("\", "/")),
+                $nativeModulesPath.TrimEnd([char[]]@("\", "/")),
+                [System.StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+            [void]$orderedPaths.Add($trimmedEntry)
+        }
+    }
+
+    return ($orderedPaths -join [string]$pathSeparator)
+}
+
 function Start-HenkaProcess {
     param(
         [Parameter(Mandatory = $true)]
@@ -1124,6 +1262,10 @@ function Start-HenkaProcess {
     $startInfo.WorkingDirectory = $WorkingDirectory
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = [bool]$CreateNoWindow
+    $windowsPowerShellModulePath = Get-HenkaWindowsPowerShellModulePath -FilePath $FilePath
+    if (-not [string]::IsNullOrWhiteSpace($windowsPowerShellModulePath)) {
+        $startInfo.EnvironmentVariables["PSModulePath"] = $windowsPowerShellModulePath
+    }
     if (-not $CreateNoWindow -and
         ($StartMinimized -or $StartVisibleWithoutActivation)) {
         # See the captured-process path: hidden creation avoids a transient
@@ -1191,6 +1333,7 @@ function Start-HenkaCapturedProcess {
     if (-not [string]::IsNullOrWhiteSpace($stderrDirectory)) {
         [System.IO.Directory]::CreateDirectory($stderrDirectory) | Out-Null
     }
+    $windowsPowerShellModulePath = Get-HenkaWindowsPowerShellModulePath -FilePath $FilePath
 
     return [HenkaCapturedProcess]::Start(
         $FilePath,
@@ -1200,7 +1343,8 @@ function Start-HenkaCapturedProcess {
         $StderrPath,
         [bool]$CreateNoWindow,
         $StartMinimized,
-        [bool]$StartVisibleWithoutActivation)
+        [bool]$StartVisibleWithoutActivation,
+        $windowsPowerShellModulePath)
 }
 
 function Close-HenkaCapturedProcess {
@@ -1352,7 +1496,9 @@ function Invoke-HenkaNativeCapture {
         [string]$Label,
 
         [ValidateRange(1000, 3600000)]
-        [int]$TimeoutMilliseconds = 180000
+        [int]$TimeoutMilliseconds = 180000,
+
+        [switch]$Quiet
     )
 
     $captureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-native-" + [Guid]::NewGuid().ToString("N"))
@@ -1362,9 +1508,11 @@ function Invoke-HenkaNativeCapture {
     $capturedProcess = $null
 
     try {
-        Write-Host ""
-        Write-Host "==> $Label"
-        Write-Host "    $FilePath $($Arguments -join ' ')"
+        if (-not $Quiet) {
+            Write-Host ""
+            Write-Host "==> $Label"
+            Write-Host "    $FilePath $($Arguments -join ' ')"
+        }
 
         $capturedProcess = Start-HenkaCapturedProcess `
             -FilePath $FilePath `
@@ -1393,11 +1541,13 @@ function Invoke-HenkaNativeCapture {
         $stdout = Read-HenkaSharedText -Path $stdoutPath
         $stderr = Read-HenkaSharedText -Path $stderrPath
 
-        if (-not [string]::IsNullOrWhiteSpace($stdout)) {
-            Write-Host $stdout.TrimEnd()
-        }
-        if (-not [string]::IsNullOrWhiteSpace($stderr)) {
-            Write-Host $stderr.TrimEnd()
+        if (-not $Quiet -or $exitCode -ne 0) {
+            if (-not [string]::IsNullOrWhiteSpace($stdout)) {
+                Write-Host $stdout.TrimEnd()
+            }
+            if (-not [string]::IsNullOrWhiteSpace($stderr)) {
+                Write-Host $stderr.TrimEnd()
+            }
         }
 
         if ($exitCode -ne 0) {

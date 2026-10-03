@@ -20,6 +20,8 @@ typedef struct henka_material_asset henka_material_asset;
 typedef struct henka_gltf_scene_asset henka_gltf_scene_asset;
 typedef struct henka_prefab henka_prefab;
 
+#define HENKA_MATERIAL_MAX_FILE_BYTES ((size_t)65536U)
+
 typedef enum henka_asset_type
 {
     HENKA_ASSET_TYPE_UNKNOWN = 0,
@@ -413,6 +415,33 @@ henka_result henka_assets_adopt_runtime_material(
     henka_asset_manager* manager,
     const char* identity,
     const henka_material* material,
+    henka_material_asset** out_asset);
+/* Saves a validated material to a .material file confined beneath root_path.
+ * path is relative to that root. The file preserves the existing material
+ * sidecar schema; shader and material name remain runtime authorities. Texture
+ * dependencies must be manager-owned and have durable, reloadable source paths. */
+henka_result henka_assets_save_native_material_file(
+    henka_asset_manager* manager,
+    const char* root_path,
+    const char* path,
+    const henka_material* material);
+/* Loads a native .material file confined beneath root_path into the shared
+ * manager-owned material cache. path is relative to that root. The template
+ * supplies runtime-only material state, including the shader and name, which
+ * are not serialized; file-backed properties and texture dependencies replace
+ * their corresponding template values. The cached material borrows the
+ * template's shader and name pointer; both must remain valid for the asset's
+ * lifetime. Output must be empty; equivalent paths under the same root return
+ * the same identity. */
+henka_result henka_assets_load_native_material_asset(
+    henka_asset_manager* manager,
+    const char* root_path,
+    const char* path,
+    const henka_material* material_template,
+    henka_material_asset** out_asset);
+henka_result henka_assets_reload_native_material_asset(
+    henka_asset_manager* manager,
+    const char* path,
     henka_material_asset** out_asset);
 henka_result henka_assets_get_material_asset_material(
     const henka_material_asset* asset,

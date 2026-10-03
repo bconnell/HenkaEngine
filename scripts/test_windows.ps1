@@ -35,6 +35,10 @@ $resolvedDependencyRoot = $DependencyRoot
 $commandTimeoutMilliseconds = $CommandTimeoutSeconds * 1000
 
 if ($SkipBuild) {
+    Assert-HenkaCTestFilterMatchesRegisteredTests `
+        -BuildRoot $buildRoot `
+        -TestFilter $TestFilter `
+        -Configuration $Configuration
     $ctestArguments = @(
     "--test-dir", $buildRoot,
     "--output-on-failure",
@@ -88,17 +92,13 @@ $configurationReady = Test-HenkaCMakeConfigurationReady `
 if ($configurationReady -and
     -not [string]::IsNullOrWhiteSpace($TestFilter) -and
     $validationPlan.Resolution -eq "aggregate-or-unresolved") {
-    try {
-        $filterRegex = [System.Text.RegularExpressions.Regex]::new($TestFilter)
-        $registeredCount = @(Get-HenkaCTestCommandRecords -BuildRoot $buildRoot |
-            Where-Object { $filterRegex.IsMatch([string]$_.Name) }).Count
-        if ($registeredCount -eq 0) {
-            $configurationReady = $false
-            Write-Host "Configure: required to refresh missing CTest metadata for the requested filter."
-        }
-    }
-    catch {
-        throw "TestFilter is not a valid regular expression: $TestFilter"
+    $registeredCount = @(Get-HenkaCTestCommandRecords `
+        -BuildRoot $buildRoot `
+        -Configuration $Configuration `
+        -TestFilter $TestFilter).Count
+    if ($registeredCount -eq 0) {
+        $configurationReady = $false
+        Write-Host "Configure: required to refresh missing CTest metadata for the requested filter."
     }
 }
 foreach ($provider in $fetchContent.ProviderStates) {
@@ -150,6 +150,11 @@ try {
             -BuildTarget $BuildTarget
     }
 
+    Assert-HenkaCTestFilterMatchesRegisteredTests `
+        -BuildRoot $buildRoot `
+        -TestFilter $TestFilter `
+        -Configuration $Configuration
+
     $buildArguments = @("--build", $buildRoot, "--config", $Configuration)
     if (-not [string]::IsNullOrWhiteSpace($validationPlan.BuildTarget)) {
         $buildArguments += @("--target", $validationPlan.BuildTarget)
@@ -198,6 +203,10 @@ $ctestArguments = @(
     "--output-on-failure",
     "--timeout", [string]$PerTestTimeoutSeconds,
     "-C", $Configuration)
+Assert-HenkaCTestFilterMatchesRegisteredTests `
+    -BuildRoot $buildRoot `
+    -TestFilter $TestFilter `
+    -Configuration $Configuration
 if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
     $ctestArguments += @("-R", $TestFilter)
 }

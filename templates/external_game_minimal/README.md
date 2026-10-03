@@ -39,8 +39,11 @@ manager-owned glTF material definition, creates and applies a local material
 instance override, changes a non-overridden source value, reloads the shared
 definition in place, refreshes the instance while preserving its override,
 then resets the instance override and rebinds the scene entity to the current
-definition. The same reloaded mesh is then handed to the graphical scene
-alongside the public Terrain render owner. The run uses only public C17 APIs, validates the shared
+definition. It also saves and reloads a public native `.material` definition,
+retains its manager-owned texture dependency, binds the stable definition to
+the scene, and refreshes the scene after a source edit. The same reloaded mesh
+is then handed to the graphical scene alongside the public Terrain render
+owner. The run uses only public C17 APIs, validates the shared
 four-layer Terrain material contract, deterministic raise and paint commands,
 collision raycast, CPU render-mesh rebuild, transactional region save, and
 restart reload, then requires a visible Rendered draw with HDR and shadow

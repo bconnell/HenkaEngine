@@ -821,6 +821,198 @@ cleanup:
     return result;
 }
 
+static henka_result external_native_material_file_workflow(
+    henka_engine* engine,
+    henka_scene* scene,
+    henka_entity entity,
+    henka_shader* shader)
+{
+    const char* material_path = "external_native_material_workflow.material";
+    const char* texture_path = "assets/textures/cube_albedo.png";
+    henka_asset_manager* assets;
+    henka_texture* texture = NULL;
+    henka_material authored = {0};
+    henka_material loaded = {0};
+    henka_material scene_material = {0};
+    henka_material_asset* asset = NULL;
+    henka_material_asset* reloaded_asset = NULL;
+    const henka_material_asset* scene_asset = NULL;
+    henka_asset_metadata texture_metadata = {0};
+    henka_asset_metadata material_metadata = {0};
+    henka_material_dependency_info dependencies = {0};
+    uint64_t revision_before = 0U;
+    uint64_t revision_after = 0U;
+    uint64_t scene_revision = 0U;
+    size_t refreshed_count = 0U;
+    bool scene_overridden = true;
+    const char* failure_stage = "validate native material workflow inputs";
+    henka_result result;
+
+    if (engine == NULL || scene == NULL || entity == HENKA_INVALID_ENTITY ||
+        shader == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    (void)remove(material_path);
+
+    failure_stage = "load manager-owned texture";
+    result = henka_assets_load_texture(assets, texture_path, &texture);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_get_texture_metadata(assets, texture, &texture_metadata);
+    }
+    if (result != HENKA_SUCCESS || texture == NULL ||
+        texture_metadata.type != HENKA_ASSET_TYPE_TEXTURE ||
+        !texture_metadata.loaded || texture_metadata.fallback ||
+        !texture_metadata.reload_supported)
+    {
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_ASSET_SOURCE : result;
+        goto cleanup;
+    }
+
+    authored = henka_material_default();
+    authored.name = "External Native Material";
+    authored.shader = shader;
+    authored.base_color = (henka_vec4){0.74f, 0.38f, 0.16f, 1.0f};
+    authored.roughness = 0.28f;
+    authored.use_texture = true;
+    authored.base_color_texture = texture;
+    failure_stage = "save and load native material source";
+    result = henka_assets_save_native_material_file(
+        assets, ".", material_path, &authored);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_load_native_material_asset(
+            assets, ".", material_path, &authored, &asset);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_get_material_metadata(assets, asset, &material_metadata);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_get_material_asset_revision(asset, &revision_before);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_get_material_asset_material(asset, &loaded);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_get_material_asset_dependencies(asset, &dependencies);
+    }
+    failure_stage = "verify native material metadata, values, and dependencies";
+    if (result != HENKA_SUCCESS || asset == NULL ||
+        material_metadata.type != HENKA_ASSET_TYPE_MATERIAL ||
+        !material_metadata.loaded || material_metadata.fallback ||
+        !material_metadata.reload_supported || material_metadata.source_path == NULL ||
+        strcmp(material_metadata.source_path, material_path) != 0 ||
+        revision_before == 0U || loaded.shader != shader ||
+        loaded.name == NULL || strcmp(loaded.name, authored.name) != 0 ||
+        fabsf(loaded.base_color.x - authored.base_color.x) > 0.0001f ||
+        fabsf(loaded.base_color.y - authored.base_color.y) > 0.0001f ||
+        fabsf(loaded.base_color.z - authored.base_color.z) > 0.0001f ||
+        fabsf(loaded.roughness - authored.roughness) > 0.0001f ||
+        loaded.base_color_texture != texture || !loaded.use_texture ||
+        dependencies.definition_revision != revision_before ||
+        dependencies.dependency_count != 1U ||
+        dependencies.dependencies[0].slot != HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR ||
+        dependencies.dependencies[0].texture != texture)
+    {
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
+    }
+
+    failure_stage = "bind native material definition to the scene";
+    result = henka_scene_set_entity_material_asset(scene, entity, asset);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_refresh_scene_material_bindings(
+            assets, scene, &refreshed_count);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_get_entity_material_asset(scene, entity, &scene_asset);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_get_entity_material_asset_state(
+            scene, entity, &scene_revision, &scene_overridden);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_get_entity_material(scene, entity, &scene_material);
+    }
+    if (result != HENKA_SUCCESS || refreshed_count == 0U || scene_asset != asset ||
+        scene_revision != revision_before || scene_overridden ||
+        fabsf(scene_material.roughness - authored.roughness) > 0.0001f ||
+        scene_material.base_color_texture != texture)
+    {
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
+    }
+
+    authored.base_color.z = 0.63f;
+    authored.roughness = 0.67f;
+    refreshed_count = 0U;
+    failure_stage = "reload edited source and refresh scene binding";
+    result = henka_assets_save_native_material_file(
+        assets, ".", material_path, &authored);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_reload_native_material_asset(
+            assets, material_path, &reloaded_asset);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_get_material_asset_revision(asset, &revision_after);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_refresh_scene_material_bindings(
+            assets, scene, &refreshed_count);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_get_entity_material(scene, entity, &scene_material);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_get_entity_material_asset_state(
+            scene, entity, &scene_revision, &scene_overridden);
+    }
+    if (result != HENKA_SUCCESS || reloaded_asset != asset ||
+        revision_after <= revision_before || refreshed_count == 0U ||
+        scene_revision != revision_after || scene_overridden ||
+        fabsf(scene_material.base_color.z - authored.base_color.z) > 0.0001f ||
+        fabsf(scene_material.roughness - authored.roughness) > 0.0001f ||
+        scene_material.base_color_texture != texture)
+    {
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
+    }
+
+    printf(
+        "External public native material file save/load, texture dependency, scene binding, and source reload passed (revision %llu->%llu).\n",
+        (unsigned long long)revision_before,
+        (unsigned long long)revision_after);
+    result = HENKA_SUCCESS;
+
+cleanup:
+    if (result != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "External native material workflow failed during %s: %s.\n",
+            failure_stage, henka_result_to_string(result));
+    }
+    (void)remove(material_path);
+    return result;
+}
+
 static henka_result external_authoring_initialize(
     henka_engine* engine,
     external_graphical_terrain_state* state)
@@ -972,6 +1164,18 @@ static henka_result external_authoring_initialize(
     {
         printf(
             "External authoring failure: material asset/instance workflow (%s).\n",
+            henka_result_to_string(result));
+        return result;
+    }
+    result = external_native_material_file_workflow(
+        engine,
+        state->scene,
+        state->authored_entity,
+        state->authored_shader);
+    if (result != HENKA_SUCCESS)
+    {
+        printf(
+            "External authoring failure: native material file workflow (%s).\n",
             henka_result_to_string(result));
         return result;
     }

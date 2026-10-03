@@ -1477,6 +1477,7 @@ void henka_asset_manager_destroy(
     {
         henka_free(manager->material_entries[index]->key);
         henka_free(manager->material_entries[index]->source_path);
+        henka_free(manager->material_entries[index]->resolved_path);
         henka_free(manager->material_entries[index]->display_name);
         henka_free(manager->material_entries[index]);
     }
@@ -4169,7 +4170,8 @@ henka_result henka_assets_load_gltf_material_asset(
     asset = henka_asset_manager_find_material_entry(manager, key);
     if (asset != NULL)
     {
-        if (asset->material.shader != shader)
+        if (asset->source_kind != HENKA_MATERIAL_ASSET_SOURCE_GLTF ||
+            asset->material.shader != shader)
         {
             henka_free(key);
             henka_free(source_path);
@@ -4219,6 +4221,7 @@ henka_result henka_assets_load_gltf_material_asset(
     asset->source_path = source_path;
     asset->display_name = display_name;
     asset->material = candidate;
+    asset->source_kind = HENKA_MATERIAL_ASSET_SOURCE_GLTF;
     asset->revision = 1U;
     asset->metadata.type = HENKA_ASSET_TYPE_MATERIAL;
     asset->metadata.source_path = asset->source_path;
@@ -4228,6 +4231,235 @@ henka_result henka_assets_load_gltf_material_asset(
     asset->metadata.reload_supported = true;
     henka_asset_set_summary(&asset->metadata,
         "glTF material asset loaded through the shared material and texture dependency path.",
+        "");
+    manager->material_entries[manager->material_count++] = asset;
+    *out_asset = asset;
+    return HENKA_SUCCESS;
+}
+
+static bool henka_assets_material_path_has_extension(const char* path)
+{
+    size_t path_length;
+    static const char extension[] = ".material";
+    size_t index;
+
+    if (path == NULL)
+    {
+        return false;
+    }
+    path_length = strlen(path);
+    if (path_length < sizeof(extension) - 1U)
+    {
+        return false;
+    }
+    for (index = 0U; index < sizeof(extension) - 1U; ++index)
+    {
+        const unsigned char actual = (unsigned char)path[
+            path_length - (sizeof(extension) - 1U) + index];
+        const unsigned char expected = (unsigned char)extension[index];
+        if (tolower(actual) != expected)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool henka_assets_resolved_paths_equal(
+    const char* left,
+    const char* right)
+{
+    if (left == NULL || right == NULL)
+    {
+        return false;
+    }
+#if defined(_WIN32)
+    return _stricmp(left, right) == 0;
+#else
+    return strcmp(left, right) == 0;
+#endif
+}
+
+henka_result henka_assets_save_native_material_file(
+    henka_asset_manager* manager,
+    const char* root_path,
+    const char* path,
+    const henka_material* material)
+{
+    char* source_path = NULL;
+    char* resolved_path = NULL;
+    henka_result result;
+
+    if (manager == NULL || manager->engine == NULL || root_path == NULL ||
+        path == NULL || material == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_assets_normalize_source_path(path, &source_path);
+    if (result == HENKA_SUCCESS &&
+        !henka_assets_material_path_has_extension(source_path))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_path_resolve_confined(root_path, source_path, &resolved_path);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_material_asset_file_save(manager, resolved_path, material);
+    }
+    henka_free(resolved_path);
+    henka_free(source_path);
+    return result;
+}
+
+henka_result henka_assets_load_native_material_asset(
+    henka_asset_manager* manager,
+    const char* root_path,
+    const char* path,
+    const henka_material* material_template,
+    henka_material_asset** out_asset)
+{
+    char* key = NULL;
+    char* source_path = NULL;
+    char* resolved_path = NULL;
+    char* display_name = NULL;
+    henka_material_asset* asset;
+    henka_material candidate;
+    henka_result result;
+    size_t initial_texture_count;
+    uint64_t initial_resident_bytes;
+    uint64_t initial_uploaded_bytes;
+
+    if (manager == NULL || manager->engine == NULL || root_path == NULL ||
+        path == NULL || material_template == NULL ||
+        material_template->shader == NULL || out_asset == NULL || *out_asset != NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_normalize_source_path(path, &source_path);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        henka_free(source_path);
+        return result;
+    }
+    if (!henka_assets_material_path_has_extension(source_path))
+    {
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_path_resolve_confined(root_path, source_path, &resolved_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        henka_free(source_path);
+        henka_free(resolved_path);
+        return result;
+    }
+
+    asset = henka_asset_manager_find_material_entry(manager, key);
+    if (asset != NULL)
+    {
+        const bool same_native_source =
+            asset->source_kind == HENKA_MATERIAL_ASSET_SOURCE_NATIVE &&
+            asset->material.shader == material_template->shader &&
+            henka_assets_resolved_paths_equal(asset->resolved_path, resolved_path);
+        henka_free(key);
+        henka_free(source_path);
+        henka_free(resolved_path);
+        if (!same_native_source)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        *out_asset = asset;
+        return HENKA_SUCCESS;
+    }
+
+    initial_texture_count = manager->texture_count;
+    initial_resident_bytes = manager->texture_resident_bytes;
+    initial_uploaded_bytes = manager->texture_uploaded_bytes;
+    result = henka_material_asset_file_load(
+        manager, resolved_path, material_template, &candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_assets_rollback_texture_transaction(
+            manager,
+            initial_texture_count,
+            initial_resident_bytes,
+            initial_uploaded_bytes);
+        henka_free(key);
+        henka_free(source_path);
+        henka_free(resolved_path);
+        return result;
+    }
+    display_name = henka_asset_copy_display_name(source_path);
+    if (display_name == NULL)
+    {
+        henka_assets_rollback_texture_transaction(
+            manager,
+            initial_texture_count,
+            initial_resident_bytes,
+            initial_uploaded_bytes);
+        henka_free(key);
+        henka_free(source_path);
+        henka_free(resolved_path);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    asset = henka_calloc(1U, sizeof(*asset));
+    if (asset == NULL)
+    {
+        henka_assets_rollback_texture_transaction(
+            manager,
+            initial_texture_count,
+            initial_resident_bytes,
+            initial_uploaded_bytes);
+        henka_free(display_name);
+        henka_free(key);
+        henka_free(source_path);
+        henka_free(resolved_path);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    if (manager->material_count == manager->material_capacity)
+    {
+        result = henka_asset_manager_grow_materials(manager);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_assets_rollback_texture_transaction(
+                manager,
+                initial_texture_count,
+                initial_resident_bytes,
+                initial_uploaded_bytes);
+            henka_free(asset);
+            henka_free(display_name);
+            henka_free(key);
+            henka_free(source_path);
+            henka_free(resolved_path);
+            return result;
+        }
+    }
+    asset->key = key;
+    asset->source_path = source_path;
+    asset->resolved_path = resolved_path;
+    asset->display_name = display_name;
+    asset->material = candidate;
+    asset->source_kind = HENKA_MATERIAL_ASSET_SOURCE_NATIVE;
+    asset->revision = 1U;
+    asset->metadata.type = HENKA_ASSET_TYPE_MATERIAL;
+    asset->metadata.source_path = asset->source_path;
+    asset->metadata.display_name = asset->display_name;
+    asset->metadata.loaded = true;
+    asset->metadata.fallback = false;
+    asset->metadata.reload_supported = true;
+    henka_asset_set_summary(
+        &asset->metadata,
+        "Native material file loaded through the shared manager and texture dependency path.",
         "");
     manager->material_entries[manager->material_count++] = asset;
     *out_asset = asset;
@@ -4298,6 +4530,7 @@ henka_result henka_assets_adopt_runtime_material(
     asset->source_path = source_path;
     asset->display_name = display_name;
     asset->material = *material;
+    asset->source_kind = HENKA_MATERIAL_ASSET_SOURCE_RUNTIME;
     asset->revision = 1U;
     asset->metadata.type = HENKA_ASSET_TYPE_MATERIAL;
     asset->metadata.source_path = asset->source_path;
@@ -5042,6 +5275,8 @@ henka_result henka_assets_reload_gltf_material_asset(
     asset = henka_asset_manager_find_material_entry(manager, key);
     henka_free(key);
     if (asset == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    if (asset->source_kind != HENKA_MATERIAL_ASSET_SOURCE_GLTF)
+        return HENKA_ERROR_ASSET_SOURCE;
     result = henka_assets_advance_revision(asset->revision, &next_revision);
     if (result != HENKA_SUCCESS) return result;
 
@@ -5054,6 +5289,72 @@ henka_result henka_assets_reload_gltf_material_asset(
     asset->metadata.fallback = false;
     henka_asset_set_summary(&asset->metadata,
         "glTF material asset reloaded transactionally while preserving the stable asset identity.",
+        "");
+    *out_asset = asset;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_reload_native_material_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_material_asset** out_asset)
+{
+    char* key = NULL;
+    henka_material_asset* asset;
+    henka_material candidate;
+    uint64_t next_revision;
+    size_t initial_texture_count;
+    uint64_t initial_resident_bytes;
+    uint64_t initial_uploaded_bytes;
+    henka_result result;
+
+    if (out_asset != NULL) *out_asset = NULL;
+    if (manager == NULL || path == NULL || out_asset == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    asset = henka_asset_manager_find_material_entry(manager, key);
+    henka_free(key);
+    if (asset == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (asset->source_kind != HENKA_MATERIAL_ASSET_SOURCE_NATIVE ||
+        asset->resolved_path == NULL)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    result = henka_assets_advance_revision(asset->revision, &next_revision);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    initial_texture_count = manager->texture_count;
+    initial_resident_bytes = manager->texture_resident_bytes;
+    initial_uploaded_bytes = manager->texture_uploaded_bytes;
+    result = henka_material_asset_file_load(
+        manager, asset->resolved_path, &asset->material, &candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_assets_rollback_texture_transaction(
+            manager,
+            initial_texture_count,
+            initial_resident_bytes,
+            initial_uploaded_bytes);
+        return result;
+    }
+    asset->material = candidate;
+    asset->revision = next_revision;
+    asset->metadata.loaded = true;
+    asset->metadata.fallback = false;
+    henka_asset_set_summary(
+        &asset->metadata,
+        "Native material file reloaded transactionally while preserving the stable asset identity.",
         "");
     *out_asset = asset;
     return HENKA_SUCCESS;
@@ -5086,10 +5387,20 @@ henka_result henka_assets_reload_material_asset(
         }
         if (entry->source_path == NULL || entry->source_path[0] == '\0')
         {
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            return HENKA_ERROR_ASSET_SOURCE;
         }
-        return henka_assets_reload_gltf_material_asset(
-            manager, entry->source_path, out_asset);
+        switch (entry->source_kind)
+        {
+            case HENKA_MATERIAL_ASSET_SOURCE_GLTF:
+                return henka_assets_reload_gltf_material_asset(
+                    manager, entry->source_path, out_asset);
+            case HENKA_MATERIAL_ASSET_SOURCE_NATIVE:
+                return henka_assets_reload_native_material_asset(
+                    manager, entry->source_path, out_asset);
+            case HENKA_MATERIAL_ASSET_SOURCE_RUNTIME:
+            default:
+                return HENKA_ERROR_ASSET_SOURCE;
+        }
     }
 
     for (index = 0U; index < manager->gltf_scene_count; ++index)

@@ -67,13 +67,14 @@ See [architecture.md](architecture.md) and [runtime-foundations.md](runtime-foun
 - Asset metadata and texture dependencies are manager-owned.
 - Missing textures and supported OBJ failures use visible, validated fallbacks; hard failures propagate when a safe fallback is not valid.
 - Material instances support validated scalar/vector, alpha-mode, and semantic-texture overrides, dependency inspection, revision refresh, and transactional reimport.
+- Public native `.material` APIs save, load, and transactionally reload validated non-terrain definitions with durable manager-owned texture dependencies; external projects exercise the same API and scene-binding path.
 
 ### Not yet available
 
-- Dedicated user-authored material-file authority
 - Text-entry import
 - Drag/drop
 - Dependency-graph tooling
+- A complete editor-facing material-library workflow
 
 See [model-loading.md](model-loading.md) for import limits and failure behavior.
 
