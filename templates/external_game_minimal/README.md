@@ -36,9 +36,10 @@ physics box, verifies duplicate/delete of a user-owned entity, and validates
 an independent public runtime-scene clone whose entity handles remain valid
 while authored transforms stay unchanged. The graphical consumer also loads a
 manager-owned glTF material definition, creates and applies a local material
-instance override, reloads the shared definition in place, refreshes the
-instance while preserving its override, then resets that override back to the
-new definition. The same reloaded mesh is then handed to the graphical scene
+instance override, changes a non-overridden source value, reloads the shared
+definition in place, refreshes the instance while preserving its override,
+then resets the instance override and rebinds the scene entity to the current
+definition. The same reloaded mesh is then handed to the graphical scene
 alongside the public Terrain render owner. The run uses only public C17 APIs, validates the shared
 four-layer Terrain material contract, deterministic raise and paint commands,
 collision raycast, CPU render-mesh rebuild, transactional region save, and

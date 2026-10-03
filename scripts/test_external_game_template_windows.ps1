@@ -201,7 +201,7 @@ $result = Invoke-HenkaNativeCapture `
 if ($result.Stdout -notmatch "External game template initialized\." -or
     $result.Stdout -notmatch "External Terrain material, edit, collision, render-data, save, and restart workflow passed\." -or
     $result.Stdout -notmatch "External public authoring mesh, scene, runtime clone isolation, collision, duplicate/delete, and reload handoff passed\." -or
-    $result.Stdout -notmatch "External public material asset/instance load, override, reload, refresh, and reset workflow passed \(revision [1-9][0-9]*->[1-9][0-9]*\)\." -or
+    $result.Stdout -notmatch "External public material asset/instance load, changed-source reload, override refresh/reset, and definition rebind passed \(revision [1-9][0-9]*->[1-9][0-9]*\)\." -or
     $result.Stdout -notmatch "External public Audio asset, stream asset, real scene object, persistence, spatial movement, listener movement, and stale cleanup workflow passed\." -or
     $result.Stdout -notmatch "External Lua/HenkaScript mixed-language gameplay host workflow passed\." -or
     $result.Stdout -notmatch "External public Prefab save/load/instantiate/override/duplicate/detach workflow passed\." -or

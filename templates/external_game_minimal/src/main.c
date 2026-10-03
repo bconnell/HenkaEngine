@@ -527,13 +527,115 @@ static void external_graphical_terrain_destroy(external_graphical_terrain_state*
 }
 
 
+static bool external_vec4_near(henka_vec4 left, henka_vec4 right, float tolerance)
+{
+    return fabsf(left.x - right.x) <= tolerance &&
+        fabsf(left.y - right.y) <= tolerance &&
+        fabsf(left.z - right.z) <= tolerance &&
+        fabsf(left.w - right.w) <= tolerance;
+}
+
+static bool external_write_material_gltf(
+    const char* path,
+    bool change_material)
+{
+    const char* source_path = "assets/models/henka_marker.gltf";
+    const char* original_base_color =
+        "\"baseColorFactor\": [0.96, 0.72, 0.18, 1.0]";
+    const char* replacement_base_color =
+        "\"baseColorFactor\": [0.13, 0.24, 0.91, 1.0]";
+    const char* original_roughness = "\"roughnessFactor\": 0.82";
+    const char* replacement_roughness = "\"roughnessFactor\": 0.31";
+    FILE* source_file = NULL;
+    FILE* output_file = NULL;
+    char* document = NULL;
+    char* color_value;
+    char* roughness_value;
+    size_t document_length;
+    long source_length;
+    bool success = false;
+
+    if (path == NULL)
+    {
+        return false;
+    }
+#if defined(_WIN32)
+    if (fopen_s(&source_file, source_path, "rb") != 0)
+    {
+        source_file = NULL;
+    }
+#else
+    source_file = fopen(source_path, "rb");
+#endif
+    if (source_file == NULL || fseek(source_file, 0L, SEEK_END) != 0 ||
+        (source_length = ftell(source_file)) <= 0L ||
+        source_length > 1024L * 1024L || fseek(source_file, 0L, SEEK_SET) != 0)
+    {
+        if (source_file != NULL)
+        {
+            (void)fclose(source_file);
+        }
+        return false;
+    }
+    document_length = (size_t)source_length;
+    document = (char*)malloc(document_length + 1U);
+    if (document == NULL ||
+        fread(document, 1U, document_length, source_file) != document_length)
+    {
+        free(document);
+        (void)fclose(source_file);
+        return false;
+    }
+    document[document_length] = '\0';
+    if (fclose(source_file) != 0)
+    {
+        free(document);
+        return false;
+    }
+
+    if (change_material)
+    {
+        color_value = strstr(document, original_base_color);
+        roughness_value = strstr(document, original_roughness);
+        if (color_value == NULL || roughness_value == NULL ||
+            strstr(color_value + 1, original_base_color) != NULL ||
+            strstr(roughness_value + 1, original_roughness) != NULL ||
+            strlen(original_base_color) != strlen(replacement_base_color) ||
+            strlen(original_roughness) != strlen(replacement_roughness))
+        {
+            free(document);
+            return false;
+        }
+        memcpy(color_value, replacement_base_color, strlen(replacement_base_color));
+        memcpy(roughness_value, replacement_roughness, strlen(replacement_roughness));
+    }
+#if defined(_WIN32)
+    if (fopen_s(&output_file, path, "wb") != 0)
+    {
+        output_file = NULL;
+    }
+#else
+    output_file = fopen(path, "wb");
+#endif
+    success = output_file != NULL &&
+        fwrite(document, 1U, document_length, output_file) == document_length;
+    if (output_file != NULL && fclose(output_file) != 0)
+    {
+        success = false;
+    }
+    free(document);
+    return success;
+}
+
 static henka_result external_material_instance_workflow(
     henka_engine* engine,
     henka_scene* scene,
     henka_entity entity,
     henka_shader* shader)
 {
-    const char* material_path = "assets/models/henka_marker.gltf";
+    const char* material_path = "external_material_reload.gltf";
+    const henka_vec4 original_base_color = {0.96f, 0.72f, 0.18f, 1.0f};
+    const henka_vec4 reloaded_base_color = {0.13f, 0.24f, 0.91f, 1.0f};
     henka_asset_manager* assets;
     henka_material_asset* asset = NULL;
     henka_material_asset* reloaded_asset = NULL;
@@ -542,9 +644,14 @@ static henka_result external_material_instance_workflow(
     henka_material effective_material = {0};
     henka_material scene_material = {0};
     henka_asset_metadata metadata = {0};
+    const henka_material_asset* scene_asset = NULL;
     uint64_t revision_before = 0U;
     uint64_t revision_after = 0U;
+    uint64_t scene_revision = 0U;
+    size_t refreshed_count = 0U;
     float override_roughness;
+    const float reloaded_roughness = 0.31f;
+    bool scene_overridden = true;
     henka_result result;
 
     if (engine == NULL || scene == NULL || entity == HENKA_INVALID_ENTITY ||
@@ -558,6 +665,11 @@ static henka_result external_material_instance_workflow(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    if (!external_write_material_gltf(material_path, false))
+    {
+        (void)remove(material_path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
     result = henka_assets_load_gltf_material_asset(
         assets, material_path, shader, &asset);
     if (result == HENKA_SUCCESS)
@@ -569,9 +681,13 @@ static henka_result external_material_instance_workflow(
     if (result != HENKA_SUCCESS || asset == NULL ||
         metadata.source_path == NULL ||
         strcmp(metadata.source_path, material_path) != 0 ||
-        revision_before == 0U)
+        revision_before == 0U ||
+        !external_vec4_near(
+            definition_material.base_color, original_base_color, 0.0001f) ||
+        fabsf(definition_material.roughness - 0.82f) > 0.0001f)
     {
-        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
     }
 
     override_roughness =
@@ -586,11 +702,19 @@ static henka_result external_material_instance_workflow(
     if (result == HENKA_SUCCESS)
         result = henka_scene_get_entity_material(scene, entity, &scene_material);
     if (result != HENKA_SUCCESS ||
-        fabsf(scene_material.roughness - override_roughness) > 0.0001f)
+        fabsf(scene_material.roughness - override_roughness) > 0.0001f ||
+        !external_vec4_near(
+            scene_material.base_color, original_base_color, 0.0001f))
     {
-        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
     }
 
+    if (!external_write_material_gltf(material_path, true))
+    {
+        result = HENKA_ERROR_ASSET_SOURCE;
+        goto cleanup;
+    }
     result = henka_assets_reload_material_asset(assets, asset, &reloaded_asset);
     if (result == HENKA_SUCCESS)
         result = henka_assets_get_material_asset_revision(
@@ -598,7 +722,18 @@ static henka_result external_material_instance_workflow(
     if (result != HENKA_SUCCESS || reloaded_asset != asset ||
         revision_after <= revision_before)
     {
-        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
+    }
+    result = henka_assets_get_material_asset_material(
+        asset, &definition_material);
+    if (result != HENKA_SUCCESS ||
+        !external_vec4_near(
+            definition_material.base_color, reloaded_base_color, 0.0001f) ||
+        fabsf(definition_material.roughness - reloaded_roughness) > 0.0001f)
+    {
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
     }
 
     result = henka_assets_refresh_material_instance(&instance);
@@ -608,9 +743,24 @@ static henka_result external_material_instance_workflow(
     if (result != HENKA_SUCCESS ||
         instance.definition != asset ||
         instance.definition_revision != revision_after ||
-        fabsf(effective_material.roughness - override_roughness) > 0.0001f)
+        fabsf(effective_material.roughness - override_roughness) > 0.0001f ||
+        !external_vec4_near(
+            effective_material.base_color, reloaded_base_color, 0.0001f))
     {
-        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
+    }
+    result = henka_assets_apply_material_instance_to_entity(
+        &instance, scene, entity);
+    if (result == HENKA_SUCCESS)
+        result = henka_scene_get_entity_material(scene, entity, &scene_material);
+    if (result != HENKA_SUCCESS ||
+        fabsf(scene_material.roughness - override_roughness) > 0.0001f ||
+        !external_vec4_near(
+            scene_material.base_color, reloaded_base_color, 0.0001f))
+    {
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
     }
 
     result = henka_assets_material_instance_reset_override(
@@ -628,16 +778,47 @@ static henka_result external_material_instance_workflow(
         result = henka_scene_get_entity_material(scene, entity, &scene_material);
     if (result != HENKA_SUCCESS ||
         fabsf(effective_material.roughness - definition_material.roughness) > 0.0001f ||
-        fabsf(scene_material.roughness - definition_material.roughness) > 0.0001f)
+        fabsf(scene_material.roughness - definition_material.roughness) > 0.0001f ||
+        !external_vec4_near(
+            effective_material.base_color, reloaded_base_color, 0.0001f) ||
+        !external_vec4_near(
+            scene_material.base_color, reloaded_base_color, 0.0001f))
     {
-        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
+    }
+
+    result = henka_scene_set_entity_material_asset(scene, entity, asset);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_refresh_scene_material_bindings(
+            assets, scene, &refreshed_count);
+    if (result == HENKA_SUCCESS)
+        result = henka_scene_get_entity_material_asset(scene, entity, &scene_asset);
+    if (result == HENKA_SUCCESS)
+        result = henka_scene_get_entity_material_asset_state(
+            scene, entity, &scene_revision, &scene_overridden);
+    if (result == HENKA_SUCCESS)
+        result = henka_scene_get_entity_material(scene, entity, &scene_material);
+    if (result != HENKA_SUCCESS || refreshed_count == 0U ||
+        scene_asset != asset || scene_revision != revision_after ||
+        scene_overridden ||
+        !external_vec4_near(
+            scene_material.base_color, reloaded_base_color, 0.0001f) ||
+        fabsf(scene_material.roughness - reloaded_roughness) > 0.0001f)
+    {
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto cleanup;
     }
 
     printf(
-        "External public material asset/instance load, override, reload, refresh, and reset workflow passed (revision %llu->%llu).\n",
+        "External public material asset/instance load, changed-source reload, override refresh/reset, and definition rebind passed (revision %llu->%llu).\n",
         (unsigned long long)revision_before,
         (unsigned long long)revision_after);
-    return HENKA_SUCCESS;
+    result = HENKA_SUCCESS;
+
+cleanup:
+    (void)remove(material_path);
+    return result;
 }
 
 static henka_result external_authoring_initialize(
