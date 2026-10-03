@@ -4318,7 +4318,7 @@ henka_result henka_assets_load_native_material_asset(
     henka_asset_manager* manager,
     const char* root_path,
     const char* path,
-    henka_shader* shader,
+    const henka_material* material_template,
     henka_material_asset** out_asset)
 {
     char* key = NULL;
@@ -4333,7 +4333,8 @@ henka_result henka_assets_load_native_material_asset(
     uint64_t initial_uploaded_bytes;
 
     if (manager == NULL || manager->engine == NULL || root_path == NULL ||
-        path == NULL || shader == NULL || out_asset == NULL || *out_asset != NULL)
+        path == NULL || material_template == NULL ||
+        material_template->shader == NULL || out_asset == NULL || *out_asset != NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -4368,7 +4369,7 @@ henka_result henka_assets_load_native_material_asset(
     {
         const bool same_native_source =
             asset->source_kind == HENKA_MATERIAL_ASSET_SOURCE_NATIVE &&
-            asset->material.shader == shader &&
+            asset->material.shader == material_template->shader &&
             henka_assets_resolved_paths_equal(asset->resolved_path, resolved_path);
         henka_free(key);
         henka_free(source_path);
@@ -4385,7 +4386,7 @@ henka_result henka_assets_load_native_material_asset(
     initial_resident_bytes = manager->texture_resident_bytes;
     initial_uploaded_bytes = manager->texture_uploaded_bytes;
     result = henka_material_asset_file_load(
-        manager, resolved_path, shader, &candidate);
+        manager, resolved_path, material_template, &candidate);
     if (result != HENKA_SUCCESS)
     {
         henka_assets_rollback_texture_transaction(
@@ -5337,7 +5338,7 @@ henka_result henka_assets_reload_native_material_asset(
     initial_resident_bytes = manager->texture_resident_bytes;
     initial_uploaded_bytes = manager->texture_uploaded_bytes;
     result = henka_material_asset_file_load(
-        manager, asset->resolved_path, asset->material.shader, &candidate);
+        manager, asset->resolved_path, &asset->material, &candidate);
     if (result != HENKA_SUCCESS)
     {
         henka_assets_rollback_texture_transaction(

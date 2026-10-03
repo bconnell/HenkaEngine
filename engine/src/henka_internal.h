@@ -911,7 +911,7 @@ henka_result henka_material_asset_file_save(
 henka_result henka_material_asset_file_load(
     henka_asset_manager* manager,
     const char* resolved_path,
-    henka_shader* shader,
+    const henka_material* material_template,
     henka_material* out_material);
 
 #endif

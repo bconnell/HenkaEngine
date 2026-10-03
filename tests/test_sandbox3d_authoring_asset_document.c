@@ -70,10 +70,15 @@ void henka_test_sandbox3d_authoring_asset_document(void)
     henka_material persisted_material;
     henka_material reloaded_material;
     henka_texture* persisted_base_color_texture = NULL;
+    henka_texture_descriptor persisted_texture_descriptor =
+        henka_texture_descriptor_default_color();
+    henka_texture_info persisted_texture_info;
+    henka_texture_info reloaded_texture_info;
     henka_asset_metadata reloaded_texture_metadata;
     const henka_material_asset* reloaded_material_asset = NULL;
     henka_asset_metadata reloaded_material_metadata;
     henka_shader* basic_shader = NULL;
+    bool runtime_material_name_preserved_after_reload = false;
 
     config.application_name = "Henka Native Authoring Asset Document Test";
     config.window_width = 320;
@@ -89,10 +94,22 @@ void henka_test_sandbox3d_authoring_asset_document(void)
         "assets/shaders/basic_lit.vert",
         "assets/shaders/basic_lit.frag",
         &basic_shader) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(henka_assets_load_texture(
+    persisted_texture_descriptor.color_space = HENKA_TEXTURE_COLOR_SPACE_LINEAR;
+    persisted_texture_descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR;
+    persisted_texture_descriptor.mag_filter = HENKA_TEXTURE_FILTER_NEAREST;
+    persisted_texture_descriptor.wrap_u = HENKA_TEXTURE_WRAP_CLAMP_TO_EDGE;
+    persisted_texture_descriptor.wrap_v = HENKA_TEXTURE_WRAP_MIRRORED_REPEAT;
+    persisted_texture_descriptor.generate_mipmaps = false;
+    persisted_texture_descriptor.vertical_flip = true;
+    HENKA_TEST_ASSERT(henka_texture_descriptor_validate(
+        &persisted_texture_descriptor) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_load_texture_with_descriptor(
         henka_engine_get_asset_manager(engine),
         "assets/textures/cube_albedo.png",
+        &persisted_texture_descriptor,
         &persisted_base_color_texture) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_texture_get_info(
+        persisted_base_color_texture, &persisted_texture_info) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_create(
         engine, scene, "test_asset", &document) == HENKA_SUCCESS);
@@ -332,6 +349,29 @@ void henka_test_sandbox3d_authoring_asset_document(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(reloaded_material.ior, 1.31f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(reloaded_material.clearcoat, 0.18f, 0.0001f);
     HENKA_TEST_ASSERT(reloaded_material.base_color_texture != NULL);
+    HENKA_TEST_ASSERT(reloaded_material.base_color_texture == persisted_base_color_texture);
+    HENKA_TEST_ASSERT(henka_texture_get_info(
+        reloaded_material.base_color_texture, &reloaded_texture_info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_texture_info.descriptor.color_space ==
+        persisted_texture_info.descriptor.color_space);
+    HENKA_TEST_ASSERT(reloaded_texture_info.descriptor.min_filter ==
+        persisted_texture_info.descriptor.min_filter);
+    HENKA_TEST_ASSERT(reloaded_texture_info.descriptor.mag_filter ==
+        persisted_texture_info.descriptor.mag_filter);
+    HENKA_TEST_ASSERT(reloaded_texture_info.descriptor.wrap_u ==
+        persisted_texture_info.descriptor.wrap_u);
+    HENKA_TEST_ASSERT(reloaded_texture_info.descriptor.wrap_v ==
+        persisted_texture_info.descriptor.wrap_v);
+    HENKA_TEST_ASSERT(reloaded_texture_info.descriptor.generate_mipmaps ==
+        persisted_texture_info.descriptor.generate_mipmaps);
+    HENKA_TEST_ASSERT(reloaded_texture_info.descriptor.vertical_flip ==
+        persisted_texture_info.descriptor.vertical_flip);
+    HENKA_TEST_ASSERT(reloaded_texture_info.descriptor.usage ==
+        persisted_texture_info.descriptor.usage);
+    HENKA_TEST_ASSERT(reloaded_texture_info.descriptor.anisotropy ==
+        persisted_texture_info.descriptor.anisotropy);
+    HENKA_TEST_ASSERT(reloaded_material.name != NULL &&
+        strcmp(reloaded_material.name, persisted_material.name) == 0);
     HENKA_TEST_ASSERT(henka_assets_get_texture_metadata(
         henka_engine_get_asset_manager(engine),
         reloaded_material.base_color_texture,
@@ -435,6 +475,15 @@ void henka_test_sandbox3d_authoring_asset_document(void)
                 {
                     recovery_reload_result = HENKA_ERROR_UNKNOWN;
                 }
+                else
+                {
+                    henka_material recovered_material;
+                    runtime_material_name_preserved_after_reload =
+                        henka_assets_get_material_asset_material(
+                            restored_asset, &recovered_material) == HENKA_SUCCESS &&
+                        recovered_material.name != NULL &&
+                        strcmp(recovered_material.name, persisted_material.name) == 0;
+                }
             }
         }
         henka_free(material_file_path);
@@ -443,6 +492,7 @@ void henka_test_sandbox3d_authoring_asset_document(void)
         HENKA_TEST_ASSERT(failed_reload_preserved);
         HENKA_TEST_ASSERT(fixture_restored);
         HENKA_TEST_ASSERT(recovery_reload_result == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(runtime_material_name_preserved_after_reload);
     }
     HENKA_TEST_ASSERT(reloaded_material.normal_uv_set == 1);
     HENKA_TEST_ASSERT(reloaded_material.transmission_uv_set == 1);

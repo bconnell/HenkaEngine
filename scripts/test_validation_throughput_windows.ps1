@@ -9,6 +9,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $fixture = Join-Path $repoRoot ("build\test_tmp\validation-throughput-" + [Guid]::NewGuid().ToString("N"))
 $buildRoot = Join-Path $fixture "build"
 $testsRoot = Join-Path $buildRoot "tests"
+$debugTestsRoot = Join-Path $testsRoot "Debug"
 $cachePath = Join-Path $buildRoot "CMakeCache.txt"
 
 function Assert-Condition {
@@ -23,11 +24,21 @@ function Assert-Condition {
 }
 
 try {
-    [System.IO.Directory]::CreateDirectory($testsRoot) | Out-Null
+    [System.IO.Directory]::CreateDirectory($debugTestsRoot) | Out-Null
+    $henkaTestExecutable = Join-Path $debugTestsRoot "henka_tests.exe"
+    $audioTestExecutable = Join-Path $debugTestsRoot "henka_audio_tests.exe"
+    [System.IO.File]::WriteAllBytes($henkaTestExecutable, [byte[]]@())
+    [System.IO.File]::WriteAllBytes($audioTestExecutable, [byte[]]@())
+    $henkaTestExecutableCMake = $henkaTestExecutable.Replace('\', '/')
+    $audioTestExecutableCMake = $audioTestExecutable.Replace('\', '/')
+    [System.IO.File]::WriteAllText(
+        (Join-Path $buildRoot "CTestTestfile.cmake"),
+        'subdirs("tests")' + [Environment]::NewLine,
+        [System.Text.UTF8Encoding]::new($false))
     $ctestFile = Join-Path $testsRoot "CTestTestfile.cmake"
     $ctestText = @(
-        'add_test([=[henka_tests]=] "C:/fixture/build/tests/Debug/henka_tests.exe")',
-        'add_test([=[henka_audio_tests]=] "C:/fixture/build/tests/Debug/henka_audio_tests.exe")',
+        ('add_test([=[henka_tests]=] "' + $henkaTestExecutableCMake + '")'),
+        ('add_test([=[henka_audio_tests]=] "' + $audioTestExecutableCMake + '")'),
         'add_test([=[henka_fullscreen_presentation_mapping_tests]=] "powershell.exe" "-NoProfile")'
     ) -join [Environment]::NewLine
     [System.IO.File]::WriteAllText(
@@ -39,7 +50,8 @@ try {
     try {
         Assert-HenkaCTestFilterMatchesRegisteredTests `
             -BuildRoot $buildRoot `
-            -TestFilter ""
+            -TestFilter "" `
+            -Configuration Debug
         $emptyFilterAccepted = $true
     }
     catch {
@@ -50,18 +62,45 @@ try {
 
     Assert-HenkaCTestFilterMatchesRegisteredTests `
         -BuildRoot $buildRoot `
-        -TestFilter '^henka_tests$'
+        -TestFilter '^henka_tests$' `
+        -Configuration Debug
     $unmatchedFilterRejected = $false
     try {
         Assert-HenkaCTestFilterMatchesRegisteredTests `
             -BuildRoot $buildRoot `
-            -TestFilter '^henka_missing_tests$'
+            -TestFilter '^henka_missing_tests$' `
+            -Configuration Debug
     }
     catch {
         $unmatchedFilterRejected = $_.Exception.Message -match 'matched no registered CTest tests'
     }
     Assert-Condition $unmatchedFilterRejected `
         "A test filter that matches no registered CTest test was not rejected."
+    $invalidPlanRejected = $false
+    try {
+        Resolve-HenkaValidationPlan `
+            -BuildRoot $buildRoot `
+            -Configuration Debug `
+            -TestFilter '(?=henka)henka_tests'
+    }
+    catch {
+        $invalidPlanRejected = $_.Exception.Message -match 'CTest|matched no registered CTest tests'
+    }
+    Assert-Condition $invalidPlanRejected `
+        "Validation-plan resolution accepted a CTest-invalid filter because .NET accepts it."
+    $invalidCtestRegexRejected = $false
+    try {
+        Assert-HenkaCTestFilterMatchesRegisteredTests `
+            -BuildRoot $buildRoot `
+            -TestFilter '(?=henka)henka_tests' `
+            -Configuration Debug
+    }
+    catch {
+        $invalidCtestRegexRejected =
+            $_.Exception.Message -match 'CTest|matched no registered CTest tests'
+    }
+    Assert-Condition $invalidCtestRegexRejected `
+        "A .NET-valid but CTest-invalid lookahead expression was accepted as a successful selection."
     $wrapperRejectedUnmatchedFilter = $false
     try {
         & (Join-Path $repoRoot "scripts\test_windows.ps1") `

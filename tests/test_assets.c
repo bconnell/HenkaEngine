@@ -415,6 +415,7 @@ static void henka_test_runtime_material_cannot_reload_matching_gltf_path(void)
 static void henka_test_native_material_file_authority_and_reload(void)
 {
     static const char* material_path = "build/test_tmp/native-material-authority.material";
+    static const char* tiny_float_path = "build/test_tmp/native-material-tiny-float.material";
     static const char* oversized_path = "build/test_tmp/native-material-oversized.material";
     static const char* legacy_path = "build/test_tmp/native-material-legacy.material";
     static const char* malformed_text = "not a Henka material document\n";
@@ -424,17 +425,21 @@ static void henka_test_native_material_file_authority_and_reload(void)
     henka_shader shader;
     henka_material authored = henka_material_default();
     henka_material loaded;
+    henka_material tiny_float_authored = henka_material_default();
+    henka_material tiny_float_loaded = henka_material_default();
     henka_material instance_material;
     henka_material_instance instance;
     henka_material_asset* asset = NULL;
     henka_material_asset* alias_asset = NULL;
     henka_material_asset* legacy_asset = NULL;
+    henka_material_asset* tiny_float_asset = NULL;
     henka_material_asset* reloaded = NULL;
     henka_material_asset* preserved_output;
     henka_asset_metadata metadata;
     unsigned char* oversized = NULL;
     bool saved = false;
     bool loaded_ok = false;
+    bool tiny_float_round_trip = false;
     bool values_round_trip = false;
     bool metadata_ok = false;
     bool canonical_identity = false;
@@ -502,7 +507,21 @@ static void henka_test_native_material_file_authority_and_reload(void)
     if (saved)
     {
         loaded_ok = henka_assets_load_native_material_asset(
-            manager, ".", material_path, &shader, &asset) == HENKA_SUCCESS && asset != NULL;
+            manager, ".", material_path, &authored, &asset) == HENKA_SUCCESS && asset != NULL;
+    }
+    tiny_float_authored.shader = &shader;
+    tiny_float_authored.attenuation_distance = 1.0e-7f;
+    if (manager != NULL && henka_material_validate(&tiny_float_authored) == HENKA_SUCCESS &&
+        henka_assets_save_native_material_file(
+            manager, ".", tiny_float_path, &tiny_float_authored) == HENKA_SUCCESS &&
+        henka_assets_load_native_material_asset(
+            manager, ".", tiny_float_path, &tiny_float_authored, &tiny_float_asset) == HENKA_SUCCESS &&
+        tiny_float_asset != NULL &&
+        henka_assets_get_material_asset_material(
+            tiny_float_asset, &tiny_float_loaded) == HENKA_SUCCESS)
+    {
+        tiny_float_round_trip =
+            tiny_float_loaded.attenuation_distance == tiny_float_authored.attenuation_distance;
     }
     if (loaded_ok)
     {
@@ -544,7 +563,7 @@ static void henka_test_native_material_file_authority_and_reload(void)
             !metadata.fallback && metadata.reload_supported && metadata.source_path != NULL &&
             strcmp(metadata.source_path, material_path) == 0;
         canonical_identity = henka_assets_load_native_material_asset(
-            manager, ".", alias_path, &shader, &alias_asset) == HENKA_SUCCESS &&
+            manager, ".", alias_path, &authored, &alias_asset) == HENKA_SUCCESS &&
             alias_asset == asset;
         {
             henka_settings* legacy_settings = NULL;
@@ -555,7 +574,7 @@ static void henka_test_native_material_file_authority_and_reload(void)
                 henka_settings_remove(legacy_settings, "material.file_version") == HENKA_SUCCESS &&
                 henka_settings_save_file(legacy_settings, legacy_path) == HENKA_SUCCESS &&
                 henka_assets_load_native_material_asset(
-                    manager, ".", legacy_path, &shader, &legacy_asset) == HENKA_SUCCESS &&
+                    manager, ".", legacy_path, &authored, &legacy_asset) == HENKA_SUCCESS &&
                 henka_assets_get_material_asset_material(
                     legacy_asset, &legacy_material) == HENKA_SUCCESS)
             {
@@ -567,7 +586,7 @@ static void henka_test_native_material_file_authority_and_reload(void)
         }
         preserved_output = (henka_material_asset*)1;
         output_slot_preserved = henka_assets_load_native_material_asset(
-            manager, ".", "build/test_tmp/other.material", &shader,
+            manager, ".", "build/test_tmp/other.material", &authored,
             &preserved_output) == HENKA_ERROR_INVALID_ARGUMENT &&
             preserved_output == (henka_material_asset*)1;
         if (henka_assets_create_material_instance(asset, &instance) == HENKA_SUCCESS &&
@@ -742,7 +761,7 @@ static void henka_test_native_material_file_authority_and_reload(void)
                 henka_material_asset* oversized_asset = NULL;
                 const size_t old_count = manager->material_count;
                 oversized_rejected = henka_assets_load_native_material_asset(
-                    manager, ".", oversized_path, &shader, &oversized_asset) == HENKA_ERROR_LIMIT &&
+                    manager, ".", oversized_path, &authored, &oversized_asset) == HENKA_ERROR_LIMIT &&
                     oversized_asset == NULL && manager->material_count == old_count;
             }
         }
@@ -751,7 +770,7 @@ static void henka_test_native_material_file_authority_and_reload(void)
             traversal_rejected = henka_assets_save_native_material_file(
                     manager, ".", "../outside.material", &authored) == HENKA_ERROR_INVALID_ARGUMENT &&
                 henka_assets_load_native_material_asset(
-                    manager, ".", "../outside.material", &shader,
+                    manager, ".", "../outside.material", &authored,
                     &traversal_asset) == HENKA_ERROR_INVALID_ARGUMENT &&
                 traversal_asset == NULL;
         }
@@ -760,9 +779,11 @@ static void henka_test_native_material_file_authority_and_reload(void)
     henka_free(oversized);
     henka_asset_manager_destroy(manager);
     (void)remove(material_path);
+    (void)remove(tiny_float_path);
     (void)remove(oversized_path);
     (void)remove(legacy_path);
     HENKA_TEST_ASSERT(saved && loaded_ok);
+    HENKA_TEST_ASSERT(tiny_float_round_trip);
     HENKA_TEST_ASSERT(values_round_trip && metadata_ok && canonical_identity &&
         output_slot_preserved && reload_stable && instance_override_preserved);
     HENKA_TEST_ASSERT(legacy_version_accepted);
@@ -849,7 +870,7 @@ static void henka_test_native_material_missing_dependency_is_not_published(void)
                 load_resident_bytes_before = load_manager->texture_resident_bytes;
                 load_uploaded_bytes_before = load_manager->texture_uploaded_bytes;
                 load_result = henka_assets_load_native_material_asset(
-                    load_manager, ".", invalid_path, shader, &invalid_asset);
+                    load_manager, ".", invalid_path, &material, &invalid_asset);
                 load_attempted = true;
                 load_transactional = load_result == HENKA_ERROR_ASSET_SOURCE &&
                     invalid_asset == NULL && load_manager->material_count == 0U &&
@@ -877,7 +898,7 @@ static void henka_test_native_material_missing_dependency_is_not_published(void)
             if (dependency_fixtures_written &&
                 henka_asset_manager_create(engine, &reload_manager) == HENKA_SUCCESS &&
                 henka_assets_load_native_material_asset(
-                    reload_manager, ".", source_path, shader, &reload_asset) == HENKA_SUCCESS &&
+                    reload_manager, ".", source_path, &material, &reload_asset) == HENKA_SUCCESS &&
                 reload_asset != NULL &&
                 henka_assets_get_material_metadata(
                     reload_manager, reload_asset, &prior_reload_metadata) == HENKA_SUCCESS)

@@ -213,13 +213,16 @@ Texture semantic validation remains centralized in `henka_material_validate`.
 
 `henka_assets_save_native_material_file` writes a root-confined `.material`
 file, and `henka_assets_load_native_material_asset` loads it into the same
-manager-owned material cache used by imported definitions. The version-1 file
-stores validated non-terrain material values and manager-owned texture
-dependencies by their reloadable source paths. The runtime shader and material
-name remain runtime authorities and are supplied or assigned outside the file.
-The loader accepts the earlier sidecar schema without a version key as legacy
-version 0; malformed or newer unsupported versions fail closed. Material files
-are limited to 64 KiB.
+manager-owned material cache used by imported definitions. Version 2 files
+store validated non-terrain material values and manager-owned texture
+dependencies by their reloadable source paths, including each dependency's
+validated sampling descriptor. The runtime shader and material name remain
+runtime authorities and are supplied or assigned outside the file. Version 2
+preserves texture color space, filtering, wrapping, mipmap, orientation, usage,
+and anisotropy settings. The loader accepts legacy version 0 files without a
+version key and version 1 files with slot-default texture descriptors;
+malformed or newer unsupported versions fail closed. Material files are
+limited to 64 KiB.
 
 `henka_assets_reload_native_material_asset` parses and validates a complete
 candidate before updating the existing asset identity. A failed source or

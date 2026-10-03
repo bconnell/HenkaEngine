@@ -876,6 +876,7 @@ static henka_result external_native_material_file_workflow(
     }
 
     authored = henka_material_default();
+    authored.name = "External Native Material";
     authored.shader = shader;
     authored.base_color = (henka_vec4){0.74f, 0.38f, 0.16f, 1.0f};
     authored.roughness = 0.28f;
@@ -887,7 +888,7 @@ static henka_result external_native_material_file_workflow(
     if (result == HENKA_SUCCESS)
     {
         result = henka_assets_load_native_material_asset(
-            assets, ".", material_path, shader, &asset);
+            assets, ".", material_path, &authored, &asset);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -912,6 +913,7 @@ static henka_result external_native_material_file_workflow(
         !material_metadata.reload_supported || material_metadata.source_path == NULL ||
         strcmp(material_metadata.source_path, material_path) != 0 ||
         revision_before == 0U || loaded.shader != shader ||
+        loaded.name == NULL || strcmp(loaded.name, authored.name) != 0 ||
         fabsf(loaded.base_color.x - authored.base_color.x) > 0.0001f ||
         fabsf(loaded.base_color.y - authored.base_color.y) > 0.0001f ||
         fabsf(loaded.base_color.z - authored.base_color.z) > 0.0001f ||

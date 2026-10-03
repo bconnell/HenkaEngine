@@ -822,7 +822,7 @@ static henka_result sandbox3d_authoring_asset_load_material_file(
         assets,
         project_root,
         relative_material_path,
-        material_template->shader,
+        material_template,
         out_asset);
     if (result == HENKA_SUCCESS)
     {

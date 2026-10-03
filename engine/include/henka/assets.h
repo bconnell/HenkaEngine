@@ -426,15 +426,18 @@ henka_result henka_assets_save_native_material_file(
     const char* path,
     const henka_material* material);
 /* Loads a native .material file confined beneath root_path into the shared
- * manager-owned material cache. path is relative to that root. The shader is
- * supplied by the caller because shader resources are runtime authorities and
- * are not serialized in the file. Output must be empty; equivalent paths under
- * the same root return the same stable identity. */
+ * manager-owned material cache. path is relative to that root. The template
+ * supplies runtime-only material state, including the shader and name, which
+ * are not serialized; file-backed properties and texture dependencies replace
+ * their corresponding template values. The cached material borrows the
+ * template's shader and name pointer; both must remain valid for the asset's
+ * lifetime. Output must be empty; equivalent paths under the same root return
+ * the same identity. */
 henka_result henka_assets_load_native_material_asset(
     henka_asset_manager* manager,
     const char* root_path,
     const char* path,
-    henka_shader* shader,
+    const henka_material* material_template,
     henka_material_asset** out_asset);
 henka_result henka_assets_reload_native_material_asset(
     henka_asset_manager* manager,

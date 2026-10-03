@@ -5,14 +5,19 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <float.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define HENKA_MATERIAL_FILE_VERSION 1
+#define HENKA_MATERIAL_FILE_VERSION 2
 #define HENKA_MATERIAL_FILE_KEY_CAPACITY 96U
+
+#ifndef FLT_DECIMAL_DIG
+#define FLT_DECIMAL_DIG 9
+#endif
 
 static bool henka_material_file_make_key(
     char* buffer,
@@ -107,10 +112,23 @@ static henka_result henka_material_file_set_float(
     float value)
 {
     char key[HENKA_MATERIAL_FILE_KEY_CAPACITY];
+    char text[32];
+    int length;
 
-    return henka_material_file_make_key(key, sizeof(key), suffix)
-        ? henka_settings_set_float(settings, key, value)
-        : HENKA_ERROR_LIMIT;
+    if (!isfinite(value))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_material_file_make_key(key, sizeof(key), suffix))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    length = snprintf(text, sizeof(text), "%.*g", FLT_DECIMAL_DIG, (double)value);
+    if (length < 0 || (size_t)length >= sizeof(text))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return henka_settings_set_string(settings, key, text);
 }
 
 static henka_result henka_material_file_set_int(
@@ -220,6 +238,145 @@ static bool henka_material_file_get_bool(
     return true;
 }
 
+static bool henka_material_file_make_texture_descriptor_suffix(
+    char* buffer,
+    size_t capacity,
+    const char* texture_suffix,
+    const char* field)
+{
+    int length;
+
+    if (buffer == NULL || capacity == 0U || texture_suffix == NULL || field == NULL)
+    {
+        return false;
+    }
+    length = snprintf(
+        buffer, capacity, "%s.descriptor.%s", texture_suffix, field);
+    return length > 0 && (size_t)length < capacity;
+}
+
+static henka_result henka_material_file_save_texture_descriptor(
+    henka_settings* settings,
+    const char* texture_suffix,
+    const henka_texture_descriptor* descriptor)
+{
+    char suffix[HENKA_MATERIAL_FILE_KEY_CAPACITY];
+    henka_result result = HENKA_SUCCESS;
+
+    if (descriptor == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+#define HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_INT(field, value) do { \
+    if (result == HENKA_SUCCESS && !henka_material_file_make_texture_descriptor_suffix( \
+            suffix, sizeof(suffix), texture_suffix, field)) result = HENKA_ERROR_LIMIT; \
+    if (result == HENKA_SUCCESS) result = henka_material_file_set_int( \
+        settings, suffix, (int)(value)); \
+} while (0)
+#define HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_BOOL(field, value) do { \
+    if (result == HENKA_SUCCESS && !henka_material_file_make_texture_descriptor_suffix( \
+            suffix, sizeof(suffix), texture_suffix, field)) result = HENKA_ERROR_LIMIT; \
+    if (result == HENKA_SUCCESS) result = henka_material_file_set_bool( \
+        settings, suffix, value); \
+} while (0)
+#define HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_FLOAT(field, value) do { \
+    if (result == HENKA_SUCCESS && !henka_material_file_make_texture_descriptor_suffix( \
+            suffix, sizeof(suffix), texture_suffix, field)) result = HENKA_ERROR_LIMIT; \
+    if (result == HENKA_SUCCESS) result = henka_material_file_set_float( \
+        settings, suffix, value); \
+} while (0)
+    HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_INT("color_space", descriptor->color_space);
+    HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_INT("min_filter", descriptor->min_filter);
+    HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_INT("mag_filter", descriptor->mag_filter);
+    HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_INT("wrap_u", descriptor->wrap_u);
+    HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_INT("wrap_v", descriptor->wrap_v);
+    HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_BOOL("generate_mipmaps", descriptor->generate_mipmaps);
+    HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_BOOL("vertical_flip", descriptor->vertical_flip);
+    HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_INT("usage", descriptor->usage);
+    HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_FLOAT("anisotropy", descriptor->anisotropy);
+#undef HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_FLOAT
+#undef HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_BOOL
+#undef HENKA_MATERIAL_FILE_WRITE_DESCRIPTOR_INT
+    return result;
+}
+
+static bool henka_material_file_load_texture_descriptor(
+    const henka_settings* settings,
+    const char* texture_suffix,
+    henka_texture_descriptor* out_descriptor)
+{
+    char suffix[HENKA_MATERIAL_FILE_KEY_CAPACITY];
+    int color_space;
+    int min_filter;
+    int mag_filter;
+    int wrap_u;
+    int wrap_v;
+    int usage;
+    bool generate_mipmaps;
+    bool vertical_flip;
+    float anisotropy;
+
+#define HENKA_MATERIAL_FILE_READ_DESCRIPTOR_INT(field, target) \
+    (!henka_material_file_make_texture_descriptor_suffix( \
+            suffix, sizeof(suffix), texture_suffix, field) || \
+        !henka_material_file_get_int(settings, suffix, &(target)))
+#define HENKA_MATERIAL_FILE_READ_DESCRIPTOR_BOOL(field, target) \
+    (!henka_material_file_make_texture_descriptor_suffix( \
+            suffix, sizeof(suffix), texture_suffix, field) || \
+        !henka_material_file_get_bool(settings, suffix, &(target)))
+#define HENKA_MATERIAL_FILE_READ_DESCRIPTOR_FLOAT(field, target) \
+    (!henka_material_file_make_texture_descriptor_suffix( \
+            suffix, sizeof(suffix), texture_suffix, field) || \
+        !henka_material_file_get_float(settings, suffix, &(target)))
+    if (out_descriptor == NULL ||
+        HENKA_MATERIAL_FILE_READ_DESCRIPTOR_INT("color_space", color_space) ||
+        HENKA_MATERIAL_FILE_READ_DESCRIPTOR_INT("min_filter", min_filter) ||
+        HENKA_MATERIAL_FILE_READ_DESCRIPTOR_INT("mag_filter", mag_filter) ||
+        HENKA_MATERIAL_FILE_READ_DESCRIPTOR_INT("wrap_u", wrap_u) ||
+        HENKA_MATERIAL_FILE_READ_DESCRIPTOR_INT("wrap_v", wrap_v) ||
+        HENKA_MATERIAL_FILE_READ_DESCRIPTOR_BOOL("generate_mipmaps", generate_mipmaps) ||
+        HENKA_MATERIAL_FILE_READ_DESCRIPTOR_BOOL("vertical_flip", vertical_flip) ||
+        HENKA_MATERIAL_FILE_READ_DESCRIPTOR_INT("usage", usage) ||
+        HENKA_MATERIAL_FILE_READ_DESCRIPTOR_FLOAT("anisotropy", anisotropy))
+    {
+#undef HENKA_MATERIAL_FILE_READ_DESCRIPTOR_FLOAT
+#undef HENKA_MATERIAL_FILE_READ_DESCRIPTOR_BOOL
+#undef HENKA_MATERIAL_FILE_READ_DESCRIPTOR_INT
+        return false;
+    }
+#undef HENKA_MATERIAL_FILE_READ_DESCRIPTOR_FLOAT
+#undef HENKA_MATERIAL_FILE_READ_DESCRIPTOR_BOOL
+#undef HENKA_MATERIAL_FILE_READ_DESCRIPTOR_INT
+
+    if (color_space < (int)HENKA_TEXTURE_COLOR_SPACE_SRGB ||
+        color_space > (int)HENKA_TEXTURE_COLOR_SPACE_LINEAR ||
+        min_filter < (int)HENKA_TEXTURE_FILTER_NEAREST ||
+        min_filter > (int)HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR ||
+        mag_filter < (int)HENKA_TEXTURE_FILTER_NEAREST ||
+        mag_filter > (int)HENKA_TEXTURE_FILTER_LINEAR ||
+        wrap_u < (int)HENKA_TEXTURE_WRAP_CLAMP_TO_EDGE ||
+        wrap_u > (int)HENKA_TEXTURE_WRAP_MIRRORED_REPEAT ||
+        wrap_v < (int)HENKA_TEXTURE_WRAP_CLAMP_TO_EDGE ||
+        wrap_v > (int)HENKA_TEXTURE_WRAP_MIRRORED_REPEAT ||
+        usage < (int)HENKA_TEXTURE_USAGE_COLOR ||
+        usage > (int)HENKA_TEXTURE_USAGE_UI)
+    {
+        return false;
+    }
+    *out_descriptor = (henka_texture_descriptor){
+        (henka_texture_color_space)color_space,
+        (henka_texture_filter)min_filter,
+        (henka_texture_filter)mag_filter,
+        (henka_texture_wrap)wrap_u,
+        (henka_texture_wrap)wrap_v,
+        generate_mipmaps,
+        vertical_flip,
+        (henka_texture_usage)usage,
+        anisotropy};
+    return henka_texture_descriptor_validate(out_descriptor) == HENKA_SUCCESS;
+}
+
 static henka_texture_descriptor henka_material_file_texture_descriptor(
     henka_material_texture_slot slot)
 {
@@ -267,7 +424,8 @@ static henka_result henka_material_file_save_texture(
     memset(&metadata, 0, sizeof(metadata));
     if (henka_assets_get_texture_metadata(manager, texture, &metadata) != HENKA_SUCCESS ||
         metadata.source_path == NULL || metadata.source_path[0] == '\0' ||
-        !metadata.reload_supported || metadata.fallback)
+        !metadata.reload_supported || metadata.fallback ||
+        !metadata.has_texture_descriptor)
     {
         return HENKA_ERROR_ASSET_SOURCE;
     }
@@ -275,6 +433,11 @@ static henka_result henka_material_file_save_texture(
     if (result == HENKA_SUCCESS)
     {
         result = henka_material_file_set_string(settings, suffix, confined_source_path);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_material_file_save_texture_descriptor(
+            settings, suffix, &metadata.texture_descriptor);
     }
     henka_free(confined_source_path);
     return result;
@@ -285,6 +448,7 @@ static henka_result henka_material_file_load_texture(
     const henka_settings* settings,
     const char* suffix,
     henka_material_texture_slot slot,
+    int file_version,
     henka_texture** out_texture)
 {
     char key[HENKA_MATERIAL_FILE_KEY_CAPACITY];
@@ -315,6 +479,11 @@ static henka_result henka_material_file_load_texture(
         return HENKA_SUCCESS;
     }
     descriptor = henka_material_file_texture_descriptor(slot);
+    if (file_version >= 2 &&
+        !henka_material_file_load_texture_descriptor(settings, suffix, &descriptor))
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
     result = henka_assets_load_texture_with_descriptor(
         manager, source_path, &descriptor, &texture);
     if (result != HENKA_SUCCESS)
@@ -474,7 +643,7 @@ static henka_result henka_material_file_check_size(const char* path)
 henka_result henka_material_asset_file_load(
     henka_asset_manager* manager,
     const char* resolved_path,
-    henka_shader* shader,
+    const henka_material* material_template,
     henka_material* out_material)
 {
     henka_settings* settings = NULL;
@@ -498,7 +667,8 @@ henka_result henka_material_asset_file_load(
     bool receive_shadows;
     henka_result result;
 
-    if (manager == NULL || resolved_path == NULL || shader == NULL || out_material == NULL)
+    if (manager == NULL || resolved_path == NULL || material_template == NULL ||
+        material_template->shader == NULL || out_material == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -532,7 +702,9 @@ henka_result henka_material_asset_file_load(
         return HENKA_ERROR_ASSET_SOURCE;
     }
     candidate = henka_material_default();
-    candidate.shader = shader;
+    candidate.name = material_template->name != NULL
+        ? material_template->name : candidate.name;
+    candidate.shader = material_template->shader;
 
 #define HENKA_MATERIAL_FILE_READ_FLOAT(field, value) do { \
     if (!henka_material_file_get_float(settings, field, &value)) { \
@@ -618,7 +790,8 @@ henka_result henka_material_asset_file_load(
     candidate.terrain_layers_enabled = false;
 
 #define HENKA_MATERIAL_FILE_READ_TEXTURE(field, slot, target) do { \
-    result = henka_material_file_load_texture(manager, settings, field, slot, &candidate.target); \
+        result = henka_material_file_load_texture( \
+            manager, settings, field, slot, file_version, &candidate.target); \
     if (result != HENKA_SUCCESS) { henka_settings_destroy(settings); return result; } \
 } while (0)
     HENKA_MATERIAL_FILE_READ_TEXTURE("material.base_color_texture", HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR, base_color_texture);
