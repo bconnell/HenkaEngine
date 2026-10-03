@@ -35,6 +35,19 @@ try {
         $ctestText + [Environment]::NewLine,
         [System.Text.UTF8Encoding]::new($false))
 
+    $emptyFilterAccepted = $false
+    try {
+        Assert-HenkaCTestFilterMatchesRegisteredTests `
+            -BuildRoot $buildRoot `
+            -TestFilter ""
+        $emptyFilterAccepted = $true
+    }
+    catch {
+        $emptyFilterAccepted = $false
+    }
+    Assert-Condition $emptyFilterAccepted `
+        "An empty test filter should preserve the full-suite selection without failing parameter binding."
+
     Assert-HenkaCTestFilterMatchesRegisteredTests `
         -BuildRoot $buildRoot `
         -TestFilter '^henka_tests$'

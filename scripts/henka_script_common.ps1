@@ -505,6 +505,7 @@ function Assert-HenkaCTestFilterMatchesRegisteredTests {
         [string]$BuildRoot,
 
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string]$TestFilter
     )
 
