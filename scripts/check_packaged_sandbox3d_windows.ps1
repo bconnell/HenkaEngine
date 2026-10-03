@@ -1190,6 +1190,11 @@ if ($NonInteractive) {
             Pattern = "Temporal stress: .*"
         }
         @{
+            Name = "material instance"
+            Arguments = @("--material-stress")
+            Pattern = "Material stress: typed-overrides=all-supported invalid-edit=retained entity-commit=valid refresh=valid reset=valid\."
+        }
+        @{
             Name = "environment"
             Arguments = @("--environment-stress")
             Pattern = "Environment stress: .*"

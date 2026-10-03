@@ -374,6 +374,7 @@ The packaged check verifies:
 - non-interactive Terrain streaming;
 - texture residency;
 - temporal presentation;
+- material-instance override, refresh, reset, and invalid-edit stress;
 - environment stress paths.
 
 The non-interactive path runs from the package root and validates relative asset ownership without repository-root assumptions.
