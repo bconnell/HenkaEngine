@@ -24673,19 +24673,40 @@ static void sandbox3d_draw_scene_viewport_frame(
                     engine,
                     modes[index]) == HENKA_SUCCESS)
             {
-                mode = modes[index];
-                sandbox3d_set_statusf(
-                    state,
-                    false,
-                    false,
-                    "Viewport shading: %s.",
-                    henka_viewport_shading_mode_get_label(
-                        mode));
-                printf(
-                    "Viewport shading: %s.\n",
-                    henka_viewport_shading_mode_get_label(
-                        mode));
-                fflush(stdout);
+                mode = henka_engine_get_viewport_shading_mode(engine);
+                if (mode == modes[index])
+                {
+                    sandbox3d_set_statusf(
+                        state,
+                        false,
+                        false,
+                        "Viewport shading: %s.",
+                        henka_viewport_shading_mode_get_label(
+                            mode));
+                    printf(
+                        "Viewport shading: %s.\n",
+                        henka_viewport_shading_mode_get_label(
+                            mode));
+                    printf(
+                        "Viewport shading state: mode=%s.\n",
+                        henka_viewport_shading_mode_get_label(
+                            mode));
+                    fflush(stdout);
+                }
+                else
+                {
+                    sandbox3d_set_status(
+                        state,
+                        true,
+                        "Viewport shading mode did not retain the requested state.");
+                    printf(
+                        "Viewport shading state mismatch: requested=%s actual=%s.\n",
+                        henka_viewport_shading_mode_get_label(
+                            modes[index]),
+                        henka_viewport_shading_mode_get_label(
+                            mode));
+                    fflush(stdout);
+                }
             }
             else
             {

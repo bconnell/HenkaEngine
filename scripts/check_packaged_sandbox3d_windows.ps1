@@ -1216,6 +1216,8 @@ $productStartupPrimitiveScreenshotPath = Join-Path $logDir "check_packaged_sandb
 $terrainUiBeforeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_before_create.png"
 $terrainUiAfterScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_after_create.png"
 $qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
+$shadingMaterialPreviewScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_shading_material_preview_after_action.png"
+$shadingRenderedScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_shading_rendered_after_action.png"
 $nativeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_panel.png"
 $nativeAuthoringScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_authoring.png"
 $selectionOutlineScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_selection_outline.png"
@@ -1716,6 +1718,8 @@ Remove-Item `
         $startupScreenshotPath,
         $productStartupPrimitiveScreenshotPath,
         $qaScreenshotPath,
+        $shadingMaterialPreviewScreenshotPath,
+        $shadingRenderedScreenshotPath,
         $nativeScreenshotPath,
         $nativeAuthoringScreenshotPath,
         $nativeAuthoredScreenshotPath,
@@ -5007,15 +5011,17 @@ try {
             $modeCenterY = $modeY + ($modeHeight * 0.5)
 
             $expectedModePattern =
-                "Viewport shading: " +
+                "Viewport shading state: mode=" +
                 [Regex]::Escape($shadingNames[$modeIndex]) +
                 "\."
             $modeObserved = $false
+            $modeInputDownObserved = $false
+            $modeInputUpObserved = $false
             for ($shadingAttempt = 0;
                  $shadingAttempt -lt 4 -and
-                 -not $modeObserved;
+                 -not ($modeObserved -and $modeInputDownObserved -and $modeInputUpObserved);
                  ++$shadingAttempt) {
-                $shadingLogOffset = Get-FileLengthSafe -Path $stdoutPath
+                $modeActionLogOffset = Get-FileLengthSafe -Path $stdoutPath
                 Click-FramebufferPoint `
                     -Handle $mainWindowHandle `
                     -FramebufferWidth $framebufferWidth `
@@ -5025,11 +5031,57 @@ try {
                 $modeObserved = Wait-FileContainsAfterOffset `
                     -Path $stdoutPath `
                     -Pattern $expectedModePattern `
-                    -StartingOffset $shadingLogOffset `
+                    -StartingOffset $modeActionLogOffset `
+                    -TimeoutMilliseconds 1200
+                $modeInputDownObserved = Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC input record=\d+ type=button-down button=left release_consumed=0' `
+                    -StartingOffset $modeActionLogOffset `
+                    -TimeoutMilliseconds 1200
+                $modeInputUpObserved = Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC input record=\d+ type=button-up button=left release_consumed=1' `
+                    -StartingOffset $modeActionLogOffset `
                     -TimeoutMilliseconds 1200
             }
-            if (-not $modeObserved) {
+            if (-not ($modeObserved -and $modeInputDownObserved -and $modeInputUpObserved)) {
                 throw "Viewport shading mode could not be confirmed: $($shadingNames[$modeIndex])"
+            }
+            Write-Output "[pass] Packaged Sandbox consumed the complete click and read back authoritative shading state '$($shadingNames[$modeIndex])'."
+
+            if ($shadingNames[$modeIndex] -eq "Material Preview" -or
+                $shadingNames[$modeIndex] -eq "Rendered") {
+                $renderCompletePattern = 'HENKA_AUTOMATION_DIAGNOSTIC frame seq=\d+ phase=render-complete'
+                if (-not (Wait-FileContainsAfterOffset `
+                        -Path $stdoutPath `
+                        -Pattern $renderCompletePattern `
+                        -StartingOffset $modeActionLogOffset `
+                        -TimeoutMilliseconds 10000)) {
+                    throw "The packaged renderer did not complete a frame after shading changed to '$($shadingNames[$modeIndex])'."
+                }
+                $nextRenderLogOffset = Get-FileLengthSafe -Path $stdoutPath
+                if (-not (Wait-FileContainsAfterOffset `
+                        -Path $stdoutPath `
+                        -Pattern $renderCompletePattern `
+                        -StartingOffset $nextRenderLogOffset `
+                        -TimeoutMilliseconds 10000)) {
+                    throw "The packaged renderer did not complete a subsequent frame while shading remained '$($shadingNames[$modeIndex])'."
+                }
+
+                if ($shadingNames[$modeIndex] -eq "Material Preview") {
+                    $shadingScreenshotPath = $shadingMaterialPreviewScreenshotPath
+                }
+                else {
+                    $shadingScreenshotPath = $shadingRenderedScreenshotPath
+                }
+                Save-WindowScreenshot `
+                    -Handle $mainWindowHandle `
+                    -Path $shadingScreenshotPath `
+                    -Description "Packaged viewport after $($shadingNames[$modeIndex]) shading action"
+                Assert-PathExists `
+                    -Path $shadingScreenshotPath `
+                    -Description "Packaged $($shadingNames[$modeIndex]) post-action viewport screenshot"
+                Write-Output "[pass] Captured the packaged viewport after two completed render frames in '$($shadingNames[$modeIndex])' mode."
             }
         }
         $bevelControlCount = @(
@@ -5206,7 +5258,8 @@ try {
     # a unique suffix instead of queueing dozens of erase events through the
     # one-event-per-frame automation stream on a slow Debug renderer. The
     # click and text event still exercise the real editable asset-name field.
-    $genericAssetName = "NativeAsset_" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
+    $genericAssetNameSuffix = "_" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
+    $genericAssetName = "NativeAsset" + $genericAssetNameSuffix
     $genericAssetNamePattern = [Regex]::Escape($genericAssetName)
     $genericAssetNameX = $genericPanelX + 14.0 + ($genericActionWidth * 2.0 + 6.0) / 2.0
     $genericNewAssetX = $genericPanelX + 14.0 + $genericActionWidth / 2.0
@@ -5221,7 +5274,7 @@ try {
     Assert-FramebufferRect -Name "Generic New Asset control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0) -Y $genericNewAssetY -Width $genericActionWidth -Height 24.0
     Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAssetNameX -Y ($genericNameFieldY + 12.0)
     Start-Sleep -Milliseconds 600
-    Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetName
+    Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetNameSuffix
     Start-Sleep -Milliseconds 600
     $genericCreationOffset = Get-FileLengthSafe -Path $stdoutPath
     Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetX -Y ($genericNewAssetY + 12.0)
@@ -5239,7 +5292,7 @@ try {
         }
         Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAssetNameX -Y ($genericNameFieldY + 12.0)
         Start-Sleep -Milliseconds 600
-        Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetName
+        Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetNameSuffix
         Start-Sleep -Milliseconds 600
         $genericCreationRetryOffset = Get-FileLengthSafe -Path $stdoutPath
         Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetX -Y ($genericNewAssetY + 12.0)
