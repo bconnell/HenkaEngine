@@ -278,6 +278,45 @@ function Get-FileLengthSafe {
     return [System.IO.FileInfo]::new($Path).Length
 }
 
+function Get-LogPatternCount {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Pattern
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return 0
+    }
+
+    return @(
+        Select-String -LiteralPath $Path -Pattern $Pattern -ErrorAction SilentlyContinue
+    ).Count
+}
+
+function Assert-PackagedGeometryTelemetryStable {
+    param(
+        [Parameter(Mandatory = $true)][string]$Description,
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [int]$MinimumRecords = 1,
+        [int]$SettleMilliseconds = 350,
+        [int]$IdleMilliseconds = 500
+    )
+
+    Start-Sleep -Milliseconds $SettleMilliseconds
+    $before = Get-LogPatternCount -Path $stdoutPath -Pattern $Pattern
+    if ($before -lt $MinimumRecords) {
+        throw "$Description did not produce the required geometry telemetry ($before records)."
+    }
+
+    Start-Sleep -Milliseconds $IdleMilliseconds
+    $after = Get-LogPatternCount -Path $stdoutPath -Pattern $Pattern
+    if ($after -ne $before) {
+        throw "$Description telemetry grew while the packaged editor was idle ($before -> $after records)."
+    }
+
+    Write-Output "[pass] $Description geometry telemetry remained stable while idle ($after records)"
+}
+
 function Wait-FileContainsAfterOffset {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -716,6 +755,251 @@ function Scroll-FramebufferPoint {
         -Y $windowPoint.Y `
         -WheelDelta $WheelDelta
 }
+
+function Invoke-PackagedProductGameAuthoringWorkflow {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$DetailsX,
+        [Parameter(Mandatory = $true)][double]$DetailsY,
+        [Parameter(Mandatory = $true)][double]$DetailsWidth,
+        [Parameter(Mandatory = $true)][double]$DetailsHeight,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][string]$ScreenshotPath
+    )
+
+    $toolsControl = Get-LastLogRegexMatch `
+        -Path $StdoutPath `
+        -Pattern 'Scene View Tools control: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+)\.'
+    if ($null -eq $toolsControl) {
+        throw "The product-startup Scene View did not report its work-context control."
+    }
+
+    $toolsX = [double]$toolsControl.Groups["x"].Value
+    $toolsY = [double]$toolsControl.Groups["y"].Value
+    $toolsWidth = [double]$toolsControl.Groups["width"].Value
+    if ([Math]::Abs($toolsWidth - 62.0) -lt 0.1) {
+        $contextWidth = 210.0
+    }
+    elseif ([Math]::Abs($toolsWidth - 58.0) -lt 0.1) {
+        $contextWidth = 176.0
+    }
+    else {
+        throw "The product-startup Scene View reported unsupported Tools width $toolsWidth."
+    }
+
+    $contextSegmentWidth = $contextWidth / 3.0
+    $gameContextX = $toolsX - $contextWidth - 4.0 + $contextSegmentWidth
+    $contextOffset = Get-FileLengthSafe -Path $StdoutPath
+    Click-FramebufferPoint `
+        -Handle $Handle `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -FramebufferX ($gameContextX + $contextSegmentWidth * 0.5) `
+        -FramebufferY ($toolsY + 11.0)
+
+    $disclosurePattern = '^Game authoring physics disclosure: name=(?<name>.+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28\.0 expanded=(?<expanded>[01])\.'
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $StdoutPath `
+            -Pattern '^Game authoring physics disclosure: name=.+ height=28\.0 expanded=[01]\.' `
+            -StartingOffset $contextOffset `
+            -TimeoutMilliseconds 4000)) {
+        throw "The selected product-native Add Cube did not expose Game Authoring in the Game context."
+    }
+    $disclosure = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $disclosurePattern
+    if ($null -eq $disclosure) {
+        throw "The product-startup Game Authoring disclosure geometry could not be parsed."
+    }
+    $targetName = $disclosure.Groups["name"].Value.Trim()
+    if ([string]::IsNullOrWhiteSpace($targetName) -or $targetName -eq "Ground") {
+        throw "The Game Authoring workflow did not remain bound to the newly selected Add Cube object."
+    }
+    $escapedTargetName = [Regex]::Escape($targetName)
+    $targetDisclosurePattern = '^Game authoring physics disclosure: name=' + $escapedTargetName + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28\.0 expanded=(?<expanded>[01])\.'
+
+    if ($disclosure.Groups["expanded"].Value -eq "0") {
+        $expanded = $false
+        foreach ($fraction in @(0.25, 0.50, 0.75)) {
+            $latestDisclosure = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $targetDisclosurePattern
+            if ($null -eq $latestDisclosure) {
+                throw "Game Authoring disclosure telemetry disappeared for '$targetName'."
+            }
+            $disclosureX = [double]$latestDisclosure.Groups["x"].Value
+            $disclosureY = [double]$latestDisclosure.Groups["y"].Value
+            $disclosureWidth = [double]$latestDisclosure.Groups["width"].Value
+            $expandOffset = Get-FileLengthSafe -Path $StdoutPath
+            Click-FramebufferPoint `
+                -Handle $Handle `
+                -FramebufferWidth $FramebufferWidth `
+                -FramebufferHeight $FramebufferHeight `
+                -FramebufferX ($disclosureX + $disclosureWidth * $fraction) `
+                -FramebufferY ($disclosureY + 14.0)
+            if (Wait-FileContainsAfterOffset `
+                    -Path $StdoutPath `
+                    -Pattern ('^Game authoring physics disclosure: name=' + $escapedTargetName + ' .* expanded=1\.') `
+                    -StartingOffset $expandOffset `
+                    -TimeoutMilliseconds 2500) {
+                $expanded = $true
+                break
+            }
+        }
+        if (-not $expanded) {
+            throw "The product-native Game Authoring disclosure for '$targetName' did not expand."
+        }
+    }
+
+    $playPattern = '^Game authoring play controls: name=' + $escapedTargetName + ' trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26\.0 state=(?<state>[0-9]+)\.'
+    $stepPattern = '^Game authoring step controls: name=' + $escapedTargetName + ' step_x=(?<stepX>[-0-9.]+) stop_x=(?<stopX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26\.0\.'
+    $playMatch = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $playPattern
+    $stepMatch = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $stepPattern
+    for ($attempt = 0; $attempt -lt 12 -and ($null -eq $playMatch -or $null -eq $stepMatch); ++$attempt) {
+        Scroll-FramebufferPointAndWaitForConsumption `
+            -Handle $Handle `
+            -FramebufferWidth $FramebufferWidth `
+            -FramebufferHeight $FramebufferHeight `
+            -FramebufferX ($DetailsX + [Math]::Max(12.0, $DetailsWidth - 18.0)) `
+            -FramebufferY ($DetailsY + [Math]::Max(30.0, $DetailsHeight * 0.55)) `
+            -WheelDelta -1 `
+            -TimeoutMilliseconds 3000
+        $playMatch = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $playPattern
+        $stepMatch = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $stepPattern
+    }
+    if ($null -eq $playMatch -or $null -eq $stepMatch) {
+        throw "Scrolling Object Details did not expose both Game Authoring Play and Step controls for '$targetName'."
+    }
+    Assert-PackagedGeometryTelemetryStable `
+        -Description "Game Authoring Play control for $targetName" `
+        -Pattern $playPattern
+    Assert-PackagedGeometryTelemetryStable `
+        -Description "Game Authoring Step/Stop control for $targetName" `
+        -Pattern $stepPattern
+    Save-WindowScreenshot `
+        -Handle $Handle `
+        -Path $ScreenshotPath `
+        -Description "Packaged product-native Game Authoring controls"
+
+    if ($playMatch.Groups["state"].Value -ne "0") {
+        throw "The product-native Game Authoring target did not begin in Stopped state."
+    }
+    foreach ($transition in @(
+        @{ Name = "Start Play"; State = "1" },
+        @{ Name = "Pause Play"; State = "2" },
+        @{ Name = "Resume Play"; State = "1" },
+        @{ Name = "Pause before Step"; State = "2" }
+    )) {
+        $playMatch = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $playPattern
+        if ($null -eq $playMatch) {
+            throw "Game Authoring Play telemetry disappeared before $($transition.Name)."
+        }
+        $playX = [double]$playMatch.Groups["playX"].Value
+        $playY = [double]$playMatch.Groups["y"].Value
+        $playWidth = [double]$playMatch.Groups["width"].Value
+        $transitionOffset = Get-FileLengthSafe -Path $StdoutPath
+        Click-FramebufferPoint `
+            -Handle $Handle `
+            -FramebufferWidth $FramebufferWidth `
+            -FramebufferHeight $FramebufferHeight `
+            -FramebufferX ($playX + $playWidth * 0.5) `
+            -FramebufferY ($playY + 13.0)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $StdoutPath `
+                -Pattern 'Play session state changed\.' `
+                -StartingOffset $transitionOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "Game Authoring $($transition.Name) produced no product state-transition result."
+        }
+        $playMatch = Wait-LastLogRegexMatch `
+            -Path $StdoutPath `
+            -Pattern $playPattern `
+            -GroupName "state" `
+            -ExpectedValue $transition.State `
+            -TimeoutMilliseconds 5000
+        if ($null -eq $playMatch) {
+            throw "Game Authoring $($transition.Name) did not reach state $($transition.State)."
+        }
+        Write-Output "[pass] Product-native Game Authoring $($transition.Name) reached state $($transition.State)"
+    }
+
+    $stepMatch = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $stepPattern
+    if ($null -eq $stepMatch) {
+        throw "Game Authoring Step/Stop geometry disappeared before the fixed step."
+    }
+    $stepX = [double]$stepMatch.Groups["stepX"].Value
+    $stepY = [double]$stepMatch.Groups["y"].Value
+    $stepWidth = [double]$stepMatch.Groups["width"].Value
+    $stepOffset = Get-FileLengthSafe -Path $StdoutPath
+    Click-FramebufferPoint `
+        -Handle $Handle `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -FramebufferX ($stepX + $stepWidth * 0.5) `
+        -FramebufferY ($stepY + 13.0)
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $StdoutPath `
+            -Pattern 'Play fixed step complete\.' `
+            -StartingOffset $stepOffset `
+            -TimeoutMilliseconds 5000)) {
+        throw "Product-native Game Authoring Step Play did not complete."
+    }
+    $stopOffset = Get-FileLengthSafe -Path $StdoutPath
+    Click-FramebufferPoint `
+        -Handle $Handle `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -FramebufferX ([double]$stepMatch.Groups["stopX"].Value + $stepWidth * 0.5) `
+        -FramebufferY ($stepY + 13.0)
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $StdoutPath `
+            -Pattern 'Play stopped; authored state preserved\.' `
+            -StartingOffset $stopOffset `
+            -TimeoutMilliseconds 5000) -or
+        -not (Wait-FileContainsAfterOffset `
+            -Path $StdoutPath `
+            -Pattern 'Game authoring play stopped: state=0\.' `
+            -StartingOffset $stopOffset `
+            -TimeoutMilliseconds 5000)) {
+        throw "Product-native Game Authoring Stop did not preserve authored state and return to Stopped."
+    }
+    Write-Output "[pass] Product-native Game Authoring Step and Stop preserved the Add Cube target"
+}
+
+function Scroll-FramebufferPointAndWaitForConsumption {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$FramebufferX,
+        [Parameter(Mandatory = $true)][double]$FramebufferY,
+        [Parameter(Mandatory = $true)][int]$WheelDelta,
+        [int]$TimeoutMilliseconds = 3000
+    )
+
+    $existingRecordCount = [System.IO.File]::ReadAllLines($automationInputPath).Length
+    $expectedWheelRecord = [long]$existingRecordCount + 2L
+    if ($expectedWheelRecord -gt 512L) {
+        throw "Packaged UI scroll record $expectedWheelRecord exceeds the bounded application-diagnostic window."
+    }
+    $diagnosticOffset = Get-FileLengthSafe -Path $stdoutPath
+    Scroll-FramebufferPoint `
+        -Handle $Handle `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -FramebufferX $FramebufferX `
+        -FramebufferY $FramebufferY `
+        -WheelDelta $WheelDelta
+
+    $consumedPattern = 'HENKA_AUTOMATION_DIAGNOSTIC input record={0} type=wheel button=none release_consumed=[01]' -f $expectedWheelRecord
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern $consumedPattern `
+            -StartingOffset $diagnosticOffset `
+            -TimeoutMilliseconds $TimeoutMilliseconds)) {
+        throw "The packaged Sandbox did not consume the expected scroll record $expectedWheelRecord within ${TimeoutMilliseconds} ms."
+    }
+    Write-Output "[pass] Packaged Sandbox consumed scroll input record $expectedWheelRecord"
+}
+
 function Click-FramebufferPointRight {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
@@ -852,17 +1136,53 @@ function Assert-SceneFramesStable {
     }
 }
 
+function Get-HenkaDirectorySnapshot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        return
+    }
+
+    $root = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if (($root.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Refusing to snapshot a reparse-point directory: $Path"
+    }
+
+    $snapshot = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($item in @(Get-ChildItem -LiteralPath $root.FullName -Force -Recurse -ErrorAction Stop)) {
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Refusing to traverse a reparse point in the packaged user-data tree: $($item.FullName)"
+        }
+
+        $relativePath = [IO.Path]::GetRelativePath($root.FullName, $item.FullName)
+        if ($item.PSIsContainer) {
+            $snapshot.Add("D|$relativePath")
+        }
+        else {
+            $hash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
+            $snapshot.Add("F|$relativePath|$($item.Length)|$hash")
+        }
+    }
+
+    return @($snapshot.ToArray() | Sort-Object)
+}
+
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $gitCommand = Get-HenkaGitPath
 $packageRoot = Join-Path $repoRoot "out\HenkaSandbox3D"
+$packageUserRoot = Join-Path $packageRoot "user"
 $packagedExe = Join-Path $packageRoot "HenkaSandbox3D.exe"
 $assetsDir = Join-Path $packageRoot "assets"
 $showcaseModelsDir = Join-Path $assetsDir "models"
 $helpPath = Join-Path $packageRoot "docs\help\sandbox3d.md"
 $readmePath = Join-Path $packageRoot "README.txt"
 $packageInfoPath = Join-Path $packageRoot "PACKAGE_INFO.txt"
-$settingsPath = Join-Path $packageRoot "user\sandbox3d.settings"
 $logDir = Join-Path $repoRoot "build\test_tmp"
+$automationUserDataRoot = Join-Path $logDir ("check_packaged_sandbox3d_user_data_" + [guid]::NewGuid().ToString("N"))
+$settingsPath = Join-Path $automationUserDataRoot "sandbox3d.settings"
 $stdoutPath = Join-Path $logDir "check_packaged_sandbox3d_stdout.log"
 $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
 $startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png"
@@ -1045,6 +1365,128 @@ Assert-FileContains -Path $helpPath -Pattern "Utility > Settings controls:" -Des
 Assert-FileContains -Path $helpPath -Pattern "Perspective 3D|Side 2.5D|Top-down 2.5D|Isometric 2.5D" -Description "Packaged camera preset help"
 Assert-FileContains -Path $helpPath -Pattern "Showcase Giraffe" -Description "Packaged showcase help"
 
+function Invoke-HenkaIsolatedPackageNativeCapture {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [string[]]$Arguments = @(),
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkingDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label,
+
+        [bool]$RequireIsolatedUserData = $true,
+
+        [ValidateRange(1000, 3600000)]
+        [int]$TimeoutMilliseconds = 180000,
+
+        [switch]$Quiet
+    )
+
+    $runRoot = Join-Path $logDir ("check_packaged_sandbox3d_smoke_user_data_" + [guid]::NewGuid().ToString("N"))
+    $isolatedUserRoot = Join-Path $runRoot "user"
+    $automationInputPath = Join-Path $runRoot "automation.events"
+    $packageUserSnapshotBefore = @(Get-HenkaDirectorySnapshot -Path $packageUserRoot)
+    $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
+    $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
+    $previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
+    $previousAutomationUserDataBasePath = $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH
+    $retainRunRoot = $true
+
+    try {
+        $logDirectoryItem = Get-Item -LiteralPath $logDir -Force -ErrorAction Stop
+        if (($logDirectoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Refusing isolated package smoke data under a reparse-point test directory: $logDir"
+        }
+        if (Test-Path -LiteralPath $runRoot) {
+            throw "The unique isolated package smoke data path unexpectedly already exists: $runRoot"
+        }
+
+        [System.IO.Directory]::CreateDirectory($isolatedUserRoot) | Out-Null
+        [System.IO.File]::WriteAllText($automationInputPath, "")
+        $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
+        $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
+        $env:HENKA_AUTOMATION_DIAGNOSTICS = "1"
+        $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH = $isolatedUserRoot
+
+        $capture = Invoke-HenkaNativeCapture `
+            -FilePath $FilePath `
+            -Arguments $Arguments `
+            -WorkingDirectory $WorkingDirectory `
+            -Label $Label `
+            -TimeoutMilliseconds $TimeoutMilliseconds `
+            -Quiet:$Quiet
+
+        if ($RequireIsolatedUserData -and
+            $capture.Stdout -notmatch "HENKA_AUTOMATION_DIAGNOSTIC user_data_base_path=isolated") {
+            throw "$Label did not confirm its automation-owned isolated user-data root."
+        }
+
+        $packageUserSnapshotAfter = @(Get-HenkaDirectorySnapshot -Path $packageUserRoot)
+        if (@(Compare-Object -ReferenceObject $packageUserSnapshotBefore -DifferenceObject $packageUserSnapshotAfter).Count -ne 0) {
+            throw "$Label changed the packaged user-data tree despite isolated user-data configuration."
+        }
+
+        $retainRunRoot = $false
+        return $capture
+    }
+    catch {
+        throw "$Label failed with isolated package user data at '$isolatedUserRoot': $($_.Exception.Message)"
+    }
+    finally {
+        if ($null -eq $previousAutomationOwned) {
+            Remove-Item Env:HENKA_AUTOMATION_INPUT_OWNED -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_INPUT_OWNED = $previousAutomationOwned
+        }
+        if ($null -eq $previousAutomationFile) {
+            Remove-Item Env:HENKA_AUTOMATION_INPUT_FILE -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_INPUT_FILE = $previousAutomationFile
+        }
+        if ($null -eq $previousAutomationDiagnostics) {
+            Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTICS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_DIAGNOSTICS = $previousAutomationDiagnostics
+        }
+        if ($null -eq $previousAutomationUserDataBasePath) {
+            Remove-Item Env:HENKA_AUTOMATION_USER_DATA_BASE_PATH -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH = $previousAutomationUserDataBasePath
+        }
+
+        if ($retainRunRoot -and (Test-Path -LiteralPath $runRoot)) {
+            Write-Warning "Preserving isolated package smoke data for diagnosis: $runRoot"
+        }
+        elseif (-not $retainRunRoot -and (Test-Path -LiteralPath $runRoot)) {
+            try {
+                $normalizedLogDirectory = [IO.Path]::GetFullPath($logDir).TrimEnd([IO.Path]::DirectorySeparatorChar)
+                $normalizedRunRoot = [IO.Path]::GetFullPath($runRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+                if (-not $normalizedRunRoot.StartsWith(
+                        $normalizedLogDirectory + [IO.Path]::DirectorySeparatorChar,
+                        [StringComparison]::OrdinalIgnoreCase)) {
+                    throw "Generated package smoke path escaped the test-output directory: $normalizedRunRoot"
+                }
+                $null = @(Get-HenkaDirectorySnapshot -Path $normalizedRunRoot)
+                Remove-Item -LiteralPath $normalizedRunRoot -Recurse -Force -ErrorAction Stop
+                if (Test-Path -LiteralPath $normalizedRunRoot) {
+                    throw "Generated package smoke data remains after exact-path cleanup: $normalizedRunRoot"
+                }
+            }
+            catch {
+                Write-Warning "Could not retire successful isolated package smoke data '$runRoot': $($_.Exception.Message)"
+            }
+        }
+    }
+}
+
 if ($NonInteractive) {
     if ($ContractOnly) {
         Write-Step "Completing hosted package contract validation"
@@ -1053,7 +1495,7 @@ if ($NonInteractive) {
     }
 
     Write-Step "Running deterministic packaged startup smoke test"
-    $smoke = Invoke-HenkaNativeCapture `
+    $smoke = Invoke-HenkaIsolatedPackageNativeCapture `
         -FilePath $packagedExe `
         -Arguments @("--smoke-test") `
         -WorkingDirectory $packageRoot `
@@ -1085,7 +1527,7 @@ if ($NonInteractive) {
     Write-Output "[pass] Deterministic packaged startup smoke test completed."
 
     Write-Step "Running packaged Physics QA smoke"
-    $physicsSmoke = Invoke-HenkaNativeCapture `
+    $physicsSmoke = Invoke-HenkaIsolatedPackageNativeCapture `
         -FilePath $packagedExe `
         -Arguments @("--physics-smoke-test") `
         -WorkingDirectory $packageRoot `
@@ -1101,7 +1543,7 @@ if ($NonInteractive) {
     Write-Output "[pass] Packaged Physics QA smoke completed."
 
     Write-Step "Running packaged Physics rendered capture"
-    $physicsCapture = Invoke-HenkaNativeCapture `
+    $physicsCapture = Invoke-HenkaIsolatedPackageNativeCapture `
         -FilePath $packagedExe `
         -Arguments @("--capture-physics-view", "wide", "rendered", $logDir) `
         -WorkingDirectory $packageRoot `
@@ -1120,7 +1562,7 @@ if ($NonInteractive) {
     Write-Output "[pass] Packaged Physics rendered capture completed."
 
     Write-Step "Running packaged Audio fixture smoke"
-    $audioSmoke = Invoke-HenkaNativeCapture -FilePath $packagedExe -Arguments @("--audio-smoke-test") -WorkingDirectory $packageRoot -Label "Run packaged Audio fixture smoke"
+    $audioSmoke = Invoke-HenkaIsolatedPackageNativeCapture -FilePath $packagedExe -Arguments @("--audio-smoke-test") -WorkingDirectory $packageRoot -Label "Run packaged Audio fixture smoke"
 
     if ($audioSmoke.Stdout -notmatch "Audio smoke: packaged resident and streamed WAV fixture paths loaded through the asset manager; real scene object emitters mixed and reached the SDL output boundary\.") {
         throw "The packaged Audio smoke test did not prove the real fixture-to-SDL production path."
@@ -1134,11 +1576,12 @@ if ($NonInteractive) {
 
     Write-Output "[pass] Packaged Audio fixture smoke completed."
     Write-Step "Running packaged Prefab public API smoke"
-    $prefabSmoke = Invoke-HenkaNativeCapture `
+    $prefabSmoke = Invoke-HenkaIsolatedPackageNativeCapture `
         -FilePath $packagedExe `
         -Arguments @("--prefab-smoke-test") `
         -WorkingDirectory $packageRoot `
-        -Label "Run packaged Prefab public API smoke"
+        -Label "Run packaged Prefab public API smoke" `
+        -RequireIsolatedUserData:$false
 
     if ($prefabSmoke.Stdout -notmatch "Prefab package smoke: public save/load/instantiate/override/duplicate/detach workflow passed\.") {
         throw "The packaged Prefab smoke test did not prove the public Prefab workflow."
@@ -1146,7 +1589,7 @@ if ($NonInteractive) {
     Write-Output "[pass] Packaged Prefab public API smoke completed."
 
     Write-Step "Running packaged Prefab Game Authoring smoke"
-    $prefabAuthoringSmoke = Invoke-HenkaNativeCapture `
+    $prefabAuthoringSmoke = Invoke-HenkaIsolatedPackageNativeCapture `
         -FilePath $packagedExe `
         -Arguments @("--prefab-authoring-smoke-test") `
         -WorkingDirectory $packageRoot `
@@ -1161,7 +1604,7 @@ if ($NonInteractive) {
     Write-Output "[pass] Packaged Prefab Game Authoring smoke completed."
 
     Write-Step "Running bounded packaged Terrain stream stress"
-    $terrainStreamStress = Invoke-HenkaNativeCapture `
+    $terrainStreamStress = Invoke-HenkaIsolatedPackageNativeCapture `
         -FilePath $packagedExe `
         -Arguments @("--terrain-stream-stress") `
         -WorkingDirectory $packageRoot `
@@ -1201,7 +1644,7 @@ if ($NonInteractive) {
         }
     )) {
         Write-Step "Running packaged $($stressCase.Name) stress"
-        $stress = Invoke-HenkaNativeCapture `
+        $stress = Invoke-HenkaIsolatedPackageNativeCapture `
             -FilePath $packagedExe `
             -Arguments $stressCase.Arguments `
             -WorkingDirectory $packageRoot `
@@ -1241,12 +1684,29 @@ $process = $null
 $mainWindowHandle = [System.IntPtr]::Zero
 $uiAutomationVerified = $false
 $sandboxPanelsVisible = $false
+$packagedCheckSucceeded = $false
+$packageUserSnapshotBefore = @()
 $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
 $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
+$previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
+$previousAutomationDiagnosticFaceId = $env:HENKA_AUTOMATION_DIAGNOSTIC_FACE_ID
+$previousAutomationUserDataBasePath = $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH
 try {
+    $logDirectoryItem = Get-Item -LiteralPath $logDir -Force -ErrorAction Stop
+    if (($logDirectoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Refusing to place isolated packaged user data under a reparse-point test directory: $logDir"
+    }
+    $packageUserSnapshotBefore = @(Get-HenkaDirectorySnapshot -Path $packageUserRoot)
+    if (Test-Path -LiteralPath $automationUserDataRoot) {
+        throw "The unique isolated package user-data path unexpectedly already exists."
+    }
+    New-Item -ItemType Directory -Path $automationUserDataRoot -ErrorAction Stop | Out-Null
     New-Item -ItemType File -Path $automationInputPath -Force | Out-Null
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
+    $env:HENKA_AUTOMATION_DIAGNOSTICS = "1"
+    Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTIC_FACE_ID -ErrorAction SilentlyContinue
+    $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH = $automationUserDataRoot
     Write-Step "Launching the packaged sandbox"
     # The native authoring workflow is an explicit reference-asset path.
     # Ordinary no-argument startup is validated separately as the clean
@@ -1264,9 +1724,18 @@ try {
             -WorkingDirectory $packageRoot `
             -Arguments @("--capture-showcase-view", "wide", "solid") `
             -StdoutPath $stdoutPath `
-            -StderrPath $stderrPath
+            -StderrPath $stderrPath `
+            -StartMinimized:$false `
+            -StartVisibleWithoutActivation
     }
     $process = $capturedProcess.Process
+
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC user_data_base_path=isolated' `
+            -TimeoutMilliseconds 10000)) {
+        throw "The packaged Sandbox did not confirm automation-owned isolated user data before the workflow began."
+    }
 
     for ($index = 0; $index -lt 80 -and $mainWindowHandle -eq [System.IntPtr]::Zero; $index++) {
         Start-Sleep -Milliseconds 250
@@ -1772,6 +2241,17 @@ try {
                 -Path $productStartupPrimitiveScreenshotPath `
                 -Description "Packaged product-native Add Cube"
             Write-Output "[pass] Product-native Add Cube visual proof captured"
+            Invoke-PackagedProductGameAuthoringWorkflow `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -DetailsX $detailsX `
+                -DetailsY $detailsY `
+                -DetailsWidth $detailsWidth `
+                -DetailsHeight $detailsHeight `
+                -StdoutPath $stdoutPath `
+                -ScreenshotPath $nativeAuthoringScreenshotPath
+            Write-Output "[pass] Packaged Game Authoring workflow used the canonical product-startup Add Cube"
             return
         }
 
@@ -2000,6 +2480,27 @@ try {
         if (-not $nativeSelectionObserved) {
             throw "Selecting the showcase row did not expose Object Details > Authoring > Make Editable."
         }
+        Start-Sleep -Milliseconds 350
+        $sourceRowTelemetryPattern = '^Native authoring source row: name='
+        if (-not (Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern $sourceRowTelemetryPattern `
+                -TimeoutMilliseconds 2000)) {
+            throw "The packaged editor did not report imported source-row geometry for the bounded-telemetry check."
+        }
+        $sourceRowTelemetryCountBeforeIdle = @(
+            Select-String -LiteralPath $stdoutPath -Pattern $sourceRowTelemetryPattern
+        ).Count
+        Start-Sleep -Milliseconds 500
+        $sourceRowTelemetryCountAfterIdle = @(
+            Select-String -LiteralPath $stdoutPath -Pattern $sourceRowTelemetryPattern
+        ).Count
+        if ($sourceRowTelemetryCountAfterIdle -ne $sourceRowTelemetryCountBeforeIdle) {
+            throw (
+                "Imported source-row layout telemetry grew while the selected editor layout was idle " +
+                "($sourceRowTelemetryCountBeforeIdle -> $sourceRowTelemetryCountAfterIdle records).")
+        }
+        Write-Output "[pass] Imported source-row layout telemetry remained stable during a 500 ms idle interval"
         $nativeDisclosureMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring disclosure: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=28.0 expanded=([01])\.'
@@ -2524,13 +3025,17 @@ try {
         Write-Output "[pass] User-facing native material and texture edits completed"
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material history:" -TimeoutMilliseconds 1200)) {
             for ($scrollAttempt = 0; $scrollAttempt -lt 12; ++$scrollAttempt) {
-                Scroll-FramebufferPoint `
+                # Automation wheel records use SDL-style notch units. The
+                # editor maps one notch to 48 px; Win32's WHEEL_DELTA (120)
+                # would skip past this row in one event.
+                Scroll-FramebufferPointAndWaitForConsumption `
                     -Handle $mainWindowHandle `
                     -FramebufferWidth $framebufferWidth `
                     -FramebufferHeight $framebufferHeight `
                     -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
                     -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                    -WheelDelta -120
+                    -WheelDelta -1 `
+                    -TimeoutMilliseconds 3000
                 if (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material history:" -TimeoutMilliseconds 1000) {
                     break
                 }
@@ -2594,42 +3099,108 @@ try {
         $componentViewportY = [double]$componentViewportMatch.Groups[2].Value
         $componentViewportWidth = [double]$componentViewportMatch.Groups[3].Value
         $componentViewportHeight = [double]$componentViewportMatch.Groups[4].Value
+        # Face 16530 belonged to an older packaged Giraffe topology. The current
+        # production import is independently validated and converts to 16,528
+        # authoring faces, so do not silently alias that stale identifier. Frame
+        # the selected current Giraffe normally, then let the real Scene View ray
+        # picker identify the face used by this positive authoring interaction.
+        $faceFrameExpectedReleaseRecord = [long][IO.File]::ReadAllLines($automationInputPath).Length + 2L
+        $faceFrameLogOffset = Get-FileLengthSafe -Path $stdoutPath
+        Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern ('HENKA_AUTOMATION_DIAGNOSTIC input record={0} type=key-up button=none release_consumed=0' -f $faceFrameExpectedReleaseRecord) `
+                -StartingOffset $faceFrameLogOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The packaged Sandbox did not consume the object-frame key release before face picking."
+        }
+        $faceFrameConsumedPattern = 'HENKA_AUTOMATION_DIAGNOSTIC frame seq=[0-9]+ phase=events-polled record_available=0 consumed_seq={0} release_consumed=0 input_faulted=0' -f $faceFrameExpectedReleaseRecord
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $faceFrameConsumedPattern `
+                -StartingOffset $faceFrameLogOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The packaged Sandbox did not complete a frame after consuming the object-frame key release."
+        }
+        $targetFaceFramebufferX = $componentViewportX + ($componentViewportWidth * 0.5)
+        $targetFaceFramebufferY = $componentViewportY + ($componentViewportHeight * 0.5)
+        $nativeTargetFaceId = $null
+        Write-Output ("[probe] current Giraffe Scene View center is ({0:N2},{1:N2}); selection will come from the production ray picker" -f `
+            $targetFaceFramebufferX, $targetFaceFramebufferY)
+        Start-Sleep -Milliseconds 450
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path (Join-Path $logDir 'check_packaged_sandbox3d_face_pick_framed.png') `
+            -Description "Packaged Giraffe framed before deterministic face picking"
         $nativeComponentPicked = $false
+        $nativeLastPickedFaceId = $null
+        $nativeFacePickProbeCount = 0
+        $facePickOffsets = @(
+            [pscustomobject]@{ X = 0.0; Y = 0.0 },
+            [pscustomobject]@{ X = -2.0; Y = 0.0 },
+            [pscustomobject]@{ X = 2.0; Y = 0.0 },
+            [pscustomobject]@{ X = 0.0; Y = -2.0 },
+            [pscustomobject]@{ X = 0.0; Y = 2.0 },
+            [pscustomobject]@{ X = -2.0; Y = -2.0 },
+            [pscustomobject]@{ X = 2.0; Y = -2.0 },
+            [pscustomobject]@{ X = -2.0; Y = 2.0 },
+            [pscustomobject]@{ X = 2.0; Y = 2.0 })
+        $nativeFacePickProbeTotal = $facePickOffsets.Count
         $nativeMoveLogOffset = $null
-        # The selected showcase is the left-hand Giraffe in the deterministic
-        # Standard layout.  Probe its visible silhouette first; the prior
-        # center-biased probes landed in the Rocket's empty side gap and could
-        # not prove component picking even though the selected mesh was
-        # visibly outlined.
-        foreach ($componentPickX in @(0.18, 0.22, 0.26, 0.30, 0.35, 0.40)) {
-            foreach ($componentPickY in @(0.50, 0.56, 0.62, 0.68)) {
-                if ($nativeComponentPicked) { break }
-                $componentPickLogOffset = Get-FileLengthSafe -Path $stdoutPath
-                Click-FramebufferPoint `
-                    -Handle $mainWindowHandle `
-                    -FramebufferWidth $framebufferWidth `
-                    -FramebufferHeight $framebufferHeight `
-                    -FramebufferX ($componentViewportX + $componentViewportWidth * $componentPickX) `
-                    -FramebufferY ($componentViewportY + $componentViewportHeight * $componentPickY)
-                $nativeComponentPicked = Wait-FileContainsAfterOffset `
+        # Probe only a bounded 3x3 neighborhood around the framed object's view
+        # center. Each candidate is a real screen click through the production
+        # Scene View picker; accept the exact face the runtime reports on this
+        # Giraffe, rather than assuming a stale serialized face ID.
+        foreach ($facePickOffset in $facePickOffsets) {
+            if ($nativeComponentPicked) { break }
+            ++$nativeFacePickProbeCount
+            $probeFramebufferX = $targetFaceFramebufferX + [double]$facePickOffset.X
+            $probeFramebufferY = $targetFaceFramebufferY + [double]$facePickOffset.Y
+            if ($probeFramebufferX -lt $componentViewportX -or
+                $probeFramebufferX -ge ($componentViewportX + $componentViewportWidth) -or
+                $probeFramebufferY -lt $componentViewportY -or
+                $probeFramebufferY -ge ($componentViewportY + $componentViewportHeight)) {
+                throw "The projected deterministic face lies outside the current Scene View viewport."
+            }
+            $componentPickLogOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX $probeFramebufferX `
+                -FramebufferY $probeFramebufferY
+            $componentPickObserved = Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native authoring component picked:" `
+                -StartingOffset $componentPickLogOffset `
+                -TimeoutMilliseconds 1200
+            $componentPickMatch = $null
+            if ($componentPickObserved) {
+                $componentPickMatch = Get-LastLogRegexMatch `
                     -Path $stdoutPath `
-                    -Pattern "Native authoring component picked:" `
-                    -StartingOffset $componentPickLogOffset `
-                    -TimeoutMilliseconds 1200
-                if ($nativeComponentPicked) {
-                    # The native authoring update reports the component pick
-                    # and the mode-specific move control in one UI dispatch.
-                    # Keep the click offset so the second event cannot be
-                    # missed when it is already in the log by the time the
-                    # first wait returns.
-                    $nativeMoveLogOffset = $componentPickLogOffset
+                    -Pattern 'Native authoring component picked: name=(?<name>.+) visual=(?<visual>.+) mode=(?<mode>face) active=(?<active>[0-9]+) selected=(?<selected>[0-9]+) source_state=(?<sourceState>.+)\.'
+            if ($null -ne $componentPickMatch -and
+                $componentPickMatch.Groups['name'].Value -eq 'Showcase Giraffe Anatomical Giraffe Study Primitive' -and
+                $componentPickMatch.Groups['selected'].Value -eq '1' -and
+                [uint32]$componentPickMatch.Groups['active'].Value -gt 0U) {
+                $nativeLastPickedFaceId = [uint32]$componentPickMatch.Groups['active'].Value
+                $nativeTargetFaceId = $nativeLastPickedFaceId
+                $nativeComponentPicked = $true
+                $nativeMoveLogOffset = $componentPickLogOffset
                 }
             }
-            if ($nativeComponentPicked) { break }
+            Write-Output ("[probe] face-pick {0}/{1} at ({2:N2},{3:N2}) -> {4}" -f `
+                $nativeFacePickProbeCount, $nativeFacePickProbeTotal, $probeFramebufferX, $probeFramebufferY, `
+                $(if ($componentPickObserved -and $null -ne $componentPickMatch) {
+                    "face $($componentPickMatch.Groups['active'].Value)"
+                } else {
+                    'no new face-hit record'
+                }))
         }
         if (-not $nativeComponentPicked) {
-            throw "The selected showcase did not expose a pickable component for the user-facing edit check."
+            throw "The real Scene View picker did not select a Giraffe face near the framed object center after $nativeFacePickProbeCount bounded probes (last picked face: $nativeLastPickedFaceId)."
         }
+        Write-Output ("[pass] Production Scene View picking selected current Giraffe face {0}" -f $nativeTargetFaceId)
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring move control:" `
@@ -2643,31 +3214,73 @@ try {
         if ($null -eq $nativeMoveMatch) {
             throw "The native authoring component-edit control geometry could not be parsed."
         }
-        $nativeMoveX = [double]$nativeMoveMatch.Groups[2].Value
-        $nativeMoveY = [double]$nativeMoveMatch.Groups[3].Value
         Assert-FramebufferRect `
             -Name "Native authoring component-edit control" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -X $nativeMoveX `
-            -Y $nativeMoveY `
+            -X ([double]$nativeMoveMatch.Groups[2].Value) `
+            -Y ([double]$nativeMoveMatch.Groups[3].Value) `
+            -Width 88.0 `
+            -Height 24.0
+        Write-Output "[scope] The intentional X+ adjacent-face-collapse rejection is covered by the deterministic in-memory authoring/operator regression; the current packaged Giraffe face is used for the real safe-edit control."
+
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring Move Y\+ control: name=' `
+                -StartingOffset $nativeMoveLogOffset `
+                -TimeoutMilliseconds 3000)) {
+            throw "The packaged application did not report its current Move Y+ control geometry."
+        }
+        $nativeMoveYControlMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring Move Y\+ control: name=(?<name>.+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=88.0 height=24.0\.'
+        if ($null -eq $nativeMoveYControlMatch) {
+            throw "The packaged Move Y+ control geometry could not be parsed."
+        }
+        $nativeMoveYControlX = [double]$nativeMoveYControlMatch.Groups["x"].Value
+        $nativeMoveYControlY = [double]$nativeMoveYControlMatch.Groups["y"].Value
+        $nativeMoveYClickLogOffset = Get-FileLengthSafe -Path $stdoutPath
+        Assert-FramebufferRect `
+            -Name "Native authoring Move Y+ control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeMoveYControlX `
+            -Y $nativeMoveYControlY `
             -Width 88.0 `
             -Height 24.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMoveX + 20.0) `
-            -FramebufferY ($nativeMoveY + 6.0)
+            -FramebufferX ($nativeMoveYControlX + 44.0) `
+            -FramebufferY ($nativeMoveYControlY + 12.0)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern '^Native authoring component move: name=' `
+                -StartingOffset $nativeMoveYClickLogOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The real Move Y+ control did not report an operation result after its center click."
+        }
+        $nativeMoveYResultMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring component move: name=(?<name>.+) result=(?<result>.+) mode=(?<mode>.+) selected_components=(?<selected>[0-9]+)\.'
+        if ($null -eq $nativeMoveYResultMatch) {
+            throw "The Move Y+ operation result could not be parsed."
+        }
+        if ($nativeMoveYResultMatch.Groups["result"].Value -ne "success" -or
+            $nativeMoveYResultMatch.Groups["mode"].Value -ne "Face" -or
+            [int]$nativeMoveYResultMatch.Groups["selected"].Value -ne 1) {
+            throw "The real Move Y+ control returned $($nativeMoveYResultMatch.Groups['result'].Value) for mode $($nativeMoveYResultMatch.Groups['mode'].Value) with $($nativeMoveYResultMatch.Groups['selected'].Value) selected components."
+        }
         $nativeMoveObserved = Wait-FileContainsAfterOffset `
             -Path $stdoutPath `
             -Pattern "Native authoring workflow: component move edited" `
-            -StartingOffset $nativeMoveLogOffset `
+            -StartingOffset $nativeMoveYClickLogOffset `
             -TimeoutMilliseconds 10000
         if (-not $nativeMoveObserved) {
-            throw "The user-facing component edit did not update the native authoring source."
+            throw "The successful Move Y+ edit did not reach the native authoring workflow publication boundary."
         }
-        Write-Output "[pass] User-facing component edit changed the native showcase source"
+        Write-Output "[pass] Move Y+ edited the same selected face through the packaged authoring workflow"
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring quad repair control:" `
@@ -2774,7 +3387,7 @@ try {
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
                 -FramebufferY ($detailsY + 42.0) `
-                -WheelDelta 120
+                -WheelDelta 1.0
             Start-Sleep -Milliseconds 120
             $visibleFaceMatch = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
@@ -3010,54 +3623,118 @@ try {
         if (-not $nativeFaceModeObserved) {
             throw "The user-facing Face selection mode did not become active."
         }
-        $nativeFacePickPoints = @(
-            @(0.12, 0.50),
-            @(0.16, 0.50),
-            @(0.20, 0.50),
-            @(0.24, 0.50),
-            @(0.28, 0.50),
-            @(0.12, 0.58),
-            @(0.16, 0.58),
-            @(0.20, 0.58),
-            @(0.24, 0.58),
-            @(0.28, 0.58),
-            @(0.12, 0.66),
-            @(0.16, 0.66),
-            @(0.20, 0.66),
-            @(0.24, 0.66),
-            @(0.28, 0.66),
-            @(0.12, 0.74),
-            @(0.16, 0.74),
-            @(0.20, 0.74),
-            @(0.24, 0.74),
-            @(0.28, 0.74),
-            @(0.12, 0.82),
-            @(0.16, 0.82),
-            @(0.20, 0.82),
-            @(0.24, 0.82),
-            @(0.28, 0.82),
-            @(0.32, 0.58),
-            @(0.36, 0.66),
-            @(0.40, 0.74))
+        $connectedSelectionGeometryPattern = '^Native authoring connected selection control:'
+        $connectedSelectionGeometryBefore = Get-LogPatternCount `
+            -Path $stdoutPath `
+            -Pattern $connectedSelectionGeometryPattern
+        $faceDeleteGeometryPattern = '^Native authoring face delete control:'
+        $faceDeleteGeometryBefore = Get-LogPatternCount `
+            -Path $stdoutPath `
+            -Pattern $faceDeleteGeometryPattern
+        $connectedSelectionGeometryStable = $false
+        $faceDeleteGeometryStable = $false
+        for ($detailsScrollAttempt = 0;
+            $detailsScrollAttempt -lt 12 -and
+            (-not $connectedSelectionGeometryStable -or -not $faceDeleteGeometryStable);
+            ++$detailsScrollAttempt) {
+            Scroll-FramebufferPointAndWaitForConsumption `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta -1 `
+                -TimeoutMilliseconds 3000
+
+            if (-not $faceDeleteGeometryStable -and
+                (Get-LogPatternCount -Path $stdoutPath -Pattern $faceDeleteGeometryPattern) -gt $faceDeleteGeometryBefore) {
+                Assert-PackagedGeometryTelemetryStable `
+                    -Description "Native Face delete control" `
+                    -Pattern $faceDeleteGeometryPattern
+                $faceDeleteGeometryStable = $true
+            }
+            if (-not $connectedSelectionGeometryStable -and
+                (Get-LogPatternCount -Path $stdoutPath -Pattern $connectedSelectionGeometryPattern) -gt $connectedSelectionGeometryBefore) {
+                Assert-PackagedGeometryTelemetryStable `
+                    -Description "Native connected-selection control" `
+                    -Pattern $connectedSelectionGeometryPattern
+                $connectedSelectionGeometryStable = $true
+            }
+        }
+        if (-not $connectedSelectionGeometryStable) {
+            throw "Scrolling Object Details did not expose the native connected-selection control."
+        }
+        if (-not $faceDeleteGeometryStable) {
+            throw "Scrolling Object Details did not expose the native Face delete control."
+        }
+        # Re-frame after the preceding profile/edge transactions, which may
+        # leave the view target elsewhere while preserving the selected object.
+        # Wait on the product-consumed key release and following event frame.
+        $bevelFaceFrameExpectedReleaseRecord = [long][IO.File]::ReadAllLines($automationInputPath).Length + 2L
+        $bevelFaceFrameLogOffset = Get-FileLengthSafe -Path $stdoutPath
+        Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern ('HENKA_AUTOMATION_DIAGNOSTIC input record={0} type=key-up button=none release_consumed=0' -f $bevelFaceFrameExpectedReleaseRecord) `
+                -StartingOffset $bevelFaceFrameLogOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The packaged Sandbox did not consume the frame key release before the Bevel face pick."
+        }
+        $bevelFaceFrameConsumedPattern = 'HENKA_AUTOMATION_DIAGNOSTIC frame seq=[0-9]+ phase=events-polled record_available=0 consumed_seq={0} release_consumed=0 input_faulted=0' -f $bevelFaceFrameExpectedReleaseRecord
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $bevelFaceFrameConsumedPattern `
+                -StartingOffset $bevelFaceFrameLogOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The packaged Sandbox did not complete a frame after the Bevel face-frame key."
+        }
+        $nativeFacePickOffsets = @(
+            [pscustomobject]@{ X = 0.0; Y = 0.0 },
+            [pscustomobject]@{ X = -2.0; Y = 0.0 },
+            [pscustomobject]@{ X = 2.0; Y = 0.0 },
+            [pscustomobject]@{ X = 0.0; Y = -2.0 },
+            [pscustomobject]@{ X = 0.0; Y = 2.0 },
+            [pscustomobject]@{ X = -2.0; Y = -2.0 },
+            [pscustomobject]@{ X = 2.0; Y = -2.0 },
+            [pscustomobject]@{ X = -2.0; Y = 2.0 },
+            [pscustomobject]@{ X = 2.0; Y = 2.0 })
+        $nativeFaceTargetX = $componentViewportX + ($componentViewportWidth * 0.5)
+        $nativeFaceTargetY = $componentViewportY + ($componentViewportHeight * 0.5)
         $nativeFacePicked = $false
-        foreach ($facePickPoint in $nativeFacePickPoints) {
+        $nativeBevelPickedFaceId = $null
+        $nativeBevelFacePickCount = 0
+        foreach ($facePickOffset in $nativeFacePickOffsets) {
             if ($nativeFacePicked) { break }
+            ++$nativeBevelFacePickCount
             $nativeFacePickLogOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($componentViewportX + $componentViewportWidth * $facePickPoint[0]) `
-                -FramebufferY ($componentViewportY + $componentViewportHeight * $facePickPoint[1])
-            $nativeFacePicked = Wait-FileContainsAfterOffset `
+                -FramebufferX ($nativeFaceTargetX + [double]$facePickOffset.X) `
+                -FramebufferY ($nativeFaceTargetY + [double]$facePickOffset.Y)
+            $nativeFacePickObserved = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring component picked:" `
                 -StartingOffset $nativeFacePickLogOffset `
                 -TimeoutMilliseconds 1200
+            if ($nativeFacePickObserved) {
+                $nativeBevelFacePickMatch = Get-LastLogRegexMatch `
+                    -Path $stdoutPath `
+                    -Pattern 'Native authoring component picked: name=(?<name>.+) visual=(?<visual>.+) mode=(?<mode>face) active=(?<active>[0-9]+) selected=(?<selected>[0-9]+) source_state=(?<sourceState>.+)\.'
+                if ($null -ne $nativeBevelFacePickMatch -and
+                    $nativeBevelFacePickMatch.Groups['name'].Value -eq 'Showcase Giraffe Anatomical Giraffe Study Primitive' -and
+                    $nativeBevelFacePickMatch.Groups['selected'].Value -eq '1' -and
+                    [uint32]$nativeBevelFacePickMatch.Groups['active'].Value -gt 0U) {
+                    $nativeBevelPickedFaceId = [uint32]$nativeBevelFacePickMatch.Groups['active'].Value
+                    $nativeFacePicked = $true
+                }
+            }
         }
         if (-not $nativeFacePicked) {
-            throw "The user-facing Face mode did not select a viewport face before Bevel."
+            throw "The user-facing Face mode did not select a Giraffe viewport face near the framed object center before Bevel after $nativeBevelFacePickCount bounded probes."
         }
+        Write-Output ("[pass] Production Scene View selected Giraffe face {0} before Bevel" -f $nativeBevelPickedFaceId)
         # Capture the face while its freshly picked stable handle is still
         # authoritative. Later bevel/flip transactions may intentionally
         # remap component identities, so their proof must not be responsible
@@ -3117,6 +3794,39 @@ try {
             -Height 24.0
         $nativeBevelObserved = $false
         Start-Sleep -Milliseconds 250
+        # Keep a bounded set of visible Giraffe screen regions for the later
+        # Bevel and Face-delete fallback probes.  The primary Face selection
+        # above is based on the current framed viewport center; these points
+        # are only used if a selected imported face cannot accept Bevel.
+        $nativeFacePickPoints = @(
+            @(0.12, 0.50),
+            @(0.16, 0.50),
+            @(0.20, 0.50),
+            @(0.24, 0.50),
+            @(0.28, 0.50),
+            @(0.12, 0.58),
+            @(0.16, 0.58),
+            @(0.20, 0.58),
+            @(0.24, 0.58),
+            @(0.28, 0.58),
+            @(0.12, 0.66),
+            @(0.16, 0.66),
+            @(0.20, 0.66),
+            @(0.24, 0.66),
+            @(0.28, 0.66),
+            @(0.12, 0.74),
+            @(0.16, 0.74),
+            @(0.20, 0.74),
+            @(0.24, 0.74),
+            @(0.28, 0.74),
+            @(0.12, 0.82),
+            @(0.16, 0.82),
+            @(0.20, 0.82),
+            @(0.24, 0.82),
+            @(0.28, 0.82),
+            @(0.32, 0.58),
+            @(0.36, 0.66),
+            @(0.40, 0.74))
         # A picked imported face may be concave or otherwise unable to accept
         # the bounded inset-based bevel.  The editor correctly rejects that
         # transaction and retains the source.  Keep the gate deterministic by
@@ -3187,43 +3897,37 @@ try {
                 -FramebufferY ($nativeBevelY + 12.0)
             # The selected imported fixture remains a bounded 45k-vertex
             # authoring source. Its Face Bevel transaction can legitimately
-            # outlive the pointer event; accept only a fresh post-commit line
-            # after this click, which proves that the native source changed.
-            $nativeBevelObserved = Wait-FileContains `
+            # outlive the pointer event. Start at the click's pre-recorded
+            # offset and require the commit record followed by the refreshed
+            # Flip geometry. Do not take another offset after observing the
+            # commit: both records can be appended before the poller resumes.
+            $nativeBevelObserved = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
-                -Pattern "Native authoring workflow: bevel operator edited" `
+                -Pattern 'Native authoring workflow: bevel operator edited[^\r\n]*\r?\n[\s\S]*?Native authoring priority face flip control: name=.* width=[-0-9.]+ height=24\.0\.' `
+                -StartingOffset $bevelLogOffset `
                 -TimeoutMilliseconds 15000
         }
         if (-not $nativeBevelObserved) {
-            throw "The user-facing native bevel operation did not update the showcase source."
+            throw "The user-facing native bevel did not commit and re-report the current Face-mode Flip control."
         }
         Write-Output "[pass] User-facing topology selection and bevel changed the native showcase source"
-        # Bevel publishes a fresh candidate and rebuilds the details flow. Let
-        # one render/input turn settle before reading and activating the next
-        # control so the subsequent click cannot race that publication.
-        $nativeFlipLayoutLogOffset = Get-FileLengthSafe -Path $stdoutPath
-        Start-Sleep -Milliseconds 350
-        if (-not (Wait-FileContainsAfterOffset `
-                -Path $stdoutPath `
-                -Pattern 'Native authoring face flip control: name=.* width=88.0 height=24.0\.' `
-                -StartingOffset $nativeFlipLayoutLogOffset `
-                -TimeoutMilliseconds 2500)) {
-            throw "The fresh native Face-mode Flip control geometry was not reported after bevel."
-        }
         $nativeFlipMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring face flip control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
+            -Pattern 'Native authoring priority face flip control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
         if ($null -eq $nativeFlipMatch) {
             throw "The native Face-mode Flip control geometry could not be parsed."
         }
+        $nativeFlipWidth = [double]$nativeFlipMatch.Groups[4].Value
+        $nativeFlipOffsetFractions = @(0.25, 0.50, 0.75)
         $nativeFlipObserved = $false
         for ($flipAttempt = 0; $flipAttempt -lt 5 -and -not $nativeFlipObserved; ++$flipAttempt) {
             $latestFlipMatch = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
-                -Pattern 'Native authoring face flip control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
+                -Pattern 'Native authoring priority face flip control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
             if ($null -ne $latestFlipMatch) {
                 $nativeFlipX = [double]$latestFlipMatch.Groups[2].Value
                 $nativeFlipY = [double]$latestFlipMatch.Groups[3].Value
+                $nativeFlipWidth = [double]$latestFlipMatch.Groups[4].Value
             }
             Assert-FramebufferRect `
                 -Name "Native authoring Flip control retry" `
@@ -3231,9 +3935,9 @@ try {
                 -FramebufferHeight $framebufferHeight `
                 -X $nativeFlipX `
                 -Y $nativeFlipY `
-                -Width 88.0 `
+                -Width $nativeFlipWidth `
                 -Height 24.0
-            $flipXOffset = @(20.0, 44.0, 68.0)[$flipAttempt % 3]
+            $flipXOffset = $nativeFlipWidth * $nativeFlipOffsetFractions[$flipAttempt % 3]
             $flipYOffset = @(6.0, 12.0, 18.0)[$flipAttempt % 3]
             $nativeFlipLogOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
@@ -3276,44 +3980,42 @@ try {
         }
         $nativeDeleteMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=102.0 height=24.0\.'
+            -Pattern 'Native authoring priority face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
         if ($null -eq $nativeDeleteMatch) {
             throw "The native Face-mode delete control geometry could not be parsed."
         }
         $nativeDeleteX = [double]$nativeDeleteMatch.Groups[2].Value
         $nativeDeleteY = [double]$nativeDeleteMatch.Groups[3].Value
+        $nativeDeleteWidth = [double]$nativeDeleteMatch.Groups[4].Value
         Assert-FramebufferRect `
             -Name "Native authoring Delete Faces control" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeDeleteX `
             -Y $nativeDeleteY `
-            -Width 102.0 `
+            -Width $nativeDeleteWidth `
             -Height 24.0
         $nativeDeleteObserved = $false
-        $nativeDeleteOffsets = @(
-            @(20.0, 6.0),
-            @(51.0, 12.0),
-            @(82.0, 18.0),
-            @(51.0, 6.0),
-            @(51.0, 18.0))
+        $nativeDeleteOffsetFractions = @(0.20, 0.50, 0.80, 0.50, 0.50)
+        $nativeDeleteOffsetRows = @(6.0, 12.0, 18.0, 6.0, 18.0)
         for ($deleteAttempt = 0;
-             $deleteAttempt -lt $nativeDeleteOffsets.Count -and
+             $deleteAttempt -lt $nativeDeleteOffsetFractions.Count -and
              -not $nativeDeleteObserved;
              ++$deleteAttempt) {
             $latestDeleteMatch = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
-                -Pattern 'Native authoring face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=102.0 height=24.0\.'
+                -Pattern 'Native authoring priority face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
             if ($null -ne $latestDeleteMatch) {
                 $nativeDeleteX = [double]$latestDeleteMatch.Groups[2].Value
                 $nativeDeleteY = [double]$latestDeleteMatch.Groups[3].Value
+                $nativeDeleteWidth = [double]$latestDeleteMatch.Groups[4].Value
             }
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeDeleteX + [double]$nativeDeleteOffsets[$deleteAttempt][0]) `
-                -FramebufferY ($nativeDeleteY + [double]$nativeDeleteOffsets[$deleteAttempt][1])
+                -FramebufferX ($nativeDeleteX + $nativeDeleteWidth * $nativeDeleteOffsetFractions[$deleteAttempt]) `
+                -FramebufferY ($nativeDeleteY + $nativeDeleteOffsetRows[$deleteAttempt])
             $nativeDeleteObserved = Wait-FileContains `
                 -Path $stdoutPath `
                 -Pattern "Native authoring workflow: selected faces deleted from" `
@@ -3432,22 +4134,94 @@ try {
             -Path $nativeAuthoringScreenshotPath `
             -Description "Packaged native authoring screenshot"
 
-        Write-Step "Checking Game Authoring Play lifecycle"
-        $gamePhysicsDisclosure = $null
-        for ($scrollAttempt = 0; $scrollAttempt -lt 20 -and $null -eq $gamePhysicsDisclosure; ++$scrollAttempt) {
-            $gamePhysicsDisclosure = Get-LastLogRegexMatch `
-                -Path $stdoutPath `
-                -Pattern 'Game authoring physics disclosure: name=(?<name>.+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=(?<expanded>[01])\.'
-            if ($null -eq $gamePhysicsDisclosure) {
-                Scroll-FramebufferPoint `
-                    -Handle $mainWindowHandle `
-                    -FramebufferWidth $framebufferWidth `
-                    -FramebufferHeight $framebufferHeight `
-                    -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
-                    -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                    -WheelDelta -120
-            }
+        Write-Step "Selecting the Game work context through its visible segmented control"
+        $toolsControl = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Scene View Tools control: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+)\.'
+        if ($null -eq $toolsControl) {
+            throw "The Scene View header did not report the visible work-context control geometry."
         }
+        $toolsX = [double]$toolsControl.Groups["x"].Value
+        $toolsY = [double]$toolsControl.Groups["y"].Value
+        $toolsWidth = [double]$toolsControl.Groups["width"].Value
+        if ([Math]::Abs($toolsWidth - 62.0) -lt 0.1) {
+            $contextWidth = 210.0
+        }
+        elseif ([Math]::Abs($toolsWidth - 58.0) -lt 0.1) {
+            $contextWidth = 176.0
+        }
+        else {
+            throw "The Scene View header reported unsupported Tools width $toolsWidth; refusing to guess context geometry."
+        }
+        $contextX = $toolsX - $contextWidth - 4.0
+        $contextSegmentWidth = $contextWidth / 3.0
+        $gameContextX = $contextX + $contextSegmentWidth
+        $gameContextY = $toolsY
+        Assert-FramebufferRect `
+            -Name "Game work-context segment" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $gameContextX `
+            -Y $gameContextY `
+            -Width $contextSegmentWidth `
+            -Height 22.0
+        $groundRowPattern = '^Default scene Ground row: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) selected=(?<selected>[01])\.'
+        $groundRowMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $groundRowPattern
+        if ($null -eq $groundRowMatch) {
+            throw "The real Ground row was not reported by the packaged Scene Objects hierarchy."
+        }
+        $groundRowX = [double]$groundRowMatch.Groups["x"].Value
+        $groundRowY = [double]$groundRowMatch.Groups["y"].Value
+        $groundRowWidth = [double]$groundRowMatch.Groups["width"].Value
+        $groundRowHeight = [double]$groundRowMatch.Groups["height"].Value
+        Assert-FramebufferRect `
+            -Name "Product-native Ground Scene Objects row" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $groundRowX `
+            -Y $groundRowY `
+            -Width $groundRowWidth `
+            -Height $groundRowHeight
+        if ($groundRowMatch.Groups["selected"].Value -ne "1") {
+            $groundSelectionLogOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($groundRowX + $groundRowWidth * 0.5) `
+                -FramebufferY ($groundRowY + $groundRowHeight * 0.5)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern '^Default scene Ground row: .* selected=1\.' `
+                    -StartingOffset $groundSelectionLogOffset `
+                    -TimeoutMilliseconds 3500)) {
+                throw "The normal Scene Objects click did not select the product-native Ground object."
+            }
+            $groundRowMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $groundRowPattern
+        }
+        if ($null -eq $groundRowMatch -or $groundRowMatch.Groups["selected"].Value -ne "1") {
+            throw "The Game-context acceptance target is not the selected authored Ground object."
+        }
+        Write-Output "[info] Selected the visible Ground row for Showcase context; Ground is not used as a Game Authoring target"
+
+        $gameContextLogOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($gameContextX + $contextSegmentWidth * 0.5) `
+            -FramebufferY ($gameContextY + 11.0)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern '^Game authoring physics disclosure: name=Ground ' `
+                -StartingOffset $gameContextLogOffset `
+                -TimeoutMilliseconds 3500)) {
+            throw "Selecting the visible Game context did not expose a fresh Game Authoring Physics disclosure."
+        }
+        $gameControlsLogOffset = $gameContextLogOffset
+        $gamePhysicsDisclosure = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Game authoring physics disclosure: name=(?<name>Ground) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=(?<expanded>[01])\.'
         if ($null -eq $gamePhysicsDisclosure) {
             throw "The selected authored object did not expose the Game Authoring Physics disclosure."
         }
@@ -3482,10 +4256,11 @@ try {
                     -FramebufferY ($gamePhysicsDisclosureY + 14.0)
                 if (Wait-FileContainsAfterOffset `
                         -Path $stdoutPath `
-                        -Pattern 'Game authoring physics disclosure: name=.+ expanded=1\.' `
+                    -Pattern 'Game authoring physics disclosure: name=Ground .* expanded=1\.' `
                         -StartingOffset $physicsDisclosureClickOffset `
                         -TimeoutMilliseconds 2500) {
                     $gamePhysicsExpanded = $true
+                    $gameControlsLogOffset = $physicsDisclosureClickOffset
                     break
                 }
             }
@@ -3493,24 +4268,82 @@ try {
                 throw "The Game Authoring Physics disclosure did not report expansion after bounded click retries."
             }
         }
-        $gamePlayMatch = $null
-        for ($scrollAttempt = 0; $scrollAttempt -lt 20 -and $null -eq $gamePlayMatch; ++$scrollAttempt) {
-            $gamePlayMatch = Get-LastLogRegexMatch `
-                -Path $stdoutPath `
-                -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
-            if ($null -eq $gamePlayMatch) {
-                Scroll-FramebufferPoint `
-                    -Handle $mainWindowHandle `
-                    -FramebufferWidth $framebufferWidth `
-                    -FramebufferHeight $framebufferHeight `
-                    -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
-                    -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                    -WheelDelta -120
+        $gamePlayGeometryPattern = '^Game authoring play controls: name=Ground '
+        $gameStepGeometryPattern = '^Game authoring step controls: name=Ground '
+        $gamePlayGeometryBefore = Get-LogPatternCount `
+            -Path $stdoutPath `
+            -Pattern $gamePlayGeometryPattern
+        $gameStepGeometryBefore = Get-LogPatternCount `
+            -Path $stdoutPath `
+            -Pattern $gameStepGeometryPattern
+        $gamePlayGeometryStable = $gamePlayGeometryBefore -gt 0
+        $gameStepGeometryStable = $gameStepGeometryBefore -gt 0
+        if ($gamePlayGeometryStable) {
+            Assert-PackagedGeometryTelemetryStable `
+                -Description "Game Authoring Play control" `
+                -Pattern $gamePlayGeometryPattern
+        }
+        if ($gameStepGeometryStable) {
+            Assert-PackagedGeometryTelemetryStable `
+                -Description "Game Authoring Step/Stop control" `
+                -Pattern $gameStepGeometryPattern
+        }
+        for ($gameDetailsScrollAttempt = 0;
+            $gameDetailsScrollAttempt -lt 12 -and
+            (-not $gamePlayGeometryStable -or -not $gameStepGeometryStable);
+            ++$gameDetailsScrollAttempt) {
+            Scroll-FramebufferPointAndWaitForConsumption `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta -1 `
+                -TimeoutMilliseconds 3000
+
+            if (-not $gamePlayGeometryStable -and
+                (Get-LogPatternCount -Path $stdoutPath -Pattern $gamePlayGeometryPattern) -gt $gamePlayGeometryBefore) {
+                Assert-PackagedGeometryTelemetryStable `
+                    -Description "Game Authoring Play control" `
+                    -Pattern $gamePlayGeometryPattern
+                $gamePlayGeometryStable = $true
+            }
+            if (-not $gameStepGeometryStable -and
+                (Get-LogPatternCount -Path $stdoutPath -Pattern $gameStepGeometryPattern) -gt $gameStepGeometryBefore) {
+                Assert-PackagedGeometryTelemetryStable `
+                    -Description "Game Authoring Step/Stop control" `
+                    -Pattern $gameStepGeometryPattern
+                $gameStepGeometryStable = $true
             }
         }
+        $gameAuthoringControlsAvailable = $gamePlayGeometryStable -and $gameStepGeometryStable
+        if (-not $gameAuthoringControlsAvailable) {
+            Write-Output "[info] The Showcase Ground helper has no Game Authoring Play/Step binding; the dedicated product-startup Add Cube lane exercises those controls on a canonical Scene Document object."
+        }
+        if ($gameAuthoringControlsAvailable) {
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $nativeAuthoringScreenshotPath `
+            -Description "Packaged Game-context Physics authoring controls screenshot"
+        $gamePlayMatch = $null
+        $gamePlayMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Game authoring play controls: name=(?<name>Ground) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
         if ($null -eq $gamePlayMatch) {
             throw "The Game Authoring Physics disclosure did not expose Play controls."
         }
+        $gameStepMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Game authoring step controls: name=(?<name>.+) step_x=(?<stepX>[-0-9.]+) stop_x=(?<stopX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0\.'
+        Assert-PackagedGeometryTelemetryStable `
+            -Description "Game Authoring Physics disclosure" `
+            -Pattern '^Game authoring physics disclosure:'
+        Assert-PackagedGeometryTelemetryStable `
+            -Description "Game Authoring Play control" `
+            -Pattern '^Game authoring play controls:'
+        Assert-PackagedGeometryTelemetryStable `
+            -Description "Game Authoring Step/Stop control" `
+            -Pattern '^Game authoring step controls:'
         $gamePlayX = [double]$gamePlayMatch.Groups["playX"].Value
         $gamePlayY = [double]$gamePlayMatch.Groups["y"].Value
         $gamePlayWidth = [double]$gamePlayMatch.Groups["width"].Value
@@ -3590,7 +4423,7 @@ try {
         if ($null -eq $gamePlayMatch) {
             throw "Game Authoring pause before Step did not reach Paused state."
         }
-        $gameStepMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring step controls: name=(?<name>.+) step_x=(?<stepX>[-0-9.]+) stop_x=(?<stopX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0\.'
+        $gameStepMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring step controls: name=(?<name>Ground) step_x=(?<stepX>[-0-9.]+) stop_x=(?<stopX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0\.'
         if ($null -eq $gameStepMatch) {
             throw "The Game Authoring Step/Stop control geometry could not be parsed."
         }
@@ -3613,6 +4446,7 @@ try {
             throw "Game Authoring Stop Play did not return to Stopped state."
         }
         Write-Output "[pass] Game Authoring Stop Play returned to Stopped state with authored state preserved"
+        }
 
         Write-Step "Checking section-header context menu"
         $contextMenuPattern = "Workspace context menu: section=Tools horizontal=available vertical=available"
@@ -4265,7 +5099,7 @@ try {
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=saved parts=4\." -TimeoutMilliseconds 5000)) {
         throw "The generic authored asset did not save transactionally."
     }
-    $genericAssetManifestPath = Join-Path $packageRoot ("user\saves\" + $genericAssetName + ".asset")
+    $genericAssetManifestPath = Join-Path $automationUserDataRoot ("saves\" + $genericAssetName + ".asset")
     if (-not (Test-Path -LiteralPath $genericAssetManifestPath -PathType Leaf)) {
         throw "The generic authored asset manifest was not persisted in the packaged runtime workspace."
     }
@@ -4318,6 +5152,12 @@ try {
         -StdoutPath $startupRestoreStdoutPath `
         -StderrPath $startupRestoreStderrPath
     $startupRestoreProcess = $startupRestoreCapture.Process
+    if (-not (Wait-FileContains `
+            -Path $startupRestoreStdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC user_data_base_path=isolated' `
+            -TimeoutMilliseconds 10000)) {
+        throw "The persisted-authoring relaunch did not use the isolated automation user-data authority."
+    }
     if (-not (Wait-FileContains `
             -Path $startupRestoreStdoutPath `
             -Pattern "Native authoring startup restore: name=" `
@@ -4408,8 +5248,29 @@ try {
     Assert-PathExists `
         -Path $nativeAuthoredScreenshotPath `
         -Description "Packaged native-generated rocket fixture visual proof"
+
+    $authoringSaveDirectory = Join-Path $automationUserDataRoot "saves"
+    $authoringSaveFiles = @()
+    if (Test-Path -LiteralPath $authoringSaveDirectory -PathType Container) {
+        $authoringSaveFiles = @(Get-ChildItem `
+            -LiteralPath $authoringSaveDirectory `
+            -File `
+            -Filter "sandbox3d_authoring_*.hams" `
+            -ErrorAction Stop)
+    }
+    if ($authoringSaveFiles.Count -eq 0) {
+        throw "The packaged authoring workflow did not persist a native HAMS scene under its isolated user-data root."
+    }
+
+    $packageUserSnapshotAfter = @(Get-HenkaDirectorySnapshot -Path $packageUserRoot)
+    if ([string]::Join("`n", $packageUserSnapshotBefore) -cne
+        [string]::Join("`n", $packageUserSnapshotAfter)) {
+        throw "The packaged workflow changed pre-existing package user data despite the isolated automation root."
+    }
+    Write-Output "[pass] Existing package user data remained byte-identical; authoring saves were isolated"
     Write-Output "[pass] Live workspace settings recovery persisted across relaunch"
     Write-Output "[pass] Packaged sandbox checks completed."
+    $packagedCheckSucceeded = $true
 }
 finally {
     if ($null -eq $previousAutomationOwned) {
@@ -4424,6 +5285,24 @@ finally {
     else {
         $env:HENKA_AUTOMATION_INPUT_FILE = $previousAutomationFile
     }
+    if ($null -eq $previousAutomationDiagnostics) {
+        Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTICS -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_DIAGNOSTICS = $previousAutomationDiagnostics
+    }
+    if ($null -eq $previousAutomationDiagnosticFaceId) {
+        Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTIC_FACE_ID -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_DIAGNOSTIC_FACE_ID = $previousAutomationDiagnosticFaceId
+    }
+    if ($null -eq $previousAutomationUserDataBasePath) {
+        Remove-Item Env:HENKA_AUTOMATION_USER_DATA_BASE_PATH -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH = $previousAutomationUserDataBasePath
+    }
     if ($null -ne $startupRestoreCapture) {
         Close-HenkaCapturedProcess -CapturedProcess $startupRestoreCapture
     }
@@ -4435,5 +5314,45 @@ finally {
             Stop-HenkaProcessTree -ProcessId $process.Id
         }
         $process.Dispose()
+    }
+
+    if (Test-Path -LiteralPath $automationUserDataRoot -PathType Container) {
+        if (-not $packagedCheckSucceeded) {
+            Write-Warning "Preserving the isolated package user-data tree because this validation did not complete successfully."
+        }
+        else {
+            try {
+                $expectedParent = [IO.Path]::GetFullPath($logDir).TrimEnd([IO.Path]::DirectorySeparatorChar)
+                $candidatePath = [IO.Path]::GetFullPath($automationUserDataRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+                $candidateItem = Get-Item -LiteralPath $candidatePath -Force -ErrorAction Stop
+                if ([IO.Path]::GetDirectoryName($candidatePath).TrimEnd([IO.Path]::DirectorySeparatorChar) -ine $expectedParent -or
+                    ($candidateItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "The generated user-data path no longer matches its exact safe parent or is a reparse point."
+                }
+
+                $packageProcesses = @(Get-CimInstance Win32_Process -Filter "Name='HenkaSandbox3D.exe'")
+                $activePackageProcesses = @($packageProcesses |
+                    Where-Object {
+                        -not $_.ExecutablePath -or
+                        [IO.Path]::GetFullPath($_.ExecutablePath) -ieq [IO.Path]::GetFullPath($packagedExe)
+                    })
+                if ($activePackageProcesses.Count -ne 0) {
+                    throw "A packaged Sandbox process remains active; preserving its user-data tree."
+                }
+
+                $generatedChildren = @(Get-ChildItem -LiteralPath $candidatePath -Force -Recurse -ErrorAction Stop)
+                if (@($generatedChildren | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }).Count -ne 0) {
+                    throw "A reparse point appeared inside the generated user-data tree; preserving it."
+                }
+                Remove-Item -LiteralPath $candidatePath -Recurse -Force -ErrorAction Stop
+                if (Test-Path -LiteralPath $candidatePath) {
+                    throw "The generated isolated package user-data tree still exists after cleanup."
+                }
+                Write-Output "[pass] Retired the exact consumed isolated package user-data tree"
+            }
+            catch {
+                Write-Warning ("Could not safely retire the consumed isolated package user-data tree; preserved it: " + $_.Exception.Message)
+            }
+        }
     }
 }

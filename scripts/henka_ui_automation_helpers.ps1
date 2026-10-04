@@ -238,6 +238,8 @@ function Send-HenkaAutomationScroll {
         [Parameter(Mandatory = $true)][double]$WheelDelta
     )
 
+    # WheelDelta is passed through to the application as SDL-style wheel-notch
+    # units (for example, -1.0), not Win32 WHEEL_DELTA units (for example, -120).
     if ([double]::IsNaN($X) -or [double]::IsInfinity($X) -or
         [double]::IsNaN($Y) -or [double]::IsInfinity($Y) -or
         $X -lt 0.0 -or $Y -lt 0.0 -or $X -gt 65536.0 -or $Y -gt 65536.0 -or

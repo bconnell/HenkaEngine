@@ -554,6 +554,364 @@ cleanup:
     return result ? 1 : fail("topology/evaluation");
 }
 
+static float test_face_maximum_fan_cross_length(
+    const henka_authoring_mesh* mesh,
+    const henka_authoring_face* face)
+{
+    const henka_authoring_vertex* first;
+    float maximum = 0.0f;
+    size_t second_corner;
+
+    if (mesh == NULL || face == NULL || face->corner_count < 3U)
+    {
+        return 0.0f;
+    }
+    first = henka_authoring_mesh_get_vertex(mesh, face->vertices[0]);
+    if (first == NULL)
+    {
+        return 0.0f;
+    }
+    for (second_corner = 1U; second_corner + 1U < face->corner_count; ++second_corner)
+    {
+        const henka_authoring_vertex* second =
+            henka_authoring_mesh_get_vertex(mesh, face->vertices[second_corner]);
+        const henka_authoring_vertex* third =
+            henka_authoring_mesh_get_vertex(mesh, face->vertices[second_corner + 1U]);
+        if (second != NULL && third != NULL)
+        {
+            const henka_vec3 cross = henka_vec3_cross(
+                henka_vec3_subtract(second->position, first->position),
+                henka_vec3_subtract(third->position, first->position));
+            const float cross_length = henka_vec3_length(cross);
+            if (cross_length > maximum)
+            {
+                maximum = cross_length;
+            }
+        }
+    }
+    return maximum;
+}
+
+static int test_face_move_rejects_adjacent_face_collapse(void)
+{
+    const henka_vec3 positions[8] = {
+        {0.576937199f, 4.03129196f, 1.23000002f},
+        {0.481220901f, 4.03057623f, 1.23000002f},
+        {0.487073630f, 4.02823067f, 1.24000001f},
+        {0.585645735f, 4.02851677f, 1.24000001f},
+        {0.582999408f, 4.02857351f, 1.23975003f},
+        {0.489355922f, 4.02830172f, 1.23975003f},
+        {0.483795822f, 4.03052998f, 1.23025000f},
+        {0.574726284f, 4.03120995f, 1.23025000f}};
+    const size_t face_vertex_indices[3][4] = {
+        {0U, 1U, 6U, 7U},
+        {1U, 2U, 5U, 6U},
+        {2U, 3U, 4U, 5U}};
+    const henka_vec3 translation = {0.1f, 0.0f, 0.0f};
+    const float minimum_face_cross_length = 0.00001f;
+    const henka_authoring_mesh_desc fixture_desc = {8U, 10U, 3U, 4U};
+    henka_authoring_mesh* source = NULL;
+    henka_authoring_mesh* source_snapshot = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_mesh* positive_control = NULL;
+    henka_authoring_mesh_desc desc;
+    henka_authoring_render_vertex* render_vertices = NULL;
+    uint32_t* render_indices = NULL;
+    henka_authoring_render_data render = {NULL, 0U, 0U, NULL, 0U, 0U};
+    henka_authoring_vertex_id* selected_vertices = NULL;
+    henka_authoring_vertex_id fixture_vertices[8];
+    henka_authoring_face_id fixture_faces[3];
+    henka_authoring_face_id post_invalid_face_ids[3] = {
+        HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id selected_face_id = HENKA_AUTHORING_INVALID_ID;
+    const henka_authoring_face* selected_face;
+    size_t total_face_corners = 0U;
+    size_t total_render_indices = 0U;
+    size_t pre_invalid_faces = 0U;
+    size_t post_invalid_faces = 0U;
+    size_t post_invalid_adjacent_faces = 0U;
+    size_t post_invalid_vertex_touch_faces = 0U;
+    size_t post_invalid_unrelated_faces = 0U;
+    size_t selected_corner;
+    size_t face_slot;
+    henka_result candidate_result = HENKA_ERROR_INVALID_ARGUMENT;
+    henka_result positive_control_result = HENKA_ERROR_INVALID_ARGUMENT;
+    const char* failure_stage = "create deterministic three-quad source fixture";
+    int source_unchanged = 0;
+    int result = 0;
+
+    candidate_result = henka_authoring_mesh_create(&fixture_desc, &source);
+    if (candidate_result != HENKA_SUCCESS || source == NULL)
+    {
+        goto cleanup;
+    }
+    for (face_slot = 0U; face_slot < 8U; ++face_slot)
+    {
+        candidate_result = henka_authoring_mesh_add_vertex(
+            source,
+            positions[face_slot],
+            (henka_vec2){positions[face_slot].x, positions[face_slot].z},
+            0U,
+            &fixture_vertices[face_slot]);
+        if (candidate_result != HENKA_SUCCESS)
+        {
+            failure_stage = "add deterministic source vertex";
+            goto cleanup;
+        }
+    }
+    for (face_slot = 0U; face_slot < 3U; ++face_slot)
+    {
+        const henka_authoring_vertex_id face_vertices[4] = {
+            fixture_vertices[face_vertex_indices[face_slot][0]],
+            fixture_vertices[face_vertex_indices[face_slot][1]],
+            fixture_vertices[face_vertex_indices[face_slot][2]],
+            fixture_vertices[face_vertex_indices[face_slot][3]]};
+        candidate_result = henka_authoring_mesh_add_face(
+            source, face_vertices, 4U, 0U, true, &fixture_faces[face_slot]);
+        if (candidate_result != HENKA_SUCCESS)
+        {
+            failure_stage = "add deterministic source face";
+            goto cleanup;
+        }
+    }
+    selected_face_id = fixture_faces[1];
+    if (!henka_authoring_mesh_validate(source))
+    {
+        failure_stage = "validate deterministic source fixture";
+        goto cleanup;
+    }
+    desc = henka_authoring_mesh_get_desc(source);
+    selected_face = henka_authoring_mesh_get_face(source, selected_face_id);
+    if (selected_face == NULL || !selected_face->active || selected_face->corner_count < 3U ||
+        selected_face->corner_count > desc.max_face_corners ||
+        desc.max_face_corners < 3U)
+    {
+        goto cleanup;
+    }
+    failure_stage = "calculate exact whole-mesh evaluation buffer capacities";
+    for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
+    {
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_face* face;
+        size_t face_indices;
+        if (henka_authoring_mesh_get_face_id_at(source, face_slot, &face_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        face = henka_authoring_mesh_get_face(source, face_id);
+        if (face == NULL || face->corner_count < 3U ||
+            face->corner_count > SIZE_MAX - total_face_corners ||
+            face->corner_count - 2U > SIZE_MAX / 3U)
+        {
+            goto cleanup;
+        }
+        face_indices = (face->corner_count - 2U) * 3U;
+        if (face_indices > SIZE_MAX - total_render_indices)
+        {
+            goto cleanup;
+        }
+        total_face_corners += face->corner_count;
+        total_render_indices += face_indices;
+    }
+    if (total_face_corners == 0U || total_render_indices == 0U ||
+        total_face_corners > SIZE_MAX / sizeof(*render_vertices) ||
+        total_render_indices > SIZE_MAX / sizeof(*render_indices))
+    {
+        goto cleanup;
+    }
+    failure_stage = "allocate buffers and clone the source";
+    selected_vertices = henka_malloc(selected_face->corner_count * sizeof(*selected_vertices));
+    render_vertices = henka_malloc(total_face_corners * sizeof(*render_vertices));
+    render_indices = henka_malloc(total_render_indices * sizeof(*render_indices));
+    if (selected_vertices == NULL || render_vertices == NULL || render_indices == NULL ||
+        henka_authoring_mesh_clone(source, &source_snapshot) != HENKA_SUCCESS ||
+        henka_authoring_mesh_clone(source, &candidate) != HENKA_SUCCESS ||
+        henka_authoring_mesh_clone(source, &positive_control) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    failure_stage = "baseline source evaluates before the move";
+    render.vertices = render_vertices;
+    render.vertex_capacity = total_face_corners;
+    render.indices = render_indices;
+    render.index_capacity = total_render_indices;
+    if (henka_authoring_mesh_evaluate(source, &render) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    failure_stage = "copy stable selected face vertices";
+    for (selected_corner = 0U; selected_corner < selected_face->corner_count; ++selected_corner)
+    {
+        selected_vertices[selected_corner] = selected_face->vertices[selected_corner];
+    }
+
+    failure_stage = "apply finite +0.1 X translation to cloned face vertices";
+    for (selected_corner = 0U; selected_corner < selected_face->corner_count; ++selected_corner)
+    {
+        const henka_authoring_vertex_id vertex_id = selected_vertices[selected_corner];
+        const henka_authoring_vertex* before = henka_authoring_mesh_get_vertex(candidate, vertex_id);
+        size_t earlier_corner;
+        int duplicate = 0;
+        for (earlier_corner = 0U; earlier_corner < selected_corner; ++earlier_corner)
+        {
+            if (selected_vertices[earlier_corner] == vertex_id)
+            {
+                duplicate = 1;
+                break;
+            }
+        }
+        if (duplicate)
+        {
+            continue;
+        }
+        if (before == NULL || !isfinite(before->position.x) ||
+            !isfinite(before->position.y) || !isfinite(before->position.z) ||
+            henka_authoring_mesh_set_vertex_position(
+                candidate,
+                vertex_id,
+                (henka_vec3){
+                    before->position.x + translation.x,
+                    before->position.y + translation.y,
+                    before->position.z + translation.z}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+
+    failure_stage = "scan candidate topology after evaluator result";
+    candidate_result = henka_authoring_mesh_evaluate(candidate, &render);
+    source_unchanged = test_authoring_mesh_content_equal(source, source_snapshot);
+    for (selected_corner = 0U; selected_corner < desc.max_faces; ++selected_corner)
+    {
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_face* before_face;
+        const henka_authoring_face* after_face;
+        float before_measure;
+        float after_measure;
+        size_t corner;
+        size_t shared_selected_vertex_count = 0U;
+
+        if (henka_authoring_mesh_get_face_id_at(source, selected_corner, &face_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        before_face = henka_authoring_mesh_get_face(source, face_id);
+        after_face = henka_authoring_mesh_get_face(candidate, face_id);
+        if (before_face == NULL || after_face == NULL)
+        {
+            goto cleanup;
+        }
+        before_measure = test_face_maximum_fan_cross_length(source, before_face);
+        after_measure = test_face_maximum_fan_cross_length(candidate, after_face);
+        if (before_measure <= minimum_face_cross_length)
+        {
+            ++pre_invalid_faces;
+        }
+        if (after_measure <= minimum_face_cross_length)
+        {
+            ++post_invalid_faces;
+            if (post_invalid_faces <= sizeof(post_invalid_face_ids) / sizeof(post_invalid_face_ids[0]))
+            {
+                post_invalid_face_ids[post_invalid_faces - 1U] = face_id;
+            }
+            for (corner = 0U; corner < after_face->corner_count; ++corner)
+            {
+                size_t selected_index;
+                for (selected_index = 0U; selected_index < selected_face->corner_count; ++selected_index)
+                {
+                    if (after_face->vertices[corner] == selected_vertices[selected_index])
+                    {
+                        ++shared_selected_vertex_count;
+                        break;
+                    }
+                }
+            }
+            if (face_id != selected_face_id && shared_selected_vertex_count >= 2U)
+            {
+                ++post_invalid_adjacent_faces;
+            }
+            else if (face_id != selected_face_id && shared_selected_vertex_count == 1U)
+            {
+                ++post_invalid_vertex_touch_faces;
+            }
+            else if (face_id != selected_face_id)
+            {
+                ++post_invalid_unrelated_faces;
+            }
+        }
+    }
+    failure_stage = "same face accepts non-collapsing Y move as a positive control";
+    for (selected_corner = 0U; selected_corner < selected_face->corner_count; ++selected_corner)
+    {
+        const henka_authoring_vertex_id vertex_id = selected_vertices[selected_corner];
+        const henka_authoring_vertex* before =
+            henka_authoring_mesh_get_vertex(positive_control, vertex_id);
+        if (before == NULL || henka_authoring_mesh_set_vertex_position(
+                positive_control,
+                vertex_id,
+                (henka_vec3){before->position.x, before->position.y + 0.1f, before->position.z}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    positive_control_result = henka_authoring_mesh_evaluate(positive_control, &render);
+
+    /* The source is accepted and renderable before the move. The X setters
+     * accept finite positions, but candidate evaluation rejects the move when
+     * two edge-adjacent faces collapse. The selected face remains valid and
+     * its Y translation is a positive control. */
+    failure_stage = "candidate rejection and adjacent-face classification match";
+    if (candidate_result == HENKA_ERROR_NUMERIC_RANGE &&
+        positive_control_result == HENKA_SUCCESS &&
+        pre_invalid_faces == 0U && post_invalid_faces == 2U &&
+        post_invalid_adjacent_faces == 2U && post_invalid_vertex_touch_faces == 0U &&
+        post_invalid_unrelated_faces == 0U && source_unchanged &&
+        ((post_invalid_face_ids[0] == fixture_faces[0] &&
+          post_invalid_face_ids[1] == fixture_faces[2]) ||
+         (post_invalid_face_ids[0] == fixture_faces[2] &&
+          post_invalid_face_ids[1] == fixture_faces[0])) &&
+        test_face_maximum_fan_cross_length(
+            candidate, henka_authoring_mesh_get_face(candidate, selected_face_id)) >
+            minimum_face_cross_length)
+    {
+        result = 1;
+    }
+    if (!result)
+    {
+        fprintf(
+            stderr,
+            "face-move contract failed: selected=%u x_result=%d y_result=%d pre_invalid=%zu post_invalid=%zu adjacent=%zu vertex_touching=%zu unrelated=%zu bad_faces=%u,%u source_unchanged=%s\n",
+            (unsigned int)selected_face_id,
+            (int)candidate_result,
+            (int)positive_control_result,
+            pre_invalid_faces,
+            post_invalid_faces,
+            post_invalid_adjacent_faces,
+            post_invalid_vertex_touch_faces,
+            post_invalid_unrelated_faces,
+            (unsigned int)post_invalid_face_ids[0],
+            (unsigned int)post_invalid_face_ids[1],
+            source_unchanged ? "true" : "false");
+    }
+
+cleanup:
+    if (!result)
+    {
+        fprintf(stderr, "face-move regression failed at: %s (x_result=%d y_result=%d)\n",
+            failure_stage, (int)candidate_result, (int)positive_control_result);
+    }
+    henka_free(selected_vertices);
+    henka_free(render_vertices);
+    henka_free(render_indices);
+    henka_authoring_mesh_destroy(positive_control);
+    henka_authoring_mesh_destroy(candidate);
+    henka_authoring_mesh_destroy(source_snapshot);
+    henka_authoring_mesh_destroy(source);
+    return result ? 1 : fail("face move rejects adjacent face collapse");
+}
+
 static int test_evaluation_failure_clears_output_counts(void)
 {
     const henka_authoring_mesh_desc desc = {4U, 4U, 1U, 4U};
@@ -16166,7 +16524,9 @@ int main(void)
         test_split_edge_respects_descriptor_capacity() &&
         test_split_many_loose_edges_operation() &&
         test_split_loose_edges_large_batch_scales() &&
-        test_topology_and_evaluation() && test_extreme_bounds_remain_finite() &&
+        test_topology_and_evaluation() &&
+        test_face_move_rejects_adjacent_face_collapse() &&
+        test_extreme_bounds_remain_finite() &&
         test_evaluation_failure_clears_output_counts() &&
         test_face_operation_outputs_fail_closed() &&
         test_duplicate_face_propagates_allocation_failure() &&
