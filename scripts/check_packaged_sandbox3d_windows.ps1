@@ -1229,9 +1229,10 @@ $startupRestoreStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_startup_
 $startupRestoreStderrPath = Join-Path $logDir "check_packaged_sandbox3d_startup_restore_stderr.log"
 $physicsCapturePath = Join-Path $logDir "physics-reference-wide.bmp"
 $automationInputPath = Join-Path $logDir "check_packaged_sandbox3d_automation.events"
-# This imported Giraffe face is the deterministic adjacent-face-collapse
-# negative-control target. Resolve its screen position from the live mesh;
-# the viewport center can select an unrelated face that correctly accepts X+.
+# This face ID came from the previously classified adjacent-face-collapse
+# observation. It is optional runtime evidence: the deterministic in-memory
+# mesh/operator regressions own the X+ negative control when a packaged source
+# revision no longer contains this exact logical ID.
 $nativeFaceMoveCollapseTargetId = [uint32]16530
 
 if (-not $NonInteractive) {
@@ -3173,55 +3174,83 @@ try {
                 -TimeoutMilliseconds 5000)) {
             throw "The packaged Sandbox did not complete a frame after consuming the object-frame key release."
         }
-        $faceProjectionStatusPattern = 'HENKA_AUTOMATION_DIAGNOSTIC face_projection id={0} status=' -f `
-            $nativeFaceMoveCollapseTargetId
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
-                -Pattern $faceProjectionStatusPattern `
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC face_projection ' `
                 -StartingOffset $faceFrameLogOffset `
                 -TimeoutMilliseconds 3000)) {
-            throw "The packaged application did not project the known face-move collapse target $nativeFaceMoveCollapseTargetId."
+            throw "The packaged application did not report the requested face-projection diagnostic."
         }
         $faceProjectionMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern ('HENKA_AUTOMATION_DIAGNOSTIC face_projection id={0} status=projected local_x=[^ ]+ local_y=[^ ]+ local_z=[^ ]+ framebuffer_x=(?<x>-?[0-9]+(?:\.[0-9]+)?) framebuffer_y=(?<y>-?[0-9]+(?:\.[0-9]+)?) depth=(?<depth>-?[0-9]+(?:\.[0-9]+)?) viewport=(?<viewportX>[0-9]+),(?<viewportY>[0-9]+),(?<viewportWidth>[0-9]+),(?<viewportHeight>[0-9]+)' -f `
                 $nativeFaceMoveCollapseTargetId)
-        if ($null -eq $faceProjectionMatch) {
-            $faceProjectionFailure = Get-LastLogRegexMatch `
+        $faceProjectionUnavailable = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC face_projection status=unavailable reason=(?<reason>[^ ]+).*requested_face_id=(?<id>[0-9]+)'
+        $nativeCollapseNegativeControlAvailable = $null -ne $faceProjectionMatch
+        if (-not $nativeCollapseNegativeControlAvailable -and
+            ($null -eq $faceProjectionUnavailable -or
+             $faceProjectionUnavailable.Groups['reason'].Value -ne 'face-id-not-in-active-mesh' -or
+             [uint32]$faceProjectionUnavailable.Groups['id'].Value -ne $nativeFaceMoveCollapseTargetId)) {
+            $faceProjectionDetail = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
-                -Pattern ('HENKA_AUTOMATION_DIAGNOSTIC face_projection id={0} status=(?<status>[^ ]+)(?: reason=(?<reason>[^ ]+))?' -f `
-                    $nativeFaceMoveCollapseTargetId)
-            $status = if ($null -ne $faceProjectionFailure) {
-                $faceProjectionFailure.Groups['status'].Value
-            } else { 'missing' }
-            $reason = if ($null -ne $faceProjectionFailure -and
-                $faceProjectionFailure.Groups['reason'].Success) {
-                " reason=$($faceProjectionFailure.Groups['reason'].Value)"
-            } else { '' }
-            throw "The known face-move collapse target $nativeFaceMoveCollapseTargetId was not projectable in the active Giraffe mesh (status=$status$reason)."
-        }
-        $invariantCulture = [Globalization.CultureInfo]::InvariantCulture
-        $projectionNumberStyle = [Globalization.NumberStyles]::Float
-        $targetFaceFramebufferX = [double]::Parse(
-            $faceProjectionMatch.Groups['x'].Value, $projectionNumberStyle, $invariantCulture)
-        $targetFaceFramebufferY = [double]::Parse(
-            $faceProjectionMatch.Groups['y'].Value, $projectionNumberStyle, $invariantCulture)
-        $projectedFaceDepth = [double]::Parse(
-            $faceProjectionMatch.Groups['depth'].Value, $projectionNumberStyle, $invariantCulture)
-        if ([int]$faceProjectionMatch.Groups['viewportX'].Value -ne $componentViewportX -or
-            [int]$faceProjectionMatch.Groups['viewportY'].Value -ne $componentViewportY -or
-            [int]$faceProjectionMatch.Groups['viewportWidth'].Value -ne $componentViewportWidth -or
-            [int]$faceProjectionMatch.Groups['viewportHeight'].Value -ne $componentViewportHeight -or
-            $targetFaceFramebufferX -lt $componentViewportX -or
-            $targetFaceFramebufferX -ge ($componentViewportX + $componentViewportWidth) -or
-            $targetFaceFramebufferY -lt $componentViewportY -or
-            $targetFaceFramebufferY -ge ($componentViewportY + $componentViewportHeight) -or
-            $projectedFaceDepth -lt 0.0 -or $projectedFaceDepth -gt 1.0) {
-            throw "The projected collapse target $nativeFaceMoveCollapseTargetId is outside the active Scene View or behind the camera."
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC (?<detail>face_projection [^\r\n]+)'
+            $detail = if ($null -ne $faceProjectionDetail) {
+                $faceProjectionDetail.Groups['detail'].Value
+            } else { 'missing projection result' }
+            throw "The packaged face-projection diagnostic was neither the expected projected target nor an absent logical ID: $detail"
         }
         $nativeTargetFaceId = $null
-        Write-Output ("[probe] projected Giraffe collapse target face {0} at ({1:N2},{2:N2}) depth={3:N6}; selection will come from the production ray picker" -f `
-            $nativeFaceMoveCollapseTargetId, $targetFaceFramebufferX, $targetFaceFramebufferY, $projectedFaceDepth)
+        if ($nativeCollapseNegativeControlAvailable) {
+            $invariantCulture = [Globalization.CultureInfo]::InvariantCulture
+            $projectionNumberStyle = [Globalization.NumberStyles]::Float
+            $targetFaceFramebufferX = [double]::Parse(
+                $faceProjectionMatch.Groups['x'].Value, $projectionNumberStyle, $invariantCulture)
+            $targetFaceFramebufferY = [double]::Parse(
+                $faceProjectionMatch.Groups['y'].Value, $projectionNumberStyle, $invariantCulture)
+            $projectedFaceDepth = [double]::Parse(
+                $faceProjectionMatch.Groups['depth'].Value, $projectionNumberStyle, $invariantCulture)
+            if ([int]$faceProjectionMatch.Groups['viewportX'].Value -ne $componentViewportX -or
+                [int]$faceProjectionMatch.Groups['viewportY'].Value -ne $componentViewportY -or
+                [int]$faceProjectionMatch.Groups['viewportWidth'].Value -ne $componentViewportWidth -or
+                [int]$faceProjectionMatch.Groups['viewportHeight'].Value -ne $componentViewportHeight -or
+                $targetFaceFramebufferX -lt $componentViewportX -or
+                $targetFaceFramebufferX -ge ($componentViewportX + $componentViewportWidth) -or
+                $targetFaceFramebufferY -lt $componentViewportY -or
+                $targetFaceFramebufferY -ge ($componentViewportY + $componentViewportHeight) -or
+                $projectedFaceDepth -lt 0.0 -or $projectedFaceDepth -gt 1.0) {
+                throw "The projected collapse target $nativeFaceMoveCollapseTargetId is outside the active Scene View or behind the camera."
+            }
+            Write-Output ("[probe] projected Giraffe collapse target face {0} at ({1:N2},{2:N2}) depth={3:N6}; selection will come from the production ray picker" -f `
+                $nativeFaceMoveCollapseTargetId, $targetFaceFramebufferX, $targetFaceFramebufferY, $projectedFaceDepth)
+            $facePickOffsets = @(
+                [pscustomobject]@{ X = 0.0; Y = 0.0 },
+                [pscustomobject]@{ X = -2.0; Y = 0.0 },
+                [pscustomobject]@{ X = 2.0; Y = 0.0 },
+                [pscustomobject]@{ X = 0.0; Y = -2.0 },
+                [pscustomobject]@{ X = 0.0; Y = 2.0 },
+                [pscustomobject]@{ X = -2.0; Y = -2.0 },
+                [pscustomobject]@{ X = 2.0; Y = -2.0 },
+                [pscustomobject]@{ X = -2.0; Y = 2.0 },
+                [pscustomobject]@{ X = 2.0; Y = 2.0 })
+        }
+        else {
+            Write-Output ("[info] Runtime Giraffe mesh does not contain previously observed collapse face ID {0}; the deterministic mesh and authoring-operator regressions remain the X+ rejection authority. The packaged interaction will use a live picked face for its Y+ positive control." -f `
+                $nativeFaceMoveCollapseTargetId)
+            $targetFaceFramebufferX = $componentViewportX + ($componentViewportWidth * 0.5)
+            $targetFaceFramebufferY = $componentViewportY + ($componentViewportHeight * 0.5)
+            $facePickOffsets = @(
+                [pscustomobject]@{ X = 0.0; Y = 0.0 },
+                [pscustomobject]@{ X = -24.0; Y = 0.0 },
+                [pscustomobject]@{ X = 24.0; Y = 0.0 },
+                [pscustomobject]@{ X = 0.0; Y = -24.0 },
+                [pscustomobject]@{ X = 0.0; Y = 24.0 },
+                [pscustomobject]@{ X = -48.0; Y = 0.0 },
+                [pscustomobject]@{ X = 48.0; Y = 0.0 },
+                [pscustomobject]@{ X = 0.0; Y = -48.0 },
+                [pscustomobject]@{ X = 0.0; Y = 48.0 })
+        }
         Start-Sleep -Milliseconds 450
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
@@ -3230,23 +3259,11 @@ try {
         $nativeComponentPicked = $false
         $nativeLastPickedFaceId = $null
         $nativeFacePickProbeCount = 0
-        $facePickOffsets = @(
-            [pscustomobject]@{ X = 0.0; Y = 0.0 },
-            [pscustomobject]@{ X = -2.0; Y = 0.0 },
-            [pscustomobject]@{ X = 2.0; Y = 0.0 },
-            [pscustomobject]@{ X = 0.0; Y = -2.0 },
-            [pscustomobject]@{ X = 0.0; Y = 2.0 },
-            [pscustomobject]@{ X = -2.0; Y = -2.0 },
-            [pscustomobject]@{ X = 2.0; Y = -2.0 },
-            [pscustomobject]@{ X = -2.0; Y = 2.0 },
-            [pscustomobject]@{ X = 2.0; Y = 2.0 })
         $nativeFacePickProbeTotal = $facePickOffsets.Count
         $nativeMoveLogOffset = $null
-        # Probe only a bounded 3x3 neighborhood around the live projection of
-        # the known collapse target. Each candidate is a real screen click
-        # through the production Scene View picker; require that exact face so
-        # the following X+ rejection tests the intended geometry, not an
-        # arbitrary center face.
+        # Pick only through the production ray picker. When the diagnostic face
+        # exists, require that exact logical identity; otherwise this remains an
+        # ordinary packaged positive-control edit on a live Giraffe face.
         foreach ($facePickOffset in $facePickOffsets) {
             if ($nativeComponentPicked) { break }
             ++$nativeFacePickProbeCount
@@ -3256,7 +3273,7 @@ try {
                 $probeFramebufferX -ge ($componentViewportX + $componentViewportWidth) -or
                 $probeFramebufferY -lt $componentViewportY -or
                 $probeFramebufferY -ge ($componentViewportY + $componentViewportHeight)) {
-                throw "The projected deterministic face lies outside the current Scene View viewport."
+                throw "The face-pick probe lies outside the current Scene View viewport."
             }
             $componentPickLogOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
@@ -3280,7 +3297,8 @@ try {
                 $componentPickMatch.Groups['selected'].Value -eq '1' -and
                 [uint32]$componentPickMatch.Groups['active'].Value -gt [uint32]0) {
                 $nativeLastPickedFaceId = [uint32]$componentPickMatch.Groups['active'].Value
-                if ($nativeLastPickedFaceId -eq $nativeFaceMoveCollapseTargetId) {
+                if (-not $nativeCollapseNegativeControlAvailable -or
+                    $nativeLastPickedFaceId -eq $nativeFaceMoveCollapseTargetId) {
                     $nativeTargetFaceId = $nativeLastPickedFaceId
                     $nativeComponentPicked = $true
                     $nativeMoveLogOffset = $componentPickLogOffset
@@ -3296,9 +3314,17 @@ try {
                 }))
         }
         if (-not $nativeComponentPicked) {
-            throw "The real Scene View picker did not select the projected Giraffe collapse target face $nativeFaceMoveCollapseTargetId after $nativeFacePickProbeCount bounded probes (last picked face: $nativeLastPickedFaceId)."
+            $targetDescription = if ($nativeCollapseNegativeControlAvailable) {
+                "collapse target face $nativeFaceMoveCollapseTargetId"
+            } else { 'a live Giraffe face' }
+            throw "The real Scene View picker did not select $targetDescription after $nativeFacePickProbeCount bounded probes (last picked face: $nativeLastPickedFaceId)."
         }
-        Write-Output ("[pass] Production Scene View picking selected the intended Giraffe collapse target face {0}" -f $nativeTargetFaceId)
+        if ($nativeCollapseNegativeControlAvailable) {
+            Write-Output ("[pass] Production Scene View picking selected the intended Giraffe collapse target face {0}" -f $nativeTargetFaceId)
+        }
+        else {
+            Write-Output ("[pass] Production Scene View picker selected live Giraffe face {0} for the packaged Y+ positive control" -f $nativeTargetFaceId)
+        }
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring move control:" `
@@ -3325,42 +3351,44 @@ try {
         if ($nativeMoveControlName -ne $nativePickedName) {
             throw "The Move X+ control belongs to '$nativeMoveControlName', not the selected face owner '$nativePickedName'."
         }
-        $nativeMoveXClickLogOffset = Get-FileLengthSafe -Path $stdoutPath
-        $componentMoveEditCountBeforeX = @(Select-String `
-            -LiteralPath $stdoutPath `
-            -Pattern '^Native authoring workflow: component move edited ').Count
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ([double]$nativeMoveMatch.Groups[2].Value + 44.0) `
-            -FramebufferY ([double]$nativeMoveMatch.Groups[3].Value + 12.0)
-        if (-not (Wait-FileContainsAfterOffset `
+        if ($nativeCollapseNegativeControlAvailable) {
+            $nativeMoveXClickLogOffset = Get-FileLengthSafe -Path $stdoutPath
+            $componentMoveEditCountBeforeX = @(Select-String `
+                -LiteralPath $stdoutPath `
+                -Pattern '^Native authoring workflow: component move edited ').Count
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ([double]$nativeMoveMatch.Groups[2].Value + 44.0) `
+                -FramebufferY ([double]$nativeMoveMatch.Groups[3].Value + 12.0)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern '^Native authoring component move: name=' `
+                    -StartingOffset $nativeMoveXClickLogOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The packaged Move X+ negative control did not report an operation result."
+            }
+            $nativeMoveXResultMatch = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
-                -Pattern '^Native authoring component move: name=' `
-                -StartingOffset $nativeMoveXClickLogOffset `
-                -TimeoutMilliseconds 5000)) {
-            throw "The packaged Move X+ negative control did not report an operation result."
+                -Pattern 'Native authoring component move: name=(?<name>.+) result=(?<result>.+) mode=(?<mode>.+) selected_components=(?<selected>[0-9]+)\.'
+            if ($null -eq $nativeMoveXResultMatch) {
+                throw "The packaged Move X+ negative-control result could not be parsed."
+            }
+            if ($nativeMoveXResultMatch.Groups['name'].Value -ne $nativePickedName -or
+                $nativeMoveXResultMatch.Groups['result'].Value -ne 'numeric range error' -or
+                $nativeMoveXResultMatch.Groups['mode'].Value -ne 'Face' -or
+                [int]$nativeMoveXResultMatch.Groups['selected'].Value -ne 1) {
+                throw "The packaged Move X+ control returned result '$($nativeMoveXResultMatch.Groups['result'].Value)' for '$($nativeMoveXResultMatch.Groups['name'].Value)' in mode '$($nativeMoveXResultMatch.Groups['mode'].Value)' with $($nativeMoveXResultMatch.Groups['selected'].Value) selected components; expected numeric range rejection for the same single selected face."
+            }
+            $componentMoveEditCountAfterX = @(Select-String `
+                -LiteralPath $stdoutPath `
+                -Pattern '^Native authoring workflow: component move edited ').Count
+            if ($componentMoveEditCountAfterX -ne $componentMoveEditCountBeforeX) {
+                throw "The rejected packaged Move X+ candidate emitted successful component-move publication telemetry."
+            }
+            Write-Output ("[pass] Packaged Move X+ intentionally rejected the adjacent-face collapse for face owner '{0}' with numeric range error and no edit-publication telemetry." -f $nativePickedName)
         }
-        $nativeMoveXResultMatch = Get-LastLogRegexMatch `
-            -Path $stdoutPath `
-            -Pattern 'Native authoring component move: name=(?<name>.+) result=(?<result>.+) mode=(?<mode>.+) selected_components=(?<selected>[0-9]+)\.'
-        if ($null -eq $nativeMoveXResultMatch) {
-            throw "The packaged Move X+ negative-control result could not be parsed."
-        }
-        if ($nativeMoveXResultMatch.Groups['name'].Value -ne $nativePickedName -or
-            $nativeMoveXResultMatch.Groups['result'].Value -ne 'numeric range error' -or
-            $nativeMoveXResultMatch.Groups['mode'].Value -ne 'Face' -or
-            [int]$nativeMoveXResultMatch.Groups['selected'].Value -ne 1) {
-            throw "The packaged Move X+ control returned result '$($nativeMoveXResultMatch.Groups['result'].Value)' for '$($nativeMoveXResultMatch.Groups['name'].Value)' in mode '$($nativeMoveXResultMatch.Groups['mode'].Value)' with $($nativeMoveXResultMatch.Groups['selected'].Value) selected components; expected numeric range rejection for the same single selected face."
-        }
-        $componentMoveEditCountAfterX = @(Select-String `
-            -LiteralPath $stdoutPath `
-            -Pattern '^Native authoring workflow: component move edited ').Count
-        if ($componentMoveEditCountAfterX -ne $componentMoveEditCountBeforeX) {
-            throw "The rejected packaged Move X+ candidate emitted successful component-move publication telemetry."
-        }
-        Write-Output ("[pass] Packaged Move X+ intentionally rejected the adjacent-face collapse for face owner '{0}' with numeric range error and no edit-publication telemetry." -f $nativePickedName)
 
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
