@@ -24613,6 +24613,25 @@ static void sandbox3d_draw_scene_viewport_frame(
             button_width,
             gap);
         fflush(stdout);
+        for (index = 0U; index < 4U; ++index)
+        {
+            const henka_ui_rect button_bounds = shading_count == 4U
+                ? shading_rects[index]
+                : (henka_ui_rect){
+                    start_x + (button_width + gap) * (float)index,
+                    bounds.y + 4.0f,
+                    button_width,
+                    22.0f};
+
+            printf(
+                "Viewport shading control: mode=%s x=%.1f y=%.1f width=%.1f height=%.1f.\n",
+                henka_viewport_shading_mode_get_label(modes[index]),
+                button_bounds.x,
+                button_bounds.y,
+                button_bounds.width,
+                button_bounds.height);
+        }
+        fflush(stdout);
         state->viewport_shading_bounds_reported = true;
         state->viewport_shading_bounds_reported_rect =
             (henka_ui_rect){

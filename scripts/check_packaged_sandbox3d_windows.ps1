@@ -4970,14 +4970,6 @@ try {
         # status line cannot satisfy the check, and the bounded retries remain
         # safe when the operator is using the desktop concurrently.
         Start-Sleep -Milliseconds 1000
-        $shadingX =
-            [double]$shadingMatch.Groups[1].Value
-        $shadingY =
-            [double]$shadingMatch.Groups[2].Value
-        $shadingButtonWidth =
-            [double]$shadingMatch.Groups[3].Value
-        $shadingGap =
-            [double]$shadingMatch.Groups[4].Value
         $shadingNames = @(
             "Wireframe",
             "Solid",
@@ -4987,13 +4979,32 @@ try {
         for ($modeIndex = 0;
              $modeIndex -lt $shadingNames.Count;
              ++$modeIndex) {
-            $modeCenterX =
-                $shadingX +
-                ($shadingButtonWidth + $shadingGap) *
-                [double]$modeIndex +
-                $shadingButtonWidth * 0.5
-            $modeCenterY =
-                $shadingY + 11.0
+            $modeControlPattern =
+                '^Viewport shading control: mode=' +
+                [Regex]::Escape($shadingNames[$modeIndex]) +
+                ' x=(?<x>-?[0-9]+(?:\.[0-9]+)?) y=(?<y>-?[0-9]+(?:\.[0-9]+)?) width=(?<width>[0-9]+(?:\.[0-9]+)?) height=(?<height>[0-9]+(?:\.[0-9]+)?)\.'
+            $modeControlMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $modeControlPattern
+            if ($null -eq $modeControlMatch) {
+                throw "The packaged application did not report authoritative geometry for viewport shading mode '$($shadingNames[$modeIndex])'."
+            }
+            $invariantCulture = [Globalization.CultureInfo]::InvariantCulture
+            $numberStyle = [Globalization.NumberStyles]::Float
+            $modeX = [double]::Parse($modeControlMatch.Groups['x'].Value, $numberStyle, $invariantCulture)
+            $modeY = [double]::Parse($modeControlMatch.Groups['y'].Value, $numberStyle, $invariantCulture)
+            $modeWidth = [double]::Parse($modeControlMatch.Groups['width'].Value, $numberStyle, $invariantCulture)
+            $modeHeight = [double]::Parse($modeControlMatch.Groups['height'].Value, $numberStyle, $invariantCulture)
+            Assert-FramebufferRect `
+                -Name "Viewport shading $($shadingNames[$modeIndex]) control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $modeX `
+                -Y $modeY `
+                -Width $modeWidth `
+                -Height $modeHeight
+            $modeCenterX = $modeX + ($modeWidth * 0.5)
+            $modeCenterY = $modeY + ($modeHeight * 0.5)
 
             $expectedModePattern =
                 "Viewport shading: " +
