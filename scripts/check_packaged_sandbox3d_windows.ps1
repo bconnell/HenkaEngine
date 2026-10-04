@@ -800,12 +800,33 @@ function Invoke-PackagedProductGameAuthoringWorkflow {
         -FramebufferY ($toolsY + 11.0)
 
     $disclosurePattern = '^Game authoring physics disclosure: name=(?<name>.+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28\.0 expanded=(?<expanded>[01])\.'
-    if (-not (Wait-FileContainsAfterOffset `
+    $disclosureVisiblePattern = '^Game authoring physics disclosure: name=.+ height=28\.0 expanded=[01]\.'
+    $disclosureVisible = Wait-FileContainsAfterOffset `
+        -Path $StdoutPath `
+        -Pattern $disclosureVisiblePattern `
+        -StartingOffset $contextOffset `
+        -TimeoutMilliseconds 350
+    $detailsScrollCount = 0
+    for (; -not $disclosureVisible -and $detailsScrollCount -lt 12; ++$detailsScrollCount) {
+        Scroll-FramebufferPointAndWaitForConsumption `
+            -Handle $Handle `
+            -FramebufferWidth $FramebufferWidth `
+            -FramebufferHeight $FramebufferHeight `
+            -FramebufferX ($DetailsX + [Math]::Max(12.0, $DetailsWidth - 18.0)) `
+            -FramebufferY ($DetailsY + [Math]::Max(30.0, $DetailsHeight * 0.55)) `
+            -WheelDelta -1 `
+            -TimeoutMilliseconds 3000
+        $disclosureVisible = Wait-FileContainsAfterOffset `
             -Path $StdoutPath `
-            -Pattern '^Game authoring physics disclosure: name=.+ height=28\.0 expanded=[01]\.' `
+            -Pattern $disclosureVisiblePattern `
             -StartingOffset $contextOffset `
-            -TimeoutMilliseconds 4000)) {
-        throw "The selected product-native Add Cube did not expose Game Authoring in the Game context."
+            -TimeoutMilliseconds 350
+    }
+    if (-not $disclosureVisible) {
+        throw "The selected product-native Add Cube did not expose the Game Authoring Physics disclosure after 12 consumed Object Details scroll steps."
+    }
+    if ($detailsScrollCount -gt 0) {
+        Write-Output ("[pass] Game Authoring Physics disclosure became visible after {0} consumed Object Details scroll step(s)" -f $detailsScrollCount)
     }
     $disclosure = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $disclosurePattern
     if ($null -eq $disclosure) {
@@ -1208,6 +1229,10 @@ $startupRestoreStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_startup_
 $startupRestoreStderrPath = Join-Path $logDir "check_packaged_sandbox3d_startup_restore_stderr.log"
 $physicsCapturePath = Join-Path $logDir "physics-reference-wide.bmp"
 $automationInputPath = Join-Path $logDir "check_packaged_sandbox3d_automation.events"
+# This imported Giraffe face is the deterministic adjacent-face-collapse
+# negative-control target. Resolve its screen position from the live mesh;
+# the viewport center can select an unrelated face that correctly accepts X+.
+$nativeFaceMoveCollapseTargetId = [uint32]16530
 
 if (-not $NonInteractive) {
     Add-Type -AssemblyName System.Drawing
@@ -1728,7 +1753,7 @@ try {
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
     $env:HENKA_AUTOMATION_DIAGNOSTICS = "1"
-    Remove-Item Env:HENKA_AUTOMATION_DIAGNOSTIC_FACE_ID -ErrorAction SilentlyContinue
+    $env:HENKA_AUTOMATION_DIAGNOSTIC_FACE_ID = [string]$nativeFaceMoveCollapseTargetId
     $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH = $automationUserDataRoot
     Write-Step "Launching the packaged sandbox"
     # The native authoring workflow is an explicit reference-asset path.
@@ -1739,7 +1764,9 @@ try {
             -FilePath $packagedExe `
             -WorkingDirectory $packageRoot `
             -StdoutPath $stdoutPath `
-            -StderrPath $stderrPath
+            -StderrPath $stderrPath `
+            -StartMinimized:$false `
+            -StartVisibleWithoutActivation
     }
     else {
         $capturedProcess = Start-HenkaCapturedProcess `
@@ -2275,6 +2302,7 @@ try {
                 -StdoutPath $stdoutPath `
                 -ScreenshotPath $nativeAuthoringScreenshotPath
             Write-Output "[pass] Packaged Game Authoring workflow used the canonical product-startup Add Cube"
+            $packagedCheckSucceeded = $true
             return
         }
 
@@ -2370,6 +2398,7 @@ try {
 
         if ($TerrainStartupOnly) {
             Write-Output "[pass] Packaged product-startup/Terrain gate completed without entering the explicit showcase authoring suite"
+            $packagedCheckSucceeded = $true
             return
         }
 
@@ -3144,11 +3173,55 @@ try {
                 -TimeoutMilliseconds 5000)) {
             throw "The packaged Sandbox did not complete a frame after consuming the object-frame key release."
         }
-        $targetFaceFramebufferX = $componentViewportX + ($componentViewportWidth * 0.5)
-        $targetFaceFramebufferY = $componentViewportY + ($componentViewportHeight * 0.5)
+        $faceProjectionStatusPattern = 'HENKA_AUTOMATION_DIAGNOSTIC face_projection id={0} status=' -f `
+            $nativeFaceMoveCollapseTargetId
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $faceProjectionStatusPattern `
+                -StartingOffset $faceFrameLogOffset `
+                -TimeoutMilliseconds 3000)) {
+            throw "The packaged application did not project the known face-move collapse target $nativeFaceMoveCollapseTargetId."
+        }
+        $faceProjectionMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern ('HENKA_AUTOMATION_DIAGNOSTIC face_projection id={0} status=projected local_x=[^ ]+ local_y=[^ ]+ local_z=[^ ]+ framebuffer_x=(?<x>-?[0-9]+(?:\.[0-9]+)?) framebuffer_y=(?<y>-?[0-9]+(?:\.[0-9]+)?) depth=(?<depth>-?[0-9]+(?:\.[0-9]+)?) viewport=(?<viewportX>[0-9]+),(?<viewportY>[0-9]+),(?<viewportWidth>[0-9]+),(?<viewportHeight>[0-9]+)' -f `
+                $nativeFaceMoveCollapseTargetId)
+        if ($null -eq $faceProjectionMatch) {
+            $faceProjectionFailure = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern ('HENKA_AUTOMATION_DIAGNOSTIC face_projection id={0} status=(?<status>[^ ]+)(?: reason=(?<reason>[^ ]+))?' -f `
+                    $nativeFaceMoveCollapseTargetId)
+            $status = if ($null -ne $faceProjectionFailure) {
+                $faceProjectionFailure.Groups['status'].Value
+            } else { 'missing' }
+            $reason = if ($null -ne $faceProjectionFailure -and
+                $faceProjectionFailure.Groups['reason'].Success) {
+                " reason=$($faceProjectionFailure.Groups['reason'].Value)"
+            } else { '' }
+            throw "The known face-move collapse target $nativeFaceMoveCollapseTargetId was not projectable in the active Giraffe mesh (status=$status$reason)."
+        }
+        $invariantCulture = [Globalization.CultureInfo]::InvariantCulture
+        $projectionNumberStyle = [Globalization.NumberStyles]::Float
+        $targetFaceFramebufferX = [double]::Parse(
+            $faceProjectionMatch.Groups['x'].Value, $projectionNumberStyle, $invariantCulture)
+        $targetFaceFramebufferY = [double]::Parse(
+            $faceProjectionMatch.Groups['y'].Value, $projectionNumberStyle, $invariantCulture)
+        $projectedFaceDepth = [double]::Parse(
+            $faceProjectionMatch.Groups['depth'].Value, $projectionNumberStyle, $invariantCulture)
+        if ([int]$faceProjectionMatch.Groups['viewportX'].Value -ne $componentViewportX -or
+            [int]$faceProjectionMatch.Groups['viewportY'].Value -ne $componentViewportY -or
+            [int]$faceProjectionMatch.Groups['viewportWidth'].Value -ne $componentViewportWidth -or
+            [int]$faceProjectionMatch.Groups['viewportHeight'].Value -ne $componentViewportHeight -or
+            $targetFaceFramebufferX -lt $componentViewportX -or
+            $targetFaceFramebufferX -ge ($componentViewportX + $componentViewportWidth) -or
+            $targetFaceFramebufferY -lt $componentViewportY -or
+            $targetFaceFramebufferY -ge ($componentViewportY + $componentViewportHeight) -or
+            $projectedFaceDepth -lt 0.0 -or $projectedFaceDepth -gt 1.0) {
+            throw "The projected collapse target $nativeFaceMoveCollapseTargetId is outside the active Scene View or behind the camera."
+        }
         $nativeTargetFaceId = $null
-        Write-Output ("[probe] current Giraffe Scene View center is ({0:N2},{1:N2}); selection will come from the production ray picker" -f `
-            $targetFaceFramebufferX, $targetFaceFramebufferY)
+        Write-Output ("[probe] projected Giraffe collapse target face {0} at ({1:N2},{2:N2}) depth={3:N6}; selection will come from the production ray picker" -f `
+            $nativeFaceMoveCollapseTargetId, $targetFaceFramebufferX, $targetFaceFramebufferY, $projectedFaceDepth)
         Start-Sleep -Milliseconds 450
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
@@ -3169,10 +3242,11 @@ try {
             [pscustomobject]@{ X = 2.0; Y = 2.0 })
         $nativeFacePickProbeTotal = $facePickOffsets.Count
         $nativeMoveLogOffset = $null
-        # Probe only a bounded 3x3 neighborhood around the framed object's view
-        # center. Each candidate is a real screen click through the production
-        # Scene View picker; accept the exact face the runtime reports on this
-        # Giraffe, rather than assuming a stale serialized face ID.
+        # Probe only a bounded 3x3 neighborhood around the live projection of
+        # the known collapse target. Each candidate is a real screen click
+        # through the production Scene View picker; require that exact face so
+        # the following X+ rejection tests the intended geometry, not an
+        # arbitrary center face.
         foreach ($facePickOffset in $facePickOffsets) {
             if ($nativeComponentPicked) { break }
             ++$nativeFacePickProbeCount
@@ -3206,10 +3280,12 @@ try {
                 $componentPickMatch.Groups['selected'].Value -eq '1' -and
                 [uint32]$componentPickMatch.Groups['active'].Value -gt [uint32]0) {
                 $nativeLastPickedFaceId = [uint32]$componentPickMatch.Groups['active'].Value
-                $nativeTargetFaceId = $nativeLastPickedFaceId
-                $nativeComponentPicked = $true
-                $nativeMoveLogOffset = $componentPickLogOffset
+                if ($nativeLastPickedFaceId -eq $nativeFaceMoveCollapseTargetId) {
+                    $nativeTargetFaceId = $nativeLastPickedFaceId
+                    $nativeComponentPicked = $true
+                    $nativeMoveLogOffset = $componentPickLogOffset
                 }
+            }
             }
             Write-Output ("[probe] face-pick {0}/{1} at ({2:N2},{3:N2}) -> {4}" -f `
                 $nativeFacePickProbeCount, $nativeFacePickProbeTotal, $probeFramebufferX, $probeFramebufferY, `
@@ -3220,9 +3296,9 @@ try {
                 }))
         }
         if (-not $nativeComponentPicked) {
-            throw "The real Scene View picker did not select a Giraffe face near the framed object center after $nativeFacePickProbeCount bounded probes (last picked face: $nativeLastPickedFaceId)."
+            throw "The real Scene View picker did not select the projected Giraffe collapse target face $nativeFaceMoveCollapseTargetId after $nativeFacePickProbeCount bounded probes (last picked face: $nativeLastPickedFaceId)."
         }
-        Write-Output ("[pass] Production Scene View picking selected current Giraffe face {0}" -f $nativeTargetFaceId)
+        Write-Output ("[pass] Production Scene View picking selected the intended Giraffe collapse target face {0}" -f $nativeTargetFaceId)
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring move control:" `

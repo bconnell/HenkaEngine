@@ -26669,6 +26669,7 @@ static void sandbox3d_draw_scene_objects_panel(
     float footer_y;
     float row_y;
     float row_start_y;
+    float available_row_height;
     float glyph_advance;
     float line_height;
     float action_y;
@@ -27158,10 +27159,11 @@ static void sandbox3d_draw_scene_objects_panel(
     }
 
     footer_y = panel_bounds.y + panel_bounds.height - 34.0f;
+    available_row_height = footer_y - row_start_y;
     layout_result = sandbox3d_editor_layout_page_variable_rows(
         row_line_counts,
         hierarchy_row_count,
-        footer_y - row_start_y,
+        available_row_height,
         line_height,
         12.0f,
         28.0f,
@@ -27194,6 +27196,11 @@ static void sandbox3d_draw_scene_objects_panel(
         bool clicked;
         size_t wrapped_line_count;
         size_t hidden_suffix_size;
+        size_t maximum_visible_line_count;
+        size_t expected_name_line_count;
+        double possible_visible_lines;
+        bool entity_hidden;
+        bool display_truncated = false;
         henka_ui_rect row_bounds;
 
         entity = hierarchy_rows[row_index].entity;
@@ -27222,6 +27229,39 @@ static void sandbox3d_draw_scene_objects_panel(
             sandbox3d_set_status(state, true, "A Scene Objects row has invalid text geometry.");
             return;
         }
+        layout_result = sandbox3d_editor_layout_clamp_row_height(
+            row_height,
+            available_row_height,
+            28.0f,
+            &row_height);
+        if (layout_result != HENKA_SUCCESS)
+        {
+            free(row_line_counts);
+            free(hierarchy_rows);
+            sandbox3d_set_status(state, true, "A Scene Objects row cannot fit the visible panel.");
+            return;
+        }
+        possible_visible_lines = floor(
+            ((double)row_height - 12.0) / (double)line_height);
+        if (!isfinite(possible_visible_lines))
+        {
+            free(row_line_counts);
+            free(hierarchy_rows);
+            sandbox3d_set_status(state, true, "Scene object text has invalid visible line limits.");
+            return;
+        }
+        if (possible_visible_lines < 1.0)
+        {
+            maximum_visible_line_count = 1U;
+        }
+        else if (possible_visible_lines >= (double)row_line_counts[row_index])
+        {
+            maximum_visible_line_count = row_line_counts[row_index];
+        }
+        else
+        {
+            maximum_visible_line_count = (size_t)possible_visible_lines;
+        }
         row_bounds = (henka_ui_rect){panel_bounds.x + 14.0f, row_y, row_width, row_height};
         name_length = strlen(entity_name);
         if (name_length > (((size_t)-1 - 16U) / 2U))
@@ -27231,10 +27271,9 @@ static void sandbox3d_draw_scene_objects_panel(
             sandbox3d_set_status(state, true, "A Scene Objects name is too large to display safely.");
             return;
         }
-        hidden_suffix_size = henka_scene_is_entity_visible(state->scene, entity)
-            ? 0U
-            : sizeof("\n- Hidden");
-        wrapped_capacity = name_length * 2U + hidden_suffix_size + 1U;
+        entity_hidden = !henka_scene_is_entity_visible(state->scene, entity);
+        hidden_suffix_size = entity_hidden ? sizeof("\n- Hidden") : 0U;
+        wrapped_capacity = name_length * 2U + hidden_suffix_size + 6U;
         wrapped_text = (char*)malloc(wrapped_capacity);
         if (wrapped_text == NULL)
         {
@@ -27257,7 +27296,67 @@ static void sandbox3d_draw_scene_objects_panel(
             sandbox3d_set_status(state, true, "A Scene Objects name could not be wrapped.");
             return;
         }
-        if (hidden_suffix_size > 0U)
+        expected_name_line_count = row_line_counts[row_index] -
+            (entity_hidden ? 1U : 0U);
+        if (wrapped_line_count != expected_name_line_count)
+        {
+            free(wrapped_text);
+            free(row_line_counts);
+            free(hierarchy_rows);
+            sandbox3d_set_status(state, true, "Scene object text changed during layout.");
+            return;
+        }
+        if (entity_hidden && maximum_visible_line_count == 1U)
+        {
+            layout_result = sandbox3d_editor_layout_wrap_text(
+                "Hidden",
+                name_columns,
+                wrapped_text,
+                wrapped_capacity,
+                &wrapped_line_count);
+            if (layout_result == HENKA_SUCCESS)
+            {
+                layout_result = sandbox3d_editor_layout_limit_wrapped_text(
+                    wrapped_text,
+                    1U,
+                    name_columns,
+                    wrapped_text,
+                    wrapped_capacity,
+                    &wrapped_line_count,
+                    &display_truncated);
+            }
+            if (layout_result != HENKA_SUCCESS)
+            {
+                free(wrapped_text);
+                free(row_line_counts);
+                free(hierarchy_rows);
+                sandbox3d_set_status(state, true, "Hidden object state could not fit its visible row.");
+                return;
+            }
+        }
+        else
+        {
+            const size_t name_line_limit = entity_hidden
+                ? maximum_visible_line_count - 1U
+                : maximum_visible_line_count;
+            layout_result = sandbox3d_editor_layout_limit_wrapped_text(
+                wrapped_text,
+                name_line_limit,
+                name_columns,
+                wrapped_text,
+                wrapped_capacity,
+                &wrapped_line_count,
+                &display_truncated);
+            if (layout_result != HENKA_SUCCESS)
+            {
+                free(wrapped_text);
+                free(row_line_counts);
+                free(hierarchy_rows);
+                sandbox3d_set_status(state, true, "Scene object text could not be bounded to the visible row.");
+                return;
+            }
+        }
+        if (entity_hidden && maximum_visible_line_count > 1U)
         {
             const size_t wrapped_length = strlen(wrapped_text);
             if (wrapped_length + sizeof("\n- Hidden") > wrapped_capacity)
@@ -27271,12 +27370,13 @@ static void sandbox3d_draw_scene_objects_panel(
             memcpy(wrapped_text + wrapped_length, "\n- Hidden", sizeof("\n- Hidden"));
             ++wrapped_line_count;
         }
-        if (wrapped_line_count != row_line_counts[row_index])
+        if (wrapped_line_count == 0U ||
+            wrapped_line_count > maximum_visible_line_count)
         {
             free(wrapped_text);
             free(row_line_counts);
             free(hierarchy_rows);
-            sandbox3d_set_status(state, true, "Scene object text changed during layout.");
+            sandbox3d_set_status(state, true, "Scene object text exceeds its visible row bounds.");
             return;
         }
         text_x = row_bounds.x + 8.0f + (float)indent_columns * glyph_advance;

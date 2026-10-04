@@ -330,6 +330,27 @@ void henka_test_sandbox3d_editor_layout(void)
                 &row_height) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT_FLOAT_CLOSE(row_height, 44.0f, 0.0001f);
         HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_clamp_row_height(
+                332.0f,
+                72.0f,
+                28.0f,
+                &row_height) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(row_height, 72.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_clamp_row_height(
+                44.0f,
+                72.0f,
+                28.0f,
+                &row_height) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(row_height, 44.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_clamp_row_height(
+                44.0f,
+                27.0f,
+                28.0f,
+                &row_height) == HENKA_ERROR_NUMERIC_RANGE);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(row_height, 0.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
             sandbox3d_editor_layout_page_variable_rows(
                 row_line_counts,
                 4U,
@@ -382,6 +403,127 @@ void henka_test_sandbox3d_editor_layout(void)
         HENKA_TEST_ASSERT(page_count == 0U);
         HENKA_TEST_ASSERT(first_row == 0U);
         HENKA_TEST_ASSERT(visible_count == 0U);
+    }
+
+    {
+        char bounded_text[32] = "keep";
+        size_t visible_lines = 99U;
+        bool truncated = false;
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_limit_wrapped_text(
+                "root\nchild\ncontinued",
+                2U,
+                12U,
+                bounded_text,
+                sizeof(bounded_text),
+                &visible_lines,
+                &truncated) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(strcmp(bounded_text, "root\n...") == 0);
+        HENKA_TEST_ASSERT(visible_lines == 2U);
+        HENKA_TEST_ASSERT(truncated);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_limit_wrapped_text(
+                "root\nchild",
+                2U,
+                12U,
+                bounded_text,
+                sizeof(bounded_text),
+                &visible_lines,
+                &truncated) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(strcmp(bounded_text, "root\nchild") == 0);
+        HENKA_TEST_ASSERT(visible_lines == 2U);
+        HENKA_TEST_ASSERT(!truncated);
+
+        (void)memcpy(bounded_text, "keep", sizeof("keep"));
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_limit_wrapped_text(
+                "root\nchild",
+                2U,
+                12U,
+                bounded_text,
+                5U,
+                &visible_lines,
+                &truncated) == HENKA_ERROR_LIMIT);
+        HENKA_TEST_ASSERT(strcmp(bounded_text, "keep") == 0);
+        HENKA_TEST_ASSERT(visible_lines == 0U);
+        HENKA_TEST_ASSERT(!truncated);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_limit_wrapped_text(
+                "ab\ncd\nef",
+                2U,
+                2U,
+                bounded_text,
+                sizeof(bounded_text),
+                &visible_lines,
+                &truncated) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(strcmp(bounded_text, "ab\n..") == 0);
+        HENKA_TEST_ASSERT(visible_lines == 2U);
+        HENKA_TEST_ASSERT(truncated);
+    }
+
+    {
+        const size_t row_line_counts[] = {1U, 40U, 2U, 1U};
+        size_t page_index = 99U;
+        size_t page_count = 99U;
+        size_t first_row = 99U;
+        size_t visible_count = 99U;
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_page_variable_rows(
+                row_line_counts,
+                4U,
+                72.0f,
+                8.0f,
+                12.0f,
+                28.0f,
+                0U,
+                &page_index,
+                &page_count,
+                &first_row,
+                &visible_count) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(page_index == 0U);
+        HENKA_TEST_ASSERT(page_count == 3U);
+        HENKA_TEST_ASSERT(first_row == 0U);
+        HENKA_TEST_ASSERT(visible_count == 1U);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_page_variable_rows(
+                row_line_counts,
+                4U,
+                72.0f,
+                8.0f,
+                12.0f,
+                28.0f,
+                1U,
+                &page_index,
+                &page_count,
+                &first_row,
+                &visible_count) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(page_index == 1U);
+        HENKA_TEST_ASSERT(page_count == 3U);
+        HENKA_TEST_ASSERT(first_row == 1U);
+        HENKA_TEST_ASSERT(visible_count == 1U);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_page_variable_rows(
+                row_line_counts,
+                4U,
+                72.0f,
+                8.0f,
+                12.0f,
+                28.0f,
+                2U,
+                &page_index,
+                &page_count,
+                &first_row,
+                &visible_count) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(page_index == 2U);
+        HENKA_TEST_ASSERT(page_count == 3U);
+        HENKA_TEST_ASSERT(first_row == 2U);
+        HENKA_TEST_ASSERT(visible_count == 2U);
     }
 
     HENKA_TEST_ASSERT(

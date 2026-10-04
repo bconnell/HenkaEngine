@@ -166,6 +166,17 @@ henka_result sandbox3d_editor_layout_wrap_text(
     size_t out_capacity,
     size_t* out_line_count);
 
+/* Bound already-wrapped display text to a visible line and column budget.
+ * The final visible line becomes a width-bounded ellipsis when lines are omitted. */
+henka_result sandbox3d_editor_layout_limit_wrapped_text(
+    const char* wrapped_text,
+    size_t maximum_line_count,
+    size_t maximum_columns,
+    char* out_text,
+    size_t out_capacity,
+    size_t* out_line_count,
+    bool* out_truncated);
+
 /* Row heights and pages share the same text metrics so wrapped rows cannot
  * overlap the next row or the panel footer. */
 henka_result sandbox3d_editor_layout_text_row_height(
@@ -174,6 +185,12 @@ henka_result sandbox3d_editor_layout_text_row_height(
     float vertical_padding,
     float minimum_height,
     float* out_height);
+
+henka_result sandbox3d_editor_layout_clamp_row_height(
+    float natural_row_height,
+    float available_height,
+    float minimum_row_height,
+    float* out_visible_height);
 
 henka_result sandbox3d_editor_layout_page_variable_rows(
     const size_t* row_line_counts,
