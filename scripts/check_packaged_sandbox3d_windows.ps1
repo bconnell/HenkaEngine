@@ -1152,12 +1152,17 @@ function Get-HenkaDirectorySnapshot {
     }
 
     $snapshot = New-Object 'System.Collections.Generic.List[string]'
+    $rootPrefix = $root.FullName.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
     foreach ($item in @(Get-ChildItem -LiteralPath $root.FullName -Force -Recurse -ErrorAction Stop)) {
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw "Refusing to traverse a reparse point in the packaged user-data tree: $($item.FullName)"
         }
 
-        $relativePath = [IO.Path]::GetRelativePath($root.FullName, $item.FullName)
+        $itemFullPath = [IO.Path]::GetFullPath($item.FullName)
+        if (-not $itemFullPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to snapshot a path outside the packaged user-data root: $($item.FullName)"
+        }
+        $relativePath = $itemFullPath.Substring($rootPrefix.Length)
         if ($item.PSIsContainer) {
             $snapshot.Add("D|$relativePath")
         }
@@ -1386,9 +1391,10 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
         [switch]$Quiet
     )
 
-    $runRoot = Join-Path $logDir ("check_packaged_sandbox3d_smoke_user_data_" + [guid]::NewGuid().ToString("N"))
+    $runRoot = Join-Path $logDir ("pkgsmk-" + [guid]::NewGuid().ToString("N"))
     $isolatedUserRoot = Join-Path $runRoot "user"
     $automationInputPath = Join-Path $runRoot "automation.events"
+    $persistenceSourcePath = Join-Path $script:repoRoot "engine\src\core\persistence.c"
     $packageUserSnapshotBefore = @(Get-HenkaDirectorySnapshot -Path $packageUserRoot)
     $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
     $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
@@ -1401,6 +1407,23 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
         if (($logDirectoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw "Refusing isolated package smoke data under a reparse-point test directory: $logDir"
         }
+        if (-not (Test-Path -LiteralPath $persistenceSourcePath -PathType Leaf)) {
+            throw "The packaged smoke path budget cannot be verified because the persistence implementation is missing: $persistenceSourcePath"
+        }
+        $persistenceSuffixDefinition = Select-String `
+            -LiteralPath $persistenceSourcePath `
+            -Pattern '^\s*#define\s+HENKA_PERSISTENCE_TEMP_SUFFIX\s+"([^"]+)"' |
+            Select-Object -First 1
+        if ($null -eq $persistenceSuffixDefinition -or $persistenceSuffixDefinition.Matches.Count -ne 1) {
+            throw "The packaged smoke path budget could not read HENKA_PERSISTENCE_TEMP_SUFFIX from the production persistence implementation."
+        }
+        $persistenceTempSuffix = $persistenceSuffixDefinition.Matches[0].Groups[1].Value
+        $smokeMaterialSidecarPath = Join-Path $isolatedUserRoot "authored_assets\SmokeAsset\rev1\smoke_box_1.material"
+        $smokeMaterialTempPathLength = $smokeMaterialSidecarPath.Length + $persistenceTempSuffix.Length
+        if ($smokeMaterialTempPathLength -ge 260) {
+            throw "The isolated package smoke material temp path would exceed the legacy Windows MAX_PATH contract ($smokeMaterialTempPathLength characters before its terminator)."
+        }
+        Write-Host ("[pass] Isolated smoke material temp path budget: {0} characters plus terminator (limit 260)." -f $smokeMaterialTempPathLength)
         if (Test-Path -LiteralPath $runRoot) {
             throw "The unique isolated package smoke data path unexpectedly already exists: $runRoot"
         }
@@ -3099,11 +3122,10 @@ try {
         $componentViewportY = [double]$componentViewportMatch.Groups[2].Value
         $componentViewportWidth = [double]$componentViewportMatch.Groups[3].Value
         $componentViewportHeight = [double]$componentViewportMatch.Groups[4].Value
-        # Face 16530 belonged to an older packaged Giraffe topology. The current
-        # production import is independently validated and converts to 16,528
-        # authoring faces, so do not silently alias that stale identifier. Frame
-        # the selected current Giraffe normally, then let the real Scene View ray
-        # picker identify the face used by this positive authoring interaction.
+        # Use the real Scene View ray picker and retain its reported face identity.
+        # The X+ control below is an intentional negative control for the known
+        # adjacent-face collapse; the following Y+ control must safely commit on
+        # the same still-selected face.
         $faceFrameExpectedReleaseRecord = [long][IO.File]::ReadAllLines($automationInputPath).Length + 2L
         $faceFrameLogOffset = Get-FileLengthSafe -Path $stdoutPath
         Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
@@ -3182,7 +3204,7 @@ try {
             if ($null -ne $componentPickMatch -and
                 $componentPickMatch.Groups['name'].Value -eq 'Showcase Giraffe Anatomical Giraffe Study Primitive' -and
                 $componentPickMatch.Groups['selected'].Value -eq '1' -and
-                [uint32]$componentPickMatch.Groups['active'].Value -gt 0U) {
+                [uint32]$componentPickMatch.Groups['active'].Value -gt [uint32]0) {
                 $nativeLastPickedFaceId = [uint32]$componentPickMatch.Groups['active'].Value
                 $nativeTargetFaceId = $nativeLastPickedFaceId
                 $nativeComponentPicked = $true
@@ -3222,7 +3244,47 @@ try {
             -Y ([double]$nativeMoveMatch.Groups[3].Value) `
             -Width 88.0 `
             -Height 24.0
-        Write-Output "[scope] The intentional X+ adjacent-face-collapse rejection is covered by the deterministic in-memory authoring/operator regression; the current packaged Giraffe face is used for the real safe-edit control."
+        $nativePickedName = $componentPickMatch.Groups['name'].Value
+        $nativeMoveControlName = $nativeMoveMatch.Groups[1].Value
+        if ($nativeMoveControlName -ne $nativePickedName) {
+            throw "The Move X+ control belongs to '$nativeMoveControlName', not the selected face owner '$nativePickedName'."
+        }
+        $nativeMoveXClickLogOffset = Get-FileLengthSafe -Path $stdoutPath
+        $componentMoveEditCountBeforeX = @(Select-String `
+            -LiteralPath $stdoutPath `
+            -Pattern '^Native authoring workflow: component move edited ').Count
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ([double]$nativeMoveMatch.Groups[2].Value + 44.0) `
+            -FramebufferY ([double]$nativeMoveMatch.Groups[3].Value + 12.0)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern '^Native authoring component move: name=' `
+                -StartingOffset $nativeMoveXClickLogOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The packaged Move X+ negative control did not report an operation result."
+        }
+        $nativeMoveXResultMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring component move: name=(?<name>.+) result=(?<result>.+) mode=(?<mode>.+) selected_components=(?<selected>[0-9]+)\.'
+        if ($null -eq $nativeMoveXResultMatch) {
+            throw "The packaged Move X+ negative-control result could not be parsed."
+        }
+        if ($nativeMoveXResultMatch.Groups['name'].Value -ne $nativePickedName -or
+            $nativeMoveXResultMatch.Groups['result'].Value -ne 'numeric range error' -or
+            $nativeMoveXResultMatch.Groups['mode'].Value -ne 'Face' -or
+            [int]$nativeMoveXResultMatch.Groups['selected'].Value -ne 1) {
+            throw "The packaged Move X+ control returned result '$($nativeMoveXResultMatch.Groups['result'].Value)' for '$($nativeMoveXResultMatch.Groups['name'].Value)' in mode '$($nativeMoveXResultMatch.Groups['mode'].Value)' with $($nativeMoveXResultMatch.Groups['selected'].Value) selected components; expected numeric range rejection for the same single selected face."
+        }
+        $componentMoveEditCountAfterX = @(Select-String `
+            -LiteralPath $stdoutPath `
+            -Pattern '^Native authoring workflow: component move edited ').Count
+        if ($componentMoveEditCountAfterX -ne $componentMoveEditCountBeforeX) {
+            throw "The rejected packaged Move X+ candidate emitted successful component-move publication telemetry."
+        }
+        Write-Output ("[pass] Packaged Move X+ intentionally rejected the adjacent-face collapse for face owner '{0}' with numeric range error and no edit-publication telemetry." -f $nativePickedName)
 
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
@@ -3267,10 +3329,11 @@ try {
         if ($null -eq $nativeMoveYResultMatch) {
             throw "The Move Y+ operation result could not be parsed."
         }
-        if ($nativeMoveYResultMatch.Groups["result"].Value -ne "success" -or
+        if ($nativeMoveYResultMatch.Groups["name"].Value -ne $nativePickedName -or
+            $nativeMoveYResultMatch.Groups["result"].Value -ne "success" -or
             $nativeMoveYResultMatch.Groups["mode"].Value -ne "Face" -or
             [int]$nativeMoveYResultMatch.Groups["selected"].Value -ne 1) {
-            throw "The real Move Y+ control returned $($nativeMoveYResultMatch.Groups['result'].Value) for mode $($nativeMoveYResultMatch.Groups['mode'].Value) with $($nativeMoveYResultMatch.Groups['selected'].Value) selected components."
+            throw "The real Move Y+ control returned $($nativeMoveYResultMatch.Groups['result'].Value) for '$($nativeMoveYResultMatch.Groups['name'].Value)' in mode $($nativeMoveYResultMatch.Groups['mode'].Value) with $($nativeMoveYResultMatch.Groups['selected'].Value) selected components; expected a successful edit on '$nativePickedName'."
         }
         $nativeMoveObserved = Wait-FileContainsAfterOffset `
             -Path $stdoutPath `
@@ -3725,7 +3788,7 @@ try {
                 if ($null -ne $nativeBevelFacePickMatch -and
                     $nativeBevelFacePickMatch.Groups['name'].Value -eq 'Showcase Giraffe Anatomical Giraffe Study Primitive' -and
                     $nativeBevelFacePickMatch.Groups['selected'].Value -eq '1' -and
-                    [uint32]$nativeBevelFacePickMatch.Groups['active'].Value -gt 0U) {
+                    [uint32]$nativeBevelFacePickMatch.Groups['active'].Value -gt [uint32]0) {
                     $nativeBevelPickedFaceId = [uint32]$nativeBevelFacePickMatch.Groups['active'].Value
                     $nativeFacePicked = $true
                 }

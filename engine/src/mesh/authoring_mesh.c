@@ -26,7 +26,7 @@
 #define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V5 5U
 #define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V6 6U
 #define HENKA_AUTHORING_MESH_LEGACY_MAX_FACE_CORNERS 32U
-#define HENKA_AUTHORING_TEMP_PATH_SUFFIX_CAPACITY 96U
+#define HENKA_AUTHORING_TEMP_BASENAME_CAPACITY 32U
 
 #ifdef _WIN32
 static volatile LONG g_authoring_save_sequence = 0L;
@@ -3723,12 +3723,38 @@ static uint32_t authoring_next_save_sequence(void)
 
 static bool authoring_make_temporary_path(const char* path, char** out_path)
 {
-    const size_t path_length = strlen(path);
+    const char* slash;
+    const char* backslash;
+    size_t directory_length = 0U;
     size_t allocation_size;
     char* temporary_path;
     int written;
-    if (out_path == NULL || path_length > SIZE_MAX - HENKA_AUTHORING_TEMP_PATH_SUFFIX_CAPACITY ||
-        !henka_checked_size_add(path_length, HENKA_AUTHORING_TEMP_PATH_SUFFIX_CAPACITY, &allocation_size))
+    unsigned long process_id;
+    uint32_t sequence;
+    if (out_path == NULL || path == NULL || path[0] == '\0')
+    {
+        return false;
+    }
+    *out_path = NULL;
+    slash = strrchr(path, '/');
+    backslash = strrchr(path, '\\');
+    if (slash != NULL || backslash != NULL)
+    {
+        const char* last_separator = slash;
+        if (backslash != NULL && (last_separator == NULL || backslash > last_separator))
+        {
+            last_separator = backslash;
+        }
+        directory_length = (size_t)(last_separator - path) + 1U;
+        if (path[directory_length] == '\0')
+        {
+            return false;
+        }
+    }
+    if (!henka_checked_size_add(
+            directory_length,
+            HENKA_AUTHORING_TEMP_BASENAME_CAPACITY,
+            &allocation_size))
     {
         return false;
     }
@@ -3737,26 +3763,27 @@ static bool authoring_make_temporary_path(const char* path, char** out_path)
     {
         return false;
     }
+    sequence = authoring_next_save_sequence();
 #ifdef _WIN32
-    written = _snprintf_s(
-        temporary_path,
-        allocation_size,
-        _TRUNCATE,
-        "%s.tmp.%lu.%lu.%lu",
-        path,
-        (unsigned long)GetCurrentProcessId(),
-        (unsigned long)GetCurrentThreadId(),
-        (unsigned long)authoring_next_save_sequence());
+    process_id = (unsigned long)GetCurrentProcessId();
 #else
-    written = snprintf(
-        temporary_path,
-        allocation_size,
-        "%s.tmp.%ld.%lu",
-        path,
-        (long)getpid(),
-        (unsigned long)authoring_next_save_sequence());
+    process_id = (unsigned long)getpid();
 #endif
-    if (written < 0 || (size_t)written >= allocation_size)
+    if (directory_length > 0U)
+    {
+        memcpy(temporary_path, path, directory_length);
+    }
+    /* Keep atomic-write temporaries beside the destination, but independent
+     * of its basename so legal destinations near legacy Windows MAX_PATH
+     * still have room for the temporary filename. The process-wide sequence
+     * keeps concurrent saves in this process distinct. */
+    written = snprintf(
+        temporary_path + directory_length,
+        allocation_size - directory_length,
+        ".h%08lX%08lX",
+        process_id,
+        (unsigned long)sequence);
+    if (written < 0 || (size_t)written >= allocation_size - directory_length)
     {
         henka_free(temporary_path);
         return false;

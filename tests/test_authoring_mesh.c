@@ -5,11 +5,18 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
+
 #include <henka/authoring_mesh.h>
 #include <henka/authoring_modeling.h>
 #include <henka/authoring_topology.h>
 #include <henka/authoring_uv.h>
 #include <henka/memory.h>
+#include <henka/persistence.h>
 
 #include "../engine/src/core/memory_internal.h"
 
@@ -1457,6 +1464,155 @@ cleanup:
     henka_authoring_mesh_history_destroy(history);
     henka_authoring_mesh_destroy(mesh);
     return result ? 1 : fail("history/persistence");
+}
+
+static int test_authoring_mesh_save_near_windows_path_limit(void)
+{
+    const size_t target_path_length = 250U;
+    const char* base_relative_path = "build/test_tmp/authoring_mesh_path_limit";
+    const char* file_name = "near_limit.hams";
+    const henka_authoring_mesh_desc desc = {3U, 3U, 1U, 3U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* loaded = NULL;
+    henka_authoring_vertex_id vertex_ids[3] = {
+        HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    char padding[256];
+    char current_directory[512];
+    char path[512] = {0};
+    char* base_path = NULL;
+    size_t base_length;
+    size_t padding_length;
+    int written;
+    int result = 0;
+    const char* failure_stage = "resolve destination directory";
+    henka_result operation_result = HENKA_SUCCESS;
+
+#ifdef _WIN32
+    if (_getcwd(current_directory, sizeof(current_directory)) == NULL)
+#else
+    if (getcwd(current_directory, sizeof(current_directory)) == NULL)
+#endif
+    {
+        failure_stage = "resolve absolute current directory";
+        goto cleanup;
+    }
+    operation_result = henka_path_resolve_confined(current_directory, base_relative_path, &base_path);
+    if (operation_result != HENKA_SUCCESS || base_path == NULL)
+    {
+        goto cleanup;
+    }
+    base_length = strlen(base_path);
+    failure_stage = "construct destination path";
+    if (base_length + 2U + strlen(file_name) >= target_path_length)
+    {
+        goto cleanup;
+    }
+    padding_length = target_path_length - base_length - 2U - strlen(file_name);
+    if (padding_length == 0U || padding_length >= sizeof(padding))
+    {
+        goto cleanup;
+    }
+    memset(padding, 'p', padding_length);
+    padding[padding_length] = '\0';
+#ifdef _WIN32
+    written = snprintf(path, sizeof(path), "%s\\%s\\%s", base_path, padding, file_name);
+#else
+    written = snprintf(path, sizeof(path), "%s/%s/%s", base_path, padding, file_name);
+#endif
+    if (written < 0 || (size_t)written >= sizeof(path) || strlen(path) != target_path_length)
+    {
+        goto cleanup;
+    }
+#ifdef _WIN32
+    /* The former .tmp.<pid>.<thread>.<sequence> sibling exceeded MAX_PATH
+     * even though this final destination itself is within the legacy limit. */
+    failure_stage = "verify former temporary path exceeded MAX_PATH";
+    if (strlen(path) + strlen(".tmp.1.1.1") + 1U <= 260U)
+    {
+        goto cleanup;
+    }
+#endif
+    failure_stage = "create mesh";
+    operation_result = henka_authoring_mesh_create(&desc, &mesh);
+    if (operation_result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    failure_stage = "add first vertex";
+    operation_result = henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 0.0f, 0.0f},
+        (henka_vec2){0.0f, 0.0f}, 0U, &vertex_ids[0]);
+    if (operation_result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    failure_stage = "add second vertex";
+    operation_result = henka_authoring_mesh_add_vertex(mesh, (henka_vec3){1.0f, 0.0f, 0.0f},
+        (henka_vec2){1.0f, 0.0f}, 0U, &vertex_ids[1]);
+    if (operation_result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    failure_stage = "add third vertex";
+    operation_result = henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 1.0f, 0.0f},
+        (henka_vec2){0.0f, 1.0f}, 0U, &vertex_ids[2]);
+    if (operation_result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    failure_stage = "add face";
+    operation_result = henka_authoring_mesh_add_face(mesh, vertex_ids,
+        3U, 0U, false, &face_id);
+    if (operation_result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    failure_stage = "validate source mesh";
+    if (!henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    failure_stage = "save near-limit mesh";
+    operation_result = henka_authoring_mesh_save_file(mesh, path);
+    if (operation_result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    failure_stage = "reload near-limit mesh";
+    operation_result = henka_authoring_mesh_load_file_new(path, &loaded);
+    if (operation_result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    failure_stage = "validate reloaded mesh";
+    if (loaded == NULL || !henka_authoring_mesh_validate(loaded) ||
+        henka_authoring_mesh_get_counts(loaded).faces != 1U ||
+        henka_authoring_mesh_get_vertex(loaded, vertex_ids[0]) == NULL ||
+        henka_authoring_mesh_get_face(loaded, face_id) == NULL)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    if (path[0] != '\0')
+    {
+        remove(path);
+    }
+    henka_authoring_mesh_destroy(loaded);
+    henka_authoring_mesh_destroy(mesh);
+    henka_free(base_path);
+    if (!result)
+    {
+        fprintf(stderr,
+            "authoring mesh near-limit path regression failed at %s (path length=%zu, result=%d)\n",
+            failure_stage,
+            strlen(path),
+            (int)operation_result);
+    }
+    return result ? 1 : fail("authoring mesh save near Windows path limit");
 }
 
 static int test_modeling_operations(void)
@@ -16641,6 +16797,7 @@ int main(void)
         test_large_boundary_loop_fill_operation() &&
         test_boundary_loop_batch_fill_operation() &&
         test_logical_identity_reuse_and_history() &&
+        test_authoring_mesh_save_near_windows_path_limit() &&
         test_save_propagates_parent_directory_errors() &&
         test_persistence_versions_and_malformed() &&
         test_loose_component_representation_and_persistence() &&
