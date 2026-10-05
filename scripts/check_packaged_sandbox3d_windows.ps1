@@ -2301,26 +2301,32 @@ try {
             Write-Output "[pass] Product-native Ground long Object Details visual proof captured"
 
             Write-Step "Checking product-native Add Cube through the visible Scene Objects UI"
-            $addCubeX = $sceneObjectsX + 14.0
+            $addCubeRowX = $sceneObjectsX + 14.0
             $addCubeY = $sceneObjectsY + 60.0
-            $addCubeWidth = $sceneObjectsWidth - 28.0
+            $addCubeRowWidth = $sceneObjectsWidth - 28.0
             $addCubeHeight = 24.0
             Assert-FramebufferRect `
-                -Name "Scene Objects Add Cube control" `
+                -Name "Scene Objects action row containing Add Cube" `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -X $addCubeX `
+                -X $addCubeRowX `
                 -Y $addCubeY `
-                -Width $addCubeWidth `
+                -Width $addCubeRowWidth `
                 -Height $addCubeHeight
 
+            # Ground is selected for the Details capture, so the product renders
+            # Add Cube, Clone, and Delete in this row.  The row's center is Clone;
+            # click inside its first action cell instead of reusing the unselected
+            # full-width Add Cube target.
+            $addCubeClickX = $addCubeRowX + 8.0
+            $addCubeClickY = $addCubeY + ($addCubeHeight * 0.5)
             $addCubeOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($addCubeX + $addCubeWidth * 0.5) `
-                -FramebufferY ($addCubeY + $addCubeHeight * 0.5)
+                -FramebufferX $addCubeClickX `
+                -FramebufferY $addCubeClickY
             if (-not (Wait-FileContainsAfterOffset `
                     -Path $stdoutPath `
                     -Pattern 'DEFAULT_SCENE_ADD_CUBE_READY entity=[0-9]+ document_id=[0-9]+ source=primitive canonical_document=1\.' `
