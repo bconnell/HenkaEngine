@@ -1093,8 +1093,11 @@ henka_result henka_engine_run(henka_engine* engine)
     henka_result result;
     henka_result run_result;
     char automation_diagnostics_value[8];
+    char automation_diagnostics_every_frame_value[8];
     bool automation_diagnostics_enabled;
+    bool automation_diagnostics_every_frame;
     uint32_t automation_diagnostic_frame_report_count;
+    uint32_t automation_diagnostic_frame_report_limit;
 
     result = henka_engine_begin_run_transition(engine);
     if (result != HENKA_SUCCESS)
@@ -1126,7 +1129,15 @@ henka_result henka_engine_run(henka_engine* engine)
             automation_diagnostics_value,
             sizeof(automation_diagnostics_value)) &&
         strcmp(automation_diagnostics_value, "1") == 0;
+    automation_diagnostics_every_frame =
+        henka_copy_environment_value(
+            "HENKA_AUTOMATION_DIAGNOSTICS_EVERY_FRAME",
+            automation_diagnostics_every_frame_value,
+            sizeof(automation_diagnostics_every_frame_value)) &&
+        strcmp(automation_diagnostics_every_frame_value, "1") == 0;
     automation_diagnostic_frame_report_count = 0U;
+    automation_diagnostic_frame_report_limit =
+        automation_diagnostics_every_frame ? 64U : 256U;
     HENKA_LOG_INFO("entering engine run loop");
 
     while (henka_engine_should_continue_run(engine))
@@ -1134,9 +1145,11 @@ henka_result henka_engine_run(henka_engine* engine)
         bool report_automation_frame;
         henka_time_tick(&engine->time);
         report_automation_frame = automation_diagnostics_enabled &&
-            automation_diagnostic_frame_report_count < 256U &&
-            (engine->time.frame_index <= 5U ||
-             engine->time.frame_index % 30U == 0U);
+            automation_diagnostic_frame_report_count <
+                automation_diagnostic_frame_report_limit &&
+            (automation_diagnostics_every_frame ||
+                engine->time.frame_index <= 5U ||
+                engine->time.frame_index % 30U == 0U);
         if (report_automation_frame)
         {
             ++automation_diagnostic_frame_report_count;

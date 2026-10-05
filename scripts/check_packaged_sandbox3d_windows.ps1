@@ -1207,12 +1207,17 @@ $helpPath = Join-Path $packageRoot "docs\help\sandbox3d.md"
 $readmePath = Join-Path $packageRoot "README.txt"
 $packageInfoPath = Join-Path $packageRoot "PACKAGE_INFO.txt"
 $logDir = Join-Path $repoRoot "build\test_tmp"
-$automationUserDataRoot = Join-Path $logDir ("check_packaged_sandbox3d_user_data_" + [guid]::NewGuid().ToString("N"))
+$automationUserDataRoot = Join-Path $logDir ("pkg_" + [guid]::NewGuid().ToString("N"))
+$longestNativeAssetTempPath = Join-Path $automationUserDataRoot "authored_assets\NativeAsset_ffffffff\rev1\quad_sphere_4.material.henka-tmp"
+if ([IO.Path]::GetFullPath($longestNativeAssetTempPath).Length -ge 260) {
+    throw "The isolated packaged user-data root leaves insufficient Windows path capacity for a native material sidecar temporary file."
+}
 $settingsPath = Join-Path $automationUserDataRoot "sandbox3d.settings"
 $stdoutPath = Join-Path $logDir "check_packaged_sandbox3d_stdout.log"
 $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
 $startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png"
 $productStartupPrimitiveScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_product_startup_add_cube.png"
+$productStartupGroundDetailsScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_product_startup_ground_details.png"
 $terrainUiBeforeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_before_create.png"
 $terrainUiAfterScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_after_create.png"
 $qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
@@ -2258,27 +2263,74 @@ try {
         Write-Output "[pass] Inactive merged tabs may report zero content rectangles safely"
 
         if ($ProductStartupPrimitiveOnly) {
-            Write-Step "Checking product-native Add Cube through the visible Scene Objects UI"
-            $addCubeX = $sceneObjectsX + 14.0
-            $addCubeY = $sceneObjectsY + 60.0
-            $addCubeWidth = $sceneObjectsWidth - 28.0
-            $addCubeHeight = 24.0
+            Write-Step "Selecting the product-native Ground row to inspect long Object Details text"
+            $groundRowPattern = '^Default scene Ground row: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) selected=(?<selected>[01])\.'
+            $groundRowMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $groundRowPattern
+            if ($null -eq $groundRowMatch -or $groundRowMatch.Groups["selected"].Value -ne "0") {
+                throw "The product-native Ground row was not available in its expected unselected startup state."
+            }
+            $groundRowX = [double]$groundRowMatch.Groups["x"].Value
+            $groundRowY = [double]$groundRowMatch.Groups["y"].Value
+            $groundRowWidth = [double]$groundRowMatch.Groups["width"].Value
+            $groundRowHeight = [double]$groundRowMatch.Groups["height"].Value
             Assert-FramebufferRect `
-                -Name "Scene Objects Add Cube control" `
+                -Name "Product-native Ground Scene Objects row for Object Details" `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -X $addCubeX `
+                -X $groundRowX `
+                -Y $groundRowY `
+                -Width $groundRowWidth `
+                -Height $groundRowHeight
+            $groundSelectionLogOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($groundRowX + $groundRowWidth * 0.5) `
+                -FramebufferY ($groundRowY + $groundRowHeight * 0.5)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern '^Default scene Ground row: .* selected=1\.' `
+                    -StartingOffset $groundSelectionLogOffset `
+                    -TimeoutMilliseconds 3500)) {
+                throw "The normal Scene Objects click did not select the product-native Ground row for its long Details text."
+            }
+            Write-Output "[pass] Product-native Ground selection reached the authoritative Scene Objects state"
+            Set-HenkaAutomationForeground -Handle $mainWindowHandle
+            Start-Sleep -Milliseconds 500
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $productStartupGroundDetailsScreenshotPath `
+                -Description "Packaged product-native Ground Object Details"
+            Write-Output "[pass] Product-native Ground long Object Details visual proof captured"
+
+            Write-Step "Checking product-native Add Cube through the visible Scene Objects UI"
+            $addCubeRowX = $sceneObjectsX + 14.0
+            $addCubeY = $sceneObjectsY + 60.0
+            $addCubeRowWidth = $sceneObjectsWidth - 28.0
+            $addCubeHeight = 24.0
+            Assert-FramebufferRect `
+                -Name "Scene Objects action row containing Add Cube" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $addCubeRowX `
                 -Y $addCubeY `
-                -Width $addCubeWidth `
+                -Width $addCubeRowWidth `
                 -Height $addCubeHeight
 
+            # Ground is selected for the Details capture, so the product renders
+            # Add Cube, Clone, and Delete in this row.  The row's center is Clone;
+            # click inside its first action cell instead of reusing the unselected
+            # full-width Add Cube target.
+            $addCubeClickX = $addCubeRowX + 8.0
+            $addCubeClickY = $addCubeY + ($addCubeHeight * 0.5)
             $addCubeOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($addCubeX + $addCubeWidth * 0.5) `
-                -FramebufferY ($addCubeY + $addCubeHeight * 0.5)
+                -FramebufferX $addCubeClickX `
+                -FramebufferY $addCubeClickY
             if (-not (Wait-FileContainsAfterOffset `
                     -Path $stdoutPath `
                     -Pattern 'DEFAULT_SCENE_ADD_CUBE_READY entity=[0-9]+ document_id=[0-9]+ source=primitive canonical_document=1\.' `

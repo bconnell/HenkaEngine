@@ -166,10 +166,14 @@ jobs:
         timeout-minutes: 5
         run: .\scripts\test_visible_native_modeling_windows.ps1
 
+      - name: Test bounded packaged smoke progress
+        shell: powershell
+        run: .\scripts\test_packaged_smoke_progress_windows.ps1
+
       - name: Run bounded packaged soak
         shell: powershell
         timeout-minutes: 8
-        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10 -IterationTimeoutMilliseconds 30000
+        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10 -NoProgressTimeoutMilliseconds 30000 -HardTimeoutMilliseconds 120000
 
       - name: Validate external game template
         shell: powershell
