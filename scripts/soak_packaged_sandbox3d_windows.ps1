@@ -2,8 +2,12 @@ param(
     [ValidateRange(1, 100)]
     [int]$Iterations = 10,
 
-    [ValidateRange(1000, 300000)]
-    [int]$IterationTimeoutMilliseconds = 30000,
+    [Alias("IterationTimeoutMilliseconds")]
+    [ValidateRange(1, 3600000)]
+    [int]$NoProgressTimeoutMilliseconds = 30000,
+
+    [ValidateRange(1000, 3600000)]
+    [int]$HardTimeoutMilliseconds = 120000,
 
     # Hosted Windows runners can build the package without exposing an
     # OpenGL-capable desktop video driver. Keep local runs strict; CI may
@@ -14,6 +18,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
+. (Join-Path $PSScriptRoot "henka_packaged_startup_readiness.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $executable = Join-Path $repoRoot "out\HenkaSandbox3D\HenkaSandbox3D.exe"
@@ -29,25 +34,70 @@ for ($iteration = 1; $iteration -le $Iterations; ++$iteration) {
     Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
     $capturedProcess = $null
     try {
-        $capturedProcess = Start-HenkaCapturedProcess `
-            -FilePath $executable `
-            -Arguments @("--smoke-test") `
-            -WorkingDirectory (Split-Path -Parent $executable) `
-            -StdoutPath $stdoutPath `
-            -StderrPath $stderrPath `
-            -CreateNoWindow
-        if (-not $capturedProcess.WaitForExit($IterationTimeoutMilliseconds)) {
-            Stop-HenkaProcessTree -ProcessId $capturedProcess.Process.Id
-            $output = (Read-HenkaSharedText -Path $stdoutPath) +
-                (Read-HenkaSharedText -Path $stderrPath)
-            $diagnostic = (($output -replace "\s+", " ").Trim())
-            if ($diagnostic.Length -gt 512) {
-                $diagnostic = $diagnostic.Substring(0, 512)
-            }
-            throw "Packaged sandbox smoke iteration $iteration exceeded timeout ${IterationTimeoutMilliseconds}ms; its process tree was terminated. Diagnostics: $diagnostic"
+        $previousAutomationDiagnostics = [Environment]::GetEnvironmentVariable(
+            "HENKA_AUTOMATION_DIAGNOSTICS",
+            [EnvironmentVariableTarget]::Process)
+        $previousEveryFrameDiagnostics = [Environment]::GetEnvironmentVariable(
+            "HENKA_AUTOMATION_DIAGNOSTICS_EVERY_FRAME",
+            [EnvironmentVariableTarget]::Process)
+        try {
+            [Environment]::SetEnvironmentVariable(
+                "HENKA_AUTOMATION_DIAGNOSTICS",
+                "1",
+                [EnvironmentVariableTarget]::Process)
+            [Environment]::SetEnvironmentVariable(
+                "HENKA_AUTOMATION_DIAGNOSTICS_EVERY_FRAME",
+                "1",
+                [EnvironmentVariableTarget]::Process)
+            $capturedProcess = Start-HenkaCapturedProcess `
+                -FilePath $executable `
+                -Arguments @("--smoke-test") `
+                -WorkingDirectory (Split-Path -Parent $executable) `
+                -StdoutPath $stdoutPath `
+                -StderrPath $stderrPath `
+                -CreateNoWindow
         }
+        finally {
+            [Environment]::SetEnvironmentVariable(
+                "HENKA_AUTOMATION_DIAGNOSTICS",
+                $previousAutomationDiagnostics,
+                [EnvironmentVariableTarget]::Process)
+            [Environment]::SetEnvironmentVariable(
+                "HENKA_AUTOMATION_DIAGNOSTICS_EVERY_FRAME",
+                $previousEveryFrameDiagnostics,
+                [EnvironmentVariableTarget]::Process)
+        }
+
+        $smokeProgress = $null
+        $waitFailure = $null
+        try {
+            $smokeProgress = Wait-HenkaPackagedSmokeProgress `
+                -StdoutPath $stdoutPath `
+                -StderrPath $stderrPath `
+                -ProcessId $capturedProcess.Process.Id `
+                -NoProgressTimeoutMilliseconds $NoProgressTimeoutMilliseconds `
+                -HardTimeoutMilliseconds $HardTimeoutMilliseconds
+        }
+        catch {
+            $waitFailure = $_.Exception.Message
+        }
+
+        if ($null -ne $waitFailure) {
+            Stop-HenkaProcessTree -ProcessId $capturedProcess.Process.Id
+            [void]$capturedProcess.Process.WaitForExit(5000)
+            $output = (Get-HenkaPackagedStartupLogText -Path $stdoutPath) +
+                (Get-HenkaPackagedStartupLogText -Path $stderrPath)
+            $diagnostic = (($output -replace "\s+", " ").Trim())
+            if ($diagnostic.Length -gt 2048) {
+                $diagnostic = $diagnostic.Substring($diagnostic.Length - 2048)
+            }
+            throw "$waitFailure Captured logs: stdout=$stdoutPath; stderr=$stderrPath. Output tail: $diagnostic"
+        }
+
+        [void]$capturedProcess.Process.WaitForExit()
         $exitCode = $capturedProcess.Process.ExitCode
-        $output = (Read-HenkaSharedText -Path $stdoutPath) + (Read-HenkaSharedText -Path $stderrPath)
+        $output = (Get-HenkaPackagedStartupLogText -Path $stdoutPath) +
+            (Get-HenkaPackagedStartupLogText -Path $stderrPath)
     }
     finally {
         Close-HenkaCapturedProcess -CapturedProcess $capturedProcess
@@ -59,8 +109,13 @@ for ($iteration = 1; $iteration -le $Iterations; ++$iteration) {
             continue
         }
         $diagnostic = (($output -replace "\s+", " ").Trim())
-        if ($diagnostic.Length -gt 512) { $diagnostic = $diagnostic.Substring(0, 512) }
-        throw "Packaged sandbox smoke iteration $iteration failed with exit code $exitCode. Diagnostics: $diagnostic"
+        if ($diagnostic.Length -gt 2048) {
+            $diagnostic = $diagnostic.Substring($diagnostic.Length - 2048)
+        }
+        throw "Packaged sandbox smoke iteration $iteration failed with exit code $exitCode. Captured logs: stdout=$stdoutPath; stderr=$stderrPath. Output tail: $diagnostic"
+    }
+    if (-not $smokeProgress.ApplicationProgressSeen) {
+        throw "Packaged sandbox smoke iteration $iteration exited without application-owned frame progress telemetry. Captured logs: stdout=$stdoutPath; stderr=$stderrPath."
     }
     if ($output -notmatch "Sandbox smoke test completed\.") {
         throw "Packaged sandbox smoke iteration $iteration did not reach its completion marker."
@@ -68,6 +123,12 @@ for ($iteration = 1; $iteration -le $Iterations; ++$iteration) {
     if ($output -notmatch "memory shutdown clean: no active allocations tracked") {
         throw "Packaged sandbox smoke iteration $iteration did not report a clean memory shutdown."
     }
+    Write-Host (
+        "[pass] Packaged smoke iteration {0} exited after application frame seq={1} phase={2} in {3}ms." -f
+        $iteration,
+        $smokeProgress.LastProgressFrame,
+        $smokeProgress.LastProgressPhase,
+        $smokeProgress.ElapsedMilliseconds)
 }
 
 if ($AllowHeadlessUnavailable) {

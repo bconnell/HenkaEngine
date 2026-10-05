@@ -1207,7 +1207,11 @@ $helpPath = Join-Path $packageRoot "docs\help\sandbox3d.md"
 $readmePath = Join-Path $packageRoot "README.txt"
 $packageInfoPath = Join-Path $packageRoot "PACKAGE_INFO.txt"
 $logDir = Join-Path $repoRoot "build\test_tmp"
-$automationUserDataRoot = Join-Path $logDir ("check_packaged_sandbox3d_user_data_" + [guid]::NewGuid().ToString("N"))
+$automationUserDataRoot = Join-Path $logDir ("pkg_" + [guid]::NewGuid().ToString("N"))
+$longestNativeAssetTempPath = Join-Path $automationUserDataRoot "authored_assets\NativeAsset_ffffffff\rev1\quad_sphere_4.material.henka-tmp"
+if ([IO.Path]::GetFullPath($longestNativeAssetTempPath).Length -ge 260) {
+    throw "The isolated packaged user-data root leaves insufficient Windows path capacity for a native material sidecar temporary file."
+}
 $settingsPath = Join-Path $automationUserDataRoot "sandbox3d.settings"
 $stdoutPath = Join-Path $logDir "check_packaged_sandbox3d_stdout.log"
 $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
