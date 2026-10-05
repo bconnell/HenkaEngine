@@ -1231,6 +1231,7 @@ $startupRestoreStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_startup_
 $startupRestoreStderrPath = Join-Path $logDir "check_packaged_sandbox3d_startup_restore_stderr.log"
 $physicsCapturePath = Join-Path $logDir "physics-reference-wide.bmp"
 $automationInputPath = Join-Path $logDir "check_packaged_sandbox3d_automation.events"
+$showcaseAuthoringLaunchArguments = @("--capture-showcase-view", "wide", "solid")
 # This face ID came from the previously classified adjacent-face-collapse
 # observation. It is optional runtime evidence: the deterministic in-memory
 # mesh/operator regressions own the X+ negative control when a packaged source
@@ -1777,7 +1778,7 @@ try {
         $capturedProcess = Start-HenkaCapturedProcess `
             -FilePath $packagedExe `
             -WorkingDirectory $packageRoot `
-            -Arguments @("--capture-showcase-view", "wide", "solid") `
+            -Arguments $showcaseAuthoringLaunchArguments `
             -StdoutPath $stdoutPath `
             -StderrPath $stderrPath `
             -StartMinimized:$false `
@@ -5376,10 +5377,15 @@ try {
         Write-Output "[warn] Automated packaged close did not leave behind a settings file in this run. Manual packaged persistence QA is still needed."
     }
 
-    Write-Step "Checking persisted native authoring relaunch"
+    # Native authoring persistence is keyed to the imported showcase entity.
+    # Normal product startup intentionally has no showcase entities, so this
+    # relaunch must restore the same source context rather than expect the clean
+    # default scene to recreate that entity implicitly.
+    Write-Step "Checking persisted native authoring relaunch with the same showcase source"
     $startupRestoreCapture = Start-HenkaCapturedProcess `
         -FilePath $packagedExe `
         -WorkingDirectory $packageRoot `
+        -Arguments $showcaseAuthoringLaunchArguments `
         -StdoutPath $startupRestoreStdoutPath `
         -StderrPath $startupRestoreStderrPath
     $startupRestoreProcess = $startupRestoreCapture.Process
@@ -5403,7 +5409,7 @@ try {
                 [System.IntPtr]::Zero,
                 [System.IntPtr]::Zero) | Out-Null
         }
-        throw "A normal packaged relaunch did not restore the saved native showcase source."
+        throw "A relaunch with the same showcase source did not restore the saved native source."
     }
     if (-not (Wait-FileContains `
             -Path $startupRestoreStdoutPath `
@@ -5419,7 +5425,7 @@ try {
                 [System.IntPtr]::Zero,
                 [System.IntPtr]::Zero) | Out-Null
         }
-        throw "A normal packaged relaunch did not restore the saved native material sidecar."
+        throw "A relaunch with the same showcase source did not restore the saved native material sidecar."
     }
     $restoreWindow = [NativeMethods]::FindProcessWindow(
         [uint32]$startupRestoreProcess.Id,
@@ -5438,7 +5444,7 @@ try {
     Close-HenkaCapturedProcess -CapturedProcess $startupRestoreCapture
     $startupRestoreCapture = $null
     $startupRestoreProcess = $null
-    Write-Output "[pass] Persisted native source and owned material restored on normal packaged relaunch"
+    Write-Output "[pass] Persisted native source and owned material restored after relaunch with the same showcase source"
 
     Write-Step "Checking persisted live workspace settings recovery"
     $persistenceSmoke = Invoke-HenkaNativeCapture `
