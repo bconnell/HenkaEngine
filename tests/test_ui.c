@@ -137,6 +137,113 @@ static void henka_test_ui_control_chrome_contract(void)
     henka_ui_destroy(ui);
 }
 
+static bool henka_test_ui_rect_color_matches(henka_vec4 actual, henka_vec4 expected)
+{
+    return
+        fabsf(actual.x - expected.x) < 0.0001f &&
+        fabsf(actual.y - expected.y) < 0.0001f &&
+        fabsf(actual.z - expected.z) < 0.0001f &&
+        fabsf(actual.w - expected.w) < 0.0001f;
+}
+
+static void henka_test_ui_value_row_keeps_multiline_detail_readable(void)
+{
+    static const char detail[] =
+        "Ground plane covers the central area.\n"
+        "It stays editable and centered at origin.\n"
+        "Use it to test placement and scale.";
+    henka_ui_context* ui = NULL;
+    henka_ui_context* reference = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    henka_vec4 normal_text_color;
+    size_t expected_glyph_pixels;
+    size_t actual_glyph_pixels;
+    size_t index;
+    bool glyphs_inside_row;
+    bool glyphs_match_reference;
+    const henka_ui_rect row_bounds = {20.0f, 20.0f, 320.0f, 64.0f};
+
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_create(&reference) == HENKA_SUCCESS);
+    henka_ui_set_visible(ui, true);
+    henka_ui_set_visible(reference, true);
+    frame_desc.framebuffer_width = 1280;
+    frame_desc.framebuffer_height = 720;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_ui_begin_frame(reference, &frame_desc) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_ui_label(
+            reference,
+            row_bounds.x + 8.0f,
+            row_bounds.y + 18.0f,
+            1.0f,
+            detail) == HENKA_SUCCESS);
+    expected_glyph_pixels = reference->draw_rect_count;
+    HENKA_TEST_ASSERT(expected_glyph_pixels > 100U);
+    normal_text_color = reference->draw_rects[0].color;
+
+    HENKA_TEST_ASSERT(
+        henka_ui_value_row(
+            ui,
+            row_bounds,
+            "Detail",
+            detail) == HENKA_SUCCESS);
+
+    actual_glyph_pixels = 0U;
+    glyphs_inside_row = true;
+    glyphs_match_reference = true;
+    for (index = 0U; index < ui->draw_rect_count; ++index)
+    {
+        if (henka_test_ui_rect_color_matches(
+                ui->draw_rects[index].color,
+                normal_text_color))
+        {
+            if (ui->draw_rects[index].bounds.x < row_bounds.x + 8.0f - 0.0001f ||
+                ui->draw_rects[index].bounds.x +
+                    ui->draw_rects[index].bounds.width >
+                row_bounds.x + row_bounds.width - 8.0f + 0.0001f ||
+                ui->draw_rects[index].bounds.y < row_bounds.y + 18.0f - 0.0001f ||
+                ui->draw_rects[index].bounds.y +
+                    ui->draw_rects[index].bounds.height >
+                row_bounds.y + row_bounds.height - 1.0f + 0.0001f)
+            {
+                glyphs_inside_row = false;
+            }
+            if (actual_glyph_pixels >= expected_glyph_pixels ||
+                fabsf(
+                    ui->draw_rects[index].bounds.x -
+                    reference->draw_rects[actual_glyph_pixels].bounds.x) >
+                    0.0001f ||
+                fabsf(
+                    ui->draw_rects[index].bounds.y -
+                    reference->draw_rects[actual_glyph_pixels].bounds.y) >
+                    0.0001f ||
+                fabsf(
+                    ui->draw_rects[index].bounds.width -
+                    reference->draw_rects[actual_glyph_pixels].bounds.width) >
+                    0.0001f ||
+                fabsf(
+                    ui->draw_rects[index].bounds.height -
+                    reference->draw_rects[actual_glyph_pixels].bounds.height) >
+                    0.0001f)
+            {
+                glyphs_match_reference = false;
+            }
+            ++actual_glyph_pixels;
+        }
+    }
+    HENKA_TEST_ASSERT(actual_glyph_pixels == expected_glyph_pixels);
+    HENKA_TEST_ASSERT(glyphs_inside_row);
+    HENKA_TEST_ASSERT(glyphs_match_reference);
+
+    HENKA_TEST_ASSERT(henka_ui_end_frame(reference) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    henka_ui_destroy(reference);
+    henka_ui_destroy(ui);
+}
+
 static void henka_test_ui_overlay_circle_primitives(void)
 {
     henka_ui_context* ui = NULL;
@@ -340,6 +447,7 @@ void henka_test_ui(void)
 {
     henka_test_ui_theme_is_light_by_default_and_context_local();
     henka_test_ui_control_chrome_contract();
+    henka_test_ui_value_row_keeps_multiline_detail_readable();
     henka_test_ui_readability_scale_is_bounded_and_fit_aware();
     henka_test_ui_overlay_circle_primitives();
     henka_test_ui_overlay_triangle_primitive();

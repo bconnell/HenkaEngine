@@ -1145,6 +1145,103 @@ static void henka_ui_copy_fit_text(const char* source, char* buffer, size_t buff
     snprintf(buffer, buffer_size, "%.*s...", (int)(max_characters - 3U), source);
 }
 
+static void henka_ui_copy_fit_multiline_text(
+    const char* source,
+    char* buffer,
+    size_t buffer_size,
+    size_t max_columns,
+    size_t max_lines)
+{
+    size_t source_length;
+    size_t source_index;
+    size_t destination_index;
+    size_t line_start;
+    size_t line_count;
+    size_t column_count;
+    bool truncated;
+
+    if (buffer == NULL || buffer_size == 0U)
+    {
+        return;
+    }
+    buffer[0] = '\0';
+    if (source == NULL || max_columns == 0U || max_lines == 0U ||
+        !henka_checked_c_string_length(
+            source,
+            HENKA_UI_MAX_TEXT_BYTES,
+            &source_length))
+    {
+        return;
+    }
+
+    if (max_columns > buffer_size - 1U)
+    {
+        max_columns = buffer_size - 1U;
+    }
+    if (max_lines > buffer_size)
+    {
+        max_lines = buffer_size;
+    }
+
+    source_index = 0U;
+    destination_index = 0U;
+    line_start = 0U;
+    line_count = 1U;
+    column_count = 0U;
+    truncated = false;
+    while (source_index < source_length)
+    {
+        const char character = source[source_index];
+        if (character == '\n')
+        {
+            if (line_count >= max_lines ||
+                destination_index >= buffer_size - 1U)
+            {
+                truncated = true;
+                break;
+            }
+            buffer[destination_index++] = '\n';
+            ++line_count;
+            line_start = destination_index;
+            column_count = 0U;
+            ++source_index;
+            continue;
+        }
+        if (column_count >= max_columns ||
+            destination_index >= buffer_size - 1U)
+        {
+            truncated = true;
+            break;
+        }
+        buffer[destination_index++] = character;
+        ++column_count;
+        ++source_index;
+    }
+
+    if (truncated)
+    {
+        size_t ellipsis_count = max_columns < 3U ? max_columns : 3U;
+        while ((column_count + ellipsis_count > max_columns ||
+                destination_index + ellipsis_count > buffer_size - 1U) &&
+               destination_index > line_start)
+        {
+            --destination_index;
+            --column_count;
+        }
+        while (ellipsis_count > 0U &&
+               destination_index + ellipsis_count > buffer_size - 1U)
+        {
+            --ellipsis_count;
+        }
+        while (ellipsis_count > 0U)
+        {
+            buffer[destination_index++] = '.';
+            --ellipsis_count;
+        }
+    }
+    buffer[destination_index] = '\0';
+}
+
 static henka_result henka_ui_draw_fit_text(
     henka_ui_context* context,
     henka_ui_rect bounds,
@@ -2665,14 +2762,18 @@ henka_result henka_ui_value_row_colored(
     henka_ui_semantic_color value_color)
 {
     char label_buffer[48];
-    char value_buffer[96];
+    char value_buffer[256];
     henka_ui_draw_checkpoint checkpoint;
+    bool multiline;
+    float available_lines;
+    float effective_scale;
     float label_x;
     float value_x;
     henka_result result;
     henka_ui_rect value_bounds;
     size_t label_characters;
     size_t value_characters;
+    size_t value_lines;
 
     if (context == NULL || label == NULL || value == NULL ||
         !context->frame_active)
@@ -2686,11 +2787,24 @@ henka_result henka_ui_value_row_colored(
 
     henka_ui_capture_checkpoint(context, &checkpoint);
 
-    value_bounds = (henka_ui_rect){
-        bounds.x + bounds.width * 0.38f,
-        bounds.y + 2.0f,
-        bounds.width - bounds.width * 0.38f - 4.0f,
-        bounds.height - 4.0f};
+    multiline = bounds.height > 28.0f;
+    effective_scale = henka_ui_effective_text_scale(context, 1.0f);
+    if (multiline)
+    {
+        value_bounds = (henka_ui_rect){
+            bounds.x + 4.0f,
+            bounds.y + 16.0f,
+            bounds.width - 8.0f,
+            bounds.height - 18.0f};
+    }
+    else
+    {
+        value_bounds = (henka_ui_rect){
+            bounds.x + bounds.width * 0.38f,
+            bounds.y + 2.0f,
+            bounds.width - bounds.width * 0.38f - 4.0f,
+            bounds.height - 4.0f};
+    }
 
     result = henka_ui_push_rect(context, bounds, g_ui_row_fill);
     if (result == HENKA_SUCCESS)
@@ -2729,19 +2843,52 @@ henka_result henka_ui_value_row_colored(
         return result;
     }
 
-    label_characters = henka_ui_clamped_character_count(
-        bounds.width * 0.34f,
-        6.0f,
-        6U,
-        sizeof(label_buffer) - 1U);
-
-    value_characters = henka_ui_clamped_character_count(
-        value_bounds.width > 12.0f
-            ? value_bounds.width - 12.0f
-            : 12.0f,
-        6.0f,
-        8U,
-        sizeof(value_buffer) - 1U);
+    if (multiline)
+    {
+        label_characters = henka_ui_clamped_character_count(
+            bounds.width - 16.0f,
+            6.0f * effective_scale,
+            1U,
+            sizeof(label_buffer) - 1U);
+        value_characters = henka_ui_clamped_character_count(
+            value_bounds.width > 12.0f
+                ? value_bounds.width - 12.0f
+                : 12.0f,
+            6.0f * effective_scale,
+            1U,
+            sizeof(value_buffer) - 1U);
+        available_lines = floorf(
+            (bounds.height - 20.0f) /
+            (8.0f * effective_scale));
+        if (available_lines < 1.0f)
+        {
+            value_lines = 1U;
+        }
+        else if (available_lines >= (float)sizeof(value_buffer))
+        {
+            value_lines = sizeof(value_buffer) - 1U;
+        }
+        else
+        {
+            value_lines = (size_t)available_lines;
+        }
+    }
+    else
+    {
+        label_characters = henka_ui_clamped_character_count(
+            bounds.width * 0.34f,
+            6.0f,
+            6U,
+            sizeof(label_buffer) - 1U);
+        value_characters = henka_ui_clamped_character_count(
+            value_bounds.width > 12.0f
+                ? value_bounds.width - 12.0f
+                : 12.0f,
+            6.0f,
+            8U,
+            sizeof(value_buffer) - 1U);
+        value_lines = 1U;
+    }
 
     henka_ui_copy_fit_text(
         label,
@@ -2749,19 +2896,31 @@ henka_result henka_ui_value_row_colored(
         sizeof(label_buffer),
         label_characters);
 
-    henka_ui_copy_fit_text(
-        value,
-        value_buffer,
-        sizeof(value_buffer),
-        value_characters);
+    if (multiline)
+    {
+        henka_ui_copy_fit_multiline_text(
+            value,
+            value_buffer,
+            sizeof(value_buffer),
+            value_characters,
+            value_lines);
+    }
+    else
+    {
+        henka_ui_copy_fit_text(
+            value,
+            value_buffer,
+            sizeof(value_buffer),
+            value_characters);
+    }
 
     label_x = bounds.x + 8.0f;
-    value_x = value_bounds.x + 6.0f;
+    value_x = multiline ? bounds.x + 8.0f : value_bounds.x + 6.0f;
 
     result = henka_ui_draw_text(
         context,
         label_x,
-        bounds.y + 6.0f,
+        bounds.y + (multiline ? 4.0f : 6.0f),
         1.0f,
         label_buffer,
         henka_ui_semantic_color_to_vec4(context, label_color));
@@ -2771,7 +2930,7 @@ henka_result henka_ui_value_row_colored(
         result = henka_ui_draw_text(
             context,
             value_x,
-            bounds.y + 6.0f,
+            bounds.y + (multiline ? 18.0f : 6.0f),
             1.0f,
             value_buffer,
             henka_ui_semantic_color_to_vec4(context, value_color));

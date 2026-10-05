@@ -27585,6 +27585,70 @@ static bool sandbox3d_details_row_fully_visible(
         row.y + row.height <= viewport.y + viewport.height;
 }
 
+static bool sandbox3d_details_prepare_wrapped_value(
+    henka_ui_context* ui,
+    float row_width,
+    const char* source,
+    char* out_text,
+    size_t out_capacity,
+    size_t* out_line_count)
+{
+    int one_character_width;
+    int two_character_width;
+    int text_height;
+    float available_width;
+    int character_advance;
+    size_t max_columns;
+
+    if (ui == NULL || source == NULL || out_text == NULL ||
+        out_capacity < 2U || out_line_count == NULL ||
+        !isfinite((double)row_width) || row_width <= 0.0f ||
+        henka_ui_measure_text_for_context(
+            ui,
+            "M",
+            1.0f,
+            &one_character_width,
+            &text_height) != HENKA_SUCCESS ||
+        henka_ui_measure_text_for_context(
+            ui,
+            "MM",
+            1.0f,
+            &two_character_width,
+            &text_height) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    character_advance = two_character_width - one_character_width;
+    available_width = row_width - 20.0f;
+    if (character_advance <= 0 || available_width <= 0.0f)
+    {
+        return false;
+    }
+
+    if (available_width <= (float)one_character_width)
+    {
+        max_columns = 1U;
+    }
+    else
+    {
+        max_columns = 1U + (size_t)floorf(
+            (available_width - (float)one_character_width) /
+            (float)character_advance);
+    }
+    if (max_columns > out_capacity - 1U)
+    {
+        max_columns = out_capacity - 1U;
+    }
+
+    return sandbox3d_editor_layout_wrap_text(
+        source,
+        max_columns,
+        out_text,
+        out_capacity,
+        out_line_count) == HENKA_SUCCESS;
+}
+
 static bool sandbox3d_details_flow_next_row(
     sandbox3d_state* state,
     henka_ui_rect viewport,
@@ -27819,6 +27883,8 @@ static void sandbox3d_draw_object_details_panel(
     char authoring_face_text[48];
     char behavior_summary[64];
     char clear_action_id[64];
+    char description_wrapped[512];
+    char detail_wrapped[512];
     char focus_action_id[64];
     char interaction_text[64];
     char lock_action_id[64];
@@ -27836,6 +27902,8 @@ static void sandbox3d_draw_object_details_panel(
     const char* description;
     const char* detail;
     float content_height;
+    float description_row_height;
+    float detail_row_height;
     henka_interaction_desc interaction;
     henka_scene_document_object authored_object;
     henka_scene_document_id authored_document_id;
@@ -27856,6 +27924,8 @@ static void sandbox3d_draw_object_details_panel(
     size_t details_group_position;
     size_t authoring_group_index;
     size_t behavior_count;
+    size_t description_line_count;
+    size_t detail_line_count;
     bool prioritize_authoring_group;
     bool authored_object_available;
     bool bevel_controls_prioritized;
@@ -28213,6 +28283,30 @@ static void sandbox3d_draw_object_details_panel(
         SANDBOX3D_PANEL_SCROLL_DETAILS);
     flow_desc.row_spacing = 6.0f;
     flow_desc.indent_width = 10.0f;
+
+    if (!sandbox3d_details_prepare_wrapped_value(
+            state->ui,
+            flow_desc.bounds.width - flow_desc.indent_width,
+            description,
+            description_wrapped,
+            sizeof(description_wrapped),
+            &description_line_count) ||
+        !sandbox3d_details_prepare_wrapped_value(
+            state->ui,
+            flow_desc.bounds.width - flow_desc.indent_width,
+            detail,
+            detail_wrapped,
+            sizeof(detail_wrapped),
+            &detail_line_count))
+    {
+        sandbox3d_set_status(
+            state,
+            true,
+            "Object details text could not be laid out within the panel.");
+        return;
+    }
+    description_row_height = 22.0f + 10.0f * (float)description_line_count;
+    detail_row_height = 22.0f + 10.0f * (float)detail_line_count;
 
     state->editor_ui.details_scroll_offset =
         sandbox3d_editor_ui_clamp_scroll(
@@ -28726,32 +28820,28 @@ details_group_overview:
         if (sandbox3d_details_flow_next_row(
                 state,
                 flow_desc.bounds,
-                22.0f,
+                description_row_height,
                 1U,
                 &row))
         {
-            sandbox3d_draw_value_row(
+            henka_ui_value_row(
                 state->ui,
-                row.x,
-                row.y,
-                row.width,
+                row,
                 "Shows",
-                description);
+                description_wrapped);
         }
         if (sandbox3d_details_flow_next_row(
                 state,
                 flow_desc.bounds,
-                22.0f,
+                detail_row_height,
                 1U,
                 &row))
         {
-            sandbox3d_draw_value_row(
+            henka_ui_value_row(
                 state->ui,
-                row.x,
-                row.y,
-                row.width,
+                row,
                 "Detail",
-                detail);
+                detail_wrapped);
         }
         if (sandbox3d_details_flow_next_row(
                 state,
