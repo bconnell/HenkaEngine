@@ -4,6 +4,7 @@
 
 #include <float.h>
 #include <math.h>
+#include <stdint.h>
 #include <string.h>
 
 #define SANDBOX3D_EDITOR_LAYOUT_MAX_TOOL_ITEMS 64U
@@ -764,11 +765,14 @@ henka_result sandbox3d_editor_layout_tool_row(
     return HENKA_SUCCESS;
 }
 
-henka_result sandbox3d_editor_layout_text_control_row(
+static henka_result sandbox3d_editor_layout_text_control_row_impl(
+    const henka_ui_context* ui_context,
+    bool distribute_extra_width,
     henka_ui_rect bounds,
     const char* const* labels,
     size_t item_count,
     float scale,
+    float minimum_item_width,
     float horizontal_padding,
     float gap,
     henka_ui_rect* out_items,
@@ -797,6 +801,8 @@ henka_result sandbox3d_editor_layout_text_control_row(
         !sandbox3d_editor_layout_float_is_valid(bounds.height) ||
         bounds.width <= 0.0f || bounds.height <= 0.0f ||
         !sandbox3d_editor_layout_float_is_valid(scale) || scale <= 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(minimum_item_width) ||
+        minimum_item_width < 0.0f ||
         !sandbox3d_editor_layout_float_is_valid(horizontal_padding) ||
         horizontal_padding < 0.0f ||
         !sandbox3d_editor_layout_float_is_valid(gap) || gap < 0.0f ||
@@ -817,17 +823,28 @@ henka_result sandbox3d_editor_layout_text_control_row(
         double required_item_width;
 
         if (labels[item_index] == NULL ||
-            henka_ui_measure_text(
-                labels[item_index],
-                scale,
-                &measured_width,
-                &measured_height) != HENKA_SUCCESS)
+            (ui_context != NULL
+                 ? henka_ui_measure_text_for_context(
+                       ui_context,
+                       labels[item_index],
+                       scale,
+                       &measured_width,
+                       &measured_height)
+                 : henka_ui_measure_text(
+                       labels[item_index],
+                       scale,
+                       &measured_width,
+                       &measured_height)) != HENKA_SUCCESS)
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
         (void)measured_height;
         required_item_width =
             (double)measured_width + (double)horizontal_padding * 2.0;
+        if (required_item_width < (double)minimum_item_width)
+        {
+            required_item_width = (double)minimum_item_width;
+        }
         if (!isfinite(required_item_width) ||
             required_item_width <= 0.0 ||
             required_item_width > (double)FLT_MAX)
@@ -846,8 +863,9 @@ henka_result sandbox3d_editor_layout_text_control_row(
         return HENKA_ERROR_NUMERIC_RANGE;
     }
 
-    extra_width =
-        (available_width - required_width) / (double)item_count;
+    extra_width = distribute_extra_width
+        ? (available_width - required_width) / (double)item_count
+        : 0.0;
     if (!isfinite(extra_width) || extra_width < 0.0 ||
         extra_width > (double)FLT_MAX)
     {
@@ -857,7 +875,7 @@ henka_result sandbox3d_editor_layout_text_control_row(
     item_x = (double)bounds.x;
     for (item_index = 0U; item_index < item_count; ++item_index)
     {
-        const double item_width = item_index + 1U == item_count
+        const double item_width = distribute_extra_width && item_index + 1U == item_count
             ? ((double)bounds.x + (double)bounds.width) - item_x
             : (double)required_items[item_index] + extra_width;
         const double item_right = item_x + item_width;
@@ -881,5 +899,608 @@ henka_result sandbox3d_editor_layout_text_control_row(
     }
 
     *out_item_count = item_count;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_editor_layout_text_control_row(
+    henka_ui_rect bounds,
+    const char* const* labels,
+    size_t item_count,
+    float scale,
+    float horizontal_padding,
+    float gap,
+    henka_ui_rect* out_items,
+    size_t item_capacity,
+    size_t* out_item_count)
+{
+    return sandbox3d_editor_layout_text_control_row_impl(
+        NULL,
+        true,
+        bounds,
+        labels,
+        item_count,
+        scale,
+        0.0f,
+        horizontal_padding,
+        gap,
+        out_items,
+        item_capacity,
+        out_item_count);
+}
+
+henka_result sandbox3d_editor_layout_text_control_row_for_context(
+    const henka_ui_context* ui_context,
+    henka_ui_rect bounds,
+    const char* const* labels,
+    size_t item_count,
+    float scale,
+    float minimum_item_width,
+    float horizontal_padding,
+    float gap,
+    henka_ui_rect* out_items,
+    size_t item_capacity,
+    size_t* out_item_count)
+{
+    if (out_item_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_item_count = 0U;
+    if (ui_context == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_editor_layout_text_control_row_impl(
+        ui_context,
+        false,
+        bounds,
+        labels,
+        item_count,
+        scale,
+        minimum_item_width,
+        horizontal_padding,
+        gap,
+        out_items,
+        item_capacity,
+        out_item_count);
+}
+
+static bool sandbox3d_editor_layout_is_wrap_space(char value)
+{
+    return value == ' ' || value == '\t';
+}
+
+static henka_result sandbox3d_editor_layout_process_wrapped_text(
+    const char* text,
+    size_t max_columns,
+    char* out_text,
+    size_t out_capacity,
+    size_t* out_required_bytes,
+    size_t* out_line_count)
+{
+    const size_t text_length = strlen(text);
+    size_t position = 0U;
+    size_t written = 0U;
+    size_t lines = 1U;
+
+    if (out_text == NULL && out_capacity != 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    while (position < text_length)
+    {
+        size_t end = position;
+        size_t columns = 0U;
+        size_t segment_end;
+        size_t next_position;
+        bool line_break;
+
+        if (text[position] == '\n')
+        {
+            segment_end = position;
+            next_position = position + 1U;
+            line_break = true;
+        }
+        else
+        {
+            while (end < text_length && text[end] != '\n' && columns < max_columns)
+            {
+                ++end;
+                ++columns;
+            }
+
+            if (end < text_length && text[end] == '\n')
+            {
+                segment_end = end;
+                next_position = end + 1U;
+                line_break = true;
+            }
+            else if (end < text_length)
+            {
+                size_t split = end;
+                while (split > position && !sandbox3d_editor_layout_is_wrap_space(text[split - 1U]))
+                {
+                    --split;
+                }
+                if (split > position)
+                {
+                    segment_end = split - 1U;
+                    next_position = split;
+                }
+                else
+                {
+                    segment_end = end;
+                    next_position = end;
+                }
+                while (next_position < text_length &&
+                       sandbox3d_editor_layout_is_wrap_space(text[next_position]))
+                {
+                    ++next_position;
+                }
+                line_break = next_position < text_length;
+            }
+            else
+            {
+                segment_end = end;
+                next_position = end;
+                line_break = false;
+            }
+        }
+
+        if (segment_end < position ||
+            segment_end - position > SIZE_MAX - written)
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        if (out_text != NULL && segment_end > position)
+        {
+            memcpy(out_text + written, text + position, segment_end - position);
+        }
+        written += segment_end - position;
+
+        if (line_break)
+        {
+            if (written == SIZE_MAX || lines == SIZE_MAX)
+            {
+                return HENKA_ERROR_NUMERIC_RANGE;
+            }
+            if (out_text != NULL)
+            {
+                out_text[written] = '\n';
+            }
+            ++written;
+            ++lines;
+        }
+
+        if (next_position <= position && next_position < text_length)
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        position = next_position;
+    }
+
+    if (out_required_bytes != NULL)
+    {
+        *out_required_bytes = written;
+    }
+    if (out_line_count != NULL)
+    {
+        *out_line_count = lines;
+    }
+    if (out_text != NULL)
+    {
+        out_text[written] = '\0';
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_editor_layout_measure_wrapped_text(
+    const char* text,
+    size_t max_columns,
+    size_t* out_line_count)
+{
+    if (out_line_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_line_count = 0U;
+    if (text == NULL || max_columns == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_editor_layout_process_wrapped_text(
+        text,
+        max_columns,
+        NULL,
+        0U,
+        NULL,
+        out_line_count);
+}
+
+henka_result sandbox3d_editor_layout_wrap_text(
+    const char* text,
+    size_t max_columns,
+    char* out_text,
+    size_t out_capacity,
+    size_t* out_line_count)
+{
+    henka_result result;
+    size_t required_bytes = 0U;
+    size_t line_count = 0U;
+
+    if (out_line_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_line_count = 0U;
+    if (text == NULL || max_columns == 0U || out_text == NULL || out_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = sandbox3d_editor_layout_process_wrapped_text(
+        text,
+        max_columns,
+        NULL,
+        0U,
+        &required_bytes,
+        &line_count);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (required_bytes >= out_capacity)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    result = sandbox3d_editor_layout_process_wrapped_text(
+        text,
+        max_columns,
+        out_text,
+        out_capacity,
+        NULL,
+        &line_count);
+    if (result == HENKA_SUCCESS)
+    {
+        *out_line_count = line_count;
+    }
+    return result;
+}
+
+henka_result sandbox3d_editor_layout_limit_wrapped_text(
+    const char* wrapped_text,
+    size_t maximum_line_count,
+    size_t maximum_columns,
+    char* out_text,
+    size_t out_capacity,
+    size_t* out_line_count,
+    bool* out_truncated)
+{
+    size_t text_length;
+    size_t line_count = 1U;
+    size_t index;
+    size_t prefix_line_count;
+    size_t prefix_bytes = 0U;
+    size_t cursor = 0U;
+    size_t required_bytes;
+    size_t ellipsis_length;
+
+    if (out_line_count == NULL || out_truncated == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_line_count = 0U;
+    *out_truncated = false;
+    if (wrapped_text == NULL || maximum_line_count == 0U || maximum_columns == 0U ||
+        out_text == NULL || out_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    text_length = strlen(wrapped_text);
+    for (index = 0U; index < text_length; ++index)
+    {
+        if (wrapped_text[index] == '\n')
+        {
+            if (line_count == SIZE_MAX)
+            {
+                return HENKA_ERROR_NUMERIC_RANGE;
+            }
+            ++line_count;
+        }
+    }
+
+    if (line_count <= maximum_line_count)
+    {
+        if (text_length == SIZE_MAX || text_length + 1U > out_capacity)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        memmove(out_text, wrapped_text, text_length + 1U);
+        *out_line_count = line_count;
+        return HENKA_SUCCESS;
+    }
+
+    prefix_line_count = maximum_line_count - 1U;
+    ellipsis_length = maximum_columns < 3U ? maximum_columns : 3U;
+    for (index = 0U; index < prefix_line_count; ++index)
+    {
+        const char* newline = strchr(wrapped_text + cursor, '\n');
+        if (newline == NULL)
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        prefix_bytes = (size_t)(newline - wrapped_text);
+        cursor = prefix_bytes + 1U;
+    }
+    if (prefix_bytes > SIZE_MAX -
+        (prefix_line_count > 0U ? ellipsis_length + 2U : ellipsis_length + 1U))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    required_bytes = prefix_bytes +
+        (prefix_line_count > 0U ? ellipsis_length + 2U : ellipsis_length + 1U);
+    if (required_bytes > out_capacity)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    memmove(out_text, wrapped_text, prefix_bytes);
+    cursor = prefix_bytes;
+    if (prefix_line_count > 0U)
+    {
+        out_text[cursor++] = '\n';
+    }
+    memcpy(out_text + cursor, "...", ellipsis_length);
+    out_text[cursor + ellipsis_length] = '\0';
+    *out_line_count = maximum_line_count;
+    *out_truncated = true;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_editor_layout_text_row_height(
+    size_t line_count,
+    float line_height,
+    float vertical_padding,
+    float minimum_height,
+    float* out_height)
+{
+    double content_height;
+    double row_height;
+
+    if (out_height == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_height = 0.0f;
+    if (line_count == 0U ||
+        !sandbox3d_editor_layout_float_is_valid(line_height) || line_height <= 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(vertical_padding) || vertical_padding < 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(minimum_height) || minimum_height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    content_height = (double)line_count * (double)line_height + (double)vertical_padding;
+    if (!isfinite(content_height) || content_height > (double)FLT_MAX)
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    row_height = fmax(content_height, (double)minimum_height);
+    if (!isfinite(row_height) || row_height > (double)FLT_MAX)
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    *out_height = (float)row_height;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_editor_layout_clamp_row_height(
+    float natural_row_height,
+    float available_height,
+    float minimum_row_height,
+    float* out_visible_height)
+{
+    if (out_visible_height == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_visible_height = 0.0f;
+    if (!sandbox3d_editor_layout_float_is_valid(natural_row_height) ||
+        natural_row_height <= 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(available_height) ||
+        available_height <= 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(minimum_row_height) ||
+        minimum_row_height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (minimum_row_height > available_height)
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    *out_visible_height = fminf(natural_row_height, available_height);
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_editor_layout_page_variable_rows(
+    const size_t* row_line_counts,
+    size_t row_count,
+    float available_height,
+    float line_height,
+    float vertical_padding,
+    float minimum_row_height,
+    size_t requested_page,
+    size_t* out_page_index,
+    size_t* out_page_count,
+    size_t* out_first_row,
+    size_t* out_visible_row_count)
+{
+    size_t page_count = 0U;
+    size_t selected_page;
+    size_t row_index;
+    size_t visible_first = 0U;
+    size_t visible_count = 0U;
+    size_t current_page = 0U;
+    double used_height = 0.0;
+    bool current_page_has_rows = false;
+
+    if (out_page_index == NULL || out_page_count == NULL ||
+        out_first_row == NULL || out_visible_row_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_page_index = 0U;
+    *out_page_count = 0U;
+    *out_first_row = 0U;
+    *out_visible_row_count = 0U;
+
+    if ((row_count > 0U && row_line_counts == NULL) ||
+        !sandbox3d_editor_layout_float_is_valid(available_height) || available_height <= 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(line_height) || line_height <= 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(vertical_padding) || vertical_padding < 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(minimum_row_height) || minimum_row_height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (row_index = 0U; row_index < row_count; ++row_index)
+    {
+        float row_height;
+        float visible_row_height;
+        henka_result result = sandbox3d_editor_layout_text_row_height(
+            row_line_counts[row_index],
+            line_height,
+            vertical_padding,
+            minimum_row_height,
+            &row_height);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        result = sandbox3d_editor_layout_clamp_row_height(
+            row_height,
+            available_height,
+            minimum_row_height,
+            &visible_row_height);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        if (visible_row_height < row_height)
+        {
+            current_page_has_rows = false;
+            used_height = 0.0;
+            if (page_count == SIZE_MAX)
+            {
+                return HENKA_ERROR_NUMERIC_RANGE;
+            }
+            ++page_count;
+            continue;
+        }
+        if (current_page_has_rows &&
+            used_height + (double)row_height > (double)available_height)
+        {
+            current_page_has_rows = false;
+            used_height = 0.0;
+        }
+        if (!current_page_has_rows)
+        {
+            if (page_count == SIZE_MAX)
+            {
+                return HENKA_ERROR_NUMERIC_RANGE;
+            }
+            ++page_count;
+            current_page_has_rows = true;
+        }
+        used_height += (double)row_height;
+    }
+
+    if (page_count == 0U)
+    {
+        page_count = 1U;
+    }
+    selected_page = requested_page < page_count ? requested_page : page_count - 1U;
+
+    current_page = 0U;
+    used_height = 0.0;
+    current_page_has_rows = false;
+    for (row_index = 0U; row_index < row_count; ++row_index)
+    {
+        float row_height;
+        float visible_row_height;
+        henka_result result = sandbox3d_editor_layout_text_row_height(
+            row_line_counts[row_index],
+            line_height,
+            vertical_padding,
+            minimum_row_height,
+            &row_height);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        result = sandbox3d_editor_layout_clamp_row_height(
+            row_height,
+            available_height,
+            minimum_row_height,
+            &visible_row_height);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        if (visible_row_height < row_height)
+        {
+            if (current_page_has_rows)
+            {
+                if (current_page == selected_page)
+                {
+                    break;
+                }
+                ++current_page;
+                current_page_has_rows = false;
+                used_height = 0.0;
+            }
+            if (current_page == selected_page)
+            {
+                visible_first = row_index;
+                visible_count = 1U;
+            }
+            ++current_page;
+            current_page_has_rows = false;
+            used_height = 0.0;
+            continue;
+        }
+        if (current_page_has_rows &&
+            used_height + (double)row_height > (double)available_height)
+        {
+            if (current_page == selected_page)
+            {
+                break;
+            }
+            ++current_page;
+            current_page_has_rows = false;
+            used_height = 0.0;
+        }
+        if (!current_page_has_rows)
+        {
+            if (current_page == selected_page)
+            {
+                visible_first = row_index;
+            }
+            current_page_has_rows = true;
+        }
+        if (current_page == selected_page)
+        {
+            ++visible_count;
+        }
+        used_height += (double)row_height;
+    }
+
+    *out_page_index = selected_page;
+    *out_page_count = page_count;
+    *out_first_row = visible_first;
+    *out_visible_row_count = visible_count;
     return HENKA_SUCCESS;
 }

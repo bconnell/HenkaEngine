@@ -136,4 +136,73 @@ henka_result sandbox3d_editor_layout_text_control_row(
     size_t item_capacity,
     size_t* out_item_count);
 
+/* Place controls at their measured text width (or a minimum hit width) using
+ * the active UI context's DPI-aware text scale. Extra row space remains
+ * available to neighboring content instead of stretching the controls. */
+henka_result sandbox3d_editor_layout_text_control_row_for_context(
+    const henka_ui_context* ui_context,
+    henka_ui_rect bounds,
+    const char* const* labels,
+    size_t item_count,
+    float scale,
+    float minimum_item_width,
+    float horizontal_padding,
+    float gap,
+    henka_ui_rect* out_items,
+    size_t item_capacity,
+    size_t* out_item_count);
+
+/* Wrap display text without truncating its non-whitespace content. A long
+ * token is split at the column boundary. */
+henka_result sandbox3d_editor_layout_measure_wrapped_text(
+    const char* text,
+    size_t max_columns,
+    size_t* out_line_count);
+
+henka_result sandbox3d_editor_layout_wrap_text(
+    const char* text,
+    size_t max_columns,
+    char* out_text,
+    size_t out_capacity,
+    size_t* out_line_count);
+
+/* Bound already-wrapped display text to a visible line and column budget.
+ * The final visible line becomes a width-bounded ellipsis when lines are omitted. */
+henka_result sandbox3d_editor_layout_limit_wrapped_text(
+    const char* wrapped_text,
+    size_t maximum_line_count,
+    size_t maximum_columns,
+    char* out_text,
+    size_t out_capacity,
+    size_t* out_line_count,
+    bool* out_truncated);
+
+/* Row heights and pages share the same text metrics so wrapped rows cannot
+ * overlap the next row or the panel footer. */
+henka_result sandbox3d_editor_layout_text_row_height(
+    size_t line_count,
+    float line_height,
+    float vertical_padding,
+    float minimum_height,
+    float* out_height);
+
+henka_result sandbox3d_editor_layout_clamp_row_height(
+    float natural_row_height,
+    float available_height,
+    float minimum_row_height,
+    float* out_visible_height);
+
+henka_result sandbox3d_editor_layout_page_variable_rows(
+    const size_t* row_line_counts,
+    size_t row_count,
+    float available_height,
+    float line_height,
+    float vertical_padding,
+    float minimum_row_height,
+    size_t requested_page,
+    size_t* out_page_index,
+    size_t* out_page_count,
+    size_t* out_first_row,
+    size_t* out_visible_row_count);
+
 #endif

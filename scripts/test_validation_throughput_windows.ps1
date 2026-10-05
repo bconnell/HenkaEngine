@@ -24,6 +24,35 @@ function Assert-Condition {
 }
 
 try {
+    $nameOnlyCTestJson = '{"kind":"ctestInfo","tests":[{"name":"henka_tests","config":"Debug"}]}'
+    $nameOnlyRecords = @(ConvertFrom-HenkaCTestJsonListing -JsonText $nameOnlyCTestJson)
+    Assert-Condition ($nameOnlyRecords.Count -eq 1 -and
+            $nameOnlyRecords[0].Name -eq "henka_tests" -and
+            [string]::IsNullOrWhiteSpace([string]$nameOnlyRecords[0].Command)) `
+        "A valid CTest listing with an omitted optional command was not preserved as a name-only record."
+    $missingCommandResolution = Get-HenkaCTestCommandResolution `
+        -Command ([string]$nameOnlyRecords[0].Command) `
+        -Configuration Debug
+    Assert-Condition ($missingCommandResolution -eq "aggregate-or-unresolved") `
+        "A name-only CTest record did not select the safe aggregate-build fallback."
+
+    $commandCTestJson = '{"kind":"ctestInfo","tests":[{"name":"henka_tests","command":["C:/build/tests/Debug/henka_tests.exe"]}]}'
+    $commandRecords = @(ConvertFrom-HenkaCTestJsonListing -JsonText $commandCTestJson)
+    Assert-Condition ($commandRecords.Count -eq 1 -and
+            $commandRecords[0].Command -eq "C:/build/tests/Debug/henka_tests.exe") `
+        "A CTest listing with an executable command did not retain its command."
+
+    $missingNameRejected = $false
+    try {
+        ConvertFrom-HenkaCTestJsonListing `
+            -JsonText '{"kind":"ctestInfo","tests":[{"command":["C:/build/tests/Debug/henka_tests.exe"]}]}'
+    }
+    catch {
+        $missingNameRejected = $_.Exception.Message -match 'without a test name'
+    }
+    Assert-Condition $missingNameRejected `
+        "A CTest record without its required test name was accepted."
+
     [System.IO.Directory]::CreateDirectory($debugTestsRoot) | Out-Null
     $henkaTestExecutable = Join-Path $debugTestsRoot "henka_tests.exe"
     $audioTestExecutable = Join-Path $debugTestsRoot "henka_audio_tests.exe"

@@ -465,6 +465,55 @@ function Test-HenkaCMakeConfigurationReady {
     return $true
 }
 
+function ConvertFrom-HenkaCTestJsonListing {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$JsonText,
+
+        [string]$BuildRoot = "CTest"
+    )
+
+    try {
+        $listing = ConvertFrom-Json -InputObject $JsonText -ErrorAction Stop
+    }
+    catch {
+        throw "CTest returned an invalid JSON test listing for '$BuildRoot': $($_.Exception.Message)"
+    }
+    if ([string]$listing.kind -ne "ctestInfo") {
+        throw "CTest returned an unexpected JSON listing kind for '$BuildRoot'."
+    }
+
+    $tests = @($listing.tests | Where-Object { $null -ne $_ })
+    foreach ($test in $tests) {
+        $nameProperty = $test.PSObject.Properties["name"]
+        if ($null -eq $nameProperty -or
+            [string]::IsNullOrWhiteSpace([string]$nameProperty.Value)) {
+            $recordSummary = ConvertTo-Json -InputObject $test -Compress -Depth 8
+            throw "CTest returned a test record without a test name for '$BuildRoot': $recordSummary"
+        }
+
+        # CTest's json-v1 schema makes command optional. Preserve a name-only
+        # record so filter validation remains authoritative; target planning
+        # will conservatively fall back to the aggregate build when the
+        # executable identity is unavailable.
+        $command = ""
+        $commandProperty = $test.PSObject.Properties["command"]
+        if ($null -ne $commandProperty) {
+            $commandParts = @($commandProperty.Value | Where-Object { $null -ne $_ })
+            if ($commandParts.Count -eq 0 -or
+                [string]::IsNullOrWhiteSpace([string]$commandParts[0])) {
+                throw "CTest returned an empty test command for '$($nameProperty.Value)'."
+            }
+            $command = [string]$commandParts[0]
+        }
+
+        [pscustomobject]@{
+            Name = [string]$nameProperty.Value
+            Command = $command
+        }
+    }
+}
+
 function Get-HenkaCTestCommandRecords {
     param(
         [Parameter(Mandatory = $true)]
@@ -520,35 +569,9 @@ function Get-HenkaCTestCommandRecords {
     }
     $jsonText = ([string]$capture.Stdout).Substring(
         $jsonStart, $jsonEnd - $jsonStart + 1)
-    try {
-        $listing = ConvertFrom-Json -InputObject $jsonText -ErrorAction Stop
-    }
-    catch {
-        throw "CTest returned an invalid JSON test listing for '$BuildRoot': $($_.Exception.Message)"
-    }
-    if ([string]$listing.kind -ne "ctestInfo") {
-        throw "CTest returned an unexpected JSON listing kind for '$BuildRoot'."
-    }
-
-    $tests = @($listing.tests | Where-Object { $null -ne $_ })
-    foreach ($test in $tests) {
-        $nameProperty = $test.PSObject.Properties["name"]
-        $commandProperty = $test.PSObject.Properties["command"]
-        if ($null -eq $nameProperty -or $null -eq $commandProperty -or
-            [string]::IsNullOrWhiteSpace([string]$nameProperty.Value)) {
-            $recordSummary = ConvertTo-Json -InputObject $test -Compress -Depth 8
-            throw "CTest returned a test record without a name or command for '$BuildRoot': $recordSummary"
-        }
-        $commandParts = @($commandProperty.Value | Where-Object { $null -ne $_ })
-        if ($commandParts.Count -eq 0 -or
-            [string]::IsNullOrWhiteSpace([string]$commandParts[0])) {
-            throw "CTest returned an empty test command for '$($nameProperty.Value)'."
-        }
-        [pscustomobject]@{
-            Name = [string]$nameProperty.Value
-            Command = [string]$commandParts[0]
-        }
-    }
+    return @(ConvertFrom-HenkaCTestJsonListing `
+        -JsonText $jsonText `
+        -BuildRoot $BuildRoot)
 }
 
 function Assert-HenkaCTestFilterMatchesRegisteredTests {
@@ -575,6 +598,27 @@ function Assert-HenkaCTestFilterMatchesRegisteredTests {
     if ($records.Count -eq 0) {
         throw "TestFilter '$TestFilter' matched no registered CTest tests in configuration '$Configuration'."
     }
+}
+
+function Get-HenkaCTestCommandResolution {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Command,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Debug", "Release")]
+        [string]$Configuration
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Command)) {
+        return "aggregate-or-unresolved"
+    }
+    if ([System.IO.Path]::GetExtension($Command) -ne ".exe" -or
+        $Command -notmatch "[\\/]$([System.Text.RegularExpressions.Regex]::Escape($Configuration))[\\/]") {
+        return "non-executable-test"
+    }
+    return "registered-executable"
 }
 
 function Resolve-HenkaValidationPlan {
@@ -634,13 +678,15 @@ function Resolve-HenkaValidationPlan {
     }
 
     $command = [string]$matchingTests[0].Command
-    if ([System.IO.Path]::GetExtension($command) -ne ".exe" -or
-        $command -notmatch "[\\/]$([System.Text.RegularExpressions.Regex]::Escape($Configuration))[\\/]") {
+    $commandResolution = Get-HenkaCTestCommandResolution `
+        -Command $command `
+        -Configuration $Configuration
+    if ($commandResolution -ne "registered-executable") {
         return [pscustomobject]@{
             TestFilter = $TestFilter
             BuildTarget = ""
             Artifact = $defaultArtifact
-            Resolution = "non-executable-test"
+            Resolution = $commandResolution
         }
     }
 
