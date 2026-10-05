@@ -1213,6 +1213,7 @@ $stdoutPath = Join-Path $logDir "check_packaged_sandbox3d_stdout.log"
 $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
 $startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png"
 $productStartupPrimitiveScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_product_startup_add_cube.png"
+$productStartupGroundDetailsScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_product_startup_ground_details.png"
 $terrainUiBeforeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_before_create.png"
 $terrainUiAfterScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_after_create.png"
 $qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
@@ -2258,6 +2259,47 @@ try {
         Write-Output "[pass] Inactive merged tabs may report zero content rectangles safely"
 
         if ($ProductStartupPrimitiveOnly) {
+            Write-Step "Selecting the product-native Ground row to inspect long Object Details text"
+            $groundRowPattern = '^Default scene Ground row: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) selected=(?<selected>[01])\.'
+            $groundRowMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $groundRowPattern
+            if ($null -eq $groundRowMatch -or $groundRowMatch.Groups["selected"].Value -ne "0") {
+                throw "The product-native Ground row was not available in its expected unselected startup state."
+            }
+            $groundRowX = [double]$groundRowMatch.Groups["x"].Value
+            $groundRowY = [double]$groundRowMatch.Groups["y"].Value
+            $groundRowWidth = [double]$groundRowMatch.Groups["width"].Value
+            $groundRowHeight = [double]$groundRowMatch.Groups["height"].Value
+            Assert-FramebufferRect `
+                -Name "Product-native Ground Scene Objects row for Object Details" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $groundRowX `
+                -Y $groundRowY `
+                -Width $groundRowWidth `
+                -Height $groundRowHeight
+            $groundSelectionLogOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($groundRowX + $groundRowWidth * 0.5) `
+                -FramebufferY ($groundRowY + $groundRowHeight * 0.5)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern '^Default scene Ground row: .* selected=1\.' `
+                    -StartingOffset $groundSelectionLogOffset `
+                    -TimeoutMilliseconds 3500)) {
+                throw "The normal Scene Objects click did not select the product-native Ground row for its long Details text."
+            }
+            Write-Output "[pass] Product-native Ground selection reached the authoritative Scene Objects state"
+            Set-HenkaAutomationForeground -Handle $mainWindowHandle
+            Start-Sleep -Milliseconds 500
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path $productStartupGroundDetailsScreenshotPath `
+                -Description "Packaged product-native Ground Object Details"
+            Write-Output "[pass] Product-native Ground long Object Details visual proof captured"
+
             Write-Step "Checking product-native Add Cube through the visible Scene Objects UI"
             $addCubeX = $sceneObjectsX + 14.0
             $addCubeY = $sceneObjectsY + 60.0
