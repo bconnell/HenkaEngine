@@ -24,6 +24,7 @@ void sandbox3d_modeling_toolbar_state_reset(
     state->pivot_mode = SANDBOX3D_AUTHORING_PIVOT_MEDIAN;
     state->snap_enabled = false;
     state->xray_enabled = false;
+    state->options_expanded = false;
     state->authoring_available = false;
     state->selected_component_count = 0U;
 }
@@ -216,6 +217,38 @@ henka_result sandbox3d_modeling_toolbar_format_summary(
         sandbox3d_modeling_toolbar_orientation_label(state->orientation_mode),
         sandbox3d_modeling_toolbar_pivot_label(state->pivot_mode),
         state->selected_component_count);
+    if (required < 0 || (size_t)required >= sizeof(formatted))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    if ((size_t)required >= buffer_size)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    memcpy(buffer, formatted, (size_t)required + 1U);
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_modeling_toolbar_format_options_summary(
+    const sandbox3d_modeling_toolbar_state* state,
+    char* buffer,
+    size_t buffer_size)
+{
+    char formatted[96];
+    int required;
+
+    if (state == NULL || buffer == NULL || buffer_size == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    required = snprintf(
+        formatted,
+        sizeof(formatted),
+        "%s | %s | Snap %s | X-Ray %s",
+        sandbox3d_modeling_toolbar_orientation_label(state->orientation_mode),
+        sandbox3d_modeling_toolbar_pivot_label(state->pivot_mode),
+        state->snap_enabled ? "on" : "off",
+        state->xray_enabled ? "on" : "off");
     if (required < 0 || (size_t)required >= sizeof(formatted))
     {
         return HENKA_ERROR_LIMIT;

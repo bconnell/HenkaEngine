@@ -29,6 +29,27 @@ The scope column is part of each status. A future backend, advanced mode, or
 larger workflow outside that scope does not lower the current status. A gap
 inside the declared scope does lower it.
 
+## Modeling-readiness gate for editor icons
+
+Production editor icons are part of Henka's modeling/content-authoring
+readiness, not an assumed external-art dependency. Track the provenance of
+icons used by the editor. For any new or replacement icon, first attempt to
+author it with Henka's own tools wherever they can produce a production-ready
+asset. Existing icons are not exempt by age: if Henka can reasonably create a
+native equivalent, retain that as a modeling-readiness item until the native
+source is authored and used. Preserve the authored source, not only an
+exported/runtime derivative, and validate save/reload, the asset pipeline,
+rendering, packaging, actual UI sizes, and supported DPI/scaling through the
+normal Henka path. Shape and state must remain understandable without color
+alone. If Henka cannot reasonably author a required production-ready icon,
+record the limitation in the modeling-completeness queue. A temporary
+externally authored icon must be identified as such and does not satisfy this
+gate.
+
+The compact-toolbar slice adds a text disclosure and no new icon asset. Its
+existing tool glyphs remain subject to the editor-icon provenance and native
+authoring gate above.
+
 ## Current closure blockers
 
 These are the material open items that currently prevent the 3D completion gate

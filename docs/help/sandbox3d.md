@@ -291,6 +291,13 @@ Current bounded component transforms include:
 
 Sandbox Rotate and Scale use the median pivot. The authoring API also exposes active-component and per-face individual pivots plus world, local, and face-normal rotation orientation.
 
+At compact Scene View widths, component mode, Select, Move, Rotate, and Scale
+remain directly visible. Orientation, pivot, Snap, and X-Ray are available in
+the labeled `Options` disclosure. Its collapsed status line continues to show
+the active orientation, pivot, Snap, and X-Ray states. Wider Scene Views keep
+those controls inline. The disclosure changes presentation only; it does not
+change authoring state or keyboard bindings.
+
 Soft Move uses a one-ring linear falloff:
 
 - selected vertices receive full movement;

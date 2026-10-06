@@ -28,6 +28,7 @@ typedef struct sandbox3d_modeling_toolbar_state
     sandbox3d_authoring_pivot_mode pivot_mode;
     bool snap_enabled;
     bool xray_enabled;
+    bool options_expanded;
     bool authoring_available;
     size_t selected_component_count;
 } sandbox3d_modeling_toolbar_state;
@@ -60,6 +61,10 @@ const char* sandbox3d_modeling_toolbar_disabled_reason(
     sandbox3d_modeling_toolbar_action action,
     const sandbox3d_modeling_toolbar_state* state);
 henka_result sandbox3d_modeling_toolbar_format_summary(
+    const sandbox3d_modeling_toolbar_state* state,
+    char* buffer,
+    size_t buffer_size);
+henka_result sandbox3d_modeling_toolbar_format_options_summary(
     const sandbox3d_modeling_toolbar_state* state,
     char* buffer,
     size_t buffer_size);

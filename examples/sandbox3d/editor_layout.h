@@ -62,6 +62,20 @@ typedef struct sandbox3d_editor_frame_layout
     sandbox3d_workspace_topology_layout right_topology;
 } sandbox3d_editor_frame_layout;
 
+typedef struct sandbox3d_modeling_toolbar_layout
+{
+    henka_ui_rect bounds;
+    henka_ui_rect selection_mode;
+    henka_ui_rect options_toggle;
+    henka_ui_rect orientation;
+    henka_ui_rect pivot;
+    henka_ui_rect tool_buttons[6];
+    henka_ui_rect state_summary;
+    bool compact;
+    bool options_expanded;
+    bool authoring_available;
+} sandbox3d_modeling_toolbar_layout;
+
 /*
  * Return the responsive policy for a positive framebuffer width. Invalid
  * widths fail closed to the narrowest policy; callers that need diagnostics
@@ -90,13 +104,27 @@ bool sandbox3d_editor_frame_layout_is_valid(
  * the toolbar or its hit targets. */
 henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
     henka_ui_rect scene_frame,
-    bool authoring_available);
+    bool authoring_available,
+    bool options_expanded);
+
+henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
+    henka_ui_rect scene_frame,
+    bool authoring_available,
+    bool options_expanded,
+    sandbox3d_modeling_toolbar_layout* out_layout);
+
+/* True only for visible interactive toolbar controls. Empty space and
+ * informational summary text remain available for viewport interaction. */
+bool sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+    const sandbox3d_modeling_toolbar_layout* layout,
+    henka_vec2 point);
 
 /* Return the scene viewport region reserved for navigation overlays. This is
  * editor presentation geometry; it does not change the renderer viewport. */
 henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
     const sandbox3d_editor_frame_layout* layout,
-    bool authoring_available);
+    bool authoring_available,
+    bool options_expanded);
 
 henka_ui_rect sandbox3d_editor_frame_layout_panel_rect(
     const sandbox3d_editor_frame_layout* layout,

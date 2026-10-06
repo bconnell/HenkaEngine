@@ -625,6 +625,51 @@ function Wait-LastLogRegexMatch {
 
     return $null
 }
+
+function Get-HenkaModelingToolbarFields {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $match = Get-LastLogRegexMatch `
+        -Path $Path `
+        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar (?<fields>[^\r\n]+)'
+    if ($null -eq $match) {
+        return $null
+    }
+
+    $fields = @{}
+    foreach ($field in $match.Groups['fields'].Value.Split(
+            ' ',
+            [System.StringSplitOptions]::RemoveEmptyEntries)) {
+        $separator = $field.IndexOf('=')
+        if ($separator -gt 0) {
+            $fields[$field.Substring(0, $separator)] = $field.Substring($separator + 1)
+        }
+    }
+    return ,$fields
+}
+
+function Get-HenkaModelingToolbarRect {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Fields,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if (-not $Fields.ContainsKey($Name)) {
+        throw "The product toolbar diagnostic omitted '$Name'."
+    }
+    $parts = $Fields[$Name].Split(',')
+    if ($parts.Count -ne 4) {
+        throw "The product toolbar diagnostic returned malformed geometry for '$Name'."
+    }
+    $culture = [Globalization.CultureInfo]::InvariantCulture
+    return [pscustomobject]@{
+        X = [double]::Parse($parts[0], $culture)
+        Y = [double]::Parse($parts[1], $culture)
+        Width = [double]::Parse($parts[2], $culture)
+        Height = [double]::Parse($parts[3], $culture)
+    }
+}
+
 function Assert-FramebufferRect {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -3199,6 +3244,265 @@ try {
             throw "The user-facing native material redo did not restore the edited material state."
         }
         Write-Output "[pass] User-facing native material undo/redo completed"
+        if ($framebufferWidth -ne 1280 -or $framebufferHeight -ne 720) {
+            throw "The compact modeling toolbar interaction must run at 1280x720; packaged framebuffer is $($framebufferWidth)x$($framebufferHeight)."
+        }
+        $toolbarFields = Get-HenkaModelingToolbarFields -Path $stdoutPath
+        if ($null -eq $toolbarFields -or
+            $toolbarFields.authoring -ne '1' -or
+            $toolbarFields.compact -ne '1' -or
+            $toolbarFields.options_expanded -ne '0' -or
+            $toolbarFields.hidden_controls_zero -ne '1') {
+            throw "The packaged compact toolbar did not report its collapsed, editable, no-hidden-hit-target state."
+        }
+        $toolbarBounds = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name 'bounds'
+        $toolbarOptions = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name 'options'
+        Assert-FramebufferRect `
+            -Name "Collapsed modeling toolbar" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $toolbarBounds.X -Y $toolbarBounds.Y `
+            -Width $toolbarBounds.Width -Height $toolbarBounds.Height
+        Assert-FramebufferRect `
+            -Name "Visible compact Options disclosure" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $toolbarOptions.X -Y $toolbarOptions.Y `
+            -Width $toolbarOptions.Width -Height $toolbarOptions.Height
+        foreach ($hiddenControl in @('orientation_rect', 'pivot_rect', 'snap', 'xray')) {
+            $hiddenRect = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name $hiddenControl
+            if ($hiddenRect.Width -ne 0.0 -or $hiddenRect.Height -ne 0.0) {
+                throw "Collapsed toolbar exposed a hit target for '$hiddenControl'."
+            }
+        }
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path (Join-Path $logDir 'modeling-toolbar-collapsed-1280x720.png') `
+            -Description "Packaged compact modeling toolbar with active state summary"
+
+        $toolbarActionOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($toolbarOptions.X + ($toolbarOptions.Width * 0.5)) `
+            -FramebufferY ($toolbarOptions.Y + ($toolbarOptions.Height * 0.5))
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar .*options_expanded=1' `
+                -StartingOffset $toolbarActionOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The packaged Options disclosure did not open after a real framebuffer click."
+        }
+        $toolbarFields = Get-HenkaModelingToolbarFields -Path $stdoutPath
+        if ($toolbarFields.options_expanded -ne '1' -or $toolbarFields.hidden_controls_zero -ne '0') {
+            throw "Expanded compact toolbar state or visible option-control geometry was not reported."
+        }
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path (Join-Path $logDir 'modeling-toolbar-expanded-1280x720.png') `
+            -Description "Packaged compact modeling toolbar with Options expanded"
+
+        foreach ($control in @(
+                [pscustomobject]@{ Name = 'orientation_rect'; Field = 'orientation'; Value = 'Local'; Segment = 1 },
+                [pscustomobject]@{ Name = 'pivot_rect'; Field = 'pivot'; Value = 'Individual'; Segment = 2 })) {
+            $controlRect = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name $control.Name
+            Assert-FramebufferRect `
+                -Name "Expanded modeling toolbar $($control.Field) control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $controlRect.X -Y $controlRect.Y `
+                -Width $controlRect.Width -Height $controlRect.Height
+            $toolbarActionOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($controlRect.X + ($controlRect.Width * (($control.Segment + 0.5) / 3.0))) `
+                -FramebufferY ($controlRect.Y + ($controlRect.Height * 0.5))
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar ' `
+                    -StartingOffset $toolbarActionOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The packaged $($control.Field) click produced no editor-state report."
+            }
+            $toolbarFields = Get-HenkaModelingToolbarFields -Path $stdoutPath
+            $actualValue = if ($control.Field -eq 'orientation') {
+                $toolbarFields.orientation
+            }
+            else {
+                $toolbarFields.pivot
+            }
+            if ($toolbarFields.authoring -ne '1' -or $actualValue -ne $control.Value) {
+                throw "The packaged $($control.Field) click did not preserve the editable selection and set '$($control.Value)' (authoring=$($toolbarFields.authoring), actual=$actualValue)."
+            }
+        }
+
+        $toolbarInitialSnap = [string]$toolbarFields.snap_enabled
+        $toolbarInitialXRay = [string]$toolbarFields.xray_enabled
+        $toolbarToggledSnap = if ($toolbarInitialSnap -eq '1') { '0' } else { '1' }
+        $toolbarToggledXRay = if ($toolbarInitialXRay -eq '1') { '0' } else { '1' }
+        foreach ($control in @(
+                [pscustomobject]@{ Name = 'snap'; Field = 'snap_enabled'; Value = $toolbarToggledSnap },
+                [pscustomobject]@{ Name = 'xray'; Field = 'xray_enabled'; Value = $toolbarToggledXRay })) {
+            $controlRect = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name $control.Name
+            Assert-FramebufferRect `
+                -Name "Expanded modeling toolbar $($control.Name) control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $controlRect.X -Y $controlRect.Y `
+                -Width $controlRect.Width -Height $controlRect.Height
+            $toolbarActionOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($controlRect.X + ($controlRect.Width * 0.5)) `
+                -FramebufferY ($controlRect.Y + ($controlRect.Height * 0.5))
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar ' `
+                    -StartingOffset $toolbarActionOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The packaged $($control.Name) click produced no editor-state report."
+            }
+            $toolbarFields = Get-HenkaModelingToolbarFields -Path $stdoutPath
+            $actualValue = if ($control.Field -eq 'snap_enabled') {
+                $toolbarFields.snap_enabled
+            }
+            else {
+                $toolbarFields.xray_enabled
+            }
+            if ($toolbarFields.authoring -ne '1' -or $actualValue -ne $control.Value) {
+                throw "The packaged $($control.Name) click did not preserve the editable selection and toggle to '$($control.Value)' (authoring=$($toolbarFields.authoring), actual=$actualValue)."
+            }
+        }
+
+        $toolbarOptions = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name 'options'
+        $toolbarActionOffset = Get-FileLengthSafe -Path $stdoutPath
+        $cleanToolbarStatePattern = 'HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar .*options_expanded=0 hidden_controls_zero=1.*orientation=World pivot=Median snap_enabled={0} xray_enabled={1}' -f $toolbarInitialSnap, $toolbarInitialXRay
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($toolbarOptions.X + ($toolbarOptions.Width * 0.5)) `
+            -FramebufferY ($toolbarOptions.Y + ($toolbarOptions.Height * 0.5))
+        $activeOptionsPattern = 'HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar .*options_expanded=0 hidden_controls_zero=1.*orientation=Local pivot=Individual snap_enabled={0} xray_enabled={1}' -f $toolbarToggledSnap, $toolbarToggledXRay
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $activeOptionsPattern `
+                -StartingOffset $toolbarActionOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "Collapsed Options did not preserve and disclose the active Local, Individual, Snap, and X-Ray states."
+        }
+        $toolbarFields = Get-HenkaModelingToolbarFields -Path $stdoutPath
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path (Join-Path $logDir 'modeling-toolbar-active-options-collapsed-1280x720.png') `
+            -Description "Packaged compact toolbar showing active options while collapsed"
+
+        $toolbarOptions = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name 'options'
+        $toolbarActionOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($toolbarOptions.X + ($toolbarOptions.Width * 0.5)) `
+            -FramebufferY ($toolbarOptions.Y + ($toolbarOptions.Height * 0.5))
+        $activeOptionsPattern = 'HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar .*options_expanded=1.*orientation=Local pivot=Individual snap_enabled={0} xray_enabled={1}' -f $toolbarToggledSnap, $toolbarToggledXRay
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $activeOptionsPattern `
+                -StartingOffset $toolbarActionOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "Reopening Options did not restore the active orientation, pivot, Snap, and X-Ray values."
+        }
+        $toolbarFields = Get-HenkaModelingToolbarFields -Path $stdoutPath
+
+        foreach ($control in @(
+                [pscustomobject]@{ Name = 'orientation_rect'; Field = 'orientation'; Value = 'World'; Segment = 0 },
+                [pscustomobject]@{ Name = 'pivot_rect'; Field = 'pivot'; Value = 'Median'; Segment = 0 })) {
+            $controlRect = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name $control.Name
+            $toolbarActionOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($controlRect.X + ($controlRect.Width * (($control.Segment + 0.5) / 3.0))) `
+                -FramebufferY ($controlRect.Y + ($controlRect.Height * 0.5))
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern ('HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar .*{0}={1}' -f $control.Field, $control.Value) `
+                    -StartingOffset $toolbarActionOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The packaged $($control.Field) control did not restore its default state."
+            }
+            $toolbarFields = Get-HenkaModelingToolbarFields -Path $stdoutPath
+        }
+        foreach ($control in @(
+                [pscustomobject]@{ Name = 'snap'; Field = 'snap_enabled'; Value = $toolbarInitialSnap },
+                [pscustomobject]@{ Name = 'xray'; Field = 'xray_enabled'; Value = $toolbarInitialXRay })) {
+            $controlRect = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name $control.Name
+            $toolbarActionOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($controlRect.X + ($controlRect.Width * 0.5)) `
+                -FramebufferY ($controlRect.Y + ($controlRect.Height * 0.5))
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern ('HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar .*{0}={1}' -f $control.Field, $control.Value) `
+                    -StartingOffset $toolbarActionOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The packaged $($control.Name) control did not restore its default state."
+            }
+            $toolbarFields = Get-HenkaModelingToolbarFields -Path $stdoutPath
+        }
+
+        $toolbarOptions = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name 'options'
+        $toolbarActionOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($toolbarOptions.X + ($toolbarOptions.Width * 0.5)) `
+            -FramebufferY ($toolbarOptions.Y + ($toolbarOptions.Height * 0.5))
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $cleanToolbarStatePattern `
+                -StartingOffset $toolbarActionOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The compact toolbar did not return to its clean collapsed state."
+        }
+        $toolbarFields = Get-HenkaModelingToolbarFields -Path $stdoutPath
+        $toolbarSelect = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name 'select'
+        Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName 'R'
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar .*options_expanded=0.*transform=Rotate' `
+                -StartingOffset $toolbarActionOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The Rotate keyboard shortcut did not work while Options was collapsed."
+        }
+        $toolbarFields = Get-HenkaModelingToolbarFields -Path $stdoutPath
+        $toolbarSelect = Get-HenkaModelingToolbarRect -Fields $toolbarFields -Name 'select'
+        $toolbarActionOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($toolbarSelect.X + ($toolbarSelect.Width * 0.5)) `
+            -FramebufferY ($toolbarSelect.Y + ($toolbarSelect.Height * 0.5))
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar .*options_expanded=0.*transform=Select' `
+                -StartingOffset $toolbarActionOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The visible Select tool did not restore the core toolbar state after the shortcut check."
+        }
+        Write-Output "[pass] Packaged 1280x720 modeling toolbar opened, changed each option, preserved active values while collapsed/reopened, and retained the Rotate shortcut"
         $componentViewportMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Sandbox viewport: origin ([0-9]+),([0-9]+) size ([0-9]+)x([0-9]+)\.'
@@ -3912,6 +4216,11 @@ try {
                 -TimeoutMilliseconds 5000)) {
             throw "The packaged Sandbox did not complete a frame after the Bevel face-frame key."
         }
+        # The framed center can cross the narrow neck or air between body parts.
+        # Also probe the visibly broad torso while still requiring a real
+        # Giraffe face identity from the production Scene View ray picker.
+        $nativeFaceTorsoYOffset = $componentViewportHeight * 0.22
+        $nativeFaceTorsoXOffset = $componentViewportWidth * 0.10
         $nativeFacePickOffsets = @(
             [pscustomobject]@{ X = 0.0; Y = 0.0 },
             [pscustomobject]@{ X = -2.0; Y = 0.0 },
@@ -3921,7 +4230,10 @@ try {
             [pscustomobject]@{ X = -2.0; Y = -2.0 },
             [pscustomobject]@{ X = 2.0; Y = -2.0 },
             [pscustomobject]@{ X = -2.0; Y = 2.0 },
-            [pscustomobject]@{ X = 2.0; Y = 2.0 })
+            [pscustomobject]@{ X = 2.0; Y = 2.0 },
+            [pscustomobject]@{ X = -$nativeFaceTorsoXOffset; Y = $nativeFaceTorsoYOffset },
+            [pscustomobject]@{ X = 0.0; Y = $nativeFaceTorsoYOffset },
+            [pscustomobject]@{ X = $nativeFaceTorsoXOffset; Y = $nativeFaceTorsoYOffset })
         $nativeFaceTargetX = $componentViewportX + ($componentViewportWidth * 0.5)
         $nativeFaceTargetY = $componentViewportY + ($componentViewportHeight * 0.5)
         $nativeFacePicked = $false
@@ -3956,7 +4268,7 @@ try {
             }
         }
         if (-not $nativeFacePicked) {
-            throw "The user-facing Face mode did not select a Giraffe viewport face near the framed object center before Bevel after $nativeBevelFacePickCount bounded probes."
+            throw "The user-facing Face mode did not select a Giraffe viewport face across the framed neck and torso before Bevel after $nativeBevelFacePickCount bounded probes."
         }
         Write-Output ("[pass] Production Scene View selected Giraffe face {0} before Bevel" -f $nativeBevelPickedFaceId)
         # Capture the face while its freshly picked stable handle is still

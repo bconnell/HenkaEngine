@@ -608,6 +608,19 @@ typedef struct sandbox3d_state
     uint64_t automation_diagnostic_utility_action_sequence;
     uint64_t automation_diagnostic_assets_reported_action_sequence;
     uint32_t automation_diagnostic_asset_layout_log_lines;
+    uint32_t automation_diagnostic_modeling_toolbar_report_count;
+    bool automation_diagnostic_modeling_toolbar_reported;
+    float automation_diagnostic_modeling_toolbar_frame_width;
+    float automation_diagnostic_modeling_toolbar_frame_height;
+    bool automation_diagnostic_modeling_toolbar_authoring_available;
+    bool automation_diagnostic_modeling_toolbar_options_expanded;
+    int automation_diagnostic_modeling_toolbar_selection_mode;
+    int automation_diagnostic_modeling_toolbar_transform_tool;
+    int automation_diagnostic_modeling_toolbar_orientation_mode;
+    int automation_diagnostic_modeling_toolbar_pivot_mode;
+    bool automation_diagnostic_modeling_toolbar_snap_enabled;
+    bool automation_diagnostic_modeling_toolbar_xray_enabled;
+    size_t automation_diagnostic_modeling_toolbar_selected_count;
     henka_texture* asset_browser_selected_texture;
     const henka_material_asset* asset_browser_selected_material;
     const henka_prefab* asset_browser_selected_prefab;
@@ -7319,7 +7332,8 @@ static henka_ui_rect sandbox3d_get_modeling_toolbar_bounds(
     }
     return sandbox3d_editor_layout_modeling_toolbar_bounds(
         scene_frame,
-        sandbox3d_modeling_toolbar_has_editable_selection(state));
+        sandbox3d_modeling_toolbar_has_editable_selection(state),
+        state->modeling_toolbar.options_expanded);
 }
 
 static bool sandbox3d_rects_overlap(henka_ui_rect left, henka_ui_rect right)
@@ -20163,6 +20177,7 @@ static bool sandbox3d_collect_gizmo_overlay_state(
 static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka_vec2 framebuffer_mouse)
 {
     henka_ui_rect panels[6];
+    sandbox3d_modeling_toolbar_layout modeling_toolbar_layout;
     size_t panel_count;
 
     if (state == NULL || state->ui == NULL || !henka_ui_is_visible(state->ui))
@@ -20178,6 +20193,20 @@ static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka
     }
     if (henka_ui_rect_contains(
             state->scene_view_authoring_controls,
+            framebuffer_mouse))
+    {
+        return true;
+    }
+    /* Only actual toolbar controls own pointer input. Its surrounding visual
+     * bounds include empty spacing that must remain available for viewport
+     * selection and drag operations. */
+    if (sandbox3d_editor_layout_modeling_toolbar_compute(
+            state->frame_layout.scene_frame,
+            sandbox3d_modeling_toolbar_has_editable_selection(state),
+            state->modeling_toolbar.options_expanded,
+            &modeling_toolbar_layout) == HENKA_SUCCESS &&
+        sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+            &modeling_toolbar_layout,
             framebuffer_mouse))
     {
         return true;
@@ -21272,6 +21301,91 @@ static void sandbox3d_sync_modeling_toolbar_state(sandbox3d_state* state)
     state->modeling_toolbar.snap_enabled = state->gizmo.snap.enabled;
 }
 
+static void sandbox3d_report_modeling_toolbar_diagnostic(
+    sandbox3d_state* state,
+    henka_ui_rect scene_frame,
+    const sandbox3d_modeling_toolbar_layout* layout)
+{
+    char diagnostics_value[8];
+    const sandbox3d_modeling_toolbar_state* toolbar;
+    bool hidden_controls_zero;
+    bool changed;
+
+    if (state == NULL || layout == NULL ||
+        !sandbox3d_copy_environment_value(
+            "HENKA_AUTOMATION_DIAGNOSTICS",
+            diagnostics_value,
+            sizeof(diagnostics_value)) ||
+        strcmp(diagnostics_value, "1") != 0)
+    {
+        return;
+    }
+
+    toolbar = &state->modeling_toolbar;
+    changed = !state->automation_diagnostic_modeling_toolbar_reported ||
+        state->automation_diagnostic_modeling_toolbar_frame_width != scene_frame.width ||
+        state->automation_diagnostic_modeling_toolbar_frame_height != scene_frame.height ||
+        state->automation_diagnostic_modeling_toolbar_authoring_available != toolbar->authoring_available ||
+        state->automation_diagnostic_modeling_toolbar_options_expanded != toolbar->options_expanded ||
+        state->automation_diagnostic_modeling_toolbar_selection_mode != (int)toolbar->selection_mode ||
+        state->automation_diagnostic_modeling_toolbar_transform_tool != (int)toolbar->transform_tool ||
+        state->automation_diagnostic_modeling_toolbar_orientation_mode != (int)toolbar->orientation_mode ||
+        state->automation_diagnostic_modeling_toolbar_pivot_mode != (int)toolbar->pivot_mode ||
+        state->automation_diagnostic_modeling_toolbar_snap_enabled != toolbar->snap_enabled ||
+        state->automation_diagnostic_modeling_toolbar_xray_enabled != toolbar->xray_enabled ||
+        state->automation_diagnostic_modeling_toolbar_selected_count != toolbar->selected_component_count;
+    if (!changed || state->automation_diagnostic_modeling_toolbar_report_count >= 32U)
+    {
+        return;
+    }
+
+    hidden_controls_zero = layout->compact && !layout->options_expanded &&
+        layout->orientation.width == 0.0f && layout->pivot.width == 0.0f &&
+        layout->tool_buttons[4].width == 0.0f &&
+        layout->tool_buttons[5].width == 0.0f;
+    printf(
+        "HENKA_AUTOMATION_DIAGNOSTIC modeling_toolbar scene_frame=%.1fx%.1f compact=%u authoring=%u options_expanded=%u hidden_controls_zero=%u bounds=%.1f,%.1f,%.1f,%.1f options=%.1f,%.1f,%.1f,%.1f selection=%.1f,%.1f,%.1f,%.1f orientation_rect=%.1f,%.1f,%.1f,%.1f pivot_rect=%.1f,%.1f,%.1f,%.1f select=%.1f,%.1f,%.1f,%.1f move=%.1f,%.1f,%.1f,%.1f rotate=%.1f,%.1f,%.1f,%.1f scale=%.1f,%.1f,%.1f,%.1f snap=%.1f,%.1f,%.1f,%.1f xray=%.1f,%.1f,%.1f,%.1f mode=%s transform=%s orientation=%s pivot=%s snap_enabled=%u xray_enabled=%u selected=%zu\n",
+        scene_frame.width,
+        scene_frame.height,
+        layout->compact ? 1U : 0U,
+        toolbar->authoring_available ? 1U : 0U,
+        toolbar->options_expanded ? 1U : 0U,
+        hidden_controls_zero ? 1U : 0U,
+        layout->bounds.x, layout->bounds.y, layout->bounds.width, layout->bounds.height,
+        layout->options_toggle.x, layout->options_toggle.y, layout->options_toggle.width, layout->options_toggle.height,
+        layout->selection_mode.x, layout->selection_mode.y, layout->selection_mode.width, layout->selection_mode.height,
+        layout->orientation.x, layout->orientation.y, layout->orientation.width, layout->orientation.height,
+        layout->pivot.x, layout->pivot.y, layout->pivot.width, layout->pivot.height,
+        layout->tool_buttons[0].x, layout->tool_buttons[0].y, layout->tool_buttons[0].width, layout->tool_buttons[0].height,
+        layout->tool_buttons[1].x, layout->tool_buttons[1].y, layout->tool_buttons[1].width, layout->tool_buttons[1].height,
+        layout->tool_buttons[2].x, layout->tool_buttons[2].y, layout->tool_buttons[2].width, layout->tool_buttons[2].height,
+        layout->tool_buttons[3].x, layout->tool_buttons[3].y, layout->tool_buttons[3].width, layout->tool_buttons[3].height,
+        layout->tool_buttons[4].x, layout->tool_buttons[4].y, layout->tool_buttons[4].width, layout->tool_buttons[4].height,
+        layout->tool_buttons[5].x, layout->tool_buttons[5].y, layout->tool_buttons[5].width, layout->tool_buttons[5].height,
+        sandbox3d_modeling_toolbar_selection_label(toolbar->selection_mode),
+        sandbox3d_modeling_toolbar_transform_label(toolbar->transform_tool),
+        sandbox3d_modeling_toolbar_orientation_label(toolbar->orientation_mode),
+        sandbox3d_modeling_toolbar_pivot_label(toolbar->pivot_mode),
+        toolbar->snap_enabled ? 1U : 0U,
+        toolbar->xray_enabled ? 1U : 0U,
+        toolbar->selected_component_count);
+    fflush(stdout);
+
+    ++state->automation_diagnostic_modeling_toolbar_report_count;
+    state->automation_diagnostic_modeling_toolbar_reported = true;
+    state->automation_diagnostic_modeling_toolbar_frame_width = scene_frame.width;
+    state->automation_diagnostic_modeling_toolbar_frame_height = scene_frame.height;
+    state->automation_diagnostic_modeling_toolbar_authoring_available = toolbar->authoring_available;
+    state->automation_diagnostic_modeling_toolbar_options_expanded = toolbar->options_expanded;
+    state->automation_diagnostic_modeling_toolbar_selection_mode = (int)toolbar->selection_mode;
+    state->automation_diagnostic_modeling_toolbar_transform_tool = (int)toolbar->transform_tool;
+    state->automation_diagnostic_modeling_toolbar_orientation_mode = (int)toolbar->orientation_mode;
+    state->automation_diagnostic_modeling_toolbar_pivot_mode = (int)toolbar->pivot_mode;
+    state->automation_diagnostic_modeling_toolbar_snap_enabled = toolbar->snap_enabled;
+    state->automation_diagnostic_modeling_toolbar_xray_enabled = toolbar->xray_enabled;
+    state->automation_diagnostic_modeling_toolbar_selected_count = toolbar->selected_component_count;
+}
+
 static void sandbox3d_draw_topology_selection_commands(
     sandbox3d_state* state,
     henka_ui_rect row)
@@ -21316,21 +21430,31 @@ static void sandbox3d_draw_modeling_toolbar(
     static const char* const selection_labels[] = {"Vertex", "Edge", "Face"};
     static const char* const orientation_labels[] = {"World", "Local", "Norm."};
     static const char* const pivot_labels[] = {"Median", "Active", "Indiv."};
-    const float x = viewport_bounds.x + 10.0f;
-    float y = viewport_bounds.y + 34.0f;
-    const float width = viewport_bounds.width - 20.0f;
-    const float gap = 4.0f;
-    const bool compact_toolbar = viewport_bounds.width < 760.0f;
-    float toolbar_height;
-    float first_row_y;
-    float tool_row_y;
-    float summary_y;
+    static const struct
+    {
+        sandbox3d_modeling_toolbar_action action;
+        henka_ui_icon icon;
+        const char* id;
+        const char* label;
+        sandbox3d_transform_tool tool;
+    } tool_descriptors[] = {
+        {SANDBOX3D_MODELING_TOOLBAR_ACTION_SELECT, HENKA_UI_ICON_SELECT, "modeling_toolbar.select", "Select", SANDBOX3D_TRANSFORM_TOOL_NONE},
+        {SANDBOX3D_MODELING_TOOLBAR_ACTION_MOVE, HENKA_UI_ICON_MOVE, "modeling_toolbar.move", "Move", SANDBOX3D_TRANSFORM_TOOL_MOVE},
+        {SANDBOX3D_MODELING_TOOLBAR_ACTION_ROTATE, HENKA_UI_ICON_ROTATE, "modeling_toolbar.rotate", "Rotate", SANDBOX3D_TRANSFORM_TOOL_ROTATE},
+        {SANDBOX3D_MODELING_TOOLBAR_ACTION_SCALE, HENKA_UI_ICON_SCALE, "modeling_toolbar.scale", "Scale", SANDBOX3D_TRANSFORM_TOOL_SCALE},
+        {SANDBOX3D_MODELING_TOOLBAR_ACTION_SNAP, HENKA_UI_ICON_SNAP, "modeling_toolbar.snap", "Snap", SANDBOX3D_TRANSFORM_TOOL_NONE},
+        {SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY, HENKA_UI_ICON_BUILD, "modeling_toolbar.xray", "X-Ray", SANDBOX3D_TRANSFORM_TOOL_NONE}
+    };
+    sandbox3d_modeling_toolbar_layout toolbar_layout;
     size_t selection_index;
     size_t orientation_index;
     size_t pivot_index;
     bool changed;
-    bool reserve_compass;
+    size_t tool_count;
+    size_t index;
     char summary[128];
+    char options_summary[96];
+    const bool compact_toolbar = viewport_bounds.width < 760.0f;
 
     if (engine == NULL || state == NULL || state->ui == NULL ||
         state->workspace.context.active != SANDBOX3D_WORK_CONTEXT_BUILD ||
@@ -21340,63 +21464,60 @@ static void sandbox3d_draw_modeling_toolbar(
     }
 
     sandbox3d_sync_modeling_toolbar_state(state);
-    reserve_compass = compact_toolbar &&
-        !state->modeling_toolbar.authoring_available;
-    if (reserve_compass)
+    if (sandbox3d_editor_layout_modeling_toolbar_compute(
+            viewport_bounds,
+            state->modeling_toolbar.authoring_available,
+            state->modeling_toolbar.options_expanded,
+            &toolbar_layout) != HENKA_SUCCESS)
     {
-        /* An empty compact viewport keeps the compass and its readout clear.
-         * The full modeling controls become relevant after an editable asset
-         * is selected, so present that state without a competing disabled
-         * control wall. */
-        y = viewport_bounds.y + 76.0f;
-        toolbar_height = 52.0f;
-        (void)henka_ui_overlay_rect(
-            state->ui,
-            (henka_ui_rect){x, y, width, toolbar_height},
-            (henka_vec4){0.025f, 0.035f, 0.055f, 1.0f});
+        return;
+    }
+    sandbox3d_report_modeling_toolbar_diagnostic(
+        state,
+        viewport_bounds,
+        &toolbar_layout);
+    if (toolbar_layout.bounds.width <= 0.0f || toolbar_layout.bounds.height <= 0.0f)
+    {
+        return;
+    }
+    (void)henka_ui_overlay_rect(
+        state->ui,
+        toolbar_layout.bounds,
+        (henka_vec4){0.025f, 0.035f, 0.055f, 1.0f});
+    (void)henka_ui_label_colored(
+        state->ui,
+        toolbar_layout.bounds.x + 8.0f,
+        toolbar_layout.bounds.y + 6.0f,
+        0.9f,
+        "MODELING",
+        HENKA_UI_COLOR_ACCENT);
+
+    if (compact_toolbar && !state->modeling_toolbar.authoring_available)
+    {
         (void)henka_ui_label_colored(
             state->ui,
-            x + 8.0f,
-            y + 6.0f,
-            0.9f,
-            "MODELING",
-            HENKA_UI_COLOR_ACCENT);
-        (void)henka_ui_label_colored(
-            state->ui,
-            x + 8.0f,
-            y + 28.0f,
+            toolbar_layout.bounds.x + 8.0f,
+            toolbar_layout.bounds.y + 28.0f,
             0.82f,
             "Select an editable asset to begin.",
             HENKA_UI_COLOR_MUTED);
         return;
     }
-    toolbar_height = compact_toolbar ? 166.0f : 136.0f;
-    if (state->modeling_toolbar.authoring_available)
+
+    if (compact_toolbar && henka_ui_button(
+            state->ui,
+            "modeling_toolbar.options",
+            toolbar_layout.options_toggle,
+            state->modeling_toolbar.options_expanded ? "Options -" : "Options +"))
     {
-        /* The topology selection overlays own the first viewport band of the
-         * viewport. Keep the toolbar below it so the two truthful status
-         * surfaces never paint over one another. */
-        y = viewport_bounds.y + 82.0f;
+        state->modeling_toolbar.options_expanded =
+            !state->modeling_toolbar.options_expanded;
+        (void)sandbox3d_editor_layout_modeling_toolbar_compute(
+            viewport_bounds,
+            state->modeling_toolbar.authoring_available,
+            state->modeling_toolbar.options_expanded,
+            &toolbar_layout);
     }
-    else if (compact_toolbar)
-    {
-        /* The medium desktop header reflows shading tabs onto a second row. */
-        y = viewport_bounds.y + 76.0f;
-    }
-    first_row_y = y + 20.0f;
-    tool_row_y = y + (compact_toolbar ? 110.0f : 80.0f);
-    summary_y = y + (compact_toolbar ? 142.0f : 112.0f);
-    (void)henka_ui_overlay_rect(
-        state->ui,
-        (henka_ui_rect){x, y, width, toolbar_height},
-        (henka_vec4){0.025f, 0.035f, 0.055f, 1.0f});
-    (void)henka_ui_label_colored(
-        state->ui,
-        x + 8.0f,
-        y + 6.0f,
-        0.9f,
-        "MODELING",
-        HENKA_UI_COLOR_ACCENT);
 
     selection_index = state->modeling_toolbar.authoring_available
         ? (size_t)state->modeling_toolbar.selection_mode
@@ -21405,7 +21526,7 @@ static void sandbox3d_draw_modeling_toolbar(
     if (henka_ui_segmented_select(
             state->ui,
             "modeling_toolbar.selection_mode",
-            (henka_ui_rect){x + 74.0f, first_row_y, 196.0f, 22.0f},
+            toolbar_layout.selection_mode,
             selection_labels,
             sizeof(selection_labels) / sizeof(selection_labels[0]),
             &selection_index,
@@ -21437,164 +21558,162 @@ static void sandbox3d_draw_modeling_toolbar(
                 "Select an editable asset before changing component mode.");
         }
     }
-    (void)henka_ui_label_colored(
-        state->ui,
-        compact_toolbar ? x + 8.0f : x + 278.0f,
-        compact_toolbar ? y + 56.0f : first_row_y + 6.0f,
-        0.82f,
-        "Orientation",
-        HENKA_UI_COLOR_MUTED);
-    orientation_index = (size_t)state->modeling_toolbar.orientation_mode;
-    changed = false;
-    if (henka_ui_segmented_select(
-            state->ui,
-            "modeling_toolbar.orientation",
-            compact_toolbar
-                ? (henka_ui_rect){x + 82.0f, y + 50.0f, 196.0f, 22.0f}
-                : (henka_ui_rect){x + 352.0f, first_row_y, 142.0f, 22.0f},
-            orientation_labels,
-            sizeof(orientation_labels) / sizeof(orientation_labels[0]),
-            &orientation_index,
-            &changed) == HENKA_SUCCESS &&
-        changed && orientation_index < 3U)
+
+    if (!compact_toolbar || state->modeling_toolbar.options_expanded)
     {
-        (void)sandbox3d_modeling_toolbar_set_orientation_mode(
-            &state->modeling_toolbar,
-            (sandbox3d_authoring_orientation_mode)orientation_index);
+        (void)henka_ui_label_colored(
+            state->ui,
+            compact_toolbar ? toolbar_layout.bounds.x + 8.0f : toolbar_layout.bounds.x + 278.0f,
+            compact_toolbar ? toolbar_layout.bounds.y + 56.0f : toolbar_layout.bounds.y + 26.0f,
+            0.82f,
+            "Orientation",
+            HENKA_UI_COLOR_MUTED);
+        orientation_index = (size_t)state->modeling_toolbar.orientation_mode;
+        changed = false;
+        if (henka_ui_segmented_select(
+                state->ui,
+                "modeling_toolbar.orientation",
+                toolbar_layout.orientation,
+                orientation_labels,
+                sizeof(orientation_labels) / sizeof(orientation_labels[0]),
+                &orientation_index,
+                &changed) == HENKA_SUCCESS &&
+            changed && orientation_index < 3U)
+        {
+            (void)sandbox3d_modeling_toolbar_set_orientation_mode(
+                &state->modeling_toolbar,
+                (sandbox3d_authoring_orientation_mode)orientation_index);
+        }
+
+        (void)henka_ui_label_colored(
+            state->ui,
+            toolbar_layout.bounds.x + 8.0f,
+            compact_toolbar ? toolbar_layout.bounds.y + 86.0f : toolbar_layout.bounds.y + 56.0f,
+            0.82f,
+            "Pivot",
+            HENKA_UI_COLOR_MUTED);
+        pivot_index = (size_t)state->modeling_toolbar.pivot_mode;
+        changed = false;
+        if (henka_ui_segmented_select(
+                state->ui,
+                "modeling_toolbar.pivot",
+                toolbar_layout.pivot,
+                pivot_labels,
+                sizeof(pivot_labels) / sizeof(pivot_labels[0]),
+                &pivot_index,
+                &changed) == HENKA_SUCCESS &&
+            changed && pivot_index < 3U)
+        {
+            (void)sandbox3d_modeling_toolbar_set_pivot_mode(
+                &state->modeling_toolbar,
+                (sandbox3d_authoring_pivot_mode)pivot_index);
+        }
+        tool_count = 6U;
+    }
+    else
+    {
+        tool_count = 4U;
     }
 
-    (void)henka_ui_label_colored(
-        state->ui,
-        x + 8.0f,
-        compact_toolbar ? y + 86.0f : y + 56.0f,
-        0.82f,
-        "Pivot",
-        HENKA_UI_COLOR_MUTED);
-    pivot_index = (size_t)state->modeling_toolbar.pivot_mode;
-    changed = false;
-    if (henka_ui_segmented_select(
-            state->ui,
-            "modeling_toolbar.pivot",
-            (henka_ui_rect){
-                x + 74.0f,
-                compact_toolbar ? y + 80.0f : y + 50.0f,
-                196.0f,
-                22.0f},
-            pivot_labels,
-            sizeof(pivot_labels) / sizeof(pivot_labels[0]),
-            &pivot_index,
-            &changed) == HENKA_SUCCESS &&
-        changed && pivot_index < 3U)
+    for (index = 0U; index < tool_count; ++index)
     {
-        (void)sandbox3d_modeling_toolbar_set_pivot_mode(
-            &state->modeling_toolbar,
-            (sandbox3d_authoring_pivot_mode)pivot_index);
-    }
+        const bool is_transform =
+            tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_MOVE ||
+            tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_ROTATE ||
+            tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_SCALE;
+        const bool enabled =
+            (tool_descriptors[index].action != SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY ||
+             state->modeling_toolbar.authoring_available) &&
+            (!is_transform ||
+            (state->modeling_toolbar.authoring_available &&
+             state->modeling_toolbar.selected_component_count > 0U));
+        const char* tooltip = enabled
+            ? sandbox3d_modeling_toolbar_action_tooltip(tool_descriptors[index].action)
+            : sandbox3d_modeling_toolbar_disabled_reason(
+                tool_descriptors[index].action,
+                &state->modeling_toolbar);
+        const henka_ui_tool_button_desc descriptor = {
+            tool_descriptors[index].id,
+            tool_descriptors[index].label,
+            tooltip,
+            tool_descriptors[index].icon,
+            enabled,
+            tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_SNAP
+                ? state->modeling_toolbar.snap_enabled
+                : tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY
+                    ? state->modeling_toolbar.xray_enabled
+                    : tool_descriptors[index].tool == state->modeling_toolbar.transform_tool};
 
-    {
-        static const struct
+        if (henka_ui_tool_button(
+                state->ui,
+                toolbar_layout.tool_buttons[index],
+                &descriptor))
         {
-            sandbox3d_modeling_toolbar_action action;
-            henka_ui_icon icon;
-            const char* id;
-            const char* label;
-            sandbox3d_transform_tool tool;
-        } tool_descriptors[] = {
-            {SANDBOX3D_MODELING_TOOLBAR_ACTION_SELECT, HENKA_UI_ICON_SELECT, "modeling_toolbar.select", "Select", SANDBOX3D_TRANSFORM_TOOL_NONE},
-            {SANDBOX3D_MODELING_TOOLBAR_ACTION_MOVE, HENKA_UI_ICON_MOVE, "modeling_toolbar.move", "Move", SANDBOX3D_TRANSFORM_TOOL_MOVE},
-            {SANDBOX3D_MODELING_TOOLBAR_ACTION_ROTATE, HENKA_UI_ICON_ROTATE, "modeling_toolbar.rotate", "Rotate", SANDBOX3D_TRANSFORM_TOOL_ROTATE},
-            {SANDBOX3D_MODELING_TOOLBAR_ACTION_SCALE, HENKA_UI_ICON_SCALE, "modeling_toolbar.scale", "Scale", SANDBOX3D_TRANSFORM_TOOL_SCALE},
-            {SANDBOX3D_MODELING_TOOLBAR_ACTION_SNAP, HENKA_UI_ICON_SNAP, "modeling_toolbar.snap", "Snap", SANDBOX3D_TRANSFORM_TOOL_NONE},
-            {SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY, HENKA_UI_ICON_BUILD, "modeling_toolbar.xray", "X-Ray", SANDBOX3D_TRANSFORM_TOOL_NONE}
-        };
-        size_t index;
-        const float button_width = (width - gap * 5.0f) / 6.0f;
-
-        for (index = 0U; index < sizeof(tool_descriptors) / sizeof(tool_descriptors[0]); ++index)
-        {
-            const bool is_transform =
-                tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_MOVE ||
-                tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_ROTATE ||
-                tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_SCALE;
-            const bool enabled =
-                (tool_descriptors[index].action != SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY ||
-                 state->modeling_toolbar.authoring_available) &&
-                (!is_transform ||
-                (state->modeling_toolbar.authoring_available &&
-                 state->modeling_toolbar.selected_component_count > 0U));
-            const char* tooltip = enabled
-                ? sandbox3d_modeling_toolbar_action_tooltip(tool_descriptors[index].action)
-                : sandbox3d_modeling_toolbar_disabled_reason(
-                    tool_descriptors[index].action,
-                    &state->modeling_toolbar);
-            henka_ui_tool_button_desc descriptor = {
-                tool_descriptors[index].id,
-                tool_descriptors[index].label,
-                tooltip,
-                tool_descriptors[index].icon,
-                enabled,
-                tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_SNAP
-                    ? state->modeling_toolbar.snap_enabled
-                    : tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY
-                        ? state->modeling_toolbar.xray_enabled
-                        : tool_descriptors[index].tool == state->modeling_toolbar.transform_tool};
-            const henka_ui_rect button_bounds = {
-                x + (button_width + gap) * (float)index,
-                tool_row_y,
-                button_width,
-                28.0f};
-
-            if (henka_ui_tool_button(state->ui, button_bounds, &descriptor))
+            if (tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_SNAP)
             {
-                if (tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_SNAP)
-                {
-                    sandbox3d_gizmo_toggle_snap(state);
-                }
-                else if (tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY)
-                {
-                    state->modeling_toolbar.xray_enabled =
-                        !state->modeling_toolbar.xray_enabled;
-                    sandbox3d_set_statusf(
-                        state,
-                        false,
-                        false,
-                        "X-Ray selection %s.",
-                        state->modeling_toolbar.xray_enabled ? "enabled" : "disabled");
-                }
-                else if (tool_descriptors[index].action != SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY)
-                {
-                    (void)sandbox3d_modeling_toolbar_set_transform_tool(
-                        &state->modeling_toolbar,
-                        tool_descriptors[index].tool);
-                    sandbox3d_set_viewport_tool_mode(
-                        state,
-                        sandbox3d_get_viewport_tool_for_transform(
-                            tool_descriptors[index].tool),
-                        true);
-                }
+                sandbox3d_gizmo_toggle_snap(state);
+            }
+            else if (tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY)
+            {
+                state->modeling_toolbar.xray_enabled =
+                    !state->modeling_toolbar.xray_enabled;
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    false,
+                    "X-Ray selection %s.",
+                    state->modeling_toolbar.xray_enabled ? "enabled" : "disabled");
+            }
+            else
+            {
+                (void)sandbox3d_modeling_toolbar_set_transform_tool(
+                    &state->modeling_toolbar,
+                    tool_descriptors[index].tool);
+                sandbox3d_set_viewport_tool_mode(
+                    state,
+                    sandbox3d_get_viewport_tool_for_transform(
+                        tool_descriptors[index].tool),
+                    true);
             }
         }
     }
 
-    if (sandbox3d_modeling_toolbar_format_summary(
-            &state->modeling_toolbar,
-            summary,
-            sizeof(summary)) == HENKA_SUCCESS)
+    if (compact_toolbar && !state->modeling_toolbar.options_expanded)
+    {
+        if (sandbox3d_modeling_toolbar_format_options_summary(
+                &state->modeling_toolbar,
+                options_summary,
+                sizeof(options_summary)) == HENKA_SUCCESS)
+        {
+            (void)henka_ui_label_colored(
+                state->ui,
+                toolbar_layout.state_summary.x,
+                toolbar_layout.state_summary.y,
+                0.82f,
+                options_summary,
+                HENKA_UI_COLOR_INFO);
+        }
+    }
+    else if (sandbox3d_modeling_toolbar_format_summary(
+                 &state->modeling_toolbar,
+                 summary,
+                 sizeof(summary)) == HENKA_SUCCESS)
     {
         (void)henka_ui_label_colored(
             state->ui,
-            x + 8.0f,
-            summary_y,
+            toolbar_layout.state_summary.x,
+            toolbar_layout.state_summary.y,
             0.82f,
             summary,
             HENKA_UI_COLOR_INFO);
     }
-    if (!state->modeling_toolbar.authoring_available)
+
+    if (!state->modeling_toolbar.authoring_available && toolbar_layout.compact == false)
     {
         (void)henka_ui_label_colored(
             state->ui,
-            x + 310.0f,
-            summary_y,
+            toolbar_layout.bounds.x + 310.0f,
+            toolbar_layout.state_summary.y,
             0.78f,
             "Select an editable asset to begin.",
             HENKA_UI_COLOR_MUTED);
@@ -38639,7 +38758,8 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
             const henka_viewport compass_viewport =
                 sandbox3d_editor_frame_layout_navigation_viewport(
                     &layout,
-                    sandbox3d_modeling_toolbar_has_editable_selection(state));
+                    sandbox3d_modeling_toolbar_has_editable_selection(state),
+                    state->modeling_toolbar.options_expanded);
             const bool compass_changed = sandbox3d_view_compass_draw(
                 state->ui,
                 compass_viewport,
