@@ -600,37 +600,150 @@ bool sandbox3d_editor_frame_layout_is_valid(
 
 henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
     henka_ui_rect scene_frame,
-    bool authoring_available)
+    bool authoring_available,
+    bool options_expanded)
 {
-    const bool compact_toolbar = scene_frame.width < 760.0f;
-    const float y = authoring_available
-        ? scene_frame.y + 82.0f
-        : compact_toolbar ? scene_frame.y + 76.0f : scene_frame.y + 34.0f;
-    const float height = authoring_available
-        ? compact_toolbar ? 166.0f : 136.0f
-        : compact_toolbar ? 52.0f : 136.0f;
+    sandbox3d_modeling_toolbar_layout toolbar_layout;
 
-    if (scene_frame.width < 500.0f || scene_frame.height < 150.0f)
+    if (sandbox3d_editor_layout_modeling_toolbar_compute(
+            scene_frame,
+            authoring_available,
+            options_expanded,
+            &toolbar_layout) != HENKA_SUCCESS)
     {
         return (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
     }
-    return (henka_ui_rect){
-        scene_frame.x + 10.0f,
-        y,
-        scene_frame.width - 20.0f,
-        height};
+    return toolbar_layout.bounds;
+}
+
+henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
+    henka_ui_rect scene_frame,
+    bool authoring_available,
+    bool options_expanded,
+    sandbox3d_modeling_toolbar_layout* out_layout)
+{
+    sandbox3d_modeling_toolbar_layout layout;
+    const bool compact_toolbar = scene_frame.width < 760.0f;
+    float y;
+    float width;
+    float toolbar_height;
+    size_t index;
+
+    if (out_layout == NULL ||
+        !sandbox3d_editor_layout_float_is_valid(scene_frame.x) ||
+        !sandbox3d_editor_layout_float_is_valid(scene_frame.y) ||
+        !sandbox3d_editor_layout_float_is_valid(scene_frame.width) ||
+        !sandbox3d_editor_layout_float_is_valid(scene_frame.height) ||
+        scene_frame.width < 500.0f || scene_frame.height < 150.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    memset(&layout, 0, sizeof(layout));
+    layout.compact = compact_toolbar;
+    layout.authoring_available = authoring_available;
+    layout.options_expanded = compact_toolbar && authoring_available && options_expanded;
+    y = authoring_available
+        ? scene_frame.y + 82.0f
+        : compact_toolbar ? scene_frame.y + 76.0f : scene_frame.y + 34.0f;
+    width = scene_frame.width - 20.0f;
+    if (!authoring_available && compact_toolbar)
+    {
+        toolbar_height = 52.0f;
+    }
+    else if (compact_toolbar)
+    {
+        toolbar_height = layout.options_expanded ? 166.0f : 104.0f;
+    }
+    else
+    {
+        toolbar_height = 136.0f;
+    }
+    layout.bounds = (henka_ui_rect){scene_frame.x + 10.0f, y, width, toolbar_height};
+
+    if (!authoring_available && compact_toolbar)
+    {
+        *out_layout = layout;
+        return HENKA_SUCCESS;
+    }
+
+    layout.selection_mode = (henka_ui_rect){
+        layout.bounds.x + 74.0f,
+        y + 20.0f,
+        196.0f,
+        22.0f};
+    if (compact_toolbar)
+    {
+        layout.options_toggle = (henka_ui_rect){
+            layout.bounds.x + width - 112.0f,
+            y + 4.0f,
+            104.0f,
+            32.0f};
+        if (layout.options_expanded)
+        {
+            layout.orientation = (henka_ui_rect){
+                layout.bounds.x + 82.0f, y + 50.0f, 196.0f, 22.0f};
+            layout.pivot = (henka_ui_rect){
+                layout.bounds.x + 74.0f, y + 80.0f, 196.0f, 22.0f};
+        }
+        layout.state_summary = layout.options_expanded
+            ? (henka_ui_rect){layout.bounds.x + 8.0f, y + 142.0f, width - 16.0f, 18.0f}
+            : (henka_ui_rect){layout.bounds.x + 8.0f, y + 84.0f, width - 16.0f, 18.0f};
+    }
+    else
+    {
+        layout.orientation = (henka_ui_rect){
+            layout.bounds.x + 352.0f, y + 20.0f, 142.0f, 22.0f};
+        layout.pivot = (henka_ui_rect){
+            layout.bounds.x + 74.0f, y + 50.0f, 196.0f, 22.0f};
+        layout.state_summary = (henka_ui_rect){
+            layout.bounds.x + 8.0f, y + 112.0f, width - 16.0f, 18.0f};
+    }
+
+    if (compact_toolbar && !layout.options_expanded)
+    {
+        const float gap = 4.0f;
+        const float button_width = (width - gap * 3.0f) / 4.0f;
+        for (index = 0U; index < 4U; ++index)
+        {
+            layout.tool_buttons[index] = (henka_ui_rect){
+                layout.bounds.x + (button_width + gap) * (float)index,
+                y + 52.0f,
+                button_width,
+                28.0f};
+        }
+    }
+    else
+    {
+        const float gap = 4.0f;
+        const float button_width = (width - gap * 5.0f) / 6.0f;
+        const float tool_y = y + (compact_toolbar ? 110.0f : 80.0f);
+        for (index = 0U; index < 6U; ++index)
+        {
+            layout.tool_buttons[index] = (henka_ui_rect){
+                layout.bounds.x + (button_width + gap) * (float)index,
+                tool_y,
+                button_width,
+                28.0f};
+        }
+    }
+
+    *out_layout = layout;
+    return HENKA_SUCCESS;
 }
 
 henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
     const sandbox3d_editor_frame_layout* layout,
-    bool authoring_available)
+    bool authoring_available,
+    bool options_expanded)
 {
     henka_viewport navigation_viewport;
     const henka_ui_rect toolbar = layout == NULL
         ? (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f}
         : sandbox3d_editor_layout_modeling_toolbar_bounds(
             layout->scene_frame,
-            authoring_available);
+            authoring_available,
+            options_expanded);
     float safe_top;
     int bottom;
 

@@ -12,6 +12,7 @@ void henka_test_sandbox3d_editor_ui(void)
 {
     sandbox3d_modeling_toolbar_state toolbar;
     char toolbar_summary[96];
+    char toolbar_options_summary[96];
     henka_settings* settings;
     sandbox3d_editor_ui_state invalid_state;
     sandbox3d_editor_ui_state state;
@@ -32,6 +33,7 @@ void henka_test_sandbox3d_editor_ui(void)
         toolbar.pivot_mode == SANDBOX3D_AUTHORING_PIVOT_MEDIAN);
     HENKA_TEST_ASSERT(!toolbar.snap_enabled);
     HENKA_TEST_ASSERT(!toolbar.xray_enabled);
+    HENKA_TEST_ASSERT(!toolbar.options_expanded);
     HENKA_TEST_ASSERT(!toolbar.authoring_available);
     HENKA_TEST_ASSERT(
         strcmp(
@@ -63,6 +65,28 @@ void henka_test_sandbox3d_editor_ui(void)
             sizeof(toolbar_summary)) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(
         strcmp(toolbar_summary, "Face | Select | World | Median | 0 selected") == 0);
+    HENKA_TEST_ASSERT(
+        sandbox3d_modeling_toolbar_format_options_summary(
+            &toolbar,
+            toolbar_options_summary,
+            sizeof(toolbar_options_summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        strcmp(
+            toolbar_options_summary,
+            "World | Median | Snap off | X-Ray off") == 0);
+    toolbar.orientation_mode = SANDBOX3D_AUTHORING_ORIENTATION_LOCAL;
+    toolbar.pivot_mode = SANDBOX3D_AUTHORING_PIVOT_INDIVIDUAL;
+    toolbar.snap_enabled = true;
+    toolbar.xray_enabled = true;
+    HENKA_TEST_ASSERT(
+        sandbox3d_modeling_toolbar_format_options_summary(
+            &toolbar,
+            toolbar_options_summary,
+            sizeof(toolbar_options_summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        strcmp(
+            toolbar_options_summary,
+            "Local | Individual | Snap on | X-Ray on") == 0);
 
     sandbox3d_editor_ui_state_reset(&state);
 
