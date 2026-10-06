@@ -113,6 +113,12 @@ henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
     bool options_expanded,
     sandbox3d_modeling_toolbar_layout* out_layout);
 
+/* True only for visible interactive toolbar controls. Empty space and
+ * informational summary text remain available for viewport interaction. */
+bool sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+    const sandbox3d_modeling_toolbar_layout* layout,
+    henka_vec2 point);
+
 /* Return the scene viewport region reserved for navigation overlays. This is
  * editor presentation geometry; it does not change the renderer viewport. */
 henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(

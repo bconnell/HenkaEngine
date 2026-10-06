@@ -77,6 +77,31 @@ void henka_test_sandbox3d_editor_layout(void)
 
             if (widths[width_index] < 760.0f)
             {
+                const henka_vec2 empty_toolbar_gap = {
+                    collapsed.bounds.x + 20.0f,
+                    collapsed.bounds.y + 10.0f};
+                const henka_vec2 select_mode_center = {
+                    collapsed.selection_mode.x + collapsed.selection_mode.width * 0.5f,
+                    collapsed.selection_mode.y + collapsed.selection_mode.height * 0.5f};
+                const henka_vec2 options_center = {
+                    collapsed.options_toggle.x + collapsed.options_toggle.width * 0.5f,
+                    collapsed.options_toggle.y + collapsed.options_toggle.height * 0.5f};
+                const henka_vec2 summary_center = {
+                    collapsed.state_summary.x + collapsed.state_summary.width * 0.5f,
+                    collapsed.state_summary.y + collapsed.state_summary.height * 0.5f};
+                const henka_vec2 expanded_orientation_center = {
+                    expanded.orientation.x + expanded.orientation.width * 0.5f,
+                    expanded.orientation.y + expanded.orientation.height * 0.5f};
+                const henka_vec2 expanded_pivot_center = {
+                    expanded.pivot.x + expanded.pivot.width * 0.5f,
+                    expanded.pivot.y + expanded.pivot.height * 0.5f};
+                const henka_vec2 expanded_snap_center = {
+                    expanded.tool_buttons[4].x + expanded.tool_buttons[4].width * 0.5f,
+                    expanded.tool_buttons[4].y + expanded.tool_buttons[4].height * 0.5f};
+                const henka_vec2 visible_tool_center = {
+                    collapsed.tool_buttons[0].x + collapsed.tool_buttons[0].width * 0.5f,
+                    collapsed.tool_buttons[0].y + collapsed.tool_buttons[0].height * 0.5f};
+
                 HENKA_TEST_ASSERT(collapsed.compact);
                 HENKA_TEST_ASSERT(collapsed.bounds.height == 104.0f);
                 HENKA_TEST_ASSERT(expanded.bounds.height == 166.0f);
@@ -88,6 +113,33 @@ void henka_test_sandbox3d_editor_layout(void)
                 HENKA_TEST_ASSERT(henka_test_rect_is_empty(collapsed.pivot));
                 HENKA_TEST_ASSERT(henka_test_rect_is_empty(collapsed.tool_buttons[4]));
                 HENKA_TEST_ASSERT(henka_test_rect_is_empty(collapsed.tool_buttons[5]));
+                HENKA_TEST_ASSERT(
+                    !sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &collapsed, empty_toolbar_gap));
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &collapsed, select_mode_center));
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &collapsed, options_center));
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &collapsed, visible_tool_center));
+                HENKA_TEST_ASSERT(
+                    !sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &collapsed, summary_center));
+                HENKA_TEST_ASSERT(
+                    !sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &collapsed, expanded_snap_center));
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &expanded, expanded_orientation_center));
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &expanded, expanded_pivot_center));
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &expanded, expanded_snap_center));
                 HENKA_TEST_ASSERT(!henka_test_rect_is_empty(collapsed.state_summary));
                 HENKA_TEST_ASSERT(henka_test_rect_is_contained(
                     collapsed.bounds, collapsed.state_summary));
@@ -102,6 +154,13 @@ void henka_test_sandbox3d_editor_layout(void)
             }
             else
             {
+                const henka_vec2 orientation_center = {
+                    collapsed.orientation.x + collapsed.orientation.width * 0.5f,
+                    collapsed.orientation.y + collapsed.orientation.height * 0.5f};
+                const henka_vec2 pivot_center = {
+                    collapsed.pivot.x + collapsed.pivot.width * 0.5f,
+                    collapsed.pivot.y + collapsed.pivot.height * 0.5f};
+
                 HENKA_TEST_ASSERT(!collapsed.compact);
                 HENKA_TEST_ASSERT(collapsed.bounds.height == 136.0f);
                 HENKA_TEST_ASSERT(henka_test_rect_is_empty(collapsed.options_toggle));
@@ -111,6 +170,12 @@ void henka_test_sandbox3d_editor_layout(void)
                     collapsed.bounds, collapsed.orientation));
                 HENKA_TEST_ASSERT(henka_test_rect_is_contained(
                     collapsed.bounds, collapsed.pivot));
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &collapsed, orientation_center));
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+                        &collapsed, pivot_center));
                 tool_index = 6U;
             }
 

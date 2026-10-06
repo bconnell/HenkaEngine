@@ -21,6 +21,19 @@ static bool sandbox3d_editor_layout_float_is_valid(float value)
     return isfinite((double)value) != 0;
 }
 
+static bool sandbox3d_editor_layout_point_in_nonempty_rect(
+    henka_ui_rect rect,
+    henka_vec2 point)
+{
+    return sandbox3d_editor_layout_float_is_valid(rect.x) &&
+        sandbox3d_editor_layout_float_is_valid(rect.y) &&
+        sandbox3d_editor_layout_float_is_valid(rect.width) &&
+        sandbox3d_editor_layout_float_is_valid(rect.height) &&
+        rect.width > 0.0f &&
+        rect.height > 0.0f &&
+        henka_ui_rect_contains(rect, point);
+}
+
 sandbox3d_editor_layout_breakpoint sandbox3d_editor_layout_breakpoint_for_width(
     int framebuffer_width)
 {
@@ -730,6 +743,40 @@ henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
 
     *out_layout = layout;
     return HENKA_SUCCESS;
+}
+
+bool sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+    const sandbox3d_modeling_toolbar_layout* layout,
+    henka_vec2 point)
+{
+    size_t index;
+
+    if (layout == NULL ||
+        !sandbox3d_editor_layout_float_is_valid(point.x) ||
+        !sandbox3d_editor_layout_float_is_valid(point.y) ||
+        !sandbox3d_editor_layout_point_in_nonempty_rect(layout->bounds, point))
+    {
+        return false;
+    }
+
+    if (sandbox3d_editor_layout_point_in_nonempty_rect(layout->selection_mode, point) ||
+        sandbox3d_editor_layout_point_in_nonempty_rect(layout->options_toggle, point) ||
+        sandbox3d_editor_layout_point_in_nonempty_rect(layout->orientation, point) ||
+        sandbox3d_editor_layout_point_in_nonempty_rect(layout->pivot, point))
+    {
+        return true;
+    }
+
+    for (index = 0U; index < sizeof(layout->tool_buttons) / sizeof(layout->tool_buttons[0]); ++index)
+    {
+        if (sandbox3d_editor_layout_point_in_nonempty_rect(
+                layout->tool_buttons[index],
+                point))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(

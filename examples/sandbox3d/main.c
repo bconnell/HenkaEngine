@@ -20177,7 +20177,7 @@ static bool sandbox3d_collect_gizmo_overlay_state(
 static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka_vec2 framebuffer_mouse)
 {
     henka_ui_rect panels[6];
-    henka_ui_rect modeling_toolbar_bounds;
+    sandbox3d_modeling_toolbar_layout modeling_toolbar_layout;
     size_t panel_count;
 
     if (state == NULL || state->ui == NULL || !henka_ui_is_visible(state->ui))
@@ -20197,11 +20197,17 @@ static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka
     {
         return true;
     }
-    /* Expanded overlay rows must not also fall through to viewport selection. */
-    modeling_toolbar_bounds = sandbox3d_get_modeling_toolbar_bounds(
-        state,
-        state->frame_layout.scene_frame);
-    if (henka_ui_rect_contains(modeling_toolbar_bounds, framebuffer_mouse))
+    /* Only actual toolbar controls own pointer input. Its surrounding visual
+     * bounds include empty spacing that must remain available for viewport
+     * selection and drag operations. */
+    if (sandbox3d_editor_layout_modeling_toolbar_compute(
+            state->frame_layout.scene_frame,
+            sandbox3d_modeling_toolbar_has_editable_selection(state),
+            state->modeling_toolbar.options_expanded,
+            &modeling_toolbar_layout) == HENKA_SUCCESS &&
+        sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
+            &modeling_toolbar_layout,
+            framebuffer_mouse))
     {
         return true;
     }
