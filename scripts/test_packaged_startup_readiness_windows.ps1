@@ -5,11 +5,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
-    $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    $RepositoryRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 } else {
     $RepositoryRoot = (Resolve-Path $RepositoryRoot).Path
 }
+$repoRoot = $RepositoryRoot
 
 $readinessHelper = Join-Path $RepositoryRoot "scripts\henka_packaged_startup_readiness.ps1"
 if (-not (Test-Path -LiteralPath $readinessHelper -PathType Leaf)) {
