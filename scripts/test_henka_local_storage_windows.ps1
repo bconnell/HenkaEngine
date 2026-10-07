@@ -43,7 +43,7 @@ function Invoke-ArtifactLifecycleManager {
 function Invoke-StorageProbeScript {
     param(
         [Parameter(Mandatory = $true)][string]$ScriptPath,
-        [Parameter(Mandatory = $true)][string[]]$Arguments
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Arguments
     )
     $previousPreference = $ErrorActionPreference
     try {
@@ -352,9 +352,61 @@ try {
     Assert-StorageContract (Test-Path -LiteralPath (Join-Path $gitMetadataProbe ".git") -PathType Leaf) `
         "The Git metadata negative control was unexpectedly removed."
 
+    $cleanProbeRepository = Join-Path $markerProbe "clean-wrapper-fixture"
+    $cleanProbeScripts = Join-Path $cleanProbeRepository "scripts"
+    New-Item -ItemType Directory -Path $cleanProbeScripts -Force | Out-Null
+    foreach ($scriptName in @("henka_script_common.ps1", "manage_generated_artifacts_windows.ps1", "clean_windows.ps1")) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $scriptName) -Destination $cleanProbeScripts
+    }
+    $git = Get-HenkaGitPath
+    & $git -C $cleanProbeRepository init --quiet 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not initialize the isolated clean-wrapper regression repository." }
+    & $git -C $cleanProbeRepository -c core.autocrlf=false -c user.name="Henka cleanup regression" -c user.email="henka-cleanup-regression@invalid" add -- scripts 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not stage the isolated clean-wrapper regression scripts." }
+    & $git -C $cleanProbeRepository -c user.name="Henka cleanup regression" -c user.email="henka-cleanup-regression@invalid" commit --quiet -m "clean wrapper fixture" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not establish isolated clean-wrapper source provenance." }
+
+    $cleanProbeLocalRoot = Join-Path $markerProbe "_local"
+    $cleanProbeBuildRoot = Join-Path (Join-Path $cleanProbeLocalRoot "builds") `
+        (Get-HenkaCheckoutStorageKey -RepositoryRoot $cleanProbeRepository)
+    New-Item -ItemType Directory -Path $cleanProbeBuildRoot -Force | Out-Null
+    $cleanProbeSourceSha = [string](& $git -C $cleanProbeRepository rev-parse HEAD)
+    if ($LASTEXITCODE -ne 0 -or $cleanProbeSourceSha -notmatch "^[0-9a-f]{40,64}$") {
+        throw "Could not resolve isolated clean-wrapper fixture provenance."
+    }
+    $cleanProbeMarker = [ordered]@{
+        schema_version = 1
+        owner = "test_henka_local_storage_windows.ps1"
+        purpose = "isolated clean-wrapper confirmation regression"
+        source_sha = $cleanProbeSourceSha
+        configuration = "test"
+        created_utc = [DateTime]::UtcNow.ToString("o")
+        retention_class = "REBUILDABLE"
+        cleanup_owner = "test_henka_local_storage_windows.ps1"
+        cleanup_condition = "rebuildable"
+        active = $false
+        cleanup_eligible = $true
+    }
+    [System.IO.File]::WriteAllText(
+        (Join-Path $cleanProbeBuildRoot ".henka-generated.json"),
+        (ConvertTo-Json -InputObject $cleanProbeMarker -Depth 4) + [Environment]::NewLine,
+        [System.Text.UTF8Encoding]::new($false))
+
+    $cleanWrapper = Join-Path $cleanProbeScripts "clean_windows.ps1"
+    $unguardedClean = Invoke-StorageProbeScript -ScriptPath $cleanWrapper -Arguments @()
+    Assert-StorageContract ($unguardedClean.ExitCode -ne 0 -and
+        $unguardedClean.Output -match "ConfirmNoActiveProcess" -and
+        (Test-Path -LiteralPath $cleanProbeBuildRoot -PathType Container)) `
+        "The clean wrapper claimed no active process without explicit confirmation or removed its fixture build root. Output: $($unguardedClean.Output)"
+    $confirmedClean = Invoke-StorageProbeScript -ScriptPath $cleanWrapper -Arguments @("-ConfirmNoActiveProcess")
+    Assert-StorageContract ($confirmedClean.ExitCode -eq 0 -and
+        -not (Test-Path -LiteralPath $cleanProbeBuildRoot)) `
+        "The clean wrapper did not retire its isolated eligible build root after explicit confirmation. Output: $($confirmedClean.Output)"
+
     Write-Output "[pass] Build, package, evidence, exact-candidate, and generated marker roots resolve beneath canonical _local."
     Write-Output "[pass] External root creation and traversal are rejected before filesystem mutation."
     Write-Output "[pass] Artifact lifecycle cleanup accepts exact generated children beneath _local and rejects Git metadata."
+    Write-Output "[pass] The clean wrapper preserves a generated build root unless the caller explicitly confirms no active process uses it."
 }
 finally {
     if ($null -ne $reparseProbe -and (Test-Path -LiteralPath $reparseProbe)) {

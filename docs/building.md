@@ -489,9 +489,13 @@ also generated locally.
 Running:
 
 ```powershell
-.\scripts\clean_windows.ps1
+.\scripts\clean_windows.ps1 -ConfirmNoActiveProcess
 ```
 
-removes the exact generated build root selected for the current checkout. It
+Before running the command, verify that no build, test, or Sandbox process is
+using this checkout's build root. The switch is an explicit caller
+confirmation; the script does not discover active processes itself.
+
+The command removes the exact generated build root selected for the current checkout. It
 preserves package output and package-local Sandbox settings; use the package
 lifecycle controls only when package retention requirements permit cleanup.

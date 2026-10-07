@@ -1,3 +1,8 @@
+[CmdletBinding()]
+param(
+    [switch]$ConfirmNoActiveProcess
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -12,6 +17,9 @@ if (Test-Path -LiteralPath $buildRoot -PathType Container) {
     $marker = Join-Path $buildRoot ".henka-generated.json"
     if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) {
         throw "The canonical build root lacks lifecycle provenance and was preserved: $buildRoot"
+    }
+    if (-not $ConfirmNoActiveProcess) {
+        throw "Refusing to remove the canonical build root without explicit -ConfirmNoActiveProcess confirmation that no build, test, or Sandbox process is using it: $buildRoot"
     }
     $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $manager `
         -Mode Cleanup -ConfirmNoActiveProcess -CandidatePath $buildRoot 2>&1)
