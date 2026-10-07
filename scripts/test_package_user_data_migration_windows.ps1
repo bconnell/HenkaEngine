@@ -45,6 +45,36 @@ try {
     $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
     Assert-Condition ($state.action -eq "legacy-copied") "Migration state does not record the copy action."
 
+    $malformedCurrentPackageRoot = Join-Path $fixtureRoot "package-with-user-file"
+    $malformedCurrentUserPath = Join-Path $malformedCurrentPackageRoot "user"
+    $malformedCurrentStagingRoot = Join-Path $fixtureRoot "staging-user-file"
+    [System.IO.Directory]::CreateDirectory($malformedCurrentPackageRoot) | Out-Null
+    [System.IO.Directory]::CreateDirectory($malformedCurrentStagingRoot) | Out-Null
+    [System.IO.File]::WriteAllText($malformedCurrentUserPath, "preserve-current-package-user-file")
+    $malformedCurrentRejected = $false
+    try {
+        $null = Copy-HenkaPackageUserDataForStaging `
+            -RepositoryRoot $RepositoryRoot `
+            -PackageRoot $malformedCurrentPackageRoot `
+            -StagingRoot $malformedCurrentStagingRoot `
+            -LegacyPackageUserPath $legacyUser `
+            -AllowTestOwnedLegacyPath `
+            -TestOwnedPathJustification $testJustification
+    }
+    catch {
+        $malformedCurrentRejected = $_.Exception.Message -match "current package user-data path exists but is not a directory"
+        if (-not $malformedCurrentRejected) { throw }
+    }
+    Assert-Condition $malformedCurrentRejected `
+        "A malformed current package user-data path was silently skipped in favor of legacy data."
+    Assert-Condition ((Get-Content -LiteralPath $malformedCurrentUserPath -Raw) -eq "preserve-current-package-user-file") `
+        "Rejecting malformed current package user data changed the existing file."
+    Assert-Condition ((Get-Content -LiteralPath (Join-Path $legacyUser "legacy.settings") -Raw) -eq "legacy") `
+        "Rejecting malformed current package user data changed the legacy source."
+    Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $malformedCurrentStagingRoot "user")) -and
+        -not (Test-Path -LiteralPath (Join-Path $malformedCurrentStagingRoot ".henka-user-data-migration.json"))) `
+        "Malformed current package user data partially published a staging tree."
+
     $resetPackageRoot = Join-Path $fixtureRoot "reset-package"
     $resetStagingRoot = Join-Path $fixtureRoot "staging-reset"
     [System.IO.Directory]::CreateDirectory($resetPackageRoot) | Out-Null

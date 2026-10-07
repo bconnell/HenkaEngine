@@ -84,12 +84,18 @@ function Copy-HenkaPackageUserDataForStaging {
     $source = $null
     if ($ResetUserData) {
         $action = "reset"
+    } else {
+        Assert-HenkaPackageUserDataTreeHasNoReparsePoints -Path $currentUser
+        $currentUserItem = Get-Item -LiteralPath $currentUser -Force -ErrorAction SilentlyContinue
+        if ($null -ne $currentUserItem) {
+            if (-not $currentUserItem.PSIsContainer) {
+                throw "Current package user-data path exists but is not a directory: $currentUser"
+            }
+            $source = $currentUser
+            $action = "preserved-package"
+        }
     }
-    elseif (Test-Path -LiteralPath $currentUser -PathType Container) {
-        $source = $currentUser
-        $action = "preserved-package"
-    }
-    elseif (Test-Path -LiteralPath $previousState -PathType Leaf) {
+    if ($null -eq $source -and -not $ResetUserData -and (Test-Path -LiteralPath $previousState -PathType Leaf)) {
         Assert-HenkaPackageUserDataTreeHasNoReparsePoints -Path $previousState
         try {
             $state = Get-Content -LiteralPath $previousState -Raw | ConvertFrom-Json -ErrorAction Stop
@@ -102,7 +108,7 @@ function Copy-HenkaPackageUserDataForStaging {
         }
         $action = "migration-already-complete"
     }
-    elseif (Test-Path -LiteralPath $legacy -PathType Container) {
+    elseif ($null -eq $source -and -not $ResetUserData -and (Test-Path -LiteralPath $legacy -PathType Container)) {
         $source = $legacy
         $action = "legacy-copied"
     }
