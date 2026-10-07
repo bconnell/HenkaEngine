@@ -26,7 +26,7 @@ function Assert-Equal {
     }
 }
 
-$temporaryRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "packaged-smoke-progress-regression"
+$temporaryRoot = New-HenkaTemporaryDirectory -RepositoryRoot $RepositoryRoot -Purpose "packaged-smoke-progress-regression"
 $fixturePath = Join-Path $temporaryRoot "smoke-progress-fixture.ps1"
 $powerShellPath = (Get-Process -Id $PID).Path
 $captured = $null
