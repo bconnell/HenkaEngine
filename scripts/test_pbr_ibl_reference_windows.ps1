@@ -1,5 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'henka_script_common.ps1')
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $sandbox = Get-Content (Join-Path $repoRoot 'examples/sandbox3d/main.c') -Raw
 $capture = Get-Content (Join-Path $repoRoot 'scripts/capture_visual_evidence_windows.ps1') -Raw
