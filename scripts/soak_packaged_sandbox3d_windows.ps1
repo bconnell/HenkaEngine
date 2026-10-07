@@ -21,8 +21,8 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_packaged_startup_readiness.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
-$executable = Join-Path $repoRoot "out\HenkaSandbox3D\HenkaSandbox3D.exe"
-$logRoot = Join-Path $repoRoot "build\test_tmp\packaged-soak"
+$executable = Join-Path (Get-HenkaPackageRoot -RepositoryRoot $repoRoot -PackageName "HenkaSandbox3D") "HenkaSandbox3D.exe"
+$logRoot = Join-Path (Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot) "packaged-soak"
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "Packaged sandbox executable is missing: $executable"
 }

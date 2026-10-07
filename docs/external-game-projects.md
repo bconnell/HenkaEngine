@@ -162,7 +162,7 @@ From the Henka Engine repository, run:
 The validation script owns and reuses:
 
 ```text
-build/tv/external_game_minimal/
+_local/builds/<checkout-key>/tv/external_game_minimal/
 ```
 
 It replaces the generated template source snapshot, reuses the corresponding build directory, and retires legacy timestamped `ext_YYYYMMDD_HHMMSS` trees.
@@ -197,7 +197,7 @@ Use `-NoLocalProviders` to force the pinned ENet FetchContent path when reposito
 The server validator reuses:
 
 ```text
-build/tv/external_server_minimal/
+_local/builds/<checkout-key>/tv/external_server_minimal/
 ```
 
 ## Suggested project layout

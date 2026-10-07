@@ -1,14 +1,15 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$fixtureRoot = Join-Path $repoRoot (".ssgi-visual-validator-test-" + [Guid]::NewGuid().ToString("N"))
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$fixtureRoot = $null
 $rendererSource = Get-Content (Join-Path $repoRoot 'engine/src/renderer/renderer_opengl.c') -Raw
 if ($rendererSource -notmatch 'ssgiSourceFacing' -or
     $rendererSource -notmatch 'ssgiSourceFacing\(sampleUv') {
     throw "SSGI source-facing visibility guard is missing from the renderer gather."
 }
-[System.IO.Directory]::CreateDirectory($fixtureRoot) | Out-Null
+$fixtureRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "ssgi-visual-validator"
 Add-Type -AssemblyName System.Drawing
 
 try {

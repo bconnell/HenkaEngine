@@ -465,7 +465,8 @@ If expected panels are missing after a build, refresh the package:
 .\scripts\package_sandbox3d_windows.ps1
 ```
 
-Then verify that `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed.
+Then verify that `PACKAGE_INFO.txt` under the package root returned by
+`Get-HenkaPackageRoot` was refreshed.
 
 ### Tools panel
 

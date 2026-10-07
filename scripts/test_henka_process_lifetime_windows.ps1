@@ -13,7 +13,7 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
 }
 
-$fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-process-lifetime-" + $PID)
+$fixtureRoot = New-HenkaTemporaryDirectory -RepositoryRoot $RepositoryRoot -Purpose "process-lifetime-regression"
 $childScript = Join-Path $fixtureRoot "child.ps1"
 $failureChildScript = Join-Path $fixtureRoot "failure-child.ps1"
 $launcherScript = Join-Path $fixtureRoot "launcher.ps1"

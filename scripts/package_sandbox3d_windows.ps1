@@ -9,14 +9,17 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
+. (Join-Path $PSScriptRoot "henka_package_user_data.ps1")
 
 $repoRoot = [System.IO.Path]::GetFullPath((Resolve-Path (Join-Path $PSScriptRoot "..")))
 $git = Get-HenkaGitPath
-$outRoot = Join-Path $repoRoot "out"
-$packageRoot = Join-Path $outRoot "HenkaSandbox3D"
+$buildRoot = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
+$packageRoot = Get-HenkaPackageRoot -RepositoryRoot $repoRoot -PackageName "HenkaSandbox3D"
+$outRoot = Split-Path -Parent $packageRoot
 $packageUserDir = Join-Path $packageRoot "user"
-$manifestPath = Join-Path $repoRoot "build\henka-build-info.json"
-$expectedExe = Join-Path $repoRoot "build\examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
+$legacyPackageUserDir = Join-Path (Get-HenkaCanonicalRepositoryRoot -RepositoryRoot $repoRoot) "out\HenkaSandbox3D\user"
+$manifestPath = Join-Path $buildRoot "henka-build-info.json"
+$expectedExe = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
 $packagedProcessName = "HenkaSandbox3D"
 $transactionId = [Guid]::NewGuid().ToString("N")
 $stagingRoot = Join-Path $outRoot (".HenkaSandbox3D-staging-" + $transactionId)
@@ -193,7 +196,7 @@ if ($manifest.schema_version -ne 3 -or $manifest.configuration -ne $Configuratio
 }
 
 $expectedExeFull = [System.IO.Path]::GetFullPath($expectedExe)
-$manifestExeFull = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $manifest.executable_relative_path))
+$manifestExeFull = [System.IO.Path]::GetFullPath((Join-Path $buildRoot $manifest.executable_relative_path))
 if ($manifestExeFull -ne $expectedExeFull) {
     throw "Build provenance points to a different executable."
 }
@@ -220,9 +223,9 @@ if ($manifest.executable_sha256 -ne $currentHash) {
 
 $assetsSource = Join-Path $repoRoot "assets"
 $helpSource = Join-Path $repoRoot "docs\help\sandbox3d.md"
-$residencyFixtureSource = Join-Path $repoRoot "build\examples\sandbox3d\$Configuration\assets\textures\residency"
+$residencyFixtureSource = Join-Path $buildRoot "examples\sandbox3d\$Configuration\assets\textures\residency"
 $residencyGenerator = Join-Path $repoRoot "scripts\generate_residency_fixtures_windows.ps1"
-$showcaseModelSource = Join-Path $repoRoot "build\examples\sandbox3d\$Configuration\assets\models"
+$showcaseModelSource = Join-Path $buildRoot "examples\sandbox3d\$Configuration\assets\models"
 Assert-NoReparsePoints -Path $expectedExeFull -Description "Sandbox executable input"
 Assert-NoReparsePoints -Path $assetsSource -Description "Asset input"
 Assert-NoReparsePoints -Path $helpSource -Description "Offline help input"
@@ -255,6 +258,21 @@ if ((-not $ResetUserData) -and (Test-Path -LiteralPath $packageUserDir)) {
 
 try {
     [System.IO.Directory]::CreateDirectory($stagingRoot) | Out-Null
+    $null = Write-HenkaGeneratedRootMarker `
+        -RepoRoot $repoRoot `
+        -Path $outRoot `
+        -Purpose "packaged Sandbox3D candidate output" `
+        -RetentionClass "ACTIVE_CANDIDATE" `
+        -Active $true `
+        -CleanupEligible $false `
+        -CleanupCondition "retire only after a replacement package is activated and no consumer uses this package root" `
+        -Configuration $Configuration
+    $userDataAction = Copy-HenkaPackageUserDataForStaging `
+        -RepositoryRoot $repoRoot `
+        -PackageRoot $packageRoot `
+        -StagingRoot $stagingRoot `
+        -LegacyPackageUserPath $legacyPackageUserDir `
+        -ResetUserData:$ResetUserData
     $stagingDocsDir = Join-Path $stagingRoot "docs"
     $stagingHelpDir = Join-Path $stagingDocsDir "help"
     $stagingExe = Join-Path $stagingRoot "HenkaSandbox3D.exe"
@@ -299,10 +317,6 @@ try {
         Copy-Item -LiteralPath $showcaseSourceFile -Destination $stagingModelsDir
     }
     Copy-Item -LiteralPath $helpSource -Destination (Join-Path $stagingHelpDir "sandbox3d.md")
-
-    if ((-not $ResetUserData) -and (Test-Path -LiteralPath $packageUserDir)) {
-        Copy-Item -LiteralPath $packageUserDir -Destination (Join-Path $stagingRoot "user") -Recurse
-    }
 
     $sourceDir = Split-Path $expectedExeFull
     $stagingResidencyDir = Join-Path $stagingRoot "assets\textures\residency"
@@ -387,6 +401,7 @@ Runtime mode: Packaged
         $stagingExe,
         (Join-Path $stagingRoot "assets"),
         (Join-Path $stagingHelpDir "sandbox3d.md"),
+        (Join-Path $stagingRoot ".henka-user-data-migration.json"),
         $stagingReadme,
         $stagingInfo
     )) {
@@ -434,4 +449,5 @@ Write-Host "  $packageInfoPath"
 Write-Host "Source commit: $currentCommit"
 Write-Host "Source state: $currentState"
 Write-Host "Configuration: $Configuration"
+Write-Host "Package user-data handling: $userDataAction"
 Write-Host "Executable SHA-256: $finalHash"

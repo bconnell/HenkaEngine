@@ -9,8 +9,7 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
 $git = Get-HenkaGitPath
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
-    "henka-source-provenance-" + [Guid]::NewGuid().ToString("N"))
+$tempRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "source-provenance-regression"
 $repoA = Join-Path $tempRoot "repo-a"
 $repoB = Join-Path $tempRoot "repo-b"
 

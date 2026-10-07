@@ -22,8 +22,9 @@ Solid, Material Preview, and Rendered comparison, run:
 ```
 
 This waits for the application CAPTURE_READY metadata before capturing each
-shaded mode. It writes generated images plus per-mode logs under
-`build/visual_evidence/`; it does not add them to the repository.
+shaded mode. It writes generated images plus per-mode logs under the local
+evidence root returned by `Get-HenkaEvidenceRoot`; it does not add them to the
+repository.
 
 ## Packaged executable test
 
@@ -33,14 +34,22 @@ shaded mode. It writes generated images plus per-mode logs under
    .\scripts\package_sandbox3d_windows.ps1
    ```
 
-2. Open `out/HenkaSandbox3D` in Explorer.
+2. Resolve and open the package root:
+
+   ```powershell
+   . .\scripts\henka_script_common.ps1
+   $repoRoot = (Resolve-Path .).Path
+   $packageRoot = Get-HenkaPackageRoot -RepositoryRoot $repoRoot
+   Invoke-Item $packageRoot
+   ```
+
 3. Double-click `HenkaSandbox3D.exe`.
 4. Confirm the window opens and the scene loads from the packaged `assets/` folder.
 5. Confirm the console help still prints and `docs/help/sandbox3d.md` is present beside the executable.
 6. Confirm there are no unexpected shader, texture, model, or asset path errors.
 7. Confirm the missing-texture and missing-model examples still use the intended fallback visuals.
-8. Change `F1` or `F3`, exit cleanly, and confirm `out/HenkaSandbox3D/user/sandbox3d.settings` is created.
-9. Run the package script again and confirm the `user/` folder is preserved by default.
+8. Change `F1` or `F3`, exit cleanly, and confirm `user/sandbox3d.settings` is created under `$packageRoot`.
+9. Run the package script again and confirm the `user/` folder is preserved by default. On the first run after moving package output to `_local`, the old `out/HenkaSandbox3D/user/` contents are copied into the new package without modifying the legacy source.
 10. If you intentionally test `-ResetUserData`, confirm the settings file is removed only when that switch is used.
 11. Confirm the sandbox panels are visible in the packaged run before pressing `F4`.
 12. If you want a quick automated packaged check first, run:
@@ -57,9 +66,9 @@ shaded mode. It writes generated images plus per-mode logs under
    .\scripts\package_sandbox3d_windows.ps1
    ```
 
-2. Open `out/HenkaSandbox3D\HenkaSandbox3D.exe`.
+2. Launch `HenkaSandbox3D.exe` from `$packageRoot`.
 3. Confirm the startup help says `F4` hides or shows the in-window panels.
-4. Confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed for the current package.
+4. Confirm `PACKAGE_INFO.txt` under `$packageRoot` was refreshed for the current package.
 5. If there was no existing packaged settings file or you used reset user data, confirm the UI starts in a docked scene-first layout with a dedicated viewport and no selected scene object.
 6. Confirm Ground is not highlighted on startup.
 7. Confirm Debug Grid is not highlighted on startup.
@@ -323,7 +332,7 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - `Escape` releases capture first, then exits
 - Window close exits cleanly
 - Resize behavior remains readable
-- Packaged executable launches from `out/HenkaSandbox3D`
+- Packaged executable launches from the root returned by `Get-HenkaPackageRoot`
 - Packaged assets load without relying on the repo root
 - Offline help file is included with the packaged output
 - Packaged settings file is created after a clean exit

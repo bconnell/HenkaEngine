@@ -2,6 +2,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$RepoRoot,
 
+    [string]$BuildRoot = "",
+
     [Parameter(Mandatory = $true)]
     [ValidateSet("Debug", "Release")]
     [string]$Configuration,
@@ -43,9 +45,14 @@ function Invoke-GitCapture {
 }
 
 $repoPath = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd([char[]]@("\", "/"))
-$repoPrefix = $repoPath + [System.IO.Path]::DirectorySeparatorChar
 $exePath = [System.IO.Path]::GetFullPath($ExecutablePath)
 $cmakePath = [System.IO.Path]::GetFullPath($CMakePath)
+$resolvedBuildRoot = if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
+    Get-HenkaBuildRoot -RepositoryRoot $repoPath
+} else {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoPath -Path $BuildRoot
+}
+$buildPrefix = $resolvedBuildRoot.TrimEnd([char[]]@("\", "/")) + [System.IO.Path]::DirectorySeparatorChar
 
 if ((-not (Test-Path -LiteralPath (Join-Path $repoPath ".git") -PathType Leaf) -and
      -not (Test-Path -LiteralPath (Join-Path $repoPath ".git") -PathType Container)) -or
@@ -55,8 +62,8 @@ if ((-not (Test-Path -LiteralPath (Join-Path $repoPath ".git") -PathType Leaf) -
 if (-not (Test-Path -LiteralPath $exePath -PathType Leaf)) {
     throw "The built sandbox executable was not found: $exePath"
 }
-if (-not $exePath.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "The built sandbox executable is outside the repository."
+if (-not $exePath.StartsWith($buildPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "The built artifact is outside its canonical-local build root."
 }
 if (-not (Test-Path -LiteralPath $cmakePath -PathType Leaf)) {
     throw "The resolved CMake executable was not found: $cmakePath"
@@ -87,7 +94,7 @@ if ($LASTEXITCODE -ne 0 -or $cmakeVersionLines.Count -lt 1) {
     throw "CMake version could not be read for build provenance."
 }
 
-$relativeExe = $exePath.Substring($repoPrefix.Length).Replace("\", "/")
+$relativeExe = $exePath.Substring($buildPrefix.Length).Replace("\", "/")
 $manifest = [ordered]@{
     schema_version = 3
     commit_sha = $sourceIdentity.commit_sha
@@ -111,7 +118,7 @@ $manifest = [ordered]@{
     generated_utc = [DateTime]::UtcNow.ToString("o")
 }
 
-$manifestPath = Join-Path $repoPath "build\henka-build-info.json"
+$manifestPath = Join-Path $resolvedBuildRoot "henka-build-info.json"
 $tempPath = $manifestPath + "." + [Guid]::NewGuid().ToString("N") + ".tmp"
 $backupPath = $manifestPath + "." + [Guid]::NewGuid().ToString("N") + ".bak"
 try {

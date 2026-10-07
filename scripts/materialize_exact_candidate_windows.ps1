@@ -68,19 +68,15 @@ function Assert-CandidatePathIsApproved {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd("\")
-    $approved = @(
-        [System.IO.Path]::GetFullPath((Join-Path $repository "build")).TrimEnd("\"),
-        [System.IO.Path]::GetFullPath((Join-Path $repository "out")).TrimEnd("\"))
-    foreach ($root in $approved) {
-        if ($fullPath -eq $root) {
-            throw "Candidate path must be one exact generated child, not an approved root: $Path"
-        }
-        if ($fullPath.StartsWith($root + [System.IO.Path]::DirectorySeparatorChar,
-                [System.StringComparison]::OrdinalIgnoreCase)) {
-            return
-        }
+    $approvedRoot = [System.IO.Path]::GetFullPath((Get-HenkaExactCandidateRoot -RepositoryRoot $repository)).TrimEnd("\")
+    if ([string]::Equals($fullPath, $approvedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Candidate path must be one exact generated child, not the exact-candidates root: $Path"
     }
-    throw "Candidate path is outside the approved generated roots (build or out): $Path"
+    $null = Resolve-HenkaLocalPath -RepositoryRoot $repository -Path $fullPath
+    if (-not $fullPath.StartsWith($approvedRoot + [System.IO.Path]::DirectorySeparatorChar,
+            [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Candidate path is outside the canonical exact-candidates root: $Path"
+    }
 }
 
 function ConvertTo-HenkaLongPath {
@@ -502,9 +498,19 @@ if (Test-Path -LiteralPath $candidate) {
 }
 $candidateParent = Split-Path -Parent $candidate
 if (-not (Test-Path -LiteralPath $candidateParent -PathType Container)) {
-    throw "Candidate parent directory must already exist: $candidateParent"
+    $null = New-HenkaLocalDirectory -RepositoryRoot $repository -Path $candidateParent
 }
 Assert-DirectoryIsSafe -Path $candidateParent -Label "Candidate parent directory"
+$exactCandidateRoot = Get-HenkaExactCandidateRoot -RepositoryRoot $repository
+$null = New-HenkaLocalDirectory -RepositoryRoot $repository -Path $exactCandidateRoot
+$null = Write-HenkaGeneratedRootMarker `
+    -RepoRoot $repository `
+    -Path $exactCandidateRoot `
+    -Purpose "exact validation candidate collection" `
+    -RetentionClass "CACHE" `
+    -Active $false `
+    -CleanupEligible $false `
+    -CleanupCondition "contains independently registered validation candidates and provenance markers"
 
 $head = (@(Invoke-RepositoryGit @("rev-parse", "HEAD")))[0]
 $tree = (@(Invoke-RepositoryGit @("write-tree")))[0]

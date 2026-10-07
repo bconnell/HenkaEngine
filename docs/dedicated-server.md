@@ -34,24 +34,32 @@ The dedicated server omits graphical-client systems.
 The normal Windows build produces:
 
 ```text
-build/examples/dedicated_server/Debug/henka_dedicated_server.exe
+_local/builds/<checkout-key>/examples/dedicated_server/Debug/henka_dedicated_server.exe
 ```
 
 A server-only configuration is also supported without a C++ compiler or graphical client providers:
 
 ```powershell
-cmake -S . -B out/server-only `
+. .\scripts\henka_script_common.ps1
+$repoRoot = (Resolve-Path .).Path
+$serverBuild = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot `
+  -Path (Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "server-only")
+$cmake = Get-HenkaCMakePath
+& $cmake -S . -B $serverBuild `
   -DHENKA_BUILD_CLIENT=OFF `
   -DHENKA_BUILD_DEDICATED_SERVER=ON `
   -DHENKA_BUILD_EXAMPLES=OFF `
   -DHENKA_ENABLE_KTX2_TRANSCODER=OFF
-cmake --build out/server-only --config Debug --target henka_dedicated_server
+& $cmake --build $serverBuild --config Debug --target henka_dedicated_server
 ```
 
 ## Run
 
 ```powershell
-.\build\examples\dedicated_server\Debug\henka_dedicated_server.exe `
+. .\scripts\henka_script_common.ps1
+$repoRoot = (Resolve-Path .).Path
+$serverBuild = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
+& (Join-Path $serverBuild "examples\dedicated_server\Debug\henka_dedicated_server.exe") `
   --bind 0.0.0.0 --port 7777 --max-clients 32 `
   --tick-rate 60 --save-root save --config server.conf
 ```
@@ -132,10 +140,11 @@ Create the headless deployment package with:
 .\scripts\package_dedicated_server_windows.ps1 -Configuration Release
 ```
 
-The package is written to:
+The package is written beneath the project-owned local package root returned by
+`Get-HenkaPackageRoot`:
 
 ```text
-out/HenkaDedicatedServer
+_local/packages/<checkout-key>/HenkaDedicatedServer/
 ```
 
 It contains:

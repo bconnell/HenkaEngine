@@ -29,8 +29,7 @@ function Assert-Equal {
     }
 }
 
-$temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
-    "henka-packaged-startup-readiness-" + [Guid]::NewGuid().ToString("N"))
+$temporaryRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "packaged-startup-readiness-regression"
 $stdoutPath = Join-Path $temporaryRoot "stdout.log"
 $stderrPath = Join-Path $temporaryRoot "stderr.log"
 $slowProgressJob = $null

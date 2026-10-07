@@ -1,14 +1,15 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$fixtureRoot = Join-Path $repoRoot (".subsurface-visual-validator-test-" + [Guid]::NewGuid().ToString("N"))
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$fixtureRoot = $null
 $shader = Get-Content (Join-Path $repoRoot 'assets/shaders/basic_lit.frag') -Raw
 if ($shader -notmatch 'subsurfaceDirectProfile' -or
     $shader -notmatch 'mix\(0\.02, 0\.08, curvatureValue\)') {
     throw "Subsurface direct profile is missing its bounded grazing-edge energy limit."
 }
-[System.IO.Directory]::CreateDirectory($fixtureRoot) | Out-Null
+$fixtureRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "subsurface-visual-validator"
 Add-Type -AssemblyName System.Drawing
 
 function New-TestSubsurfaceImage {

@@ -11,8 +11,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $helper = Join-Path $PSScriptRoot "materialize_exact_candidate_windows.ps1"
-$fixtureRoot = Join-Path $repoRoot ("build\test_tmp\ecl-" + [Guid]::NewGuid().ToString("N"))
-$fixtureBuildRoot = Join-Path $fixtureRoot "build\test_tmp"
+$fixtureRoot = Join-Path (Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot) ("ecl-" + [Guid]::NewGuid().ToString("N"))
+$fixtureBuildRoot = Join-Path (Get-HenkaExactCandidateRoot -RepositoryRoot $repoRoot) ("lifecycle-" + [Guid]::NewGuid().ToString("N"))
 $registeredCandidate = Join-Path $fixtureBuildRoot "registered-candidate"
 $unregisteredCandidate = Join-Path $fixtureBuildRoot "unregistered-candidate"
 $sibling = Join-Path $fixtureBuildRoot "unrelated-sibling"

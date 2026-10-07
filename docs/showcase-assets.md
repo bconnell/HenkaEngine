@@ -366,14 +366,17 @@ For reproducible local captures, use the repository capture and validation
 helpers:
 
 ```powershell
+. .\scripts\henka_script_common.ps1
+$repoRoot = (Resolve-Path .).Path
+$giraffeEvidence = Join-Path (Get-HenkaEvidenceRoot -RepositoryRoot $repoRoot) "giraffe"
 .\scripts\capture_visual_evidence_windows.ps1 `
   -Configuration Debug `
-  -OutputDirectory (Join-Path (Get-Location) "build\visual_evidence_giraffe") `
+  -OutputDirectory $giraffeEvidence `
   -IncludeStartupShowcase `
   -IncludeGiraffeInspection
 
 .\scripts\check_showcase_visual_evidence_windows.ps1 `
-  -InputDirectory (Join-Path (Get-Location) "build\visual_evidence_giraffe")
+  -InputDirectory $giraffeEvidence
 ```
 
 The capture helper stages the selected executable and adjacent assets into a

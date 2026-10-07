@@ -1,8 +1,9 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$fixtureRoot = Join-Path $repoRoot (".ssgi-motion-visual-validator-test-" + [Guid]::NewGuid().ToString("N"))
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$fixtureRoot = $null
 $sandbox = Get-Content (Join-Path $repoRoot 'examples/sandbox3d/main.c') -Raw
 $renderer = Get-Content (Join-Path $repoRoot 'engine/src/renderer/renderer_opengl.c') -Raw
 $capture = Get-Content (Join-Path $repoRoot 'scripts/capture_visual_evidence_windows.ps1') -Raw
@@ -30,7 +31,7 @@ if ($checker -notmatch 'temporal_resolve_count' -or
 if ($missing.Count -gt 0) {
     throw "SSGI motion temporal contract is incomplete: $($missing -join ', ')"
 }
-[System.IO.Directory]::CreateDirectory($fixtureRoot) | Out-Null
+$fixtureRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "ssgi-motion-visual-validator"
 Add-Type -AssemblyName System.Drawing
 
 try {

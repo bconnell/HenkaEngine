@@ -1,9 +1,10 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'henka_script_common.ps1')
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $checker = Join-Path $PSScriptRoot 'check_realism_reference_visual_evidence_windows.ps1'
-$tempRoot = Join-Path $repoRoot ('build\test_tmp\realism-reference-visual-validator-' + [Guid]::NewGuid().ToString('N'))
+$tempRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose 'realism-reference-visual-regression'
 
 function New-ReferenceBitmap {
     param(

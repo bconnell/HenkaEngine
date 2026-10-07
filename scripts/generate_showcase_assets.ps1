@@ -5,6 +5,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+$repositoryRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 
 function New-Part {
     param([int]$Material)
@@ -1536,7 +1538,8 @@ function New-Rocket {
 if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
     throw "OutputDirectory must be absolute."
 }
-[IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
+$OutputDirectory = Resolve-HenkaLocalPath -RepositoryRoot $repositoryRoot -Path $OutputDirectory
+$null = New-HenkaLocalDirectory -RepositoryRoot $repositoryRoot -Path $OutputDirectory
 $giraffe = New-Giraffe
 $giraffeTextures = New-ShowcaseTextureDefinitions -OutputDirectory $OutputDirectory -Subject "giraffe" -IncludeBaseColor
 Write-Gltf (Join-Path $OutputDirectory "cheeky_giraffe.gltf") "Anatomical Giraffe Study" $giraffe.Parts $giraffe.Materials @(-2.15, 0.0, -1.7) $giraffeTextures

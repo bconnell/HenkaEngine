@@ -1150,6 +1150,18 @@ if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
     add_test(
+        NAME henka_local_storage_path_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_henka_local_storage_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
+        NAME henka_package_user_data_migration_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_package_user_data_migration_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_build_state_lock_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_henka_build_state_lock_windows.ps1
@@ -1167,13 +1179,13 @@ if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
             ${CMAKE_SOURCE_DIR}/scripts/test_validation_throughput_windows.ps1)
 endif()
 
-# Tests use bounded fixtures under build/test_tmp relative to the repository
-# root. Keep CTest's working directory stable across single-test and full-suite
-# runs so every test resolves the same documented fixture root. Keep this block
-# after every add_test call so late registrations receive the same contract.
+# Tests use bounded fixtures under <build-root>/test_tmp relative to CTest's
+# binary directory. Local Windows scripts place that build root under Henka's
+# canonical _local root. Keep this block after every add_test call so late
+# registrations receive the same contract.
 get_property(HENKA_TEST_NAMES DIRECTORY PROPERTY TESTS)
 if(HENKA_TEST_NAMES)
-    set(HENKA_TEST_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+    set(HENKA_TEST_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     set_tests_properties(
         ${HENKA_TEST_NAMES}
         PROPERTIES

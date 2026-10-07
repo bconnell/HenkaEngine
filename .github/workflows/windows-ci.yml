@@ -132,7 +132,15 @@ jobs:
       - name: Prepare pinned software OpenGL fallback
         shell: powershell
         timeout-minutes: 5
-        run: .\scripts\setup_windows_software_opengl.ps1 -TargetDirectory @("build\tests\Debug", "build\examples\sandbox3d\Debug")
+        run: |
+          $repoRoot = (Resolve-Path .).Path
+          . .\scripts\henka_script_common.ps1
+          $buildRoot = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
+          $targets = @(
+            (Join-Path $buildRoot "tests\Debug"),
+            (Join-Path $buildRoot "examples\sandbox3d\Debug")
+          )
+          .\scripts\setup_windows_software_opengl.ps1 -TargetDirectory $targets
 
       - name: Check OpenGL capability
         shell: powershell
@@ -154,7 +162,11 @@ jobs:
 
       - name: Install CI-only OpenGL runtime for packaged smoke
         shell: powershell
-        run: .\scripts\install_windows_software_opengl.ps1 -SourceDirectory "$env:HENKA_CI_SOFTWARE_OPENGL_ROOT" -TargetDirectory "out\HenkaSandbox3D"
+        run: |
+          $repoRoot = (Resolve-Path .).Path
+          . .\scripts\henka_script_common.ps1
+          $packageRoot = Get-HenkaPackageRoot -RepositoryRoot $repoRoot -PackageName "HenkaSandbox3D"
+          .\scripts\install_windows_software_opengl.ps1 -SourceDirectory "$env:HENKA_CI_SOFTWARE_OPENGL_ROOT" -TargetDirectory $packageRoot
 
       - name: Verify packaged product-startup Add Cube and Game Authoring
         shell: powershell

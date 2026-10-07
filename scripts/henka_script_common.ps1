@@ -1,4 +1,7 @@
 Set-StrictMode -Version Latest
+if ($null -eq (Get-Variable -Name HenkaCommonScriptDirectory -Scope Script -ErrorAction SilentlyContinue)) {
+    $script:HenkaCommonScriptDirectory = $PSScriptRoot
+}
 
 function Get-HenkaRepoRoot {
     param(
@@ -7,6 +10,247 @@ function Get-HenkaRepoRoot {
     )
 
     return (Resolve-Path (Join-Path $ScriptDirectory "..")).Path
+}
+
+function Get-HenkaCanonicalRepositoryRoot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot
+    )
+
+    $repository = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd("\", "/")
+    if (-not (Test-Path -LiteralPath $repository -PathType Container)) {
+        throw "Henka repository root does not exist: $repository"
+    }
+    $git = Get-HenkaGitPath
+    $commonDirectoryText = [string](& $git -C $repository rev-parse --git-common-dir 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commonDirectoryText)) {
+        throw "Could not resolve the Henka repository's shared Git directory: $repository"
+    }
+    $commonDirectory = $commonDirectoryText.Trim()
+    if (-not [System.IO.Path]::IsPathRooted($commonDirectory)) {
+        $commonDirectory = Join-Path $repository $commonDirectory
+    }
+    $commonDirectory = [System.IO.Path]::GetFullPath($commonDirectory).TrimEnd("\", "/")
+    if (-not [string]::Equals((Split-Path -Leaf $commonDirectory), ".git", [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Henka storage placement requires a non-bare repository with a .git common directory: $commonDirectory"
+    }
+    return [System.IO.Path]::GetFullPath((Split-Path -Parent $commonDirectory)).TrimEnd("\", "/")
+}
+
+function Get-HenkaLocalRoot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot
+    )
+
+    $repository = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd("\", "/")
+    if (-not (Test-Path -LiteralPath $repository -PathType Container)) {
+        throw "Henka repository root does not exist: $repository"
+    }
+
+    $helperRepository = Get-HenkaRepoRoot -ScriptDirectory $script:HenkaCommonScriptDirectory
+    $canonicalRepository = Get-HenkaCanonicalRepositoryRoot -RepositoryRoot $helperRepository
+    $projectRoot = Split-Path -Parent $canonicalRepository
+    if ([string]::IsNullOrWhiteSpace($projectRoot)) {
+        throw "Could not determine the Henka project-owned storage parent from $canonicalRepository"
+    }
+    $localRoot = [System.IO.Path]::GetFullPath((Join-Path $projectRoot "_local")).TrimEnd("\", "/")
+
+    $requestedCanonicalRepository = $null
+    try {
+        $requestedCanonicalRepository = Get-HenkaCanonicalRepositoryRoot -RepositoryRoot $repository
+    }
+    catch {
+        $requestedCanonicalRepository = $null
+    }
+
+    $repositoryIsInsideLocalRoot = [string]::Equals(
+        $repository,
+        $localRoot,
+        [System.StringComparison]::OrdinalIgnoreCase) -or
+        $repository.StartsWith(
+            $localRoot + [System.IO.Path]::DirectorySeparatorChar,
+            [System.StringComparison]::OrdinalIgnoreCase)
+    $repositorySharesHenkaGitAuthority = $null -ne $requestedCanonicalRepository -and
+        [string]::Equals(
+            [System.IO.Path]::GetFullPath($requestedCanonicalRepository).TrimEnd("\", "/"),
+            [System.IO.Path]::GetFullPath($canonicalRepository).TrimEnd("\", "/"),
+            [System.StringComparison]::OrdinalIgnoreCase)
+
+    if (-not $repositoryIsInsideLocalRoot -and -not $repositorySharesHenkaGitAuthority) {
+        throw "Repository does not share Henka's canonical Git authority: $repository"
+    }
+
+    return $localRoot
+}
+
+function Resolve-HenkaLocalPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw "Henka generated path cannot be empty."
+    }
+
+    $localRoot = [System.IO.Path]::GetFullPath((Get-HenkaLocalRoot -RepositoryRoot $RepositoryRoot)).TrimEnd("\", "/")
+    $fullPath = if ([System.IO.Path]::IsPathRooted($Path)) {
+        [System.IO.Path]::GetFullPath($Path)
+    } else {
+        [System.IO.Path]::GetFullPath((Join-Path $localRoot $Path))
+    }
+    $fullPath = $fullPath.TrimEnd("\", "/")
+    $insideRoot = [string]::Equals($fullPath, $localRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $fullPath.StartsWith($localRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
+    if (-not $insideRoot) {
+        throw "Generated Henka path is outside the canonical project-owned _local root: $fullPath"
+    }
+
+    $relative = $fullPath.Substring($localRoot.Length).TrimStart("\", "/")
+    $current = $localRoot
+    $rootItem = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+    if ($null -ne $rootItem) {
+        if (-not $rootItem.PSIsContainer -or
+            (($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            throw "Canonical Henka _local root is not a normal directory: $current"
+        }
+    }
+    foreach ($part in @($relative -split "[\\/]" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        $current = Join-Path $current $part
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($null -eq $item) {
+            break
+        }
+        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Generated Henka path crosses a reparse point: $current"
+        }
+        if (-not $item.PSIsContainer -and $current -ne $fullPath) {
+            throw "Generated Henka path crosses a file instead of a directory: $current"
+        }
+    }
+    return $fullPath
+}
+
+function Resolve-HenkaDependencyRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$DependencyRoot
+    )
+
+    $resolvedRoot = Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot -Path $DependencyRoot
+    if (-not (Test-Path -LiteralPath $resolvedRoot -PathType Container)) {
+        throw "Henka dependency root was not found beneath canonical _local: $resolvedRoot"
+    }
+    return $resolvedRoot
+}
+
+function Get-HenkaCheckoutStorageKey {
+    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+
+    $repository = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd("\", "/")
+    $leaf = (Split-Path -Leaf $repository) -replace "[^A-Za-z0-9._-]", "-"
+    if ([string]::IsNullOrWhiteSpace($leaf)) { $leaf = "checkout" }
+    $hashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hashBytes = $hashAlgorithm.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($repository.ToLowerInvariant()))
+        $hash = ([BitConverter]::ToString($hashBytes)).Replace("-", "").Substring(0, 12).ToLowerInvariant()
+    }
+    finally { $hashAlgorithm.Dispose() }
+    return "$leaf-$hash"
+}
+
+function Get-HenkaBuildRoot {
+    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+
+    $repository = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd("\", "/")
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $repository
+    $candidateRoot = [System.IO.Path]::GetFullPath((Join-Path $localRoot "exact-candidates")).TrimEnd("\", "/")
+    if ($repository.StartsWith($candidateRoot + [System.IO.Path]::DirectorySeparatorChar,
+            [System.StringComparison]::OrdinalIgnoreCase)) {
+        $candidateRelative = $repository.Substring(($candidateRoot + [System.IO.Path]::DirectorySeparatorChar).Length)
+        if (-not [string]::IsNullOrWhiteSpace($candidateRelative) -and
+            $candidateRelative.IndexOf([System.IO.Path]::DirectorySeparatorChar) -lt 0 -and
+            $candidateRelative.IndexOf([System.IO.Path]::AltDirectorySeparatorChar) -lt 0) {
+            return Resolve-HenkaLocalPath -RepositoryRoot $repository -Path (Join-Path $repository "build")
+        }
+    }
+    return Resolve-HenkaLocalPath -RepositoryRoot $repository `
+        -Path (Join-Path (Join-Path $localRoot "builds") (Get-HenkaCheckoutStorageKey -RepositoryRoot $repository))
+}
+
+function Get-HenkaPackageRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [string]$PackageName = "HenkaSandbox3D"
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PackageName) -or $PackageName -match "[\\/:*?`"<>|]" -or $PackageName -in @(".", "..")) {
+        throw "Henka package name is not a valid single path segment: $PackageName"
+    }
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $RepositoryRoot
+    return Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot `
+        -Path (Join-Path (Join-Path (Join-Path $localRoot "packages") (Get-HenkaCheckoutStorageKey -RepositoryRoot $RepositoryRoot)) $PackageName)
+}
+
+function Get-HenkaWorktreeRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][ValidatePattern("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")][string]$Name
+    )
+
+    if ($Name -in @(".", "..")) {
+        throw "Henka worktree name must be a single safe path segment: $Name"
+    }
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $RepositoryRoot
+    return Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot -Path (Join-Path (Join-Path $localRoot "worktrees") $Name)
+}
+
+function Get-HenkaExactCandidateRoot {
+    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $RepositoryRoot
+    return Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot -Path (Join-Path $localRoot "exact-candidates")
+}
+
+function Get-HenkaEvidenceRoot {
+    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $RepositoryRoot
+    return Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot `
+        -Path (Join-Path (Join-Path $localRoot "evidence") (Get-HenkaCheckoutStorageKey -RepositoryRoot $RepositoryRoot))
+}
+
+function Get-HenkaTestTemporaryRoot {
+    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+    return Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot -Path (Join-Path (Get-HenkaBuildRoot -RepositoryRoot $RepositoryRoot) "test_tmp")
+}
+
+function New-HenkaTemporaryDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][ValidatePattern("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")][string]$Purpose
+    )
+
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $RepositoryRoot
+    $path = Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot `
+        -Path (Join-Path (Join-Path $localRoot "temporary") ($Purpose + "-" + [Guid]::NewGuid().ToString("N")))
+    $null = New-HenkaLocalDirectory -RepositoryRoot $RepositoryRoot -Path $path
+    $null = Write-HenkaGeneratedRootMarker -RepoRoot $RepositoryRoot -Path $path `
+        -Purpose $Purpose -RetentionClass "SCRATCH" -Active $true -CleanupEligible $true `
+        -CleanupCondition "the owning command completed or was interrupted and active consumers were checked"
+    return $path
+}
+
+function New-HenkaLocalDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $fullPath = Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot -Path $Path
+    [System.IO.Directory]::CreateDirectory($fullPath) | Out-Null
+    $fullPath = Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot -Path $fullPath
+    return $fullPath
 }
 
 function Resolve-HenkaRepositoryPath {
@@ -40,7 +284,7 @@ function Write-HenkaGeneratedRootMarker {
         [Parameter(Mandatory = $true)] [string]$RepoRoot,
         [Parameter(Mandatory = $true)] [string]$Path,
         [Parameter(Mandatory = $true)] [string]$Purpose,
-        [Parameter(Mandatory = $true)] [ValidateSet("SCRATCH", "ACTIVE_CANDIDATE", "PUBLISHED_BOUNDARY_EVIDENCE", "NEGATIVE_CONTROL", "CACHE")]
+        [Parameter(Mandatory = $true)] [ValidateSet("SCRATCH", "ACTIVE_CANDIDATE", "PUBLISHED_BOUNDARY_EVIDENCE", "NEGATIVE_CONTROL", "CACHE", "PROOF_CONSUMED", "SUPERSEDED", "REBUILDABLE")]
         [string]$RetentionClass,
         [Parameter(Mandatory = $true)] [bool]$Active,
         [Parameter(Mandatory = $true)] [bool]$CleanupEligible,
@@ -49,15 +293,9 @@ function Write-HenkaGeneratedRootMarker {
     )
 
     $repo = (Resolve-Path -LiteralPath $RepoRoot).Path.TrimEnd("\")
-    $fullPath = [System.IO.Path]::GetFullPath($Path)
-    $buildRoot = [System.IO.Path]::GetFullPath((Join-Path $repo "build")).TrimEnd("\")
-    $outRoot = [System.IO.Path]::GetFullPath((Join-Path $repo "out")).TrimEnd("\")
-    $underBuild = $fullPath.StartsWith($buildRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
-    $underOut = $fullPath.StartsWith($outRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
-    if (-not $underBuild -and -not $underOut) {
-        throw "Generated root marker path must be under the repository build or out root: $fullPath"
-    }
+    $fullPath = Resolve-HenkaLocalPath -RepositoryRoot $repo -Path $Path
     [System.IO.Directory]::CreateDirectory($fullPath) | Out-Null
+    $fullPath = Resolve-HenkaLocalPath -RepositoryRoot $repo -Path $fullPath
     $item = Get-Item -LiteralPath $fullPath -Force
     if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
         throw "Generated root marker path is a reparse point: $fullPath"
@@ -1547,8 +1785,8 @@ function Invoke-HenkaNativeCapture {
         [switch]$Quiet
     )
 
-    $captureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-native-" + [Guid]::NewGuid().ToString("N"))
-    [System.IO.Directory]::CreateDirectory($captureRoot) | Out-Null
+    $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $script:HenkaCommonScriptDirectory
+    $captureRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "native-process-capture"
     $stdoutPath = Join-Path $captureRoot "stdout.log"
     $stderrPath = Join-Path $captureRoot "stderr.log"
     $capturedProcess = $null
@@ -1634,8 +1872,8 @@ function Invoke-HenkaExpectedFailure {
         throw "Expected-failure process timeout must be positive."
     }
 
-    $captureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-expected-failure-" + [Guid]::NewGuid().ToString("N"))
-    [System.IO.Directory]::CreateDirectory($captureRoot) | Out-Null
+    $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $script:HenkaCommonScriptDirectory
+    $captureRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "expected-failure-capture"
     $stdoutPath = Join-Path $captureRoot "stdout.log"
     $stderrPath = Join-Path $captureRoot "stderr.log"
     $capturedProcess = $null

@@ -12,10 +12,12 @@ $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $cmake = Get-HenkaCMakePath
 $ctest = Get-HenkaCTestPath -CMakePath $cmake
 if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
-    $BuildDirectory = Join-Path $repoRoot "build"
+    $BuildDirectory = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
 }
 $BuildDirectory = [System.IO.Path]::GetFullPath($BuildDirectory)
-$expectedWorkingDirectory = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd('\', '/')
+$expectedWorkingDirectory = [System.IO.Path]::GetFullPath($BuildDirectory).TrimEnd('\', '/')
+$localRoot = [System.IO.Path]::GetFullPath((Get-HenkaLocalRoot -RepositoryRoot $repoRoot)).TrimEnd('\', '/')
+$null = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $expectedWorkingDirectory
 
 if (-not (Test-Path -LiteralPath $BuildDirectory -PathType Container)) {
     throw "CTest build directory does not exist: $BuildDirectory"
@@ -86,7 +88,7 @@ foreach ($test in $jsonTests) {
 }
 
 if ($workingDirectoryFailures.Count -gt 0) {
-    Write-Error ("CTest working-directory contract failed. Expected repository root '$expectedWorkingDirectory': " +
+                Write-Error ("CTest working-directory contract failed. Expected binary directory '$expectedWorkingDirectory' under canonical local root '$localRoot': " +
         ($workingDirectoryFailures -join "; "))
     exit 1
 }
@@ -96,7 +98,7 @@ if ($timeoutFailures.Count -gt 0) {
     exit 1
 }
 
-Write-Output ("[pass] {0} first-party CTest entries use repository-root working directory {1}." -f
+Write-Output ("[pass] {0} first-party CTest entries use canonical-local binary working directory {1}." -f
     $jsonTests.Count, $expectedWorkingDirectory)
 Write-Output ("[pass] {0} first-party CTest entries carry the 300-second per-test timeout contract." -f
     $jsonTests.Count)

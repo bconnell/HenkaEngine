@@ -9,20 +9,21 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $installer = Join-Path $PSScriptRoot "install_windows_software_opengl.ps1"
 $setup = Join-Path $PSScriptRoot "setup_windows_software_opengl.ps1"
-$fixtureName = "software-opengl-path-resolution-" + [Guid]::NewGuid().ToString("N")
-$fixture = Join-Path $repoRoot ("build\test_tmp\" + $fixtureName)
-$sourceRelative = "build\test_tmp\$fixtureName\source"
-$targetRelative = "build\test_tmp\$fixtureName\target"
+$fixture = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "software-opengl-path-resolution"
+$localRoot = Get-HenkaLocalRoot -RepositoryRoot $repoRoot
+$fixtureRelative = $fixture.Substring($localRoot.Length).TrimStart("\", "/")
+$sourceRelative = Join-Path $fixtureRelative "source"
+$targetRelative = Join-Path $fixtureRelative "target"
 $foreignDirectory = Join-Path $fixture "foreign-current-directory"
-$source = Join-Path $repoRoot $sourceRelative
-$target = Join-Path $repoRoot $targetRelative
+$source = Join-Path $fixture "source"
+$target = Join-Path $fixture "target"
 
 $previousLocation = (Get-Location).Path
 $previousCurrentDirectory = [Environment]::CurrentDirectory
 
 try {
-    [System.IO.Directory]::CreateDirectory($source) | Out-Null
-    [System.IO.Directory]::CreateDirectory($foreignDirectory) | Out-Null
+    $null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $source
+    $null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $foreignDirectory
 
     [System.IO.File]::WriteAllBytes(
         (Join-Path $source "opengl32.dll"),
@@ -34,11 +35,11 @@ try {
     Set-Location -LiteralPath $foreignDirectory
     [Environment]::CurrentDirectory = $foreignDirectory
 
-    $resolvedTarget = Resolve-HenkaRepositoryPath -RepoRoot $repoRoot -Path $targetRelative
+    $resolvedTarget = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $targetRelative
     if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals(
             [System.IO.Path]::GetFullPath($resolvedTarget),
             [System.IO.Path]::GetFullPath($target))) {
-        throw "Repository-relative path resolution followed the process working directory."
+        throw "Canonical local-root path resolution followed the process working directory."
     }
 
     $global:LASTEXITCODE = 0
@@ -51,7 +52,7 @@ try {
     }
 
     if (-not (Test-Path -LiteralPath (Join-Path $target "opengl32.dll") -PathType Leaf)) {
-        throw "The installer did not place the OpenGL runtime under the repository-root target."
+        throw "The installer did not place the OpenGL runtime under the canonical local-root target."
     }
 
     $wrongTarget = [System.IO.Path]::GetFullPath(
@@ -61,13 +62,13 @@ try {
     }
 
     $setupText = [System.IO.File]::ReadAllText($setup)
-    $expectedSetupBinding = 'Resolve-HenkaRepositoryPath -RepoRoot $repoRoot -Path $target'
+    $expectedSetupBinding = 'Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $target'
     if (-not $setupText.Contains($expectedSetupBinding)) {
-        throw "The Mesa setup path does not use the canonical repository-relative resolver."
+        throw "The Mesa setup path does not use the canonical Henka local-root resolver."
     }
 
     $global:LASTEXITCODE = 0
-    Write-Host "[pass] Repository-relative OpenGL validation paths remain anchored to the Henka checkout even when the process working directory is elsewhere."
+    Write-Host "[pass] OpenGL validation paths remain anchored to canonical _local even when the process working directory is elsewhere."
 }
 finally {
     [Environment]::CurrentDirectory = $previousCurrentDirectory

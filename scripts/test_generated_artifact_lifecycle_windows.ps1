@@ -6,10 +6,13 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $manager = Join-Path $PSScriptRoot "manage_generated_artifacts_windows.ps1"
 $captureScript = Join-Path $PSScriptRoot "capture_visual_evidence_windows.ps1"
-$captureExecutable = Join-Path $repoRoot "build\examples\sandbox3d\Debug\henka_sandbox3d.exe"
-$captureRuntimeRoot = Join-Path $repoRoot "build\test_tmp"
-$testRoot = Join-Path $repoRoot ("build\test_tmp\generated-artifact-lifecycle-regression-" + [Guid]::NewGuid().ToString("N"))
-$outside = Join-Path $repoRoot ("generated-artifact-lifecycle-outside-" + [Guid]::NewGuid().ToString("N"))
+$buildRoot = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
+$localRoot = Get-HenkaLocalRoot -RepositoryRoot $repoRoot
+$testTemporaryRoot = Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot
+$captureExecutable = Join-Path $buildRoot "examples\sandbox3d\Debug\henka_sandbox3d.exe"
+$captureRuntimeRoot = $testTemporaryRoot
+$testRoot = Join-Path $testTemporaryRoot ("generated-artifact-lifecycle-regression-" + [Guid]::NewGuid().ToString("N"))
+$outside = Join-Path $localRoot ("generated-artifact-lifecycle-outside-" + [Guid]::NewGuid().ToString("N"))
 $junction = Join-Path $testRoot "junction"
 $captureProbeNewPaths = @()
 
@@ -148,8 +151,8 @@ try {
 
     Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $active) -ExpectedText "active"
     Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $unmarked) -ExpectedText "unmarked"
-    Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $outside) -ExpectedText "approved generated root"
-    Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", (Join-Path $repoRoot "build\test_tmp\..\..\out")) -ExpectedText "approved generated root itself"
+    Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $outside) -ExpectedText "canonical local or cleanup-only legacy generated roots"
+    Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", (Join-Path $localRoot "builds")) -ExpectedText "approved generated root itself"
 
     $cleanup = Invoke-Manager -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $eligible)
     if ($cleanup.ExitCode -ne 0 -or (Test-Path -LiteralPath $eligible)) {

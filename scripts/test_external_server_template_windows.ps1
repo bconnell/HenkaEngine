@@ -38,7 +38,7 @@ function Invoke-ExternalServerNative {
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $templateRoot = Join-Path $repoRoot "templates\external_server_minimal"
-$validationParent = Join-Path $repoRoot "build\tv"
+$validationParent = Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "tv"
 $validationRoot = Join-Path $validationParent "external_server_minimal"
 $validationSource = Join-Path $validationRoot "external_server_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_server_minimal_build"
@@ -50,7 +50,7 @@ $configureArguments = @(
     "-DCMAKE_SUPPRESS_REGENERATION=ON"
 )
 $fetchArguments = @{
-    DependencyRoot = Join-Path $repoRoot "build\_deps"
+    DependencyRoot = Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "_deps"
     Providers = @("ENET", "LUA")
 }
 if ($NoLocalProviders) {

@@ -4,7 +4,8 @@ Henka's Windows package flow records and verifies the build that produced the ru
 
 ## Build record
 
-`build/henka-build-info.json` is written transactionally after a successful Windows build. It records:
+`_local/builds/<checkout-key>/henka-build-info.json` is written transactionally
+after a successful Windows build. It records:
 
 - the full source commit
 - whether tracked or untracked working-tree changes were present
@@ -20,7 +21,7 @@ Henka's Windows package flow records and verifies the build that produced the ru
 
 Detached checkouts are valid. This is required for pull-request validation, where the checked-out commit may not have a local branch name.
 
-The file stays under the ignored build tree and is not committed.
+The file stays under the ignored project-owned build root and is not committed.
 
 ## Package checks
 

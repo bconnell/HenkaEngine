@@ -35,30 +35,49 @@ if (-not (Test-Path -LiteralPath $candidate -PathType Container)) {
     throw "The exact candidate directory was not found: $candidate"
 }
 
+# Enforce the storage boundary with the caller's trusted shared helper before
+# loading or executing any candidate-owned PowerShell code.
+$repositoryCommon = Join-Path $repository "scripts\henka_script_common.ps1"
+if (-not (Test-Path -LiteralPath $repositoryCommon -PathType Leaf)) {
+    throw "The validation repository is missing scripts\henka_script_common.ps1."
+}
+. $repositoryCommon
+$candidate = Resolve-HenkaLocalPath -RepositoryRoot $repository -Path $candidate
+$exactCandidateRoot = [System.IO.Path]::GetFullPath((Get-HenkaExactCandidateRoot -RepositoryRoot $repository)).TrimEnd('\', '/')
+if (-not $candidate.StartsWith(
+        $exactCandidateRoot + [System.IO.Path]::DirectorySeparatorChar,
+        [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Exact candidate is outside the canonical _local\exact-candidates root: $candidate"
+}
+$candidateRelativePath = $candidate.Substring($exactCandidateRoot.Length + 1)
+if ([string]::IsNullOrWhiteSpace($candidateRelativePath) -or
+    $candidateRelativePath.IndexOf([System.IO.Path]::DirectorySeparatorChar) -ge 0 -or
+    $candidateRelativePath.IndexOf([System.IO.Path]::AltDirectorySeparatorChar) -ge 0) {
+    throw "Exact candidate must be a direct child of the canonical _local\exact-candidates root: $candidate"
+}
+
 $candidateCommon = Join-Path $candidate "scripts\henka_script_common.ps1"
 if (-not (Test-Path -LiteralPath $candidateCommon -PathType Leaf)) {
     throw "The exact candidate is missing scripts\henka_script_common.ps1."
 }
 . $candidateCommon
+$candidate = Resolve-HenkaLocalPath -RepositoryRoot $candidate -Path $candidate
+$candidateBuildRoot = Get-HenkaBuildRoot -RepositoryRoot $candidate
 
 # Resolve the requested build target before creating candidate build state or
 # invoking any candidate validation stage. The artifact mapping is the shared
 # authority for accepted CMake target names and prevents a friendly alias from
 # reaching an expensive configure/build operation.
 $null = Get-HenkaBuildArtifact `
-    -BuildRoot (Join-Path $candidate "build") `
+    -BuildRoot $candidateBuildRoot `
     -Configuration $Configuration `
     -BuildTarget $BuildTarget
 
 $dependency = $DependencyRoot
 if ([string]::IsNullOrWhiteSpace($dependency)) {
-    $dependency = Join-Path $repository "build\_deps"
-} else {
-    $dependency = [System.IO.Path]::GetFullPath($dependency)
+    $dependency = Join-Path $candidateBuildRoot "_deps"
 }
-if (-not (Test-Path -LiteralPath $dependency -PathType Container)) {
-    throw "The exact-candidate dependency root was not found: $dependency"
-}
+$dependency = Resolve-HenkaDependencyRoot -RepositoryRoot $candidate -DependencyRoot $dependency
 
 $buildScript = Join-Path $candidate "scripts\build_windows.ps1"
 $testScript = Join-Path $candidate "scripts\test_windows.ps1"
@@ -69,7 +88,7 @@ foreach ($script in @($buildScript, $testScript, $packageScript)) {
     }
 }
 
-$candidateTestTemporaryRoot = Join-Path $candidate "build\test_tmp"
+$candidateTestTemporaryRoot = Join-Path $candidateBuildRoot "test_tmp"
 if (-not (Test-Path -LiteralPath $candidateTestTemporaryRoot -PathType Container)) {
     New-Item -ItemType Directory -Path $candidateTestTemporaryRoot -Force | Out-Null
 }

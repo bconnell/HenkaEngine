@@ -12,12 +12,8 @@ $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $sourceDirectory = Join-Path $repoRoot "assets\textures"
 $textureCount = 65
 
-if (-not [System.IO.Path]::IsPathRooted($OutputDirectory)) {
-    throw "OutputDirectory must be absolute."
-}
-
-$OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
-[System.IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
+$OutputDirectory = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $OutputDirectory
+$null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $OutputDirectory
 
 for ($index = 0; $index -lt $textureCount; $index++) {
     $sourceName = if (($index % 2) -eq 0) {

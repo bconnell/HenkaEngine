@@ -200,7 +200,9 @@ in [docs/building.md](docs/building.md).
 .\scripts\run_packaged_sandbox3d_windows.ps1
 ```
 
-The run-ready folder is `out/HenkaSandbox3D/`. It contains the executable,
+The run-ready package is stored beneath the project-owned sibling `_local`
+directory at `packages/<checkout-key>/HenkaSandbox3D/`. The validation helper
+`Get-HenkaPackageRoot` resolves the exact path. It contains the executable,
 assets, offline help, package identity, and local user settings when present.
 Packaging and recovery rules are documented in
 [docs/package-provenance.md](docs/package-provenance.md).

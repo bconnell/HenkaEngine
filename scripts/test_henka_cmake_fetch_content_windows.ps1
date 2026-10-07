@@ -4,7 +4,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
-$fixtureRoot = Join-Path $repoRoot ("build\test_tmp\cmake-fetch-content-fixture-" + [Guid]::NewGuid().ToString("N"))
+$fixtureRoot = Join-Path (Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot) ("cmake-fetch-content-fixture-" + [Guid]::NewGuid().ToString("N"))
 $dependencyRoot = Join-Path $fixtureRoot "_deps"
 
 function Assert-Condition {

@@ -174,7 +174,7 @@ if ($missing.Count -gt 0) {
 # checker, but this keeps the visual regression executable in clean CI where
 # no prior evidence directory is present.
 Add-Type -AssemblyName System.Drawing
-$negativeControlRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-ibl-checker-negative-" + [Guid]::NewGuid().ToString('N'))
+$negativeControlRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "ibl-checker-negative-control"
 $negativeControlPassed = $false
 try {
     New-Item -ItemType Directory -Path $negativeControlRoot -Force | Out-Null
