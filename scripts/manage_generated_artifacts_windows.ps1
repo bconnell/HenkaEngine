@@ -30,7 +30,16 @@ function Get-AbsolutePath {
 }
 
 function Get-ApprovedRoots {
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $repoRoot
     return @(
+        [System.IO.Path]::GetFullPath((Join-Path $localRoot "builds")).TrimEnd("\"),
+        [System.IO.Path]::GetFullPath((Join-Path $localRoot "packages")).TrimEnd("\"),
+        [System.IO.Path]::GetFullPath((Join-Path $localRoot "evidence")).TrimEnd("\"),
+        [System.IO.Path]::GetFullPath((Join-Path $localRoot "exact-candidates")).TrimEnd("\"),
+        [System.IO.Path]::GetFullPath((Join-Path $localRoot "temporary")).TrimEnd("\"),
+        [System.IO.Path]::GetFullPath((Join-Path $localRoot "test-data")).TrimEnd("\"),
+        # Legacy locations remain cleanup-only. New markers and generated roots
+        # are accepted exclusively beneath the canonical project-owned root.
         [System.IO.Path]::GetFullPath((Join-Path $repoRoot "build")).TrimEnd("\"),
         [System.IO.Path]::GetFullPath((Join-Path $repoRoot "out")).TrimEnd("\")
     )
@@ -96,6 +105,7 @@ function Get-HenkaTreeStats {
     $bytes = [int64]0
     $files = [int64]0
     $reparse = [int64]0
+    $gitMetadata = [int64]0
     $stack = New-Object System.Collections.Generic.Stack[string]
     $stack.Push($Path)
     while ($stack.Count -gt 0) {
@@ -103,6 +113,10 @@ function Get-HenkaTreeStats {
         foreach ($item in @(Get-ChildItem -LiteralPath $current -Force -ErrorAction Stop)) {
             if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
                 $reparse++
+                continue
+            }
+            if ([string]::Equals($item.Name, ".git", [System.StringComparison]::OrdinalIgnoreCase)) {
+                $gitMetadata++
                 continue
             }
             if ($item.PSIsContainer) {
@@ -114,7 +128,7 @@ function Get-HenkaTreeStats {
             }
         }
     }
-    return [pscustomobject]@{ Bytes = $bytes; Files = $files; ReparseEntries = $reparse }
+    return [pscustomobject]@{ Bytes = $bytes; Files = $files; ReparseEntries = $reparse; GitMetadataEntries = $gitMetadata }
 }
 
 function Get-ApprovedRootForPath {
@@ -125,7 +139,7 @@ function Get-ApprovedRootForPath {
             return $root
         }
     }
-    throw "Path is outside an approved generated root (build or out): $Path"
+    throw "Path is outside the canonical local or cleanup-only legacy generated roots: $Path"
 }
 
 function Get-RepositoryRelativePath {
@@ -142,14 +156,25 @@ function Get-RepositoryRelativePath {
 function Assert-ContainsNoTrackedFiles {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    $relative = Get-RepositoryRelativePath -Path $Path
-    $tracked = @(& $git -C $repoRoot ls-files -- $relative 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not inspect tracked-file state for generated artifact: $Path"
+    $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd("\")
+    $repositoryPath = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd("\")
+    if (Test-PathWithin -Path $fullPath -Root $repositoryPath) {
+        $relative = Get-RepositoryRelativePath -Path $fullPath
+        $tracked = @(& $git -C $repoRoot ls-files -- $relative 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not inspect tracked-file state for generated artifact: $Path"
+        }
+        if ($tracked.Count -ne 0) {
+            throw "Refusing to operate on a generated path containing tracked files: $Path"
+        }
+        return
     }
-    if ($tracked.Count -ne 0) {
-        throw "Refusing to operate on a generated path containing tracked files: $Path"
+
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $repoRoot
+    if (Test-PathWithin -Path $fullPath -Root $localRoot) {
+        return
     }
+    throw "Generated artifact is neither inside the repository nor canonical _local storage: $Path"
 }
 
 function Read-GeneratedMarker {
@@ -220,12 +245,18 @@ function Assert-CandidateSafe {
     if ([System.IO.Path]::GetFullPath($Path).TrimEnd("\") -eq $root.TrimEnd("\")) {
         throw "Refusing to operate on an approved generated root itself; provide one exact child candidate: $Path"
     }
+    if ([string]::Equals((Split-Path -Leaf $Path), ".git", [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to operate on Git metadata: $Path"
+    }
     Assert-NoReparseChain -Root $root -Path $Path
     Assert-ContainsNoTrackedFiles -Path $Path
     $marker = Assert-GeneratedMarker -Path $Path
     $stats = Get-HenkaTreeStats -Path $Path
     if ($stats.ReparseEntries -ne 0) {
         throw "Generated artifact contains reparse entries; refusing cleanup: $Path"
+    }
+    if ($stats.GitMetadataEntries -ne 0) {
+        throw "Generated artifact contains Git metadata; refusing cleanup: $Path"
     }
     return [pscustomobject]@{ Root = $root; Marker = $marker; Stats = $stats }
 }

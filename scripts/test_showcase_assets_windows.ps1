@@ -5,11 +5,17 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
 Add-Type -AssemblyName System.Drawing
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$OutputDirectory = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $OutputDirectory
+$null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $OutputDirectory
 $generator = Join-Path $repoRoot "scripts\generate_showcase_assets.ps1"
 $generatorText = Get-Content -LiteralPath $generator -Raw
+if ($generatorText -notmatch 'Resolve-HenkaLocalPath\s+-RepositoryRoot\s+\$repositoryRoot\s+-Path\s+\$OutputDirectory') {
+    throw "The standalone Showcase asset generator must validate its output beneath the canonical Henka _local root."
+}
 
 $rocketStart = $generatorText.IndexOf("function New-Rocket")
 $rocketEnd = $generatorText.IndexOf('if (-not [IO.Path]::IsPathRooted($OutputDirectory))')
@@ -93,6 +99,23 @@ function Get-ShowcaseFileHash {
 if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
     throw "OutputDirectory must be absolute."
 }
+
+$externalOutputProbe = Join-Path $env:SystemDrive ("henka-showcase-output-negative-" + [Guid]::NewGuid().ToString("N"))
+$externalOutputRejected = $false
+try {
+    & $generator -OutputDirectory $externalOutputProbe
+}
+catch {
+    $externalOutputRejected = $_.Exception.Message -match "outside|canonical|local root"
+}
+if (-not $externalOutputRejected) {
+    throw "The standalone Showcase generator accepted an output path outside canonical _local."
+}
+if (Test-Path -LiteralPath $externalOutputProbe) {
+    throw "The rejected Showcase output path was created before the storage guard failed."
+}
+Write-Output "[pass] Standalone Showcase generation rejects external output roots before mutation."
+
 [IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 
 $LASTEXITCODE = 0

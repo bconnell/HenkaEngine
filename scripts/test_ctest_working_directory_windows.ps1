@@ -12,10 +12,12 @@ $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $cmake = Get-HenkaCMakePath
 $ctest = Get-HenkaCTestPath -CMakePath $cmake
 if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
-    $BuildDirectory = Join-Path $repoRoot "build"
+    $BuildDirectory = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
 }
 $BuildDirectory = [System.IO.Path]::GetFullPath($BuildDirectory)
-$expectedWorkingDirectory = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd('\', '/')
+$expectedWorkingDirectory = [System.IO.Path]::GetFullPath($BuildDirectory).TrimEnd('\', '/')
+$localRoot = [System.IO.Path]::GetFullPath((Get-HenkaLocalRoot -RepositoryRoot $repoRoot)).TrimEnd('\', '/')
+$null = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $expectedWorkingDirectory
 
 if (-not (Test-Path -LiteralPath $BuildDirectory -PathType Container)) {
     throw "CTest build directory does not exist: $BuildDirectory"
@@ -37,6 +39,54 @@ catch {
 $jsonTests = @($ctestJson.tests | Where-Object { ([string]$_.name) -like "henka_*" })
 if ($jsonTests.Count -eq 0) {
     throw "The CTest JSON listing did not contain first-party Henka tests."
+}
+
+function Get-FileSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $algorithm = $null
+    $stream = $null
+    try {
+        $algorithm = [System.Security.Cryptography.SHA256]::Create()
+        $stream = [System.IO.File]::OpenRead($Path)
+        return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace("-", "")
+    }
+    finally {
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+        if ($null -ne $algorithm) {
+            $algorithm.Dispose()
+        }
+    }
+}
+
+$resourceFailures = New-Object System.Collections.Generic.List[string]
+foreach ($relativeRoot in @("assets", "tests/fixtures")) {
+    $sourceRoot = Join-Path $repoRoot $relativeRoot
+    if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
+        $resourceFailures.Add("${relativeRoot}: source fixture root is missing")
+        continue
+    }
+
+    foreach ($sourceFile in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File) {
+        $relativePath = $sourceFile.FullName.Substring($sourceRoot.TrimEnd('\').Length).TrimStart('\')
+        $buildFile = Join-Path (Join-Path $BuildDirectory $relativeRoot) $relativePath
+        if (-not (Test-Path -LiteralPath $buildFile -PathType Leaf)) {
+            $resourceFailures.Add("${relativeRoot}\${relativePath}: missing from CTest working directory")
+            continue
+        }
+
+        $sourceHash = Get-FileSha256 -Path $sourceFile.FullName
+        $buildHash = Get-FileSha256 -Path $buildFile
+        if ($sourceHash -ne $buildHash) {
+            $resourceFailures.Add("${relativeRoot}\${relativePath}: staged copy differs from source")
+        }
+    }
+}
+$testScratchRoot = Join-Path $BuildDirectory "build\test_tmp"
+if (-not (Test-Path -LiteralPath $testScratchRoot -PathType Container)) {
+    $resourceFailures.Add("build/test_tmp: native test scratch directory is missing")
 }
 
 $workingDirectoryFailures = New-Object System.Collections.Generic.List[string]
@@ -86,8 +136,13 @@ foreach ($test in $jsonTests) {
 }
 
 if ($workingDirectoryFailures.Count -gt 0) {
-    Write-Error ("CTest working-directory contract failed. Expected repository root '$expectedWorkingDirectory': " +
+    Write-Error ("CTest working-directory contract failed. Expected binary directory '$expectedWorkingDirectory' under canonical local root '$localRoot': " +
         ($workingDirectoryFailures -join "; "))
+    exit 1
+}
+if ($resourceFailures.Count -gt 0) {
+    Write-Error ("CTest source-resource staging contract failed for working directory '$expectedWorkingDirectory': " +
+        ($resourceFailures -join "; "))
     exit 1
 }
 if ($timeoutFailures.Count -gt 0) {
@@ -96,7 +151,9 @@ if ($timeoutFailures.Count -gt 0) {
     exit 1
 }
 
-Write-Output ("[pass] {0} first-party CTest entries use repository-root working directory {1}." -f
+Write-Output ("[pass] {0} first-party CTest entries use canonical-local binary working directory {1}." -f
     $jsonTests.Count, $expectedWorkingDirectory)
+Write-Output ("[pass] Source assets and test fixtures are staged byte-identically under the CTest working directory.")
+Write-Output ("[pass] Native test scratch directory exists under the canonical-local build root.")
 Write-Output ("[pass] {0} first-party CTest entries carry the 300-second per-test timeout contract." -f
     $jsonTests.Count)

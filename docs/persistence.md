@@ -58,8 +58,10 @@ Integer settings outside the C `int` range fall back to the caller-provided defa
 
 The sandbox stores local settings in:
 
-- packaged run: `out/HenkaSandbox3D/user/sandbox3d.settings`
-- development run: a `user/` folder beside the built sandbox executable
+- packaged run: `user/sandbox3d.settings` beneath the package root returned by
+  `Get-HenkaPackageRoot`;
+- development run: a `user/` folder beside the executable under the build root
+  returned by `Get-HenkaBuildRoot`.
 
 The sandbox persists display, camera, input, and workspace state. Short status messages are session-only.
 

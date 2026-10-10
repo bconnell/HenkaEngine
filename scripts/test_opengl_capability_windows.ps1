@@ -12,7 +12,7 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
-    $BuildDirectory = Join-Path $repoRoot "build"
+    $BuildDirectory = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
 }
 $probe = Join-Path $BuildDirectory "tests\$Configuration\henka_opengl_capability_probe.exe"
 if (-not (Test-Path -LiteralPath $probe -PathType Leaf)) {

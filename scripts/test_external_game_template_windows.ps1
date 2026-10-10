@@ -59,7 +59,7 @@ function Invoke-ExternalNativeDirect {
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $templateRoot = Join-Path $repoRoot "templates\external_game_minimal"
 $templateScriptRoot = Join-Path $templateRoot "assets\scripts"
-$validationParent = Join-Path $repoRoot "build\tv"
+$validationParent = Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "tv"
 $validationRoot = Join-Path $validationParent "external_game_minimal"
 $validationSource = Join-Path $validationRoot "external_game_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_game_minimal_build"
@@ -70,7 +70,7 @@ $configureArguments = @(
     "-DHENKA_ENGINE_DIR=$repoRoot"
 )
 $fetchArguments = @{
-    DependencyRoot = Join-Path $repoRoot "build\_deps"
+    DependencyRoot = Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "_deps"
     Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
 }
 if ($NoLocalProviders) {

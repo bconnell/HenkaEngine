@@ -11,10 +11,11 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
-$outRoot = Join-Path $repoRoot "out"
-$packageRoot = Join-Path $outRoot "HenkaDedicatedServer"
+$buildRoot = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
+$packageRoot = Get-HenkaPackageRoot -RepositoryRoot $repoRoot -PackageName "HenkaDedicatedServer"
+$outRoot = Split-Path -Parent $packageRoot
 $packageSaveRoot = Join-Path $packageRoot "save"
-$expectedExe = Join-Path $repoRoot ("build\examples\dedicated_server\{0}\henka_dedicated_server.exe" -f $Configuration)
+$expectedExe = Join-Path $buildRoot ("examples\dedicated_server\{0}\henka_dedicated_server.exe" -f $Configuration)
 $configSource = Join-Path $repoRoot "examples\dedicated_server\server.conf.example"
 $docsSource = Join-Path $repoRoot "docs\dedicated-server.md"
 $git = Get-HenkaGitPath
@@ -88,6 +89,15 @@ if (Test-Path -LiteralPath $packageRoot) { Assert-NoReparsePoints -Path $package
 
 try {
     [System.IO.Directory]::CreateDirectory($stagingRoot) | Out-Null
+    $null = Write-HenkaGeneratedRootMarker `
+        -RepoRoot $repoRoot `
+        -Path $outRoot `
+        -Purpose "packaged dedicated-server candidate output" `
+        -RetentionClass "ACTIVE_CANDIDATE" `
+        -Active $true `
+        -CleanupEligible $false `
+        -CleanupCondition "retire only after a replacement package is activated and no consumer uses this package root" `
+        -Configuration $Configuration
     [System.IO.Directory]::CreateDirectory((Join-Path $stagingRoot "docs")) | Out-Null
     [System.IO.Directory]::CreateDirectory((Join-Path $stagingRoot "save")) | Out-Null
     Copy-Item -LiteralPath $expectedExe -Destination (Join-Path $stagingRoot "henka_dedicated_server.exe")
@@ -122,7 +132,7 @@ Source commit: $currentCommit
 Source state: $sourceState
 Source identity: $($sourceIdentity.source_identity)
 Build configuration: $Configuration
-Source executable: build/examples/dedicated_server/$Configuration/henka_dedicated_server.exe
+Source executable: _local/builds/<checkout-key>/examples/dedicated_server/$Configuration/henka_dedicated_server.exe
 Source executable SHA-256: $sourceHash
 Packaged executable SHA-256: $packagedHash
 Runtime dependencies: Henka runtime and ENet are statically linked; no client renderer, SDL, OpenGL, or KTX runtime is packaged.

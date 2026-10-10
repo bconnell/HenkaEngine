@@ -4,7 +4,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
-$packageRoot = Join-Path $repoRoot "out\HenkaSandbox3D"
+$packageRoot = Get-HenkaPackageRoot -RepositoryRoot $repoRoot -PackageName "HenkaSandbox3D"
 $packagedExe = Join-Path $packageRoot "HenkaSandbox3D.exe"
 $packageInfoPath = Join-Path $packageRoot "PACKAGE_INFO.txt"
 

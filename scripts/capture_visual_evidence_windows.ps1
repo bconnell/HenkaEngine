@@ -31,22 +31,22 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $executable = if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
-    Join-Path $repoRoot ("build\examples\sandbox3d\{0}\henka_sandbox3d.exe" -f $Configuration)
+    Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) ("examples\sandbox3d\{0}\henka_sandbox3d.exe" -f $Configuration)
 }
 else {
     [System.IO.Path]::GetFullPath($ExecutablePath)
 }
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
-    $OutputDirectory = Join-Path $repoRoot "build\visual_evidence"
+    $OutputDirectory = Get-HenkaEvidenceRoot -RepositoryRoot $repoRoot
 }
 else {
-    $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
+    $OutputDirectory = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $OutputDirectory
 }
 
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "Sandbox executable was not found: $executable"
 }
-$captureRuntimeDirectory = Join-Path $repoRoot ("build\test_tmp\visual-evidence-runtime-" + [Guid]::NewGuid().ToString("N"))
+$captureRuntimeDirectory = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "visual-evidence-runtime"
 $captureExecutable = Join-Path $captureRuntimeDirectory "henka_sandbox3d.exe"
 $captureAssets = Join-Path (Split-Path -Parent $executable) "assets"
 if (-not (Test-Path -LiteralPath $captureAssets -PathType Container)) {

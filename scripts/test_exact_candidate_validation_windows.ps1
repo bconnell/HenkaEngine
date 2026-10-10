@@ -4,10 +4,14 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $wrapper = Join-Path $PSScriptRoot "validate_exact_candidate_windows.ps1"
-$fixture = Join-Path $repoRoot ("build\test_tmp\exact-candidate-validation-fixture-" + [guid]::NewGuid().ToString("N"))
-$candidate = Join-Path $fixture "candidate"
+$fixture = Join-Path (Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot) ("exact-candidate-validation-fixture-" + [guid]::NewGuid().ToString("N"))
+$exactCandidateRoot = Get-HenkaExactCandidateRoot -RepositoryRoot $repoRoot
+$candidate = Join-Path $exactCandidateRoot ("e2cv-" + [guid]::NewGuid().ToString("N"))
+$nestedCandidateFixture = Join-Path $exactCandidateRoot ("e2nested-" + [guid]::NewGuid().ToString("N"))
 $candidateScripts = Join-Path $candidate "scripts"
 $dependencyRoot = Join-Path $fixture "dependencies"
 $logPath = Join-Path $fixture "calls.log"
@@ -58,6 +62,17 @@ Add-Content -LiteralPath '$logLiteral' -Value ("package|" + `$Configuration)
 exit 0
 "@
 
+    # The candidate scripts emit generated-root provenance while capturing
+    # subprocess output, so the fixture must be a real local Git repository,
+    # not an unversioned directory pretending to be an exact candidate.
+    $git = Get-HenkaGitPath
+    & $git -C $candidate init --quiet 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not initialize the isolated exact-candidate test fixture." }
+    & $git -C $candidate -c core.autocrlf=false -c user.name="Henka storage regression" -c user.email="henka-storage-regression@invalid" add -- scripts 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not stage the isolated exact-candidate test fixture scripts." }
+    & $git -C $candidate -c user.name="Henka storage regression" -c user.email="henka-storage-regression@invalid" commit --quiet -m "test fixture" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not establish source provenance for the exact-candidate test fixture." }
+
     $wrapperArguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
@@ -86,6 +101,46 @@ exit 0
         if ($actualCalls[$index] -ne $expectedCalls[$index]) {
             throw "Unexpected exact-candidate stage $($index): '$($actualCalls[$index])'. Expected '$($expectedCalls[$index])'."
         }
+    }
+
+    $externalDependencyProbe = Join-Path $env:SystemDrive ("henka-exact-dependency-negative-" + [guid]::NewGuid().ToString("N"))
+    $externalDependencyArguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $wrapper,
+        "-RepositoryRoot", $repoRoot,
+        "-CandidatePath", $candidate,
+        "-Configuration", "Debug",
+        "-DependencyRoot", $externalDependencyProbe,
+        "-StageTimeoutMilliseconds", "5000"
+    )
+    $externalDependencyFailure = Invoke-ValidationWrapper -Arguments $externalDependencyArguments
+    if ($externalDependencyFailure.ExitCode -eq 0 -or
+        ($externalDependencyFailure.Output -join [Environment]::NewLine) -notmatch "outside|escape|local root|canonical" -or
+        (Get-Content -LiteralPath $logPath).Count -ne $actualCalls.Count -or
+        (Test-Path -LiteralPath $externalDependencyProbe)) {
+        throw "The exact-candidate wrapper did not reject its external dependency root before invoking a validation stage or creating it. Output: $($externalDependencyFailure.Output -join [Environment]::NewLine)"
+    }
+
+    $nestedCandidate = Join-Path $nestedCandidateFixture "candidate"
+    $nestedCandidateScripts = Join-Path $nestedCandidate "scripts"
+    New-Item -ItemType Directory -Path $nestedCandidateScripts -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "henka_script_common.ps1") -Destination (Join-Path $nestedCandidateScripts "henka_script_common.ps1")
+    $nestedCandidateArguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $wrapper,
+        "-RepositoryRoot", $repoRoot,
+        "-CandidatePath", $nestedCandidate,
+        "-Configuration", "Debug",
+        "-DependencyRoot", $dependencyRoot,
+        "-StageTimeoutMilliseconds", "5000"
+    )
+    $nestedCandidateFailure = Invoke-ValidationWrapper -Arguments $nestedCandidateArguments
+    if ($nestedCandidateFailure.ExitCode -eq 0 -or
+        ($nestedCandidateFailure.Output -join [Environment]::NewLine) -notmatch "direct child.*exact-candidates" -or
+        (Get-Content -LiteralPath $logPath).Count -ne $actualCalls.Count) {
+        throw "The validator did not reject a nested candidate that is not a direct child of _local\\exact-candidates before staging or invoking it. Output: $($nestedCandidateFailure.Output -join [Environment]::NewLine)"
     }
 
     $focusedWrapperArguments = @(
@@ -213,7 +268,13 @@ exit 0
 
     Write-Host "Exact-candidate orchestration regression passed."
 } finally {
+    if (Test-Path -LiteralPath $nestedCandidateFixture) {
+        Remove-Item -LiteralPath $nestedCandidateFixture -Recurse -Force
+    }
     if (Test-Path -LiteralPath $fixture) {
         Remove-Item -LiteralPath $fixture -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $candidate) {
+        Remove-Item -LiteralPath $candidate -Recurse -Force
     }
 }

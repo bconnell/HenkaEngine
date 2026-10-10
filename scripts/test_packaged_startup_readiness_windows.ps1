@@ -5,11 +5,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
-    $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    $RepositoryRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 } else {
     $RepositoryRoot = (Resolve-Path $RepositoryRoot).Path
 }
+$repoRoot = $RepositoryRoot
 
 $readinessHelper = Join-Path $RepositoryRoot "scripts\henka_packaged_startup_readiness.ps1"
 if (-not (Test-Path -LiteralPath $readinessHelper -PathType Leaf)) {
@@ -29,8 +32,7 @@ function Assert-Equal {
     }
 }
 
-$temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
-    "henka-packaged-startup-readiness-" + [Guid]::NewGuid().ToString("N"))
+$temporaryRoot = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "packaged-startup-readiness-regression"
 $stdoutPath = Join-Path $temporaryRoot "stdout.log"
 $stderrPath = Join-Path $temporaryRoot "stderr.log"
 $slowProgressJob = $null

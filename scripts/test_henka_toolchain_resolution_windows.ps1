@@ -62,7 +62,7 @@ if (([string]$toolchain.CMakeVersion -replace "^cmake version\s+", "") -ne
     throw "CMake and CTest did not report the same toolchain version."
 }
 
-$fakeRoot = Join-Path $repo "build\test_tmp\toolchain-resolution-negative-control"
+$fakeRoot = Join-Path (Get-HenkaTestTemporaryRoot -RepositoryRoot $repo) "toolchain-resolution-negative-control"
 $fakeCMake = Join-Path $fakeRoot "cmake.exe"
 try {
     New-Item -ItemType Directory -Path $fakeRoot -Force | Out-Null

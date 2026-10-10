@@ -1243,7 +1243,7 @@ function Get-HenkaDirectorySnapshot {
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $gitCommand = Get-HenkaGitPath
-$packageRoot = Join-Path $repoRoot "out\HenkaSandbox3D"
+$packageRoot = Get-HenkaPackageRoot -RepositoryRoot $repoRoot -PackageName "HenkaSandbox3D"
 $packageUserRoot = Join-Path $packageRoot "user"
 $packagedExe = Join-Path $packageRoot "HenkaSandbox3D.exe"
 $assetsDir = Join-Path $packageRoot "assets"
@@ -1251,7 +1251,8 @@ $showcaseModelsDir = Join-Path $assetsDir "models"
 $helpPath = Join-Path $packageRoot "docs\help\sandbox3d.md"
 $readmePath = Join-Path $packageRoot "README.txt"
 $packageInfoPath = Join-Path $packageRoot "PACKAGE_INFO.txt"
-$logDir = Join-Path $repoRoot "build\test_tmp"
+$logDir = Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot
+[System.IO.Directory]::CreateDirectory($logDir) | Out-Null
 $automationUserDataRoot = Join-Path $logDir ("pkg_" + [guid]::NewGuid().ToString("N"))
 $longestNativeAssetTempPath = Join-Path $automationUserDataRoot "authored_assets\NativeAsset_ffffffff\rev1\quad_sphere_4.material.henka-tmp"
 if ([IO.Path]::GetFullPath($longestNativeAssetTempPath).Length -ge 260) {

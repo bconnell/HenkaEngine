@@ -1,5 +1,5 @@
 param(
-    [string]$ExecutablePath = "build\examples\sandbox3d\Debug\henka_sandbox3d.exe",
+    [string]$ExecutablePath = "",
     [ValidateSet("Both", "Giraffe", "Rocket")]
     [string]$Subject = "Both"
 )
@@ -7,9 +7,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = (Get-Location).Path
-$executable = (Resolve-Path -LiteralPath (Join-Path $repoRoot $ExecutablePath)).Path
-. (Join-Path $repoRoot "scripts\henka_script_common.ps1")
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$defaultExecutable = Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "examples\sandbox3d\Debug\henka_sandbox3d.exe"
+$executable = if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $defaultExecutable
+} else {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $ExecutablePath
+}
 . (Join-Path $repoRoot "scripts\henka_ui_automation_helpers.ps1")
 Add-Type -AssemblyName System.Windows.Forms
 if (-not ("NativeMethods" -as [type])) {
@@ -75,7 +80,7 @@ public static class NativeMethods {
 '@
 }
 
-$logDirectory = Join-Path $repoRoot "build\test_tmp\editor-owned-authoring-sources"
+$logDirectory = Join-Path (Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot) "editor-owned-authoring-sources"
 $stdoutPath = Join-Path $logDirectory "stdout.log"
 $stderrPath = Join-Path $logDirectory "stderr.log"
 $runtimeDirectory = Join-Path $logDirectory ("runtime-" + [Guid]::NewGuid().ToString("N"))

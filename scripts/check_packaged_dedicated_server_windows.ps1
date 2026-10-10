@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
-$packageRoot = Join-Path $repoRoot "out\HenkaDedicatedServer"
+$packageRoot = Get-HenkaPackageRoot -RepositoryRoot $repoRoot -PackageName "HenkaDedicatedServer"
 $packageExe = Join-Path $packageRoot "henka_dedicated_server.exe"
 $packageInfo = Join-Path $packageRoot "PACKAGE_INFO.txt"
 $saveRoot = Join-Path $packageRoot "save"

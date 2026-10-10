@@ -21,4 +21,6 @@ The integrity check runs before compilation in Windows CI. It can also be run lo
 .\scripts\check_repository_integrity.ps1
 ```
 
-Generated output remains under ignored `build/` and `out/` paths. The check does not rewrite, clean, reset, or remove repository content.
+New generated output remains beneath the ignored project-owned `_local/` root.
+Historical checkout-local `build/` and `out/` paths are legacy locations. The
+check does not rewrite, clean, reset, or remove repository content.

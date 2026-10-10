@@ -19,12 +19,12 @@ $toolchain = Get-HenkaToolchain
 $cmake = $toolchain.CMakePath
 $ctest = $toolchain.CTestPath
 if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
-    $BuildDirectory = Join-Path $repoRoot "build\test_tmp\sanitized-runtime"
+    $BuildDirectory = Join-Path (Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot) "sanitized-runtime"
 }
 $BuildDirectory = [System.IO.Path]::GetFullPath($BuildDirectory)
 $buildStateLock = Enter-HenkaBuildStateLock
 try {
-$testFixtureDirectory = Join-Path $repoRoot "build\test_tmp"
+$testFixtureDirectory = Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot
 New-Item -ItemType Directory -Path $testFixtureDirectory -Force | Out-Null
 
 function Get-HenkaAddressSanitizerRuntime {
@@ -74,7 +74,7 @@ $configureArguments = @(
 )
 
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
-    -DependencyRoot (Join-Path $repoRoot "build\_deps") `
+    -DependencyRoot (Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "_deps") `
     -Providers @("ENET", "LUA", "MINIAUDIO", "STB")
 $configureArguments += @($fetchContent.Arguments)
 

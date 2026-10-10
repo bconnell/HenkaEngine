@@ -1,5 +1,5 @@
 param(
-    [string]$CacheDirectory = "build\ci\mesa3d-26.1.7",
+    [string]$CacheDirectory = "",
     [string[]]$TargetDirectory = @()
 )
 
@@ -9,7 +9,12 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
-$cacheRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $CacheDirectory))
+$defaultCacheDirectory = Join-Path (Join-Path (Get-HenkaLocalRoot -RepositoryRoot $repoRoot) "caches") "mesa3d-26.1.7"
+$cacheRoot = if ([string]::IsNullOrWhiteSpace($CacheDirectory)) {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $defaultCacheDirectory
+} else {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $CacheDirectory
+}
 $archiveName = "mesa3d-26.1.7-release-msvc.7z"
 $archivePath = Join-Path $cacheRoot $archiveName
 $extractRoot = Join-Path $cacheRoot "extracted"
@@ -116,7 +121,10 @@ function Install-SoftwareOpenGLRuntime {
     Write-Host "Installed app-local Mesa OpenGL runtime into $destination"
 }
 
-[System.IO.Directory]::CreateDirectory($cacheRoot) | Out-Null
+$null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $cacheRoot
+$null = Write-HenkaGeneratedRootMarker -RepoRoot $repoRoot -Path $cacheRoot `
+    -Purpose "pinned Mesa software OpenGL cache" -RetentionClass "CACHE" -Active $true `
+    -CleanupEligible $false -CleanupCondition "retain while software-renderer package validation uses this pinned dependency cache"
 if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
     Write-Host "Downloading pinned Mesa3D Windows runtime: $downloadUri"
     Invoke-WebRequest -Uri $downloadUri -OutFile $archivePath -UseBasicParsing
@@ -162,7 +170,7 @@ if (-not [string]::IsNullOrWhiteSpace([string]$env:GITHUB_PATH)) {
 }
 
 foreach ($target in $TargetDirectory) {
-    $resolvedTarget = Resolve-HenkaRepositoryPath -RepoRoot $repoRoot -Path $target
+    $resolvedTarget = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $target
     Install-SoftwareOpenGLRuntime -SourceDirectory $driverDirectory -DestinationDirectory $resolvedTarget
 }
 

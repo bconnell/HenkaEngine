@@ -5,9 +5,10 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $cmake = Get-HenkaCMakePath
-$serverExe = Join-Path $repoRoot "build\examples\dedicated_server\Debug\henka_dedicated_server.exe"
-$clientExe = Join-Path $repoRoot "build\tests\Debug\henka_terrain_process_client.exe"
-$outRoot = Join-Path $repoRoot "out"
+$buildRoot = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
+$outRoot = Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot
+$serverExe = Join-Path $buildRoot "examples\dedicated_server\Debug\henka_dedicated_server.exe"
+$clientExe = Join-Path $buildRoot "tests\Debug\henka_terrain_process_client.exe"
 $evidenceRoot = Join-Path $outRoot "terrain-process-integration"
 $saveRoot = Join-Path $evidenceRoot "save"
 
@@ -50,7 +51,7 @@ Write-HenkaGeneratedRootMarker `
     -CleanupEligible $false `
     -CleanupCondition "retained_for_current_boundary" | Out-Null
 Invoke-HenkaNative -FilePath $cmake -Arguments @(
-    "--build", (Join-Path $repoRoot "build"), "--config", "Debug",
+    "--build", $buildRoot, "--config", "Debug",
     "--target", "henka_dedicated_server", "henka_terrain_process_client", "--parallel", "8"
 ) -WorkingDirectory $repoRoot -Label "Build process Terrain integration targets" -TimeoutMilliseconds 600000
 

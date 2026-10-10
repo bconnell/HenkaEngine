@@ -4,7 +4,9 @@ param(
 
     [string]$DependencyRoot = "",
 
-    [string]$BuildTarget = ""
+    [string]$BuildTarget = "",
+
+    [string]$BuildRoot = ""
 )
 
 Set-StrictMode -Version Latest
@@ -13,27 +15,45 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
-$buildRoot = Join-Path $repoRoot "build"
-$toolchain = Get-HenkaToolchain
-$cmake = $toolchain.CMakePath
-$artifact = Get-HenkaBuildArtifact -BuildRoot $buildRoot -Configuration $Configuration -BuildTarget $BuildTarget
-$provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
+$buildRoot = if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
+    Get-HenkaBuildRoot -RepositoryRoot $repoRoot
+} else {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $BuildRoot
+}
 $resolvedDependencyRoot = $DependencyRoot
 $dependencyRootWasExplicit = -not [string]::IsNullOrWhiteSpace($resolvedDependencyRoot)
 if ($dependencyRootWasExplicit) {
-    $resolvedDependencyRoot = [System.IO.Path]::GetFullPath($resolvedDependencyRoot)
-    if (-not (Test-Path -LiteralPath $resolvedDependencyRoot -PathType Container)) {
-        throw "Henka dependency root was not found: $resolvedDependencyRoot"
-    }
+    $resolvedDependencyRoot = Resolve-HenkaDependencyRoot `
+        -RepositoryRoot $repoRoot `
+        -DependencyRoot $resolvedDependencyRoot
 } else {
     $defaultDependencyRoot = Join-Path $buildRoot "_deps"
     if (Test-Path -LiteralPath $defaultDependencyRoot -PathType Container) {
-        $resolvedDependencyRoot = $defaultDependencyRoot
+        $resolvedDependencyRoot = Resolve-HenkaDependencyRoot `
+            -RepositoryRoot $repoRoot `
+            -DependencyRoot $defaultDependencyRoot
     } else {
         $resolvedDependencyRoot = ""
         Write-Host "No populated local dependency root was found; FetchContent network fallback remains enabled."
     }
 }
+
+# Validate all caller-controlled storage paths before creating or marking a
+# build root, so a rejected external dependency root leaves no generated state.
+$null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $buildRoot
+$null = Write-HenkaGeneratedRootMarker `
+    -RepoRoot $repoRoot `
+    -Path $buildRoot `
+    -Purpose "CMake build output" `
+    -RetentionClass "REBUILDABLE" `
+    -Active $false `
+    -CleanupEligible $true `
+    -CleanupCondition "source inputs are preserved and no validation process is using this build root" `
+    -Configuration "multi-configuration"
+$toolchain = Get-HenkaToolchain
+$cmake = $toolchain.CMakePath
+$artifact = Get-HenkaBuildArtifact -BuildRoot $buildRoot -Configuration $Configuration -BuildTarget $BuildTarget
+$provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
     -DependencyRoot $resolvedDependencyRoot `
     -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
@@ -87,6 +107,7 @@ try {
             "-ExecutionPolicy", "Bypass",
             "-File", $provenanceScript,
             "-RepoRoot", $repoRoot,
+            "-BuildRoot", $buildRoot,
             "-Configuration", $Configuration,
             "-ExecutablePath", $artifact.Path,
             "-ArtifactKind", $artifact.Kind,

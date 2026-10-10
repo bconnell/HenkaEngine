@@ -1,15 +1,31 @@
 [CmdletBinding()]
 param(
-    [string]$ExecutablePath = "build\examples\sandbox3d\Debug\henka_sandbox3d.exe",
-    [string]$OutputDirectory = "build\test_tmp\editor-native-authoring"
+    [string]$ExecutablePath = "",
+    [string]$OutputDirectory = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = (Get-Location).Path
-$executable = (Resolve-Path -LiteralPath (Join-Path $repoRoot $ExecutablePath)).Path
-$outputRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $OutputDirectory))
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$buildRoot = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
+$defaultExecutable = Join-Path $buildRoot "examples\sandbox3d\Debug\henka_sandbox3d.exe"
+$executable = if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $defaultExecutable
+} else {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $ExecutablePath
+}
+$defaultOutput = Join-Path (Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot) "editor-native-authoring"
+$outputRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $defaultOutput
+} else {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $OutputDirectory
+}
+$null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $outputRoot
+$null = Write-HenkaGeneratedRootMarker -RepoRoot $repoRoot -Path $outputRoot `
+    -Purpose "editor native authoring test output" -RetentionClass "SCRATCH" -Active $true `
+    -CleanupEligible $true -CleanupCondition "the owning authoring validation is terminal and any required output has been classified"
 $runId = [Guid]::NewGuid().ToString("N")
 $runtimeDirectory = Join-Path $outputRoot ("runtime-" + $runId)
 $runtimeExecutable = Join-Path $runtimeDirectory "henka_sandbox3d.exe"
@@ -21,7 +37,6 @@ $capturedProcess = $null
 $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
 $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
 
-. (Join-Path $repoRoot "scripts\henka_script_common.ps1")
 . (Join-Path $repoRoot "scripts\henka_ui_automation_helpers.ps1")
 
 function Get-SceneObjectsGeometry {

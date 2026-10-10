@@ -10,6 +10,14 @@ else()
     add_compile_options("-include${CMAKE_CURRENT_SOURCE_DIR}/test_assertions.h")
 endif()
 
+if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
+    add_test(
+        NAME henka_ctest_working_directory_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_ctest_working_directory_windows.ps1
+            -BuildDirectory ${CMAKE_BINARY_DIR})
+endif()
+
 add_executable(henka_headless_runtime_tests
     test_headless_runtime.c
 )
@@ -1127,12 +1135,6 @@ if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
     add_test(
-        NAME henka_ctest_working_directory_tests
-        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
-            ${CMAKE_SOURCE_DIR}/scripts/test_ctest_working_directory_windows.ps1
-            -BuildDirectory ${CMAKE_BINARY_DIR})
-
-    add_test(
         NAME henka_software_opengl_path_resolution_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_software_opengl_path_resolution_windows.ps1)
@@ -1147,6 +1149,18 @@ if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
         NAME henka_toolchain_resolution_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_henka_toolchain_resolution_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
+        NAME henka_local_storage_path_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_henka_local_storage_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
+        NAME henka_package_user_data_migration_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_package_user_data_migration_windows.ps1
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
     add_test(
@@ -1167,13 +1181,32 @@ if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
             ${CMAKE_SOURCE_DIR}/scripts/test_validation_throughput_windows.ps1)
 endif()
 
-# Tests use bounded fixtures under build/test_tmp relative to the repository
-# root. Keep CTest's working directory stable across single-test and full-suite
-# runs so every test resolves the same documented fixture root. Keep this block
-# after every add_test call so late registrations receive the same contract.
+# Source-relative test resources are mirrored into the generated CTest root so
+# tests can keep using repository paths while running with a canonical-local
+# binary working directory. Track the source files as configure dependencies
+# so edits refresh the mirror before the next build/test cycle.
+file(GLOB_RECURSE HENKA_TEST_SOURCE_RESOURCE_FILES
+    CONFIGURE_DEPENDS
+    LIST_DIRECTORIES FALSE
+    "${PROJECT_SOURCE_DIR}/assets/*"
+    "${PROJECT_SOURCE_DIR}/tests/fixtures/*")
+if(HENKA_TEST_SOURCE_RESOURCE_FILES)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        ${HENKA_TEST_SOURCE_RESOURCE_FILES})
+endif()
+file(COPY "${PROJECT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_BINARY_DIR}")
+file(COPY "${PROJECT_SOURCE_DIR}/tests/fixtures" DESTINATION "${CMAKE_BINARY_DIR}/tests")
+
+# Several native test fixtures use build/test_tmp relative to CTest's binary
+# directory. Keep that data beneath the canonical-local build root and ensure
+# its parent exists before the first test starts (including sanitizer runs).
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/build/test_tmp")
+
+# Keep this block after every add_test call so late registrations receive the
+# same canonical-local working-directory and timeout contract.
 get_property(HENKA_TEST_NAMES DIRECTORY PROPERTY TESTS)
 if(HENKA_TEST_NAMES)
-    set(HENKA_TEST_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+    set(HENKA_TEST_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     set_tests_properties(
         ${HENKA_TEST_NAMES}
         PROPERTIES

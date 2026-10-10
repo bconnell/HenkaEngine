@@ -38,7 +38,7 @@ public static class HenkaWindowPolicyNative
 "@
 }
 
-$fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-process-window-policy-" + $PID)
+$fixtureRoot = New-HenkaTemporaryDirectory -RepositoryRoot $RepositoryRoot -Purpose "process-window-policy-regression"
 $fixturePath = Join-Path $fixtureRoot "window-fixture.ps1"
 $stdoutPath = Join-Path $fixtureRoot "stdout.log"
 $stderrPath = Join-Path $fixtureRoot "stderr.log"

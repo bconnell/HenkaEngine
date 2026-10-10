@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$fixture = Join-Path $repoRoot ("build\test_tmp\validation-throughput-" + [Guid]::NewGuid().ToString("N"))
+$fixture = New-HenkaTemporaryDirectory -RepositoryRoot $repoRoot -Purpose "validation-throughput"
 $buildRoot = Join-Path $fixture "build"
 $testsRoot = Join-Path $buildRoot "tests"
 $debugTestsRoot = Join-Path $testsRoot "Debug"
@@ -36,10 +36,18 @@ try {
     Assert-Condition ($missingCommandResolution -eq "aggregate-or-unresolved") `
         "A name-only CTest record did not select the safe aggregate-build fallback."
 
-    $commandCTestJson = '{"kind":"ctestInfo","tests":[{"name":"henka_tests","command":["C:/build/tests/Debug/henka_tests.exe"]}]}'
+    $fixtureHenkaTestExecutable = Join-Path $buildRoot "tests\Debug\henka_tests.exe"
+    $commandCTestJson = ConvertTo-Json -Compress -Depth 5 -InputObject @{
+        kind = "ctestInfo"
+        tests = @(@{
+            name = "henka_tests"
+            command = @($fixtureHenkaTestExecutable.Replace('\', '/'))
+        })
+    }
     $commandRecords = @(ConvertFrom-HenkaCTestJsonListing -JsonText $commandCTestJson)
+    $expectedCommand = $fixtureHenkaTestExecutable.Replace('\', '/')
     Assert-Condition ($commandRecords.Count -eq 1 -and
-            $commandRecords[0].Command -eq "C:/build/tests/Debug/henka_tests.exe") `
+            $commandRecords[0].Command -eq $expectedCommand) `
         "A CTest listing with an executable command did not retain its command."
 
     $missingNameRejected = $false
@@ -150,8 +158,12 @@ try {
         -TestFilter '^henka_tests$'
     Assert-Condition ($plan.BuildTarget -eq "henka_tests") `
         "An exact executable CTest selection did not resolve to henka_tests."
-    Assert-Condition ($plan.Artifact.Path -like "*\build\tests\Debug\henka_tests.exe") `
-        "The resolved Debug artifact did not match the selected CTest executable."
+    $expectedArtifactPath = [System.IO.Path]::GetFullPath($henkaTestExecutable)
+    $resolvedArtifactPath = [System.IO.Path]::GetFullPath([string]$plan.Artifact.Path)
+    Assert-Condition ($resolvedArtifactPath.Equals($expectedArtifactPath, [System.StringComparison]::OrdinalIgnoreCase) -and
+        $resolvedArtifactPath.StartsWith($buildRoot.TrimEnd("\") + [System.IO.Path]::DirectorySeparatorChar,
+            [System.StringComparison]::OrdinalIgnoreCase)) `
+        "The resolved Debug artifact did not match the selected executable inside its fixture build root."
 
     $ambiguousPlan = Resolve-HenkaValidationPlan `
         -BuildRoot $buildRoot `
@@ -168,7 +180,7 @@ try {
         "A PowerShell CTest command was incorrectly treated as a CMake target."
 
     $fetchContent = Get-HenkaCMakeFetchContentArguments `
-        -DependencyRoot (Join-Path $repoRoot "build\_deps")
+        -DependencyRoot (Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "_deps")
     $configureArguments = @("-DCMAKE_VS_GLOBALS=TrackFileAccess=true") +
         @($fetchContent.Arguments)
     $cacheLines = @("CMAKE_HOME_DIRECTORY:INTERNAL=$repoRoot")

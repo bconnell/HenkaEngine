@@ -13,7 +13,7 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = (Resolve-Path $RepositoryRoot).Path
 }
 
-$probeRoot = Join-Path $RepositoryRoot ("build\test_tmp\documentation-truth-{0}" -f $PID)
+$probeRoot = New-HenkaTemporaryDirectory -RepositoryRoot $RepositoryRoot -Purpose "documentation-truth"
 $copyTargets = @(
     "docs",
     "scripts\henka_script_common.ps1",
@@ -41,7 +41,6 @@ function Invoke-TruthCheck {
 }
 
 try {
-    New-Item -ItemType Directory -Path $probeRoot -Force | Out-Null
     foreach ($relativePath in $copyTargets) {
         $source = Join-Path $RepositoryRoot $relativePath
         $destination = Join-Path $probeRoot $relativePath

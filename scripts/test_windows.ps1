@@ -8,6 +8,8 @@ param(
 
     [string]$BuildTarget = "",
 
+    [string]$BuildRoot = "",
+
     [ValidateRange(30, 3600)]
     [int]$PerTestTimeoutSeconds = 300,
 
@@ -27,11 +29,21 @@ $configureSeconds = 0.0
 $buildSeconds = 0.0
 $testSeconds = 0.0
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
-$buildRoot = Join-Path $repoRoot "build"
+$buildRoot = if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
+    Get-HenkaBuildRoot -RepositoryRoot $repoRoot
+} else {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $BuildRoot
+}
+$resolvedDependencyRoot = $DependencyRoot
+$dependencyRootWasExplicit = -not [string]::IsNullOrWhiteSpace($resolvedDependencyRoot)
+if ($dependencyRootWasExplicit) {
+    $resolvedDependencyRoot = Resolve-HenkaDependencyRoot `
+        -RepositoryRoot $repoRoot `
+        -DependencyRoot $resolvedDependencyRoot
+}
 $cmake = Get-HenkaCMakePath
 $ctest = Get-HenkaCTestPath -CMakePath $cmake
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
-$resolvedDependencyRoot = $DependencyRoot
 $commandTimeoutMilliseconds = $CommandTimeoutSeconds * 1000
 
 if ($SkipBuild) {
@@ -58,21 +70,30 @@ if ($SkipBuild) {
     exit 0
 }
 
-$dependencyRootWasExplicit = -not [string]::IsNullOrWhiteSpace($resolvedDependencyRoot)
-if ($dependencyRootWasExplicit) {
-    $resolvedDependencyRoot = [System.IO.Path]::GetFullPath($resolvedDependencyRoot)
-    if (-not (Test-Path -LiteralPath $resolvedDependencyRoot -PathType Container)) {
-        throw "Henka dependency root was not found: $resolvedDependencyRoot"
-    }
-} else {
+if (-not $dependencyRootWasExplicit) {
     $defaultDependencyRoot = Join-Path $buildRoot "_deps"
     if (Test-Path -LiteralPath $defaultDependencyRoot -PathType Container) {
-        $resolvedDependencyRoot = $defaultDependencyRoot
+        $resolvedDependencyRoot = Resolve-HenkaDependencyRoot `
+            -RepositoryRoot $repoRoot `
+            -DependencyRoot $defaultDependencyRoot
     } else {
         $resolvedDependencyRoot = ""
         Write-Host "No populated local dependency root was found; FetchContent network fallback remains enabled."
     }
 }
+
+# Reject invalid dependency storage before creating or marking the build root.
+$null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $buildRoot
+$null = Write-HenkaGeneratedRootMarker `
+    -RepoRoot $repoRoot `
+    -Path $buildRoot `
+    -Purpose "CTest build and runtime output" `
+    -RetentionClass "REBUILDABLE" `
+    -Active $false `
+    -CleanupEligible $true `
+    -CleanupCondition "source inputs are preserved and no validation process is using this build root" `
+    -Configuration "multi-configuration"
+
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
     -DependencyRoot $resolvedDependencyRoot `
     -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
@@ -235,6 +256,7 @@ try {
             "-ExecutionPolicy", "Bypass",
             "-File", $provenanceScript,
             "-RepoRoot", $repoRoot,
+            "-BuildRoot", $buildRoot,
             "-Configuration", $Configuration,
             "-ExecutablePath", $executablePath,
             "-CMakePath", $cmake) `

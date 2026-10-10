@@ -1,5 +1,24 @@
 # Building Henka Engine
 
+## Project-owned generated storage
+
+Henka development scripts keep generated state beneath the canonical
+repository's sibling `_local` directory, shared by its worktrees. The shared resolver in
+`scripts/henka_script_common.ps1` owns these locations:
+
+- builds and test fixtures: `_local/builds/<checkout-key>/`;
+- packages: `_local/packages/<checkout-key>/<package-name>/`;
+- evidence: `_local/evidence/<checkout-key>/`;
+- exact candidates: `_local/exact-candidates/`;
+- new development worktrees: `_local/worktrees/<name>/`;
+- short-lived temporary validation: `_local/temporary/`.
+
+Use `Get-HenkaBuildRoot`, `Get-HenkaPackageRoot`, `Get-HenkaEvidenceRoot`, and
+`Get-HenkaExactCandidateRoot` rather than inventing another scratch root.
+Explicit generated paths are rejected unless they remain beneath `_local`.
+Ordinary scripts no longer create new `build/`, `out/`, or root-level `C:\hx-*`
+trees in the checkout or system drive.
+
 > **Current validated development path:** Windows 64-bit with Visual Studio 2022, MSVC, CMake, and PowerShell 5.1-compatible scripts.
 
 This page covers normal development builds, tests, packaging, visual evidence, external-project validation, and headless/server builds.
@@ -27,7 +46,7 @@ Install or provide:
 - CMake on `PATH` or available through the Visual Studio installation;
 - network access during the first configure when pinned dependencies are not already cached locally.
 
-Henka can use populated local dependency sources under `build/_deps/` as optional offline acceleration. Clean builds clear absent local-source overrides and use the pinned network-capable FetchContent path.
+Henka can use populated local dependency sources under `_local/builds/<checkout-key>/_deps/` as optional offline acceleration. Clean builds clear absent local-source overrides and use the pinned network-capable FetchContent path.
 
 The top-level project applies bounded Visual Studio path hardening for clean-clone builds. The KTX dependency also enables Git long-path handling inside its own clean clone. Machine-wide Git or MSBuild path changes are not required for the normal supported path.
 
@@ -50,18 +69,20 @@ From the repository root:
 .\scripts\build_windows.ps1
 ```
 
-The script configures and builds into `build/`.
+The script configures and builds into the path returned by `Get-HenkaBuildRoot`.
 
 ### Generated roots
 
-`build/` and `out/` are generated output roots. They are not durable source.
+The project-owned generated roots are beneath `_local/`. Historical checkout-local
+`build/` and `out/` directories are legacy output locations; new validation does
+not use them as its default storage roots.
 
 Stable validation scratch roots include:
 
 ```text
-build/tv/external_game_minimal/
-build/tv/external_server_minimal/
-out/terrain-process-integration/
+_local/builds/<checkout-key>/tv/external_game_minimal/
+_local/builds/<checkout-key>/tv/external_server_minimal/
+_local/builds/<checkout-key>/test_tmp/terrain-process-integration/
 ```
 
 The validation scripts reuse these roots and retire old generated validation trees. Newly created persistent validation roots carry a `.henka-generated.json` marker with their owner, source commit, purpose, configuration, retention class, and cleanup condition. Inspect generated-output bounds with:
@@ -77,12 +98,13 @@ retire one exact, marked candidate after its proof is consumed:
 
 ```powershell
 .\scripts\manage_generated_artifacts_windows.ps1 -Mode Report
-.\scripts\manage_generated_artifacts_windows.ps1 -Mode DryRun -CandidatePath .\build\test_tmp\some-candidate
-.\scripts\manage_generated_artifacts_windows.ps1 -Mode Cleanup -ConfirmNoActiveProcess -CandidatePath .\build\test_tmp\some-candidate
+$candidatePath = (Read-Host "Enter one exact marked candidate path shown by Report").Trim('"')
+.\scripts\manage_generated_artifacts_windows.ps1 -Mode DryRun -CandidatePath $candidatePath
+.\scripts\manage_generated_artifacts_windows.ps1 -Mode Cleanup -ConfirmNoActiveProcess -CandidatePath $candidatePath
 ```
 
 Report mode preserves unmarked roots as `UNMARKED`. Dry-run and cleanup require
-one exact candidate under `build/` or `out/`, a valid marker, no tracked files,
+one exact candidate under an approved `_local` generated root, a valid marker, no tracked files,
 no reparse-point path, a non-active cleanup-eligible retention class, and an
 explicit confirmation that no active process uses the candidate. The manager
 never removes an approved root itself or an unclassified path. Validate this
@@ -94,8 +116,8 @@ contract with:
 
 ### Evidence retention
 
-Visual capture output defaults to `build/visual_evidence`. Capture runtime copies
-under `build/test_tmp/visual-evidence-runtime-*` are temporary and are retired by
+Visual capture output defaults to `_local/evidence/<checkout-key>`. Capture runtime copies
+under `_local/temporary/visual-evidence-runtime-*` are temporary and are retired by
 the capture script after each run. If operating-system or security controls block
 that exact cleanup, the path is preserved as a protected remainder for later
 classification; the workflow does not bypass those controls.
@@ -115,14 +137,20 @@ The normal client build produces the graphical compatibility target `henka` and 
 Validate a runtime-only configuration with:
 
 ```powershell
-cmake -S . -B out/headless `
+. .\scripts\henka_script_common.ps1
+$repoRoot = (Resolve-Path .).Path
+$buildRoot = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot `
+  -Path (Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "headless")
+$cmake = Get-HenkaCMakePath
+$ctest = Get-HenkaCTestPath
+& $cmake -S . -B $buildRoot `
   -DHENKA_BUILD_CLIENT=OFF `
   -DHENKA_BUILD_DEDICATED_SERVER=OFF `
   -DHENKA_BUILD_EXAMPLES=OFF `
   -DHENKA_ENABLE_KTX2_TRANSCODER=OFF
 
-cmake --build out/headless --config Debug --target henka_headless_runtime_tests
-ctest --test-dir out/headless -C Debug -R henka_headless_runtime_tests --output-on-failure
+& $cmake --build $buildRoot --config Debug --target henka_headless_runtime_tests
+& $ctest --test-dir $buildRoot -C Debug -R henka_headless_runtime_tests --output-on-failure
 ```
 
 This path validates the renderer-free runtime boundary used by dedicated-server and headless consumers.
@@ -140,10 +168,11 @@ ENet is fetched at the pinned commit recorded in [architecture.md](architecture.
 .\scripts\check_packaged_dedicated_server_windows.ps1
 ```
 
-The package is written to:
+The package is written beneath the project-owned local package root returned by
+`Get-HenkaPackageRoot`:
 
 ```text
-out/HenkaDedicatedServer
+_local/packages/<checkout-key>/HenkaDedicatedServer/
 ```
 
 It contains the renderer-free server, sample configuration, server documentation, provenance, and an operator-owned `save/` directory.
@@ -251,7 +280,7 @@ Bundled third-party sources are not instrumented by this gate. Graphical, packag
 .\scripts\run_sandbox3d.ps1
 ```
 
-The development run script launches the built Sandbox from its executable directory under `build/`.
+The development run script launches the built Sandbox from the executable directory under the path returned by `Get-HenkaBuildRoot`.
 
 ## Package the Sandbox
 
@@ -261,7 +290,8 @@ Create a run-ready Windows Sandbox package with:
 .\scripts\package_sandbox3d_windows.ps1
 ```
 
-The package is written under `out/HenkaSandbox3D/`.
+The package is written under the path returned by `Get-HenkaPackageRoot`, beneath
+`_local/packages/<checkout-key>/HenkaSandbox3D/`.
 
 ### Package contents
 
@@ -274,7 +304,11 @@ The package includes:
 - `docs/help/sandbox3d.md`;
 - `PACKAGE_INFO.txt`;
 - `README.txt`;
-- `user/` when local packaged settings already exist.
+- `user/` when local packaged settings already exist. On the first package
+  refresh after this storage migration, settings from the old canonical
+  checkout's `out/HenkaSandbox3D/user/` are copied once without modifying that
+  legacy source. An explicit `-ResetUserData` records the reset in the package
+  so a later refresh does not silently restore legacy settings.
 
 Required runtime DLLs are copied beside the executable when needed.
 
@@ -292,7 +326,8 @@ This is a runtime streaming foundation check. Broad-world streaming and automati
 
 ### Preserve or reset packaged settings
 
-Normal packaging refreshes executable, assets, and offline help while preserving `out/HenkaSandbox3D/user/`.
+Normal packaging refreshes executable, assets, and offline help while preserving
+`user/` inside the resolved package root.
 
 Clear packaged Sandbox settings explicitly with:
 
@@ -308,10 +343,10 @@ After a Debug build, capture the same camera in Solid, Material Preview, and Ren
 .\scripts\capture_visual_evidence_windows.ps1
 ```
 
-Evidence is written under:
+Evidence is written under the path returned by `Get-HenkaEvidenceRoot`:
 
 ```text
-build/visual_evidence/
+_local/evidence/<checkout-key>/
 ```
 
 The capture path uses deterministic framing after the final Scene View aspect is known. Capture runs leave normal user camera settings unchanged.
@@ -321,11 +356,15 @@ Rendered mode exercises scene lighting, shadows, HDR/IBL presentation, bloom, an
 ### Capture a packaged executable
 
 ```powershell
+. .\scripts\henka_script_common.ps1
+$repoRoot = (Resolve-Path .).Path
+$packageRoot = Get-HenkaPackageRoot -RepositoryRoot $repoRoot
+$evidenceRoot = Get-HenkaEvidenceRoot -RepositoryRoot $repoRoot
 .\scripts\capture_visual_evidence_windows.ps1 `
     -Configuration Release `
-    -ExecutablePath .\out\HenkaSandbox3D\HenkaSandbox3D.exe `
+    -ExecutablePath (Join-Path $packageRoot "HenkaSandbox3D.exe") `
     -IncludeTerrain `
-    -OutputDirectory .\build\visual_evidence\packaged-terrain
+    -OutputDirectory (Join-Path $evidenceRoot "packaged-terrain")
 ```
 
 `-IncludeTerrain` captures the three application-only Terrain images plus deterministic material-close and four-region corner views. The automated guard covers packaged launch, Rendered-path distinction, non-flat terrain framing, and bounded viewport composition.
@@ -342,7 +381,7 @@ Use either:
 .\scripts\run_packaged_sandbox3d_windows.ps1
 ```
 
-or open `out/HenkaSandbox3D` in Explorer and launch `HenkaSandbox3D.exe`.
+or open the resolved package root in Explorer and launch `HenkaSandbox3D.exe`.
 
 A first packaged run with no settings file opens the stable `Standard` workspace shell. The Sandbox currently opens a console window. Normal interactive controls live in the in-window workspace.
 
@@ -391,7 +430,9 @@ Validate `templates/external_game_minimal` with:
 .\scripts\test_external_game_template_windows.ps1
 ```
 
-The validation uses the stable scratch root at `build/tv/external_game_minimal/` and configures it against the current Henka checkout.
+The validation uses the stable scratch root at
+`_local/builds/<checkout-key>/tv/external_game_minimal/` and configures it against
+the current Henka checkout.
 
 Current public-API coverage includes:
 
@@ -414,15 +455,20 @@ See [External Game Projects](external-game-projects.md) for the consumer model a
 
 ## Manual CMake commands
 
-A Developer PowerShell can run the direct build sequence:
+A Developer PowerShell can use the shared toolchain and build-root resolver:
 
 ```powershell
-cmake -S . -B build
-cmake --build build --config Debug
-ctest --test-dir build --output-on-failure -C Debug
+. .\scripts\henka_script_common.ps1
+$repoRoot = (Resolve-Path .).Path
+$buildRoot = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
+$cmake = Get-HenkaCMakePath
+$ctest = Get-HenkaCTestPath -CMakePath $cmake
+& $cmake -S . -B $buildRoot
+& $cmake --build $buildRoot --config Debug
+& $ctest --test-dir $buildRoot --output-on-failure -C Debug
 ```
 
-When `cmake` is absent from `PATH`, use the executable supplied by the Visual Studio installation.
+Build output remains under the canonical sibling `_local` root.
 
 ## Generated output and runtime assets
 
@@ -436,12 +482,20 @@ assets/models/
 
 CMake copies `assets/` beside the Sandbox executable after build.
 
-Packaged output under `out/` is generated locally and should not be committed. Package-local `user/` data is also generated locally.
+Builds, packages, test fixtures, captures, and caches under `_local/` are
+generated locally and should not be committed. Package-local `user/` data is
+also generated locally.
 
 Running:
 
 ```powershell
-.\scripts\clean_windows.ps1
+.\scripts\clean_windows.ps1 -ConfirmNoActiveProcess
 ```
 
-removes both `build/` and `out/`, including package-local Sandbox settings under `out/HenkaSandbox3D/user/`.
+Before running the command, verify that no build, test, or Sandbox process is
+using this checkout's build root. The switch is an explicit caller
+confirmation; the script does not discover active processes itself.
+
+The command removes the exact generated build root selected for the current checkout. It
+preserves package output and package-local Sandbox settings; use the package
+lifecycle controls only when package retention requirements permit cleanup.

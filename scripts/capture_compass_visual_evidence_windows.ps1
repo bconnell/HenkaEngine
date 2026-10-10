@@ -1,16 +1,30 @@
 param(
-    [string]$ExecutablePath = "out\HenkaSandbox3D\HenkaSandbox3D.exe",
-    [string]$OutputDirectory = "build\compass-visual-evidence"
+    [string]$ExecutablePath = "",
+    [string]$OutputDirectory = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = (Get-Location).Path
-$executable = (Resolve-Path -LiteralPath (Join-Path $repoRoot $ExecutablePath)).Path
-$outputRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $OutputDirectory))
-. (Join-Path $repoRoot "scripts\henka_script_common.ps1")
-. (Join-Path $repoRoot "scripts\henka_ui_automation_helpers.ps1")
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+. (Join-Path $PSScriptRoot "henka_ui_automation_helpers.ps1")
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$defaultExecutable = Join-Path (Get-HenkaPackageRoot -RepositoryRoot $repoRoot) "HenkaSandbox3D.exe"
+$executable = if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $defaultExecutable
+} else {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $ExecutablePath
+}
+$defaultOutput = Join-Path (Get-HenkaEvidenceRoot -RepositoryRoot $repoRoot) "compass-visual-evidence"
+$outputRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $defaultOutput
+} else {
+    Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $OutputDirectory
+}
+New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $outputRoot | Out-Null
+$null = Write-HenkaGeneratedRootMarker -RepoRoot $repoRoot -Path $outputRoot `
+    -Purpose "compass visual evidence" -RetentionClass "SCRATCH" -Active $true `
+    -CleanupEligible $true -CleanupCondition "the visual classification is complete and no active review depends on these captures"
 
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "The packaged Compass executable was not found: $executable"
