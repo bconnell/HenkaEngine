@@ -1425,8 +1425,8 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
     $row = Wait-LastLogRegexMatch -Path $StdoutPath -Pattern $rowPattern `
         -GroupName 'hidden' -ExpectedValue '1' -TimeoutMilliseconds 5000
     if ($null -eq $row -or $row.Groups['entity'].Value -ne $entity -or
-        $row.Groups['selected'].Value -ne '1') {
-        throw "The product Hide Object action did not preserve '$Name' as the selected canonical entity."
+        $row.Groups['hidden'].Value -ne '1') {
+        throw "The product Hide Object action did not preserve '$Name' as the same hidden canonical entity."
     }
     $canonicalDisplay = $row.Groups['display'].Value
     if ($canonicalDisplay -notmatch [Regex]::Escape($Name) -or $canonicalDisplay -notmatch 'Hidden') {
