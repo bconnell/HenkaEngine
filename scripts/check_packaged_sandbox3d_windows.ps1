@@ -1468,10 +1468,32 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
         throw "The real Scene Objects click did not move selection away from hidden '$Name' to '$AlternateName'."
     }
 
-    $compactPanelHeight = 194.0
-    if ($SceneObjectsHeight -lt 202.0) {
-        throw "The normal Scene Objects panel is too short to establish a distinct multi-line baseline before compaction."
+    $rowStartY = [double]$row.Groups['y'].Value
+    $preCompactRowHeight = [double]$row.Groups['height'].Value
+    $minimumOneLineRowHeight = 28.0
+    $panelFooterHeight = 34.0
+    $preCompactAvailableRowHeight =
+        $SceneObjectsY + $SceneObjectsHeight - $panelFooterHeight - $rowStartY
+    if ([int]$row.Groups['lines'].Value -ne 2 -or
+        $preCompactRowHeight -le $minimumOneLineRowHeight -or
+        $preCompactAvailableRowHeight -lt $preCompactRowHeight) {
+        throw "The normal Scene Objects panel did not expose the expected fully visible two-line hidden-row baseline."
     }
+    # Derive the splitter target from product-reported row geometry. A fixed
+    # panel height can place the list below its footer because authoring
+    # controls occupy the upper portion of this panel. This leaves exactly
+    # the minimum one-line row height between the real row start and footer.
+    $compactPanelHeight =
+        ($rowStartY - $SceneObjectsY) + $panelFooterHeight + $minimumOneLineRowHeight
+    $compactAvailableRowHeight =
+        $SceneObjectsY + $compactPanelHeight - $panelFooterHeight - $rowStartY
+    if ($compactPanelHeight -lt 180.0 -or
+        $compactPanelHeight -ge $SceneObjectsHeight -or
+        [Math]::Abs($compactAvailableRowHeight - $minimumOneLineRowHeight) -gt 0.01) {
+        throw "The product-reported row position cannot establish the exact one-line Scene Objects boundary."
+    }
+    Write-Output (("[pass] Derived compact Scene Objects height {0:F1}px from the product row; " +
+        "visible row capacity is {1:F1}px") -f $compactPanelHeight, $compactAvailableRowHeight)
     $compactLayoutOffset = Get-FileLengthSafe -Path $StdoutPath
     Set-HenkaSceneObjectsPanelHeightThroughUi `
         -Handle $Handle `
