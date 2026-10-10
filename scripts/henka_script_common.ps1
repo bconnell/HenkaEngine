@@ -147,7 +147,10 @@ function Resolve-HenkaDependencyRoot {
 }
 
 function Get-HenkaCheckoutStorageKey {
-    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [switch]$CompactBuildKey
+    )
 
     $repository = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd("\", "/")
     $leaf = (Split-Path -Leaf $repository) -replace "[^A-Za-z0-9._-]", "-"
@@ -155,10 +158,17 @@ function Get-HenkaCheckoutStorageKey {
     $hashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
     try {
         $hashBytes = $hashAlgorithm.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($repository.ToLowerInvariant()))
-        $hash = ([BitConverter]::ToString($hashBytes)).Replace("-", "").Substring(0, 12).ToLowerInvariant()
+        $hashText = ([BitConverter]::ToString($hashBytes)).Replace("-", "").ToLowerInvariant()
     }
     finally { $hashAlgorithm.Dispose() }
-    return "$leaf-$hash"
+    if ($CompactBuildKey) {
+        $leaf = $leaf.Substring(0, [Math]::Min(4, $leaf.Length))
+        $hashText = $hashText.Substring(0, 16)
+    }
+    else {
+        $hashText = $hashText.Substring(0, 12)
+    }
+    return "$leaf-$hashText"
 }
 
 function Get-HenkaBuildRoot {
@@ -166,18 +176,9 @@ function Get-HenkaBuildRoot {
 
     $repository = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd("\", "/")
     $localRoot = Get-HenkaLocalRoot -RepositoryRoot $repository
-    $candidateRoot = [System.IO.Path]::GetFullPath((Join-Path $localRoot "exact-candidates")).TrimEnd("\", "/")
-    if ($repository.StartsWith($candidateRoot + [System.IO.Path]::DirectorySeparatorChar,
-            [System.StringComparison]::OrdinalIgnoreCase)) {
-        $candidateRelative = $repository.Substring(($candidateRoot + [System.IO.Path]::DirectorySeparatorChar).Length)
-        if (-not [string]::IsNullOrWhiteSpace($candidateRelative) -and
-            $candidateRelative.IndexOf([System.IO.Path]::DirectorySeparatorChar) -lt 0 -and
-            $candidateRelative.IndexOf([System.IO.Path]::AltDirectorySeparatorChar) -lt 0) {
-            return Resolve-HenkaLocalPath -RepositoryRoot $repository -Path (Join-Path $repository "build")
-        }
-    }
+    $buildKey = Get-HenkaCheckoutStorageKey -RepositoryRoot $repository -CompactBuildKey
     return Resolve-HenkaLocalPath -RepositoryRoot $repository `
-        -Path (Join-Path (Join-Path $localRoot "builds") (Get-HenkaCheckoutStorageKey -RepositoryRoot $repository))
+        -Path (Join-Path (Join-Path $localRoot "builds") $buildKey)
 }
 
 function Get-HenkaPackageRoot {

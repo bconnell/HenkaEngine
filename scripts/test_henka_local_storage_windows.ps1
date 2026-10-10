@@ -86,27 +86,20 @@ $packageRoot = [System.IO.Path]::GetFullPath((Get-HenkaPackageRoot -RepositoryRo
 $worktreeRoot = [System.IO.Path]::GetFullPath((Get-HenkaWorktreeRoot -RepositoryRoot $RepositoryRoot -Name "storage-guard-probe"))
 $evidenceRoot = [System.IO.Path]::GetFullPath((Get-HenkaEvidenceRoot -RepositoryRoot $RepositoryRoot))
 $candidateRoot = [System.IO.Path]::GetFullPath((Get-HenkaExactCandidateRoot -RepositoryRoot $RepositoryRoot))
-$repositoryPath = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd("\", "/")
-$candidatePrefix = $candidateRoot.TrimEnd("\", "/") + [System.IO.Path]::DirectorySeparatorChar
-$isExactCandidateRepository = $repositoryPath.StartsWith(
-    $candidatePrefix,
-    [System.StringComparison]::OrdinalIgnoreCase)
 $ordinaryBuildRoot = [System.IO.Path]::GetFullPath((Get-HenkaBuildRoot -RepositoryRoot $canonicalRepositoryRoot))
 
-Assert-StorageContract $ordinaryBuildRoot.StartsWith(
-    (Join-Path $localRoot "builds") + [System.IO.Path]::DirectorySeparatorChar,
-    [System.StringComparison]::OrdinalIgnoreCase) "The shared ordinary build root is not beneath _local\builds."
-if ($isExactCandidateRepository) {
-    Assert-StorageContract $buildRoot.Equals(
-        [System.IO.Path]::GetFullPath((Join-Path $repositoryPath "build")),
-        [System.StringComparison]::OrdinalIgnoreCase) `
-        "An exact candidate's build root is not beneath that exact candidate."
-}
-else {
-    Assert-StorageContract $buildRoot.StartsWith(
+foreach ($resolvedBuildRoot in @($buildRoot, $ordinaryBuildRoot)) {
+    Assert-StorageContract $resolvedBuildRoot.StartsWith(
         (Join-Path $localRoot "builds") + [System.IO.Path]::DirectorySeparatorChar,
-        [System.StringComparison]::OrdinalIgnoreCase) "An ordinary checkout's build root is not beneath _local\builds."
+        [System.StringComparison]::OrdinalIgnoreCase) "A resolved build root is not beneath _local\builds."
+    $sdlConfigurationObjectRoot = Join-Path $resolvedBuildRoot `
+        "_deps\sdl3-build\SDL3-static.dir\RelWithDebInfo"
+    Assert-StorageContract ($sdlConfigurationObjectRoot.Length -le 128) `
+        "A resolved build root makes SDL's CMake object directory exceed the 128-character Windows path budget ($($sdlConfigurationObjectRoot.Length)): $sdlConfigurationObjectRoot"
 }
+$cmakeLists = Get-Content -LiteralPath (Join-Path $RepositoryRoot "CMakeLists.txt") -Raw
+Assert-StorageContract ($cmakeLists -match '(?m)^\s*set\(CMAKE_OBJECT_PATH_MAX\s+128\b') `
+    "The existing 128-character CMake object-path budget was changed or removed."
 Assert-StorageContract $testTemporaryRoot.StartsWith(
     $buildRoot.TrimEnd("\", "/") + [System.IO.Path]::DirectorySeparatorChar,
     [System.StringComparison]::OrdinalIgnoreCase) "The test temporary root is not beneath its canonical build root."
@@ -134,6 +127,8 @@ foreach ($generatedRoot in @($buildRoot, $packageRoot, $evidenceRoot, $candidate
 
 $markerProbe = $null
 $candidateProbe = $null
+$secondCandidateProbe = $null
+$pathBudgetProbe = $null
 $managerProbe = $null
 $gitMetadataProbe = $null
 $reparseProbe = $null
@@ -146,10 +141,33 @@ try {
     $candidateProbe = Join-Path $candidateRoot ("storage-guard-candidate-" + [Guid]::NewGuid().ToString("N"))
     $null = New-HenkaLocalDirectory -RepositoryRoot $RepositoryRoot -Path $candidateProbe
     $candidateBuildRoot = Get-HenkaBuildRoot -RepositoryRoot $candidateProbe
-    Assert-StorageContract ([System.IO.Path]::GetFullPath($candidateBuildRoot).Equals(
+    $secondCandidateProbe = Join-Path $candidateRoot ("storage-guard-candidate-" + [Guid]::NewGuid().ToString("N"))
+    $null = New-HenkaLocalDirectory -RepositoryRoot $RepositoryRoot -Path $secondCandidateProbe
+    $secondCandidateBuildRoot = Get-HenkaBuildRoot -RepositoryRoot $secondCandidateProbe
+    $buildRootPrefix = (Join-Path $localRoot "builds") + [System.IO.Path]::DirectorySeparatorChar
+    Assert-StorageContract ([System.IO.Path]::GetFullPath($candidateBuildRoot).StartsWith(
+            $buildRootPrefix, [System.StringComparison]::OrdinalIgnoreCase) -and
+        -not [System.IO.Path]::GetFullPath($candidateBuildRoot).Equals(
             [System.IO.Path]::GetFullPath((Join-Path $candidateProbe "build")),
             [System.StringComparison]::OrdinalIgnoreCase)) `
-        "A direct exact-candidate checkout did not keep its build beneath that candidate."
+        "An exact candidate's isolated build root is not beneath _local\builds."
+    Assert-StorageContract (-not [System.IO.Path]::GetFullPath($candidateBuildRoot).Equals(
+            [System.IO.Path]::GetFullPath($secondCandidateBuildRoot),
+            [System.StringComparison]::OrdinalIgnoreCase)) `
+        "Two distinct exact-candidate source paths resolved to one shared build root."
+    $candidateSdlObjectRoot = Join-Path $candidateBuildRoot `
+        "_deps\sdl3-build\SDL3-static.dir\RelWithDebInfo"
+    Assert-StorageContract ($candidateSdlObjectRoot.Length -le 128) `
+        "The exact-candidate build root exceeds the 128-character CMake object-path budget ($($candidateSdlObjectRoot.Length))."
+
+    $pathBudgetProbe = Join-Path (Join-Path $localRoot "worktrees") `
+        ("storage-path-budget-" + [Guid]::NewGuid().ToString("N") + ("x" * 40))
+    $null = New-HenkaLocalDirectory -RepositoryRoot $RepositoryRoot -Path $pathBudgetProbe
+    $longCheckoutBuildRoot = Get-HenkaBuildRoot -RepositoryRoot $pathBudgetProbe
+    $longCheckoutSdlObjectRoot = Join-Path $longCheckoutBuildRoot `
+        "_deps\sdl3-build\SDL3-static.dir\RelWithDebInfo"
+    Assert-StorageContract ($longCheckoutSdlObjectRoot.Length -le 128) `
+        "A long checkout name pushed SDL's CMake object directory past 128 characters ($($longCheckoutSdlObjectRoot.Length))."
 
     $nestedLocalProbe = Join-Path $markerProbe "_local\nested-project"
     $null = New-HenkaLocalDirectory -RepositoryRoot $RepositoryRoot -Path $nestedLocalProbe
@@ -368,7 +386,7 @@ try {
 
     $cleanProbeLocalRoot = Join-Path $markerProbe "_local"
     $cleanProbeBuildRoot = Join-Path (Join-Path $cleanProbeLocalRoot "builds") `
-        (Get-HenkaCheckoutStorageKey -RepositoryRoot $cleanProbeRepository)
+        (Get-HenkaCheckoutStorageKey -RepositoryRoot $cleanProbeRepository -CompactBuildKey)
     New-Item -ItemType Directory -Path $cleanProbeBuildRoot -Force | Out-Null
     $cleanProbeSourceSha = [string](& $git -C $cleanProbeRepository rev-parse HEAD)
     if ($LASTEXITCODE -ne 0 -or $cleanProbeSourceSha -notmatch "^[0-9a-f]{40,64}$") {
@@ -404,6 +422,7 @@ try {
         "The clean wrapper did not retire its isolated eligible build root after explicit confirmation. Output: $($confirmedClean.Output)"
 
     Write-Output "[pass] Build, package, evidence, exact-candidate, and generated marker roots resolve beneath canonical _local."
+    Write-Output "[pass] Ordinary and exact-candidate build paths fit the unchanged 128-character CMake object-path budget and remain isolated."
     Write-Output "[pass] External root creation and traversal are rejected before filesystem mutation."
     Write-Output "[pass] Artifact lifecycle cleanup accepts exact generated children beneath _local and rejects Git metadata."
     Write-Output "[pass] The clean wrapper preserves a generated build root unless the caller explicitly confirms no active process uses it."
@@ -418,6 +437,12 @@ finally {
     }
     if ($null -ne $candidateProbe -and (Test-Path -LiteralPath $candidateProbe -PathType Container)) {
         Remove-Item -LiteralPath $candidateProbe -Recurse -Force
+    }
+    if ($null -ne $secondCandidateProbe -and (Test-Path -LiteralPath $secondCandidateProbe -PathType Container)) {
+        Remove-Item -LiteralPath $secondCandidateProbe -Recurse -Force
+    }
+    if ($null -ne $pathBudgetProbe -and (Test-Path -LiteralPath $pathBudgetProbe -PathType Container)) {
+        Remove-Item -LiteralPath $pathBudgetProbe -Recurse -Force
     }
     if ($null -ne $markerProbe -and (Test-Path -LiteralPath $markerProbe -PathType Container)) {
         Remove-Item -LiteralPath $markerProbe -Recurse -Force
