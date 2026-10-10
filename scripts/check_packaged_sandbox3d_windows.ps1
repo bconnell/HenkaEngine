@@ -1264,7 +1264,7 @@ function Get-HenkaWorkspaceTopologyReport {
         }
     }
 
-    Assert-FramebufferRect `
+    $null = Assert-FramebufferRect `
         -Name "Product-reported active workspace dock" `
         -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
         -X $report.Dock.X -Y $report.Dock.Y -Width $report.Dock.Width -Height $report.Dock.Height
@@ -1278,7 +1278,7 @@ function Get-HenkaWorkspaceTopologyReport {
         throw "Tools/Controls is visible, but the product layout reports no active Scene Objects/Controls topology divider."
     }
     if ($report.DividerCount -gt 0) {
-        Assert-FramebufferRect `
+        $null = Assert-FramebufferRect `
             -Name "Product-owned topology divider hit rectangle" `
             -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
             -X $report.DividerHit.X -Y $report.DividerHit.Y `
