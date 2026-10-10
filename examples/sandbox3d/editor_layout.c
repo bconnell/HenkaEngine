@@ -1420,6 +1420,80 @@ henka_result sandbox3d_editor_layout_limit_wrapped_text(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_editor_layout_format_hidden_row_label(
+    const char* object_name,
+    size_t maximum_columns,
+    char* out_text,
+    size_t out_capacity,
+    bool* out_name_truncated)
+{
+    static const char hidden_suffix[] = " [Hidden]";
+    const size_t suffix_length = sizeof(hidden_suffix) - 1U;
+    size_t name_length;
+    size_t name_columns;
+    size_t prefix_length;
+    size_t suffix_name_length;
+    size_t output_length;
+
+    if (object_name == NULL || out_text == NULL || out_name_truncated == NULL ||
+        out_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    name_length = strlen(object_name);
+    if (name_length == 0U || strchr(object_name, '\n') != NULL ||
+        strchr(object_name, '\r') != NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (maximum_columns <= suffix_length)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    name_columns = maximum_columns - suffix_length;
+    if (name_length <= name_columns)
+    {
+        output_length = name_length + suffix_length;
+        if (output_length >= out_capacity)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        memmove(out_text, object_name, name_length);
+        memcpy(out_text + name_length, hidden_suffix, sizeof(hidden_suffix));
+        *out_name_truncated = false;
+        return HENKA_SUCCESS;
+    }
+
+    /* Keep the marker intact and use the remaining row budget for a bounded
+     * middle ellipsis. A four-column name budget yields "A..."; larger
+     * budgets retain both the beginning and end of the canonical name. */
+    if (name_columns < 4U)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    output_length = name_columns + suffix_length;
+    if (output_length >= out_capacity)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    prefix_length = (name_columns - 3U + 1U) / 2U;
+    suffix_name_length = name_columns - 3U - prefix_length;
+
+    memmove(out_text, object_name, prefix_length);
+    memcpy(out_text + prefix_length, "...", 3U);
+    if (suffix_name_length > 0U)
+    {
+        memcpy(
+            out_text + prefix_length + 3U,
+            object_name + name_length - suffix_name_length,
+            suffix_name_length);
+    }
+    memcpy(out_text + name_columns, hidden_suffix, sizeof(hidden_suffix));
+    *out_name_truncated = true;
+    return HENKA_SUCCESS;
+}
+
 henka_result sandbox3d_editor_layout_text_row_height(
     size_t line_count,
     float line_height,

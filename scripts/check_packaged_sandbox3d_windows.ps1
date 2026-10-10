@@ -1066,6 +1066,516 @@ function Scroll-FramebufferPointAndWaitForConsumption {
     Write-Output "[pass] Packaged Sandbox consumed scroll input record $expectedWheelRecord"
 }
 
+function Send-HenkaBackgroundFramebufferClick {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$FramebufferX,
+        [Parameter(Mandatory = $true)][double]$FramebufferY
+    )
+
+    $clientRect = New-Object NativeMethods+RECT
+    if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
+        throw "The packaged Sandbox client bounds could not be read for background automation."
+    }
+    $windowWidth = $clientRect.Right - $clientRect.Left
+    $windowHeight = $clientRect.Bottom - $clientRect.Top
+    $windowPoint = Convert-HenkaFramebufferPointToWindowPoint `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -WindowWidth $windowWidth `
+        -WindowHeight $windowHeight `
+        -FramebufferX $FramebufferX `
+        -FramebufferY $FramebufferY
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X $windowPoint.X `
+        -Y $windowPoint.Y
+}
+
+function Send-HenkaBackgroundFramebufferClickAndWait {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$FramebufferX,
+        [Parameter(Mandatory = $true)][double]$FramebufferY,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    $recordCount = [System.IO.File]::ReadAllLines($automationInputPath).Length
+    $firstRecord = [long]$recordCount + 1L
+    $lastRecord = $firstRecord + 2L
+    if ($lastRecord -gt 512L) {
+        throw "$Description input record $lastRecord exceeds the bounded product diagnostic window."
+    }
+    $diagnosticOffset = Get-FileLengthSafe -Path $StdoutPath
+    Send-HenkaBackgroundFramebufferClick `
+        -Handle $Handle `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -FramebufferX $FramebufferX `
+        -FramebufferY $FramebufferY
+
+    $expectedEvents = @(
+        @{ Record = $firstRecord; Type = "move"; Button = "none" },
+        @{ Record = ($firstRecord + 1L); Type = "button-down"; Button = "left" },
+        @{ Record = $lastRecord; Type = "button-up"; Button = "left" }
+    )
+    foreach ($expectedEvent in $expectedEvents) {
+        $releaseConsumed = if ($expectedEvent.Type -eq "button-up") { "1" } else { "[01]" }
+        $pattern = "HENKA_AUTOMATION_DIAGNOSTIC input record={0} type={1} button={2} release_consumed={3}" -f `
+            $expectedEvent.Record, $expectedEvent.Type, $expectedEvent.Button, $releaseConsumed
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $StdoutPath `
+                -Pattern $pattern `
+                -StartingOffset $diagnosticOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "$Description did not consume its real pointer event record $($expectedEvent.Record)."
+        }
+    }
+}
+
+function Send-HenkaBackgroundFramebufferDrag {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$StartFramebufferX,
+        [Parameter(Mandatory = $true)][double]$StartFramebufferY,
+        [Parameter(Mandatory = $true)][double]$EndFramebufferX,
+        [Parameter(Mandatory = $true)][double]$EndFramebufferY,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    $clientRect = New-Object NativeMethods+RECT
+    if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
+        throw "$Description could not read the packaged Sandbox client bounds."
+    }
+    $windowWidth = $clientRect.Right - $clientRect.Left
+    $windowHeight = $clientRect.Bottom - $clientRect.Top
+    if ($windowWidth -le 0 -or $windowHeight -le 0) {
+        throw "$Description found invalid packaged Sandbox client dimensions."
+    }
+    $startPoint = Convert-HenkaFramebufferPointToWindowPoint `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -WindowWidth $windowWidth `
+        -WindowHeight $windowHeight `
+        -FramebufferX $StartFramebufferX `
+        -FramebufferY $StartFramebufferY
+    $endPoint = Convert-HenkaFramebufferPointToWindowPoint `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -WindowWidth $windowWidth `
+        -WindowHeight $windowHeight `
+        -FramebufferX $EndFramebufferX `
+        -FramebufferY $EndFramebufferY
+
+    $recordCount = [System.IO.File]::ReadAllLines($automationInputPath).Length
+    $firstRecord = [long]$recordCount + 1L
+    $lastRecord = $firstRecord + 3L
+    if ($lastRecord -gt 512L) {
+        throw "$Description input record $lastRecord exceeds the bounded product diagnostic window."
+    }
+    $diagnosticOffset = Get-FileLengthSafe -Path $StdoutPath
+    $startX = Format-HenkaAutomationFloat -Value $startPoint.X
+    $startY = Format-HenkaAutomationFloat -Value $startPoint.Y
+    $endX = Format-HenkaAutomationFloat -Value $endPoint.X
+    $endY = Format-HenkaAutomationFloat -Value $endPoint.Y
+    Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "move $startX $startY" -SettleMilliseconds 0
+    Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "button left down $startX $startY" -SettleMilliseconds 0
+    Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "move $endX $endY" -SettleMilliseconds 0
+    Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "button left up $endX $endY" -SettleMilliseconds 0
+
+    $expectedEvents = @(
+        @{ Record = $firstRecord; Type = "move"; Button = "none" },
+        @{ Record = ($firstRecord + 1L); Type = "button-down"; Button = "left" },
+        @{ Record = ($firstRecord + 2L); Type = "move"; Button = "none" },
+        @{ Record = $lastRecord; Type = "button-up"; Button = "left" }
+    )
+    foreach ($expectedEvent in $expectedEvents) {
+        $releaseConsumed = if ($expectedEvent.Type -eq "button-up") { "1" } else { "[01]" }
+        $pattern = "HENKA_AUTOMATION_DIAGNOSTIC input record={0} type={1} button={2} release_consumed={3}" -f `
+            $expectedEvent.Record, $expectedEvent.Type, $expectedEvent.Button, $releaseConsumed
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $StdoutPath `
+                -Pattern $pattern `
+                -StartingOffset $diagnosticOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "$Description did not consume its real pointer event record $($expectedEvent.Record)."
+        }
+    }
+}
+
+function Set-HenkaSceneObjectsPanelHeightThroughUi {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$SceneObjectsX,
+        [Parameter(Mandatory = $true)][double]$SceneObjectsY,
+        [Parameter(Mandatory = $true)][double]$SceneObjectsWidth,
+        [Parameter(Mandatory = $true)][double]$CurrentHeight,
+        [Parameter(Mandatory = $true)][double]$TargetHeight,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    if ($SceneObjectsWidth -le 100.0 -or $CurrentHeight -lt 180.0 -or $TargetHeight -lt 180.0 -or
+        $FramebufferWidth -ne 1280 -or $FramebufferHeight -ne 720) {
+        throw "$Description was outside the supported packaged layout boundary."
+    }
+    if ([Math]::Abs($CurrentHeight - $TargetHeight) -lt 0.5) {
+        return
+    }
+
+    $dividerX = $SceneObjectsX + ($SceneObjectsWidth * 0.5)
+    Send-HenkaBackgroundFramebufferDrag `
+        -Handle $Handle `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -StartFramebufferX $dividerX `
+        -StartFramebufferY ($SceneObjectsY + $CurrentHeight) `
+        -EndFramebufferX $dividerX `
+        -EndFramebufferY ($SceneObjectsY + $TargetHeight) `
+        -StdoutPath $StdoutPath `
+        -Description $Description
+}
+
+function Send-HenkaBackgroundFramebufferScroll {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$FramebufferX,
+        [Parameter(Mandatory = $true)][double]$FramebufferY,
+        [Parameter(Mandatory = $true)][double]$WheelDelta
+    )
+
+    $clientRect = New-Object NativeMethods+RECT
+    if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
+        throw "The packaged Sandbox client bounds could not be read for background scrolling."
+    }
+    $windowWidth = $clientRect.Right - $clientRect.Left
+    $windowHeight = $clientRect.Bottom - $clientRect.Top
+    $windowPoint = Convert-HenkaFramebufferPointToWindowPoint `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -WindowWidth $windowWidth `
+        -WindowHeight $windowHeight `
+        -FramebufferX $FramebufferX `
+        -FramebufferY $FramebufferY
+
+    $recordCount = [System.IO.File]::ReadAllLines($automationInputPath).Length
+    $expectedWheelRecord = [long]$recordCount + 2L
+    if ($expectedWheelRecord -gt 512L) {
+        throw "Packaged hidden-row scroll record $expectedWheelRecord exceeds the bounded diagnostic window."
+    }
+    $diagnosticOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaAutomationScroll `
+        -EventPath $automationInputPath `
+        -X $windowPoint.X `
+        -Y $windowPoint.Y `
+        -WheelDelta $WheelDelta
+    $consumedPattern = 'HENKA_AUTOMATION_DIAGNOSTIC input record={0} type=wheel button=none release_consumed=[01]' -f $expectedWheelRecord
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern $consumedPattern `
+            -StartingOffset $diagnosticOffset `
+            -TimeoutMilliseconds 3000)) {
+        throw "The packaged Sandbox did not consume background scroll record $expectedWheelRecord."
+    }
+}
+
+function Assert-HenkaPackagedHiddenNamedObjectSelectable {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$AlternateName,
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$SceneObjectsX,
+        [Parameter(Mandatory = $true)][double]$SceneObjectsY,
+        [Parameter(Mandatory = $true)][double]$SceneObjectsWidth,
+        [Parameter(Mandatory = $true)][double]$SceneObjectsHeight,
+        [Parameter(Mandatory = $true)][double]$DetailsX,
+        [Parameter(Mandatory = $true)][double]$DetailsY,
+        [Parameter(Mandatory = $true)][double]$DetailsWidth,
+        [Parameter(Mandatory = $true)][double]$DetailsHeight,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [switch]$RestorePanelAfterSelection
+    )
+
+    $escapedName = [Regex]::Escape($Name)
+    $rowPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row entity=(?<entity>\d+) name=' +
+        $escapedName + ' display=(?<display>[^\r\n]*) lines=(?<lines>\d+) hidden=(?<hidden>[01]) selected=(?<selected>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+)\.'
+    $row = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $rowPattern
+    if ($null -eq $row) {
+        throw "The packaged Scene Objects UI did not expose the '$Name' row."
+    }
+    $entity = $row.Groups['entity'].Value
+    if ($row.Groups['hidden'].Value -ne '0') {
+        throw "The isolated packaged startup did not provide '$Name' in its expected visible baseline state."
+    }
+    if ($AlternateName -eq $Name) {
+        throw "The hidden-row selection control requires a distinct alternate object."
+    }
+    if ($row.Groups['hidden'].Value -ne '1') {
+        if ($row.Groups['selected'].Value -ne '1') {
+            $rowX = [double]$row.Groups['x'].Value
+            $rowY = [double]$row.Groups['y'].Value
+            $rowWidth = [double]$row.Groups['width'].Value
+            $rowHeight = [double]$row.Groups['height'].Value
+            Assert-FramebufferRect `
+                -Name "$Name Scene Objects row before hiding" `
+                -FramebufferWidth $FramebufferWidth `
+                -FramebufferHeight $FramebufferHeight `
+                -X $rowX -Y $rowY -Width $rowWidth -Height $rowHeight
+            if ($rowX -lt $SceneObjectsX -or $rowY -lt $SceneObjectsY -or
+                $rowX + $rowWidth -gt $SceneObjectsX + $SceneObjectsWidth -or
+                $rowY + $rowHeight -gt $SceneObjectsY + $SceneObjectsHeight) {
+                throw "$Name row hit geometry was outside the visible Scene Objects panel."
+            }
+            $selectionOffset = Get-FileLengthSafe -Path $StdoutPath
+            Send-HenkaBackgroundFramebufferClick `
+                -Handle $Handle -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+                -FramebufferX ($rowX + $rowWidth * 0.5) -FramebufferY ($rowY + $rowHeight * 0.5)
+            $selectionPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row_click entity=' +
+                $entity + ' name=' + $escapedName + ' hidden=0 selected_entity=' + $entity + ' selected=1\.'
+            if (-not (Wait-FileContainsAfterOffset -Path $StdoutPath -Pattern $selectionPattern `
+                    -StartingOffset $selectionOffset -TimeoutMilliseconds 5000)) {
+                throw "Clicking the visible '$Name' row did not select its canonical entity."
+            }
+        }
+
+        $actionsPattern = '^HENKA_AUTOMATION_DIAGNOSTIC object_details_disclosure id=actions entity=' +
+            $entity + ' x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28\.0 expanded=(?<expanded>[01])\.'
+        $actions = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $actionsPattern
+        for ($attempt = 0; $attempt -lt 14 -and $null -eq $actions; ++$attempt) {
+            Send-HenkaBackgroundFramebufferScroll `
+                -Handle $Handle -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+                -FramebufferX ($DetailsX + [Math]::Max(12.0, $DetailsWidth - 18.0)) `
+                -FramebufferY ($DetailsY + [Math]::Max(30.0, $DetailsHeight * 0.55)) `
+                -WheelDelta -1.0
+            $actions = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $actionsPattern
+        }
+        if ($null -eq $actions) {
+            throw "Object Details > Actions for '$Name' did not become visible after bounded, consumed scrolling."
+        }
+        if ($actions.Groups['expanded'].Value -ne '1') {
+            $actionsX = [double]$actions.Groups['x'].Value
+            $actionsY = [double]$actions.Groups['y'].Value
+            $actionsWidth = [double]$actions.Groups['width'].Value
+            Assert-FramebufferRect `
+                -Name "$Name Object Details Actions disclosure" `
+                -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+                -X $actionsX -Y $actionsY -Width $actionsWidth -Height 28.0
+            $expandOffset = Get-FileLengthSafe -Path $StdoutPath
+            Send-HenkaBackgroundFramebufferClick `
+                -Handle $Handle -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+                -FramebufferX ($actionsX + $actionsWidth * 0.5) -FramebufferY ($actionsY + 14.0)
+            $expandedPattern = '^HENKA_AUTOMATION_DIAGNOSTIC object_details_disclosure id=actions entity=' +
+                $entity + ' .* expanded=1\.'
+            if (-not (Wait-FileContainsAfterOffset -Path $StdoutPath -Pattern $expandedPattern `
+                    -StartingOffset $expandOffset -TimeoutMilliseconds 5000)) {
+                throw "Object Details > Actions for '$Name' did not expand after the real UI click."
+            }
+        }
+
+        $visibilityPattern = '^HENKA_AUTOMATION_DIAGNOSTIC object_visibility_control entity=' +
+            $entity + ' name=' + $escapedName + ' label=Hide Object visible=1 x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+)\.'
+        $visibility = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $visibilityPattern
+        for ($attempt = 0; $attempt -lt 8 -and $null -eq $visibility; ++$attempt) {
+            Send-HenkaBackgroundFramebufferScroll `
+                -Handle $Handle -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+                -FramebufferX ($DetailsX + [Math]::Max(12.0, $DetailsWidth - 18.0)) `
+                -FramebufferY ($DetailsY + [Math]::Max(30.0, $DetailsHeight * 0.55)) `
+                -WheelDelta -1.0
+            $visibility = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $visibilityPattern
+        }
+        if ($null -eq $visibility) {
+            throw "The visible Hide Object control for '$Name' did not appear after bounded scrolling."
+        }
+        $visibilityX = [double]$visibility.Groups['x'].Value
+        $visibilityY = [double]$visibility.Groups['y'].Value
+        $visibilityWidth = [double]$visibility.Groups['width'].Value
+        $visibilityHeight = [double]$visibility.Groups['height'].Value
+        Assert-FramebufferRect `
+            -Name "$Name Hide Object control" `
+            -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+            -X $visibilityX -Y $visibilityY -Width $visibilityWidth -Height $visibilityHeight
+        $hideOffset = Get-FileLengthSafe -Path $StdoutPath
+        Send-HenkaBackgroundFramebufferClick `
+            -Handle $Handle -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+            -FramebufferX ($visibilityX + $visibilityWidth * 0.5) `
+            -FramebufferY ($visibilityY + $visibilityHeight * 0.5)
+        $hiddenPattern = '^HENKA_AUTOMATION_DIAGNOSTIC object_visibility_changed entity=' +
+            $entity + ' name=' + $escapedName + ' visible=0\.'
+        if (-not (Wait-FileContainsAfterOffset -Path $StdoutPath -Pattern $hiddenPattern `
+                -StartingOffset $hideOffset -TimeoutMilliseconds 5000)) {
+            throw "The product Hide Object control did not hide '$Name'."
+        }
+        Write-Output "[pass] Packaged Object Details hid the canonical '$Name' object"
+    }
+
+    $row = Wait-LastLogRegexMatch -Path $StdoutPath -Pattern $rowPattern `
+        -GroupName 'hidden' -ExpectedValue '1' -TimeoutMilliseconds 5000
+    if ($null -eq $row -or $row.Groups['entity'].Value -ne $entity -or
+        $row.Groups['selected'].Value -ne '1') {
+        throw "The product Hide Object action did not preserve '$Name' as the selected canonical entity."
+    }
+    $canonicalDisplay = $row.Groups['display'].Value
+    if ($canonicalDisplay -notmatch [Regex]::Escape($Name) -or $canonicalDisplay -notmatch 'Hidden') {
+        throw "The hidden '$Name' row lost its canonical identity or explicit Hidden marker: '$canonicalDisplay'."
+    }
+
+    $alternateEscaped = [Regex]::Escape($AlternateName)
+    $alternatePattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row entity=(?<entity>\d+) name=' +
+        $alternateEscaped + ' display=(?<display>[^\r\n]*) lines=(?<lines>\d+) hidden=(?<hidden>[01]) selected=(?<selected>[01]) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+)\.'
+    $alternate = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $alternatePattern
+    if ($null -eq $alternate -or $alternate.Groups['selected'].Value -ne '0') {
+        throw "A distinct, currently unselected '$AlternateName' row was not observable before the selection-transition control."
+    }
+    $alternateEntity = $alternate.Groups['entity'].Value
+    if ($alternateEntity -eq $entity) {
+        throw "The alternate row resolved to the same canonical entity as '$Name'."
+    }
+    $alternateX = [double]$alternate.Groups['x'].Value
+    $alternateY = [double]$alternate.Groups['y'].Value
+    $alternateWidth = [double]$alternate.Groups['width'].Value
+    $alternateHeight = [double]$alternate.Groups['height'].Value
+    if ($alternateX -lt $SceneObjectsX -or $alternateY -lt $SceneObjectsY -or
+        $alternateX + $alternateWidth -gt $SceneObjectsX + $SceneObjectsWidth -or
+        $alternateY + $alternateHeight -gt $SceneObjectsY + $SceneObjectsHeight) {
+        throw "The '$AlternateName' deselection control was outside the fully visible Scene Objects panel."
+    }
+    $alternateClickOffset = Get-FileLengthSafe -Path $StdoutPath
+    Send-HenkaBackgroundFramebufferClickAndWait `
+        -Handle $Handle -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+        -FramebufferX ($alternateX + $alternateWidth * 0.5) `
+        -FramebufferY ($alternateY + $alternateHeight * 0.5) `
+        -StdoutPath $StdoutPath `
+        -Description "Selecting alternate '$AlternateName' before hidden-row click"
+    $alternateClickPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row_click entity=' +
+        $alternateEntity + ' name=' + $alternateEscaped + ' hidden=[01] selected_entity=' +
+        $alternateEntity + ' selected=1\.'
+    if (-not (Wait-FileContainsAfterOffset -Path $StdoutPath -Pattern $alternateClickPattern `
+            -StartingOffset $alternateClickOffset -TimeoutMilliseconds 5000)) {
+        throw "The real Scene Objects click did not move selection away from hidden '$Name' to '$AlternateName'."
+    }
+
+    $compactPanelHeight = 194.0
+    if ($SceneObjectsHeight -lt 202.0) {
+        throw "The normal Scene Objects panel is too short to establish a distinct multi-line baseline before compaction."
+    }
+    $compactLayoutOffset = Get-FileLengthSafe -Path $StdoutPath
+    Set-HenkaSceneObjectsPanelHeightThroughUi `
+        -Handle $Handle `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -SceneObjectsX $SceneObjectsX `
+        -SceneObjectsY $SceneObjectsY `
+        -SceneObjectsWidth $SceneObjectsWidth `
+        -CurrentHeight $SceneObjectsHeight `
+        -TargetHeight $compactPanelHeight `
+        -StdoutPath $StdoutPath `
+        -Description "Resizing Scene Objects to the supported one-line row boundary"
+
+    $compactDisplayPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row entity=' +
+        [Regex]::Escape($entity) + ' name=' + $escapedName + ' display=' +
+        [Regex]::Escape($Name + ' [Hidden]') + ' lines=1 hidden=1 selected=0 x=[-0-9.]+ y=[-0-9.]+ width=[-0-9.]+ height=[-0-9.]+\.'
+    $compactRowVisible = Wait-FileContainsAfterOffset -Path $StdoutPath `
+        -Pattern $compactDisplayPattern -StartingOffset $compactLayoutOffset -TimeoutMilliseconds 350
+    for ($pageAdvance = 0; -not $compactRowVisible -and $pageAdvance -lt 12; ++$pageAdvance) {
+        $pageClickOffset = Get-FileLengthSafe -Path $StdoutPath
+        Send-HenkaBackgroundFramebufferClickAndWait `
+            -Handle $Handle `
+            -FramebufferWidth $FramebufferWidth `
+            -FramebufferHeight $FramebufferHeight `
+            -FramebufferX ($SceneObjectsX + $SceneObjectsWidth - 51.0) `
+            -FramebufferY ($SceneObjectsY + $compactPanelHeight - 22.0) `
+            -StdoutPath $StdoutPath `
+            -Description "Advancing the real compact Scene Objects page"
+        $compactRowVisible = Wait-FileContainsAfterOffset -Path $StdoutPath `
+            -Pattern $compactDisplayPattern -StartingOffset $pageClickOffset -TimeoutMilliseconds 350
+    }
+    if (-not $compactRowVisible) {
+        throw "The hidden '$Name' one-line row was not reached through bounded Scene Objects paging."
+    }
+
+    $row = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $rowPattern
+    if ($null -eq $row -or $row.Groups['entity'].Value -ne $entity -or
+        $row.Groups['hidden'].Value -ne '1' -or $row.Groups['selected'].Value -ne '0' -or
+        [int]$row.Groups['lines'].Value -ne 1 -or
+        $row.Groups['display'].Value -cne ($Name + ' [Hidden]')) {
+        throw "The fresh compact product row report did not prove the exact one-line '$Name [Hidden]' state before clicking."
+    }
+
+    $rowX = [double]$row.Groups['x'].Value
+    $rowY = [double]$row.Groups['y'].Value
+    $rowWidth = [double]$row.Groups['width'].Value
+    $rowHeight = [double]$row.Groups['height'].Value
+    Assert-FramebufferRect `
+        -Name "$Name one-line Scene Objects row" `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -X $rowX -Y $rowY -Width $rowWidth -Height $rowHeight
+    if ($rowX -lt $SceneObjectsX -or $rowY -lt $SceneObjectsY -or
+        $rowX + $rowWidth -gt $SceneObjectsX + $SceneObjectsWidth -or
+        $rowY + $rowHeight -gt $SceneObjectsY + $compactPanelHeight) {
+        throw "Hidden '$Name' one-line row hit geometry escaped the compact visible Scene Objects panel."
+    }
+
+    $selectionOffset = Get-FileLengthSafe -Path $StdoutPath
+    Send-HenkaBackgroundFramebufferClickAndWait `
+        -Handle $Handle `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -FramebufferX ($rowX + $rowWidth * 0.5) `
+        -FramebufferY ($rowY + $rowHeight * 0.5) `
+        -StdoutPath $StdoutPath `
+        -Description "Selecting hidden '$Name' through its reported Scene Objects hitbox"
+    $selectedPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row_click entity=' +
+        $entity + ' name=' + $escapedName + ' hidden=1 selected_entity=' + $entity + ' selected=1\.'
+    if (-not (Wait-FileContainsAfterOffset -Path $StdoutPath -Pattern $selectedPattern `
+            -StartingOffset $selectionOffset -TimeoutMilliseconds 5000)) {
+        throw "The real compact-row click did not change authoritative selection to hidden '$Name'."
+    }
+    $selectedRowPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row entity=' +
+        [Regex]::Escape($entity) + ' name=' + $escapedName + ' display=' +
+        [Regex]::Escape($Name + ' [Hidden]') + ' lines=1 hidden=1 selected=1 x=[-0-9.]+ y=[-0-9.]+ width=[-0-9.]+ height=[-0-9.]+\.'
+    if (-not (Wait-FileContainsAfterOffset -Path $StdoutPath -Pattern $selectedRowPattern `
+            -StartingOffset $selectionOffset -TimeoutMilliseconds 5000)) {
+        throw "The product Scene Objects row did not retain the same hidden entity, canonical name, and one-line presentation after selection."
+    }
+    Write-Output "[pass] Packaged Scene Objects changed authoritative selection from '$AlternateName' to hidden '$Name' through the real one-line row hitbox (entity $entity)"
+
+    if ($RestorePanelAfterSelection) {
+        $restoreOffset = Get-FileLengthSafe -Path $StdoutPath
+        Set-HenkaSceneObjectsPanelHeightThroughUi `
+            -Handle $Handle `
+            -FramebufferWidth $FramebufferWidth `
+            -FramebufferHeight $FramebufferHeight `
+            -SceneObjectsX $SceneObjectsX `
+            -SceneObjectsY $SceneObjectsY `
+            -SceneObjectsWidth $SceneObjectsWidth `
+            -CurrentHeight $compactPanelHeight `
+            -TargetHeight $SceneObjectsHeight `
+            -StdoutPath $StdoutPath `
+            -Description "Restoring the normal Scene Objects panel height after the first row proof"
+        $restoredPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row entity=' +
+            [Regex]::Escape($entity) + ' name=' + $escapedName + ' display=[^\r\n]* lines=2 hidden=1 selected=1 x=[-0-9.]+ y=[-0-9.]+ width=[-0-9.]+ height=[-0-9.]+\.'
+        if (-not (Wait-FileContainsAfterOffset -Path $StdoutPath -Pattern $restoredPattern `
+                -StartingOffset $restoreOffset -TimeoutMilliseconds 5000)) {
+            throw "The first hidden-row proof did not restore the normal multi-line Scene Objects layout."
+        }
+    }
+}
+
 function Click-FramebufferPointRight {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
@@ -2406,6 +2916,41 @@ try {
                 -StdoutPath $stdoutPath `
                 -ScreenshotPath $nativeAuthoringScreenshotPath
             Write-Output "[pass] Packaged Game Authoring workflow used the canonical product-startup Add Cube"
+            if ($framebufferWidth -ne 1280 -or $framebufferHeight -ne 720) {
+                throw "Hidden Scene Objects selection proof requires the packaged 1280x720 layout; received ${framebufferWidth}x${framebufferHeight}."
+            }
+            Write-Step "Hiding and selecting multiple named Scene Objects rows at 1280x720"
+            $hiddenRowCases = @(
+                [PSCustomObject]@{ Name = 'Ground'; AlternateName = 'Cube'; RestorePanel = $true },
+                [PSCustomObject]@{ Name = 'Cube'; AlternateName = 'Ground'; RestorePanel = $false }
+            )
+            foreach ($hiddenRowCase in $hiddenRowCases) {
+                $hiddenRowArguments = @{
+                    Name = $hiddenRowCase.Name
+                    AlternateName = $hiddenRowCase.AlternateName
+                    Handle = $mainWindowHandle
+                    FramebufferWidth = $framebufferWidth
+                    FramebufferHeight = $framebufferHeight
+                    SceneObjectsX = $sceneObjectsX
+                    SceneObjectsY = $sceneObjectsY
+                    SceneObjectsWidth = $sceneObjectsWidth
+                    SceneObjectsHeight = $sceneObjectsHeight
+                    DetailsX = $detailsX
+                    DetailsY = $detailsY
+                    DetailsWidth = $detailsWidth
+                    DetailsHeight = $detailsHeight
+                    StdoutPath = $stdoutPath
+                }
+                if ($hiddenRowCase.RestorePanel) {
+                    $hiddenRowArguments.RestorePanelAfterSelection = $true
+                }
+                Assert-HenkaPackagedHiddenNamedObjectSelectable @hiddenRowArguments
+            }
+            Save-WindowScreenshot `
+                -Handle $mainWindowHandle `
+                -Path (Join-Path $logDir 'scene-objects-hidden-rows-1280x720.bmp') `
+                -Description "Packaged 1280x720 Scene Objects with two hidden named objects and the intended object selected"
+            Write-Output "[pass] Two distinct hidden product-native objects retained readable names and individually selected through their visible rows"
             $packagedCheckSucceeded = $true
             return
         }

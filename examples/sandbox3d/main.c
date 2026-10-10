@@ -559,6 +559,10 @@ typedef struct sandbox3d_state
     sandbox3d_ui_geometry_report native_authoring_face_delete_reports[2];
     sandbox3d_ui_geometry_report native_authoring_move_y_control_report;
     sandbox3d_ui_geometry_report default_scene_ground_row_report;
+    sandbox3d_ui_geometry_report default_scene_ground_display_report;
+    sandbox3d_ui_geometry_report default_scene_cube_row_report;
+    sandbox3d_ui_geometry_report object_details_actions_disclosure_report;
+    sandbox3d_ui_geometry_report object_details_visibility_button_report;
     sandbox3d_ui_geometry_report game_authoring_physics_disclosure_report;
     sandbox3d_ui_geometry_report game_authoring_play_controls_report;
     sandbox3d_ui_geometry_report game_authoring_step_controls_report;
@@ -786,12 +790,38 @@ static void sandbox3d_reset_ui_geometry_reports(sandbox3d_state* state)
         sizeof(state->native_authoring_move_y_control_report));
     memset(&state->default_scene_ground_row_report, 0,
         sizeof(state->default_scene_ground_row_report));
+    memset(&state->default_scene_ground_display_report, 0,
+        sizeof(state->default_scene_ground_display_report));
+    memset(&state->default_scene_cube_row_report, 0,
+        sizeof(state->default_scene_cube_row_report));
+    memset(&state->object_details_actions_disclosure_report, 0,
+        sizeof(state->object_details_actions_disclosure_report));
+    memset(&state->object_details_visibility_button_report, 0,
+        sizeof(state->object_details_visibility_button_report));
     memset(&state->game_authoring_physics_disclosure_report, 0,
         sizeof(state->game_authoring_physics_disclosure_report));
     memset(&state->game_authoring_play_controls_report, 0,
         sizeof(state->game_authoring_play_controls_report));
     memset(&state->game_authoring_step_controls_report, 0,
         sizeof(state->game_authoring_step_controls_report));
+}
+
+static bool sandbox3d_automation_input_is_owned(void)
+{
+#if defined(_WIN32)
+    char* value = NULL;
+    size_t value_length = 0U;
+    const bool owned = _dupenv_s(
+        &value,
+        &value_length,
+        "HENKA_AUTOMATION_INPUT_OWNED") == 0 &&
+        value != NULL && value_length > 0U;
+    free(value);
+    return owned;
+#else
+    const char* value = getenv("HENKA_AUTOMATION_INPUT_OWNED");
+    return value != NULL && value[0] != '\0';
+#endif
 }
 
 static void sandbox3d_mark_smoke_validation_failed(
@@ -27467,23 +27497,12 @@ static void sandbox3d_draw_scene_objects_panel(
         }
         if (entity_hidden && maximum_visible_line_count == 1U)
         {
-            layout_result = sandbox3d_editor_layout_wrap_text(
-                "Hidden",
+            layout_result = sandbox3d_editor_layout_format_hidden_row_label(
+                entity_name,
                 name_columns,
                 wrapped_text,
                 wrapped_capacity,
-                &wrapped_line_count);
-            if (layout_result == HENKA_SUCCESS)
-            {
-                layout_result = sandbox3d_editor_layout_limit_wrapped_text(
-                    wrapped_text,
-                    1U,
-                    name_columns,
-                    wrapped_text,
-                    wrapped_capacity,
-                    &wrapped_line_count,
-                    &display_truncated);
-            }
+                &display_truncated);
             if (layout_result != HENKA_SUCCESS)
             {
                 free(wrapped_text);
@@ -27492,6 +27511,7 @@ static void sandbox3d_draw_scene_objects_panel(
                 sandbox3d_set_status(state, true, "Hidden object state could not fit its visible row.");
                 return;
             }
+            wrapped_line_count = 1U;
         }
         else
         {
@@ -27547,6 +27567,49 @@ static void sandbox3d_draw_scene_objects_panel(
             "scene_object_%llu",
             (unsigned long long)entity);
 
+        if ((strcmp(entity_name, "Ground") == 0 ||
+             strcmp(entity_name, "Cube") == 0) &&
+            sandbox3d_automation_input_is_owned())
+        {
+            sandbox3d_ui_geometry_report* row_report =
+                strcmp(entity_name, "Ground") == 0
+                    ? &state->default_scene_ground_display_report
+                    : &state->default_scene_cube_row_report;
+            const int row_state =
+                (entity_hidden ? 2 : 0) | (selected ? 1 : 0);
+            if (sandbox3d_ui_geometry_report_changed(
+                    row_report,
+                    entity,
+                    row_bounds,
+                    row_state))
+            {
+                char display_summary[256];
+                size_t display_index = 0U;
+                while (wrapped_text[display_index] != '\0' &&
+                       display_index + 1U < sizeof(display_summary))
+                {
+                    const char value = wrapped_text[display_index];
+                    display_summary[display_index] =
+                        value == '\n' || value == '\r' ? '|' : value;
+                    ++display_index;
+                }
+                display_summary[display_index] = '\0';
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row entity=%llu name=%s display=%s lines=%zu hidden=%d selected=%d x=%.1f y=%.1f width=%.1f height=%.1f.\n",
+                    (unsigned long long)entity,
+                    entity_name,
+                    display_summary,
+                    wrapped_line_count,
+                    entity_hidden ? 1 : 0,
+                    selected ? 1 : 0,
+                    row_bounds.x,
+                    row_bounds.y,
+                    row_bounds.width,
+                    row_bounds.height);
+                fflush(stdout);
+            }
+        }
+
         /* The packaged Game-context check must select the real authored
          * starter object, not an imported Showcase entity that has no
          * Scene Document record. Keep this row geometry diagnostic bounded
@@ -27556,26 +27619,9 @@ static void sandbox3d_draw_scene_objects_panel(
                 &state->default_scene_ground_row_report,
                 entity,
                 row_bounds,
-                selected ? 1 : 0))
+                (entity_hidden ? 2 : 0) | (selected ? 1 : 0)))
         {
-            bool automation_input_owned = false;
-#if defined(_WIN32)
-            {
-                char* environment_value = NULL;
-                size_t environment_length = 0U;
-                automation_input_owned = _dupenv_s(
-                    &environment_value,
-                    &environment_length,
-                    "HENKA_AUTOMATION_INPUT_OWNED") == 0 &&
-                    environment_value != NULL &&
-                    environment_length > 0U;
-                free(environment_value);
-            }
-#else
-            automation_input_owned =
-                getenv("HENKA_AUTOMATION_INPUT_OWNED") != NULL;
-#endif
-            if (automation_input_owned)
+            if (sandbox3d_automation_input_is_owned())
             {
                 printf(
                     "Default scene Ground row: x=%.1f y=%.1f width=%.1f height=%.1f selected=%d.\n",
@@ -27604,6 +27650,19 @@ static void sandbox3d_draw_scene_objects_panel(
                 fflush(stdout);
             }
             sandbox3d_select_entity(state, entity);
+            if (sandbox3d_automation_input_is_owned())
+            {
+                const henka_entity selected_entity =
+                    sandbox3d_get_real_selected_entity(state);
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row_click entity=%llu name=%s hidden=%d selected_entity=%llu selected=%d.\n",
+                    (unsigned long long)entity,
+                    entity_name,
+                    henka_scene_is_entity_visible(state->scene, entity) ? 0 : 1,
+                    (unsigned long long)selected_entity,
+                    selected_entity == entity ? 1 : 0);
+                fflush(stdout);
+            }
         }
 
         if (!state->native_authoring_row_reported &&
@@ -27853,6 +27912,24 @@ static bool sandbox3d_details_flow_disclosure(
     disclosure_bounds = bounds;
     {
         const henka_entity selected_entity = sandbox3d_get_real_selected_entity(state);
+        if (group_id == SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS &&
+            sandbox3d_automation_input_is_owned() &&
+            sandbox3d_ui_geometry_report_changed(
+                &state->object_details_actions_disclosure_report,
+                selected_entity,
+                disclosure_bounds,
+                *expanded ? 1 : 0))
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC object_details_disclosure id=actions entity=%u x=%.1f y=%.1f width=%.1f height=%.1f expanded=%d.\n",
+                (unsigned int)selected_entity,
+                disclosure_bounds.x,
+                disclosure_bounds.y,
+                disclosure_bounds.width,
+                disclosure_bounds.height,
+                *expanded ? 1 : 0);
+            fflush(stdout);
+        }
         if (group_id == SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING &&
             (state->native_authoring_disclosure_reported_entity != selected_entity ||
              state->native_authoring_disclosure_reported_expanded != *expanded))
@@ -35873,20 +35950,50 @@ details_group_actions:
             const float gap = 6.0f;
             const float item_width =
                 (row.width - gap) * 0.5f;
+            const henka_ui_rect visibility_bounds = {
+                row.x,
+                row.y,
+                item_width,
+                row.height};
+
+            if (sandbox3d_automation_input_is_owned() &&
+                sandbox3d_ui_geometry_report_changed(
+                    &state->object_details_visibility_button_report,
+                    entity,
+                    visibility_bounds,
+                    visible ? 1 : 0))
+            {
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC object_visibility_control entity=%u name=%s label=%s visible=%d x=%.1f y=%.1f width=%.1f height=%.1f.\n",
+                    (unsigned int)entity,
+                    display_name,
+                    visible ? "Hide Object" : "Show Object",
+                    visible ? 1 : 0,
+                    visibility_bounds.x,
+                    visibility_bounds.y,
+                    visibility_bounds.width,
+                    visibility_bounds.height);
+                fflush(stdout);
+            }
 
             if (henka_ui_button(
                     state->ui,
                     visibility_action_id,
-                    (henka_ui_rect){
-                        row.x,
-                        row.y,
-                        item_width,
-                        row.height},
+                    visibility_bounds,
                     action_label))
             {
                 if (sandbox3d_toggle_selected_entity_visibility(
                         state))
                 {
+                    if (sandbox3d_automation_input_is_owned())
+                    {
+                        printf(
+                            "HENKA_AUTOMATION_DIAGNOSTIC object_visibility_changed entity=%u name=%s visible=%d.\n",
+                            (unsigned int)entity,
+                            display_name,
+                            henka_scene_is_entity_visible(state->scene, entity) ? 1 : 0);
+                        fflush(stdout);
+                    }
                     sandbox3d_set_statusf(
                         state,
                         false,
