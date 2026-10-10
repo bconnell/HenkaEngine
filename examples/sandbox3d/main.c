@@ -560,7 +560,7 @@ typedef struct sandbox3d_state
     sandbox3d_ui_geometry_report native_authoring_move_y_control_report;
     sandbox3d_ui_geometry_report default_scene_ground_row_report;
     sandbox3d_ui_geometry_report default_scene_ground_display_report;
-    sandbox3d_ui_geometry_report default_scene_cube_row_report;
+    sandbox3d_ui_geometry_report default_scene_new_cube_row_report;
     sandbox3d_ui_geometry_report object_details_actions_disclosure_report;
     sandbox3d_ui_geometry_report object_details_visibility_button_report;
     sandbox3d_ui_geometry_report game_authoring_physics_disclosure_report;
@@ -792,8 +792,8 @@ static void sandbox3d_reset_ui_geometry_reports(sandbox3d_state* state)
         sizeof(state->default_scene_ground_row_report));
     memset(&state->default_scene_ground_display_report, 0,
         sizeof(state->default_scene_ground_display_report));
-    memset(&state->default_scene_cube_row_report, 0,
-        sizeof(state->default_scene_cube_row_report));
+    memset(&state->default_scene_new_cube_row_report, 0,
+        sizeof(state->default_scene_new_cube_row_report));
     memset(&state->object_details_actions_disclosure_report, 0,
         sizeof(state->object_details_actions_disclosure_report));
     memset(&state->object_details_visibility_button_report, 0,
@@ -27568,13 +27568,13 @@ static void sandbox3d_draw_scene_objects_panel(
             (unsigned long long)entity);
 
         if ((strcmp(entity_name, "Ground") == 0 ||
-             strcmp(entity_name, "Cube") == 0) &&
+             strcmp(entity_name, "New Cube") == 0) &&
             sandbox3d_automation_input_is_owned())
         {
             sandbox3d_ui_geometry_report* row_report =
                 strcmp(entity_name, "Ground") == 0
                     ? &state->default_scene_ground_display_report
-                    : &state->default_scene_cube_row_report;
+                    : &state->default_scene_new_cube_row_report;
             const int row_state =
                 (entity_hidden ? 2 : 0) | (selected ? 1 : 0);
             if (sandbox3d_ui_geometry_report_changed(

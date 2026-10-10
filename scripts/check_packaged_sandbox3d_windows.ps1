@@ -2921,8 +2921,8 @@ try {
             }
             Write-Step "Hiding and selecting multiple named Scene Objects rows at 1280x720"
             $hiddenRowCases = @(
-                [PSCustomObject]@{ Name = 'Ground'; AlternateName = 'Cube'; RestorePanel = $true },
-                [PSCustomObject]@{ Name = 'Cube'; AlternateName = 'Ground'; RestorePanel = $false }
+                [PSCustomObject]@{ Name = 'Ground'; AlternateName = 'New Cube'; RestorePanel = $true },
+                [PSCustomObject]@{ Name = 'New Cube'; AlternateName = 'Ground'; RestorePanel = $false }
             )
             foreach ($hiddenRowCase in $hiddenRowCases) {
                 $hiddenRowArguments = @{
