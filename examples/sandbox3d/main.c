@@ -666,6 +666,9 @@ typedef struct sandbox3d_state
     bool startup_panels_auto_opened;
     bool ui_visibility_report_pending;
     bool ui_visible_last_frame;
+    bool workspace_topology_report_pending;
+    bool workspace_topology_report_deferred;
+    const char* workspace_topology_report_cause;
     bool status_warning;
     bool startup_frame_pending;
     char status_message[160];
@@ -20826,6 +20829,12 @@ static bool sandbox3d_handle_workspace_input(
         {
             const bool closing = sandbox3d_workspace_divider_close_preview(&state->workspace.model);
             sandbox3d_workspace_end_interaction(&state->workspace.model);
+            if (sandbox3d_automation_input_is_owned())
+            {
+                state->workspace_topology_report_pending = true;
+                state->workspace_topology_report_deferred = true;
+                state->workspace_topology_report_cause = "divider_release";
+            }
             sandbox3d_set_status(
                 state,
                 false,
@@ -24125,6 +24134,60 @@ static void sandbox3d_draw_workspace_affordances(
         return;
     }
 
+    if (state->workspace_topology_report_pending &&
+        sandbox3d_automation_input_is_owned())
+    {
+        if (state->workspace_topology_report_deferred)
+        {
+            state->workspace_topology_report_deferred = false;
+        }
+        else
+        {
+            const bool tools_visible = sandbox3d_workspace_panel_visible(
+                state,
+                SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+            const size_t divider_count = tools_visible
+                ? layout->left_topology.divider_count
+                : 0U;
+            henka_ui_rect divider_hit = {0.0f, 0.0f, 0.0f, 0.0f};
+            if (divider_count > 0U)
+            {
+                divider_hit = layout->left_topology.divider_hit_rects[0];
+            }
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC workspace_topology "
+                "cause=%s tools_visible=%d divider_count=%zu "
+                "left_dock=%.1f,%.1f,%.1f,%.1f "
+                "scene_objects=%.1f,%.1f,%.1f,%.1f "
+                "controls=%.1f,%.1f,%.1f,%.1f "
+                "divider0=%.1f,%.1f,%.1f,%.1f.\n",
+                state->workspace_topology_report_cause != NULL
+                    ? state->workspace_topology_report_cause
+                    : "unspecified",
+                tools_visible ? 1 : 0,
+                divider_count,
+                layout->left_dock.x,
+                layout->left_dock.y,
+                layout->left_dock.width,
+                layout->left_dock.height,
+                layout->scene_objects_panel.x,
+                layout->scene_objects_panel.y,
+                layout->scene_objects_panel.width,
+                layout->scene_objects_panel.height,
+                layout->controls_panel.x,
+                layout->controls_panel.y,
+                layout->controls_panel.width,
+                layout->controls_panel.height,
+                divider_hit.x,
+                divider_hit.y,
+                divider_hit.width,
+                divider_hit.height);
+            fflush(stdout);
+            state->workspace_topology_report_pending = false;
+            state->workspace_topology_report_cause = NULL;
+        }
+    }
+
     if (layout->left_splitter.width > 0.0f)
     {
         henka_ui_overlay_rect(
@@ -24613,6 +24676,12 @@ static void sandbox3d_draw_scene_viewport_frame(
         {
             state->workspace.tools_panel_visible =
                 !state->workspace.tools_panel_visible;
+            if (sandbox3d_automation_input_is_owned())
+            {
+                state->workspace_topology_report_pending = true;
+                state->workspace_topology_report_deferred = true;
+                state->workspace_topology_report_cause = "tools_toggle";
+            }
             sandbox3d_set_status(
                 state,
                 false,
@@ -45086,6 +45155,12 @@ int main(int argc, char** argv)
     state.native_panel_window_id = HENKA_INVALID_WINDOW_ID;
     state.ui_visible_last_frame = false;
     sandbox3d_reset_workspace_layout(&state);
+    if (sandbox3d_automation_input_is_owned())
+    {
+        state.workspace_topology_report_pending = true;
+        state.workspace_topology_report_deferred = true;
+        state.workspace_topology_report_cause = "startup";
+    }
     sandbox3d_gizmo_init_defaults(&state.gizmo);
 
     for (index = 0U; index < SANDBOX3D_OBJECT_COUNT; ++index)

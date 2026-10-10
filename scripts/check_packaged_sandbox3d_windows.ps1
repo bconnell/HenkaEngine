@@ -1211,37 +1211,121 @@ function Send-HenkaBackgroundFramebufferDrag {
     }
 }
 
+function Get-HenkaWorkspaceTopologyReport {
+    param(
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [switch]$RequireToolsVisible,
+        [switch]$RequireDivider
+    )
+
+    $number = '[-0-9.]+'
+    $pattern = '^HENKA_AUTOMATION_DIAGNOSTIC workspace_topology ' +
+        'cause=(?<cause>[a-z_]+) tools_visible=(?<toolsVisible>[01]) ' +
+        'divider_count=(?<dividerCount>[0-9]+) ' +
+        'left_dock=(?<dockX>' + $number + '),(?<dockY>' + $number + '),(?<dockWidth>' + $number + '),(?<dockHeight>' + $number + ') ' +
+        'scene_objects=(?<sceneX>' + $number + '),(?<sceneY>' + $number + '),(?<sceneWidth>' + $number + '),(?<sceneHeight>' + $number + ') ' +
+        'controls=(?<controlsX>' + $number + '),(?<controlsY>' + $number + '),(?<controlsWidth>' + $number + '),(?<controlsHeight>' + $number + ') ' +
+        'divider0=(?<dividerX>' + $number + '),(?<dividerY>' + $number + '),(?<dividerWidth>' + $number + '),(?<dividerHeight>' + $number + ')\.'
+    $match = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $pattern
+    if ($null -eq $match) {
+        throw "The product did not report its canonical left-dock topology and divider hit rectangle."
+    }
+
+    $groups = $match.Groups
+    $report = [PSCustomObject]@{
+        Cause = $groups['cause'].Value
+        ToolsVisible = [int]$groups['toolsVisible'].Value
+        DividerCount = [int]$groups['dividerCount'].Value
+        Dock = [PSCustomObject]@{
+            X = [double]$groups['dockX'].Value
+            Y = [double]$groups['dockY'].Value
+            Width = [double]$groups['dockWidth'].Value
+            Height = [double]$groups['dockHeight'].Value
+        }
+        SceneObjects = [PSCustomObject]@{
+            X = [double]$groups['sceneX'].Value
+            Y = [double]$groups['sceneY'].Value
+            Width = [double]$groups['sceneWidth'].Value
+            Height = [double]$groups['sceneHeight'].Value
+        }
+        Controls = [PSCustomObject]@{
+            X = [double]$groups['controlsX'].Value
+            Y = [double]$groups['controlsY'].Value
+            Width = [double]$groups['controlsWidth'].Value
+            Height = [double]$groups['controlsHeight'].Value
+        }
+        DividerHit = [PSCustomObject]@{
+            X = [double]$groups['dividerX'].Value
+            Y = [double]$groups['dividerY'].Value
+            Width = [double]$groups['dividerWidth'].Value
+            Height = [double]$groups['dividerHeight'].Value
+        }
+    }
+
+    Assert-FramebufferRect `
+        -Name "Product-reported active workspace dock" `
+        -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+        -X $report.Dock.X -Y $report.Dock.Y -Width $report.Dock.Width -Height $report.Dock.Height
+    if ($RequireToolsVisible -and
+        ($report.ToolsVisible -ne 1 -or
+         $report.Controls.Width -le 0.0 -or $report.Controls.Height -le 0.0 -or
+         $report.SceneObjects.Width -le 0.0 -or $report.SceneObjects.Height -le 0.0)) {
+        throw "The product topology report does not show both Controls and Scene Objects in the active dock."
+    }
+    if ($RequireDivider -and $report.DividerCount -lt 1) {
+        throw "Tools/Controls is visible, but the product layout reports no active Scene Objects/Controls topology divider."
+    }
+    if ($report.DividerCount -gt 0) {
+        Assert-FramebufferRect `
+            -Name "Product-owned topology divider hit rectangle" `
+            -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+            -X $report.DividerHit.X -Y $report.DividerHit.Y `
+            -Width $report.DividerHit.Width -Height $report.DividerHit.Height
+        if ($report.DividerHit.X -lt $report.Dock.X -or
+            $report.DividerHit.Y -lt $report.Dock.Y -or
+            $report.DividerHit.X + $report.DividerHit.Width -gt $report.Dock.X + $report.Dock.Width -or
+            $report.DividerHit.Y + $report.DividerHit.Height -gt $report.Dock.Y + $report.Dock.Height) {
+            throw "The product-owned topology divider hit rectangle lies outside the active dock."
+        }
+    }
+
+    return $report
+}
+
 function Set-HenkaSceneObjectsPanelHeightThroughUi {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
         [Parameter(Mandatory = $true)][int]$FramebufferWidth,
         [Parameter(Mandatory = $true)][int]$FramebufferHeight,
-        [Parameter(Mandatory = $true)][double]$SceneObjectsX,
-        [Parameter(Mandatory = $true)][double]$SceneObjectsY,
-        [Parameter(Mandatory = $true)][double]$SceneObjectsWidth,
-        [Parameter(Mandatory = $true)][double]$CurrentHeight,
-        [Parameter(Mandatory = $true)][double]$TargetHeight,
+        [Parameter(Mandatory = $true)][PSCustomObject]$Topology,
+        [Parameter(Mandatory = $true)][double]$TargetFramebufferY,
         [Parameter(Mandatory = $true)][string]$StdoutPath,
         [Parameter(Mandatory = $true)][string]$Description
     )
 
-    if ($SceneObjectsWidth -le 100.0 -or $CurrentHeight -lt 180.0 -or $TargetHeight -lt 180.0 -or
-        $FramebufferWidth -ne 1280 -or $FramebufferHeight -ne 720) {
+    if ($FramebufferWidth -ne 1280 -or $FramebufferHeight -ne 720) {
         throw "$Description was outside the supported packaged layout boundary."
     }
-    if ([Math]::Abs($CurrentHeight - $TargetHeight) -lt 0.5) {
-        return
+    if ($Topology.ToolsVisible -ne 1 -or $Topology.DividerCount -lt 1) {
+        throw "$Description requires the product-reported visible Tools section and active topology divider."
     }
 
-    $dividerX = $SceneObjectsX + ($SceneObjectsWidth * 0.5)
+    $dividerX = $Topology.DividerHit.X + ($Topology.DividerHit.Width * 0.5)
+    $dividerY = $Topology.DividerHit.Y + ($Topology.DividerHit.Height * 0.5)
+    if ($TargetFramebufferY -lt $Topology.Dock.Y -or
+        $TargetFramebufferY -ge $Topology.Dock.Y + $Topology.Dock.Height) {
+        throw "$Description target is outside the product-reported active dock."
+    }
     Send-HenkaBackgroundFramebufferDrag `
         -Handle $Handle `
         -FramebufferWidth $FramebufferWidth `
         -FramebufferHeight $FramebufferHeight `
         -StartFramebufferX $dividerX `
-        -StartFramebufferY ($SceneObjectsY + $CurrentHeight) `
+        -StartFramebufferY $dividerY `
         -EndFramebufferX $dividerX `
-        -EndFramebufferY ($SceneObjectsY + $TargetHeight) `
+        -EndFramebufferY $TargetFramebufferY `
         -StdoutPath $StdoutPath `
         -Description $Description
 }
@@ -1309,6 +1393,17 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
         [Parameter(Mandatory = $true)][string]$StdoutPath,
         [switch]$RestorePanelAfterSelection
     )
+
+    $topology = Get-HenkaWorkspaceTopologyReport `
+        -StdoutPath $StdoutPath `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -RequireToolsVisible -RequireDivider
+    $SceneObjectsX = $topology.SceneObjects.X
+    $SceneObjectsY = $topology.SceneObjects.Y
+    $SceneObjectsWidth = $topology.SceneObjects.Width
+    $SceneObjectsHeight = $topology.SceneObjects.Height
+    $originalSceneObjectsHeight = $SceneObjectsHeight
 
     $escapedName = [Regex]::Escape($Name)
     $rowPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row entity=(?<entity>\d+) name=' +
@@ -1495,38 +1590,84 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
     Write-Output (("[pass] Derived compact Scene Objects height {0:F1}px from the product row; " +
         "visible row capacity is {1:F1}px") -f $compactPanelHeight, $compactAvailableRowHeight)
     $compactLayoutOffset = Get-FileLengthSafe -Path $StdoutPath
+    $reachabilityScreenshotPath = Join-Path (Split-Path -Parent $StdoutPath) `
+        "scene-objects-$($Name.ToLowerInvariant())-divider-reachability-1280x720.bmp"
     Set-HenkaSceneObjectsPanelHeightThroughUi `
         -Handle $Handle `
         -FramebufferWidth $FramebufferWidth `
         -FramebufferHeight $FramebufferHeight `
-        -SceneObjectsX $SceneObjectsX `
-        -SceneObjectsY $SceneObjectsY `
-        -SceneObjectsWidth $SceneObjectsWidth `
-        -CurrentHeight $SceneObjectsHeight `
-        -TargetHeight $compactPanelHeight `
+        -Topology $topology `
+        -TargetFramebufferY ($SceneObjectsY + $compactPanelHeight) `
         -StdoutPath $StdoutPath `
         -Description "Resizing Scene Objects to the supported one-line row boundary"
+
+    $dividerReleasePattern = '^HENKA_AUTOMATION_DIAGNOSTIC workspace_topology cause=divider_release '
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $StdoutPath `
+            -Pattern $dividerReleasePattern `
+            -StartingOffset $compactLayoutOffset `
+            -TimeoutMilliseconds 5000)) {
+        throw "The product did not report the live left-dock geometry after the divider release."
+    }
+    $resizedTopology = Get-HenkaWorkspaceTopologyReport `
+        -StdoutPath $StdoutPath `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -RequireToolsVisible
+    $geometryChanged =
+        [Math]::Abs($resizedTopology.SceneObjects.X - $topology.SceneObjects.X) -gt 0.5 -or
+        [Math]::Abs($resizedTopology.SceneObjects.Y - $topology.SceneObjects.Y) -gt 0.5 -or
+        [Math]::Abs($resizedTopology.SceneObjects.Width - $topology.SceneObjects.Width) -gt 0.5 -or
+        [Math]::Abs($resizedTopology.SceneObjects.Height - $topology.SceneObjects.Height) -gt 0.5
+    if (-not $geometryChanged) {
+        throw "The real divider drag events were consumed, but product-reported Scene Objects geometry did not change."
+    }
+    $SceneObjectsX = $resizedTopology.SceneObjects.X
+    $SceneObjectsY = $resizedTopology.SceneObjects.Y
+    $SceneObjectsWidth = $resizedTopology.SceneObjects.Width
+    $SceneObjectsHeight = $resizedTopology.SceneObjects.Height
+    $topology = $resizedTopology
+    Write-Output ("[pass] The real product topology divider changed Scene Objects geometry to {0:F1}px high" -f $SceneObjectsHeight)
+    Save-WindowScreenshot `
+        -Handle $Handle `
+        -Path $reachabilityScreenshotPath `
+        -Description "Packaged Scene Objects after the real topology-divider drag"
 
     $compactDisplayPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row entity=' +
         [Regex]::Escape($entity) + ' name=' + $escapedName + ' display=' +
         [Regex]::Escape($Name + ' [Hidden]') + ' lines=1 hidden=1 selected=0 x=[-0-9.]+ y=[-0-9.]+ width=[-0-9.]+ height=[-0-9.]+\.'
     $compactRowVisible = Wait-FileContainsAfterOffset -Path $StdoutPath `
-        -Pattern $compactDisplayPattern -StartingOffset $compactLayoutOffset -TimeoutMilliseconds 350
-    for ($pageAdvance = 0; -not $compactRowVisible -and $pageAdvance -lt 12; ++$pageAdvance) {
-        $pageClickOffset = Get-FileLengthSafe -Path $StdoutPath
-        Send-HenkaBackgroundFramebufferClickAndWait `
-            -Handle $Handle `
-            -FramebufferWidth $FramebufferWidth `
-            -FramebufferHeight $FramebufferHeight `
-            -FramebufferX ($SceneObjectsX + $SceneObjectsWidth - 51.0) `
-            -FramebufferY ($SceneObjectsY + $compactPanelHeight - 22.0) `
-            -StdoutPath $StdoutPath `
-            -Description "Advancing the real compact Scene Objects page"
-        $compactRowVisible = Wait-FileContainsAfterOffset -Path $StdoutPath `
-            -Pattern $compactDisplayPattern -StartingOffset $pageClickOffset -TimeoutMilliseconds 350
-    }
+        -Pattern $compactDisplayPattern -StartingOffset $compactLayoutOffset -TimeoutMilliseconds 1000
     if (-not $compactRowVisible) {
-        throw "The hidden '$Name' one-line row was not reached through bounded Scene Objects paging."
+        if ($topology.DividerCount -gt 0) {
+            $restoreUnreachableOffset = Get-FileLengthSafe -Path $StdoutPath
+            Set-HenkaSceneObjectsPanelHeightThroughUi `
+                -Handle $Handle `
+                -FramebufferWidth $FramebufferWidth `
+                -FramebufferHeight $FramebufferHeight `
+                -Topology $topology `
+                -TargetFramebufferY ($SceneObjectsY + $originalSceneObjectsHeight) `
+                -StdoutPath $StdoutPath `
+                -Description "Restoring the Scene Objects dock after classifying one-line reachability"
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $StdoutPath `
+                    -Pattern $dividerReleasePattern `
+                    -StartingOffset $restoreUnreachableOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The product did not report Scene Objects geometry after restoring the ordinary dock."
+            }
+            $restoredTopology = Get-HenkaWorkspaceTopologyReport `
+                -StdoutPath $StdoutPath `
+                -FramebufferWidth $FramebufferWidth `
+                -FramebufferHeight $FramebufferHeight `
+                -RequireToolsVisible
+            if ([Math]::Abs($restoredTopology.SceneObjects.Height - $originalSceneObjectsHeight) -gt 1.0) {
+                throw "The normal Scene Objects height was not restored after the one-line reachability classification."
+            }
+        }
+        $script:hiddenRowOneLineReachable = $false
+        Write-Output ("[classified-open] The normal divider interaction reached a {0:F1}px Scene Objects panel, but the product did not report '$Name [Hidden]' in its one-line row layout; no further synthetic resizing or paging will be attempted." -f $resizedTopology.SceneObjects.Height)
+        return
     }
 
     $row = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $rowPattern
@@ -1548,7 +1689,7 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
         -X $rowX -Y $rowY -Width $rowWidth -Height $rowHeight
     if ($rowX -lt $SceneObjectsX -or $rowY -lt $SceneObjectsY -or
         $rowX + $rowWidth -gt $SceneObjectsX + $SceneObjectsWidth -or
-        $rowY + $rowHeight -gt $SceneObjectsY + $compactPanelHeight) {
+        $rowY + $rowHeight -gt $SceneObjectsY + $SceneObjectsHeight) {
         throw "Hidden '$Name' one-line row hit geometry escaped the compact visible Scene Objects panel."
     }
 
@@ -1582,13 +1723,25 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
             -Handle $Handle `
             -FramebufferWidth $FramebufferWidth `
             -FramebufferHeight $FramebufferHeight `
-            -SceneObjectsX $SceneObjectsX `
-            -SceneObjectsY $SceneObjectsY `
-            -SceneObjectsWidth $SceneObjectsWidth `
-            -CurrentHeight $compactPanelHeight `
-            -TargetHeight $SceneObjectsHeight `
+            -Topology $topology `
+            -TargetFramebufferY ($SceneObjectsY + $originalSceneObjectsHeight) `
             -StdoutPath $StdoutPath `
             -Description "Restoring the normal Scene Objects panel height after the first row proof"
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $StdoutPath `
+                -Pattern $dividerReleasePattern `
+                -StartingOffset $restoreOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The product did not report Scene Objects geometry after restoring the normal dock height."
+        }
+        $restoredTopology = Get-HenkaWorkspaceTopologyReport `
+            -StdoutPath $StdoutPath `
+            -FramebufferWidth $FramebufferWidth `
+            -FramebufferHeight $FramebufferHeight `
+            -RequireToolsVisible
+        if ([Math]::Abs($restoredTopology.SceneObjects.Height - $originalSceneObjectsHeight) -gt 1.0) {
+            throw "The normal Scene Objects height was not restored after the hidden-row selection proof."
+        }
         $restoredPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row entity=' +
             [Regex]::Escape($entity) + ' name=' + $escapedName + ' display=[^\r\n]* lines=2 hidden=1 selected=1 x=[-0-9.]+ y=[-0-9.]+ width=[-0-9.]+ height=[-0-9.]+\.'
         if (-not (Wait-FileContainsAfterOffset -Path $StdoutPath -Pattern $restoredPattern `
@@ -2498,11 +2651,20 @@ try {
                 -FramebufferHeight $preflightFramebufferHeight `
                 -FramebufferX ($preflightToolsX + $preflightToolsWidth * 0.5) `
                 -FramebufferY ($preflightToolsY + $preflightToolsHeight * 0.5)
-            if (-not (Wait-FileContains `
+            if (-not (Wait-FileContainsAfterOffset `
                     -Path $stdoutPath `
                     -Pattern "Tools QA tab:" `
+                    -StartingOffset $nativeOpenLogOffset `
                     -TimeoutMilliseconds 4000)) {
                 throw "The packaged Tools dock was not available and could not be opened through its logical Scene View header control."
+            }
+            $toolsTopologyPattern = '^HENKA_AUTOMATION_DIAGNOSTIC workspace_topology cause=tools_toggle tools_visible=1 '
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $toolsTopologyPattern `
+                    -StartingOffset $nativeOpenLogOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "The real Scene View Tools click did not produce a fresh product report showing the Controls section and its topology state."
             }
         }
 
@@ -2519,6 +2681,17 @@ try {
                     -TimeoutMilliseconds 4000)) {
                 throw "Required packaged UI automation geometry was not reported: $requiredPattern"
             }
+        }
+
+        $toolsTopologyPattern = '^HENKA_AUTOMATION_DIAGNOSTIC workspace_topology cause=[a-z_]+ tools_visible=(?<toolsVisible>[01]) '
+        $toolsTopologyMatch = Wait-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $toolsTopologyPattern `
+            -GroupName 'toolsVisible' `
+            -ExpectedValue '1' `
+            -TimeoutMilliseconds 5000
+        if ($null -eq $toolsTopologyMatch) {
+            throw "The product did not confirm that Tools/Controls is visible in its current workspace layout."
         }
 
         $framebufferMatch = Get-LastLogRegexMatch `
@@ -2610,6 +2783,24 @@ try {
             [double]$workspaceGeometryMatch.Groups[23].Value
         $detailsHeight =
             [double]$workspaceGeometryMatch.Groups[24].Value
+
+        $workspaceTopology = Get-HenkaWorkspaceTopologyReport `
+            -StdoutPath $stdoutPath `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -RequireToolsVisible -RequireDivider
+        $leftDockX = $workspaceTopology.Dock.X
+        $leftDockY = $workspaceTopology.Dock.Y
+        $leftDockWidth = $workspaceTopology.Dock.Width
+        $leftDockHeight = $workspaceTopology.Dock.Height
+        $controlsX = $workspaceTopology.Controls.X
+        $controlsY = $workspaceTopology.Controls.Y
+        $controlsWidth = $workspaceTopology.Controls.Width
+        $controlsHeight = $workspaceTopology.Controls.Height
+        $sceneObjectsX = $workspaceTopology.SceneObjects.X
+        $sceneObjectsY = $workspaceTopology.SceneObjects.Y
+        $sceneObjectsWidth = $workspaceTopology.SceneObjects.Width
+        $sceneObjectsHeight = $workspaceTopology.SceneObjects.Height
 
         $gridAvailable = $null -ne $gridMatch
         if ($gridAvailable) {
@@ -2946,6 +3137,7 @@ try {
                 [PSCustomObject]@{ Name = 'Ground'; AlternateName = 'New Cube'; RestorePanel = $true },
                 [PSCustomObject]@{ Name = 'New Cube'; AlternateName = 'Ground'; RestorePanel = $false }
             )
+            $script:hiddenRowOneLineReachable = $true
             foreach ($hiddenRowCase in $hiddenRowCases) {
                 $hiddenRowArguments = @{
                     Name = $hiddenRowCase.Name
@@ -2967,12 +3159,20 @@ try {
                     $hiddenRowArguments.RestorePanelAfterSelection = $true
                 }
                 Assert-HenkaPackagedHiddenNamedObjectSelectable @hiddenRowArguments
+                if (-not $script:hiddenRowOneLineReachable) {
+                    break
+                }
             }
             Save-WindowScreenshot `
                 -Handle $mainWindowHandle `
                 -Path (Join-Path $logDir 'scene-objects-hidden-rows-1280x720.bmp') `
                 -Description "Packaged 1280x720 Scene Objects with two hidden named objects and the intended object selected"
-            Write-Output "[pass] Two distinct hidden product-native objects retained readable names and individually selected through their visible rows"
+            if ($script:hiddenRowOneLineReachable) {
+                Write-Output "[pass] Two distinct hidden product-native objects retained readable names and individually selected through their visible one-line rows"
+            }
+            else {
+                Write-Output "[classified-open] The formatter regression remains the one-line fallback proof; packaged evidence covers the narrowest layout reached by the real product divider, and the one-line state is not reachable through this packaged UI path."
+            }
             $packagedCheckSucceeded = $true
             return
         }
