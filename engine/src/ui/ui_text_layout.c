@@ -1,6 +1,7 @@
 #include "ui_internal.h"
 
 #include <float.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -83,6 +84,83 @@ static henka_ui_utf8_decoded henka_ui_text_decode_utf8(const uint8_t* bytes, siz
     return decoded;
 }
 
+static henka_result henka_ui_text_layout_build_internal(
+    const henka_ui_font_resource* resource,
+    const char* utf8,
+    size_t utf8_size,
+    float max_width,
+    size_t max_line_count,
+    bool include_glyph_placements,
+    henka_ui_text_run* out_run,
+    henka_ui_font_diagnostic* out_diagnostic);
+
+henka_result henka_ui_measure_font_text(
+    const henka_ui_context* context,
+    const char* text,
+    float scale,
+    int* out_width,
+    int* out_height)
+{
+    const henka_ui_font_resource* font;
+    henka_ui_text_run run;
+    size_t text_length;
+    double measured_width;
+    double measured_height;
+    henka_result result;
+
+    if (out_width != NULL)
+    {
+        *out_width = 0;
+    }
+    if (out_height != NULL)
+    {
+        *out_height = 0;
+    }
+    if (context == NULL || context->font_profile == NULL || text == NULL ||
+        out_width == NULL || out_height == NULL || !isfinite((double)scale) ||
+        scale <= 0.0f || scale > HENKA_UI_MAX_SCALE ||
+        !henka_checked_c_string_length(text, HENKA_UI_TEXT_MAX_BYTES, &text_length))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    font = henka_ui_font_raster_profile_get_font(
+        context->font_profile, context->font_app_scale_percent);
+    if (font == NULL)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+
+    memset(&run, 0, sizeof(run));
+    result = henka_ui_text_layout_build_internal(
+        font,
+        text,
+        text_length,
+        0.0f,
+        SIZE_MAX,
+        false,
+        &run,
+        NULL);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_ui_text_run_dispose(&run);
+        return result;
+    }
+    measured_width = ceil((double)run.advance_width * (double)scale);
+    measured_height = ceil((double)run.line_height * (double)run.line_count * (double)scale);
+    if (!isfinite(measured_width) || !isfinite(measured_height) ||
+        measured_width < 0.0 || measured_height <= 0.0 ||
+        measured_width > (double)INT_MAX || measured_height > (double)INT_MAX)
+    {
+        henka_ui_text_run_dispose(&run);
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    *out_width = (int)measured_width;
+    *out_height = (int)measured_height;
+    henka_ui_text_run_dispose(&run);
+    return HENKA_SUCCESS;
+}
+
 static void henka_ui_text_run_include_ink(henka_ui_text_run* run, const henka_ui_text_glyph* glyph)
 {
     const float right = glyph->x + glyph->width;
@@ -118,45 +196,55 @@ static void henka_ui_text_run_include_ink(henka_ui_text_run* run, const henka_ui
     }
 }
 
-static bool henka_ui_text_append_glyph(
-    const henka_ui_font_resource* resource,
+static bool henka_ui_text_append_glyph_info(
     henka_ui_text_run* run,
     uint32_t source_codepoint,
     uint32_t rendered_codepoint,
-    uint32_t previous_glyph_index,
+    const henka_ui_font_glyph_info* glyph_info,
+    float kerning,
     float line_offset_y,
-    float* in_out_pen_x)
+    float* in_out_pen_x,
+    bool include_glyph_placement)
 {
-    henka_ui_font_glyph_info glyph_info;
-    henka_ui_text_glyph* placement;
-    float kerning = 0.0f;
+    float glyph_pen_x;
+    float next_pen_x;
 
-    if (run == NULL || run->glyphs == NULL || in_out_pen_x == NULL ||
-        !henka_ui_font_resource_get_glyph(resource, rendered_codepoint, &glyph_info))
+    if (run == NULL || glyph_info == NULL || in_out_pen_x == NULL ||
+        !isfinite((double)kerning))
     {
         return false;
     }
-    if (previous_glyph_index != 0U &&
-        !henka_ui_font_resource_get_kerning(resource, previous_glyph_index, glyph_info.glyph_index, &kerning))
+    glyph_pen_x = *in_out_pen_x + kerning;
+    next_pen_x = glyph_pen_x + glyph_info->advance_x;
+    if (!isfinite((double)glyph_pen_x) || !isfinite((double)next_pen_x) ||
+        glyph_pen_x < 0.0f || next_pen_x < 0.0f)
     {
         return false;
     }
-    placement = &run->glyphs[run->glyph_count];
-    placement->source_codepoint = source_codepoint;
-    placement->rendered_codepoint = rendered_codepoint;
-    placement->glyph_index = glyph_info.glyph_index;
-    placement->pen_x = *in_out_pen_x + kerning;
-    placement->x = placement->pen_x + glyph_info.bitmap_x;
-    placement->y = glyph_info.bitmap_y + line_offset_y;
-    placement->width = (float)glyph_info.bitmap_width;
-    placement->height = (float)glyph_info.bitmap_height;
-    placement->advance_x = glyph_info.advance_x;
-    placement->atlas_x = glyph_info.atlas_x;
-    placement->atlas_y = glyph_info.atlas_y;
-    henka_ui_text_run_include_ink(run, placement);
-    *in_out_pen_x = placement->pen_x + placement->advance_x;
-    run->advance_width = *in_out_pen_x;
-    ++run->glyph_count;
+    if (include_glyph_placement)
+    {
+        henka_ui_text_glyph* placement;
+        if (run->glyphs == NULL)
+        {
+            return false;
+        }
+        placement = &run->glyphs[run->glyph_count];
+        placement->source_codepoint = source_codepoint;
+        placement->rendered_codepoint = rendered_codepoint;
+        placement->glyph_index = glyph_info->glyph_index;
+        placement->pen_x = glyph_pen_x;
+        placement->x = glyph_pen_x + glyph_info->bitmap_x;
+        placement->y = glyph_info->bitmap_y + line_offset_y;
+        placement->width = (float)glyph_info->bitmap_width;
+        placement->height = (float)glyph_info->bitmap_height;
+        placement->advance_x = glyph_info->advance_x;
+        placement->atlas_x = glyph_info->atlas_x;
+        placement->atlas_y = glyph_info->atlas_y;
+        henka_ui_text_run_include_ink(run, placement);
+        ++run->glyph_count;
+    }
+    *in_out_pen_x = next_pen_x;
+    run->advance_width = next_pen_x;
     return true;
 }
 
@@ -202,9 +290,15 @@ static bool henka_ui_text_append_ellipsis(
         }
         if (*in_out_pen_x + kerning + ellipsis.advance_x <= max_width)
         {
-            return henka_ui_text_append_glyph(
-                resource, run, HENKA_UI_TEXT_ELLIPSIS_CODEPOINT,
-                codepoint, previous, line_offset_y, in_out_pen_x);
+            return henka_ui_text_append_glyph_info(
+                run,
+                HENKA_UI_TEXT_ELLIPSIS_CODEPOINT,
+                codepoint,
+                &ellipsis,
+                kerning,
+                line_offset_y,
+                in_out_pen_x,
+                true);
         }
         if (run->glyph_count <= line_start)
         {
@@ -237,11 +331,13 @@ static bool henka_ui_text_append_ellipsis(
     }
 }
 
-henka_result henka_ui_text_layout_build(
+static henka_result henka_ui_text_layout_build_internal(
     const henka_ui_font_resource* resource,
     const char* utf8,
     size_t utf8_size,
     float max_width,
+    size_t max_line_count,
+    bool include_glyph_placements,
     henka_ui_text_run* out_run,
     henka_ui_font_diagnostic* out_diagnostic)
 {
@@ -252,6 +348,7 @@ henka_result henka_ui_text_layout_build(
     float maximum_line_advance = 0.0f;
     size_t offset = 0U;
     size_t line_start = 0U;
+    uint32_t previous_glyph_index = 0U;
     size_t capacity;
     size_t allocation_size;
 
@@ -265,7 +362,8 @@ henka_result henka_ui_text_layout_build(
     }
     memset(out_run, 0, sizeof(*out_run));
     memset(&candidate, 0, sizeof(candidate));
-    if (resource == NULL || (utf8 == NULL && utf8_size > 0U) ||
+    if (resource == NULL || (utf8 == NULL && utf8_size > 0U) || max_line_count == 0U ||
+        (!include_glyph_placements && (max_width != 0.0f || max_line_count != SIZE_MAX)) ||
         !isfinite(max_width) || max_width < 0.0f ||
         !henka_ui_font_resource_get_info(resource, &font_info))
     {
@@ -293,7 +391,7 @@ henka_result henka_ui_text_layout_build(
     candidate.line_height = font_info.line_height;
     candidate.line_count = 1U;
     capacity = utf8_size;
-    if (capacity > 0U)
+    if (include_glyph_placements && capacity > 0U)
     {
         if (!henka_checked_size_multiply(capacity, sizeof(*candidate.glyphs), &allocation_size))
         {
@@ -333,6 +431,18 @@ henka_result henka_ui_text_layout_build(
             {
                 maximum_line_advance = pen_x;
             }
+            if (candidate.line_count >= max_line_count)
+            {
+                candidate.truncated = true;
+                if (!henka_ui_text_append_ellipsis(
+                        resource, &candidate, max_width, line_start,
+                        line_offset_y, &pen_x))
+                {
+                    henka_ui_text_run_dispose(&candidate);
+                    return HENKA_ERROR_ASSET_SOURCE;
+                }
+                break;
+            }
             if (candidate.line_count == SIZE_MAX ||
                 !isfinite((double)line_offset_y + (double)font_info.line_height) ||
                 (double)line_offset_y + (double)font_info.line_height > (double)FLT_MAX)
@@ -343,6 +453,7 @@ henka_result henka_ui_text_layout_build(
             pen_x = 0.0f;
             line_offset_y += font_info.line_height;
             line_start = candidate.glyph_count;
+            previous_glyph_index = 0U;
             ++candidate.line_count;
             continue;
         }
@@ -361,7 +472,7 @@ henka_result henka_ui_text_layout_build(
                 return HENKA_ERROR_ASSET_SOURCE;
             }
         }
-        previous_glyph = henka_ui_text_previous_glyph(resource, &candidate, line_start);
+        previous_glyph = previous_glyph_index;
         if (previous_glyph != 0U &&
             !henka_ui_font_resource_get_kerning(resource, previous_glyph, glyph_info.glyph_index, &kerning))
         {
@@ -380,13 +491,20 @@ henka_result henka_ui_text_layout_build(
             }
             break;
         }
-        if (!henka_ui_text_append_glyph(resource, &candidate,
-                decoded.codepoint, rendered_codepoint, previous_glyph,
-                line_offset_y, &pen_x))
+        if (!henka_ui_text_append_glyph_info(
+                &candidate,
+                decoded.codepoint,
+                rendered_codepoint,
+                &glyph_info,
+                kerning,
+                line_offset_y,
+                &pen_x,
+                include_glyph_placements))
         {
             henka_ui_text_run_dispose(&candidate);
             return HENKA_ERROR_ASSET_SOURCE;
         }
+        previous_glyph_index = glyph_info.glyph_index;
         if (replaced)
         {
             ++candidate.replacement_count;
@@ -404,6 +522,44 @@ henka_result henka_ui_text_layout_build(
         (void)snprintf(out_diagnostic->identity, sizeof(out_diagnostic->identity), "%s", font_info.identity);
     }
     return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_text_layout_build_limited(
+    const henka_ui_font_resource* resource,
+    const char* utf8,
+    size_t utf8_size,
+    float max_width,
+    size_t max_line_count,
+    henka_ui_text_run* out_run,
+    henka_ui_font_diagnostic* out_diagnostic)
+{
+    return henka_ui_text_layout_build_internal(
+        resource,
+        utf8,
+        utf8_size,
+        max_width,
+        max_line_count,
+        true,
+        out_run,
+        out_diagnostic);
+}
+
+henka_result henka_ui_text_layout_build(
+    const henka_ui_font_resource* resource,
+    const char* utf8,
+    size_t utf8_size,
+    float max_width,
+    henka_ui_text_run* out_run,
+    henka_ui_font_diagnostic* out_diagnostic)
+{
+    return henka_ui_text_layout_build_limited(
+        resource,
+        utf8,
+        utf8_size,
+        max_width,
+        SIZE_MAX,
+        out_run,
+        out_diagnostic);
 }
 
 void henka_ui_text_run_dispose(henka_ui_text_run* run)
@@ -537,13 +693,15 @@ henka_result henka_ui_context_set_font_profile(
     return HENKA_SUCCESS;
 }
 
-henka_result henka_ui_draw_font_text(
+static henka_result henka_ui_draw_font_text_with_limits(
     henka_ui_context* context,
     float x,
     float y,
     float scale,
     const char* text,
-    henka_vec4 color)
+    henka_vec4 color,
+    float maximum_width,
+    size_t maximum_line_count)
 {
     const henka_ui_font_resource* font;
     henka_ui_font_info font_info;
@@ -559,6 +717,7 @@ henka_result henka_ui_draw_font_text(
         scale <= 0.0f || scale > HENKA_UI_MAX_SCALE ||
         !isfinite(color.x) || !isfinite(color.y) ||
         !isfinite(color.z) || !isfinite(color.w) ||
+        !isfinite(maximum_width) || maximum_width < 0.0f || maximum_line_count == 0U ||
         !henka_checked_c_string_length(text, HENKA_UI_TEXT_MAX_BYTES, &text_length))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -570,8 +729,14 @@ henka_result henka_ui_draw_font_text(
         return HENKA_ERROR_ASSET_SOURCE;
     }
     memset(&run, 0, sizeof(run));
-    result = henka_ui_text_layout_build(
-        font, text, text_length, 0.0f, &run, &diagnostic);
+    result = henka_ui_text_layout_build_limited(
+        font,
+        text,
+        text_length,
+        maximum_width > 0.0f ? maximum_width / scale : 0.0f,
+        maximum_line_count,
+        &run,
+        &diagnostic);
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -647,4 +812,41 @@ henka_result henka_ui_draw_font_text(
     }
     henka_ui_text_run_dispose(&run);
     return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_draw_font_text(
+    henka_ui_context* context,
+    float x,
+    float y,
+    float scale,
+    const char* text,
+    henka_vec4 color)
+{
+    return henka_ui_draw_font_text_with_limits(
+        context, x, y, scale, text, color, 0.0f, SIZE_MAX);
+}
+
+henka_result henka_ui_draw_font_text_limited(
+    henka_ui_context* context,
+    float x,
+    float y,
+    float scale,
+    const char* text,
+    henka_vec4 color,
+    float maximum_width,
+    size_t maximum_line_count)
+{
+    if (!isfinite((double)maximum_width) || maximum_width <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_ui_draw_font_text_with_limits(
+        context,
+        x,
+        y,
+        scale,
+        text,
+        color,
+        maximum_width,
+        maximum_line_count);
 }

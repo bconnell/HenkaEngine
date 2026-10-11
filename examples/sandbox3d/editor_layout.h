@@ -147,26 +147,8 @@ henka_result sandbox3d_editor_layout_tool_row(
     size_t item_capacity,
     size_t* out_item_count);
 
-/*
- * Place a bounded row of labeled controls using the engine UI text metrics.
- * Each control receives its measured label width plus horizontal padding;
- * extra space is distributed evenly. The output array is caller-owned and
- * remains unchanged when the row cannot fit or any input is invalid.
- */
-henka_result sandbox3d_editor_layout_text_control_row(
-    henka_ui_rect bounds,
-    const char* const* labels,
-    size_t item_count,
-    float scale,
-    float horizontal_padding,
-    float gap,
-    henka_ui_rect* out_items,
-    size_t item_capacity,
-    size_t* out_item_count);
-
-/* Place controls at their measured text width (or a minimum hit width) using
- * the active UI context's DPI-aware text scale. Extra row space remains
- * available to neighboring content instead of stretching the controls. */
+/* Place measured labels using the active UI context's text authority. Each
+ * output is caller-owned; an unfit row leaves output geometry unchanged. */
 henka_result sandbox3d_editor_layout_text_control_row_for_context(
     const henka_ui_context* ui_context,
     henka_ui_rect bounds,
@@ -180,8 +162,9 @@ henka_result sandbox3d_editor_layout_text_control_row_for_context(
     size_t item_capacity,
     size_t* out_item_count);
 
-/* Wrap display text without truncating its non-whitespace content. A long
- * token is split at the column boundary. */
+#ifdef HENKA_SANDBOX3D_TEST_SEAM
+/* Regression-only coverage for the retired fixed-column display helpers.
+ * Product layout must use editor_text_layout's active font metrics. */
 henka_result sandbox3d_editor_layout_measure_wrapped_text(
     const char* text,
     size_t max_columns,
@@ -214,6 +197,7 @@ henka_result sandbox3d_editor_layout_format_hidden_row_label(
     char* out_text,
     size_t out_capacity,
     bool* out_name_truncated);
+#endif /* HENKA_SANDBOX3D_TEST_SEAM */
 
 /* Row heights and pages share the same text metrics so wrapped rows cannot
  * overlap the next row or the panel footer. */

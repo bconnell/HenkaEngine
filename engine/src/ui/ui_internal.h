@@ -145,4 +145,31 @@ henka_result henka_ui_draw_font_text(
     const char* text,
     henka_vec4 color);
 
+henka_result henka_ui_draw_font_text_limited(
+    henka_ui_context* context,
+    float x,
+    float y,
+    float scale,
+    const char* text,
+    henka_vec4 color,
+    float maximum_width,
+    size_t maximum_line_count);
+
+/* Context metrics share the font/profile authority used by font drawing. */
+henka_result henka_ui_measure_font_text(
+    const henka_ui_context* context,
+    const char* text,
+    float scale,
+    int* out_width,
+    int* out_height);
+
+henka_result henka_ui_text_layout_build_limited(
+    const henka_ui_font_resource* resource,
+    const char* utf8,
+    size_t utf8_size,
+    float max_width,
+    size_t max_line_count,
+    henka_ui_text_run* out_run,
+    henka_ui_font_diagnostic* out_diagnostic);
+
 #endif

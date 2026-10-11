@@ -3,10 +3,12 @@
 #include <henka/memory.h>
 
 #include "../examples/sandbox3d/editor_font_bootstrap.h"
+#include "../examples/sandbox3d/editor_text_layout.h"
 #include "../engine/src/core/memory_internal.h"
 #include "../engine/src/ui/ui_font_internal.h"
 #include "../engine/src/ui/ui_internal.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -774,6 +776,187 @@ static void henka_test_ui_font_text_draw_preserves_line_breaks(void)
     henka_ui_font_test_fixture_dispose(&fixture);
 }
 
+static void henka_test_ui_context_measurement_uses_active_font_metrics(void)
+{
+    henka_ui_context* ui = NULL;
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* font = NULL;
+    henka_ui_font_raster_profile* profile = NULL;
+    henka_ui_font_info font_info;
+    henka_ui_text_run run;
+    henka_ui_frame_desc frame_desc = {0};
+    int narrow_width = 0;
+    int wide_width = 0;
+    int six_wide_width = 0;
+    int one_line_height = 0;
+    int two_line_height = 0;
+    int measured_run_width = 0;
+    int measured_run_height = 0;
+    bool saw_font_glyph;
+    size_t allocations_before_measurement;
+    size_t wrapped_line_count = 0U;
+    char wrapped_text[128];
+    char limited_text[128];
+    char hidden_text[128];
+    char other_hidden_text[128];
+    const char* hidden_input = "Long canonical scene object name";
+    bool was_truncated = false;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x701U, 1U, 1U, &font, &profile));
+    HENKA_TEST_ASSERT(henka_ui_font_resource_get_info(
+        henka_ui_font_raster_profile_get_font(profile, 100U), &font_info));
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(ui, profile, 100U) == HENKA_SUCCESS);
+
+    allocations_before_measurement = henka_memory_get_allocation_count();
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        ui, "iiii", 1.0f, &narrow_width, &one_line_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_measurement);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        ui, "WWWW", 1.0f, &wide_width, &measured_run_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(wide_width > narrow_width);
+    HENKA_TEST_ASSERT(one_line_height == (int)ceilf(font_info.line_height));
+    HENKA_TEST_ASSERT(measured_run_height == one_line_height);
+
+    {
+        size_t byte_offset = SIZE_MAX;
+        int after_narrow_prefix = 0;
+        int after_first_wide_glyph = 0;
+        int ignored_height = 0;
+
+        HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+            ui, "iiiiW", 1.0f, &after_first_wide_glyph, &ignored_height) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+            ui, "iiii", 1.0f, &after_narrow_prefix, &ignored_height) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_editor_text_byte_offset_at_x(
+            ui, "iiiiWWWW", 1.0f,
+            (float)after_narrow_prefix + 0.1f,
+            &byte_offset) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(byte_offset == 4U);
+        HENKA_TEST_ASSERT(sandbox3d_editor_text_byte_offset_at_x(
+            ui, "iiiiWWWW", 1.0f,
+            ((float)after_narrow_prefix + (float)after_first_wide_glyph) * 0.5f,
+            &byte_offset) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(byte_offset == 5U);
+        HENKA_TEST_ASSERT(sandbox3d_editor_text_byte_offset_at_x(
+            ui, "iiiiWWWW", 1.0f, (float)wide_width * 2.0f,
+            &byte_offset) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(byte_offset == 8U);
+        HENKA_TEST_ASSERT(sandbox3d_editor_text_byte_offset_at_x(
+            ui, "iiiiWWWW", 1.0f, -1.0f, &byte_offset) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(byte_offset == 0U);
+    }
+
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_wrap(
+        ui, "WWWW iii", (float)wide_width,
+        wrapped_text, sizeof(wrapped_text), &wrapped_line_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(wrapped_line_count == 2U);
+    HENKA_TEST_ASSERT(strcmp(wrapped_text, "WWWW\niii") == 0);
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_measure_wrapped_lines(
+        ui, "WWWW iii", (float)wide_width, &wrapped_line_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(wrapped_line_count == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_wrap(
+        ui, "WWWW iii MMM", (float)wide_width,
+        wrapped_text, sizeof(wrapped_text), &wrapped_line_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(wrapped_line_count >= 3U);
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_limit_wrapped_lines(
+        ui, wrapped_text, 2U, (float)wide_width,
+        limited_text, sizeof(limited_text), &wrapped_line_count,
+        &was_truncated) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(was_truncated && wrapped_line_count == 2U);
+    HENKA_TEST_ASSERT(strstr(limited_text, "...") != NULL);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        ui, "WWWWWW", 1.0f, &six_wide_width, &measured_run_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(six_wide_width > wide_width);
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_fit(
+        ui, "WWWWWW", ((float)wide_width + (float)six_wide_width) * 0.5f,
+        limited_text, sizeof(limited_text), &was_truncated) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(was_truncated &&
+        strcmp(limited_text, "WWWWWW") != 0 && strstr(limited_text, "...") != NULL);
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_format_hidden_row(
+        ui, hidden_input, 110.0f,
+        hidden_text, sizeof(hidden_text), &was_truncated) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(was_truncated && strstr(hidden_text, " [Hidden]") != NULL);
+    HENKA_TEST_ASSERT(strlen(hidden_text) >= strlen(" [Hidden]") &&
+        strcmp(hidden_text + strlen(hidden_text) - strlen(" [Hidden]"), " [Hidden]") == 0);
+    HENKA_TEST_ASSERT(strchr(hidden_text, '\n') == NULL);
+    HENKA_TEST_ASSERT(strcmp(hidden_input, "Long canonical scene object name") == 0);
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_format_hidden_row(
+        ui, "Another long scene object name", 110.0f,
+        other_hidden_text, sizeof(other_hidden_text), &was_truncated) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(was_truncated && strstr(other_hidden_text, " [Hidden]") != NULL);
+    HENKA_TEST_ASSERT(strlen(other_hidden_text) >= strlen(" [Hidden]") &&
+        strcmp(other_hidden_text + strlen(other_hidden_text) - strlen(" [Hidden]"), " [Hidden]") == 0);
+    HENKA_TEST_ASSERT(strcmp(hidden_text, other_hidden_text) != 0);
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_measure_wrapped_lines(
+        ui, hidden_text, 110.0f, &wrapped_line_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(wrapped_line_count == 1U);
+
+    memset(&run, 0, sizeof(run));
+    HENKA_TEST_ASSERT(henka_ui_text_layout_build(
+        henka_ui_font_raster_profile_get_font(profile, 100U),
+        "AVATAR I/l/1 O/0: 123.45",
+        strlen("AVATAR I/l/1 O/0: 123.45"),
+        0.0f,
+        &run,
+        NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        ui, "AVATAR I/l/1 O/0: 123.45", 1.0f,
+        &measured_run_width, &measured_run_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(measured_run_width == (int)ceilf(run.advance_width));
+    henka_ui_text_run_dispose(&run);
+
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        ui, "A\nA", 1.0f, &measured_run_width, &two_line_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(two_line_height == (int)ceilf(font_info.line_height * 2.0f));
+
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(ui, profile, 200U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        ui, "WWWW", 1.0f, &measured_run_width, &measured_run_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(measured_run_width > wide_width);
+
+    memset(&run, 0, sizeof(run));
+    HENKA_TEST_ASSERT(henka_ui_text_layout_build_limited(
+        henka_ui_font_raster_profile_get_font(profile, 200U),
+        "WWWWWWWW\nO/0 I/l/1",
+        strlen("WWWWWWWW\nO/0 I/l/1"),
+        90.0f,
+        1U,
+        &run,
+        NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(run.truncated && run.line_count == 1U);
+    HENKA_TEST_ASSERT(run.advance_width <= 90.0f);
+    HENKA_TEST_ASSERT(run.glyph_count > 0U);
+    HENKA_TEST_ASSERT(run.glyphs[run.glyph_count - 1U].rendered_codepoint == 0x2026U);
+    henka_ui_text_run_dispose(&run);
+
+    frame_desc.framebuffer_width = 1280;
+    frame_desc.framebuffer_height = 720;
+    henka_ui_set_visible(ui, true);
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    (void)henka_ui_button(
+        ui, "font_fit_control", (henka_ui_rect){10.0f, 10.0f, 90.0f, 28.0f}, "WWWWWWWW");
+    HENKA_TEST_ASSERT(ui->draw_quad_count > 0U);
+    saw_font_glyph = false;
+    for (size_t quad_index = 0U; quad_index < ui->draw_quad_count; ++quad_index)
+    {
+        if (ui->draw_quads[quad_index].kind == HENKA_UI_DRAW_QUAD_GLYPH)
+        {
+            saw_font_glyph = true;
+            break;
+        }
+    }
+    HENKA_TEST_ASSERT(saw_font_glyph);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    henka_ui_destroy(ui);
+    henka_ui_font_raster_profile_destroy(profile);
+    henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
 void henka_test_ui_font(void)
 {
     henka_test_ui_font_sha256_and_static_font_resource();
@@ -789,4 +972,5 @@ void henka_test_ui_font(void)
     henka_test_ui_context_profile_replacement_is_atomic();
     henka_test_ui_mixed_glyph_solid_quads_keep_submission_order();
     henka_test_ui_font_text_draw_preserves_line_breaks();
+    henka_test_ui_context_measurement_uses_active_font_metrics();
 }

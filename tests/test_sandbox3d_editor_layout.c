@@ -30,8 +30,11 @@ static bool henka_test_rect_is_contained(henka_ui_rect outer, henka_ui_rect inne
 void henka_test_sandbox3d_editor_layout(void)
 {
     sandbox3d_editor_layout_metrics metrics;
+    henka_ui_context* ui = NULL;
     henka_ui_rect row[4];
     size_t row_count;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
 
     {
         const float widths[] = {500.0f, 720.0f, 759.0f, 760.0f, 1280.0f, 1920.0f, 2560.0f};
@@ -449,11 +452,13 @@ void henka_test_sandbox3d_editor_layout(void)
         int label_height;
 
         HENKA_TEST_ASSERT(
-            sandbox3d_editor_layout_text_control_row(
+            sandbox3d_editor_layout_text_control_row_for_context(
+                ui,
                 (henka_ui_rect){100.0f, 40.0f, 360.0f, 32.0f},
                 labels,
                 3U,
                 1.0f,
+                0.0f,
                 12.0f,
                 8.0f,
                 controls,
@@ -461,7 +466,7 @@ void henka_test_sandbox3d_editor_layout(void)
                 &row_count) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(row_count == 3U);
         HENKA_TEST_ASSERT(
-            henka_ui_measure_text(labels[2], 1.0f, &label_width, &label_height) == HENKA_SUCCESS);
+            henka_ui_measure_text_for_context(ui, labels[2], 1.0f, &label_width, &label_height) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(controls[2].width >= (float)label_width + 24.0f);
         HENKA_TEST_ASSERT(controls[2].x + controls[2].width <= 460.0f);
         HENKA_TEST_ASSERT(controls[0].x + controls[0].width + 8.0f <= controls[1].x);
@@ -474,11 +479,13 @@ void henka_test_sandbox3d_editor_layout(void)
         int label_height;
 
         HENKA_TEST_ASSERT(
-            sandbox3d_editor_layout_text_control_row(
+            sandbox3d_editor_layout_text_control_row_for_context(
+                ui,
                 (henka_ui_rect){20.0f, 40.0f, 280.0f, 24.0f},
                 labels,
                 5U,
                 1.0f,
+                0.0f,
                 8.0f,
                 4.0f,
                 controls,
@@ -486,7 +493,7 @@ void henka_test_sandbox3d_editor_layout(void)
                 &row_count) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(row_count == 5U);
         HENKA_TEST_ASSERT(
-            henka_ui_measure_text(labels[2], 1.0f, &label_width, &label_height) == HENKA_SUCCESS);
+            henka_ui_measure_text_for_context(ui, labels[2], 1.0f, &label_width, &label_height) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(controls[2].width >= (float)label_width + 16.0f);
         HENKA_TEST_ASSERT(controls[4].x + controls[4].width <= 300.0f);
         HENKA_TEST_ASSERT(controls[3].x + controls[3].width + 4.0f <= controls[4].x);
@@ -497,11 +504,13 @@ void henka_test_sandbox3d_editor_layout(void)
         henka_ui_rect control = {91.0f, 92.0f, 93.0f, 94.0f};
 
         HENKA_TEST_ASSERT(
-            sandbox3d_editor_layout_text_control_row(
+            sandbox3d_editor_layout_text_control_row_for_context(
+                ui,
                 (henka_ui_rect){12.0f, 24.0f, 64.0f, 28.0f},
                 labels,
                 1U,
                 1.0f,
+                0.0f,
                 12.0f,
                 0.0f,
                 &control,
@@ -1037,4 +1046,6 @@ void henka_test_sandbox3d_editor_layout(void)
                 720,
                 &frame) == HENKA_ERROR_INVALID_ARGUMENT);
     }
+
+    henka_ui_destroy(ui);
 }

@@ -18,6 +18,17 @@ if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
             -BuildDirectory ${CMAKE_BINARY_DIR})
 endif()
 
+if(HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
+    add_test(
+        NAME henka_sandbox3d_text_measurement_authority_tests
+        COMMAND ${CMAKE_COMMAND}
+            -DSANDBOX3D_SOURCE_DIR=${CMAKE_SOURCE_DIR}/examples/sandbox3d
+            -DTEXT_AUTHORITY_CHECKER=${CMAKE_CURRENT_SOURCE_DIR}/check_sandbox3d_text_measurement_authority.cmake
+            -DUI_TEXT_LAYOUT_SOURCE=${CMAKE_SOURCE_DIR}/engine/src/ui/ui_text_layout.c
+            -DNEGATIVE_CONTROL_ROOT=${CMAKE_CURRENT_BINARY_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test_sandbox3d_text_measurement_authority.cmake)
+endif()
+
 add_executable(henka_headless_runtime_tests
     test_headless_runtime.c
 )
@@ -1018,6 +1029,7 @@ add_executable(henka_tests
     ../examples/sandbox3d/camera_tools.c
     ../examples/sandbox3d/editor_preferences.c
     ../examples/sandbox3d/editor_font_bootstrap.c
+    ../examples/sandbox3d/editor_text_layout.c
     ../examples/sandbox3d/view_compass.c
     ../examples/sandbox3d/object_details_tools.c
     ../examples/sandbox3d/authoring_asset_controller.c

@@ -9,6 +9,7 @@
 #include <henka/memory.h>
 #include <henka/script_backends.h>
 
+#include "editor_text_layout.h"
 #include "game_authoring.h"
 
 #define SANDBOX3D_SCRIPT_EDITOR_MAX_LINES 8U
@@ -234,21 +235,25 @@ static void sandbox3d_script_editor_copy_line(
     }
 }
 
-static void sandbox3d_script_editor_draw_source_segment(
+static henka_result sandbox3d_script_editor_draw_source_segment(
     henka_ui_context* ui,
     const char* source,
     size_t source_size,
     size_t offset,
     size_t length,
-    float x,
+    float* io_x,
     float y,
     henka_ui_semantic_color color)
 {
     char segment[SANDBOX3D_SCRIPT_EDITOR_MAX_LINE_BYTES];
-    if (ui == NULL || source == NULL || offset > source_size ||
+    int segment_width = 0;
+    int segment_height = 0;
+    henka_result result;
+    if (ui == NULL || source == NULL || io_x == NULL || !isfinite((double)*io_x) ||
+        offset > source_size ||
         length > source_size - offset || length == 0U)
     {
-        return;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
     sandbox3d_script_editor_copy_line(
         source,
@@ -257,16 +262,32 @@ static void sandbox3d_script_editor_draw_source_segment(
         length,
         segment,
         sizeof(segment));
-    (void)henka_ui_label_colored(
+    result = henka_ui_measure_text_for_context(
         ui,
-        x,
+        segment,
+        SANDBOX3D_SCRIPT_EDITOR_TEXT_SCALE,
+        &segment_width,
+        &segment_height);
+    if (result != HENKA_SUCCESS || segment_width < 0)
+    {
+        return result != HENKA_SUCCESS ? result : HENKA_ERROR_NUMERIC_RANGE;
+    }
+    result = henka_ui_label_colored(
+        ui,
+        *io_x,
         y,
         SANDBOX3D_SCRIPT_EDITOR_TEXT_SCALE,
         segment,
         color);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    *io_x += (float)segment_width;
+    return HENKA_SUCCESS;
 }
 
-static void sandbox3d_script_editor_draw_tokenized_line(
+static henka_result sandbox3d_script_editor_draw_tokenized_line(
     henka_ui_context* ui,
     henka_ui_rect bounds,
     const char* source,
@@ -275,12 +296,12 @@ static void sandbox3d_script_editor_draw_tokenized_line(
     size_t token_count,
     uint32_t line_number,
     size_t line_offset,
-    size_t line_length,
-    float character_width)
+    size_t line_length)
 {
     const float code_x = bounds.x + 42.0f;
     const float line_y = bounds.y + SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT +
         ((float)line_number - 1.0f) * SANDBOX3D_SCRIPT_EDITOR_LINE_HEIGHT;
+    float segment_x = code_x;
     size_t cursor = 0U;
     size_t token_index;
 
@@ -302,45 +323,60 @@ static void sandbox3d_script_editor_draw_tokenized_line(
         }
         if (token_offset > cursor)
         {
-            sandbox3d_script_editor_draw_source_segment(
+            henka_result result = sandbox3d_script_editor_draw_source_segment(
                 ui,
                 source,
                 source_size,
                 line_offset + cursor,
                 token_offset - cursor,
-                code_x + (float)cursor * character_width,
+                &segment_x,
                 line_y,
                 HENKA_UI_COLOR_NORMAL);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
         }
         token_length = token->length;
         if (token_length > line_length - token_offset)
         {
             token_length = line_length - token_offset;
         }
-        sandbox3d_script_editor_draw_source_segment(
-            ui,
-            source,
-            source_size,
-            line_offset + token_offset,
-            token_length,
-            code_x + (float)token_offset * character_width,
-            line_y,
-            token->color);
+        {
+            henka_result result = sandbox3d_script_editor_draw_source_segment(
+                ui,
+                source,
+                source_size,
+                line_offset + token_offset,
+                token_length,
+                &segment_x,
+                line_y,
+                token->color);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+        }
         cursor = token_offset + token_length;
     }
 
     if (cursor < line_length)
     {
-        sandbox3d_script_editor_draw_source_segment(
+        henka_result result = sandbox3d_script_editor_draw_source_segment(
             ui,
             source,
             source_size,
             line_offset + cursor,
             line_length - cursor,
-            code_x + (float)cursor * character_width,
+            &segment_x,
             line_y,
             HENKA_UI_COLOR_NORMAL);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
     }
+    return HENKA_SUCCESS;
 }
 
 static size_t sandbox3d_script_editor_previous_boundary(
@@ -443,22 +479,74 @@ static size_t sandbox3d_script_editor_lua_indent_replacement(
     return indent_spaces + 1U;
 }
 
-static void sandbox3d_script_editor_draw_caret(
+static henka_result sandbox3d_script_editor_draw_caret(
     henka_ui_context* ui,
     henka_ui_rect bounds,
     sandbox3d_script_editor_model* model,
-    float character_width)
+    const char* source,
+    size_t source_size)
 {
     const size_t line = sandbox3d_script_editor_model_get_caret_line(model);
-    const size_t column = sandbox3d_script_editor_model_get_caret_column(model);
-    if (ui == NULL || model == NULL || line == 0U || column == 0U)
+    const size_t caret_offset = sandbox3d_script_editor_model_get_caret_offset(model);
+    size_t line_offset = 0U;
+    size_t line_length = 0U;
+    size_t caret_prefix_length;
+    char caret_prefix[SANDBOX3D_SCRIPT_EDITOR_MAX_LINE_BYTES];
+    int caret_prefix_width = 0;
+    int caret_prefix_height = 0;
+    if (ui == NULL || model == NULL || source == NULL || line == 0U ||
+        !sandbox3d_script_editor_get_line(
+            source,
+            source_size,
+            line - 1U,
+            &line_offset,
+            &line_length) ||
+        caret_offset < line_offset || caret_offset - line_offset > line_length)
     {
-        return;
+        return HENKA_SUCCESS;
     }
-    (void)henka_ui_overlay_rect(
+    caret_prefix_length = caret_offset - line_offset;
+    if (line_length >= sizeof(caret_prefix) &&
+        caret_prefix_length > sizeof(caret_prefix) - 4U)
+    {
+        sandbox3d_script_editor_copy_line(
+            source,
+            source_size,
+            line_offset,
+            line_length,
+            caret_prefix,
+            sizeof(caret_prefix));
+    }
+    else
+    {
+        sandbox3d_script_editor_copy_line(
+            source,
+            source_size,
+            line_offset,
+            caret_prefix_length,
+            caret_prefix,
+            sizeof(caret_prefix));
+    }
+    {
+        const henka_result result = henka_ui_measure_text_for_context(
+            ui,
+            caret_prefix,
+            SANDBOX3D_SCRIPT_EDITOR_TEXT_SCALE,
+            &caret_prefix_width,
+            &caret_prefix_height);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    if (caret_prefix_width < 0)
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    return henka_ui_overlay_rect(
         ui,
         (henka_ui_rect){
-            bounds.x + 42.0f + (float)(column - 1U) * character_width,
+            bounds.x + 42.0f + (float)caret_prefix_width,
             bounds.y + SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT +
                 (float)(line - 1U) * SANDBOX3D_SCRIPT_EDITOR_LINE_HEIGHT,
             1.0f,
@@ -494,11 +582,10 @@ henka_result sandbox3d_script_editor_draw_preview(
     const char* text_input;
     henka_result result = HENKA_SUCCESS;
     henka_result validation_result;
-    int character_width = 6;
     size_t line_index;
     size_t visible_lines;
     bool tokenized = false;
-    int character_height = 0;
+    henka_result text_layout_result = HENKA_SUCCESS;
     bool save_clicked;
     bool revert_clicked;
     bool reload_clicked;
@@ -624,10 +711,42 @@ henka_result sandbox3d_script_editor_draw_preview(
         size_t clicked_line = (size_t)((mouse_position.y - bounds.y -
             SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT) /
             SANDBOX3D_SCRIPT_EDITOR_LINE_HEIGHT);
-        size_t clicked_column = mouse_position.x > bounds.x + 42.0f
-            ? (size_t)((mouse_position.x - bounds.x - 42.0f) /
-                (float)character_width)
-            : 0U;
+        size_t line_offset = 0U;
+        size_t line_length = 0U;
+        size_t clicked_column = 0U;
+        char clicked_line_text[SANDBOX3D_SCRIPT_EDITOR_MAX_LINE_BYTES];
+        const float code_x = bounds.x + 42.0f;
+        const float relative_x = mouse_position.x > code_x
+            ? mouse_position.x - code_x
+            : 0.0f;
+        if (sandbox3d_script_editor_get_line(
+                source,
+                source_size,
+                clicked_line,
+                &line_offset,
+                &line_length))
+        {
+            sandbox3d_script_editor_copy_line(
+                source,
+                source_size,
+                line_offset,
+                line_length,
+                clicked_line_text,
+                sizeof(clicked_line_text));
+            result = sandbox3d_editor_text_byte_offset_at_x(
+                ui,
+                clicked_line_text,
+                SANDBOX3D_SCRIPT_EDITOR_TEXT_SCALE,
+                relative_x,
+                &clicked_column);
+            if (result != HENKA_SUCCESS)
+            {
+                henka_free(hks_tokens);
+                henka_free(lua_tokens);
+                henka_free(presentation_tokens);
+                return result;
+            }
+        }
         (void)sandbox3d_script_editor_model_set_focused(model, true);
         (void)sandbox3d_script_editor_model_set_caret_position(
             model, clicked_line, clicked_column);
@@ -851,13 +970,6 @@ henka_result sandbox3d_script_editor_draw_preview(
         &token_count,
         &diagnostic,
         &lua_diagnostic);
-    (void)henka_ui_measure_text_for_context(
-        ui,
-        "M",
-        SANDBOX3D_SCRIPT_EDITOR_TEXT_SCALE,
-        &character_width,
-        &character_height);
-    (void)character_height;
     visible_lines = (size_t)((bounds.height - SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT) /
         SANDBOX3D_SCRIPT_EDITOR_LINE_HEIGHT);
     if (visible_lines > SANDBOX3D_SCRIPT_EDITOR_MAX_LINES)
@@ -902,7 +1014,7 @@ henka_result sandbox3d_script_editor_draw_preview(
             HENKA_UI_COLOR_MUTED);
         if (tokenized)
         {
-            sandbox3d_script_editor_draw_tokenized_line(
+            text_layout_result = sandbox3d_script_editor_draw_tokenized_line(
                 ui,
                 bounds,
                 source,
@@ -911,8 +1023,11 @@ henka_result sandbox3d_script_editor_draw_preview(
                 token_count,
                 (uint32_t)line_index + 1U,
                 line_offset,
-                line_length,
-                (float)character_width);
+                line_length);
+            if (text_layout_result != HENKA_SUCCESS)
+            {
+                break;
+            }
         }
         else
         {
@@ -925,10 +1040,11 @@ henka_result sandbox3d_script_editor_draw_preview(
                 HENKA_UI_COLOR_NORMAL);
         }
     }
-    if (sandbox3d_script_editor_model_is_focused(model))
+    if (text_layout_result == HENKA_SUCCESS &&
+        sandbox3d_script_editor_model_is_focused(model))
     {
-        sandbox3d_script_editor_draw_caret(
-            ui, bounds, model, (float)character_width);
+        text_layout_result = sandbox3d_script_editor_draw_caret(
+            ui, bounds, model, source, source_size);
     }
     if (diagnostic_text[0] != '\0')
     {
@@ -943,5 +1059,5 @@ henka_result sandbox3d_script_editor_draw_preview(
     henka_free(hks_tokens);
     henka_free(lua_tokens);
     henka_free(presentation_tokens);
-    return HENKA_SUCCESS;
+    return text_layout_result;
 }

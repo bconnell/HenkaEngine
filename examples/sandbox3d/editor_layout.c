@@ -927,7 +927,6 @@ henka_result sandbox3d_editor_layout_tool_row(
 
 static henka_result sandbox3d_editor_layout_text_control_row_impl(
     const henka_ui_context* ui_context,
-    bool distribute_extra_width,
     henka_ui_rect bounds,
     const char* const* labels,
     size_t item_count,
@@ -942,7 +941,6 @@ static henka_result sandbox3d_editor_layout_text_control_row_impl(
     double total_gap;
     double required_width;
     double available_width;
-    double extra_width;
     double item_x;
     size_t item_index;
     int measured_width;
@@ -982,19 +980,13 @@ static henka_result sandbox3d_editor_layout_text_control_row_impl(
     {
         double required_item_width;
 
-        if (labels[item_index] == NULL ||
-            (ui_context != NULL
-                 ? henka_ui_measure_text_for_context(
-                       ui_context,
-                       labels[item_index],
-                       scale,
-                       &measured_width,
-                       &measured_height)
-                 : henka_ui_measure_text(
-                       labels[item_index],
-                       scale,
-                       &measured_width,
-                       &measured_height)) != HENKA_SUCCESS)
+        if (labels[item_index] == NULL || ui_context == NULL ||
+            henka_ui_measure_text_for_context(
+                ui_context,
+                labels[item_index],
+                scale,
+                &measured_width,
+                &measured_height) != HENKA_SUCCESS)
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
@@ -1023,21 +1015,10 @@ static henka_result sandbox3d_editor_layout_text_control_row_impl(
         return HENKA_ERROR_NUMERIC_RANGE;
     }
 
-    extra_width = distribute_extra_width
-        ? (available_width - required_width) / (double)item_count
-        : 0.0;
-    if (!isfinite(extra_width) || extra_width < 0.0 ||
-        extra_width > (double)FLT_MAX)
-    {
-        return HENKA_ERROR_NUMERIC_RANGE;
-    }
-
     item_x = (double)bounds.x;
     for (item_index = 0U; item_index < item_count; ++item_index)
     {
-        const double item_width = distribute_extra_width && item_index + 1U == item_count
-            ? ((double)bounds.x + (double)bounds.width) - item_x
-            : (double)required_items[item_index] + extra_width;
+        const double item_width = (double)required_items[item_index];
         const double item_right = item_x + item_width;
         const double bounds_right = (double)bounds.x + (double)bounds.width;
 
@@ -1060,32 +1041,6 @@ static henka_result sandbox3d_editor_layout_text_control_row_impl(
 
     *out_item_count = item_count;
     return HENKA_SUCCESS;
-}
-
-henka_result sandbox3d_editor_layout_text_control_row(
-    henka_ui_rect bounds,
-    const char* const* labels,
-    size_t item_count,
-    float scale,
-    float horizontal_padding,
-    float gap,
-    henka_ui_rect* out_items,
-    size_t item_capacity,
-    size_t* out_item_count)
-{
-    return sandbox3d_editor_layout_text_control_row_impl(
-        NULL,
-        true,
-        bounds,
-        labels,
-        item_count,
-        scale,
-        0.0f,
-        horizontal_padding,
-        gap,
-        out_items,
-        item_capacity,
-        out_item_count);
 }
 
 henka_result sandbox3d_editor_layout_text_control_row_for_context(
@@ -1112,7 +1067,6 @@ henka_result sandbox3d_editor_layout_text_control_row_for_context(
     }
     return sandbox3d_editor_layout_text_control_row_impl(
         ui_context,
-        false,
         bounds,
         labels,
         item_count,
@@ -1130,6 +1084,8 @@ static bool sandbox3d_editor_layout_is_wrap_space(char value)
     return value == ' ' || value == '\t';
 }
 
+#ifdef HENKA_SANDBOX3D_TEST_SEAM
+/* Regression-only coverage for the retired fixed-column display helpers. */
 static henka_result sandbox3d_editor_layout_process_wrapped_text(
     const char* text,
     size_t max_columns,
@@ -1601,6 +1557,7 @@ henka_result sandbox3d_editor_layout_format_hidden_row_label(
     *out_name_truncated = true;
     return HENKA_SUCCESS;
 }
+#endif /* HENKA_SANDBOX3D_TEST_SEAM */
 
 henka_result sandbox3d_editor_layout_text_row_height(
     size_t line_count,

@@ -1169,7 +1169,11 @@ static bool henka_ui_control_is_hot(henka_ui_context* context, henka_ui_rect bou
     return false;
 }
 
-static void henka_ui_copy_fit_text(const char* source, char* buffer, size_t buffer_size, size_t max_characters)
+static void henka_ui_copy_fit_text_bitmap_fallback(
+    const char* source,
+    char* buffer,
+    size_t buffer_size,
+    size_t max_characters)
 {
     size_t length;
 
@@ -1199,7 +1203,7 @@ static void henka_ui_copy_fit_text(const char* source, char* buffer, size_t buff
     snprintf(buffer, buffer_size, "%.*s...", (int)(max_characters - 3U), source);
 }
 
-static void henka_ui_copy_fit_multiline_text(
+static void henka_ui_copy_fit_multiline_text_bitmap_fallback(
     const char* source,
     char* buffer,
     size_t buffer_size,
@@ -1318,8 +1322,6 @@ static henka_result henka_ui_draw_fit_text(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    effective_scale = henka_ui_effective_text_scale(context, scale);
-
     available_width = (double)bounds.width - (double)padding_x * 2.0;
     if (!isfinite(available_width) ||
         available_width <= 0.0 ||
@@ -1328,12 +1330,27 @@ static henka_result henka_ui_draw_fit_text(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    if (context->font_profile != NULL)
+    {
+        return henka_ui_draw_font_text_limited(
+            context,
+            bounds.x + padding_x,
+            y,
+            scale,
+            text,
+            color,
+            (float)available_width,
+            1U);
+    }
+
+    /* This character-cell fit is retained only for the explicit bitmap fallback. */
+    effective_scale = henka_ui_effective_text_scale(context, scale);
     max_characters = henka_ui_clamped_character_count(
         (float)available_width,
         6.0f * effective_scale,
         4U,
         sizeof(buffer) - 1U);
-    henka_ui_copy_fit_text(text, buffer, sizeof(buffer), max_characters);
+    henka_ui_copy_fit_text_bitmap_fallback(text, buffer, sizeof(buffer), max_characters);
     return henka_ui_draw_text_raw(
         context,
         bounds.x + padding_x,
@@ -2610,6 +2627,11 @@ henka_result henka_ui_measure_text_for_context(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    if (context->font_profile != NULL)
+    {
+        return henka_ui_measure_font_text(context, text, scale, out_width, out_height);
+    }
+
     return henka_ui_measure_text_raw(
         text,
         henka_ui_effective_text_scale(context, scale),
@@ -2899,6 +2921,68 @@ henka_result henka_ui_value_row_colored(
         return result;
     }
 
+    if (context->font_profile != NULL)
+    {
+        const float font_label_x = bounds.x + 8.0f;
+        const float font_value_x = multiline ? bounds.x + 8.0f : value_bounds.x + 6.0f;
+        const float font_label_width = multiline ? bounds.width - 16.0f : bounds.width * 0.34f;
+        const float font_value_width = multiline
+            ? bounds.width - 16.0f
+            : (value_bounds.width > 12.0f ? value_bounds.width - 12.0f : 12.0f);
+        size_t max_value_lines = 1U;
+
+        if (multiline)
+        {
+            int measured_width = 0;
+            int measured_line_height = 0;
+            float font_available_lines;
+            if (henka_ui_measure_text_for_context(
+                    context, "M", 1.0f,
+                    &measured_width, &measured_line_height) != HENKA_SUCCESS ||
+                measured_width <= 0 || measured_line_height <= 0)
+            {
+                henka_ui_restore_checkpoint(context, &checkpoint);
+                return HENKA_ERROR_ASSET_SOURCE;
+            }
+            font_available_lines = floorf(
+                (bounds.height - 20.0f) / (float)measured_line_height);
+            if (font_available_lines >= 1.0f)
+            {
+                max_value_lines = font_available_lines >= (float)HENKA_UI_TEXT_MAX_BYTES
+                    ? HENKA_UI_TEXT_MAX_BYTES
+                    : (size_t)font_available_lines;
+            }
+        }
+
+        result = henka_ui_draw_font_text_limited(
+            context,
+            font_label_x,
+            bounds.y + (multiline ? 4.0f : 6.0f),
+            1.0f,
+            label,
+            henka_ui_semantic_color_to_vec4(context, label_color),
+            font_label_width,
+            1U);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_ui_draw_font_text_limited(
+                context,
+                font_value_x,
+                bounds.y + (multiline ? 18.0f : 6.0f),
+                1.0f,
+                value,
+                henka_ui_semantic_color_to_vec4(context, value_color),
+                font_value_width,
+                max_value_lines);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            henka_ui_restore_checkpoint(context, &checkpoint);
+        }
+        return result;
+    }
+
+    /* Character-count fitting below is used only by the fixed-cell bitmap fallback. */
     if (multiline)
     {
         label_characters = henka_ui_clamped_character_count(
@@ -2946,7 +3030,7 @@ henka_result henka_ui_value_row_colored(
         value_lines = 1U;
     }
 
-    henka_ui_copy_fit_text(
+    henka_ui_copy_fit_text_bitmap_fallback(
         label,
         label_buffer,
         sizeof(label_buffer),
@@ -2954,7 +3038,7 @@ henka_result henka_ui_value_row_colored(
 
     if (multiline)
     {
-        henka_ui_copy_fit_multiline_text(
+        henka_ui_copy_fit_multiline_text_bitmap_fallback(
             value,
             value_buffer,
             sizeof(value_buffer),
@@ -2963,7 +3047,7 @@ henka_result henka_ui_value_row_colored(
     }
     else
     {
-        henka_ui_copy_fit_text(
+        henka_ui_copy_fit_text_bitmap_fallback(
             value,
             value_buffer,
             sizeof(value_buffer),
@@ -3554,12 +3638,11 @@ bool henka_ui_toggle(
     bool hot;
     bool owns_active;
     bool pressed;
-    char label_buffer[48];
     henka_ui_draw_checkpoint checkpoint;
     henka_result result;
     henka_ui_rect knob_bounds;
     henka_ui_rect track_bounds;
-    size_t label_characters;
+    henka_ui_rect label_bounds;
 
     if (context == NULL || id == NULL || label == NULL || value == NULL ||
         !context->frame_active || !henka_ui_id_is_valid(id))
@@ -3646,26 +3729,21 @@ bool henka_ui_toggle(
             g_ui_panel_border);
     }
 
-    label_characters = henka_ui_clamped_character_count(
-        bounds.width > 64.0f ? bounds.width - 64.0f : 24.0f,
-        6.0f,
-        4U,
-        sizeof(label_buffer) - 1U);
-
-    henka_ui_copy_fit_text(
-        label,
-        label_buffer,
-        sizeof(label_buffer),
-        label_characters);
+    label_bounds = (henka_ui_rect){
+        bounds.x,
+        bounds.y,
+        (bounds.width > 64.0f ? bounds.width - 64.0f : 24.0f) + 20.0f,
+        bounds.height};
 
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_draw_text(
+        result = henka_ui_draw_fit_text(
             context,
-            bounds.x + 10.0f,
+            label_bounds,
+            10.0f,
             bounds.y + 9.0f,
             1.0f,
-            label_buffer,
+            label,
             displayed_value ? g_ui_text_color : g_ui_muted_text_color);
     }
     if (result != HENKA_SUCCESS)
