@@ -3516,6 +3516,9 @@ try {
 
         $assetSearchQueryBytes = [Text.Encoding]::UTF8.GetByteCount($assetSearchQuery)
         $assetSearchStartOffset = Get-FileLengthSafe -Path $stdoutPath
+        $assetPathRowsBeforeSearch = Get-LogPatternCount `
+            -Path $stdoutPath `
+            -Pattern '^Asset Browser row: path='
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
@@ -3540,6 +3543,12 @@ try {
         if ($filteredAssetMatchCount -le 0 -or
             $filteredAssetMatchCount -ge $assetFilterBaselineMatches) {
             throw "The real Asset Browser search did not reduce the populated list (before=$assetFilterBaselineMatches after=$filteredAssetMatchCount)."
+        }
+        $assetPathRowsAfterSearch = Get-LogPatternCount `
+            -Path $stdoutPath `
+            -Pattern '^Asset Browser row: path='
+        if ($assetPathRowsAfterSearch -ne $assetPathRowsBeforeSearch) {
+            throw "Filtering re-emitted path-bearing Asset Browser row diagnostics ($assetPathRowsBeforeSearch -> $assetPathRowsAfterSearch)."
         }
         $filteredAssetRowPattern = "HENKA_AUTOMATION_DIAGNOSTIC asset_row action_seq=$assetUtilityActionSequence frame=\d+ type=$assetFilterType query_bytes=$assetSearchQueryBytes metadata_index=(?<metadataIndex>\d+) rect_x=(?<x>[-0-9.]+) rect_y=(?<y>[-0-9.]+) rect_width=(?<width>[-0-9.]+) rect_height=(?<height>[-0-9.]+)"
         if (-not (Wait-FileContainsAfterOffset `
@@ -3590,6 +3599,7 @@ try {
         $assetFilterMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern $assetFilterPattern
+        $assetStatusSummaryPattern = 'Asset Browser status row: warning=0 message=(?:Textures|Materials|Meshes|Prefabs) \| \d+ known \| page \d+/\d+'
         $assetFilterClearOffset = Get-FileLengthSafe -Path $stdoutPath
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
@@ -3603,6 +3613,13 @@ try {
                 -StartingOffset $assetFilterClearOffset `
                 -TimeoutMilliseconds 4000)) {
             throw "The product's real Clear control did not restore the original Asset Browser match set."
+        }
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $assetStatusSummaryPattern `
+                -StartingOffset $assetFilterClearOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "Clearing search after selecting a result did not replace the stale selection status with the current asset/page summary."
         }
 
         $assetFilterMatch = Get-LastLogRegexMatch `
