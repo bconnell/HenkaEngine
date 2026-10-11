@@ -3544,12 +3544,6 @@ try {
             $filteredAssetMatchCount -ge $assetFilterBaselineMatches) {
             throw "The real Asset Browser search did not reduce the populated list (before=$assetFilterBaselineMatches after=$filteredAssetMatchCount)."
         }
-        $assetPathRowsAfterSearch = Get-LogPatternCount `
-            -Path $stdoutPath `
-            -Pattern '^Asset Browser row: path='
-        if ($assetPathRowsAfterSearch -ne $assetPathRowsBeforeSearch) {
-            throw "Filtering re-emitted path-bearing Asset Browser row diagnostics ($assetPathRowsBeforeSearch -> $assetPathRowsAfterSearch)."
-        }
         $filteredAssetRowPattern = "HENKA_AUTOMATION_DIAGNOSTIC asset_row action_seq=$assetUtilityActionSequence frame=\d+ type=$assetFilterType query_bytes=$assetSearchQueryBytes metadata_index=(?<metadataIndex>\d+) rect_x=(?<x>[-0-9.]+) rect_y=(?<y>[-0-9.]+) rect_width=(?<width>[-0-9.]+) rect_height=(?<height>[-0-9.]+)"
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
@@ -3557,6 +3551,12 @@ try {
                 -StartingOffset $assetSearchStartOffset `
                 -TimeoutMilliseconds 4000)) {
             throw "The filtered page did not publish its actual selectable row rectangle after the search changed."
+        }
+        $assetPathRowsAfterSearch = Get-LogPatternCount `
+            -Path $stdoutPath `
+            -Pattern '^Asset Browser row: path='
+        if ($assetPathRowsAfterSearch -ne $assetPathRowsBeforeSearch) {
+            throw "Filtering re-emitted path-bearing Asset Browser row diagnostics ($assetPathRowsBeforeSearch -> $assetPathRowsAfterSearch)."
         }
         $filteredAssetRowMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
