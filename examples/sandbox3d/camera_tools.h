@@ -32,4 +32,15 @@ bool sandbox3d_camera_apply_framed_preset(
     henka_camera_preset preset,
     henka_bounds bounds);
 
+/*
+ * Apply a signed, magnitude-sensitive zoom toward a stable target.
+ * Negative values zoom in, positive values zoom out, and one unit preserves
+ * the existing Sandbox wheel-notch behavior. The camera is unchanged when
+ * the input or resulting candidate is invalid.
+ */
+bool sandbox3d_camera_apply_zoom_delta(
+    henka_camera* camera,
+    henka_vec3 target,
+    float direction_scale);
+
 #endif

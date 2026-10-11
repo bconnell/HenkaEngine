@@ -2618,7 +2618,7 @@ static bool sandbox3d_apply_camera_preset(
     henka_camera_preset preset,
     henka_vec3 target,
     bool update_status);
-static void sandbox3d_zoom_camera_to_target(sandbox3d_state* state, float direction_scale);
+static bool sandbox3d_zoom_camera_to_target(sandbox3d_state* state, float direction_scale);
 static void sandbox3d_frame_selected_object(sandbox3d_state* state, bool print_status);
 static bool sandbox3d_commit_compass_preferences(
     henka_engine* engine,
@@ -19862,36 +19862,76 @@ static void sandbox3d_sync_view_navigation_target_to_selection(sandbox3d_state* 
     }
 }
 
-static void sandbox3d_zoom_camera_to_target(sandbox3d_state* state, float direction_scale)
+static bool sandbox3d_zoom_camera_to_target(sandbox3d_state* state, float direction_scale)
 {
-    float distance;
-    float step;
-    float zoom_factor;
     henka_vec3 target;
 
-    if (state == NULL || direction_scale == 0.0f)
+    if (state == NULL || !isfinite(direction_scale) || direction_scale == 0.0f)
     {
-        return;
+        return false;
     }
 
-    sandbox3d_view_compass_cancel_transition(&state->compass);
     target = sandbox3d_get_view_navigation_target(state);
-    if (state->camera.projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
+    if (sandbox3d_camera_apply_zoom_delta(
+            &state->camera,
+            target,
+            direction_scale))
     {
-        zoom_factor = direction_scale < 0.0f ? 0.88f : 1.14f;
-        if (henka_camera_zoom_orthographic(&state->camera, zoom_factor, 0.5f, 80.0f) == HENKA_SUCCESS)
-        {
-            sandbox3d_set_view_navigation_target(state, target);
-        }
+        sandbox3d_view_compass_cancel_transition(&state->compass);
+        sandbox3d_set_view_navigation_target(state, target);
+        return true;
+    }
+
+    return false;
+}
+
+static void sandbox3d_report_automation_camera_zoom(
+    sandbox3d_state* state,
+    henka_camera camera_before,
+    float wheel_delta,
+    bool pointer_inside_viewport,
+    bool applied)
+{
+    char diagnostics_value[8];
+    const henka_vec3 target = state != NULL
+        ? sandbox3d_get_view_navigation_target(state)
+        : (henka_vec3){0.0f, 0.0f, 0.0f};
+    const float before_distance = state != NULL
+        ? henka_vec3_length(henka_vec3_subtract(target, camera_before.position))
+        : 0.0f;
+    const float after_distance = state != NULL
+        ? henka_vec3_length(henka_vec3_subtract(target, state->camera.position))
+        : 0.0f;
+    const char* projection = state == NULL
+        ? "unavailable"
+        : (camera_before.projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC
+            ? "orthographic"
+            : (camera_before.projection_mode == HENKA_CAMERA_PROJECTION_PERSPECTIVE
+                ? "perspective"
+                : "unknown"));
+
+    if (state == NULL ||
+        !sandbox3d_copy_environment_value(
+            "HENKA_AUTOMATION_DIAGNOSTICS",
+            diagnostics_value,
+            sizeof(diagnostics_value)) ||
+        strcmp(diagnostics_value, "1") != 0)
+    {
         return;
     }
 
-    distance = henka_vec3_length(henka_vec3_subtract(target, state->camera.position));
-    step = fmaxf(0.25f, distance * 0.12f) * direction_scale;
-    if (henka_camera_dolly_target(&state->camera, target, step, 0.5f))
-    {
-        sandbox3d_set_view_navigation_target(state, target);
-    }
+    printf(
+        "HENKA_AUTOMATION_DIAGNOSTIC camera_zoom frame=%llu wheel_y=%.9g viewport=%u projection=%s before_distance=%.9g after_distance=%.9g before_height=%.9g after_height=%.9g applied=%u\n",
+        (unsigned long long)state->automation_diagnostic_frame_sequence,
+        (double)wheel_delta,
+        pointer_inside_viewport ? 1U : 0U,
+        projection,
+        (double)before_distance,
+        (double)after_distance,
+        (double)camera_before.orthographic_height,
+        (double)state->camera.orthographic_height,
+        applied ? 1U : 0U);
+    fflush(stdout);
 }
 
 static void sandbox3d_report_automation_face_projection(sandbox3d_state* state)
@@ -44049,8 +44089,18 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 
         if (mouse_in_viewport && mouse_wheel_delta.y != 0.0f)
         {
-            sandbox3d_zoom_camera_to_target(state, mouse_wheel_delta.y > 0.0f ? -1.0f : 1.0f);
-            navigation_active = true;
+            const henka_camera camera_before = state->camera;
+            const bool zoom_applied = sandbox3d_zoom_camera_to_target(
+                state,
+                -mouse_wheel_delta.y);
+
+            sandbox3d_report_automation_camera_zoom(
+                state,
+                camera_before,
+                mouse_wheel_delta.y,
+                mouse_in_viewport,
+                zoom_applied);
+            navigation_active = zoom_applied;
         }
         else if (mouse_wheel_delta.y != 0.0f)
         {
