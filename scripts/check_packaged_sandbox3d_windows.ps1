@@ -3368,6 +3368,149 @@ try {
             return
         }
 
+        Write-Step "Checking packaged Asset Browser Materials tab geometry and selection"
+        $utilityAssetsTabMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Utility Assets tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)\.'
+        if ($null -eq $utilityAssetsTabMatch) {
+            throw "The product-owned Utility > Assets tab geometry was not reported."
+        }
+        $utilityAssetsTabX = [double]$utilityAssetsTabMatch.Groups[1].Value
+        $utilityAssetsTabY = [double]$utilityAssetsTabMatch.Groups[2].Value
+        $utilityAssetsTabWidth = [double]$utilityAssetsTabMatch.Groups[3].Value
+        $utilityAssetsTabHeight = [double]$utilityAssetsTabMatch.Groups[4].Value
+        Assert-FramebufferRect `
+            -Name "Utility Assets tab" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $utilityAssetsTabX `
+            -Y $utilityAssetsTabY `
+            -Width $utilityAssetsTabWidth `
+            -Height $utilityAssetsTabHeight
+
+        $assetUtilityClickOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($utilityAssetsTabX + $utilityAssetsTabWidth * 0.5) `
+            -FramebufferY ($utilityAssetsTabY + $utilityAssetsTabHeight * 0.5)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC utility action_seq=\d+ frame=\d+ before=.* requested=Assets after=Assets changed=[01]' `
+                -StartingOffset $assetUtilityClickOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "A real Utility > Assets click did not reach the authoritative utility transition path."
+        }
+
+        $assetUtilityActionMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC utility action_seq=(\d+) frame=\d+ before=.* requested=Assets after=Assets changed=[01]'
+        if ($null -eq $assetUtilityActionMatch) {
+            throw "The authoritative Utility > Assets transition sequence was not available for correlating its layout."
+        }
+        $assetUtilityActionSequence = $assetUtilityActionMatch.Groups[1].Value
+        $settledAssetTypeLayoutPattern = "HENKA_AUTOMATION_DIAGNOSTIC asset_type_tabs action_seq=$assetUtilityActionSequence frame=\d+ utility_tabs_visible=0 active_assets=1 status=(?:available|unavailable)"
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $settledAssetTypeLayoutPattern `
+                -StartingOffset $assetUtilityClickOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "The Asset Browser did not report current type-tab geometry after its Utility navigation rows settled."
+        }
+        $assetTypeTabsMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern "HENKA_AUTOMATION_DIAGNOSTIC asset_type_tabs action_seq=$assetUtilityActionSequence frame=\d+ utility_tabs_visible=0 active_assets=1 status=available count=4 materials_x=([-0-9.]+) materials_y=([-0-9.]+) materials_width=([-0-9.]+) materials_height=([-0-9.]+)"
+        if ($null -eq $assetTypeTabsMatch) {
+            $unavailableMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern "HENKA_AUTOMATION_DIAGNOSTIC asset_type_tabs action_seq=$assetUtilityActionSequence frame=\d+ utility_tabs_visible=0 active_assets=1 status=unavailable result=(-?\d+) count=(\d+)"
+            if ($null -ne $unavailableMatch) {
+                throw "The production Asset Browser type-tab row is unavailable (result=$($unavailableMatch.Groups[1].Value), count=$($unavailableMatch.Groups[2].Value))."
+            }
+            throw "The production Materials tab rectangle was not reported."
+        }
+        $materialsTabX = [double]$assetTypeTabsMatch.Groups[1].Value
+        $materialsTabY = [double]$assetTypeTabsMatch.Groups[2].Value
+        $materialsTabWidth = [double]$assetTypeTabsMatch.Groups[3].Value
+        $materialsTabHeight = [double]$assetTypeTabsMatch.Groups[4].Value
+        Assert-FramebufferRect `
+            -Name "Asset Browser Materials tab" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $materialsTabX `
+            -Y $materialsTabY `
+            -Width $materialsTabWidth `
+            -Height $materialsTabHeight
+
+        $materialsSelectionOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($materialsTabX + $materialsTabWidth * 0.5) `
+            -FramebufferY ($materialsTabY + $materialsTabHeight * 0.5)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC asset_type_tab action=click type=Materials selected=1' `
+                -StartingOffset $materialsSelectionOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "A real packaged click on the Materials tab did not select the Materials asset view."
+        }
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path (Join-Path $logDir 'asset-browser-materials-tab-1280x720.bmp') `
+            -Description "Packaged Asset Browser with Materials selected at the actual product tab rectangle"
+        Write-Output "[pass] Asset Browser Materials tab selected through its product-owned rectangle and the real packaged UI click"
+
+        Write-Step "Restoring Utility navigation through the visible Asset Browser Tools control"
+        $assetBrowserToolsPattern = "HENKA_AUTOMATION_DIAGNOSTIC asset_browser_tools action_seq=$assetUtilityActionSequence frame=\d+ active_assets=1 navigation_visible=0 status=available x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)"
+        $assetBrowserToolsMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $assetBrowserToolsPattern
+        if ($null -eq $assetBrowserToolsMatch) {
+            throw "The product-owned Asset Browser Tools control geometry was not reported for the active Materials view."
+        }
+        $assetBrowserToolsX = [double]$assetBrowserToolsMatch.Groups[1].Value
+        $assetBrowserToolsY = [double]$assetBrowserToolsMatch.Groups[2].Value
+        $assetBrowserToolsWidth = [double]$assetBrowserToolsMatch.Groups[3].Value
+        $assetBrowserToolsHeight = [double]$assetBrowserToolsMatch.Groups[4].Value
+        Assert-FramebufferRect `
+            -Name "Asset Browser Tools control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $assetBrowserToolsX `
+            -Y $assetBrowserToolsY `
+            -Width $assetBrowserToolsWidth `
+            -Height $assetBrowserToolsHeight
+
+        # Capture before dispatch: the product can emit the Tools action and
+        # the newly visible Terrain rectangle in the same frame, before this
+        # process observes either line.
+        $assetBrowserToolsClickOffset = Get-FileLengthSafe -Path $stdoutPath
+        $terrainGeometryOffset = $assetBrowserToolsClickOffset
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($assetBrowserToolsX + $assetBrowserToolsWidth * 0.5) `
+            -FramebufferY ($assetBrowserToolsY + $assetBrowserToolsHeight * 0.5)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Asset Browser Tools: action=open utility-navigation\.' `
+                -StartingOffset $assetBrowserToolsClickOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "The real Asset Browser Tools click did not restore Utility navigation."
+        }
+
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Terrain utility tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)\.' `
+                -StartingOffset $terrainGeometryOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "The product did not report current Terrain Utility geometry after Utility navigation was restored."
+        }
+
         Write-Step "Checking packaged Terrain creation through the visible Utility UI"
         $terrainTabMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
