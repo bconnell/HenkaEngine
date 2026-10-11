@@ -437,17 +437,10 @@ bool sandbox3d_workspace_persistence_load_custom_layout(
         settings,
         "ui.workspace.custom_layout.right_dock_width",
         candidate.custom_layout_right_dock_width);
-    candidate.custom_layout_ui_scale = henka_settings_get_float(
-        settings,
-        "ui.workspace.custom_layout.ui_scale",
-        candidate.custom_layout_ui_scale);
     if (!isfinite(candidate.custom_layout_left_dock_width) ||
         candidate.custom_layout_left_dock_width < 280.0f || candidate.custom_layout_left_dock_width > 720.0f ||
         !isfinite(candidate.custom_layout_right_dock_width) ||
-        candidate.custom_layout_right_dock_width < 300.0f || candidate.custom_layout_right_dock_width > 720.0f ||
-        !isfinite(candidate.custom_layout_ui_scale) ||
-        candidate.custom_layout_ui_scale < SANDBOX3D_WORKSPACE_UI_SCALE_MIN ||
-        candidate.custom_layout_ui_scale > SANDBOX3D_WORKSPACE_UI_SCALE_MAX)
+        candidate.custom_layout_right_dock_width < 300.0f || candidate.custom_layout_right_dock_width > 720.0f)
     {
         return false;
     }
@@ -587,7 +580,6 @@ void sandbox3d_workspace_persistence_save_custom_layout(
     (void)henka_settings_set_int(settings, "ui.workspace.custom_layout.maximized_section", (int)model->custom_layout_maximized_section);
     (void)henka_settings_set_float(settings, "ui.workspace.custom_layout.left_dock_width", model->custom_layout_left_dock_width);
     (void)henka_settings_set_float(settings, "ui.workspace.custom_layout.right_dock_width", model->custom_layout_right_dock_width);
-    (void)henka_settings_set_float(settings, "ui.workspace.custom_layout.ui_scale", model->custom_layout_ui_scale);
     for (index = 0U; index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++index)
     {
         snprintf(key, sizeof(key), "ui.workspace.custom_layout.panel.%zu.dock", index);
@@ -719,9 +711,7 @@ bool sandbox3d_workspace_persistence_load_custom_layout_slots(
         snprintf(key, sizeof(key), "%s.ui_scale", prefix);
         slot.ui_scale = henka_settings_get_float(settings, key, 1.0f);
         if (!isfinite(slot.left_dock_width) || slot.left_dock_width < 280.0f || slot.left_dock_width > 720.0f ||
-            !isfinite(slot.right_dock_width) || slot.right_dock_width < 300.0f || slot.right_dock_width > 720.0f ||
-            !isfinite(slot.ui_scale) || slot.ui_scale < SANDBOX3D_WORKSPACE_UI_SCALE_MIN ||
-            slot.ui_scale > SANDBOX3D_WORKSPACE_UI_SCALE_MAX)
+            !isfinite(slot.right_dock_width) || slot.right_dock_width < 300.0f || slot.right_dock_width > 720.0f)
         {
             continue;
         }
@@ -891,8 +881,6 @@ void sandbox3d_workspace_persistence_save_custom_layout_slots(
         (void)henka_settings_set_float(settings, key, slot->left_dock_width);
         snprintf(key, sizeof(key), "%s.right_dock_width", prefix);
         (void)henka_settings_set_float(settings, key, slot->right_dock_width);
-        snprintf(key, sizeof(key), "%s.ui_scale", prefix);
-        (void)henka_settings_set_float(settings, key, slot->ui_scale);
         for (panel_index = 0U; panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++panel_index)
         {
             snprintf(key, sizeof(key), "%s.panel.%zu.dock", prefix, panel_index);

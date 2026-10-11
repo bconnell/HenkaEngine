@@ -250,7 +250,6 @@ typedef struct sandbox3d_workspace_model
     sandbox3d_workspace_dock_zone custom_layout_last_docked_zones[SANDBOX3D_WORKSPACE_PANEL_COUNT];
     float custom_layout_left_dock_width;
     float custom_layout_right_dock_width;
-    float custom_layout_ui_scale;
     sandbox3d_workspace_custom_layout_slot custom_layout_slots[SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_SLOT_COUNT - 1U];
     uint16_t active_divider_node;
     sandbox3d_workspace_dock_zone active_divider_dock;

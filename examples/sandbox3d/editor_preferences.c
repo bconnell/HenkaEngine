@@ -18,6 +18,86 @@ static const char* g_compass_keys[] =
 
 static const float g_compass_scales[] = {0.85f, 1.0f, 1.15f};
 
+static bool sandbox3d_editor_ui_scale_percent_is_supported(int scale_percent)
+{
+    return scale_percent == 100 || scale_percent == 125 ||
+        scale_percent == 150 || scale_percent == 200;
+}
+
+void sandbox3d_editor_ui_preferences_defaults(
+    sandbox3d_editor_ui_preferences* preferences)
+{
+    if (preferences != NULL)
+    {
+        preferences->scale_percent = 100;
+    }
+}
+
+bool sandbox3d_editor_ui_preferences_validate(
+    const sandbox3d_editor_ui_preferences* preferences)
+{
+    return preferences != NULL &&
+        sandbox3d_editor_ui_scale_percent_is_supported(preferences->scale_percent);
+}
+
+bool sandbox3d_editor_ui_preferences_set_scale_percent(
+    sandbox3d_editor_ui_preferences* preferences,
+    int scale_percent)
+{
+    if (preferences == NULL ||
+        !sandbox3d_editor_ui_scale_percent_is_supported(scale_percent))
+    {
+        return false;
+    }
+    preferences->scale_percent = scale_percent;
+    return true;
+}
+
+bool sandbox3d_editor_ui_preferences_get_scale_multiplier(
+    const sandbox3d_editor_ui_preferences* preferences,
+    float* out_multiplier)
+{
+    if (out_multiplier == NULL ||
+        !sandbox3d_editor_ui_preferences_validate(preferences))
+    {
+        return false;
+    }
+    *out_multiplier = (float)preferences->scale_percent / 100.0f;
+    return true;
+}
+
+bool sandbox3d_editor_ui_scale_legacy_candidate(
+    bool legacy_value_present,
+    float legacy_multiplier,
+    int* out_scale_percent)
+{
+    if (out_scale_percent == NULL)
+    {
+        return false;
+    }
+    if (!legacy_value_present || !isfinite(legacy_multiplier))
+    {
+        *out_scale_percent = 100;
+    }
+    else if (legacy_multiplier <= 1.125f)
+    {
+        *out_scale_percent = 100;
+    }
+    else if (legacy_multiplier <= 1.375f)
+    {
+        *out_scale_percent = 125;
+    }
+    else if (legacy_multiplier <= 1.75f)
+    {
+        *out_scale_percent = 150;
+    }
+    else
+    {
+        *out_scale_percent = 200;
+    }
+    return true;
+}
+
 static bool sandbox3d_compass_scale_is_supported(float scale)
 {
     size_t index;

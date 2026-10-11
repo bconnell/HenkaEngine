@@ -1,15 +1,217 @@
 #include "test_suite.h"
 
 #include <math.h>
+#include <float.h>
 #include <stdint.h>
 #include <string.h>
 
 #include <henka/persistence.h>
 
 #include "../examples/sandbox3d/interaction_tools.h"
+#include "../examples/sandbox3d/editor_preferences.h"
 #include "../examples/sandbox3d/studio_environment.h"
 #include "../examples/sandbox3d/workspace_persistence.h"
 #include "../examples/sandbox3d/workspace_tools.h"
+
+static void henka_test_editor_scale_accepts_only_four_values(void)
+{
+    static const int supported[] = {100, 125, 150, 200};
+    static const int unsupported[] = {0, 75, 101, 112, 126, 175, 201, 400};
+    sandbox3d_editor_ui_preferences preferences;
+    size_t index;
+
+    sandbox3d_editor_ui_preferences_defaults(&preferences);
+    HENKA_TEST_ASSERT(preferences.scale_percent == 100);
+    for (index = 0U; index < sizeof(supported) / sizeof(supported[0]); ++index)
+    {
+        HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_set_scale_percent(
+            &preferences,
+            supported[index]));
+        HENKA_TEST_ASSERT(preferences.scale_percent == supported[index]);
+        HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_validate(&preferences));
+    }
+    for (index = 0U; index < sizeof(unsupported) / sizeof(unsupported[0]); ++index)
+    {
+        const int previous = preferences.scale_percent;
+        HENKA_TEST_ASSERT(!sandbox3d_editor_ui_preferences_set_scale_percent(
+            &preferences,
+            unsupported[index]));
+        HENKA_TEST_ASSERT(preferences.scale_percent == previous);
+    }
+}
+
+static void henka_test_editor_scale_legacy_multiplier_maps_to_supported_percent(void)
+{
+    static const float multipliers[] = {1.0f, 1.25f, 1.5f, 2.0f};
+    static const int expected[] = {100, 125, 150, 200};
+    int actual = -1;
+    size_t index;
+
+    for (index = 0U; index < sizeof(multipliers) / sizeof(multipliers[0]); ++index)
+    {
+        HENKA_TEST_ASSERT(sandbox3d_editor_ui_scale_legacy_candidate(
+            true,
+            multipliers[index],
+            &actual));
+        HENKA_TEST_ASSERT(actual == expected[index]);
+    }
+}
+
+static void henka_test_editor_scale_legacy_multiplier_handles_missing_invalid_extreme_and_tie_values(void)
+{
+    int actual = -1;
+
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_scale_legacy_candidate(false, 1.5f, &actual));
+    HENKA_TEST_ASSERT(actual == 100);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_scale_legacy_candidate(true, NAN, &actual));
+    HENKA_TEST_ASSERT(actual == 100);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_scale_legacy_candidate(true, INFINITY, &actual));
+    HENKA_TEST_ASSERT(actual == 100);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_scale_legacy_candidate(true, -FLT_MAX, &actual));
+    HENKA_TEST_ASSERT(actual == 100);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_scale_legacy_candidate(true, FLT_MAX, &actual));
+    HENKA_TEST_ASSERT(actual == 200);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_scale_legacy_candidate(true, 1.125f, &actual));
+    HENKA_TEST_ASSERT(actual == 100);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_scale_legacy_candidate(true, 1.375f, &actual));
+    HENKA_TEST_ASSERT(actual == 125);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_scale_legacy_candidate(true, 1.75f, &actual));
+    HENKA_TEST_ASSERT(actual == 150);
+    HENKA_TEST_ASSERT(!sandbox3d_editor_ui_scale_legacy_candidate(true, 1.0f, NULL));
+}
+
+static void henka_test_saved_slot_ui_scale_values_never_override_editor_scale(void)
+{
+    sandbox3d_workspace_model model;
+
+    sandbox3d_workspace_model_reset(&model);
+    sandbox3d_workspace_set_ui_scale(&model, 2.0f);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_save_custom_layout_slot(&model, 1U, "High scale"));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.custom_layout_slots[0].ui_scale, 1.0f, 0.0001f);
+
+    sandbox3d_workspace_set_ui_scale(&model, 1.25f);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_custom_layout_slot(&model, 1U));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(sandbox3d_workspace_get_ui_scale(&model), 1.25f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.custom_layout_slots[0].ui_scale, 1.0f, 0.0001f);
+}
+
+static void henka_test_saved_slot_scale_is_inert_and_legacy_value_is_preserved(void)
+{
+    const char* key = "ui.workspace.custom_layout.slot.1.ui_scale";
+    henka_settings* settings = NULL;
+    sandbox3d_workspace_model saved;
+    sandbox3d_workspace_model loaded;
+
+    HENKA_TEST_ASSERT(henka_settings_create(&settings) == HENKA_SUCCESS);
+    sandbox3d_workspace_model_reset(&saved);
+    sandbox3d_workspace_set_ui_scale(&saved, 2.0f);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_save_custom_layout_slot(&saved, 1U, "Legacy scale"));
+    sandbox3d_workspace_persistence_save_custom_layout_slots(&saved, settings);
+    HENKA_TEST_ASSERT(!henka_settings_has_key(settings, key));
+
+    HENKA_TEST_ASSERT(henka_settings_set_float(settings, key, 1.75f) == HENKA_SUCCESS);
+    sandbox3d_workspace_model_reset(&loaded);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_persistence_load_custom_layout_slots(&loaded, settings));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded.custom_layout_slots[0].ui_scale, 1.75f, 0.0001f);
+
+    sandbox3d_workspace_set_ui_scale(&loaded, 1.25f);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_custom_layout_slot(&loaded, 1U));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(sandbox3d_workspace_get_ui_scale(&loaded), 1.25f, 0.0001f);
+
+    sandbox3d_workspace_persistence_save_custom_layout_slots(&loaded, settings);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(henka_settings_get_float(settings, key, 0.0f), 1.75f, 0.0001f);
+    henka_settings_destroy(settings);
+}
+
+static void henka_test_layout_restore_does_not_override_editor_scale(void)
+{
+    sandbox3d_workspace_model model;
+
+    sandbox3d_workspace_model_reset(&model);
+    sandbox3d_workspace_set_ui_scale(&model, 2.0f);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_save_custom_layout(&model, "High scale"));
+
+    sandbox3d_workspace_set_ui_scale(&model, 1.25f);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_custom_layout(&model));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(sandbox3d_workspace_get_ui_scale(&model), 1.25f, 0.0001f);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_named_layout(
+        &model,
+        SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(sandbox3d_workspace_get_ui_scale(&model), 1.25f, 0.0001f);
+}
+
+static void henka_test_workspace_geometry_consumes_global_scale(void)
+{
+    static const int supported[] = {100, 125, 150, 200};
+    sandbox3d_editor_ui_preferences preferences;
+    sandbox3d_workspace_model model;
+    sandbox3d_workspace_topology_layout layout;
+    float multiplier = 0.0f;
+    size_t index;
+
+    sandbox3d_editor_ui_preferences_defaults(&preferences);
+    sandbox3d_workspace_model_reset(&model);
+    for (index = 0U; index < sizeof(supported) / sizeof(supported[0]); ++index)
+    {
+        HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_set_scale_percent(
+            &preferences,
+            supported[index]));
+        HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_get_scale_multiplier(
+            &preferences,
+            &multiplier));
+        sandbox3d_workspace_set_ui_scale(&model, multiplier);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            sandbox3d_workspace_get_ui_scale(&model),
+            multiplier,
+            0.0001f);
+        sandbox3d_workspace_build_topology_layout(
+            &model,
+            (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f},
+            &layout);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            layout.divider_hit_rects[0].width,
+            10.0f * multiplier,
+            0.0001f);
+    }
+}
+
+static void henka_test_reset_layout_preserves_editor_scale(void)
+{
+    sandbox3d_workspace_model model;
+
+    sandbox3d_workspace_model_reset(&model);
+    sandbox3d_workspace_set_ui_scale(&model, 1.25f);
+    sandbox3d_workspace_reset_layout(&model);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(sandbox3d_workspace_get_ui_scale(&model), 1.25f, 0.0001f);
+}
+
+static void henka_test_legacy_scale_does_not_reject_valid_workspace(void)
+{
+    henka_settings* settings = NULL;
+    sandbox3d_workspace_model saved;
+    sandbox3d_workspace_model loaded;
+
+    HENKA_TEST_ASSERT(henka_settings_create(&settings) == HENKA_SUCCESS);
+    sandbox3d_workspace_model_reset(&saved);
+    sandbox3d_workspace_set_ui_scale(&saved, 2.0f);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_save_custom_layout(&saved, "Valid layout"));
+    sandbox3d_workspace_persistence_save_custom_layout(&saved, settings);
+    HENKA_TEST_ASSERT(!henka_settings_has_key(settings, "ui.workspace.custom_layout.ui_scale"));
+    HENKA_TEST_ASSERT(henka_settings_set_float(
+        settings,
+        "ui.workspace.custom_layout.ui_scale",
+        9.0f) == HENKA_SUCCESS);
+
+    sandbox3d_workspace_model_reset(&loaded);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_persistence_load_custom_layout(&loaded, settings));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_has_custom_layout(&loaded));
+    sandbox3d_workspace_persistence_save_custom_layout(&loaded, settings);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(settings, "ui.workspace.custom_layout.ui_scale", 0.0f),
+        9.0f,
+        0.0001f);
+    henka_settings_destroy(settings);
+}
 
 /* HENKA_WORKSPACE_TEST_DOCK_MEMBERSHIP_V1 */
 static bool henka_test_workspace_dock_contains_section(
@@ -122,6 +324,16 @@ void henka_test_sandbox3d_workspace(void)
     henka_ui_rect left_splitter;
     henka_ui_rect right_splitter;
     henka_ui_rect visual_splitter;
+
+    henka_test_editor_scale_accepts_only_four_values();
+    henka_test_editor_scale_legacy_multiplier_maps_to_supported_percent();
+    henka_test_editor_scale_legacy_multiplier_handles_missing_invalid_extreme_and_tie_values();
+    henka_test_saved_slot_ui_scale_values_never_override_editor_scale();
+    henka_test_saved_slot_scale_is_inert_and_legacy_value_is_preserved();
+    henka_test_layout_restore_does_not_override_editor_scale();
+    henka_test_workspace_geometry_consumes_global_scale();
+    henka_test_reset_layout_preserves_editor_scale();
+    henka_test_legacy_scale_does_not_reject_valid_workspace();
 
     henka_test_sandbox3d_workspace_persistence();
     ground_color = sandbox3d_ground_surface_color();
