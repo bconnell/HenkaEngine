@@ -11550,7 +11550,12 @@ static void sandbox3d_record_reject_reason(
     }
 
     state->diagnostics.last_reject_reason = reason;
-    if (update_status && reason != SANDBOX3D_INTERACTION_REJECT_NONE)
+    /* UI consumption is an expected input-routing outcome, not a viewport
+     * failure to surface in the global status row. Keep the diagnostic reason
+     * above so the interaction remains inspectable without masking UI status. */
+    if (update_status &&
+        reason != SANDBOX3D_INTERACTION_REJECT_NONE &&
+        reason != SANDBOX3D_INTERACTION_REJECT_UI_OWNS_MOUSE)
     {
         sandbox3d_set_statusf(state, true, false, "Viewport interaction blocked: %s.", sandbox3d_interaction_reject_reason_to_string(reason));
     }
@@ -37339,6 +37344,14 @@ static void sandbox3d_draw_utility_panel(
                 state->asset_browser_selected_texture = NULL;
                 state->asset_browser_selected_material = NULL;
                 state->asset_browser_selected_prefab = NULL;
+                if (!state->status_warning &&
+                    strncmp(
+                        state->status_message,
+                        "Selected manager ",
+                        sizeof("Selected manager ") - 1U) == 0)
+                {
+                    state->status_message[0] = '\0';
+                }
             }
             matching_asset_count = sandbox3d_asset_browser_collect_filtered(
                 assets,
@@ -37567,31 +37580,34 @@ static void sandbox3d_draw_utility_panel(
                             asset_browser_navigation_y,
                             state->asset_browser_page + 1U < page_count ? 1 : 0,
                             item_count);
-                        for (item_index = 0U; item_index < item_count; ++item_index)
+                        if (!asset_filter_changed)
                         {
-                            const bool retryable =
-                                sandbox3d_asset_browser_can_retry(
-                                    &items[item_index].metadata);
-                            const float retry_width = 64.0f;
-                            const float row_width = panel_bounds.width - 28.0f;
-                            const float row_y = y_start + 78.0f +
-                                (float)item_index * 30.0f;
-                            const float retry_x = x_left + row_width - retry_width;
-                            const float name_width = retryable
-                                ? row_width - retry_width - 6.0f
-                                : row_width;
-                            printf(
-                                "Asset Browser row: path=%s x=%.1f y=%.1f name_width=%.1f retry=%d retry_x=%.1f retry_y=%.1f retry_width=%.1f retry_height=24.0.\n",
-                                items[item_index].metadata.source_path != NULL
-                                    ? items[item_index].metadata.source_path
-                                    : "(unnamed)",
-                                x_left,
-                                row_y,
-                                name_width,
-                                retryable ? 1 : 0,
-                                retry_x,
-                                row_y + 1.0f,
-                                retryable ? retry_width : 0.0f);
+                            for (item_index = 0U; item_index < item_count; ++item_index)
+                            {
+                                const bool retryable =
+                                    sandbox3d_asset_browser_can_retry(
+                                        &items[item_index].metadata);
+                                const float retry_width = 64.0f;
+                                const float row_width = panel_bounds.width - 28.0f;
+                                const float row_y = y_start + 78.0f +
+                                    (float)item_index * 30.0f;
+                                const float retry_x = x_left + row_width - retry_width;
+                                const float name_width = retryable
+                                    ? row_width - retry_width - 6.0f
+                                    : row_width;
+                                printf(
+                                    "Asset Browser row: path=%s x=%.1f y=%.1f name_width=%.1f retry=%d retry_x=%.1f retry_y=%.1f retry_width=%.1f retry_height=24.0.\n",
+                                    items[item_index].metadata.source_path != NULL
+                                        ? items[item_index].metadata.source_path
+                                        : "(unnamed)",
+                                    x_left,
+                                    row_y,
+                                    name_width,
+                                    retryable ? 1 : 0,
+                                    retry_x,
+                                    row_y + 1.0f,
+                                    retryable ? retry_width : 0.0f);
+                            }
                         }
                         fflush(stdout);
                     }

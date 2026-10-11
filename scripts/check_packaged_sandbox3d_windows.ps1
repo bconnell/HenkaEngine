@@ -3619,7 +3619,7 @@ try {
                 -Pattern $assetStatusSummaryPattern `
                 -StartingOffset $assetFilterClearOffset `
                 -TimeoutMilliseconds 4000)) {
-            throw "Clearing search after selecting a result did not replace the stale selection status with the current asset/page summary."
+            throw "Clearing search after selecting a filtered result did not restore the current Asset Browser page summary."
         }
 
         $assetFilterMatch = Get-LastLogRegexMatch `
