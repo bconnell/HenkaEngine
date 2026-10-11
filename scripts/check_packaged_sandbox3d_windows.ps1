@@ -3176,6 +3176,53 @@ try {
         Write-Output "[pass] Inactive merged tabs may report zero content rectangles safely"
 
         if ($ProductStartupPrimitiveOnly) {
+            Write-Step "Applying fractional viewport zoom through packaged input and checking authoritative camera state"
+            $cameraZoomInputDelta = 0.25
+            $cameraZoomPattern = '^HENKA_AUTOMATION_DIAGNOSTIC camera_zoom frame=\d+ wheel_y=(?<wheel>[-+0-9.eE]+) viewport=(?<viewport>[01]) projection=(?<projection>orthographic|perspective|unknown|unavailable) before_distance=(?<beforeDistance>[-+0-9.eE]+) after_distance=(?<afterDistance>[-+0-9.eE]+) before_height=(?<beforeHeight>[-+0-9.eE]+) after_height=(?<afterHeight>[-+0-9.eE]+) applied=(?<applied>[01])$'
+            $cameraZoomDiagnosticOffset = Get-FileLengthSafe -Path $stdoutPath
+            Send-HenkaBackgroundFramebufferScroll `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($framebufferWidth * 0.5) `
+                -FramebufferY ($framebufferHeight * 0.5) `
+                -WheelDelta $cameraZoomInputDelta
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern $cameraZoomPattern `
+                    -StartingOffset $cameraZoomDiagnosticOffset `
+                    -TimeoutMilliseconds 3500)) {
+                throw "The real packaged viewport wheel event did not produce a product camera-state diagnostic."
+            }
+            $cameraZoomDiagnostic = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $cameraZoomPattern
+            if ($null -eq $cameraZoomDiagnostic -or
+                $cameraZoomDiagnostic.Groups["viewport"].Value -ne "1" -or
+                $cameraZoomDiagnostic.Groups["applied"].Value -ne "1" -or
+                [Math]::Abs([double]$cameraZoomDiagnostic.Groups["wheel"].Value - $cameraZoomInputDelta) -gt 0.00001) {
+                throw "The product did not confirm the expected fractional wheel input was applied inside the viewport."
+            }
+            $cameraZoomProjection = $cameraZoomDiagnostic.Groups["projection"].Value
+            if ($cameraZoomProjection -eq "orthographic") {
+                $beforeMetric = [double]$cameraZoomDiagnostic.Groups["beforeHeight"].Value
+                $afterMetric = [double]$cameraZoomDiagnostic.Groups["afterHeight"].Value
+                if (-not ($afterMetric -lt $beforeMetric)) {
+                    throw "Fractional viewport zoom did not reduce authoritative orthographic camera height."
+                }
+            }
+            elseif ($cameraZoomProjection -eq "perspective") {
+                $beforeMetric = [double]$cameraZoomDiagnostic.Groups["beforeDistance"].Value
+                $afterMetric = [double]$cameraZoomDiagnostic.Groups["afterDistance"].Value
+                if (-not ($afterMetric -lt $beforeMetric)) {
+                    throw "Fractional viewport zoom did not reduce authoritative perspective camera distance."
+                }
+            }
+            else {
+                throw "The packaged camera uses an unsupported projection for viewport zoom validation."
+            }
+            Write-Output ("[pass] Fractional viewport wheel input changed authoritative {0} camera state ({1:F4} -> {2:F4})" -f $cameraZoomProjection, $beforeMetric, $afterMetric)
+
             Write-Step "Selecting the product-native Ground row to inspect long Object Details text"
             $groundRowPattern = '^Default scene Ground row: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+) selected=(?<selected>[01])\.'
             $groundRowMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $groundRowPattern

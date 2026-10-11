@@ -278,3 +278,72 @@ bool sandbox3d_camera_apply_framed_preset(
     *camera = candidate;
     return true;
 }
+
+bool sandbox3d_camera_apply_zoom_delta(
+    henka_camera* camera,
+    henka_vec3 target,
+    float direction_scale)
+{
+    const float maximum_direction_scale = 8.0f;
+    henka_camera candidate;
+    float bounded_direction_scale;
+
+    if (camera == NULL ||
+        !henka_camera_is_valid(camera) ||
+        !isfinite(target.x) ||
+        !isfinite(target.y) ||
+        !isfinite(target.z) ||
+        !isfinite(direction_scale) ||
+        direction_scale == 0.0f)
+    {
+        return false;
+    }
+
+    bounded_direction_scale = fmaxf(
+        -maximum_direction_scale,
+        fminf(maximum_direction_scale, direction_scale));
+    candidate = *camera;
+
+    if (candidate.projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
+    {
+        const float zoom_factor = bounded_direction_scale < 0.0f
+            ? powf(0.88f, -bounded_direction_scale)
+            : powf(1.14f, bounded_direction_scale);
+
+        if (!isfinite(zoom_factor) ||
+            henka_camera_zoom_orthographic(
+                &candidate,
+                zoom_factor,
+                0.5f,
+                80.0f) != HENKA_SUCCESS)
+        {
+            return false;
+        }
+    }
+    else if (candidate.projection_mode == HENKA_CAMERA_PROJECTION_PERSPECTIVE)
+    {
+        const float distance = henka_vec3_length(
+            henka_vec3_subtract(target, candidate.position));
+        const float step = fmaxf(0.25f, distance * 0.12f) *
+            bounded_direction_scale;
+
+        if (!isfinite(distance) ||
+            !isfinite(step) ||
+            !henka_camera_dolly_target(&candidate, target, step, 0.5f))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        return false;
+    }
+
+    if (!henka_camera_is_valid(&candidate))
+    {
+        return false;
+    }
+
+    *camera = candidate;
+    return true;
+}

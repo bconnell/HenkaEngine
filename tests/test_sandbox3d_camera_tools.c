@@ -4,7 +4,93 @@
 #include <henka/camera.h>
 #include <henka/scene.h>
 
+#include <math.h>
+#include <string.h>
+
 #include "../examples/sandbox3d/camera_tools.h"
+
+static void sandbox3d_camera_test_zoom_delta(void)
+{
+    const henka_vec3 target = {0.0f, 0.0f, 0.0f};
+    const float orthographic_start = 10.0f;
+    henka_camera camera;
+    henka_camera unchanged;
+    float distance;
+
+    camera = henka_camera_create_orthographic(
+        orthographic_start,
+        16.0f / 9.0f,
+        0.1f,
+        1000.0f);
+    camera.position = (henka_vec3){0.0f, 0.0f, 10.0f};
+    HENKA_TEST_ASSERT(henka_camera_is_valid(&camera));
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_camera_apply_zoom_delta(&camera, target, -0.25f));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        camera.orthographic_height,
+        orthographic_start * powf(0.88f, 0.25f),
+        0.0001f);
+
+    camera.orthographic_height = orthographic_start;
+    HENKA_TEST_ASSERT(
+        sandbox3d_camera_apply_zoom_delta(&camera, target, -1.0f));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        camera.orthographic_height,
+        orthographic_start * 0.88f,
+        0.0001f);
+
+    camera.orthographic_height = orthographic_start;
+    HENKA_TEST_ASSERT(
+        sandbox3d_camera_apply_zoom_delta(&camera, target, 0.25f));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        camera.orthographic_height,
+        orthographic_start * powf(1.14f, 0.25f),
+        0.0001f);
+
+    camera.orthographic_height = orthographic_start;
+    HENKA_TEST_ASSERT(
+        sandbox3d_camera_apply_zoom_delta(&camera, target, 1.0f));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        camera.orthographic_height,
+        orthographic_start * 1.14f,
+        0.0001f);
+
+    camera.orthographic_height = orthographic_start;
+    HENKA_TEST_ASSERT(
+        sandbox3d_camera_apply_zoom_delta(&camera, target, -1024.0f));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        camera.orthographic_height,
+        orthographic_start * powf(0.88f, 8.0f),
+        0.0001f);
+    HENKA_TEST_ASSERT(henka_camera_is_valid(&camera));
+
+    unchanged = camera;
+    HENKA_TEST_ASSERT(
+        !sandbox3d_camera_apply_zoom_delta(&camera, target, 0.0f));
+    HENKA_TEST_ASSERT(memcmp(&camera, &unchanged, sizeof(camera)) == 0);
+    HENKA_TEST_ASSERT(
+        !sandbox3d_camera_apply_zoom_delta(&camera, target, INFINITY));
+    HENKA_TEST_ASSERT(memcmp(&camera, &unchanged, sizeof(camera)) == 0);
+    HENKA_TEST_ASSERT(
+        !sandbox3d_camera_apply_zoom_delta(
+            &camera,
+            (henka_vec3){NAN, 0.0f, 0.0f},
+            -0.25f));
+    HENKA_TEST_ASSERT(memcmp(&camera, &unchanged, sizeof(camera)) == 0);
+
+    camera = henka_camera_create_perspective(
+        1.0471975512f,
+        16.0f / 9.0f,
+        0.1f,
+        1000.0f);
+    camera.position = (henka_vec3){0.0f, 0.0f, 10.0f};
+    HENKA_TEST_ASSERT(henka_camera_is_valid(&camera));
+    HENKA_TEST_ASSERT(
+        sandbox3d_camera_apply_zoom_delta(&camera, target, -0.25f));
+    distance = henka_vec3_length(henka_vec3_subtract(target, camera.position));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(distance, 9.7f, 0.0001f);
+}
 
 static void sandbox3d_camera_test_set_bounds(
     henka_scene* scene,
@@ -39,6 +125,8 @@ void henka_test_sandbox3d_camera_tools(void)
     henka_vec2 screen_point;
     float depth;
     henka_camera_preset preset;
+
+    sandbox3d_camera_test_zoom_delta();
 
     scene = NULL;
 
