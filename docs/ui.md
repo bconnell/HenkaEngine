@@ -12,6 +12,7 @@ Henka includes a small in-window UI layer used by the Sandbox for inspection, co
 - [Text rendering](#text-rendering)
 - [Sandbox workspace](#sandbox-workspace)
 - [Panels](#panels)
+- [Asset Browser](#asset-browser)
 - [Panel scrolling and presentation state](#panel-scrolling-and-presentation-state)
 - [Scene View tools](#scene-view-tools)
 - [Selection presentation](#selection-presentation)
@@ -272,6 +273,12 @@ The Scene Objects panel can:
 - select one logical object at a time;
 - page through the list in short docks;
 - stay aligned with scene tags and bounds.
+
+### Asset Browser
+
+The Utility Assets browser lists assets already known to the active asset manager. Type tabs expose Textures, Materials, Meshes, and Prefabs. Results are selectable and paged, with the known item count and current page shown in the panel. This is a manager-backed asset index, not a filesystem or project-folder browser.
+
+The supported material texture-picker workflow also uses the browser to choose manager-known textures for a material texture slot. The full project content browser remains future work: folder navigation, search/filter, filesystem import, rename/move/duplicate/delete, drag/drop, and dependency inspection are not provided by this partial browser.
 
 ### Object Details
 
