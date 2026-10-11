@@ -23,6 +23,7 @@ if ($ContractOnly -and -not $NonInteractive) {
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 . (Join-Path $PSScriptRoot "henka_ui_automation_helpers.ps1")
 . (Join-Path $PSScriptRoot "henka_packaged_startup_readiness.ps1")
+. (Join-Path $PSScriptRoot "henka_packaged_scene_objects.ps1")
 
 $script:allowForegroundIntegration = $AllowForegroundIntegration.IsPresent
 if (-not $script:allowForegroundIntegration) {
@@ -278,6 +279,12 @@ function Get-FileLengthSafe {
     return [System.IO.FileInfo]::new($Path).Length
 }
 
+function Normalize-HenkaLogLineEndings {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    return $Text.Replace("`r`n", "`n").Replace("`r", "`n")
+}
+
 function Get-LogPatternCount {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -347,7 +354,7 @@ function Wait-FileContainsAfterOffset {
                         $true,
                         4096,
                         $false)
-                    $text = $reader.ReadToEnd()
+                    $text = Normalize-HenkaLogLineEndings -Text $reader.ReadToEnd()
                     if ([Regex]::IsMatch(
                             $text,
                             $Pattern,
@@ -557,7 +564,7 @@ function Get-LastLogRegexMatch {
                 $true,
                 4096,
                 $false)
-            $text = $reader.ReadToEnd()
+            $text = Normalize-HenkaLogLineEndings -Text $reader.ReadToEnd()
             $reader.Dispose()
             $reader = $null
             $stream = $null
@@ -1300,7 +1307,7 @@ function Set-HenkaSceneObjectsPanelHeightThroughUi {
         [Parameter(Mandatory = $true)][int]$FramebufferWidth,
         [Parameter(Mandatory = $true)][int]$FramebufferHeight,
         [Parameter(Mandatory = $true)][PSCustomObject]$Topology,
-        [Parameter(Mandatory = $true)][double]$TargetFramebufferY,
+        [Parameter(Mandatory = $true)][double]$TargetSceneObjectsBottomY,
         [Parameter(Mandatory = $true)][string]$StdoutPath,
         [Parameter(Mandatory = $true)][string]$Description
     )
@@ -1314,10 +1321,18 @@ function Set-HenkaSceneObjectsPanelHeightThroughUi {
 
     $dividerX = $Topology.DividerHit.X + ($Topology.DividerHit.Width * 0.5)
     $dividerY = $Topology.DividerHit.Y + ($Topology.DividerHit.Height * 0.5)
-    if ($TargetFramebufferY -lt $Topology.Dock.Y -or
-        $TargetFramebufferY -ge $Topology.Dock.Y + $Topology.Dock.Height) {
+    $sceneObjectsBottomY = $Topology.SceneObjects.Y + $Topology.SceneObjects.Height
+    $dividerCenterToPanelEdgeOffset = $dividerY - $sceneObjectsBottomY
+    if ([Math]::Abs($dividerCenterToPanelEdgeOffset) -gt
+        ($Topology.DividerHit.Height * 0.5 + 0.01)) {
+        throw "$Description could not reconcile the product-reported divider center with the Scene Objects panel edge."
+    }
+    $targetDividerY = $TargetSceneObjectsBottomY + $dividerCenterToPanelEdgeOffset
+    if ($targetDividerY -lt $Topology.Dock.Y -or
+        $targetDividerY -ge $Topology.Dock.Y + $Topology.Dock.Height) {
         throw "$Description target is outside the product-reported active dock."
     }
+    Write-Output ("[pass] Derived the live divider endpoint from the product panel edge and center offset ({0:F1}px)" -f $dividerCenterToPanelEdgeOffset)
     Send-HenkaBackgroundFramebufferDrag `
         -Handle $Handle `
         -FramebufferWidth $FramebufferWidth `
@@ -1325,7 +1340,7 @@ function Set-HenkaSceneObjectsPanelHeightThroughUi {
         -StartFramebufferX $dividerX `
         -StartFramebufferY $dividerY `
         -EndFramebufferX $dividerX `
-        -EndFramebufferY $TargetFramebufferY `
+        -EndFramebufferY $targetDividerY `
         -StdoutPath $StdoutPath `
         -Description $Description
 }
@@ -1566,6 +1581,7 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
     $rowStartY = [double]$row.Groups['y'].Value
     $preCompactRowHeight = [double]$row.Groups['height'].Value
     $minimumOneLineRowHeight = 28.0
+    $targetOneLineRowCapacity = $minimumOneLineRowHeight + 2.0
     $panelFooterHeight = 34.0
     $preCompactAvailableRowHeight =
         $SceneObjectsY + $SceneObjectsHeight - $panelFooterHeight - $rowStartY
@@ -1576,19 +1592,23 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
     }
     # Derive the splitter target from product-reported row geometry. A fixed
     # panel height can place the list below its footer because authoring
-    # controls occupy the upper portion of this panel. This leaves exactly
-    # the minimum one-line row height between the real row start and footer.
+    # controls occupy the upper portion of this panel. Keep a small margin
+    # above the existing minimum row height: the prior exact-minimum target
+    # rounded to 27.96 px and correctly caused layout rejection, rather than
+    # producing a row that could classify the formatter/draw boundary.
     $compactPanelHeight =
-        ($rowStartY - $SceneObjectsY) + $panelFooterHeight + $minimumOneLineRowHeight
+        ($rowStartY - $SceneObjectsY) + $panelFooterHeight + $targetOneLineRowCapacity
     $compactAvailableRowHeight =
         $SceneObjectsY + $compactPanelHeight - $panelFooterHeight - $rowStartY
     if ($compactPanelHeight -lt 180.0 -or
         $compactPanelHeight -ge $SceneObjectsHeight -or
-        [Math]::Abs($compactAvailableRowHeight - $minimumOneLineRowHeight) -gt 0.01) {
-        throw "The product-reported row position cannot establish the exact one-line Scene Objects boundary."
+        $compactAvailableRowHeight -lt ($minimumOneLineRowHeight + 1.0) -or
+        $compactAvailableRowHeight -ge $preCompactRowHeight) {
+        throw "The product-reported row position cannot establish a safe one-line Scene Objects capacity."
     }
     Write-Output (("[pass] Derived compact Scene Objects height {0:F1}px from the product row; " +
-        "visible row capacity is {1:F1}px") -f $compactPanelHeight, $compactAvailableRowHeight)
+        "one-line row capacity budget is {1:F1}px (minimum {2:F1}px; baseline row {3:F1}px)") -f `
+        $compactPanelHeight, $compactAvailableRowHeight, $minimumOneLineRowHeight, $preCompactRowHeight)
     $compactLayoutOffset = Get-FileLengthSafe -Path $StdoutPath
     $reachabilityScreenshotPath = Join-Path (Split-Path -Parent $StdoutPath) `
         "scene-objects-$($Name.ToLowerInvariant())-divider-reachability-1280x720.bmp"
@@ -1597,7 +1617,7 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
         -FramebufferWidth $FramebufferWidth `
         -FramebufferHeight $FramebufferHeight `
         -Topology $topology `
-        -TargetFramebufferY ($SceneObjectsY + $compactPanelHeight) `
+        -TargetSceneObjectsBottomY ($SceneObjectsY + $compactPanelHeight) `
         -StdoutPath $StdoutPath `
         -Description "Resizing Scene Objects to the supported one-line row boundary"
 
@@ -1628,17 +1648,141 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
     $SceneObjectsHeight = $resizedTopology.SceneObjects.Height
     $topology = $resizedTopology
     Write-Output ("[pass] The real product topology divider changed Scene Objects geometry to {0:F1}px high" -f $SceneObjectsHeight)
+
+    $compactLayoutPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_layout result=(?:ready|error) .+\.$'
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $StdoutPath `
+            -Pattern $compactLayoutPattern `
+            -StartingOffset $compactLayoutOffset `
+            -TimeoutMilliseconds 5000)) {
+        throw "The product did not report the actual Scene Objects row-page calculation after the divider release."
+    }
+    $compactLayoutReport = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $compactLayoutPattern
+    if ($null -eq $compactLayoutReport) {
+        throw "The current Scene Objects row-page calculation could not be read from product telemetry."
+    }
+
+    # Generic frame heartbeats are deliberately capped for bounded logs. Wait
+    # for the row-authority observation emitted by the actual Scene Objects
+    # draw path instead of requiring a later periodic frame sample.
+    if (-not (Wait-HenkaSceneObjectsRowDrawAfterOffset `
+            -Path $StdoutPath `
+            -StartingOffset $compactLayoutOffset `
+            -TimeoutMilliseconds 5000)) {
+        throw "The Sandbox did not execute the Scene Objects row draw path after the compact layout changed."
+    }
+    $compactRowAuthority = Find-HenkaSceneObjectsRowAuthorityThroughPager `
+        -Name $Name `
+        -Entity $entity `
+        -Handle $Handle `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -SceneObjects $topology.SceneObjects `
+        -StdoutPath $StdoutPath
+
+    # Divider movement can reflow the row list after the initial target was
+    # calculated. If the real post-resize row remains two-line, perform one
+    # bounded correction from that fresh production row geometry rather than
+    # inferring reachability from total dock height or repeating blind drags.
+    $correctedPanelHeight = $null
+    if ($null -ne $compactRowAuthority) {
+        $correctedPanelHeight = Get-HenkaSceneObjectsOneLinePanelHeightFromRow `
+            -Row $compactRowAuthority `
+            -PanelY $SceneObjectsY `
+            -CurrentPanelHeight $SceneObjectsHeight `
+            -MinimumRowHeight $minimumOneLineRowHeight `
+            -DesiredRowCapacity $targetOneLineRowCapacity `
+            -FooterHeight $panelFooterHeight `
+            -MinimumPanelHeight 180.0
+    }
+    if ($null -ne $correctedPanelHeight) {
+        $correctedLayoutOffset = Get-FileLengthSafe -Path $StdoutPath
+        Set-HenkaSceneObjectsPanelHeightThroughUi `
+            -Handle $Handle `
+            -FramebufferWidth $FramebufferWidth `
+            -FramebufferHeight $FramebufferHeight `
+            -Topology $topology `
+            -TargetSceneObjectsBottomY ($SceneObjectsY + $correctedPanelHeight) `
+            -StdoutPath $StdoutPath `
+            -Description "Correcting the compact divider target from the fresh product row position"
+
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $StdoutPath `
+                -Pattern $dividerReleasePattern `
+                -StartingOffset $correctedLayoutOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The product did not report the bounded row-derived divider correction."
+        }
+        $correctedTopology = Get-HenkaWorkspaceTopologyReport `
+            -StdoutPath $StdoutPath `
+            -FramebufferWidth $FramebufferWidth `
+            -FramebufferHeight $FramebufferHeight `
+            -RequireToolsVisible
+        $correctedGeometryChanged =
+            [Math]::Abs($correctedTopology.SceneObjects.X - $topology.SceneObjects.X) -gt 0.5 -or
+            [Math]::Abs($correctedTopology.SceneObjects.Y - $topology.SceneObjects.Y) -gt 0.5 -or
+            [Math]::Abs($correctedTopology.SceneObjects.Width - $topology.SceneObjects.Width) -gt 0.5 -or
+            [Math]::Abs($correctedTopology.SceneObjects.Height - $topology.SceneObjects.Height) -gt 0.5
+        if (-not $correctedGeometryChanged) {
+            throw "The row-derived divider correction was consumed, but product Scene Objects geometry did not change."
+        }
+
+        $SceneObjectsX = $correctedTopology.SceneObjects.X
+        $SceneObjectsY = $correctedTopology.SceneObjects.Y
+        $SceneObjectsWidth = $correctedTopology.SceneObjects.Width
+        $SceneObjectsHeight = $correctedTopology.SceneObjects.Height
+        $topology = $correctedTopology
+        $resizedTopology = $correctedTopology
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $StdoutPath `
+                -Pattern $compactLayoutPattern `
+                -StartingOffset $correctedLayoutOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The product did not report the Scene Objects layout after the row-derived correction."
+        }
+        if (-not (Wait-HenkaSceneObjectsRowDrawAfterOffset `
+                -Path $StdoutPath `
+                -StartingOffset $correctedLayoutOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The Scene Objects row draw path did not run after the row-derived correction."
+        }
+        $compactRowAuthority = Find-HenkaSceneObjectsRowAuthorityThroughPager `
+            -Name $Name `
+            -Entity $entity `
+            -Handle $Handle `
+            -FramebufferWidth $FramebufferWidth `
+            -FramebufferHeight $FramebufferHeight `
+            -SceneObjects $topology.SceneObjects `
+            -StdoutPath $StdoutPath
+        $correctedRowY = if ($null -ne $compactRowAuthority) {
+            [double]$compactRowAuthority.Groups['y'].Value
+        }
+        else {
+            [double]::NaN
+        }
+        Write-Output ("[pass] One bounded row-derived divider correction reached {0:F1}px; fresh product row y={1}" -f `
+            $SceneObjectsHeight, $correctedRowY)
+    }
+
+    $compactLayoutReport = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $compactLayoutPattern
     Save-WindowScreenshot `
         -Handle $Handle `
         -Path $reachabilityScreenshotPath `
-        -Description "Packaged Scene Objects after the real topology-divider drag"
+        -Description "Packaged Scene Objects after real divider and pager interactions"
 
-    $compactDisplayPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_row entity=' +
-        [Regex]::Escape($entity) + ' name=' + $escapedName + ' display=' +
-        [Regex]::Escape($Name + ' [Hidden]') + ' lines=1 hidden=1 selected=0 x=[-0-9.]+ y=[-0-9.]+ width=[-0-9.]+ height=[-0-9.]+\.'
-    $compactRowVisible = Wait-FileContainsAfterOffset -Path $StdoutPath `
-        -Pattern $compactDisplayPattern -StartingOffset $compactLayoutOffset -TimeoutMilliseconds 1000
+    $compactRowVisible = $null -ne $compactRowAuthority -and
+        [int]$compactRowAuthority.Groups['lines'].Value -eq 1 -and
+        $compactRowAuthority.Groups['hidden'].Value -eq '1' -and
+        $compactRowAuthority.Groups['selected'].Value -eq '0' -and
+        $compactRowAuthority.Groups['display'].Value -ceq ($Name + ' [Hidden]') -and
+        $compactRowAuthority.Groups['sameRect'].Value -eq '1'
     if (-not $compactRowVisible) {
+        if ($null -ne $compactLayoutReport) {
+            Write-Output ("[diagnostic] Actual post-divider Scene Objects layout: {0}" -f $compactLayoutReport.Value)
+        }
+        if ($null -ne $compactRowAuthority) {
+            Write-Output ("[diagnostic] Actual $Name row/draw/hitbox authority: {0}" -f $compactRowAuthority.Value)
+        }
         if ($topology.DividerCount -gt 0) {
             $restoreUnreachableOffset = Get-FileLengthSafe -Path $StdoutPath
             Set-HenkaSceneObjectsPanelHeightThroughUi `
@@ -1646,7 +1790,7 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
                 -FramebufferWidth $FramebufferWidth `
                 -FramebufferHeight $FramebufferHeight `
                 -Topology $topology `
-                -TargetFramebufferY ($SceneObjectsY + $originalSceneObjectsHeight) `
+                -TargetSceneObjectsBottomY ($SceneObjectsY + $originalSceneObjectsHeight) `
                 -StdoutPath $StdoutPath `
                 -Description "Restoring the Scene Objects dock after classifying one-line reachability"
             if (-not (Wait-FileContainsAfterOffset `
@@ -1666,11 +1810,11 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
             }
         }
         $script:hiddenRowOneLineReachable = $false
-        Write-Output ("[classified-open] The normal divider interaction reached a {0:F1}px Scene Objects panel, but the product did not report '$Name [Hidden]' in its one-line row layout; no further synthetic resizing or paging will be attempted." -f $resizedTopology.SceneObjects.Height)
+        Write-Output ("[classified-open] The normal divider interaction reached a {0:F1}px Scene Objects panel, and real pager navigation was attempted where available, but the product did not report '$Name [Hidden]' in a one-line row; no synthetic layout state was introduced." -f $resizedTopology.SceneObjects.Height)
         return
     }
 
-    $row = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $rowPattern
+    $row = $compactRowAuthority
     if ($null -eq $row -or $row.Groups['entity'].Value -ne $entity -or
         $row.Groups['hidden'].Value -ne '1' -or $row.Groups['selected'].Value -ne '0' -or
         [int]$row.Groups['lines'].Value -ne 1 -or
@@ -1724,7 +1868,7 @@ function Assert-HenkaPackagedHiddenNamedObjectSelectable {
             -FramebufferWidth $FramebufferWidth `
             -FramebufferHeight $FramebufferHeight `
             -Topology $topology `
-            -TargetFramebufferY ($SceneObjectsY + $originalSceneObjectsHeight) `
+            -TargetSceneObjectsBottomY ($SceneObjectsY + $originalSceneObjectsHeight) `
             -StdoutPath $StdoutPath `
             -Description "Restoring the normal Scene Objects panel height after the first row proof"
         if (-not (Wait-FileContainsAfterOffset `
@@ -3166,7 +3310,7 @@ try {
             Save-WindowScreenshot `
                 -Handle $mainWindowHandle `
                 -Path (Join-Path $logDir 'scene-objects-hidden-rows-1280x720.bmp') `
-                -Description "Packaged 1280x720 Scene Objects with two hidden named objects and the intended object selected"
+                -Description "Packaged 1280x720 Scene Objects after the bounded hidden-row reachability probe"
             if ($script:hiddenRowOneLineReachable) {
                 Write-Output "[pass] Two distinct hidden product-native objects retained readable names and individually selected through their visible one-line rows"
             }
