@@ -6,24 +6,6 @@
 #include "../examples/sandbox3d/editor_layout.h"
 #include "../examples/sandbox3d/view_compass.h"
 
-extern henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
-    const sandbox3d_editor_frame_layout* layout,
-    bool authoring_available,
-    bool options_expanded);
-
-extern henka_result sandbox3d_editor_layout_text_control_row_for_context(
-    const henka_ui_context* ui_context,
-    henka_ui_rect bounds,
-    const char* const* labels,
-    size_t item_count,
-    float scale,
-    float minimum_item_width,
-    float horizontal_padding,
-    float gap,
-    henka_ui_rect* out_items,
-    size_t item_capacity,
-    size_t* out_item_count);
-
 static bool henka_test_rects_overlap(henka_ui_rect left, henka_ui_rect right)
 {
     return left.x < right.x + right.width &&
@@ -286,6 +268,109 @@ void henka_test_sandbox3d_editor_layout(void)
         HENKA_TEST_ASSERT(
             controls[2].x + controls[2].width <=
             40.0f + (float)(required_width + 64.0));
+
+        {
+            const char* asset_type_labels[] = {
+                "Textures", "Materials", "Meshes", "Prefabs"};
+            henka_ui_rect asset_tabs[4] = {
+                {11.0f, 12.0f, 13.0f, 14.0f},
+                {21.0f, 22.0f, 23.0f, 24.0f},
+                {31.0f, 32.0f, 33.0f, 34.0f},
+                {41.0f, 42.0f, 43.0f, 44.0f}};
+            henka_ui_rect narrow_tabs[4] = {
+                {51.0f, 52.0f, 53.0f, 54.0f},
+                {61.0f, 62.0f, 63.0f, 64.0f},
+                {71.0f, 72.0f, 73.0f, 74.0f},
+                {81.0f, 82.0f, 83.0f, 84.0f}};
+            const henka_ui_rect narrow_tabs_before[4] = {
+                narrow_tabs[0], narrow_tabs[1], narrow_tabs[2], narrow_tabs[3]};
+            const henka_ui_rect asset_tab_bounds = {846.0f, 286.0f, 404.0f, 24.0f};
+            int label_width = 0;
+            int label_height = 0;
+            double required_tab_width = 24.0;
+            size_t asset_tab_count = 99U;
+            size_t narrow_tab_count = 99U;
+
+            for (item_index = 0U; item_index < 4U; ++item_index)
+            {
+                HENKA_TEST_ASSERT(
+                    henka_ui_measure_text_for_context(
+                        ui_context,
+                        asset_type_labels[item_index],
+                        1.0f,
+                        &label_width,
+                        &label_height) == HENKA_SUCCESS);
+                required_tab_width += (double)label_width + 16.0;
+            }
+
+            HENKA_TEST_ASSERT(
+                sandbox3d_editor_layout_text_control_row_for_context(
+                    ui_context,
+                    asset_tab_bounds,
+                    asset_type_labels,
+                    4U,
+                    1.0f,
+                    0.0f,
+                    8.0f,
+                    8.0f,
+                    asset_tabs,
+                    4U,
+                    &asset_tab_count) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(asset_tab_count == 4U);
+            for (item_index = 0U; item_index < asset_tab_count; ++item_index)
+            {
+                HENKA_TEST_ASSERT(
+                    henka_test_rect_is_contained(asset_tab_bounds, asset_tabs[item_index]));
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    asset_tabs[item_index].height,
+                    asset_tab_bounds.height,
+                    0.0001f);
+                HENKA_TEST_ASSERT(
+                    henka_ui_measure_text_for_context(
+                        ui_context,
+                        asset_type_labels[item_index],
+                        1.0f,
+                        &label_width,
+                        &label_height) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(
+                    asset_tabs[item_index].width >= (float)label_width + 16.0f);
+                if (item_index > 0U)
+                {
+                    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                        asset_tabs[item_index].x,
+                        asset_tabs[item_index - 1U].x +
+                            asset_tabs[item_index - 1U].width + 8.0f,
+                        0.0001f);
+                    HENKA_TEST_ASSERT(
+                        !henka_test_rects_overlap(
+                            asset_tabs[item_index - 1U], asset_tabs[item_index]));
+                }
+            }
+
+            HENKA_TEST_ASSERT(
+                sandbox3d_editor_layout_text_control_row_for_context(
+                    ui_context,
+                    (henka_ui_rect){
+                        asset_tab_bounds.x,
+                        asset_tab_bounds.y,
+                        (float)(required_tab_width - 0.5),
+                        asset_tab_bounds.height},
+                    asset_type_labels,
+                    4U,
+                    1.0f,
+                    0.0f,
+                    8.0f,
+                    8.0f,
+                    narrow_tabs,
+                    4U,
+                    &narrow_tab_count) == HENKA_ERROR_NUMERIC_RANGE);
+            HENKA_TEST_ASSERT(narrow_tab_count == 0U);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(narrow_tabs[0].x, narrow_tabs_before[0].x, 0.0001f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(narrow_tabs[1].width, narrow_tabs_before[1].width, 0.0001f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(narrow_tabs[2].y, narrow_tabs_before[2].y, 0.0001f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(narrow_tabs[3].height, narrow_tabs_before[3].height, 0.0001f);
+        }
+
         HENKA_TEST_ASSERT(henka_ui_end_frame(ui_context) == HENKA_SUCCESS);
         henka_ui_destroy(ui_context);
     }
