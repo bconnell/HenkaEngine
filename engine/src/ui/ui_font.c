@@ -46,10 +46,18 @@ typedef struct henka_ui_sha256_state
 struct henka_ui_font_resource
 {
     uint8_t* source_bytes;
+    size_t source_size;
     stbtt_fontinfo stb_font;
     henka_ui_font_info info;
     henka_ui_font_glyph_info* glyphs;
     uint8_t* atlas;
+};
+
+struct henka_ui_font_raster_profile
+{
+    henka_ui_font_raster_profile_desc desc;
+    henka_ui_font_resource* fonts[HENKA_UI_FONT_APP_SCALE_COUNT];
+    henka_ui_font_raster_profile_info entries[HENKA_UI_FONT_APP_SCALE_COUNT];
 };
 
 static const uint32_t g_henka_ui_sha256_round_constants[64U] =
@@ -516,6 +524,7 @@ henka_result henka_ui_font_resource_create(
         goto allocation_failure;
     }
     memcpy(candidate->source_bytes, desc->source_bytes, desc->source_size);
+    candidate->source_size = desc->source_size;
     if (!stbtt_InitFont(&candidate->stb_font, candidate->source_bytes, 0))
     {
         henka_ui_font_set_diagnostic(out_diagnostic, HENKA_UI_FONT_STAGE_PARSE,
@@ -762,4 +771,276 @@ const uint8_t* henka_ui_font_resource_get_atlas(
         *out_height = resource != NULL ? resource->info.atlas_height : 0U;
     }
     return resource != NULL ? resource->atlas : NULL;
+}
+
+static int32_t henka_ui_font_profile_scale_index(uint16_t app_scale_percent)
+{
+    switch (app_scale_percent)
+    {
+        case 100U: return 0;
+        case 125U: return 1;
+        case 150U: return 2;
+        case 200U: return 3;
+        default: return -1;
+    }
+}
+
+static bool henka_ui_font_profile_raster_height(
+    uint32_t base_pixel_height,
+    uint16_t app_scale_percent,
+    uint32_t output_numerator,
+    uint32_t output_denominator,
+    uint32_t* out_pixel_height)
+{
+    uint64_t numerator;
+    uint64_t denominator;
+    uint64_t rounded;
+
+    if (out_pixel_height == NULL || base_pixel_height == 0U ||
+        output_numerator == 0U || output_denominator == 0U)
+    {
+        return false;
+    }
+    numerator = (uint64_t)base_pixel_height * (uint64_t)app_scale_percent *
+        (uint64_t)output_numerator;
+    denominator = (uint64_t)100U * (uint64_t)output_denominator;
+    if (denominator == 0U || numerator > UINT64_MAX - denominator / 2U)
+    {
+        return false;
+    }
+    rounded = (numerator + denominator / 2U) / denominator;
+    if (rounded == 0U || rounded > 256U)
+    {
+        return false;
+    }
+    *out_pixel_height = (uint32_t)rounded;
+    return true;
+}
+
+static henka_result henka_ui_font_resource_create_raster_variant(
+    const henka_ui_font_resource* source,
+    uint32_t raster_pixel_height,
+    uint32_t atlas_width,
+    uint32_t atlas_height,
+    henka_ui_font_resource** out_resource,
+    henka_ui_font_diagnostic* out_diagnostic)
+{
+    henka_ui_font_desc desc;
+    uint32_t* codepoints = NULL;
+    size_t codepoint_bytes;
+    size_t index;
+    henka_result result;
+
+    if (source == NULL || out_resource == NULL || *out_resource != NULL ||
+        source->info.glyph_count == 0U ||
+        !henka_checked_size_multiply(
+            source->info.glyph_count, sizeof(*codepoints), &codepoint_bytes))
+    {
+        henka_ui_font_set_diagnostic(
+            out_diagnostic, HENKA_UI_FONT_STAGE_RASTER_PROFILE,
+            source != NULL ? source->info.identity : NULL,
+            "font raster variant arguments are invalid");
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    codepoints = (uint32_t*)henka_malloc(codepoint_bytes);
+    if (codepoints == NULL)
+    {
+        henka_ui_font_set_diagnostic(
+            out_diagnostic, HENKA_UI_FONT_STAGE_ALLOCATION, source->info.identity,
+            "font raster variant codepoint allocation failed");
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    for (index = 0U; index < source->info.glyph_count; ++index)
+    {
+        codepoints[index] = source->glyphs[index].codepoint;
+    }
+    memset(&desc, 0, sizeof(desc));
+    desc.source_bytes = source->source_bytes;
+    desc.source_size = source->source_size;
+    desc.identity = source->info.identity;
+    desc.verified_sha256_hex = source->info.sha256_hex;
+    desc.required_codepoints = codepoints;
+    desc.required_codepoint_count = source->info.glyph_count;
+    desc.raster_pixel_height = raster_pixel_height;
+    desc.atlas_width = atlas_width;
+    desc.atlas_height = atlas_height;
+    result = henka_ui_font_resource_create(&desc, out_resource, out_diagnostic);
+    henka_free(codepoints);
+    return result;
+}
+
+henka_result henka_ui_font_raster_profile_create(
+    const henka_ui_font_resource* font,
+    const henka_ui_font_raster_profile_desc* desc,
+    henka_ui_font_raster_profile** out_profile,
+    henka_ui_font_diagnostic* out_diagnostic)
+{
+    static const uint16_t app_scales[HENKA_UI_FONT_APP_SCALE_COUNT] =
+        {100U, 125U, 150U, 200U};
+    henka_ui_font_raster_profile* candidate = NULL;
+    henka_ui_font_info base_info;
+    size_t atlas_bytes;
+    size_t total_coverage_bytes = 0U;
+    size_t index;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+
+    henka_ui_font_set_diagnostic(out_diagnostic, HENKA_UI_FONT_STAGE_NONE,
+        font != NULL ? font->info.identity : NULL, NULL);
+    if (font == NULL || desc == NULL || out_profile == NULL || *out_profile != NULL ||
+        desc->graphics_context_identity == 0U ||
+        desc->output_scale_numerator == 0U || desc->output_scale_denominator == 0U ||
+        desc->output_scale_numerator > 16U || desc->output_scale_denominator > 16U ||
+        (uint64_t)desc->output_scale_numerator * 4U < desc->output_scale_denominator ||
+        desc->output_scale_numerator > (uint64_t)desc->output_scale_denominator * 4U ||
+        desc->atlas_width == 0U || desc->atlas_height == 0U ||
+        desc->atlas_width > HENKA_UI_FONT_MAX_ATLAS_DIMENSION ||
+        desc->atlas_height > HENKA_UI_FONT_MAX_ATLAS_DIMENSION ||
+        !henka_checked_size_multiply(
+            (size_t)desc->atlas_width, (size_t)desc->atlas_height, &atlas_bytes) ||
+        !henka_ui_font_resource_get_info(font, &base_info))
+    {
+        henka_ui_font_set_diagnostic(out_diagnostic,
+            HENKA_UI_FONT_STAGE_RASTER_PROFILE,
+            font != NULL ? font->info.identity : NULL,
+            "font raster profile arguments or output scale are invalid");
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_checked_size_multiply(atlas_bytes, HENKA_UI_FONT_APP_SCALE_COUNT,
+            &total_coverage_bytes) || total_coverage_bytes > (size_t)16U * 1024U * 1024U)
+    {
+        henka_ui_font_set_diagnostic(out_diagnostic,
+            HENKA_UI_FONT_STAGE_ATLAS_DIMENSIONS, base_info.identity,
+            "four-scale font profile exceeds the 16 MiB coverage budget");
+        return HENKA_ERROR_LIMIT;
+    }
+    candidate = (henka_ui_font_raster_profile*)henka_calloc(1U, sizeof(*candidate));
+    if (candidate == NULL)
+    {
+        henka_ui_font_set_diagnostic(out_diagnostic,
+            HENKA_UI_FONT_STAGE_ALLOCATION, base_info.identity,
+            "font raster profile allocation failed");
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    candidate->desc = *desc;
+    for (index = 0U; index < HENKA_UI_FONT_APP_SCALE_COUNT; ++index)
+    {
+        uint32_t raster_pixel_height;
+        henka_ui_font_atlas_key* key = &candidate->entries[index].key;
+
+        if (!henka_ui_font_profile_raster_height(
+                base_info.raster_pixel_height, app_scales[index],
+                desc->output_scale_numerator, desc->output_scale_denominator,
+                &raster_pixel_height))
+        {
+            henka_ui_font_set_diagnostic(out_diagnostic,
+                HENKA_UI_FONT_STAGE_RASTER_PROFILE, base_info.identity,
+                "effective glyph raster height is outside the supported 1-256 pixel range");
+            result = HENKA_ERROR_LIMIT;
+            goto failure;
+        }
+        result = henka_ui_font_resource_create_raster_variant(
+            font, raster_pixel_height, desc->atlas_width, desc->atlas_height,
+            &candidate->fonts[index], out_diagnostic);
+        if (result != HENKA_SUCCESS)
+        {
+            goto failure;
+        }
+        (void)snprintf(key->font_sha256_hex, sizeof(key->font_sha256_hex),
+            "%s", base_info.sha256_hex);
+        key->app_scale_percent = app_scales[index];
+        key->output_scale_numerator = desc->output_scale_numerator;
+        key->output_scale_denominator = desc->output_scale_denominator;
+        key->raster_pixel_height = raster_pixel_height;
+        key->graphics_context_identity = desc->graphics_context_identity;
+        candidate->entries[index].atlas_width = desc->atlas_width;
+        candidate->entries[index].atlas_height = desc->atlas_height;
+        candidate->entries[index].coverage_bytes = atlas_bytes;
+    }
+
+    *out_profile = candidate;
+    henka_ui_font_set_diagnostic(out_diagnostic, HENKA_UI_FONT_STAGE_NONE,
+        base_info.identity, NULL);
+    return HENKA_SUCCESS;
+
+failure:
+    henka_ui_font_raster_profile_destroy(candidate);
+    return result;
+}
+
+void henka_ui_font_raster_profile_destroy(
+    henka_ui_font_raster_profile* profile)
+{
+    size_t index;
+    if (profile == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < HENKA_UI_FONT_APP_SCALE_COUNT; ++index)
+    {
+        henka_ui_font_resource_destroy(profile->fonts[index]);
+    }
+    henka_free(profile);
+}
+
+size_t henka_ui_font_raster_profile_get_entry_count(
+    const henka_ui_font_raster_profile* profile)
+{
+    size_t count = 0U;
+    size_t index;
+    if (profile == NULL)
+    {
+        return 0U;
+    }
+    for (index = 0U; index < HENKA_UI_FONT_APP_SCALE_COUNT; ++index)
+    {
+        if (profile->fonts[index] != NULL)
+        {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool henka_ui_font_raster_profile_get_info(
+    const henka_ui_font_raster_profile* profile,
+    uint16_t app_scale_percent,
+    henka_ui_font_raster_profile_info* out_info)
+{
+    const int32_t index = henka_ui_font_profile_scale_index(app_scale_percent);
+    if (out_info != NULL)
+    {
+        memset(out_info, 0, sizeof(*out_info));
+    }
+    if (profile == NULL || out_info == NULL || index < 0 ||
+        profile->fonts[(size_t)index] == NULL)
+    {
+        return false;
+    }
+    *out_info = profile->entries[(size_t)index];
+    return true;
+}
+
+const henka_ui_font_resource* henka_ui_font_raster_profile_get_font(
+    const henka_ui_font_raster_profile* profile,
+    uint16_t app_scale_percent)
+{
+    const int32_t index = henka_ui_font_profile_scale_index(app_scale_percent);
+    return profile != NULL && index >= 0 ? profile->fonts[(size_t)index] : NULL;
+}
+
+const uint8_t* henka_ui_font_raster_profile_get_atlas(
+    const henka_ui_font_raster_profile* profile,
+    uint16_t app_scale_percent,
+    uint32_t* out_width,
+    uint32_t* out_height)
+{
+    const henka_ui_font_resource* font =
+        henka_ui_font_raster_profile_get_font(profile, app_scale_percent);
+    return henka_ui_font_resource_get_atlas(font, out_width, out_height);
+}
+
+uint64_t henka_ui_font_raster_profile_get_context_identity(
+    const henka_ui_font_raster_profile* profile)
+{
+    return profile != NULL ? profile->desc.graphics_context_identity : 0U;
 }

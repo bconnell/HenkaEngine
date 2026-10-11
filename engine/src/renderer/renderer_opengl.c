@@ -94,6 +94,15 @@
 
 #define HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY 256U
 
+typedef struct henka_opengl_ui_font_residency
+{
+    GLuint texture;
+    henka_ui_font_atlas_key key;
+    uint32_t atlas_width;
+    uint32_t atlas_height;
+    bool valid;
+} henka_opengl_ui_font_residency;
+
 typedef struct henka_opengl_tool_window_target
 {
     henka_window_id id;
@@ -102,6 +111,7 @@ typedef struct henka_opengl_tool_window_target
     GLuint ui_program;
     GLuint ui_vertex_array;
     GLuint ui_vertex_buffer;
+    henka_opengl_ui_font_residency ui_font;
 } henka_opengl_tool_window_target;
 
 #define HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY 4096U
@@ -146,6 +156,7 @@ typedef struct henka_opengl_renderer_state
     GLuint ui_program;
     GLuint ui_vertex_array;
     GLuint ui_vertex_buffer;
+    henka_opengl_ui_font_residency ui_font;
     GLuint viewport_program;
     henka_opengl_shader_data viewport_shader_data;
     GLuint tone_program;
@@ -770,15 +781,7 @@ bool henka_opengl_renderer_is_shadow_ready(const struct henka_renderer* renderer
         state->shadow_framebuffer_complete && state->shadow_resolution > 0;
 }
 
-typedef struct henka_ui_vertex
-{
-    float x;
-    float y;
-    float r;
-    float g;
-    float b;
-    float a;
-} henka_ui_vertex;
+typedef henka_ui_draw_vertex henka_ui_vertex;
 
 static henka_result henka_opengl_restore_main_context(
     henka_opengl_renderer_state* state,
@@ -1848,22 +1851,35 @@ static henka_result henka_opengl_renderer_create_ui_resources(
         "#version 330 core\n"
         "layout(location = 0) in vec2 inPosition;\n"
         "layout(location = 1) in vec4 inColor;\n"
+        "layout(location = 2) in vec2 inUv;\n"
+        "layout(location = 3) in float inGlyphCoverage;\n"
         "uniform vec2 framebufferSize;\n"
         "out vec4 vertexColor;\n"
+        "out vec2 vertexUv;\n"
+        "out float vertexGlyphCoverage;\n"
         "void main(void)\n"
         "{\n"
         "    vec2 clip = vec2((inPosition.x / framebufferSize.x) * 2.0 - 1.0,\n"
         "                     1.0 - (inPosition.y / framebufferSize.y) * 2.0);\n"
         "    gl_Position = vec4(clip, 0.0, 1.0);\n"
         "    vertexColor = inColor;\n"
+        "    vertexUv = inUv;\n"
+        "    vertexGlyphCoverage = inGlyphCoverage;\n"
         "}\n";
     static const char* g_ui_fragment_shader_source =
         "#version 330 core\n"
         "in vec4 vertexColor;\n"
+        "in vec2 vertexUv;\n"
+        "in float vertexGlyphCoverage;\n"
+        "uniform sampler2D glyphAtlas;\n"
+        "uniform int useGlyphAtlas;\n"
         "out vec4 fragmentColor;\n"
         "void main(void)\n"
         "{\n"
-        "    fragmentColor = vertexColor;\n"
+        "    float coverage = 1.0;\n"
+        "    if (useGlyphAtlas != 0 && vertexGlyphCoverage > 0.5)\n"
+        "        coverage = texture(glyphAtlas, vertexUv).r;\n"
+        "    fragmentColor = vec4(vertexColor.rgb, vertexColor.a * coverage);\n"
         "}\n";
 
     if (!henka_compile_program_from_source(
@@ -1884,6 +1900,10 @@ static henka_result henka_opengl_renderer_create_ui_resources(
     g_gl.VertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(henka_ui_vertex), (const void*)offsetof(henka_ui_vertex, x));
     g_gl.EnableVertexAttribArray(1);
     g_gl.VertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(henka_ui_vertex), (const void*)offsetof(henka_ui_vertex, r));
+    g_gl.EnableVertexAttribArray(2);
+    g_gl.VertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(henka_ui_vertex), (const void*)offsetof(henka_ui_vertex, u));
+    g_gl.EnableVertexAttribArray(3);
+    g_gl.VertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(henka_ui_vertex), (const void*)offsetof(henka_ui_vertex, glyph_coverage));
     g_gl.BindVertexArray(0);
     g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
     return HENKA_SUCCESS;
@@ -4763,6 +4783,10 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
     }
     else
     {
+        if (state->ui_font.texture != 0U)
+        {
+            glDeleteTextures(1, &state->ui_font.texture);
+        }
         if (state->viewport_program != 0U)
         {
             g_gl.DeleteProgram(state->viewport_program);
@@ -7495,8 +7519,146 @@ void henka_opengl_renderer_get_memory_diagnostics(
     }
 }
 
+static bool henka_opengl_ui_font_atlas_key_equal(
+    const henka_ui_font_atlas_key* left,
+    const henka_ui_font_atlas_key* right)
+{
+    return left != NULL && right != NULL &&
+        strcmp(left->font_sha256_hex, right->font_sha256_hex) == 0 &&
+        left->app_scale_percent == right->app_scale_percent &&
+        left->output_scale_numerator == right->output_scale_numerator &&
+        left->output_scale_denominator == right->output_scale_denominator &&
+        left->raster_pixel_height == right->raster_pixel_height &&
+        left->graphics_context_identity == right->graphics_context_identity;
+}
+
+static henka_result henka_opengl_ensure_ui_font_residency(
+    const struct henka_ui_context* ui_context,
+    henka_opengl_ui_font_residency* residency,
+    GLuint* out_texture)
+{
+    const henka_ui_font_raster_profile* profile;
+    henka_ui_font_raster_profile_info profile_info;
+    henka_opengl_texture_binding_state previous_texture_state;
+    const uint8_t* atlas;
+    uint32_t atlas_width = 0U;
+    uint32_t atlas_height = 0U;
+    size_t atlas_bytes;
+    GLint previous_unpack_alignment = 4;
+    GLint previous_unpack_buffer = 0;
+    GLint max_texture_size = 0;
+    GLuint candidate_texture = 0U;
+    GLuint previous_texture;
+    henka_result upload_result;
+    henka_result restore_result;
+
+    if (out_texture != NULL)
+    {
+        *out_texture = 0U;
+    }
+    if (ui_context == NULL || residency == NULL || out_texture == NULL ||
+        ui_context->font_profile == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    profile = ui_context->font_profile;
+    if (!henka_ui_font_raster_profile_get_info(
+            profile, ui_context->font_app_scale_percent, &profile_info))
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    atlas = henka_ui_font_raster_profile_get_atlas(
+        profile, ui_context->font_app_scale_percent, &atlas_width, &atlas_height);
+    if (atlas == NULL || atlas_width == 0U || atlas_height == 0U ||
+        atlas_width > (uint32_t)INT_MAX || atlas_height > (uint32_t)INT_MAX ||
+        profile_info.atlas_width != atlas_width ||
+        profile_info.atlas_height != atlas_height ||
+        profile_info.key.graphics_context_identity == 0U ||
+        profile_info.key.graphics_context_identity != ui_context->font_context_identity ||
+        !henka_checked_size_multiply((size_t)atlas_width, (size_t)atlas_height, &atlas_bytes) ||
+        atlas_bytes != profile_info.coverage_bytes)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    if (residency->valid && residency->texture != 0U &&
+        residency->atlas_width == atlas_width && residency->atlas_height == atlas_height &&
+        henka_opengl_ui_font_atlas_key_equal(&residency->key, &profile_info.key))
+    {
+        *out_texture = residency->texture;
+        return HENKA_SUCCESS;
+    }
+
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
+    if (max_texture_size <= 0 || atlas_width > (uint32_t)max_texture_size ||
+        atlas_height > (uint32_t)max_texture_size)
+    {
+        HENKA_LOG_ERROR(
+            "UI font atlas %ux%u exceeds this context's GL_MAX_TEXTURE_SIZE=%d",
+            atlas_width, atlas_height, max_texture_size);
+        return HENKA_ERROR_LIMIT;
+    }
+
+    henka_opengl_capture_texture_binding_state(&previous_texture_state);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previous_unpack_alignment);
+    glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &previous_unpack_buffer);
+    henka_opengl_discard_prior_texture_errors("UI font atlas upload");
+    glGenTextures(1, &candidate_texture);
+    upload_result = candidate_texture != 0U ? HENKA_SUCCESS : HENKA_ERROR_RENDERER;
+    if (upload_result == HENKA_SUCCESS)
+    {
+        g_gl.ActiveTexture(GL_TEXTURE0);
+        g_gl.BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0U);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glBindTexture(GL_TEXTURE_2D, candidate_texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_R8,
+            (GLsizei)atlas_width,
+            (GLsizei)atlas_height,
+            0,
+            GL_RED,
+            GL_UNSIGNED_BYTE,
+            atlas);
+        upload_result = henka_opengl_collect_texture_errors("UI font atlas upload");
+    }
+
+    henka_opengl_restore_texture_binding_state(&previous_texture_state);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
+    g_gl.BindBuffer(GL_PIXEL_UNPACK_BUFFER, (GLuint)previous_unpack_buffer);
+    restore_result = henka_opengl_collect_texture_errors("UI font atlas state restoration");
+    if (upload_result != HENKA_SUCCESS || restore_result != HENKA_SUCCESS)
+    {
+        if (candidate_texture != 0U)
+        {
+            glDeleteTextures(1, &candidate_texture);
+        }
+        HENKA_LOG_ERROR(
+            "UI font atlas candidate was rejected; the previously resident atlas remains intact");
+        return upload_result != HENKA_SUCCESS ? upload_result : restore_result;
+    }
+
+    previous_texture = residency->texture;
+    residency->texture = candidate_texture;
+    residency->key = profile_info.key;
+    residency->atlas_width = atlas_width;
+    residency->atlas_height = atlas_height;
+    residency->valid = true;
+    if (previous_texture != 0U)
+    {
+        glDeleteTextures(1, &previous_texture);
+    }
+    *out_texture = candidate_texture;
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_opengl_renderer_draw_ui_resources(
     const struct henka_ui_context* ui_context,
+    henka_opengl_ui_font_residency* ui_font,
     GLuint ui_program,
     GLuint ui_vertex_array,
     GLuint ui_vertex_buffer,
@@ -7507,18 +7669,22 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
     size_t index;
     int gl_vertex_count;
     size_t line_vertex_count;
-    size_t rect_vertex_count;
+    size_t quad_vertex_count;
+    size_t built_quad_vertex_count = 0U;
     size_t triangle_vertex_count;
     size_t vertex_bytes;
     size_t vertex_count;
+    bool has_glyph_quads = false;
+    GLuint glyph_texture = 0U;
+    henka_opengl_texture_binding_state previous_ui_texture_state;
 
-    if (ui_context == NULL || ui_context->frame_active ||
+    if (ui_context == NULL || ui_font == NULL || ui_context->frame_active ||
         framebuffer_width <= 0 || framebuffer_height <= 0)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (ui_context->draw_rect_count == 0U &&
+    if (ui_context->draw_quad_count == 0U &&
         ui_context->draw_line_count == 0U &&
         ui_context->draw_triangle_count == 0U)
     {
@@ -7528,9 +7694,9 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
     glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, framebuffer_width, framebuffer_height);
     if (!henka_checked_size_multiply(ui_context->draw_triangle_count, 3U, &triangle_vertex_count) ||
-        !henka_checked_size_multiply(ui_context->draw_rect_count, 6U, &rect_vertex_count) ||
+        !henka_checked_size_multiply(ui_context->draw_quad_count, 6U, &quad_vertex_count) ||
         !henka_checked_size_multiply(ui_context->draw_line_count, 6U, &line_vertex_count) ||
-        !henka_checked_size_add(triangle_vertex_count, rect_vertex_count, &vertex_count) ||
+        !henka_checked_size_add(triangle_vertex_count, quad_vertex_count, &vertex_count) ||
         !henka_checked_size_add(vertex_count, line_vertex_count, &vertex_count) ||
         vertex_count > HENKA_MAX_MESH_ELEMENTS ||
         !henka_checked_size_to_int(vertex_count, &gl_vertex_count) ||
@@ -7575,30 +7741,37 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
             color.w};
     }
 
-    for (index = 0U; index < ui_context->draw_rect_count; ++index)
+    if (quad_vertex_count > 0U)
     {
-        const henka_ui_draw_rect* draw_rect;
-        henka_vec4 color;
-        float x0;
-        float x1;
-        float y0;
-        float y1;
-        size_t base_index;
+        const henka_result build_result = henka_ui_context_build_quad_vertices(
+            ui_context,
+            vertices + triangle_vertex_count,
+            quad_vertex_count,
+            &built_quad_vertex_count);
 
-        draw_rect = &ui_context->draw_rects[index];
-        x0 = draw_rect->bounds.x;
-        y0 = draw_rect->bounds.y;
-        x1 = draw_rect->bounds.x + draw_rect->bounds.width;
-        y1 = draw_rect->bounds.y + draw_rect->bounds.height;
-        color = draw_rect->color;
-        base_index = triangle_vertex_count + index * 6U;
-
-        vertices[base_index + 0U] = (henka_ui_vertex){x0, y0, color.x, color.y, color.z, color.w};
-        vertices[base_index + 1U] = (henka_ui_vertex){x1, y0, color.x, color.y, color.z, color.w};
-        vertices[base_index + 2U] = (henka_ui_vertex){x1, y1, color.x, color.y, color.z, color.w};
-        vertices[base_index + 3U] = (henka_ui_vertex){x0, y0, color.x, color.y, color.z, color.w};
-        vertices[base_index + 4U] = (henka_ui_vertex){x1, y1, color.x, color.y, color.z, color.w};
-        vertices[base_index + 5U] = (henka_ui_vertex){x0, y1, color.x, color.y, color.z, color.w};
+        if (build_result != HENKA_SUCCESS || built_quad_vertex_count != quad_vertex_count)
+        {
+            henka_free(vertices);
+            return build_result != HENKA_SUCCESS ? build_result : HENKA_ERROR_RENDERER;
+        }
+    }
+    for (index = 0U; index < ui_context->draw_quad_count; ++index)
+    {
+        if (ui_context->draw_quads[index].kind == HENKA_UI_DRAW_QUAD_GLYPH)
+        {
+            has_glyph_quads = true;
+            break;
+        }
+    }
+    if (has_glyph_quads)
+    {
+        const henka_result texture_result = henka_opengl_ensure_ui_font_residency(
+            ui_context, ui_font, &glyph_texture);
+        if (texture_result != HENKA_SUCCESS)
+        {
+            henka_free(vertices);
+            return texture_result;
+        }
     }
 
     for (index = 0U; index < ui_context->draw_line_count; ++index)
@@ -7671,7 +7844,7 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
 
-        base_index = triangle_vertex_count + rect_vertex_count + index * 6U;
+        base_index = triangle_vertex_count + quad_vertex_count + index * 6U;
         vertices[base_index + 0U] = (henka_ui_vertex){(float)x0, (float)y0, color.x, color.y, color.z, color.w};
         vertices[base_index + 1U] = (henka_ui_vertex){(float)x1, (float)y1, color.x, color.y, color.z, color.w};
         vertices[base_index + 2U] = (henka_ui_vertex){(float)x2, (float)y2, color.x, color.y, color.z, color.w};
@@ -7685,6 +7858,12 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    if (has_glyph_quads)
+    {
+        henka_opengl_capture_texture_binding_state(&previous_ui_texture_state);
+        g_gl.ActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, glyph_texture);
+    }
     g_gl.UseProgram(ui_program);
     {
         GLint location;
@@ -7694,11 +7873,25 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
         {
             g_gl.Uniform2f(location, (GLfloat)framebuffer_width, (GLfloat)framebuffer_height);
         }
+        location = g_gl.GetUniformLocation(ui_program, "glyphAtlas");
+        if (location >= 0)
+        {
+            g_gl.Uniform1i(location, 0);
+        }
+        location = g_gl.GetUniformLocation(ui_program, "useGlyphAtlas");
+        if (location >= 0)
+        {
+            g_gl.Uniform1i(location, has_glyph_quads ? 1 : 0);
+        }
     }
     g_gl.BindVertexArray(ui_vertex_array);
     g_gl.BindBuffer(GL_ARRAY_BUFFER, ui_vertex_buffer);
     g_gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)vertex_bytes, vertices, GL_DYNAMIC_DRAW);
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)gl_vertex_count);
+    if (has_glyph_quads)
+    {
+        henka_opengl_restore_texture_binding_state(&previous_ui_texture_state);
+    }
     g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
     g_gl.BindVertexArray(0);
     g_gl.UseProgram(0);
@@ -7709,16 +7902,17 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
 
 henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context)
 {
-    const henka_opengl_renderer_state* state;
+    henka_opengl_renderer_state* state;
 
     if (renderer == NULL || renderer->backend_state == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    state = (const henka_opengl_renderer_state*)renderer->backend_state;
+    state = (henka_opengl_renderer_state*)renderer->backend_state;
     return henka_opengl_renderer_draw_ui_resources(
         ui_context,
+        &state->ui_font,
         state->ui_program,
         state->ui_vertex_array,
         state->ui_vertex_buffer,
@@ -7965,6 +8159,10 @@ void henka_opengl_renderer_destroy_tool_window_target(
         target = &state->tool_targets[index];
         if (SDL_GL_MakeCurrent(target->window, target->gl_context))
         {
+            if (target->ui_font.texture != 0U)
+            {
+                glDeleteTextures(1, &target->ui_font.texture);
+            }
             if (target->ui_vertex_buffer != 0U)
             {
                 g_gl.DeleteBuffers(1, &target->ui_vertex_buffer);
@@ -8063,6 +8261,7 @@ henka_result henka_opengl_renderer_draw_tool_window_ui(
 
     draw_result = henka_opengl_renderer_draw_ui_resources(
         ui_context,
+        &target->ui_font,
         target->ui_program,
         target->ui_vertex_array,
         target->ui_vertex_buffer,

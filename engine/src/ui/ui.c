@@ -18,10 +18,8 @@ typedef struct henka_ui_glyph
     unsigned char rows[7];
 } henka_ui_glyph;
 
-#define HENKA_UI_MAX_DRAW_ITEMS ((size_t)1048576U)
 #define HENKA_UI_MAX_ID_BYTES ((size_t)255U)
 #define HENKA_UI_MAX_TEXT_BYTES ((size_t)4096U)
-#define HENKA_UI_MAX_SCALE 64.0f
 #define HENKA_UI_OVERLAY_DISC_SAMPLES ((size_t)64U)
 
 static bool henka_ui_float_is_finite(float value)
@@ -574,6 +572,7 @@ static const henka_ui_glyph* henka_ui_find_glyph(char character)
 typedef struct henka_ui_draw_checkpoint
 {
     size_t draw_rect_count;
+    size_t draw_quad_count;
     size_t draw_line_count;
     size_t draw_triangle_count;
     size_t disclosure_id_count;
@@ -592,6 +591,7 @@ static void henka_ui_capture_checkpoint(
     }
 
     checkpoint->draw_rect_count = context->draw_rect_count;
+    checkpoint->draw_quad_count = context->draw_quad_count;
     checkpoint->draw_line_count = context->draw_line_count;
     checkpoint->draw_triangle_count = context->draw_triangle_count;
     checkpoint->disclosure_id_count = context->disclosure_id_count;
@@ -610,6 +610,7 @@ static void henka_ui_restore_checkpoint(
     }
 
     context->draw_rect_count = checkpoint->draw_rect_count;
+    context->draw_quad_count = checkpoint->draw_quad_count;
     context->draw_line_count = checkpoint->draw_line_count;
     context->draw_triangle_count = checkpoint->draw_triangle_count;
     context->disclosure_id_count = checkpoint->disclosure_id_count;
@@ -687,6 +688,41 @@ static henka_result henka_ui_ensure_rect_capacity(henka_ui_context* context, siz
 
     context->draw_rects = rects;
     context->draw_rect_capacity = new_capacity;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_context_reserve_draw_quads(
+    henka_ui_context* context,
+    size_t additional_quads)
+{
+    size_t allocation_size;
+    size_t minimum_capacity;
+    size_t new_capacity;
+    henka_ui_draw_quad* quads;
+
+    if (context == NULL ||
+        !henka_checked_size_add(context->draw_quad_count, additional_quads, &minimum_capacity) ||
+        !henka_checked_capacity(
+            context->draw_quad_capacity,
+            minimum_capacity,
+            128U,
+            HENKA_UI_MAX_DRAW_ITEMS,
+            &new_capacity) ||
+        !henka_checked_size_multiply(new_capacity, sizeof(*quads), &allocation_size))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (new_capacity == context->draw_quad_capacity)
+    {
+        return HENKA_SUCCESS;
+    }
+    quads = (henka_ui_draw_quad*)henka_realloc(context->draw_quads, allocation_size);
+    if (quads == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    context->draw_quads = quads;
+    context->draw_quad_capacity = new_capacity;
     return HENKA_SUCCESS;
 }
 
@@ -785,10 +821,23 @@ static henka_result henka_ui_push_rect(henka_ui_context* context, henka_ui_rect 
     {
         return result;
     }
+    result = henka_ui_context_reserve_draw_quads(context, 1U);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
 
     context->draw_rects[context->draw_rect_count].bounds = bounds;
     context->draw_rects[context->draw_rect_count].color = color;
     context->draw_rect_count += 1U;
+    context->draw_quads[context->draw_quad_count].kind = HENKA_UI_DRAW_QUAD_SOLID;
+    context->draw_quads[context->draw_quad_count].bounds = bounds;
+    context->draw_quads[context->draw_quad_count].color = color;
+    context->draw_quads[context->draw_quad_count].u0 = 0.0f;
+    context->draw_quads[context->draw_quad_count].v0 = 0.0f;
+    context->draw_quads[context->draw_quad_count].u1 = 0.0f;
+    context->draw_quads[context->draw_quad_count].v1 = 0.0f;
+    context->draw_quad_count += 1U;
     return HENKA_SUCCESS;
 }
 
@@ -1088,6 +1137,11 @@ static henka_result henka_ui_draw_text(
         scale > HENKA_UI_MAX_SCALE)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (context->font_profile != NULL)
+    {
+        return henka_ui_draw_font_text(context, x, y, scale, text, color);
     }
 
     return henka_ui_draw_text_raw(
@@ -1403,6 +1457,7 @@ void henka_ui_destroy(henka_ui_context* context)
     }
 
     henka_free(context->draw_rects);
+    henka_free(context->draw_quads);
     henka_free(context->draw_lines);
     henka_free(context->draw_triangles);
     henka_free(context);
@@ -1462,6 +1517,7 @@ henka_result henka_ui_begin_frame(
     context->text_input = frame_desc->text_input;
     context->text_input_size = frame_desc->text_input_size;
     context->draw_rect_count = 0U;
+    context->draw_quad_count = 0U;
     context->draw_line_count = 0U;
     context->draw_triangle_count = 0U;
     context->disclosure_id_count = 0U;

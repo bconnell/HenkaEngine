@@ -12,6 +12,8 @@
 #define HENKA_UI_FONT_MAX_ATLAS_DIMENSION 2048U
 #define HENKA_UI_FONT_MAX_IDENTITY_BYTES 127U
 #define HENKA_UI_TEXT_MAX_BYTES ((size_t)4096U)
+#define HENKA_UI_FONT_APP_SCALE_COUNT 4U
+#define HENKA_UI_FONT_MAX_CONTEXTS 6U
 
 typedef enum henka_ui_font_stage
 {
@@ -25,6 +27,7 @@ typedef enum henka_ui_font_stage
     HENKA_UI_FONT_STAGE_ATLAS_DIMENSIONS,
     HENKA_UI_FONT_STAGE_ATLAS_PACK,
     HENKA_UI_FONT_STAGE_ALLOCATION,
+    HENKA_UI_FONT_STAGE_RASTER_PROFILE,
     HENKA_UI_FONT_STAGE_TEXT
 } henka_ui_font_stage;
 
@@ -95,6 +98,7 @@ typedef struct henka_ui_text_run
 {
     henka_ui_text_glyph* glyphs;
     size_t glyph_count;
+    size_t line_count;
     size_t replacement_count;
     bool truncated;
     float advance_width;
@@ -108,6 +112,34 @@ typedef struct henka_ui_text_run
 } henka_ui_text_run;
 
 typedef struct henka_ui_font_resource henka_ui_font_resource;
+typedef struct henka_ui_font_raster_profile henka_ui_font_raster_profile;
+
+typedef struct henka_ui_font_raster_profile_desc
+{
+    uint64_t graphics_context_identity;
+    uint32_t output_scale_numerator;
+    uint32_t output_scale_denominator;
+    uint32_t atlas_width;
+    uint32_t atlas_height;
+} henka_ui_font_raster_profile_desc;
+
+typedef struct henka_ui_font_atlas_key
+{
+    char font_sha256_hex[65U];
+    uint16_t app_scale_percent;
+    uint32_t output_scale_numerator;
+    uint32_t output_scale_denominator;
+    uint32_t raster_pixel_height;
+    uint64_t graphics_context_identity;
+} henka_ui_font_atlas_key;
+
+typedef struct henka_ui_font_raster_profile_info
+{
+    henka_ui_font_atlas_key key;
+    uint32_t atlas_width;
+    uint32_t atlas_height;
+    size_t coverage_bytes;
+} henka_ui_font_raster_profile_info;
 
 /* Bounded SHA-256/identity helpers used by the app bootstrap before publication. */
 bool henka_ui_font_sha256_hex(
@@ -144,6 +176,31 @@ const uint8_t* henka_ui_font_resource_get_atlas(
     const henka_ui_font_resource* resource,
     uint32_t* out_width,
     uint32_t* out_height);
+
+/* Immutable four-scale raster profile for one output-raster/GL-context owner. */
+henka_result henka_ui_font_raster_profile_create(
+    const henka_ui_font_resource* font,
+    const henka_ui_font_raster_profile_desc* desc,
+    henka_ui_font_raster_profile** out_profile,
+    henka_ui_font_diagnostic* out_diagnostic);
+void henka_ui_font_raster_profile_destroy(
+    henka_ui_font_raster_profile* profile);
+size_t henka_ui_font_raster_profile_get_entry_count(
+    const henka_ui_font_raster_profile* profile);
+bool henka_ui_font_raster_profile_get_info(
+    const henka_ui_font_raster_profile* profile,
+    uint16_t app_scale_percent,
+    henka_ui_font_raster_profile_info* out_info);
+const henka_ui_font_resource* henka_ui_font_raster_profile_get_font(
+    const henka_ui_font_raster_profile* profile,
+    uint16_t app_scale_percent);
+const uint8_t* henka_ui_font_raster_profile_get_atlas(
+    const henka_ui_font_raster_profile* profile,
+    uint16_t app_scale_percent,
+    uint32_t* out_width,
+    uint32_t* out_height);
+uint64_t henka_ui_font_raster_profile_get_context_identity(
+    const henka_ui_font_raster_profile* profile);
 
 henka_result henka_ui_text_layout_build(
     const henka_ui_font_resource* resource,

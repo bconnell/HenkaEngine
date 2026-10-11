@@ -5,6 +5,7 @@
 #include "../examples/sandbox3d/editor_font_bootstrap.h"
 #include "../engine/src/core/memory_internal.h"
 #include "../engine/src/ui/ui_font_internal.h"
+#include "../engine/src/ui/ui_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,6 +99,58 @@ static henka_ui_font_desc henka_ui_font_test_desc(
     desc.atlas_width = 512U;
     desc.atlas_height = 512U;
     return desc;
+}
+
+static henka_ui_font_raster_profile_desc henka_ui_font_test_profile_desc(
+    uint64_t context_identity,
+    uint32_t output_numerator,
+    uint32_t output_denominator)
+{
+    henka_ui_font_raster_profile_desc desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.graphics_context_identity = context_identity;
+    desc.output_scale_numerator = output_numerator;
+    desc.output_scale_denominator = output_denominator;
+    desc.atlas_width = 1024U;
+    desc.atlas_height = 1024U;
+    return desc;
+}
+
+static bool henka_ui_font_test_create_profile(
+    const henka_ui_font_test_fixture* fixture,
+    uint64_t context_identity,
+    uint32_t output_numerator,
+    uint32_t output_denominator,
+    henka_ui_font_resource** out_font,
+    henka_ui_font_raster_profile** out_profile)
+{
+    henka_ui_font_desc font_desc;
+    henka_ui_font_raster_profile_desc profile_desc;
+    henka_ui_font_diagnostic diagnostic;
+
+    if (out_font == NULL || out_profile == NULL)
+    {
+        return false;
+    }
+    *out_font = NULL;
+    *out_profile = NULL;
+    font_desc = henka_ui_font_test_desc(fixture);
+    font_desc.atlas_width = 1024U;
+    font_desc.atlas_height = 1024U;
+    if (henka_ui_font_resource_create(&font_desc, out_font, &diagnostic) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+    profile_desc = henka_ui_font_test_profile_desc(
+        context_identity, output_numerator, output_denominator);
+    if (henka_ui_font_raster_profile_create(
+            *out_font, &profile_desc, out_profile, &diagnostic) != HENKA_SUCCESS)
+    {
+        henka_ui_font_resource_destroy(*out_font);
+        *out_font = NULL;
+        return false;
+    }
+    return true;
 }
 
 static void henka_test_ui_font_sha256_and_static_font_resource(void)
@@ -443,6 +496,284 @@ static void henka_test_ui_font_application_bootstrap_verifies_asset_identity(voi
     henka_ui_font_test_fixture_dispose(&fixture);
 }
 
+static void henka_test_ui_atlas_uses_effective_raster_pixel_size(void)
+{
+    static const uint16_t app_scales[HENKA_UI_FONT_APP_SCALE_COUNT] =
+        {100U, 125U, 150U, 200U};
+    static const uint32_t expected_pixel_heights[HENKA_UI_FONT_APP_SCALE_COUNT] =
+        {30U, 38U, 45U, 60U};
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* font = NULL;
+    henka_ui_font_raster_profile* profile = NULL;
+    size_t index;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x101U, 3U, 2U, &font, &profile));
+    for (index = 0U; index < HENKA_UI_FONT_APP_SCALE_COUNT; ++index)
+    {
+        henka_ui_font_raster_profile_info profile_info;
+        henka_ui_font_info font_info;
+        const henka_ui_font_resource* raster_font =
+            henka_ui_font_raster_profile_get_font(profile, app_scales[index]);
+        uint32_t atlas_width = 0U;
+        uint32_t atlas_height = 0U;
+        const uint8_t* atlas = henka_ui_font_raster_profile_get_atlas(
+            profile, app_scales[index], &atlas_width, &atlas_height);
+
+        HENKA_TEST_ASSERT(raster_font != NULL);
+        HENKA_TEST_ASSERT(henka_ui_font_resource_get_info(raster_font, &font_info));
+        HENKA_TEST_ASSERT(henka_ui_font_raster_profile_get_info(
+            profile, app_scales[index], &profile_info));
+        HENKA_TEST_ASSERT(font_info.raster_pixel_height == expected_pixel_heights[index]);
+        HENKA_TEST_ASSERT(profile_info.key.raster_pixel_height == expected_pixel_heights[index]);
+        HENKA_TEST_ASSERT(profile_info.key.app_scale_percent == app_scales[index]);
+        HENKA_TEST_ASSERT(atlas != NULL && atlas_width == 1024U && atlas_height == 1024U);
+    }
+    {
+        henka_ui_font_glyph_info small_glyph;
+        henka_ui_font_glyph_info large_glyph;
+        const henka_ui_font_resource* small_font =
+            henka_ui_font_raster_profile_get_font(profile, 100U);
+        const henka_ui_font_resource* large_font =
+            henka_ui_font_raster_profile_get_font(profile, 200U);
+        HENKA_TEST_ASSERT(henka_ui_font_resource_get_glyph(small_font, (uint32_t)'A', &small_glyph));
+        HENKA_TEST_ASSERT(henka_ui_font_resource_get_glyph(large_font, (uint32_t)'A', &large_glyph));
+        HENKA_TEST_ASSERT(large_glyph.bitmap_width > small_glyph.bitmap_width);
+        HENKA_TEST_ASSERT(large_glyph.bitmap_height > small_glyph.bitmap_height);
+    }
+    henka_ui_font_raster_profile_destroy(profile);
+    henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
+static void henka_test_ui_atlas_identity_includes_font_scale_output_and_context(void)
+{
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_desc font_desc;
+    henka_ui_font_resource* font = NULL;
+    henka_ui_font_raster_profile* profile_a = NULL;
+    henka_ui_font_raster_profile* profile_b = NULL;
+    henka_ui_font_raster_profile* profile_c = NULL;
+    henka_ui_font_raster_profile_desc desc_a;
+    henka_ui_font_raster_profile_desc desc_b;
+    henka_ui_font_raster_profile_desc desc_c;
+    henka_ui_font_diagnostic diagnostic;
+    henka_ui_font_atlas_key key_100;
+    henka_ui_font_atlas_key key_125;
+    henka_ui_font_atlas_key key_other_context;
+    henka_ui_font_atlas_key key_other_output;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    font_desc = henka_ui_font_test_desc(&fixture);
+    font_desc.atlas_width = 1024U;
+    font_desc.atlas_height = 1024U;
+    HENKA_TEST_ASSERT(henka_ui_font_resource_create(&font_desc, &font, &diagnostic) == HENKA_SUCCESS);
+    desc_a = henka_ui_font_test_profile_desc(0x201U, 1U, 1U);
+    desc_b = henka_ui_font_test_profile_desc(0x202U, 1U, 1U);
+    desc_c = henka_ui_font_test_profile_desc(0x201U, 3U, 2U);
+    HENKA_TEST_ASSERT(henka_ui_font_raster_profile_create(font, &desc_a, &profile_a, &diagnostic) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_font_raster_profile_create(font, &desc_b, &profile_b, &diagnostic) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_font_raster_profile_create(font, &desc_c, &profile_c, &diagnostic) == HENKA_SUCCESS);
+    {
+        henka_ui_font_raster_profile_info info;
+        HENKA_TEST_ASSERT(henka_ui_font_raster_profile_get_info(profile_a, 100U, &info));
+        key_100 = info.key;
+        HENKA_TEST_ASSERT(henka_ui_font_raster_profile_get_info(profile_a, 125U, &info));
+        key_125 = info.key;
+        HENKA_TEST_ASSERT(henka_ui_font_raster_profile_get_info(profile_b, 100U, &info));
+        key_other_context = info.key;
+        HENKA_TEST_ASSERT(henka_ui_font_raster_profile_get_info(profile_c, 100U, &info));
+        key_other_output = info.key;
+    }
+    HENKA_TEST_ASSERT(strcmp(key_100.font_sha256_hex, HENKA_UI_FONT_TEST_SHA256) == 0);
+    HENKA_TEST_ASSERT(key_100.app_scale_percent == 100U && key_125.app_scale_percent == 125U);
+    HENKA_TEST_ASSERT(key_100.raster_pixel_height != key_125.raster_pixel_height);
+    HENKA_TEST_ASSERT(key_100.graphics_context_identity == 0x201U);
+    HENKA_TEST_ASSERT(key_other_context.graphics_context_identity == 0x202U);
+    HENKA_TEST_ASSERT(key_100.output_scale_numerator == 1U);
+    HENKA_TEST_ASSERT(key_other_output.output_scale_numerator == 3U);
+    HENKA_TEST_ASSERT(key_other_output.output_scale_denominator == 2U);
+    henka_ui_font_raster_profile_destroy(profile_c);
+    henka_ui_font_raster_profile_destroy(profile_b);
+    henka_ui_font_raster_profile_destroy(profile_a);
+    henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
+static void henka_test_ui_atlas_cache_is_bounded_per_context(void)
+{
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* font = NULL;
+    henka_ui_font_raster_profile* profile = NULL;
+    size_t index;
+    size_t total_coverage = 0U;
+
+    HENKA_TEST_ASSERT(HENKA_UI_FONT_MAX_CONTEXTS == 6U);
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x301U, 1U, 1U, &font, &profile));
+    HENKA_TEST_ASSERT(henka_ui_font_raster_profile_get_entry_count(profile) ==
+        HENKA_UI_FONT_APP_SCALE_COUNT);
+    for (index = 0U; index < HENKA_UI_FONT_APP_SCALE_COUNT; ++index)
+    {
+        static const uint16_t scales[HENKA_UI_FONT_APP_SCALE_COUNT] =
+            {100U, 125U, 150U, 200U};
+        henka_ui_font_raster_profile_info info;
+        HENKA_TEST_ASSERT(henka_ui_font_raster_profile_get_info(
+            profile, scales[index], &info));
+        HENKA_TEST_ASSERT(info.coverage_bytes == (size_t)1024U * 1024U);
+        total_coverage += info.coverage_bytes;
+    }
+    HENKA_TEST_ASSERT(total_coverage <= (size_t)16U * 1024U * 1024U);
+    {
+        henka_ui_font_raster_profile_info unsupported;
+        HENKA_TEST_ASSERT(!henka_ui_font_raster_profile_get_info(profile, 110U, &unsupported));
+    }
+    henka_ui_font_raster_profile_destroy(profile);
+    henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
+static void henka_test_ui_context_profile_replacement_is_atomic(void)
+{
+    henka_ui_frame_desc frame_desc;
+    henka_ui_context* ui = NULL;
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* font_a = NULL;
+    henka_ui_font_resource* font_b = NULL;
+    henka_ui_font_raster_profile* profile_a = NULL;
+    henka_ui_font_raster_profile* profile_b = NULL;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x401U, 1U, 1U, &font_a, &profile_a));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x402U, 1U, 1U, &font_b, &profile_b));
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(ui, profile_a, 100U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(ui->font_profile == profile_a && ui->font_app_scale_percent == 100U);
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(ui, profile_b, 125U) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(ui->font_profile == profile_a && ui->font_app_scale_percent == 100U);
+
+    memset(&frame_desc, 0, sizeof(frame_desc));
+    frame_desc.framebuffer_width = 1280;
+    frame_desc.framebuffer_height = 720;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(ui, profile_a, 200U) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(ui->font_profile == profile_a && ui->font_app_scale_percent == 100U);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(ui, profile_a, 125U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(ui->font_profile == profile_a && ui->font_app_scale_percent == 125U);
+
+    henka_ui_destroy(ui);
+    henka_ui_font_raster_profile_destroy(profile_b);
+    henka_ui_font_raster_profile_destroy(profile_a);
+    henka_ui_font_resource_destroy(font_b);
+    henka_ui_font_resource_destroy(font_a);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
+static void henka_test_ui_mixed_glyph_solid_quads_keep_submission_order(void)
+{
+    const henka_vec4 glyph_color = {0.21f, 0.43f, 0.65f, 0.37f};
+    henka_ui_draw_vertex vertices[18U];
+    henka_ui_frame_desc frame_desc;
+    henka_ui_context* ui = NULL;
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* font = NULL;
+    henka_ui_font_raster_profile* profile = NULL;
+    size_t vertex_count = 0U;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x501U, 1U, 1U, &font, &profile));
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(ui, profile, 100U) == HENKA_SUCCESS);
+    memset(&frame_desc, 0, sizeof(frame_desc));
+    frame_desc.framebuffer_width = 1280;
+    frame_desc.framebuffer_height = 720;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_overlay_rect(ui,
+        (henka_ui_rect){1.0f, 2.0f, 3.0f, 4.0f},
+        (henka_vec4){0.8f, 0.1f, 0.2f, 0.6f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_draw_font_text(ui, 10.0f, 12.0f, 1.0f, "A", glyph_color) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_overlay_rect(ui,
+        (henka_ui_rect){20.0f, 21.0f, 22.0f, 23.0f},
+        (henka_vec4){0.1f, 0.8f, 0.2f, 0.4f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(ui->draw_quad_count == 3U);
+    HENKA_TEST_ASSERT(ui->draw_rect_count == 2U);
+    HENKA_TEST_ASSERT(ui->draw_quads[0].kind == HENKA_UI_DRAW_QUAD_SOLID);
+    HENKA_TEST_ASSERT(ui->draw_quads[1].kind == HENKA_UI_DRAW_QUAD_GLYPH);
+    HENKA_TEST_ASSERT(ui->draw_quads[2].kind == HENKA_UI_DRAW_QUAD_SOLID);
+    HENKA_TEST_ASSERT(ui->draw_quads[0].bounds.x == 1.0f);
+    HENKA_TEST_ASSERT(ui->draw_quads[1].color.x == glyph_color.x);
+    HENKA_TEST_ASSERT(ui->draw_quads[1].color.w == glyph_color.w);
+    HENKA_TEST_ASSERT(ui->draw_quads[1].u1 > ui->draw_quads[1].u0);
+    HENKA_TEST_ASSERT(ui->draw_quads[1].v1 > ui->draw_quads[1].v0);
+    HENKA_TEST_ASSERT(ui->draw_quads[2].bounds.x == 20.0f);
+    vertices[0].x = -73.0f;
+    HENKA_TEST_ASSERT(henka_ui_context_build_quad_vertices(
+        ui, vertices, 17U, &vertex_count) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(vertex_count == 0U && vertices[0].x == -73.0f);
+    HENKA_TEST_ASSERT(henka_ui_context_build_quad_vertices(
+        ui, vertices, 18U, &vertex_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(vertex_count == 18U);
+    HENKA_TEST_ASSERT(vertices[0].x == 1.0f && vertices[0].y == 2.0f);
+    HENKA_TEST_ASSERT(vertices[0].glyph_coverage == 0.0f);
+    HENKA_TEST_ASSERT(vertices[6].x == ui->draw_quads[1].bounds.x);
+    HENKA_TEST_ASSERT(vertices[6].glyph_coverage == 1.0f);
+    HENKA_TEST_ASSERT(vertices[6].u == ui->draw_quads[1].u0);
+    HENKA_TEST_ASSERT(vertices[6].v == ui->draw_quads[1].v0);
+    HENKA_TEST_ASSERT(vertices[6].r == glyph_color.x && vertices[6].a == glyph_color.w);
+    HENKA_TEST_ASSERT(vertices[12].x == 20.0f && vertices[12].glyph_coverage == 0.0f);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    henka_ui_destroy(ui);
+    henka_ui_font_raster_profile_destroy(profile);
+    henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
+static void henka_test_ui_font_text_draw_preserves_line_breaks(void)
+{
+    henka_ui_frame_desc frame_desc;
+    henka_ui_context* ui = NULL;
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* font = NULL;
+    henka_ui_font_raster_profile* profile = NULL;
+    henka_ui_font_info font_info;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x601U, 1U, 1U, &font, &profile));
+    HENKA_TEST_ASSERT(henka_ui_font_resource_get_info(
+        henka_ui_font_raster_profile_get_font(profile, 100U), &font_info));
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(ui, profile, 100U) == HENKA_SUCCESS);
+
+    memset(&frame_desc, 0, sizeof(frame_desc));
+    frame_desc.framebuffer_width = 1280;
+    frame_desc.framebuffer_height = 720;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_draw_font_text(
+        ui, 24.0f, 32.0f, 1.0f, "A\nA", (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(ui->draw_quad_count == 2U);
+    HENKA_TEST_ASSERT(ui->draw_quads[0].kind == HENKA_UI_DRAW_QUAD_GLYPH);
+    HENKA_TEST_ASSERT(ui->draw_quads[1].kind == HENKA_UI_DRAW_QUAD_GLYPH);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_quads[0].bounds.x, ui->draw_quads[1].bounds.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_quads[1].bounds.y - ui->draw_quads[0].bounds.y,
+        font_info.line_height,
+        0.0001f);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    henka_ui_destroy(ui);
+    henka_ui_font_raster_profile_destroy(profile);
+    henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
 void henka_test_ui_font(void)
 {
     henka_test_ui_font_sha256_and_static_font_resource();
@@ -452,4 +783,10 @@ void henka_test_ui_font(void)
     henka_test_ui_font_text_layout_uses_shared_glyph_placements();
     henka_test_ui_font_allocation_failures_are_atomic();
     henka_test_ui_font_application_bootstrap_verifies_asset_identity();
+    henka_test_ui_atlas_uses_effective_raster_pixel_size();
+    henka_test_ui_atlas_identity_includes_font_scale_output_and_context();
+    henka_test_ui_atlas_cache_is_bounded_per_context();
+    henka_test_ui_context_profile_replacement_is_atomic();
+    henka_test_ui_mixed_glyph_solid_quads_keep_submission_order();
+    henka_test_ui_font_text_draw_preserves_line_breaks();
 }
