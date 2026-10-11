@@ -613,6 +613,15 @@ typedef struct sandbox3d_state
     uint64_t automation_diagnostic_utility_action_sequence;
     uint64_t automation_diagnostic_assets_reported_action_sequence;
     uint32_t automation_diagnostic_asset_layout_log_lines;
+    bool automation_diagnostic_asset_type_tabs_reported;
+    bool automation_diagnostic_asset_type_tabs_last_navigation_visible;
+    bool automation_diagnostic_asset_type_tabs_last_active_assets;
+    henka_result automation_diagnostic_asset_type_tabs_last_result;
+    size_t automation_diagnostic_asset_type_tabs_last_count;
+    henka_ui_rect automation_diagnostic_asset_type_tabs_last_materials_rect;
+    bool automation_diagnostic_asset_type_tabs_last_tools_available;
+    henka_ui_rect automation_diagnostic_asset_type_tabs_last_tools_rect;
+    bool automation_diagnostic_terrain_utility_tabs_visible;
     uint32_t automation_diagnostic_modeling_toolbar_report_count;
     bool automation_diagnostic_modeling_toolbar_reported;
     float automation_diagnostic_modeling_toolbar_frame_width;
@@ -36649,9 +36658,15 @@ static void sandbox3d_draw_utility_panel(
      * This prevents overlapping controls from competing for the same pointer
      * event and keeps Apply/Cancel as the only way to finish that transaction.
      */
-    if (!state->material_texture_pick.active &&
+    const bool utility_navigation_rows_visible =
+        !state->material_texture_pick.active &&
         (state->workspace.active_utility != SANDBOX3D_UTILITY_ASSETS ||
-         state->asset_browser_show_utility_navigation))
+         state->asset_browser_show_utility_navigation);
+    if (!utility_navigation_rows_visible)
+    {
+        state->automation_diagnostic_terrain_utility_tabs_visible = false;
+    }
+    if (utility_navigation_rows_visible)
     {
     /* Keep every Utility destination in a measured, non-overlapping row. The
      * previous hand-positioned grid placed Assets and Terrain in the same
@@ -36782,7 +36797,10 @@ static void sandbox3d_draw_utility_panel(
         {
             static henka_ui_rect last_terrain_tab = {-1.0f, -1.0f, -1.0f, -1.0f};
             const henka_ui_rect terrain_tab = utility_tab_rects[0];
-            if (fabsf(terrain_tab.x - last_terrain_tab.x) > 0.01f ||
+            /* A reappearing row needs a fresh geometry observation even when
+             * its coordinates match the last visible layout. */
+            if (!state->automation_diagnostic_terrain_utility_tabs_visible ||
+                fabsf(terrain_tab.x - last_terrain_tab.x) > 0.01f ||
                 fabsf(terrain_tab.y - last_terrain_tab.y) > 0.01f ||
                 fabsf(terrain_tab.width - last_terrain_tab.width) > 0.01f ||
                 fabsf(terrain_tab.height - last_terrain_tab.height) > 0.01f)
@@ -36796,6 +36814,7 @@ static void sandbox3d_draw_utility_panel(
                 fflush(stdout);
                 last_terrain_tab = terrain_tab;
             }
+            state->automation_diagnostic_terrain_utility_tabs_visible = true;
         }
     }
 
@@ -37000,6 +37019,11 @@ static void sandbox3d_draw_utility_panel(
             const float asset_browser_status_y = texture_pick_active
                 ? 0.0f
                 : asset_browser_navigation_y - 26.0f;
+            const henka_ui_rect asset_browser_tools_button_rect = {
+                panel_bounds.x + panel_bounds.width - 84.0f,
+                y_start,
+                70.0f,
+                24.0f};
             const henka_ui_rect next_page_button = {
                 x_left + 88.0f,
                 asset_browser_navigation_y,
@@ -37013,6 +37037,7 @@ static void sandbox3d_draw_utility_panel(
             size_t item_index;
             size_t page_count;
             size_t asset_type_tab_count = 0U;
+            henka_result asset_type_tab_layout_result = HENKA_SUCCESS;
 
             if (state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL)
             {
@@ -37040,11 +37065,7 @@ static void sandbox3d_draw_utility_panel(
                 if (henka_ui_button(
                         state->ui,
                         "asset_browser_tools",
-                        (henka_ui_rect){
-                            panel_bounds.x + panel_bounds.width - 84.0f,
-                            y_start,
-                            70.0f,
-                            24.0f},
+                        asset_browser_tools_button_rect,
                         "Tools"))
                 {
                     state->asset_browser_show_utility_navigation = true;
@@ -37054,7 +37075,9 @@ static void sandbox3d_draw_utility_panel(
                 {
                     const char* labels[] = {
                         "Textures", "Materials", "Meshes", "Prefabs"};
-                    if (sandbox3d_editor_layout_text_control_row(
+                    asset_type_tab_layout_result =
+                        sandbox3d_editor_layout_text_control_row_for_context(
+                            state->ui,
                             (henka_ui_rect){
                                 x_left,
                                 y_start + 20.0f,
@@ -37062,14 +37085,127 @@ static void sandbox3d_draw_utility_panel(
                                 24.0f},
                             labels,
                             4U,
-                            48.0f,
+                            1.0f,
+                            0.0f,
                             8.0f,
                             8.0f,
                             asset_type_tab_rects,
                             4U,
-                            &asset_type_tab_count) != HENKA_SUCCESS)
+                            &asset_type_tab_count);
+                    if (asset_type_tab_layout_result != HENKA_SUCCESS)
                     {
                         asset_type_tab_count = 0U;
+                    }
+                }
+                if (diagnostics_enabled)
+                {
+                    const bool tabs_available =
+                        asset_type_tab_layout_result == HENKA_SUCCESS &&
+                        asset_type_tab_count == 4U;
+                    const bool active_assets =
+                        state->workspace.active_utility == SANDBOX3D_UTILITY_ASSETS;
+                    const bool tools_available = !texture_pick_active;
+                    bool layout_changed =
+                        !state->automation_diagnostic_asset_type_tabs_reported ||
+                        state->automation_diagnostic_asset_type_tabs_last_navigation_visible !=
+                            utility_navigation_rows_visible ||
+                        state->automation_diagnostic_asset_type_tabs_last_active_assets !=
+                            active_assets ||
+                        state->automation_diagnostic_asset_type_tabs_last_result !=
+                            asset_type_tab_layout_result ||
+                        state->automation_diagnostic_asset_type_tabs_last_count !=
+                            asset_type_tab_count ||
+                        state->automation_diagnostic_asset_type_tabs_last_tools_available !=
+                            tools_available;
+
+                    if (tabs_available &&
+                        state->automation_diagnostic_asset_type_tabs_reported)
+                    {
+                        const henka_ui_rect previous_rect =
+                            state->automation_diagnostic_asset_type_tabs_last_materials_rect;
+                        const henka_ui_rect current_rect = asset_type_tab_rects[1];
+                        layout_changed = layout_changed ||
+                            fabsf(previous_rect.x - current_rect.x) > 0.01f ||
+                            fabsf(previous_rect.y - current_rect.y) > 0.01f ||
+                            fabsf(previous_rect.width - current_rect.width) > 0.01f ||
+                            fabsf(previous_rect.height - current_rect.height) > 0.01f;
+                    }
+
+                    if (tools_available &&
+                        state->automation_diagnostic_asset_type_tabs_reported)
+                    {
+                        const henka_ui_rect previous_rect =
+                            state->automation_diagnostic_asset_type_tabs_last_tools_rect;
+                        layout_changed = layout_changed ||
+                            fabsf(previous_rect.x - asset_browser_tools_button_rect.x) > 0.01f ||
+                            fabsf(previous_rect.y - asset_browser_tools_button_rect.y) > 0.01f ||
+                            fabsf(previous_rect.width - asset_browser_tools_button_rect.width) > 0.01f ||
+                            fabsf(previous_rect.height - asset_browser_tools_button_rect.height) > 0.01f;
+                    }
+
+                    if (layout_changed)
+                    {
+                        if (tabs_available)
+                        {
+                            printf(
+                                "HENKA_AUTOMATION_DIAGNOSTIC asset_type_tabs action_seq=%llu frame=%llu utility_tabs_visible=%u active_assets=%u status=available count=%zu materials_x=%.1f materials_y=%.1f materials_width=%.1f materials_height=%.1f\n",
+                                (unsigned long long)state->automation_diagnostic_utility_action_sequence,
+                                (unsigned long long)state->automation_diagnostic_frame_sequence,
+                                utility_navigation_rows_visible ? 1U : 0U,
+                                active_assets ? 1U : 0U,
+                                asset_type_tab_count,
+                                asset_type_tab_rects[1].x,
+                                asset_type_tab_rects[1].y,
+                                asset_type_tab_rects[1].width,
+                                asset_type_tab_rects[1].height);
+                        }
+                        else
+                        {
+                            printf(
+                                "HENKA_AUTOMATION_DIAGNOSTIC asset_type_tabs action_seq=%llu frame=%llu utility_tabs_visible=%u active_assets=%u status=unavailable result=%d count=%zu\n",
+                                (unsigned long long)state->automation_diagnostic_utility_action_sequence,
+                                (unsigned long long)state->automation_diagnostic_frame_sequence,
+                                utility_navigation_rows_visible ? 1U : 0U,
+                                active_assets ? 1U : 0U,
+                                (int)asset_type_tab_layout_result,
+                                asset_type_tab_count);
+                        }
+                        fflush(stdout);
+                        if (tools_available)
+                        {
+                            printf(
+                                "HENKA_AUTOMATION_DIAGNOSTIC asset_browser_tools action_seq=%llu frame=%llu active_assets=%u navigation_visible=%u status=available x=%.1f y=%.1f width=%.1f height=%.1f\n",
+                                (unsigned long long)state->automation_diagnostic_utility_action_sequence,
+                                (unsigned long long)state->automation_diagnostic_frame_sequence,
+                                active_assets ? 1U : 0U,
+                                utility_navigation_rows_visible ? 1U : 0U,
+                                asset_browser_tools_button_rect.x,
+                                asset_browser_tools_button_rect.y,
+                                asset_browser_tools_button_rect.width,
+                                asset_browser_tools_button_rect.height);
+                            fflush(stdout);
+                        }
+                        state->automation_diagnostic_asset_type_tabs_reported = true;
+                        state->automation_diagnostic_asset_type_tabs_last_navigation_visible =
+                            utility_navigation_rows_visible;
+                        state->automation_diagnostic_asset_type_tabs_last_active_assets =
+                            active_assets;
+                        state->automation_diagnostic_asset_type_tabs_last_result =
+                            asset_type_tab_layout_result;
+                        state->automation_diagnostic_asset_type_tabs_last_count =
+                            asset_type_tab_count;
+                        state->automation_diagnostic_asset_type_tabs_last_tools_available =
+                            tools_available;
+                        if (tools_available)
+                        {
+                            state->automation_diagnostic_asset_type_tabs_last_tools_rect =
+                                asset_browser_tools_button_rect;
+                        }
+                        if (tabs_available)
+                        {
+                            state->automation_diagnostic_asset_type_tabs_last_materials_rect =
+                                asset_type_tab_rects[1];
+                        }
                     }
                 }
                 if (asset_type_tab_count == 4U &&
@@ -37093,6 +37229,13 @@ static void sandbox3d_draw_utility_panel(
                     state->asset_browser_selected_texture = NULL;
                     state->asset_browser_selected_material = NULL;
                     state->asset_browser_selected_prefab = NULL;
+                    if (diagnostics_enabled)
+                    {
+                        printf(
+                            "HENKA_AUTOMATION_DIAGNOSTIC asset_type_tab action=click type=Materials selected=%u\n",
+                            state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL ? 1U : 0U);
+                        fflush(stdout);
+                    }
                 }
                 if (asset_type_tab_count == 4U &&
                     henka_ui_tab(state->ui, "asset_browser_meshes", asset_type_tab_rects[2], "Meshes", state->asset_browser_type == HENKA_ASSET_TYPE_MESH))
