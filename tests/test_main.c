@@ -36,6 +36,7 @@ int main(void)
     henka_test_scene();
     henka_test_shader();
     henka_test_ui();
+    henka_test_ui_font();
     henka_test_viewport_shading();
     henka_test_workspace();
     henka_test_view_compass();

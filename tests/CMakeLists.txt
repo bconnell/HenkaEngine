@@ -1009,6 +1009,7 @@ add_executable(henka_tests
     ../examples/sandbox3d/editor_ui_state.c
     ../examples/sandbox3d/camera_tools.c
     ../examples/sandbox3d/editor_preferences.c
+    ../examples/sandbox3d/editor_font_bootstrap.c
     ../examples/sandbox3d/view_compass.c
     ../examples/sandbox3d/object_details_tools.c
     ../examples/sandbox3d/authoring_asset_controller.c
@@ -1062,6 +1063,7 @@ add_executable(henka_tests
     test_scene.c
     test_shader.c
     test_ui.c
+    test_ui_font.c
     test_viewport_shading.c
     test_workspace.c
     test_view_compass.c
