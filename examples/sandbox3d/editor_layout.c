@@ -1420,6 +1420,188 @@ henka_result sandbox3d_editor_layout_limit_wrapped_text(
     return HENKA_SUCCESS;
 }
 
+static size_t sandbox3d_editor_layout_normalized_name_length(
+    const char* object_name,
+    size_t object_name_length)
+{
+    size_t index;
+    size_t normalized_length = 0U;
+    bool previous_was_line_break = false;
+
+    for (index = 0U; index < object_name_length; ++index)
+    {
+        const char character = object_name[index];
+        if (character == '\r' || character == '\n')
+        {
+            if (!previous_was_line_break)
+            {
+                ++normalized_length;
+            }
+            previous_was_line_break = true;
+        }
+        else
+        {
+            ++normalized_length;
+            previous_was_line_break = false;
+        }
+    }
+
+    return normalized_length;
+}
+
+static void sandbox3d_editor_layout_copy_normalized_name_range(
+    const char* object_name,
+    size_t object_name_length,
+    size_t range_start,
+    size_t range_length,
+    char* out_text)
+{
+    size_t source_index = 0U;
+    size_t normalized_index = 0U;
+    size_t output_index = 0U;
+    bool previous_was_line_break = false;
+
+    while (source_index < object_name_length && output_index < range_length)
+    {
+        char character = object_name[source_index++];
+        if (character == '\r' || character == '\n')
+        {
+            if (previous_was_line_break)
+            {
+                continue;
+            }
+            character = ' ';
+            previous_was_line_break = true;
+        }
+        else
+        {
+            previous_was_line_break = false;
+        }
+
+        if (normalized_index >= range_start)
+        {
+            out_text[output_index++] = character;
+        }
+        ++normalized_index;
+    }
+}
+
+henka_result sandbox3d_editor_layout_format_hidden_row_label(
+    const char* object_name,
+    size_t maximum_columns,
+    char* out_text,
+    size_t out_capacity,
+    bool* out_name_truncated)
+{
+    static const char hidden_suffix[] = " [Hidden]";
+    static const char unnamed_name[] = "(unnamed)";
+    static const char compact_unnamed_name[] = "?";
+    const size_t suffix_length = sizeof(hidden_suffix) - 1U;
+    size_t source_name_length;
+    size_t name_length;
+    size_t name_columns;
+    size_t prefix_length;
+    size_t suffix_name_length;
+    size_t output_length;
+    bool object_name_was_empty = false;
+    bool unnamed_name_compacted = false;
+
+    if (object_name == NULL || out_text == NULL || out_name_truncated == NULL ||
+        out_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    source_name_length = strlen(object_name);
+    if (source_name_length == 0U)
+    {
+        object_name = unnamed_name;
+        source_name_length = sizeof(unnamed_name) - 1U;
+        object_name_was_empty = true;
+    }
+    if (maximum_columns <= suffix_length)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    name_columns = maximum_columns - suffix_length;
+    if (object_name_was_empty &&
+        name_columns < sizeof(unnamed_name) - 1U)
+    {
+        object_name = compact_unnamed_name;
+        source_name_length = sizeof(compact_unnamed_name) - 1U;
+        unnamed_name_compacted = true;
+    }
+    name_length = sandbox3d_editor_layout_normalized_name_length(
+        object_name,
+        source_name_length);
+    if (name_length <= name_columns)
+    {
+        output_length = name_length + suffix_length;
+        if (output_length >= out_capacity)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        sandbox3d_editor_layout_copy_normalized_name_range(
+            object_name,
+            source_name_length,
+            0U,
+            name_length,
+            out_text);
+        memcpy(out_text + name_length, hidden_suffix, sizeof(hidden_suffix));
+        *out_name_truncated = unnamed_name_compacted;
+        return HENKA_SUCCESS;
+    }
+
+    output_length = name_columns + suffix_length;
+    if (output_length >= out_capacity)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    /* Keep the marker intact and use the remaining row budget for a bounded
+     * middle ellipsis. A four-column name budget yields "A..."; larger
+     * budgets retain both the beginning and end of the canonical name. */
+    if (name_columns < 4U)
+    {
+        prefix_length = name_columns > 1U ? name_columns - 1U : name_columns;
+        sandbox3d_editor_layout_copy_normalized_name_range(
+            object_name,
+            source_name_length,
+            0U,
+            prefix_length,
+            out_text);
+        if (name_columns > prefix_length)
+        {
+            out_text[prefix_length] = '.';
+        }
+        memcpy(out_text + name_columns, hidden_suffix, sizeof(hidden_suffix));
+        *out_name_truncated = true;
+        return HENKA_SUCCESS;
+    }
+    prefix_length = (name_columns - 3U + 1U) / 2U;
+    suffix_name_length = name_columns - 3U - prefix_length;
+
+    sandbox3d_editor_layout_copy_normalized_name_range(
+        object_name,
+        source_name_length,
+        0U,
+        prefix_length,
+        out_text);
+    memcpy(out_text + prefix_length, "...", 3U);
+    if (suffix_name_length > 0U)
+    {
+        sandbox3d_editor_layout_copy_normalized_name_range(
+            object_name,
+            source_name_length,
+            name_length - suffix_name_length,
+            suffix_name_length,
+            out_text + prefix_length + 3U);
+    }
+    memcpy(out_text + name_columns, hidden_suffix, sizeof(hidden_suffix));
+    *out_name_truncated = true;
+    return HENKA_SUCCESS;
+}
+
 henka_result sandbox3d_editor_layout_text_row_height(
     size_t line_count,
     float line_height,

@@ -205,6 +205,16 @@ henka_result sandbox3d_editor_layout_limit_wrapped_text(
     size_t* out_line_count,
     bool* out_truncated);
 
+/* Keep a hidden Scene Objects row on one line while preserving both the
+ * object's display name and a textual state marker. Long names are bounded
+ * within the name portion; the canonical scene name is never modified. */
+henka_result sandbox3d_editor_layout_format_hidden_row_label(
+    const char* object_name,
+    size_t maximum_columns,
+    char* out_text,
+    size_t out_capacity,
+    bool* out_name_truncated);
+
 /* Row heights and pages share the same text metrics so wrapped rows cannot
  * overlap the next row or the panel footer. */
 henka_result sandbox3d_editor_layout_text_row_height(
