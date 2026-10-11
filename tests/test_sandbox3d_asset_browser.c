@@ -107,6 +107,14 @@ static void henka_test_sandbox3d_asset_browser_texture_descriptor_identity(void)
         3U) == 2U);
     HENKA_TEST_ASSERT(items[0].metadata_index == 0U);
     HENKA_TEST_ASSERT(items[1].metadata_index == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_filtered(
+        &manager,
+        HENKA_ASSET_TYPE_TEXTURE,
+        "SHARED",
+        items,
+        3U) == 2U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 0U);
+    HENKA_TEST_ASSERT(items[1].metadata_index == 1U);
     HENKA_TEST_ASSERT(items[0].metadata.texture_descriptor.usage ==
         HENKA_TEXTURE_USAGE_COLOR);
     HENKA_TEST_ASSERT(items[1].metadata.texture_descriptor.usage ==
@@ -208,6 +216,106 @@ static void henka_test_sandbox3d_asset_browser_paging(void)
     HENKA_TEST_ASSERT(items[0].metadata_index == 6U);
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_page(
         &manager, HENKA_ASSET_TYPE_TEXTURE, 3U, 3U, items, 3U) == 0U);
+}
+
+static void henka_test_sandbox3d_asset_browser_filtering(void)
+{
+    henka_asset_manager manager;
+    henka_asset_texture_entry textures[3];
+    henka_asset_mesh_entry meshes[1];
+    sandbox3d_asset_browser_item items[3];
+
+    memset(&manager, 0, sizeof(manager));
+    memset(textures, 0, sizeof(textures));
+    memset(meshes, 0, sizeof(meshes));
+
+    textures[0].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    textures[0].metadata.source_path = "assets/textures/stone_base.png";
+    textures[0].metadata.display_name = "Basalt Base";
+    textures[1].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    textures[1].metadata.source_path = "assets/textures/normal.png";
+    textures[1].metadata.display_name = "STONE Normal";
+    textures[2].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    textures[2].metadata.source_path = "assets/textures/grass.png";
+    textures[2].metadata.display_name = "Grass";
+    meshes[0].metadata.type = HENKA_ASSET_TYPE_MESH;
+    meshes[0].metadata.source_path = "assets/models/stone_mesh.obj";
+    meshes[0].metadata.display_name = "Stone Mesh";
+    manager.texture_entries = textures;
+    manager.texture_count = 3U;
+    manager.mesh_entries = meshes;
+    manager.mesh_count = 1U;
+
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_filtered(
+        &manager,
+        HENKA_ASSET_TYPE_TEXTURE,
+        "sToNe",
+        items,
+        3U) == 2U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 0U);
+    HENKA_TEST_ASSERT(items[1].metadata_index == 1U);
+
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_filtered(
+        &manager,
+        HENKA_ASSET_TYPE_TEXTURE,
+        "textures/stone",
+        items,
+        3U) == 1U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 0U);
+
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_filtered(
+        &manager,
+        HENKA_ASSET_TYPE_MESH,
+        "sToNe",
+        items,
+        3U) == 1U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 3U);
+
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_count_filtered(
+        &manager,
+        HENKA_ASSET_TYPE_TEXTURE,
+        "stone",
+        1U) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_page_filtered(
+        &manager,
+        HENKA_ASSET_TYPE_TEXTURE,
+        "stone",
+        1U,
+        1U,
+        items,
+        1U) == 1U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 1U);
+
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_filtered(
+        &manager,
+        HENKA_ASSET_TYPE_TEXTURE,
+        "not-present",
+        items,
+        3U) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_count_filtered(
+        &manager,
+        HENKA_ASSET_TYPE_TEXTURE,
+        "not-present",
+        2U) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_page_filtered(
+        &manager,
+        HENKA_ASSET_TYPE_TEXTURE,
+        "not-present",
+        0U,
+        2U,
+        items,
+        3U) == 0U);
+
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_filtered(
+        &manager,
+        HENKA_ASSET_TYPE_TEXTURE,
+        "",
+        items,
+        3U) == sandbox3d_asset_browser_collect(
+            &manager,
+            HENKA_ASSET_TYPE_TEXTURE,
+            NULL,
+            0U));
 }
 
 static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
@@ -565,6 +673,7 @@ void henka_test_sandbox3d_asset_browser(void)
     henka_test_sandbox3d_asset_browser_texture_descriptor_identity();
     henka_test_sandbox3d_asset_browser_retry_policy();
     henka_test_sandbox3d_asset_browser_paging();
+    henka_test_sandbox3d_asset_browser_filtering();
     henka_test_sandbox3d_asset_browser_texture_and_assignment();
     henka_test_sandbox3d_material_texture_picker_state();
     henka_test_sandbox3d_terrain_layer_display();
