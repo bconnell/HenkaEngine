@@ -1,6 +1,9 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$OutputDirectory
+    [string]$OutputDirectory,
+
+    [Parameter(Mandatory = $true)]
+    [string]$BaselineDirectory
 )
 
 Set-StrictMode -Version Latest
@@ -10,7 +13,27 @@ Add-Type -AssemblyName System.Drawing
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $OutputDirectory = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $OutputDirectory
+$BaselineDirectory = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $BaselineDirectory
 $null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $OutputDirectory
+$showcaseFiles = @(
+    "cheeky_giraffe.gltf",
+    "cheeky_giraffe.bin",
+    "giraffe_base_color.png",
+    "giraffe_detail_normal.png",
+    "giraffe_metallic_roughness.png",
+    "original_realistic_rocket.gltf",
+    "original_realistic_rocket.bin",
+    "rocket_base_color.png",
+    "rocket_detail_normal.png",
+    "rocket_metallic_roughness.png")
+if (-not (Test-Path -LiteralPath $BaselineDirectory -PathType Container)) {
+    throw "Build-owned Showcase baseline is missing: $BaselineDirectory. Build henka_sandbox3d for this configuration before running the generator test."
+}
+foreach ($showcaseFile in $showcaseFiles) {
+    if (-not (Test-Path -LiteralPath (Join-Path $BaselineDirectory $showcaseFile) -PathType Leaf)) {
+        throw "Build-owned Showcase baseline is incomplete: missing $showcaseFile."
+    }
+}
 $generator = Join-Path $repoRoot "scripts\generate_showcase_assets.ps1"
 $generatorText = Get-Content -LiteralPath $generator -Raw
 if ($generatorText -notmatch 'Resolve-HenkaLocalPath\s+-RepositoryRoot\s+\$repositoryRoot\s+-Path\s+\$OutputDirectory') {
@@ -116,49 +139,29 @@ if (Test-Path -LiteralPath $externalOutputProbe) {
 }
 Write-Output "[pass] Standalone Showcase generation rejects external output roots before mutation."
 
-[IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
+$candidateDirectory = Resolve-HenkaLocalPath `
+    -RepositoryRoot $repoRoot `
+    -Path (Join-Path $OutputDirectory "candidate_run")
+if (Test-Path -LiteralPath $candidateDirectory) {
+    Remove-Item -LiteralPath $candidateDirectory -Recurse -Force
+}
+[IO.Directory]::CreateDirectory($candidateDirectory) | Out-Null
 
 $LASTEXITCODE = 0
-& $generator -OutputDirectory $OutputDirectory
+& $generator -OutputDirectory $candidateDirectory
 if ($LASTEXITCODE -ne 0) {
     throw "Showcase generator failed with exit code $LASTEXITCODE."
 }
-$determinismDirectory = Join-Path $OutputDirectory "determinism_second_run"
-try {
-    if (Test-Path -LiteralPath $determinismDirectory) {
-        Remove-Item -LiteralPath $determinismDirectory -Recurse -Force
-    }
-    [IO.Directory]::CreateDirectory($determinismDirectory) | Out-Null
-    $LASTEXITCODE = 0
-    & $generator -OutputDirectory $determinismDirectory
-    if ($LASTEXITCODE -ne 0) {
-        throw "Showcase generator determinism rerun failed with exit code $LASTEXITCODE."
-    }
-    foreach ($deterministicFile in @(
-            "cheeky_giraffe.gltf",
-            "cheeky_giraffe.bin",
-            "giraffe_base_color.png",
-            "giraffe_detail_normal.png",
-            "giraffe_metallic_roughness.png",
-            "original_realistic_rocket.gltf",
-            "original_realistic_rocket.bin",
-            "rocket_base_color.png",
-            "rocket_detail_normal.png",
-            "rocket_metallic_roughness.png")) {
-        $firstHash = Get-ShowcaseFileHash (Join-Path $OutputDirectory $deterministicFile)
-        $secondHash = Get-ShowcaseFileHash (Join-Path $determinismDirectory $deterministicFile)
-        if ($firstHash -ne $secondHash) {
-            throw "Showcase generator output is not deterministic for '$deterministicFile'."
-        }
+foreach ($deterministicFile in $showcaseFiles) {
+    $candidateHash = Get-ShowcaseFileHash (Join-Path $candidateDirectory $deterministicFile)
+    $baselineHash = Get-ShowcaseFileHash (Join-Path $BaselineDirectory $deterministicFile)
+    if ($candidateHash -ne $baselineHash) {
+        throw "Showcase generator output is not deterministic for '$deterministicFile'."
     }
 }
-finally {
-    if (Test-Path -LiteralPath $determinismDirectory) {
-        Remove-Item -LiteralPath $determinismDirectory -Recurse -Force
-    }
-}
+Write-Output "[pass] One fresh Showcase generation matches all ten build-owned baseline outputs."
 foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
-    $path = Join-Path $OutputDirectory ($name + ".gltf")
+    $path = Join-Path $candidateDirectory ($name + ".gltf")
     $json = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
     if ($null -eq $json.materials -or $json.materials.Count -eq 0 -or
         $null -eq $json.meshes -or $json.meshes.Count -ne 1) {

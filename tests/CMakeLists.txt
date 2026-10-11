@@ -395,7 +395,15 @@ if(WIN32)
         NAME henka_showcase_asset_generator_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
-            -OutputDirectory ${CMAKE_BINARY_DIR}/showcase_asset_test)
+            -OutputDirectory ${CMAKE_BINARY_DIR}/showcase_asset_test
+            -BaselineDirectory $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models)
+
+    add_test(
+        NAME henka_showcase_generation_ownership_tests
+        COMMAND ${CMAKE_COMMAND}
+            -DSANDBOX_CMAKE=${CMAKE_SOURCE_DIR}/examples/sandbox3d/CMakeLists.txt
+            -DSHOWCASE_TEST_SCRIPT=${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
+            -P ${CMAKE_SOURCE_DIR}/tests/check_showcase_generation_ownership.cmake)
 
     add_test(
         NAME henka_branding_asset_tests
