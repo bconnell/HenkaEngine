@@ -50,11 +50,11 @@ endif()
 
 henka_enable_project_warnings(henka_sandbox3d)
 
-if(CMAKE_CONFIGURATION_TYPES)
-    set(HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/assets/models")
-else()
-    set(HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/assets/models")
-endif()
+# Showcase source assets do not vary by configuration. Keep one generated
+# output set for the whole multi-config build tree, then copy it into the
+# active executable configuration after that target is built.
+set(HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/showcase_assets/assets/models")
+set(HENKA_SHOWCASE_ASSET_MANIFEST "${CMAKE_CURRENT_BINARY_DIR}/showcase_assets/showcase-assets-manifest.json")
 
 set(HENKA_SHOWCASE_ASSET_FILENAMES
     cheeky_giraffe.gltf
@@ -73,6 +73,7 @@ foreach(showcase_filename IN LISTS HENKA_SHOWCASE_ASSET_FILENAMES)
     list(APPEND HENKA_SHOWCASE_ASSET_OUTPUTS
         "${HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY}/${showcase_filename}")
 endforeach()
+list(APPEND HENKA_SHOWCASE_ASSET_OUTPUTS "${HENKA_SHOWCASE_ASSET_MANIFEST}")
 
 add_custom_command(OUTPUT ${HENKA_SHOWCASE_ASSET_OUTPUTS}
     COMMAND ${CMAKE_COMMAND} -E make_directory
@@ -80,6 +81,8 @@ add_custom_command(OUTPUT ${HENKA_SHOWCASE_ASSET_OUTPUTS}
     COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
         ${CMAKE_SOURCE_DIR}/scripts/generate_showcase_assets.ps1
         -OutputDirectory "${HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY}"
+        -ReuseVerifiedOutput
+        -ManifestPath "${HENKA_SHOWCASE_ASSET_MANIFEST}"
     DEPENDS
         ${CMAKE_SOURCE_DIR}/scripts/generate_showcase_assets.ps1
         ${CMAKE_SOURCE_DIR}/scripts/henka_script_common.ps1
@@ -92,6 +95,12 @@ add_custom_command(TARGET henka_sandbox3d POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:henka_sandbox3d>/assets
+)
+
+add_custom_command(TARGET henka_sandbox3d POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY}
+        $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models
 )
 
 add_custom_command(TARGET henka_sandbox3d POST_BUILD

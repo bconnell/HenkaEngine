@@ -142,15 +142,22 @@ Write-Output "[pass] Standalone Showcase generation rejects external output root
 $candidateDirectory = Resolve-HenkaLocalPath `
     -RepositoryRoot $repoRoot `
     -Path (Join-Path $OutputDirectory "candidate_run")
+$cacheManifestPath = Join-Path $OutputDirectory "candidate-generation-manifest.json"
 if (Test-Path -LiteralPath $candidateDirectory) {
     Remove-Item -LiteralPath $candidateDirectory -Recurse -Force
+}
+if (Test-Path -LiteralPath $cacheManifestPath -PathType Leaf) {
+    Remove-Item -LiteralPath $cacheManifestPath -Force
 }
 [IO.Directory]::CreateDirectory($candidateDirectory) | Out-Null
 
 $LASTEXITCODE = 0
-& $generator -OutputDirectory $candidateDirectory
+$freshGenerationOutput = @(& $generator -OutputDirectory $candidateDirectory -ReuseVerifiedOutput -ManifestPath $cacheManifestPath 2>&1)
 if ($LASTEXITCODE -ne 0) {
     throw "Showcase generator failed with exit code $LASTEXITCODE."
+}
+if (-not (($freshGenerationOutput -join "`n").Contains("[generated] Wrote verified hashes for 10 Showcase assets."))) {
+    throw "Showcase semantic regression did not perform and record one fresh generation."
 }
 foreach ($deterministicFile in $showcaseFiles) {
     $candidateHash = Get-ShowcaseFileHash (Join-Path $candidateDirectory $deterministicFile)
@@ -178,7 +185,7 @@ foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
             [string]::IsNullOrWhiteSpace([string]$image.uri)) {
             throw "Showcase asset $name contains an invalid texture URI."
         }
-        $imagePath = Join-Path $OutputDirectory ([string]$image.uri)
+        $imagePath = Join-Path $candidateDirectory ([string]$image.uri)
         if (-not (Test-Path -LiteralPath $imagePath -PathType Leaf)) {
             throw "Showcase asset $name is missing generated texture $($image.uri)."
         }
@@ -275,9 +282,9 @@ function Get-DarkPixelRowCoverage {
     }
 }
 
-$giraffe = Get-Content -LiteralPath (Join-Path $OutputDirectory "cheeky_giraffe.gltf") -Raw | ConvertFrom-Json
+$giraffe = Get-Content -LiteralPath (Join-Path $candidateDirectory "cheeky_giraffe.gltf") -Raw | ConvertFrom-Json
 $giraffeMaterialNames = @($giraffe.materials | ForEach-Object { $_.name })
-$giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "cheeky_giraffe.bin"))
+$giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $candidateDirectory "cheeky_giraffe.bin"))
 foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye Detail", "Giraffe Ear Inner", "Giraffe Ossicone Cap", "Giraffe Hoof", "Giraffe Mane", "Giraffe Nose", "Giraffe Joint", "Giraffe Shoulder", "Giraffe Tail Tuft")) {
     if ($giraffeMaterialNames -notcontains $requiredName) {
         throw "Showcase giraffe is missing authored feature material '$requiredName'."
@@ -318,11 +325,11 @@ if ($giraffeTanWidth -gt 1.90 -or $giraffeTanHeight -lt 4.35 -or
     $giraffeTanDepth -lt 2.50 -or ($giraffeTanHeight / $giraffeTanDepth) -gt 1.95) {
     throw "Showcase giraffe silhouette lost its long-bodied, forward-necked quadruped proportion contract."
 }
-$giraffeHideAverage = Get-ImageChannelAverage (Join-Path $OutputDirectory "giraffe_base_color.png")
+$giraffeHideAverage = Get-ImageChannelAverage (Join-Path $candidateDirectory "giraffe_base_color.png")
 if ($giraffeHideAverage.Green -ge 205.0 -or $giraffeHideAverage.Blue -ge 150.0) {
     throw "Showcase giraffe hide does not use the restrained ochre palette required for an anatomical study."
 }
-$giraffeBaseColorBitmap = [System.Drawing.Bitmap]::new((Join-Path $OutputDirectory "giraffe_base_color.png"))
+$giraffeBaseColorBitmap = [System.Drawing.Bitmap]::new((Join-Path $candidateDirectory "giraffe_base_color.png"))
 try {
     if ($giraffeBaseColorBitmap.Width -lt 256 -or $giraffeBaseColorBitmap.Height -lt 256) {
         throw "Showcase giraffe base-color texture is under-resolved for close authored-detail inspection."
@@ -331,7 +338,7 @@ try {
 finally {
     $giraffeBaseColorBitmap.Dispose()
 }
-$giraffeHideCoverage = Get-DarkPixelRowCoverage (Join-Path $OutputDirectory "giraffe_base_color.png")
+$giraffeHideCoverage = Get-DarkPixelRowCoverage (Join-Path $candidateDirectory "giraffe_base_color.png")
 if ($giraffeHideCoverage.Total -lt 0.15 -or $giraffeHideCoverage.Total -gt 0.45 -or
     $giraffeHideCoverage.RowMaximum -gt 0.50) {
     throw "Showcase giraffe hide contains an implausible dark-patch band or coverage distribution."
@@ -409,8 +416,8 @@ if (($giraffeTailTuftBounds.Maximum[1] - $giraffeTailTuftBounds.Minimum[1]) -lt 
     ($giraffeTailTuftBounds.Maximum[2] - $giraffeTailTuftBounds.Minimum[2]) -lt 0.08) {
     throw "Showcase giraffe tail tuft does not establish a readable terminal feature."
 }
-$rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
-$rocketBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "original_realistic_rocket.bin"))
+$rocket = Get-Content -LiteralPath (Join-Path $candidateDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
+$rocketBinary = [IO.File]::ReadAllBytes((Join-Path $candidateDirectory "original_realistic_rocket.bin"))
 $rocketMaterialNames = @($rocket.materials | ForEach-Object { $_.name })
 if ($rocketMaterialNames -notcontains "Rocket Avionics" -or
     $rocketMaterialNames -notcontains "Rocket Launch Pad" -or
@@ -472,7 +479,7 @@ if ($null -eq $rocketPaint -or
     [int]$rocketPaint.pbrMetallicRoughness.baseColorTexture.index -ne 2) {
     throw "Showcase rocket does not bind its deterministic painted-surface base-color texture."
 }
-$rocketBaseColorBitmap = [System.Drawing.Bitmap]::new((Join-Path $OutputDirectory "rocket_base_color.png"))
+$rocketBaseColorBitmap = [System.Drawing.Bitmap]::new((Join-Path $candidateDirectory "rocket_base_color.png"))
 try {
     $warmCamouflagePixels = 0
     for ($y = 0; $y -lt $rocketBaseColorBitmap.Height; ++$y) {
@@ -549,4 +556,28 @@ if (($rocketInsulationBounds.Maximum[1] - $rocketInsulationBounds.Minimum[1]) -l
     ($rocketInsulationBounds.Maximum[0] - $rocketInsulationBounds.Minimum[0]) -lt 1.20) {
     throw "Showcase rocket interstage insulation does not establish a readable bounded thermal transition."
 }
+$showcaseCacheSnapshot = @(
+    foreach ($showcaseFile in $showcaseFiles) {
+        $showcasePath = Join-Path $candidateDirectory $showcaseFile
+        [pscustomobject]@{
+            Name = $showcaseFile
+            Hash = Get-ShowcaseFileHash $showcasePath
+            LastWriteUtcTicks = (Get-Item -LiteralPath $showcasePath).LastWriteTimeUtc.Ticks
+        }
+    })
+$cacheHitOutput = @(& $generator -OutputDirectory $candidateDirectory -ReuseVerifiedOutput -ManifestPath $cacheManifestPath 2>&1)
+if ($LASTEXITCODE -ne 0) {
+    throw "Showcase verified-output cache check failed with exit code $LASTEXITCODE."
+}
+if (-not (($cacheHitOutput -join "`n").Contains("[skip] Verified Showcase inputs and all generated output hashes are unchanged."))) {
+    throw "Showcase verified-output cache did not report an unchanged-input skip."
+}
+foreach ($cachedFile in $showcaseCacheSnapshot) {
+    $showcasePath = Join-Path $candidateDirectory $cachedFile.Name
+    if ((Get-ShowcaseFileHash $showcasePath) -cne $cachedFile.Hash -or
+        (Get-Item -LiteralPath $showcasePath).LastWriteTimeUtc.Ticks -ne $cachedFile.LastWriteUtcTicks) {
+        throw "Showcase cache hit rewrote or changed generated output '$($cachedFile.Name)'."
+    }
+}
+Write-Output "[pass] Unchanged Showcase inputs and outputs skip generation without rewriting assets."
 Write-Host "[pass] Deterministic showcase geometry, material ownership, and generated glTF contracts passed."

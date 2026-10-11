@@ -1,12 +1,17 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$OutputDirectory
+    [string]$OutputDirectory,
+
+    [switch]$ReuseVerifiedOutput,
+
+    [string]$ManifestPath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 $repositoryRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+Add-Type -AssemblyName System.Drawing
 
 function New-Part {
     param([int]$Material)
@@ -868,7 +873,6 @@ function Write-ShowcaseTexture {
         [Parameter(Mandatory = $true)][ValidateSet("base_color", "normal", "metallic_roughness")][string]$Kind,
         [Parameter(Mandatory = $true)][ValidateSet("giraffe", "rocket")][string]$Subject
     )
-    Add-Type -AssemblyName System.Drawing
     $size = if ($Kind -eq "base_color") { 256 } else { 64 }
     $bitmap = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $giraffeSeeds = @(
@@ -1540,9 +1544,136 @@ if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
 }
 $OutputDirectory = Resolve-HenkaLocalPath -RepositoryRoot $repositoryRoot -Path $OutputDirectory
 $null = New-HenkaLocalDirectory -RepositoryRoot $repositoryRoot -Path $OutputDirectory
+
+$showcaseFileNames = @(
+    "cheeky_giraffe.gltf",
+    "cheeky_giraffe.bin",
+    "giraffe_base_color.png",
+    "giraffe_detail_normal.png",
+    "giraffe_metallic_roughness.png",
+    "original_realistic_rocket.gltf",
+    "original_realistic_rocket.bin",
+    "rocket_base_color.png",
+    "rocket_detail_normal.png",
+    "rocket_metallic_roughness.png")
+
+function Get-ShowcaseSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        return ([BitConverter]::ToString($sha256.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+        $sha256.Dispose()
+    }
+}
+
+$generationFingerprint = $null
+if ($ReuseVerifiedOutput) {
+    if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
+        throw "ReuseVerifiedOutput requires a generation ManifestPath."
+    }
+    $ManifestPath = Resolve-HenkaLocalPath -RepositoryRoot $repositoryRoot -Path $ManifestPath
+    $manifestDirectory = Split-Path -Parent $ManifestPath
+    $null = New-HenkaLocalDirectory -RepositoryRoot $repositoryRoot -Path $manifestDirectory
+    $outputPrefix = [IO.Path]::GetFullPath($OutputDirectory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    if ([IO.Path]::GetFullPath($ManifestPath).StartsWith($outputPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "The Showcase generation manifest must remain outside the runtime asset-copy directory."
+    }
+    if (Test-Path -LiteralPath $ManifestPath -PathType Container) {
+        throw "Showcase generation manifest path is a directory: $ManifestPath"
+    }
+
+    $fingerprintInputs = @(
+        "format=1",
+        "generator=$(Get-ShowcaseSha256 -Path $PSCommandPath)",
+        "path-helper=$(Get-ShowcaseSha256 -Path (Join-Path $PSScriptRoot 'henka_script_common.ps1'))",
+        "powershell=$($PSVersionTable.PSVersion.ToString())",
+        "platform=$([Environment]::OSVersion.VersionString)",
+        "drawing=$([System.Drawing.Bitmap].Assembly.GetName().Version.ToString())",
+        "outputs=$($showcaseFileNames -join ',')")
+    $fingerprintBytes = [Text.Encoding]::UTF8.GetBytes(($fingerprintInputs -join "`n"))
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $generationFingerprint = ([BitConverter]::ToString($sha256.ComputeHash($fingerprintBytes))).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+
+    $cacheHit = $false
+    if (Test-Path -LiteralPath $ManifestPath -PathType Leaf) {
+        try {
+            $cachedManifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json -ErrorAction Stop
+            $cachedOutputs = @($cachedManifest.outputs)
+            $cacheHit = ([int]$cachedManifest.format_version -eq 1) -and
+                ([string]$cachedManifest.input_fingerprint -ceq $generationFingerprint) -and
+                ($cachedOutputs.Count -eq $showcaseFileNames.Count)
+            if ($cacheHit) {
+                foreach ($showcaseFileName in $showcaseFileNames) {
+                    $cachedOutput = @($cachedOutputs | Where-Object { [string]$_.name -ceq $showcaseFileName })
+                    $showcasePath = Join-Path $OutputDirectory $showcaseFileName
+                    if ($cachedOutput.Count -ne 1 -or -not (Test-Path -LiteralPath $showcasePath -PathType Leaf) -or
+                        [string]$cachedOutput[0].sha256 -cne (Get-ShowcaseSha256 -Path $showcasePath)) {
+                        $cacheHit = $false
+                        break
+                    }
+                }
+            }
+        }
+        catch {
+            $cacheHit = $false
+        }
+    }
+    if ($cacheHit) {
+        Write-Output "[skip] Verified Showcase inputs and all generated output hashes are unchanged."
+        return
+    }
+}
+
 $giraffe = New-Giraffe
 $giraffeTextures = New-ShowcaseTextureDefinitions -OutputDirectory $OutputDirectory -Subject "giraffe" -IncludeBaseColor
 Write-Gltf (Join-Path $OutputDirectory "cheeky_giraffe.gltf") "Anatomical Giraffe Study" $giraffe.Parts $giraffe.Materials @(-2.15, 0.0, -1.7) $giraffeTextures
 $rocket = New-Rocket
 $rocketTextures = New-ShowcaseTextureDefinitions $OutputDirectory "rocket" -IncludeBaseColor
 Write-Gltf (Join-Path $OutputDirectory "original_realistic_rocket.gltf") "Original Realistic Rocket" $rocket.Parts $rocket.Materials @(2.15, 0.0, -1.7) $rocketTextures
+
+if ($ReuseVerifiedOutput) {
+    $manifestOutputs = @(
+        foreach ($showcaseFileName in $showcaseFileNames) {
+            $showcasePath = Join-Path $OutputDirectory $showcaseFileName
+            if (-not (Test-Path -LiteralPath $showcasePath -PathType Leaf)) {
+                throw "Showcase generator did not produce expected output '$showcaseFileName'."
+            }
+            [pscustomobject]@{ name = $showcaseFileName; sha256 = Get-ShowcaseSha256 -Path $showcasePath }
+        })
+    $manifest = [ordered]@{
+        format_version = 1
+        input_fingerprint = $generationFingerprint
+        outputs = $manifestOutputs
+    }
+    $manifestTemporaryPath = "$ManifestPath.$PID.tmp"
+    try {
+        [IO.File]::WriteAllText(
+            $manifestTemporaryPath,
+            ($manifest | ConvertTo-Json -Depth 4),
+            [Text.UTF8Encoding]::new($false))
+        if (Test-Path -LiteralPath $ManifestPath -PathType Leaf) {
+            [IO.File]::Replace($manifestTemporaryPath, $ManifestPath, $null)
+        }
+        else {
+            [IO.File]::Move($manifestTemporaryPath, $ManifestPath)
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $manifestTemporaryPath -PathType Leaf) {
+            Remove-Item -LiteralPath $manifestTemporaryPath -Force
+        }
+    }
+    Write-Output "[generated] Wrote verified hashes for $($showcaseFileNames.Count) Showcase assets."
+}
