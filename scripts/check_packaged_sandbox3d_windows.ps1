@@ -3368,7 +3368,7 @@ try {
             return
         }
 
-        Write-Step "Checking packaged Asset Browser Materials tab geometry and selection"
+        Write-Step "Opening packaged Asset Browser and verifying search behavior"
         $utilityAssetsTabMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Utility Assets tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)\.'
@@ -3410,6 +3410,258 @@ try {
             throw "The authoritative Utility > Assets transition sequence was not available for correlating its layout."
         }
         $assetUtilityActionSequence = $assetUtilityActionMatch.Groups[1].Value
+
+        Write-Step "Checking packaged Asset Browser search, empty results, clear, and real row selection"
+        $settledAssetNavigationPattern = "HENKA_AUTOMATION_DIAGNOSTIC asset_type_tabs action_seq=$assetUtilityActionSequence frame=(?<frame>\d+) utility_tabs_visible=0 active_assets=1 status=available count=4"
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $settledAssetNavigationPattern `
+                -StartingOffset $assetUtilityClickOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "The packaged Asset Browser did not report its settled Assets layout after Utility navigation collapsed."
+        }
+        $settledAssetNavigationMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $settledAssetNavigationPattern
+        if ($null -eq $settledAssetNavigationMatch) {
+            throw "The settled Assets navigation frame could not be correlated with filter geometry."
+        }
+        $settledAssetFrame = $settledAssetNavigationMatch.Groups['frame'].Value
+
+        $assetFilterPattern = "HENKA_AUTOMATION_DIAGNOSTIC asset_filter action_seq=$assetUtilityActionSequence frame=\d+ type=(?<type>Textures|Materials|Meshes|Prefabs) query_bytes=(?<queryBytes>\d+) matches=(?<matches>\d+) page=(?<page>\d+) page_count=(?<pageCount>\d+) rows=(?<rows>\d+) field_x=(?<fieldX>[-0-9.]+) field_y=(?<fieldY>[-0-9.]+) field_width=(?<fieldWidth>[-0-9.]+) field_height=(?<fieldHeight>[-0-9.]+) clear_x=(?<clearX>[-0-9.]+) clear_y=(?<clearY>[-0-9.]+) clear_width=(?<clearWidth>[-0-9.]+) clear_height=(?<clearHeight>[-0-9.]+)"
+        $assetFilterStartPattern = "HENKA_AUTOMATION_DIAGNOSTIC asset_filter action_seq=$assetUtilityActionSequence frame=$settledAssetFrame type=(?:Textures|Materials|Meshes|Prefabs) query_bytes=0 matches=[1-9]\d* page=\d+ page_count=[1-9]\d* rows=[1-9]\d*"
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $assetFilterStartPattern `
+                -StartingOffset $assetUtilityClickOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "The production Asset Browser did not report a populated unfiltered page after its Assets layout settled."
+        }
+        $assetFilterMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $assetFilterPattern
+        if ($null -eq $assetFilterMatch) {
+            throw "The product-owned Asset Browser search state could not be parsed."
+        }
+        $assetFilterType = $assetFilterMatch.Groups['type'].Value
+        $assetFilterQueryBytes = [int]$assetFilterMatch.Groups['queryBytes'].Value
+        $assetFilterBaselineMatches = [int]$assetFilterMatch.Groups['matches'].Value
+        if ($assetFilterQueryBytes -ne 0) {
+            $assetFilterClearOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ([double]$assetFilterMatch.Groups['clearX'].Value + [double]$assetFilterMatch.Groups['clearWidth'].Value * 0.5) `
+                -FramebufferY ([double]$assetFilterMatch.Groups['clearY'].Value + [double]$assetFilterMatch.Groups['clearHeight'].Value * 0.5)
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern "HENKA_AUTOMATION_DIAGNOSTIC asset_filter action_seq=$assetUtilityActionSequence frame=\d+ type=$assetFilterType query_bytes=0 matches=\d+ page=\d+ page_count=\d+" `
+                    -StartingOffset $assetFilterClearOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "The real Asset Browser Clear control did not restore the unfiltered view."
+            }
+            $assetFilterMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $assetFilterPattern
+            if ($null -eq $assetFilterMatch) {
+                throw "The cleared Asset Browser search state could not be parsed."
+            }
+            $assetFilterBaselineMatches = [int]$assetFilterMatch.Groups['matches'].Value
+        }
+        if ($assetFilterBaselineMatches -le 0 -or [int]$assetFilterMatch.Groups['pageCount'].Value -le 0) {
+            throw "The packaged Asset Browser did not expose a populated unfiltered asset page for search proof."
+        }
+        $currentAssetBrowserLayoutMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Asset Browser layout: type=(?<type>[^ ]+) page=(?<page>\d+)/(?:\d+) panel=[-0-9.,]+ row_start=[-0-9.]+ navigation_x=[-0-9.]+ navigation_y=[-0-9.]+ navigation_next_enabled=[01] rows=(?<rows>\d+)\.'
+        if ($null -eq $currentAssetBrowserLayoutMatch -or
+            $currentAssetBrowserLayoutMatch.Groups['type'].Value -ne $assetFilterType -or
+            [int]$currentAssetBrowserLayoutMatch.Groups['rows'].Value -le 0) {
+            throw "The populated legacy Asset Browser row log did not match the current product-reported asset type."
+        }
+        Assert-FramebufferRect `
+            -Name "Asset Browser search field" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X ([double]$assetFilterMatch.Groups['fieldX'].Value) `
+            -Y ([double]$assetFilterMatch.Groups['fieldY'].Value) `
+            -Width ([double]$assetFilterMatch.Groups['fieldWidth'].Value) `
+            -Height ([double]$assetFilterMatch.Groups['fieldHeight'].Value)
+
+        $sourceAssetRowMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Asset Browser row: path=(?<path>.*?) x=[-0-9.]+ y=[-0-9.]+ name_width=[-0-9.]+'
+        if ($null -eq $sourceAssetRowMatch) {
+            throw "The product did not report a current Asset Browser source row from which to derive a real matching search term."
+        }
+        $sourceAssetPath = $sourceAssetRowMatch.Groups['path'].Value.Trim()
+        $assetFileStem = [IO.Path]::GetFileNameWithoutExtension($sourceAssetPath.Replace('/', '\'))
+        $assetSearchQuery = $assetFileStem
+        $bestAssetSearchToken = ''
+        foreach ($tokenMatch in [regex]::Matches($assetFileStem, '[A-Za-z0-9]+')) {
+            if ($tokenMatch.Length -gt $bestAssetSearchToken.Length) {
+                $bestAssetSearchToken = $tokenMatch.Value
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($bestAssetSearchToken)) {
+            $assetSearchQuery = $bestAssetSearchToken
+        }
+        if ([string]::IsNullOrWhiteSpace($assetSearchQuery) -or $assetSearchQuery -eq '(unnamed)') {
+            throw "The current Asset Browser row did not provide a usable search term."
+        }
+        while ([Text.Encoding]::UTF8.GetByteCount($assetSearchQuery) -gt 72) {
+            $assetSearchQuery = $assetSearchQuery.Substring(0, $assetSearchQuery.Length - 1)
+        }
+
+        $assetSearchQueryBytes = [Text.Encoding]::UTF8.GetByteCount($assetSearchQuery)
+        $assetSearchStartOffset = Get-FileLengthSafe -Path $stdoutPath
+        $assetPathRowsBeforeSearch = Get-LogPatternCount `
+            -Path $stdoutPath `
+            -Pattern '^Asset Browser row: path='
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ([double]$assetFilterMatch.Groups['fieldX'].Value + [double]$assetFilterMatch.Groups['fieldWidth'].Value * 0.5) `
+            -FramebufferY ([double]$assetFilterMatch.Groups['fieldY'].Value + [double]$assetFilterMatch.Groups['fieldHeight'].Value * 0.5)
+        Send-HenkaAutomationText -EventPath $automationInputPath -Text $assetSearchQuery
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "HENKA_AUTOMATION_DIAGNOSTIC asset_filter action_seq=$assetUtilityActionSequence frame=\d+ type=$assetFilterType query_bytes=$assetSearchQueryBytes matches=[1-9]\d* page=\d+ page_count=[1-9]\d*" `
+                -StartingOffset $assetSearchStartOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "Typing the current asset's real name into the focused filter did not produce a populated filtered page."
+        }
+        $filteredAssetFilterMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $assetFilterPattern
+        if ($null -eq $filteredAssetFilterMatch) {
+            throw "The production Asset Browser filtered state could not be parsed after search input."
+        }
+        $filteredAssetMatchCount = [int]$filteredAssetFilterMatch.Groups['matches'].Value
+        if ($filteredAssetMatchCount -le 0 -or
+            $filteredAssetMatchCount -ge $assetFilterBaselineMatches) {
+            throw "The real Asset Browser search did not reduce the populated list (before=$assetFilterBaselineMatches after=$filteredAssetMatchCount)."
+        }
+        $filteredAssetRowPattern = "HENKA_AUTOMATION_DIAGNOSTIC asset_row action_seq=$assetUtilityActionSequence frame=\d+ type=$assetFilterType query_bytes=$assetSearchQueryBytes metadata_index=(?<metadataIndex>\d+) rect_x=(?<x>[-0-9.]+) rect_y=(?<y>[-0-9.]+) rect_width=(?<width>[-0-9.]+) rect_height=(?<height>[-0-9.]+)"
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $filteredAssetRowPattern `
+                -StartingOffset $assetSearchStartOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "The filtered page did not publish its actual selectable row rectangle after the search changed."
+        }
+        $assetPathRowsAfterSearch = Get-LogPatternCount `
+            -Path $stdoutPath `
+            -Pattern '^Asset Browser row: path='
+        if ($assetPathRowsAfterSearch -ne $assetPathRowsBeforeSearch) {
+            throw "Filtering re-emitted path-bearing Asset Browser row diagnostics ($assetPathRowsBeforeSearch -> $assetPathRowsAfterSearch)."
+        }
+        $filteredAssetRowMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $filteredAssetRowPattern
+        if ($null -eq $filteredAssetRowMatch) {
+            throw "The production filter result had no product-owned selectable row geometry."
+        }
+        $filteredAssetRowX = [double]$filteredAssetRowMatch.Groups['x'].Value
+        $filteredAssetRowY = [double]$filteredAssetRowMatch.Groups['y'].Value
+        $filteredAssetRowWidth = [double]$filteredAssetRowMatch.Groups['width'].Value
+        $filteredAssetRowHeight = [double]$filteredAssetRowMatch.Groups['height'].Value
+        Assert-FramebufferRect `
+            -Name "Filtered Asset Browser row" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $filteredAssetRowX `
+            -Y $filteredAssetRowY `
+            -Width $filteredAssetRowWidth `
+            -Height $filteredAssetRowHeight
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path (Join-Path $logDir 'asset-browser-search-filtered-1280x720.bmp') `
+            -Description "Packaged Asset Browser showing a real non-empty filtered result"
+        $filteredAssetSelectionOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($filteredAssetRowX + $filteredAssetRowWidth * 0.5) `
+            -FramebufferY ($filteredAssetRowY + $filteredAssetRowHeight * 0.5)
+        $filteredAssetMetadataIndex = $filteredAssetRowMatch.Groups['metadataIndex'].Value
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "(?m)^HENKA_AUTOMATION_DIAGNOSTIC asset_selected type=$assetFilterType metadata_index=$filteredAssetMetadataIndex selected=1\r?$" `
+                -StartingOffset $filteredAssetSelectionOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "A real click on the filtered product row did not select its authoritative Asset Browser item."
+        }
+
+        $assetFilterMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $assetFilterPattern
+        $assetStatusSummaryPattern = 'Asset Browser status row: warning=0 message=(?:Textures|Materials|Meshes|Prefabs) \| \d+ known \| page \d+/\d+'
+        $assetFilterClearOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ([double]$assetFilterMatch.Groups['clearX'].Value + [double]$assetFilterMatch.Groups['clearWidth'].Value * 0.5) `
+            -FramebufferY ([double]$assetFilterMatch.Groups['clearY'].Value + [double]$assetFilterMatch.Groups['clearHeight'].Value * 0.5)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "HENKA_AUTOMATION_DIAGNOSTIC asset_filter action_seq=$assetUtilityActionSequence frame=\d+ type=$assetFilterType query_bytes=0 matches=$assetFilterBaselineMatches page=\d+ page_count=\d+" `
+                -StartingOffset $assetFilterClearOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "The product's real Clear control did not restore the original Asset Browser match set."
+        }
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $assetStatusSummaryPattern `
+                -StartingOffset $assetFilterClearOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "Clearing search after selecting a filtered result did not restore the current Asset Browser page summary."
+        }
+
+        $assetFilterMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $assetFilterPattern
+        $noMatchQuery = 'henka_no_match_' + [guid]::NewGuid().ToString('N')
+        $noMatchQueryBytes = [Text.Encoding]::UTF8.GetByteCount($noMatchQuery)
+        $noMatchStartOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ([double]$assetFilterMatch.Groups['fieldX'].Value + [double]$assetFilterMatch.Groups['fieldWidth'].Value * 0.5) `
+            -FramebufferY ([double]$assetFilterMatch.Groups['fieldY'].Value + [double]$assetFilterMatch.Groups['fieldHeight'].Value * 0.5)
+        Send-HenkaAutomationText -EventPath $automationInputPath -Text $noMatchQuery
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "HENKA_AUTOMATION_DIAGNOSTIC asset_filter action_seq=$assetUtilityActionSequence frame=\d+ type=$assetFilterType query_bytes=$noMatchQueryBytes matches=0 page=0 page_count=0 rows=0" `
+                -StartingOffset $noMatchStartOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "A real unmatched search did not produce the authoritative empty-result state."
+        }
+        $noMatchFilterMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern $assetFilterPattern
+        $emptyResultsClearOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ([double]$noMatchFilterMatch.Groups['clearX'].Value + [double]$noMatchFilterMatch.Groups['clearWidth'].Value * 0.5) `
+            -FramebufferY ([double]$noMatchFilterMatch.Groups['clearY'].Value + [double]$noMatchFilterMatch.Groups['clearHeight'].Value * 0.5)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "HENKA_AUTOMATION_DIAGNOSTIC asset_filter action_seq=$assetUtilityActionSequence frame=\d+ type=$assetFilterType query_bytes=0 matches=$assetFilterBaselineMatches page=\d+ page_count=\d+" `
+                -StartingOffset $emptyResultsClearOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "Clearing the genuine empty-result query did not restore the full Asset Browser list."
+        }
+        Write-Output "[pass] Packaged Asset Browser filtered '$assetSearchQuery' from $assetFilterBaselineMatches to $filteredAssetMatchCount real results, selected a result, represented a no-match query with zero rows, and restored all results through the production Clear control."
+
+        Write-Step "Checking packaged Asset Browser Materials tab geometry and selection"
         $settledAssetTypeLayoutPattern = "HENKA_AUTOMATION_DIAGNOSTIC asset_type_tabs action_seq=$assetUtilityActionSequence frame=\d+ utility_tabs_visible=0 active_assets=1 status=(?:available|unavailable)"
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `

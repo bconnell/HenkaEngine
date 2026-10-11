@@ -7,6 +7,8 @@
 
 #include <henka/assets.h>
 
+#define SANDBOX3D_ASSET_BROWSER_FILTER_CAPACITY 96U
+
 typedef struct sandbox3d_asset_browser_item
 {
     size_t metadata_index;
@@ -19,14 +21,36 @@ size_t sandbox3d_asset_browser_collect(
     sandbox3d_asset_browser_item* out_items,
     size_t capacity);
 
+size_t sandbox3d_asset_browser_collect_filtered(
+    const henka_asset_manager* manager,
+    henka_asset_type type,
+    const char* query,
+    sandbox3d_asset_browser_item* out_items,
+    size_t capacity);
+
 size_t sandbox3d_asset_browser_page_count(
     const henka_asset_manager* manager,
     henka_asset_type type,
     size_t page_size);
 
+size_t sandbox3d_asset_browser_page_count_filtered(
+    const henka_asset_manager* manager,
+    henka_asset_type type,
+    const char* query,
+    size_t page_size);
+
 size_t sandbox3d_asset_browser_collect_page(
     const henka_asset_manager* manager,
     henka_asset_type type,
+    size_t page_index,
+    size_t page_size,
+    sandbox3d_asset_browser_item* out_items,
+    size_t capacity);
+
+size_t sandbox3d_asset_browser_collect_page_filtered(
+    const henka_asset_manager* manager,
+    henka_asset_type type,
+    const char* query,
     size_t page_index,
     size_t page_size,
     sandbox3d_asset_browser_item* out_items,

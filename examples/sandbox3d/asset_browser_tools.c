@@ -332,6 +332,49 @@ static char sandbox3d_asset_browser_ascii_lower(char value)
     return value >= 'A' && value <= 'Z' ? (char)(value + ('a' - 'A')) : value;
 }
 
+static bool sandbox3d_asset_browser_text_contains_query(
+    const char* text,
+    const char* query)
+{
+    size_t text_length;
+    size_t query_length;
+    size_t start;
+
+    if (query == NULL || query[0] == '\0')
+    {
+        return true;
+    }
+    if (text == NULL)
+    {
+        return false;
+    }
+
+    text_length = strlen(text);
+    query_length = strlen(query);
+    if (query_length > text_length)
+    {
+        return false;
+    }
+
+    for (start = 0U; start <= text_length - query_length; ++start)
+    {
+        size_t offset;
+        for (offset = 0U; offset < query_length; ++offset)
+        {
+            if (sandbox3d_asset_browser_ascii_lower(text[start + offset]) !=
+                sandbox3d_asset_browser_ascii_lower(query[offset]))
+            {
+                break;
+            }
+        }
+        if (offset == query_length)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool sandbox3d_asset_browser_has_extension(
     const char* path,
     const char* extension)
@@ -502,9 +545,41 @@ static bool sandbox3d_asset_browser_is_first_identity(
     return true;
 }
 
+static bool sandbox3d_asset_browser_metadata_matches(
+    const henka_asset_manager* manager,
+    size_t metadata_index,
+    const henka_asset_metadata* metadata,
+    henka_asset_type type,
+    const char* query)
+{
+    if (manager == NULL || metadata == NULL ||
+        !sandbox3d_asset_browser_type_matches(type, metadata->type) ||
+        !sandbox3d_asset_browser_is_first_identity(
+            manager, metadata_index, metadata))
+    {
+        return false;
+    }
+
+    return sandbox3d_asset_browser_text_contains_query(
+            metadata->display_name, query) ||
+        sandbox3d_asset_browser_text_contains_query(
+            metadata->source_path, query);
+}
+
 size_t sandbox3d_asset_browser_collect(
     const henka_asset_manager* manager,
     henka_asset_type type,
+    sandbox3d_asset_browser_item* out_items,
+    size_t capacity)
+{
+    return sandbox3d_asset_browser_collect_filtered(
+        manager, type, NULL, out_items, capacity);
+}
+
+size_t sandbox3d_asset_browser_collect_filtered(
+    const henka_asset_manager* manager,
+    henka_asset_type type,
+    const char* query,
     sandbox3d_asset_browser_item* out_items,
     size_t capacity)
 {
@@ -524,11 +599,8 @@ size_t sandbox3d_asset_browser_collect(
         henka_asset_metadata metadata;
 
         if (henka_assets_get_metadata_at_index(manager, index, &metadata) != HENKA_SUCCESS ||
-            !sandbox3d_asset_browser_type_matches(type, metadata.type))
-        {
-            continue;
-        }
-        if (!sandbox3d_asset_browser_is_first_identity(manager, index, &metadata))
+            !sandbox3d_asset_browser_metadata_matches(
+                manager, index, &metadata, type, query))
         {
             continue;
         }
@@ -549,7 +621,18 @@ size_t sandbox3d_asset_browser_page_count(
     henka_asset_type type,
     size_t page_size)
 {
-    const size_t total = sandbox3d_asset_browser_collect(manager, type, NULL, 0U);
+    return sandbox3d_asset_browser_page_count_filtered(
+        manager, type, NULL, page_size);
+}
+
+size_t sandbox3d_asset_browser_page_count_filtered(
+    const henka_asset_manager* manager,
+    henka_asset_type type,
+    const char* query,
+    size_t page_size)
+{
+    const size_t total = sandbox3d_asset_browser_collect_filtered(
+        manager, type, query, NULL, 0U);
     if (page_size == 0U)
     {
         return 0U;
@@ -560,6 +643,19 @@ size_t sandbox3d_asset_browser_page_count(
 size_t sandbox3d_asset_browser_collect_page(
     const henka_asset_manager* manager,
     henka_asset_type type,
+    size_t page_index,
+    size_t page_size,
+    sandbox3d_asset_browser_item* out_items,
+    size_t capacity)
+{
+    return sandbox3d_asset_browser_collect_page_filtered(
+        manager, type, NULL, page_index, page_size, out_items, capacity);
+}
+
+size_t sandbox3d_asset_browser_collect_page_filtered(
+    const henka_asset_manager* manager,
+    henka_asset_type type,
+    const char* query,
     size_t page_index,
     size_t page_size,
     sandbox3d_asset_browser_item* out_items,
@@ -578,7 +674,8 @@ size_t sandbox3d_asset_browser_collect_page(
         return 0U;
     }
 
-    total = sandbox3d_asset_browser_collect(manager, type, NULL, 0U);
+    total = sandbox3d_asset_browser_collect_filtered(
+        manager, type, query, NULL, 0U);
     start = page_index * page_size;
     if (start >= total)
     {
@@ -596,11 +693,8 @@ size_t sandbox3d_asset_browser_collect_page(
     {
         henka_asset_metadata metadata;
         if (henka_assets_get_metadata_at_index(manager, index, &metadata) != HENKA_SUCCESS ||
-            !sandbox3d_asset_browser_type_matches(type, metadata.type))
-        {
-            continue;
-        }
-        if (!sandbox3d_asset_browser_is_first_identity(manager, index, &metadata))
+            !sandbox3d_asset_browser_metadata_matches(
+                manager, index, &metadata, type, query))
         {
             continue;
         }

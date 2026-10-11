@@ -276,9 +276,9 @@ The Scene Objects panel can:
 
 ### Asset Browser
 
-The Utility Assets browser lists assets already known to the active asset manager. Type tabs expose Textures, Materials, Meshes, and Prefabs. Results are selectable and paged, with the known item count and current page shown in the panel. This is a manager-backed asset index, not a filesystem or project-folder browser.
+The Utility Assets browser lists assets already known to the active asset manager. Type tabs expose Textures, Materials, Meshes, and Prefabs. Results are selectable and paged, with the known item count and current page shown in the panel. A text filter searches the active type's display names and source paths with ASCII case-insensitive matching; **Clear** restores the full list. The filter is session state and is not persisted. This is a manager-backed asset index, not a filesystem or project-folder browser.
 
-The supported material texture-picker workflow also uses the browser to choose manager-known textures for a material texture slot. The full project content browser remains future work: folder navigation, search/filter, filesystem import, rename/move/duplicate/delete, drag/drop, and dependency inspection are not provided by this partial browser.
+The supported material texture-picker workflow also uses the browser to choose manager-known textures for a material texture slot. The full project content browser remains future work: folder navigation, filesystem import, rename/move/duplicate/delete, drag/drop, and dependency inspection are not provided by this partial browser.
 
 ### Object Details
 
