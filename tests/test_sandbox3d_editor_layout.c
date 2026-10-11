@@ -483,6 +483,8 @@ void henka_test_sandbox3d_editor_layout(void)
 
     {
         char hidden_label[32] = "unchanged";
+        char empty_name_label[32] = "unchanged";
+        char multiline_name_label[40] = "unchanged";
         char narrow_alpha[24] = "unchanged";
         char narrow_beta[24] = "unchanged";
         char too_narrow[16] = "preserve";
@@ -500,6 +502,41 @@ void henka_test_sandbox3d_editor_layout(void)
         HENKA_TEST_ASSERT(strcmp(hidden_label, "Ground [Hidden]") == 0);
         HENKA_TEST_ASSERT(!name_truncated);
         HENKA_TEST_ASSERT(strchr(hidden_label, '\n') == NULL);
+
+        name_truncated = true;
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_format_hidden_row_label(
+                "",
+                24U,
+                empty_name_label,
+                sizeof(empty_name_label),
+                &name_truncated) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            strcmp(empty_name_label, "(unnamed) [Hidden]") == 0);
+        HENKA_TEST_ASSERT(!name_truncated);
+
+        name_truncated = false;
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_format_hidden_row_label(
+                "",
+                10U,
+                empty_name_label,
+                sizeof(empty_name_label),
+                &name_truncated) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(strcmp(empty_name_label, "? [Hidden]") == 0);
+        HENKA_TEST_ASSERT(name_truncated);
+
+        name_truncated = true;
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_format_hidden_row_label(
+                "Gear\r\nAssembly",
+                32U,
+                multiline_name_label,
+                sizeof(multiline_name_label),
+                &name_truncated) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            strcmp(multiline_name_label, "Gear Assembly [Hidden]") == 0);
+        HENKA_TEST_ASSERT(!name_truncated);
 
         HENKA_TEST_ASSERT(
             sandbox3d_editor_layout_format_hidden_row_label(
@@ -523,6 +560,33 @@ void henka_test_sandbox3d_editor_layout(void)
         HENKA_TEST_ASSERT(strcmp(narrow_beta, "Lo...ta [Hidden]") == 0);
         HENKA_TEST_ASSERT(beta_truncated);
         HENKA_TEST_ASSERT(strcmp(narrow_alpha, narrow_beta) != 0);
+
+        {
+            static const size_t narrow_columns[] = {10U, 11U, 12U};
+            static const char* expected_labels[] = {
+                "L [Hidden]",
+                "L. [Hidden]",
+                "Lo. [Hidden]"};
+            char narrow_label[16] = "unchanged";
+            size_t index;
+
+            for (index = 0U;
+                 index < sizeof(narrow_columns) / sizeof(narrow_columns[0]);
+                 ++index)
+            {
+                name_truncated = false;
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_format_hidden_row_label(
+                        "LongHiddenMeshAlpha",
+                        narrow_columns[index],
+                        narrow_label,
+                        sizeof(narrow_label),
+                        &name_truncated) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(
+                    strcmp(narrow_label, expected_labels[index]) == 0);
+                HENKA_TEST_ASSERT(name_truncated);
+            }
+        }
 
         name_truncated = true;
         HENKA_TEST_ASSERT(
