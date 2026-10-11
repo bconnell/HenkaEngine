@@ -365,10 +365,25 @@ void henka_test_sandbox3d_editor_layout(void)
                     4U,
                     &narrow_tab_count) == HENKA_ERROR_NUMERIC_RANGE);
             HENKA_TEST_ASSERT(narrow_tab_count == 0U);
-            HENKA_TEST_ASSERT_FLOAT_CLOSE(narrow_tabs[0].x, narrow_tabs_before[0].x, 0.0001f);
-            HENKA_TEST_ASSERT_FLOAT_CLOSE(narrow_tabs[1].width, narrow_tabs_before[1].width, 0.0001f);
-            HENKA_TEST_ASSERT_FLOAT_CLOSE(narrow_tabs[2].y, narrow_tabs_before[2].y, 0.0001f);
-            HENKA_TEST_ASSERT_FLOAT_CLOSE(narrow_tabs[3].height, narrow_tabs_before[3].height, 0.0001f);
+            for (item_index = 0U; item_index < 4U; ++item_index)
+            {
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    narrow_tabs[item_index].x,
+                    narrow_tabs_before[item_index].x,
+                    0.0001f);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    narrow_tabs[item_index].y,
+                    narrow_tabs_before[item_index].y,
+                    0.0001f);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    narrow_tabs[item_index].width,
+                    narrow_tabs_before[item_index].width,
+                    0.0001f);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    narrow_tabs[item_index].height,
+                    narrow_tabs_before[item_index].height,
+                    0.0001f);
+            }
         }
 
         HENKA_TEST_ASSERT(henka_ui_end_frame(ui_context) == HENKA_SUCCESS);
