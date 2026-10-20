@@ -74,6 +74,8 @@ endif()
 
 include(FetchContent)
 
+# SHA-pinned FetchContent dependencies must not use GIT_SHALLOW TRUE: upstream
+# branch tips can advance beyond the pinned commit, breaking fresh CI checkouts.
 # Audio decoding is a runtime dependency even for headless builds. Keep the
 # decoder source pinned and static so supported compressed formats do not add
 # a platform DLL or a machine-wide installation requirement.
@@ -81,7 +83,6 @@ FetchContent_Declare(
     miniaudio
     GIT_REPOSITORY https://github.com/mackron/miniaudio.git
     GIT_TAG 9634bedb5b5a2ca38c1ee7108a9358a4e233f14d
-    GIT_SHALLOW TRUE
     GIT_SUBMODULES ""
     GIT_SUBMODULES_RECURSE FALSE
 )
@@ -104,7 +105,6 @@ FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
     GIT_TAG 2c980bb59875b0d32144a71867fbdebb2f77cd20
-    GIT_SHALLOW TRUE
     GIT_SUBMODULES ""
     GIT_SUBMODULES_RECURSE FALSE
 )
@@ -228,7 +228,6 @@ if(HENKA_ENABLE_LUA)
         Lua
         GIT_REPOSITORY https://github.com/lua/lua.git
         GIT_TAG 6e22fedb74cf0c9b6656e9fce8b7331db847c605
-        GIT_SHALLOW TRUE
         GIT_SUBMODULES ""
         GIT_SUBMODULES_RECURSE FALSE
     )
