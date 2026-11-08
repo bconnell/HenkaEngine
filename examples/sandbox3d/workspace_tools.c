@@ -2027,6 +2027,13 @@ void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model)
     {
         return;
     }
+    /* Releasing an unfinished tab drag must not commit an unrelated
+     * topology transaction or create a spurious layout-history entry.
+     * A successful commit_tab_drag already ended its transaction. */
+    if (model->tab_drag_active && model->topology_transaction_active)
+    {
+        sandbox3d_workspace_rollback_topology_transaction(model);
+    }
     model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->drag_start_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->drag_start_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
