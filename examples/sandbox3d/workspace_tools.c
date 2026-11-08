@@ -2084,6 +2084,17 @@ void sandbox3d_workspace_cancel_panel_drag(sandbox3d_workspace_model* model)
     {
         return;
     }
+    /* Extracted-tab drags still own the original topology transaction.
+     * Cancelling must restore that complete snapshot, not just redock the
+     * panel and accidentally commit a split tab group. */
+    if (model->topology_transaction_active)
+    {
+        sandbox3d_workspace_rollback_topology_transaction(model);
+        model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
+        model->drag_origin_valid = false;
+        return;
+    }
+
     panel = sandbox3d_workspace_get_panel(model, model->active_drag_panel);
     if (panel != NULL &&
         (model->drag_start_dock == SANDBOX3D_WORKSPACE_DOCK_LEFT ||
