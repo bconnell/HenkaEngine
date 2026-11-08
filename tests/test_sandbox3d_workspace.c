@@ -99,6 +99,7 @@ static void henka_test_workspace_interaction_state(void)
     const uint32_t tab_transaction_flags =
         SANDBOX3D_WORKSPACE_INTERACTION_TAB_DRAG |
         SANDBOX3D_WORKSPACE_INTERACTION_TOPOLOGY_TRANSACTION;
+    size_t history_before_interrupted_tab;
 
     sandbox3d_workspace_model_reset(&model);
     HENKA_TEST_ASSERT(!sandbox3d_workspace_get_interaction_status(NULL, &status));
@@ -146,6 +147,23 @@ static void henka_test_workspace_interaction_state(void)
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_interaction_status(&model, &status));
     HENKA_TEST_ASSERT(status.active_flags == 0U);
     HENKA_TEST_ASSERT(status.can_undo_layout);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+
+    /* An interrupted drag must roll back instead of committing a history
+     * entry when end_interaction is called without commit_tab_drag. */
+    history_before_interrupted_tab = model.undo_history_count;
+    HENKA_TEST_ASSERT(sandbox3d_workspace_begin_tab_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    sandbox3d_workspace_update_tab_drag(&model, 0U);
+    sandbox3d_workspace_end_interaction(&model);
+    HENKA_TEST_ASSERT(model.undo_history_count == history_before_interrupted_tab);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_tab_at(
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, 1U) ==
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_interaction_status(&model, &status));
+    HENKA_TEST_ASSERT(status.active_flags == 0U);
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
 
     HENKA_TEST_ASSERT(sandbox3d_workspace_undo(&model));
