@@ -166,6 +166,35 @@ static void henka_test_workspace_interaction_state(void)
     HENKA_TEST_ASSERT(status.active_flags == 0U);
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
 
+    /* Cancelling an extracted tab's panel drag restores the original tab
+     * group and does not consume a layout history slot. */
+    history_before_interrupted_tab = model.undo_history_count;
+    HENKA_TEST_ASSERT(sandbox3d_workspace_begin_tab_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_extract_tab_for_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS,
+        (henka_ui_rect){16.0f, 16.0f, 320.0f, 560.0f},
+        (henka_vec2){420.0f, 120.0f},
+        1280,
+        720));
+    HENKA_TEST_ASSERT(model.topology_transaction_active);
+    HENKA_TEST_ASSERT(model.active_drag_panel ==
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    sandbox3d_workspace_cancel_panel_drag(&model);
+    sandbox3d_workspace_end_interaction(&model);
+    HENKA_TEST_ASSERT(model.undo_history_count == history_before_interrupted_tab);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_for_tab(
+        &model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS) ==
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_tab_at(
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, 1U) ==
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+
     HENKA_TEST_ASSERT(sandbox3d_workspace_undo(&model));
     HENKA_TEST_ASSERT(sandbox3d_workspace_can_redo(&model));
     sandbox3d_workspace_begin_topology_transaction(&model);
