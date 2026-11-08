@@ -230,6 +230,20 @@ The Tools panel exposes bounded workspace presets:
 
 Preset changes participate in the bounded eight-entry workspace layout undo/redo history.
 
+Layout undo and redo are unavailable while a topology transaction, tab drag,
+panel drag, or resize owns an interaction. A rejected undo/redo does not mutate
+the current layout or consume its history. Tab dragging cannot begin when
+another topology transaction or conflicting drag/resize already owns the
+workspace. The existing commit, cancel, and rollback paths remain the owners
+of their respective transactions.
+
+`sandbox3d_workspace_get_interaction_status` provides a read-only, allocation-free
+snapshot of active interaction flags and the corresponding layout-history,
+tab-cancel, and topology-rollback availability. Flags are intentionally
+composable: a tab drag also owns a topology transaction, and tab extraction
+can become panel dragging within that transaction. This is editor-side
+diagnostic state, not a second authority or a new saved setting.
+
 With the workspace visible:
 
 - `Ctrl+Z` = undo layout;
