@@ -279,6 +279,35 @@ typedef struct sandbox3d_workspace_model
     char last_action[128];
 } sandbox3d_workspace_model;
 
+/* Read-only projection of independent workspace interaction owners.
+ * Flags may coexist: tab dragging owns a topology transaction, and an
+ * extracted tab may transition to panel dragging before commit/cancel. */
+typedef enum sandbox3d_workspace_interaction_flag
+{
+    SANDBOX3D_WORKSPACE_INTERACTION_PANEL_DRAG = 1U << 0,
+    SANDBOX3D_WORKSPACE_INTERACTION_TAB_DRAG = 1U << 1,
+    SANDBOX3D_WORKSPACE_INTERACTION_RESIZE = 1U << 2,
+    SANDBOX3D_WORKSPACE_INTERACTION_DIVIDER_DRAG = 1U << 3,
+    SANDBOX3D_WORKSPACE_INTERACTION_TOPOLOGY_TRANSACTION = 1U << 4,
+    SANDBOX3D_WORKSPACE_INTERACTION_CONTEXT_MENU = 1U << 5,
+    SANDBOX3D_WORKSPACE_INTERACTION_SECTION_CHOOSER = 1U << 6
+} sandbox3d_workspace_interaction_flag;
+
+typedef struct sandbox3d_workspace_interaction_status
+{
+    uint32_t active_flags;
+    bool can_cancel_tab_drag;
+    bool can_rollback_topology;
+    bool can_undo_layout;
+    bool can_redo_layout;
+} sandbox3d_workspace_interaction_status;
+
+/* Does not mutate the model, allocate memory, or infer completion.
+ * Returns false for a null model or output pointer. */
+bool sandbox3d_workspace_get_interaction_status(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_interaction_status* out_status);
+
 void sandbox3d_workspace_context_state_reset(
     sandbox3d_workspace_context_state* state);
 bool sandbox3d_workspace_context_is_valid(
