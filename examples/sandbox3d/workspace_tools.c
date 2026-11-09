@@ -2027,6 +2027,13 @@ void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model)
     {
         return;
     }
+    /* Releasing an unfinished tab drag must not commit an unrelated
+     * topology transaction or create a spurious layout-history entry.
+     * A successful commit_tab_drag already ended its transaction. */
+    if (model->tab_drag_active && model->topology_transaction_active)
+    {
+        sandbox3d_workspace_rollback_topology_transaction(model);
+    }
     model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->drag_start_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->drag_start_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
@@ -2077,6 +2084,17 @@ void sandbox3d_workspace_cancel_panel_drag(sandbox3d_workspace_model* model)
     {
         return;
     }
+    /* Extracted-tab drags still own the original topology transaction.
+     * Cancelling must restore that complete snapshot, not just redock the
+     * panel and accidentally commit a split tab group. */
+    if (model->topology_transaction_active)
+    {
+        sandbox3d_workspace_rollback_topology_transaction(model);
+        model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
+        model->drag_origin_valid = false;
+        return;
+    }
+
     panel = sandbox3d_workspace_get_panel(model, model->active_drag_panel);
     if (panel != NULL &&
         (model->drag_start_dock == SANDBOX3D_WORKSPACE_DOCK_LEFT ||
@@ -2479,20 +2497,78 @@ static void sandbox3d_workspace_restore_history_state(
     model->divider_close_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
 }
 
+static bool sandbox3d_workspace_history_is_available(
+    const sandbox3d_workspace_model* model)
+{
+    return model != NULL && !model->topology_transaction_active &&
+        !model->tab_drag_active &&
+        model->active_drag_panel == SANDBOX3D_WORKSPACE_PANEL_NONE &&
+        model->resize_target == SANDBOX3D_WORKSPACE_RESIZE_NONE;
+}
+
 bool sandbox3d_workspace_can_undo(const sandbox3d_workspace_model* model)
 {
-    return model != NULL && model->undo_history_count > 0U;
+    return sandbox3d_workspace_history_is_available(model) &&
+        model->undo_history_count > 0U;
 }
 
 bool sandbox3d_workspace_can_redo(const sandbox3d_workspace_model* model)
 {
-    return model != NULL && model->redo_history_count > 0U;
+    return sandbox3d_workspace_history_is_available(model) &&
+        model->redo_history_count > 0U;
+}
+
+bool sandbox3d_workspace_get_interaction_status(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_interaction_status* out_status)
+{
+    uint32_t flags = 0U;
+
+    if (model == NULL || out_status == NULL)
+    {
+        return false;
+    }
+    if (model->active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
+    {
+        flags |= SANDBOX3D_WORKSPACE_INTERACTION_PANEL_DRAG;
+    }
+    if (model->tab_drag_active)
+    {
+        flags |= SANDBOX3D_WORKSPACE_INTERACTION_TAB_DRAG;
+    }
+    if (model->resize_target != SANDBOX3D_WORKSPACE_RESIZE_NONE)
+    {
+        flags |= SANDBOX3D_WORKSPACE_INTERACTION_RESIZE;
+    }
+    if (model->active_divider_node != UINT16_MAX)
+    {
+        flags |= SANDBOX3D_WORKSPACE_INTERACTION_DIVIDER_DRAG;
+    }
+    if (model->topology_transaction_active)
+    {
+        flags |= SANDBOX3D_WORKSPACE_INTERACTION_TOPOLOGY_TRANSACTION;
+    }
+    if (model->context_menu_open)
+    {
+        flags |= SANDBOX3D_WORKSPACE_INTERACTION_CONTEXT_MENU;
+    }
+    if (model->section_chooser_open)
+    {
+        flags |= SANDBOX3D_WORKSPACE_INTERACTION_SECTION_CHOOSER;
+    }
+
+    out_status->active_flags = flags;
+    out_status->can_cancel_tab_drag = model->tab_drag_active;
+    out_status->can_rollback_topology = model->topology_transaction_active;
+    out_status->can_undo_layout = sandbox3d_workspace_can_undo(model);
+    out_status->can_redo_layout = sandbox3d_workspace_can_redo(model);
+    return true;
 }
 
 bool sandbox3d_workspace_undo(sandbox3d_workspace_model* model)
 {
     sandbox3d_workspace_layout_history_state post_state;
-    if (model == NULL || model->undo_history_count == 0U ||
+    if (!sandbox3d_workspace_can_undo(model) ||
         !sandbox3d_workspace_topology_is_valid(model))
     {
         return false;
@@ -2515,7 +2591,7 @@ bool sandbox3d_workspace_redo(sandbox3d_workspace_model* model)
 {
     sandbox3d_workspace_layout_history_state current;
     sandbox3d_workspace_layout_history_state post_state;
-    if (model == NULL || model->redo_history_count == 0U ||
+    if (!sandbox3d_workspace_can_redo(model) ||
         !sandbox3d_workspace_topology_is_valid(model))
     {
         return false;
@@ -3445,8 +3521,11 @@ bool sandbox3d_workspace_begin_tab_drag(
     const sandbox3d_workspace_topology_node* node;
     size_t tab_index;
 
-    if (model == NULL || model->tab_drag_active || node_index < 0 ||
-        !sandbox3d_workspace_topology_is_valid(model))
+    if (model == NULL || model->tab_drag_active ||
+        model->topology_transaction_active ||
+        model->active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
+        model->resize_target != SANDBOX3D_WORKSPACE_RESIZE_NONE ||
+        node_index < 0 || !sandbox3d_workspace_topology_is_valid(model))
     {
         return false;
     }

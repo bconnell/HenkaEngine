@@ -92,6 +92,137 @@ static void henka_test_sandbox3d_workspace_persistence(void)
     henka_settings_destroy(settings);
 }
 
+static void henka_test_workspace_interaction_state(void)
+{
+    sandbox3d_workspace_model model;
+    sandbox3d_workspace_interaction_status status = {0};
+    const uint32_t tab_transaction_flags =
+        SANDBOX3D_WORKSPACE_INTERACTION_TAB_DRAG |
+        SANDBOX3D_WORKSPACE_INTERACTION_TOPOLOGY_TRANSACTION;
+    size_t history_before_interrupted_tab;
+
+    sandbox3d_workspace_model_reset(&model);
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_get_interaction_status(NULL, &status));
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_get_interaction_status(&model, NULL));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_interaction_status(&model, &status));
+    HENKA_TEST_ASSERT(status.active_flags == 0U);
+    HENKA_TEST_ASSERT(!status.can_cancel_tab_drag);
+    HENKA_TEST_ASSERT(!status.can_rollback_topology);
+    HENKA_TEST_ASSERT(!status.can_undo_layout);
+    HENKA_TEST_ASSERT(!status.can_redo_layout);
+
+    HENKA_TEST_ASSERT(sandbox3d_workspace_merge_sections(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_can_undo(&model));
+
+    /* A tab drag must not take ownership of another topology transaction. */
+    sandbox3d_workspace_begin_topology_transaction(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_interaction_status(&model, &status));
+    HENKA_TEST_ASSERT(status.active_flags ==
+        SANDBOX3D_WORKSPACE_INTERACTION_TOPOLOGY_TRANSACTION);
+    HENKA_TEST_ASSERT(status.can_rollback_topology);
+    HENKA_TEST_ASSERT(!status.can_undo_layout);
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_begin_tab_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_undo(&model));
+    HENKA_TEST_ASSERT(model.topology_transaction_active);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    sandbox3d_workspace_rollback_topology_transaction(&model);
+
+    HENKA_TEST_ASSERT(sandbox3d_workspace_begin_tab_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_interaction_status(&model, &status));
+    HENKA_TEST_ASSERT(status.active_flags == tab_transaction_flags);
+    HENKA_TEST_ASSERT(status.can_cancel_tab_drag);
+    HENKA_TEST_ASSERT(status.can_rollback_topology);
+    HENKA_TEST_ASSERT(!status.can_undo_layout);
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_undo(&model));
+    sandbox3d_workspace_cancel_tab_drag(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_interaction_status(&model, &status));
+    HENKA_TEST_ASSERT(status.active_flags == 0U);
+    HENKA_TEST_ASSERT(status.can_undo_layout);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+
+    /* An interrupted drag must roll back instead of committing a history
+     * entry when end_interaction is called without commit_tab_drag. */
+    history_before_interrupted_tab = model.undo_history_count;
+    HENKA_TEST_ASSERT(sandbox3d_workspace_begin_tab_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    sandbox3d_workspace_update_tab_drag(&model, 0U);
+    sandbox3d_workspace_end_interaction(&model);
+    HENKA_TEST_ASSERT(model.undo_history_count == history_before_interrupted_tab);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_tab_at(
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, 1U) ==
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_interaction_status(&model, &status));
+    HENKA_TEST_ASSERT(status.active_flags == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+
+    /* Cancelling an extracted tab's panel drag restores the original tab
+     * group and does not consume a layout history slot. */
+    history_before_interrupted_tab = model.undo_history_count;
+    HENKA_TEST_ASSERT(sandbox3d_workspace_begin_tab_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_extract_tab_for_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS,
+        (henka_ui_rect){16.0f, 16.0f, 320.0f, 560.0f},
+        (henka_vec2){420.0f, 120.0f},
+        1280,
+        720));
+    HENKA_TEST_ASSERT(model.topology_transaction_active);
+    HENKA_TEST_ASSERT(model.active_drag_panel ==
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    sandbox3d_workspace_cancel_panel_drag(&model);
+    sandbox3d_workspace_end_interaction(&model);
+    HENKA_TEST_ASSERT(model.undo_history_count == history_before_interrupted_tab);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_for_tab(
+        &model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS) ==
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_tab_at(
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, 1U) ==
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+
+    HENKA_TEST_ASSERT(sandbox3d_workspace_undo(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_can_redo(&model));
+    sandbox3d_workspace_begin_topology_transaction(&model);
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_can_redo(&model));
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_redo(&model));
+    HENKA_TEST_ASSERT(model.topology_transaction_active);
+    sandbox3d_workspace_rollback_topology_transaction(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_redo(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+
+    sandbox3d_workspace_begin_dock_resize(
+        &model,
+        SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK,
+        (henka_vec2){320.0f, 200.0f});
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_interaction_status(&model, &status));
+    HENKA_TEST_ASSERT(status.active_flags ==
+        SANDBOX3D_WORKSPACE_INTERACTION_RESIZE);
+    HENKA_TEST_ASSERT(!status.can_undo_layout);
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_begin_tab_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    sandbox3d_workspace_end_interaction(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_interaction_status(&model, &status));
+    HENKA_TEST_ASSERT(status.active_flags == 0U);
+    HENKA_TEST_ASSERT(status.can_undo_layout);
+}
+
 void henka_test_sandbox3d_workspace(void)
 {
     volatile size_t context_count = SANDBOX3D_WORK_CONTEXT_COUNT;
@@ -124,6 +255,7 @@ void henka_test_sandbox3d_workspace(void)
     henka_ui_rect visual_splitter;
 
     henka_test_sandbox3d_workspace_persistence();
+    henka_test_workspace_interaction_state();
     ground_color = sandbox3d_ground_surface_color();
     HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.x, 0.035f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.y, 0.050f, 0.0001f);
