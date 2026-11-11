@@ -598,6 +598,36 @@ static void henka_test_gltf_rejects_invalid_tangent_handedness(void)
     (void)remove(gltf_path);
 }
 
+static void henka_test_obj_file_rejects_embedded_nul(void)
+{
+    static const char valid_obj[] =
+        "v 0 0 0\n"
+        "v 1 0 0\n"
+        "v 0 1 0\n"
+        "f 1 2 3\n";
+    static const char embedded_nul_obj[] =
+        "v 0 0 0\n"
+        "v 1 0 0\n"
+        "v 0 1 0\n"
+        "f 1 2 3\n"
+        "\0"
+        "v 0 0 0\n";
+    const char* path = "build/test_tmp/obj-embedded-nul.obj";
+    henka_model_data model = {0};
+
+    HENKA_TEST_ASSERT(henka_test_write_file(path, valid_obj, sizeof(valid_obj) - 1U));
+    HENKA_TEST_ASSERT(henka_model_data_load_obj(path, &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U);
+    HENKA_TEST_ASSERT(model.index_count == 3U);
+    henka_model_data_destroy(&model);
+
+    HENKA_TEST_ASSERT(henka_test_write_file(path, embedded_nul_obj, sizeof(embedded_nul_obj) - 1U));
+    HENKA_TEST_ASSERT(henka_model_data_load_obj(path, &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+    (void)remove(path);
+}
+
 static void henka_test_gltf_external_buffer_file_load(void)
 {
     enum { position_count = 3U, position_component_count = 3U, position_component_type = 5126 };
@@ -1964,6 +1994,7 @@ void henka_test_model(void)
     henka_test_obj_projected_segment_intersection_scale();
     henka_test_model_rejects_unsafe_bounds();
     henka_test_model_load_failure_preserves_destination();
+    henka_test_obj_file_rejects_embedded_nul();
     henka_test_gltf_rejects_extra_material_vector_components();
     henka_test_gltf_rejects_material_values_outside_engine_range();
     henka_test_gltf_rejects_invalid_accessor_boolean();
