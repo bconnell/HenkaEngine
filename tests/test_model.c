@@ -628,6 +628,39 @@ static void henka_test_obj_file_rejects_embedded_nul(void)
     (void)remove(path);
 }
 
+static void henka_test_obj_utf8_bom_import(void)
+{
+    static const char bom_obj[] =
+        "\xEF\xBB\xBF"
+        "v 0 0 0\r\n"
+        "v 1 0 0\r\n"
+        "v 0 1 0\r\n"
+        "f 1 2 3\r\n";
+    static const char misplaced_bom_obj[] =
+        "v 0 0 0\n"
+        "\xEF\xBB\xBF"
+        "v 1 0 0\n"
+        "v 0 1 0\n"
+        "f 1 2 3\n";
+    const char* path = "build/test_tmp/obj-utf8-bom.obj";
+    henka_model_data model = {0};
+
+    HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(
+        bom_obj, "utf8-bom-memory.obj", &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U && model.index_count == 3U);
+    henka_model_data_destroy(&model);
+
+    HENKA_TEST_ASSERT(henka_test_write_file(path, bom_obj, sizeof(bom_obj) - 1U));
+    HENKA_TEST_ASSERT(henka_model_data_load_obj(path, &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U && model.index_count == 3U);
+    henka_model_data_destroy(&model);
+
+    HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(
+        misplaced_bom_obj, "misplaced-utf8-bom.obj", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL && model.indices == NULL);
+    (void)remove(path);
+}
+
 static void henka_test_gltf_external_buffer_file_load(void)
 {
     enum { position_count = 3U, position_component_count = 3U, position_component_type = 5126 };
@@ -1995,6 +2028,7 @@ void henka_test_model(void)
     henka_test_model_rejects_unsafe_bounds();
     henka_test_model_load_failure_preserves_destination();
     henka_test_obj_file_rejects_embedded_nul();
+    henka_test_obj_utf8_bom_import();
     henka_test_gltf_rejects_extra_material_vector_components();
     henka_test_gltf_rejects_material_values_outside_engine_range();
     henka_test_gltf_rejects_invalid_accessor_boolean();

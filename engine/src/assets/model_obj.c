@@ -1339,6 +1339,14 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
     context.line_number = 0;
     context.error_message = NULL;
     cursor = source;
+    /* UTF-8 BOM is valid only at the beginning of a text OBJ source. */
+    if (source_length >= 3U &&
+        (unsigned char)source[0] == 0xEFU &&
+        (unsigned char)source[1] == 0xBBU &&
+        (unsigned char)source[2] == 0xBFU)
+    {
+        cursor += 3;
+    }
     line_count = 0U;
     saw_face = false;
     saw_vertex_statement = false;
