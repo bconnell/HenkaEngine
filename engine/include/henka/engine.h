@@ -8,11 +8,13 @@
 #include <henka/assets.h>
 #include <henka/math.h>
 #include <henka/result.h>
+#include <henka/ui_font.h>
 
 typedef struct henka_engine henka_engine;
 typedef struct henka_scene henka_scene;
 typedef struct henka_asset_manager henka_asset_manager;
 typedef struct henka_ui_context henka_ui_context;
+typedef struct henka_engine_ui_font_resource_update henka_engine_ui_font_resource_update;
 
 #define HENKA_INVALID_WINDOW_ID 0U
 #define HENKA_MAX_TOOL_WINDOWS 5U
@@ -61,6 +63,15 @@ typedef struct henka_tool_window_state
     bool resized;
     char last_event[48];
     henka_vec2 mouse_wheel_delta;
+    /* Content-space UI dimensions. width/height remain framebuffer pixels. */
+    int logical_width;
+    int logical_height;
+    /* Combined display scale from content coordinates to framebuffer pixels. */
+    uint32_t display_scale_numerator;
+    uint32_t display_scale_denominator;
+    /* Native SDL event-coordinate dimensions, for mapping the raw cursor. */
+    int native_width;
+    int native_height;
 } henka_tool_window_state;
 
 typedef enum henka_package_mode
@@ -278,6 +289,9 @@ typedef struct henka_engine_config
      * enables the bounded per-frame KTX2 residency budget service. Zero
      * preserves the historical unlimited default. */
     uint64_t texture_residency_budget_bytes;
+    /* Appended for positional-initializer compatibility. When true, the main
+     * and engine-owned tool windows are created hidden. */
+    bool window_start_hidden;
 } henka_engine_config;
 
 /*
@@ -306,6 +320,22 @@ henka_result henka_engine_run(henka_engine* engine);
 void henka_engine_request_exit(henka_engine* engine);
 henka_result henka_engine_set_scene(henka_engine* engine, henka_scene* scene);
 henka_result henka_engine_set_ui_context(henka_engine* engine, henka_ui_context* ui_context);
+/* Prepares GPU atlas residency for every live UI context without changing its
+ * current font/profile. Publish is a no-fail swap after durable preference
+ * storage succeeds; discard preserves all current residencies. Complete or
+ * discard the update before changing the engine's UI-context set. */
+henka_result henka_engine_ui_font_resource_update_prepare(
+    henka_engine* engine,
+    const henka_ui_font_context_scale_binding* bindings,
+    size_t binding_count,
+    uint16_t app_scale_percent,
+    henka_engine_ui_font_resource_update** out_update);
+void henka_engine_ui_font_resource_update_publish(
+    henka_engine* engine,
+    henka_engine_ui_font_resource_update* update);
+void henka_engine_ui_font_resource_update_discard(
+    henka_engine* engine,
+    henka_engine_ui_font_resource_update* update);
 henka_result henka_engine_set_vsync(henka_engine* engine, bool enabled);
 bool henka_engine_is_vsync_enabled(const henka_engine* engine);
 henka_result henka_engine_set_wireframe(henka_engine* engine, bool enabled);
@@ -317,6 +347,16 @@ double henka_engine_get_delta_time(const henka_engine* engine);
 double henka_engine_get_total_time(const henka_engine* engine);
 uint64_t henka_engine_get_frame_index(const henka_engine* engine);
 henka_result henka_engine_get_window_size(const henka_engine* engine, int* out_width, int* out_height);
+/* Returns stable content-space dimensions for editor layout. On high-DPI
+ * displays these can differ from both native window coordinates and pixels. */
+henka_result henka_engine_get_window_content_size(
+    const henka_engine* engine,
+    int* out_width,
+    int* out_height);
+henka_result henka_engine_get_window_display_scale(
+    const henka_engine* engine,
+    uint32_t* out_numerator,
+    uint32_t* out_denominator);
 henka_result henka_engine_get_window_position(const henka_engine* engine, int* out_x, int* out_y);
 henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* out_width, int* out_height);
 henka_result henka_engine_set_scene_viewport(henka_engine* engine, henka_viewport viewport);

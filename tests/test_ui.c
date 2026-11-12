@@ -276,7 +276,7 @@ static void henka_test_ui_overlay_circle_primitives(void)
     henka_ui_destroy(ui);
 }
 
-static void henka_test_ui_readability_scale_is_bounded_and_fit_aware(void)
+static void henka_test_ui_bitmap_fallback_scale_is_resolution_independent(void)
 {
     henka_ui_context* ui = NULL;
     henka_ui_frame_desc frame_desc = {0};
@@ -296,11 +296,11 @@ static void henka_test_ui_readability_scale_is_bounded_and_fit_aware(void)
     HENKA_TEST_ASSERT(ui->draw_rect_count > base + 5U);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         ui->draw_rects[base + 5U].bounds.width,
-        1.20f,
+        1.0f,
         0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         ui->draw_rects[base + 5U].bounds.height,
-        1.20f,
+        1.0f,
         0.0001f);
     HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
         ui,
@@ -308,8 +308,8 @@ static void henka_test_ui_readability_scale_is_bounded_and_fit_aware(void)
         1.0f,
         &measured_width,
         &measured_height) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(measured_width == 13);
-    HENKA_TEST_ASSERT(measured_height == 8);
+    HENKA_TEST_ASSERT(measured_width == 11);
+    HENKA_TEST_ASSERT(measured_height == 7);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
     frame_desc.framebuffer_width = 1920;
@@ -320,11 +320,11 @@ static void henka_test_ui_readability_scale_is_bounded_and_fit_aware(void)
     HENKA_TEST_ASSERT(ui->draw_rect_count > base + 5U);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         ui->draw_rects[base + 5U].bounds.width,
-        1.35f,
+        1.0f,
         0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         ui->draw_rects[base + 5U].bounds.height,
-        1.35f,
+        1.0f,
         0.0001f);
     HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
         ui,
@@ -332,8 +332,8 @@ static void henka_test_ui_readability_scale_is_bounded_and_fit_aware(void)
         1.0f,
         &measured_width,
         &measured_height) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(measured_width == 15);
-    HENKA_TEST_ASSERT(measured_height == 9);
+    HENKA_TEST_ASSERT(measured_width == 11);
+    HENKA_TEST_ASSERT(measured_height == 7);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
     henka_ui_destroy(ui);
@@ -448,7 +448,7 @@ void henka_test_ui(void)
     henka_test_ui_theme_is_light_by_default_and_context_local();
     henka_test_ui_control_chrome_contract();
     henka_test_ui_value_row_keeps_multiline_detail_readable();
-    henka_test_ui_readability_scale_is_bounded_and_fit_aware();
+    henka_test_ui_bitmap_fallback_scale_is_resolution_independent();
     henka_test_ui_overlay_circle_primitives();
     henka_test_ui_overlay_triangle_primitive();
     henka_test_ui_text_field_focus_and_bounded_edits();
@@ -1564,6 +1564,90 @@ void henka_test_ui(void)
         HENKA_TEST_ASSERT(segmented_selection == 4U);
         HENKA_TEST_ASSERT(segmented_changed == false);
         HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    }
+
+    /* A segmented choice must be usable from the editor's keyboard
+     * navigation path, not only by mouse. Down enters the first choice;
+     * Right advances selection and focus together. */
+    {
+        static const char* scale_labels[] = {
+            "100%",
+            "125%",
+            "150%",
+            "200%"};
+        bool scale_changed;
+        size_t scale_selection = 0U;
+        unsigned int consumed_navigation;
+
+        henka_ui_set_visible(ui, false);
+        henka_ui_set_visible(ui, true);
+        memset(&frame_desc, 0, sizeof(frame_desc));
+        frame_desc.framebuffer_width = 1280;
+        frame_desc.framebuffer_height = 720;
+        frame_desc.navigation_down_pressed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        scale_changed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_segmented_select(
+                ui,
+                "test.editor.scale.keyboard",
+                (henka_ui_rect){20.0f, 100.0f, 320.0f, 32.0f},
+                scale_labels,
+                4U,
+                &scale_selection,
+                &scale_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!scale_changed);
+        HENKA_TEST_ASSERT(scale_selection == 0U);
+        HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+        consumed_navigation = henka_ui_get_consumed_navigation_mask(ui);
+        HENKA_TEST_ASSERT(
+            (consumed_navigation & HENKA_UI_NAVIGATION_DOWN) != 0U);
+
+        memset(&frame_desc, 0, sizeof(frame_desc));
+        frame_desc.framebuffer_width = 1280;
+        frame_desc.framebuffer_height = 720;
+        frame_desc.navigation_right_pressed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_segmented_select(
+                ui,
+                "test.editor.scale.keyboard",
+                (henka_ui_rect){20.0f, 100.0f, 320.0f, 32.0f},
+                scale_labels,
+                4U,
+                &scale_selection,
+                &scale_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(scale_changed);
+        HENKA_TEST_ASSERT(scale_selection == 1U);
+        HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+        consumed_navigation = henka_ui_get_consumed_navigation_mask(ui);
+        HENKA_TEST_ASSERT(
+            (consumed_navigation & HENKA_UI_NAVIGATION_RIGHT) != 0U);
+
+        memset(&frame_desc, 0, sizeof(frame_desc));
+        frame_desc.framebuffer_width = 1280;
+        frame_desc.framebuffer_height = 720;
+        frame_desc.navigation_enter_pressed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        scale_changed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_segmented_select(
+                ui,
+                "test.editor.scale.keyboard",
+                (henka_ui_rect){20.0f, 100.0f, 320.0f, 32.0f},
+                scale_labels,
+                4U,
+                &scale_selection,
+                &scale_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!scale_changed);
+        HENKA_TEST_ASSERT(scale_selection == 1U);
+        HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+        consumed_navigation = henka_ui_get_consumed_navigation_mask(ui);
+        HENKA_TEST_ASSERT(
+            (consumed_navigation & HENKA_UI_NAVIGATION_ENTER) != 0U);
     }
 
     {

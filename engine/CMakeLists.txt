@@ -82,6 +82,7 @@ if(HENKA_BUILD_CLIENT)
         src/core/gizmo.c
         src/core/workspace.c
         src/platform/platform_sdl.c
+        src/platform/window_scale.c
         src/platform/audio_output_sdl.c
         src/renderer/mesh.c
         src/renderer/mesh_validation.c

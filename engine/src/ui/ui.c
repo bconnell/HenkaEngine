@@ -125,7 +125,7 @@ static bool henka_ui_focused_text_id_equals(const henka_ui_context* context, con
     return strcmp(context->focused_text_id, id) == 0;
 }
 
-static bool henka_ui_register_disclosure_id(
+static bool henka_ui_register_navigation_id(
     henka_ui_context* context,
     const char* id)
 {
@@ -138,31 +138,31 @@ static bool henka_ui_register_disclosure_id(
             HENKA_UI_MAX_ID_BYTES,
             &length) ||
         length == 0U ||
-        context->disclosure_id_count >=
-            HENKA_UI_MAX_DISCLOSURE_ROWS)
+        context->navigation_id_count >=
+            HENKA_UI_MAX_NAVIGATION_ITEMS)
     {
         return false;
     }
 
     for (index = 0U;
-         index < context->disclosure_id_count;
+         index < context->navigation_id_count;
          ++index)
     {
-        if (strcmp(context->disclosure_ids[index], id) == 0)
+        if (strcmp(context->navigation_ids[index], id) == 0)
         {
             return false;
         }
     }
 
     memcpy(
-        context->disclosure_ids[context->disclosure_id_count],
+        context->navigation_ids[context->navigation_id_count],
         id,
         length + 1U);
-    context->disclosure_id_count += 1U;
+    context->navigation_id_count += 1U;
     return true;
 }
 
-static void henka_ui_clear_focused_disclosure_id(
+static void henka_ui_clear_focused_navigation_id(
     henka_ui_context* context)
 {
     if (context == NULL)
@@ -170,11 +170,11 @@ static void henka_ui_clear_focused_disclosure_id(
         return;
     }
 
-    context->focused_disclosure_id_set = false;
-    context->focused_disclosure_id[0] = '\0';
+    context->focused_navigation_id_set = false;
+    context->focused_navigation_id[0] = '\0';
 }
 
-static bool henka_ui_set_focused_disclosure_id(
+static bool henka_ui_set_focused_navigation_id(
     henka_ui_context* context,
     const char* id)
 {
@@ -191,21 +191,21 @@ static bool henka_ui_set_focused_disclosure_id(
     }
 
     memcpy(
-        context->focused_disclosure_id,
+        context->focused_navigation_id,
         id,
         length + 1U);
-    context->focused_disclosure_id_set = true;
+    context->focused_navigation_id_set = true;
     return true;
 }
 
-static bool henka_ui_focused_disclosure_id_equals(
+static bool henka_ui_focused_navigation_id_equals(
     const henka_ui_context* context,
     const char* id)
 {
     size_t length;
 
     if (context == NULL ||
-        !context->focused_disclosure_id_set ||
+        !context->focused_navigation_id_set ||
         !henka_checked_c_string_length(
             id,
             HENKA_UI_MAX_ID_BYTES,
@@ -215,10 +215,10 @@ static bool henka_ui_focused_disclosure_id_equals(
         return false;
     }
 
-    return strcmp(context->focused_disclosure_id, id) == 0;
+    return strcmp(context->focused_navigation_id, id) == 0;
 }
 
-static bool henka_ui_find_focused_disclosure_index(
+static bool henka_ui_find_focused_navigation_index(
     const henka_ui_context* context,
     size_t* out_index)
 {
@@ -231,18 +231,18 @@ static bool henka_ui_find_focused_disclosure_index(
 
     if (context == NULL ||
         out_index == NULL ||
-        !context->focused_disclosure_id_set)
+        !context->focused_navigation_id_set)
     {
         return false;
     }
 
     for (index = 0U;
-         index < context->disclosure_id_count;
+         index < context->navigation_id_count;
          ++index)
     {
         if (strcmp(
-                context->disclosure_ids[index],
-                context->focused_disclosure_id) == 0)
+                context->navigation_ids[index],
+                context->focused_navigation_id) == 0)
         {
             *out_index = index;
             return true;
@@ -252,35 +252,43 @@ static bool henka_ui_find_focused_disclosure_index(
     return false;
 }
 
-static void henka_ui_finalize_disclosure_navigation(
+static void henka_ui_finalize_navigation(
     henka_ui_context* context)
 {
     size_t focused_index;
+    bool has_focus;
 
-    if (context == NULL ||
-        !context->focused_disclosure_id_set)
+    if (context == NULL || context->navigation_id_count == 0U)
     {
         return;
     }
 
-    if (!henka_ui_find_focused_disclosure_index(
-            context,
-            &focused_index))
+    has_focus = henka_ui_find_focused_navigation_index(
+        context,
+        &focused_index);
+    if (!has_focus && context->focused_navigation_id_set)
     {
-        henka_ui_clear_focused_disclosure_id(context);
-        return;
+        henka_ui_clear_focused_navigation_id(context);
     }
 
     if (context->navigation_up_pressed)
     {
         context->consumed_navigation_mask |=
             HENKA_UI_NAVIGATION_UP;
-        if (focused_index > 0U)
+        if (!has_focus)
+        {
+            focused_index = context->navigation_id_count - 1U;
+            has_focus = true;
+            (void)henka_ui_set_focused_navigation_id(
+                context,
+                context->navigation_ids[focused_index]);
+        }
+        else if (focused_index > 0U)
         {
             focused_index -= 1U;
-            (void)henka_ui_set_focused_disclosure_id(
+            (void)henka_ui_set_focused_navigation_id(
                 context,
-                context->disclosure_ids[focused_index]);
+                context->navigation_ids[focused_index]);
         }
     }
 
@@ -288,13 +296,20 @@ static void henka_ui_finalize_disclosure_navigation(
     {
         context->consumed_navigation_mask |=
             HENKA_UI_NAVIGATION_DOWN;
-        if (focused_index + 1U <
-            context->disclosure_id_count)
+        if (!has_focus)
+        {
+            focused_index = 0U;
+            has_focus = true;
+            (void)henka_ui_set_focused_navigation_id(
+                context,
+                context->navigation_ids[focused_index]);
+        }
+        else if (focused_index + 1U < context->navigation_id_count)
         {
             focused_index += 1U;
-            (void)henka_ui_set_focused_disclosure_id(
+            (void)henka_ui_set_focused_navigation_id(
                 context,
-                context->disclosure_ids[focused_index]);
+                context->navigation_ids[focused_index]);
         }
     }
 }
@@ -575,10 +590,13 @@ typedef struct henka_ui_draw_checkpoint
     size_t draw_quad_count;
     size_t draw_line_count;
     size_t draw_triangle_count;
-    size_t disclosure_id_count;
+    size_t navigation_id_count;
     bool wants_mouse;
     bool active_id_set;
     char active_id[HENKA_UI_MAX_ID_BYTES + 1U];
+    bool focused_navigation_id_set;
+    char focused_navigation_id[HENKA_UI_MAX_ID_BYTES + 1U];
+    unsigned int consumed_navigation_mask;
 } henka_ui_draw_checkpoint;
 
 static void henka_ui_capture_checkpoint(
@@ -594,10 +612,18 @@ static void henka_ui_capture_checkpoint(
     checkpoint->draw_quad_count = context->draw_quad_count;
     checkpoint->draw_line_count = context->draw_line_count;
     checkpoint->draw_triangle_count = context->draw_triangle_count;
-    checkpoint->disclosure_id_count = context->disclosure_id_count;
+    checkpoint->navigation_id_count = context->navigation_id_count;
     checkpoint->wants_mouse = context->wants_mouse;
     checkpoint->active_id_set = context->active_id_set;
     memcpy(checkpoint->active_id, context->active_id, sizeof(checkpoint->active_id));
+    checkpoint->focused_navigation_id_set =
+        context->focused_navigation_id_set;
+    memcpy(
+        checkpoint->focused_navigation_id,
+        context->focused_navigation_id,
+        sizeof(checkpoint->focused_navigation_id));
+    checkpoint->consumed_navigation_mask =
+        context->consumed_navigation_mask;
 }
 
 static void henka_ui_restore_checkpoint(
@@ -613,10 +639,18 @@ static void henka_ui_restore_checkpoint(
     context->draw_quad_count = checkpoint->draw_quad_count;
     context->draw_line_count = checkpoint->draw_line_count;
     context->draw_triangle_count = checkpoint->draw_triangle_count;
-    context->disclosure_id_count = checkpoint->disclosure_id_count;
+    context->navigation_id_count = checkpoint->navigation_id_count;
     context->wants_mouse = checkpoint->wants_mouse;
     context->active_id_set = checkpoint->active_id_set;
     memcpy(context->active_id, checkpoint->active_id, sizeof(context->active_id));
+    context->focused_navigation_id_set =
+        checkpoint->focused_navigation_id_set;
+    memcpy(
+        context->focused_navigation_id,
+        checkpoint->focused_navigation_id,
+        sizeof(context->focused_navigation_id));
+    context->consumed_navigation_mask =
+        checkpoint->consumed_navigation_mask;
 }
 
 static bool henka_ui_id_is_valid(const char* id)
@@ -1005,33 +1039,6 @@ static henka_result henka_ui_push_border(
         HENKA_UI_BORDER_ALL);
 }
 
-#define HENKA_UI_READABILITY_TEXT_SCALE 1.20f
-#define HENKA_UI_MAX_READABILITY_DISPLAY_SCALE 1.125f
-
-static float henka_ui_effective_text_scale(
-    const henka_ui_context* context,
-    float requested_scale)
-{
-    float display_scale = 1.0f;
-
-    if (context != NULL &&
-        context->framebuffer_width > 0 &&
-        context->framebuffer_height > 0)
-    {
-        const float width_scale = (float)context->framebuffer_width / 1600.0f;
-        const float height_scale = (float)context->framebuffer_height / 900.0f;
-        display_scale = fminf(width_scale, height_scale);
-        display_scale = fmaxf(1.0f, display_scale);
-        display_scale = fminf(
-            HENKA_UI_MAX_READABILITY_DISPLAY_SCALE,
-            display_scale);
-    }
-
-    return fminf(
-        HENKA_UI_MAX_SCALE,
-        requested_scale * HENKA_UI_READABILITY_TEXT_SCALE * display_scale);
-}
-
 static henka_result henka_ui_draw_text_raw(
     henka_ui_context* context,
     float x,
@@ -1148,7 +1155,7 @@ static henka_result henka_ui_draw_text(
         context,
         x,
         y,
-        henka_ui_effective_text_scale(context, scale),
+        scale,
         text,
         color);
 }
@@ -1344,7 +1351,7 @@ static henka_result henka_ui_draw_fit_text(
     }
 
     /* This character-cell fit is retained only for the explicit bitmap fallback. */
-    effective_scale = henka_ui_effective_text_scale(context, scale);
+    effective_scale = scale;
     max_characters = henka_ui_clamped_character_count(
         (float)available_width,
         6.0f * effective_scale,
@@ -1462,6 +1469,8 @@ henka_result henka_ui_create(henka_ui_context** out_context)
     }
 
     context->theme = HENKA_UI_THEME_LIGHT;
+    context->output_scale = 1.0f;
+    context->font_app_scale_percent = 100U;
     *out_context = context;
     return HENKA_SUCCESS;
 }
@@ -1510,6 +1519,9 @@ henka_result henka_ui_begin_frame(
     henka_ui_context* context,
     const henka_ui_frame_desc* frame_desc)
 {
+    henka_vec2 logical_mouse_position;
+    henka_result transform_result;
+
     if (context == NULL ||
         frame_desc == NULL ||
         context->frame_active ||
@@ -1522,11 +1534,18 @@ henka_result henka_ui_begin_frame(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    transform_result = henka_ui_context_framebuffer_to_logical(
+        context, frame_desc->mouse_position, &logical_mouse_position);
+    if (transform_result != HENKA_SUCCESS)
+    {
+        return transform_result;
+    }
+
     context->frame_active = true;
     context->wants_mouse = false;
     context->framebuffer_width = frame_desc->framebuffer_width;
     context->framebuffer_height = frame_desc->framebuffer_height;
-    context->mouse_position = frame_desc->mouse_position;
+    context->mouse_position = logical_mouse_position;
     context->mouse_left_down = frame_desc->mouse_left_down;
     context->mouse_left_pressed = frame_desc->mouse_left_pressed;
     context->mouse_left_released = frame_desc->mouse_left_released;
@@ -1537,7 +1556,7 @@ henka_result henka_ui_begin_frame(
     context->draw_quad_count = 0U;
     context->draw_line_count = 0U;
     context->draw_triangle_count = 0U;
-    context->disclosure_id_count = 0U;
+    context->navigation_id_count = 0U;
     context->navigation_up_pressed =
         frame_desc->navigation_up_pressed;
     context->navigation_down_pressed =
@@ -1565,7 +1584,7 @@ henka_result henka_ui_end_frame(henka_ui_context* context)
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    henka_ui_finalize_disclosure_navigation(context);
+    henka_ui_finalize_navigation(context);
 
     context->frame_active = false;
     context->mouse_left_pressed = false;
@@ -1582,7 +1601,7 @@ void henka_ui_set_visible(henka_ui_context* context, bool visible)
         {
             henka_ui_clear_active_id(context);
             henka_ui_clear_focused_text_id(context);
-            henka_ui_clear_focused_disclosure_id(context);
+            henka_ui_clear_focused_navigation_id(context);
             context->consumed_navigation_mask = 0U;
             context->wants_mouse = false;
         }
@@ -2389,7 +2408,7 @@ henka_result henka_ui_disclosure_row(
     }
 
     henka_ui_capture_checkpoint(context, &checkpoint);
-    if (!henka_ui_register_disclosure_id(context, id))
+    if (!henka_ui_register_navigation_id(context, id))
     {
         henka_ui_restore_checkpoint(context, &checkpoint);
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -2399,7 +2418,7 @@ henka_result henka_ui_disclosure_row(
     requested_expanded = original_expanded;
     keyboard_consumed_mask = 0U;
     focused =
-        henka_ui_focused_disclosure_id_equals(context, id);
+        henka_ui_focused_navigation_id_equals(context, id);
 
     if (focused && context->navigation_enter_pressed)
     {
@@ -2521,7 +2540,7 @@ henka_result henka_ui_disclosure_row(
     if (pressed)
     {
         if (!henka_ui_set_active_id(context, id) ||
-            !henka_ui_set_focused_disclosure_id(context, id))
+            !henka_ui_set_focused_navigation_id(context, id))
         {
             henka_ui_restore_checkpoint(context, &checkpoint);
             return HENKA_ERROR_INVALID_ARGUMENT;
@@ -2634,7 +2653,7 @@ henka_result henka_ui_measure_text_for_context(
 
     return henka_ui_measure_text_raw(
         text,
-        henka_ui_effective_text_scale(context, scale),
+        scale,
         out_width,
         out_height);
 }
@@ -2866,7 +2885,7 @@ henka_result henka_ui_value_row_colored(
     henka_ui_capture_checkpoint(context, &checkpoint);
 
     multiline = bounds.height > 28.0f;
-    effective_scale = henka_ui_effective_text_scale(context, 1.0f);
+    effective_scale = 1.0f;
     if (multiline)
     {
         value_bounds = (henka_ui_rect){
@@ -3336,7 +3355,7 @@ bool henka_ui_tab(
         result = henka_ui_draw_fit_text(
             context,
             bounds,
-            10.0f,
+            HENKA_UI_TAB_TEXT_HORIZONTAL_PADDING,
             bounds.y + 8.0f,
             1.0f,
             label,
@@ -3372,6 +3391,7 @@ static henka_result henka_ui_segment_internal(
 {
     bool active;
     bool clicked;
+    bool focused;
     bool had_active;
     bool hot;
     bool owns_active;
@@ -3406,7 +3426,14 @@ static henka_result henka_ui_segment_internal(
 
     henka_ui_capture_checkpoint(context, &checkpoint);
 
+    if (!henka_ui_register_navigation_id(context, id))
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
     hot = henka_ui_control_is_hot(context, bounds);
+    focused = henka_ui_focused_navigation_id_equals(context, id);
     pressed = hot && context->mouse_left_pressed;
     had_active = henka_ui_active_id_equals(context, id);
     owns_active = had_active || pressed;
@@ -3445,13 +3472,24 @@ static henka_result henka_ui_segment_internal(
             selected ? g_ui_text_color : g_ui_muted_text_color);
     }
 
+    if (result == HENKA_SUCCESS && focused)
+    {
+        result = henka_ui_push_border(
+            context,
+            bounds,
+            1.0f,
+            g_ui_heading_color);
+    }
+
     if (result != HENKA_SUCCESS)
     {
         henka_ui_restore_checkpoint(context, &checkpoint);
         return result;
     }
 
-    if (pressed && !henka_ui_set_active_id(context, id))
+    if (pressed &&
+        (!henka_ui_set_active_id(context, id) ||
+         !henka_ui_set_focused_navigation_id(context, id)))
     {
         henka_ui_restore_checkpoint(context, &checkpoint);
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -3481,6 +3519,8 @@ henka_result henka_ui_segmented_select(
     size_t index;
     size_t requested_index;
     float segment_width;
+    bool had_focused_navigation_id;
+    char initial_focused_navigation_id[HENKA_UI_MAX_ID_BYTES + 1U];
 
     if (out_changed != NULL)
     {
@@ -3537,6 +3577,26 @@ henka_result henka_ui_segmented_select(
 
     henka_ui_capture_checkpoint(context, &checkpoint);
     requested_index = *selected_index;
+    had_focused_navigation_id =
+        context->focused_navigation_id_set;
+    initial_focused_navigation_id[0] = '\0';
+    if (had_focused_navigation_id)
+    {
+        size_t focused_id_length;
+
+        if (!henka_checked_c_string_length(
+                context->focused_navigation_id,
+                HENKA_UI_MAX_ID_BYTES,
+                &focused_id_length))
+        {
+            henka_ui_restore_checkpoint(context, &checkpoint);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        memcpy(
+            initial_focused_navigation_id,
+            context->focused_navigation_id,
+            focused_id_length + 1U);
+    }
 
     for (index = 0U; index < option_count; ++index)
     {
@@ -3583,6 +3643,66 @@ henka_result henka_ui_segmented_select(
         if (clicked)
         {
             requested_index = index;
+        }
+
+        if (had_focused_navigation_id &&
+            strcmp(initial_focused_navigation_id, segment_id) == 0)
+        {
+            size_t keyboard_target_index = index;
+
+            if (context->navigation_enter_pressed)
+            {
+                requested_index = index;
+                context->consumed_navigation_mask |=
+                    HENKA_UI_NAVIGATION_ENTER;
+            }
+            else if (context->navigation_left_pressed ||
+                     context->navigation_right_pressed)
+            {
+                if (context->navigation_left_pressed)
+                {
+                    context->consumed_navigation_mask |=
+                        HENKA_UI_NAVIGATION_LEFT;
+                    if (index > 0U)
+                    {
+                        keyboard_target_index = index - 1U;
+                    }
+                }
+                if (context->navigation_right_pressed)
+                {
+                    context->consumed_navigation_mask |=
+                        HENKA_UI_NAVIGATION_RIGHT;
+                    if (index + 1U < option_count)
+                    {
+                        keyboard_target_index = index + 1U;
+                    }
+                }
+
+                if (keyboard_target_index != index)
+                {
+                    char target_segment_id[
+                        HENKA_UI_MAX_ID_BYTES + 1U];
+                    const int target_id_result = snprintf(
+                        target_segment_id,
+                        sizeof(target_segment_id),
+                        "%s.%u",
+                        id,
+                        (unsigned int)keyboard_target_index);
+
+                    if (target_id_result < 0 ||
+                        (size_t)target_id_result >=
+                            sizeof(target_segment_id) ||
+                        !henka_ui_set_focused_navigation_id(
+                            context,
+                            target_segment_id))
+                    {
+                        henka_ui_restore_checkpoint(context, &checkpoint);
+                        return HENKA_ERROR_INVALID_ARGUMENT;
+                    }
+
+                    requested_index = keyboard_target_index;
+                }
+            }
         }
 
         if (index > 0U)

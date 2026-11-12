@@ -5,38 +5,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <henka/result.h>
+#include <henka/ui_font.h>
 
-#define HENKA_UI_FONT_MAX_SOURCE_BYTES ((size_t)2097152U)
 #define HENKA_UI_FONT_MAX_GLYPHS ((size_t)512U)
 #define HENKA_UI_FONT_MAX_ATLAS_DIMENSION 2048U
-#define HENKA_UI_FONT_MAX_IDENTITY_BYTES 127U
 #define HENKA_UI_TEXT_MAX_BYTES ((size_t)4096U)
 #define HENKA_UI_FONT_APP_SCALE_COUNT 4U
 #define HENKA_UI_FONT_MAX_CONTEXTS 6U
-
-typedef enum henka_ui_font_stage
-{
-    HENKA_UI_FONT_STAGE_NONE = 0,
-    HENKA_UI_FONT_STAGE_ARGUMENT,
-    HENKA_UI_FONT_STAGE_SOURCE_LIMIT,
-    HENKA_UI_FONT_STAGE_IDENTITY,
-    HENKA_UI_FONT_STAGE_HASH,
-    HENKA_UI_FONT_STAGE_PARSE,
-    HENKA_UI_FONT_STAGE_GLYPH_SET,
-    HENKA_UI_FONT_STAGE_ATLAS_DIMENSIONS,
-    HENKA_UI_FONT_STAGE_ATLAS_PACK,
-    HENKA_UI_FONT_STAGE_ALLOCATION,
-    HENKA_UI_FONT_STAGE_RASTER_PROFILE,
-    HENKA_UI_FONT_STAGE_TEXT
-} henka_ui_font_stage;
-
-typedef struct henka_ui_font_diagnostic
-{
-    henka_ui_font_stage stage;
-    char identity[HENKA_UI_FONT_MAX_IDENTITY_BYTES + 1U];
-    char message[192];
-} henka_ui_font_diagnostic;
 
 typedef struct henka_ui_font_desc
 {
@@ -64,20 +39,6 @@ typedef struct henka_ui_font_glyph_info
     uint32_t atlas_x;
     uint32_t atlas_y;
 } henka_ui_font_glyph_info;
-
-typedef struct henka_ui_font_info
-{
-    char identity[HENKA_UI_FONT_MAX_IDENTITY_BYTES + 1U];
-    char sha256_hex[65U];
-    size_t glyph_count;
-    uint32_t raster_pixel_height;
-    uint32_t atlas_width;
-    uint32_t atlas_height;
-    float ascent;
-    float descent;
-    float line_gap;
-    float line_height;
-} henka_ui_font_info;
 
 typedef struct henka_ui_text_glyph
 {
@@ -111,37 +72,7 @@ typedef struct henka_ui_text_run
     float line_height;
 } henka_ui_text_run;
 
-typedef struct henka_ui_font_resource henka_ui_font_resource;
-typedef struct henka_ui_font_raster_profile henka_ui_font_raster_profile;
-
-typedef struct henka_ui_font_raster_profile_desc
-{
-    uint64_t graphics_context_identity;
-    uint32_t output_scale_numerator;
-    uint32_t output_scale_denominator;
-    uint32_t atlas_width;
-    uint32_t atlas_height;
-} henka_ui_font_raster_profile_desc;
-
-typedef struct henka_ui_font_atlas_key
-{
-    char font_sha256_hex[65U];
-    uint16_t app_scale_percent;
-    uint32_t output_scale_numerator;
-    uint32_t output_scale_denominator;
-    uint32_t raster_pixel_height;
-    uint64_t graphics_context_identity;
-} henka_ui_font_atlas_key;
-
-typedef struct henka_ui_font_raster_profile_info
-{
-    henka_ui_font_atlas_key key;
-    uint32_t atlas_width;
-    uint32_t atlas_height;
-    size_t coverage_bytes;
-} henka_ui_font_raster_profile_info;
-
-/* Bounded SHA-256/identity helpers used by the app bootstrap before publication. */
+/* Hash, parser, glyph, atlas, and draw-command details remain engine-private. */
 bool henka_ui_font_sha256_hex(
     const void* bytes,
     size_t byte_count,
@@ -159,10 +90,6 @@ henka_result henka_ui_font_resource_create(
     const henka_ui_font_desc* desc,
     henka_ui_font_resource** out_resource,
     henka_ui_font_diagnostic* out_diagnostic);
-void henka_ui_font_resource_destroy(henka_ui_font_resource* resource);
-bool henka_ui_font_resource_get_info(
-    const henka_ui_font_resource* resource,
-    henka_ui_font_info* out_info);
 bool henka_ui_font_resource_get_glyph(
     const henka_ui_font_resource* resource,
     uint32_t codepoint,
@@ -177,20 +104,6 @@ const uint8_t* henka_ui_font_resource_get_atlas(
     uint32_t* out_width,
     uint32_t* out_height);
 
-/* Immutable four-scale raster profile for one output-raster/GL-context owner. */
-henka_result henka_ui_font_raster_profile_create(
-    const henka_ui_font_resource* font,
-    const henka_ui_font_raster_profile_desc* desc,
-    henka_ui_font_raster_profile** out_profile,
-    henka_ui_font_diagnostic* out_diagnostic);
-void henka_ui_font_raster_profile_destroy(
-    henka_ui_font_raster_profile* profile);
-size_t henka_ui_font_raster_profile_get_entry_count(
-    const henka_ui_font_raster_profile* profile);
-bool henka_ui_font_raster_profile_get_info(
-    const henka_ui_font_raster_profile* profile,
-    uint16_t app_scale_percent,
-    henka_ui_font_raster_profile_info* out_info);
 const henka_ui_font_resource* henka_ui_font_raster_profile_get_font(
     const henka_ui_font_raster_profile* profile,
     uint16_t app_scale_percent);

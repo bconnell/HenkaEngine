@@ -54,6 +54,22 @@ bool sandbox3d_editor_ui_scale_legacy_candidate(
     float legacy_multiplier,
     int* out_scale_percent);
 
+/*
+ * Resolve the startup scale without mutating settings or preferences.
+ * A missing/zero migration marker is pending; version 1 retires legacy
+ * layout scale as an authority. Unsupported marker versions fail closed.
+ */
+henka_result sandbox3d_editor_ui_preferences_resolve_startup(
+    const henka_settings* settings,
+    sandbox3d_editor_ui_preferences* out_preferences,
+    bool* out_migration_pending);
+
+henka_result sandbox3d_editor_ui_preferences_persist_scale(
+    henka_settings* settings,
+    const char* settings_path,
+    const sandbox3d_editor_ui_preferences* candidate_preferences,
+    bool complete_startup_migration);
+
 void sandbox3d_view_compass_preferences_defaults(
     sandbox3d_view_compass_preferences* preferences);
 

@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <float.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -12,6 +13,18 @@
 #include "../examples/sandbox3d/studio_environment.h"
 #include "../examples/sandbox3d/workspace_persistence.h"
 #include "../examples/sandbox3d/workspace_tools.h"
+
+static bool henka_test_workspace_file_is_absent(const char* path)
+{
+    FILE* file = fopen(path, "rb");
+
+    if (file == NULL)
+    {
+        return true;
+    }
+    fclose(file);
+    return false;
+}
 
 static void henka_test_editor_scale_accepts_only_four_values(void)
 {
@@ -78,6 +91,114 @@ static void henka_test_editor_scale_legacy_multiplier_handles_missing_invalid_ex
     HENKA_TEST_ASSERT(sandbox3d_editor_ui_scale_legacy_candidate(true, 1.75f, &actual));
     HENKA_TEST_ASSERT(actual == 150);
     HENKA_TEST_ASSERT(!sandbox3d_editor_ui_scale_legacy_candidate(true, 1.0f, NULL));
+}
+
+static void henka_test_editor_scale_startup_resolution_respects_migration_authority(void)
+{
+    henka_settings* settings = NULL;
+    sandbox3d_editor_ui_preferences resolved = {125};
+    bool migration_pending = false;
+
+    HENKA_TEST_ASSERT(henka_settings_create(&settings) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_percent", 150) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_float(
+        settings, "ui.workspace.custom_layout.ui_scale", 2.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_resolve_startup(
+        settings, &resolved, &migration_pending) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(resolved.scale_percent == 150);
+    HENKA_TEST_ASSERT(migration_pending);
+
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_percent", 175) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_float(
+        settings, "ui.workspace.custom_layout.ui_scale", 1.5f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_migration_version", 0) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_resolve_startup(
+        settings, &resolved, &migration_pending) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(resolved.scale_percent == 150);
+    HENKA_TEST_ASSERT(migration_pending);
+
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_migration_version", 1) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_percent", 125) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_float(
+        settings, "ui.workspace.custom_layout.ui_scale", 2.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_resolve_startup(
+        settings, &resolved, &migration_pending) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(resolved.scale_percent == 125);
+    HENKA_TEST_ASSERT(!migration_pending);
+
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_percent", 175) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_resolve_startup(
+        settings, &resolved, &migration_pending) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(resolved.scale_percent == 100);
+    HENKA_TEST_ASSERT(!migration_pending);
+
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_migration_version", 7) == HENKA_SUCCESS);
+    resolved.scale_percent = 200;
+    migration_pending = false;
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_resolve_startup(
+        settings, &resolved, &migration_pending) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(resolved.scale_percent == 200);
+    HENKA_TEST_ASSERT(!migration_pending);
+    HENKA_TEST_ASSERT(henka_settings_get_int(
+        settings, "ui.editor.scale_migration_version", -1) == 7);
+    henka_settings_destroy(settings);
+}
+
+static void henka_test_editor_scale_persistence_keeps_legacy_and_commits_migration_atomically(void)
+{
+    const char* settings_path = "build/test_tmp/editor_scale_settings.settings";
+    henka_settings* settings = NULL;
+    henka_settings* reloaded = NULL;
+    const sandbox3d_editor_ui_preferences user_candidate = {150};
+    const sandbox3d_editor_ui_preferences migration_candidate = {125};
+    const sandbox3d_editor_ui_preferences rejected_candidate = {200};
+
+    HENKA_TEST_ASSERT(henka_settings_create(&settings) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_percent", 100) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_migration_version", 0) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_float(
+        settings, "ui.workspace.custom_layout.ui_scale", 1.5f) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_persist_scale(
+        settings, settings_path, &user_candidate, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_get_int(settings, "ui.editor.scale_percent", -1) == 150);
+    HENKA_TEST_ASSERT(henka_settings_get_int(settings, "ui.editor.scale_migration_version", -1) == 0);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(settings, "ui.workspace.custom_layout.ui_scale", 0.0f),
+        1.5f,
+        0.0001f);
+
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_persist_scale(
+        settings, settings_path, &migration_candidate, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_get_int(settings, "ui.editor.scale_percent", -1) == 125);
+    HENKA_TEST_ASSERT(henka_settings_get_int(settings, "ui.editor.scale_migration_version", -1) == 1);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(settings, "ui.workspace.custom_layout.ui_scale", 0.0f),
+        1.5f,
+        0.0001f);
+
+    HENKA_TEST_ASSERT(henka_test_workspace_file_is_absent("build/test_tmp.henka-tmp"));
+    HENKA_TEST_ASSERT(sandbox3d_editor_ui_preferences_persist_scale(
+        settings, "build/test_tmp", &rejected_candidate, true) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_get_int(settings, "ui.editor.scale_percent", -1) == 125);
+    HENKA_TEST_ASSERT(henka_settings_get_int(settings, "ui.editor.scale_migration_version", -1) == 1);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(settings, "ui.workspace.custom_layout.ui_scale", 0.0f),
+        1.5f,
+        0.0001f);
+
+    HENKA_TEST_ASSERT(henka_settings_create(&reloaded) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_load_file(reloaded, settings_path) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_get_int(reloaded, "ui.editor.scale_percent", -1) == 125);
+    HENKA_TEST_ASSERT(henka_settings_get_int(reloaded, "ui.editor.scale_migration_version", -1) == 1);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(reloaded, "ui.workspace.custom_layout.ui_scale", 0.0f),
+        1.5f,
+        0.0001f);
+
+    henka_settings_destroy(reloaded);
+    henka_settings_destroy(settings);
+    (void)remove(settings_path);
 }
 
 static void henka_test_saved_slot_ui_scale_values_never_override_editor_scale(void)
@@ -328,6 +449,8 @@ void henka_test_sandbox3d_workspace(void)
     henka_test_editor_scale_accepts_only_four_values();
     henka_test_editor_scale_legacy_multiplier_maps_to_supported_percent();
     henka_test_editor_scale_legacy_multiplier_handles_missing_invalid_extreme_and_tie_values();
+    henka_test_editor_scale_startup_resolution_respects_migration_authority();
+    henka_test_editor_scale_persistence_keeps_legacy_and_commits_migration_atomically();
     henka_test_saved_slot_ui_scale_values_never_override_editor_scale();
     henka_test_saved_slot_scale_is_inert_and_legacy_value_is_preserved();
     henka_test_layout_restore_does_not_override_editor_scale();

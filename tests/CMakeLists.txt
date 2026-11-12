@@ -27,6 +27,22 @@ if(HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
             -DUI_TEXT_LAYOUT_SOURCE=${CMAKE_SOURCE_DIR}/engine/src/ui/ui_text_layout.c
             -DNEGATIVE_CONTROL_ROOT=${CMAKE_CURRENT_BINARY_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/test_sandbox3d_text_measurement_authority.cmake)
+
+    add_test(
+        NAME henka_sandbox3d_ui_font_scale_resource_transaction_tests
+        COMMAND ${CMAKE_COMMAND}
+            -DENGINE_SOURCE_DIR=${CMAKE_SOURCE_DIR}/engine/src
+            -DENGINE_INCLUDE_DIR=${CMAKE_SOURCE_DIR}/engine/include
+            -DSANDBOX3D_SOURCE_DIR=${CMAKE_SOURCE_DIR}/examples/sandbox3d
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_sandbox3d_ui_font_scale_resource_transaction.cmake)
+
+    add_test(
+        NAME henka_sandbox3d_editor_typography_integration_tests
+        COMMAND ${CMAKE_COMMAND}
+            -DSANDBOX3D_SOURCE_DIR=${CMAKE_SOURCE_DIR}/examples/sandbox3d
+            -DTYPOGRAPHY_CHECKER=${CMAKE_CURRENT_SOURCE_DIR}/check_sandbox3d_editor_typography_integration.cmake
+            -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test_sandbox3d_editor_typography_integration.cmake)
 endif()
 
 add_executable(henka_headless_runtime_tests
@@ -1066,6 +1082,8 @@ add_executable(henka_tests
     ../examples/sandbox3d/workspace_tools.c
     ../examples/sandbox3d/workspace_persistence.c
     ../examples/sandbox3d/editor_layout.c
+    ../examples/sandbox3d/editor_scale_control.c
+    ../examples/sandbox3d/editor_scale_transaction.c
     test_action.c
     test_assets.c
     test_camera.c
@@ -1078,6 +1096,8 @@ add_executable(henka_tests
     test_sandbox3d_physics.c
     test_sandbox3d_workspace.c
     test_sandbox3d_editor_ui.c
+    test_sandbox3d_editor_scale_control.c
+    test_sandbox3d_editor_font_bootstrap.c
     test_sandbox3d_editor_layout.c
     test_sandbox3d_camera_tools.c
     test_camera_hardening.c
@@ -1100,6 +1120,7 @@ add_executable(henka_tests
     test_shader.c
     test_ui.c
     test_ui_font.c
+    test_platform_display_scale.c
     test_viewport_shading.c
     test_workspace.c
     test_view_compass.c
@@ -1123,6 +1144,12 @@ endif()
 henka_enable_project_warnings(henka_tests)
 
 add_test(NAME henka_tests COMMAND henka_tests)
+add_test(NAME henka_ui_font_tests COMMAND henka_tests --group ui_font)
+add_test(NAME henka_sandbox3d_editor_font_bootstrap_tests COMMAND henka_tests --group sandbox3d_editor_font_bootstrap)
+add_test(NAME henka_platform_display_scale_tests COMMAND henka_tests --group platform_display_scale)
+set_tests_properties(henka_ui_font_tests PROPERTIES
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
 endif()
 
 add_executable(henka_authoring_quad_recovery_tests

@@ -2,12 +2,21 @@
 #define HENKA_PERSISTENCE_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include <henka/math.h>
 #include <henka/result.h>
 
 typedef struct henka_settings henka_settings;
 typedef struct henka_save_data henka_save_data;
+
+#define HENKA_SETTINGS_MAX_ATOMIC_INT_UPDATES 16U
+
+typedef struct henka_settings_int_update
+{
+    const char* key;
+    int value;
+} henka_settings_int_update;
 
 /* Generic joining preserves absolute inputs for trusted callers. */
 henka_result henka_path_resolve(const char* base_path, const char* relative_path, char** out_path);
@@ -28,6 +37,15 @@ void henka_settings_destroy(henka_settings* settings);
 /* Loads are transactional. Saves replace the destination only after success. */
 henka_result henka_settings_load_file(henka_settings* settings, const char* path);
 henka_result henka_settings_save_file(const henka_settings* settings, const char* path);
+/*
+ * Applies a bounded batch of integer keys to a candidate settings map, saves
+ * it atomically, then publishes the in-memory map only after the file commit.
+ */
+henka_result henka_settings_update_ints_and_save_file(
+    henka_settings* settings,
+    const char* path,
+    const henka_settings_int_update* updates,
+    size_t update_count);
 
 bool henka_settings_has_key(const henka_settings* settings, const char* key);
 const char* henka_settings_get_string(const henka_settings* settings, const char* key, const char* default_value);

@@ -50,6 +50,8 @@ static const char* g_details_group_order_prefix =
     "ui.object_details.group_order.";
 static const char* g_controls_scroll_offset_key =
     "ui.controls.scroll.offset";
+static const char* g_scene_objects_actions_scroll_offset_key =
+    "ui.scene_objects.actions.scroll.offset";
 static const char* g_details_scroll_offset_key =
     "ui.object_details.scroll.offset";
 
@@ -99,11 +101,15 @@ void sandbox3d_editor_ui_state_reset(
 
     state->controls_scroll_offset = 0.0f;
     state->controls_content_height = 0.0f;
+    state->scene_objects_actions_scroll_offset = 0.0f;
+    state->scene_objects_actions_content_height = 0.0f;
     state->details_scroll_offset = 0.0f;
     state->details_content_height = 0.0f;
     state->controls_scroll_dragging = false;
+    state->scene_objects_actions_scroll_dragging = false;
     state->details_scroll_dragging = false;
     state->controls_scroll_grab_offset = 0.0f;
+    state->scene_objects_actions_scroll_grab_offset = 0.0f;
     state->details_scroll_grab_offset = 0.0f;
 }
 
@@ -162,6 +168,12 @@ void sandbox3d_editor_ui_state_load(
                 henka_settings_get_float(
                     settings,
                     g_controls_scroll_offset_key,
+                    0.0f));
+        state->scene_objects_actions_scroll_offset =
+            sandbox3d_editor_ui_sanitize_scroll_offset(
+                henka_settings_get_float(
+                    settings,
+                    g_scene_objects_actions_scroll_offset_key,
                     0.0f));
         state->details_scroll_offset =
             sandbox3d_editor_ui_sanitize_scroll_offset(
@@ -277,6 +289,17 @@ henka_result sandbox3d_editor_ui_state_store(
             if (details_result != HENKA_SUCCESS)
             {
                 return details_result;
+            }
+        }
+        {
+            const henka_result scene_objects_result = henka_settings_set_float(
+                settings,
+                g_scene_objects_actions_scroll_offset_key,
+                sandbox3d_editor_ui_sanitize_scroll_offset(
+                    state->scene_objects_actions_scroll_offset));
+            if (scene_objects_result != HENKA_SUCCESS)
+            {
+                return scene_objects_result;
             }
         }
 
@@ -460,6 +483,36 @@ static bool sandbox3d_editor_ui_scroll_by(
     return true;
 }
 
+float sandbox3d_editor_ui_controls_scroll_delta(
+    float requested_delta_pixels,
+    float viewport_height)
+{
+    float maximum_step;
+
+    if (!isfinite(requested_delta_pixels) ||
+        !isfinite(viewport_height) ||
+        viewport_height <= 0.0f)
+    {
+        return requested_delta_pixels;
+    }
+
+    if (viewport_height >= 76.0f)
+    {
+        /* Preserve the existing scroll API's full requested displacement for
+         * ordinary layouts and explicit callers. Only compact viewports need
+         * a smaller per-wheel-event step to avoid skipping a reachable row. */
+        return requested_delta_pixels;
+    }
+
+    /* The smallest Controls buttons are 28 px high. Keep at least one
+     * overlapping wheel position between successive events so compact
+     * viewports cannot skip an otherwise reachable row. */
+    maximum_step = fmaxf(1.0f, viewport_height - 28.0f);
+    return copysignf(
+        fminf(fabsf(requested_delta_pixels), maximum_step),
+        requested_delta_pixels);
+}
+
 bool sandbox3d_editor_ui_scroll_controls_by(
     sandbox3d_editor_ui_state* state,
     float viewport_height,
@@ -469,7 +522,9 @@ bool sandbox3d_editor_ui_scroll_controls_by(
         &state->controls_scroll_offset,
         state->controls_content_height,
         viewport_height,
-        delta_pixels);
+        sandbox3d_editor_ui_controls_scroll_delta(
+            delta_pixels,
+            viewport_height));
 }
 
 bool sandbox3d_editor_ui_scroll_details_by(
@@ -482,6 +537,38 @@ bool sandbox3d_editor_ui_scroll_details_by(
         state->details_content_height,
         viewport_height,
         delta_pixels);
+}
+
+float sandbox3d_editor_ui_scene_objects_scroll_delta(
+    float requested_delta_pixels,
+    float viewport_height)
+{
+    float maximum_step;
+
+    if (!isfinite(requested_delta_pixels) ||
+        !isfinite(viewport_height) || viewport_height <= 0.0f ||
+        viewport_height >= 72.0f)
+    {
+        return requested_delta_pixels;
+    }
+    maximum_step = fmaxf(1.0f, viewport_height - 24.0f);
+    return copysignf(
+        fminf(fabsf(requested_delta_pixels), maximum_step),
+        requested_delta_pixels);
+}
+
+bool sandbox3d_editor_ui_scroll_scene_objects_actions_by(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    float delta_pixels)
+{
+    return state != NULL && sandbox3d_editor_ui_scroll_by(
+        &state->scene_objects_actions_scroll_offset,
+        state->scene_objects_actions_content_height,
+        viewport_height,
+        sandbox3d_editor_ui_scene_objects_scroll_delta(
+            delta_pixels,
+            viewport_height));
 }
 
 bool sandbox3d_editor_ui_scroll_controls(

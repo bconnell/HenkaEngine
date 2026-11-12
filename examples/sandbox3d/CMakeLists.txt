@@ -4,6 +4,7 @@ add_executable(henka_sandbox3d
     camera_tools.c
     editor_preferences.c
     editor_font_bootstrap.c
+    editor_typography_runtime.c
     editor_text_layout.c
     view_compass.c
     asset_browser_tools.c
@@ -25,6 +26,8 @@ add_executable(henka_sandbox3d
     workspace_tools.c
     workspace_persistence.c
     editor_layout.c
+    editor_scale_control.c
+    editor_scale_transaction.c
     scene_hierarchy_projection.c
     scene_document_bridge.c
     play_session.c

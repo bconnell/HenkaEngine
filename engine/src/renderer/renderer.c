@@ -243,6 +243,43 @@ void henka_renderer_destroy_tool_window_target(struct henka_renderer* renderer, 
     henka_opengl_renderer_destroy_tool_window_target(renderer, window_id);
 }
 
+henka_result henka_renderer_ui_font_resource_update_prepare(
+    struct henka_renderer* renderer,
+    const henka_renderer_ui_font_resource_binding* bindings,
+    size_t binding_count,
+    uint16_t app_scale_percent,
+    henka_renderer_ui_font_resource_update** out_update)
+{
+    if (renderer == NULL || renderer->frame_active)
+    {
+        if (out_update != NULL)
+        {
+            *out_update = NULL;
+        }
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_opengl_renderer_ui_font_resource_update_prepare(
+        renderer,
+        bindings,
+        binding_count,
+        app_scale_percent,
+        out_update);
+}
+
+void henka_renderer_ui_font_resource_update_publish(
+    struct henka_renderer* renderer,
+    henka_renderer_ui_font_resource_update* update)
+{
+    henka_opengl_renderer_ui_font_resource_update_publish(renderer, update);
+}
+
+void henka_renderer_ui_font_resource_update_discard(
+    struct henka_renderer* renderer,
+    henka_renderer_ui_font_resource_update* update)
+{
+    henka_opengl_renderer_ui_font_resource_update_discard(renderer, update);
+}
+
 henka_result henka_renderer_draw_tool_window_ui(
     struct henka_renderer* renderer,
     henka_window_id window_id,

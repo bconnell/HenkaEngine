@@ -1,0 +1,143 @@
+cmake_minimum_required(VERSION 3.25)
+
+foreach(required_var IN ITEMS SANDBOX3D_SOURCE_DIR TYPOGRAPHY_CHECKER TEST_ROOT)
+    if(NOT DEFINED ${required_var})
+        message(FATAL_ERROR "${required_var} must be supplied by the owning CTest")
+    endif()
+endforeach()
+if(NOT IS_DIRECTORY "${SANDBOX3D_SOURCE_DIR}" OR
+   NOT EXISTS "${TYPOGRAPHY_CHECKER}" OR
+   NOT IS_DIRECTORY "${TEST_ROOT}")
+    message(FATAL_ERROR "Typography integration test inputs must be existing repository-owned paths")
+endif()
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-P" "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE production_result
+    OUTPUT_VARIABLE production_stdout
+    ERROR_VARIABLE production_stderr)
+if(NOT "${production_result}" STREQUAL "0")
+    message(FATAL_ERROR
+        "Production typography integration contract failed.\n"
+        "stdout:\n${production_stdout}\n"
+        "stderr:\n${production_stderr}")
+endif()
+
+string(RANDOM LENGTH 12 ALPHABET 0123456789abcdef probe_id)
+set(probe_dir "${TEST_ROOT}/typography-integration-${probe_id}")
+if(EXISTS "${probe_dir}")
+    message(FATAL_ERROR "Refusing to reuse an existing typography integration probe: ${probe_dir}")
+endif()
+file(MAKE_DIRECTORY "${probe_dir}")
+file(READ "${SANDBOX3D_SOURCE_DIR}/main.c" main_source)
+set(candidate_main "${main_source}")
+string(REPLACE
+    "sandbox3d_editor_typography_runtime_initialize("
+    "sandbox3d_editor_typography_runtime_startup_removed("
+    candidate_main "${candidate_main}")
+file(WRITE "${probe_dir}/main.c" "${candidate_main}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DSANDBOX3D_MAIN_SOURCE=${probe_dir}/main.c"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE negative_result
+    OUTPUT_VARIABLE negative_stdout
+    ERROR_VARIABLE negative_stderr)
+set(negative_output "${negative_stdout}\n${negative_stderr}")
+
+if("${negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted removal of startup font installation")
+endif()
+if(NOT negative_output MATCHES "bundled font and global scale migration must publish before workspace restore")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Typography integration negative control failed for an unexpected reason.\n"
+        "result=${negative_result}\noutput:\n${negative_output}")
+endif()
+
+string(REPLACE
+    "sandbox3d_editor_typography_runtime_draw_scale_control("
+    "sandbox3d_editor_typography_runtime_draw_scale_control_removed("
+    candidate_main "${main_source}")
+file(WRITE "${probe_dir}/main.c" "${candidate_main}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DSANDBOX3D_MAIN_SOURCE=${probe_dir}/main.c"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE scale_negative_result
+    OUTPUT_VARIABLE scale_negative_stdout
+    ERROR_VARIABLE scale_negative_stderr)
+set(scale_negative_output "${scale_negative_stdout}\n${scale_negative_stderr}")
+if("${scale_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted removal of the visible Settings scale control")
+endif()
+if(NOT scale_negative_output MATCHES "Settings scale control must remain reachable in the Settings header row")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Typography scale reachability negative control failed for an unexpected reason.\n"
+        "result=${scale_negative_result}\noutput:\n${scale_negative_output}")
+endif()
+
+string(REGEX REPLACE
+    "sandbox3d_editor_typography_runtime_get_layout_scale[ \t\r\n]*\\([ \t\r\n]*state->typography_runtime[ \t\r\n]*\\)"
+    "1.0f"
+    candidate_main "${main_source}")
+file(WRITE "${probe_dir}/main.c" "${candidate_main}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DSANDBOX3D_MAIN_SOURCE=${probe_dir}/main.c"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE layout_scale_negative_result
+    OUTPUT_VARIABLE layout_scale_negative_stdout
+    ERROR_VARIABLE layout_scale_negative_stderr)
+set(layout_scale_negative_output "${layout_scale_negative_stdout}\n${layout_scale_negative_stderr}")
+if("${layout_scale_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted layout scale being replaced with 100%")
+endif()
+if(NOT layout_scale_negative_output MATCHES "the runtime preference must be resolved by the canonical content-size adapter")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Typography layout-scale negative control failed for an unexpected reason.\n"
+        "result=${layout_scale_negative_result}\noutput:\n${layout_scale_negative_output}")
+endif()
+
+string(REPLACE
+    "sandbox3d_editor_layout_content_viewport_to_framebuffer("
+    "sandbox3d_editor_layout_content_viewport_to_framebuffer_removed("
+    candidate_main "${main_source}")
+file(WRITE "${probe_dir}/main.c" "${candidate_main}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DSANDBOX3D_MAIN_SOURCE=${probe_dir}/main.c"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE display_scale_negative_result
+    OUTPUT_VARIABLE display_scale_negative_stdout
+    ERROR_VARIABLE display_scale_negative_stderr)
+set(display_scale_negative_output "${display_scale_negative_stdout}\n${display_scale_negative_stderr}")
+if("${display_scale_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted removal of the content-to-framebuffer viewport conversion")
+endif()
+if(NOT display_scale_negative_output MATCHES "renderer scene viewport must convert the content-space layout using the canonical display-scale converter")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Typography display-scale negative control failed for an unexpected reason.\n"
+        "result=${display_scale_negative_result}\noutput:\n${display_scale_negative_output}")
+endif()
+
+file(REMOVE_RECURSE "${probe_dir}")
+
+message(STATUS "Sandbox3D typography integration passes and rejects missing startup, Settings scale control, runtime layout-scale use, or display-scale viewport conversion")

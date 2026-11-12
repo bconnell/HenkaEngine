@@ -4,10 +4,15 @@ if (-not ("HenkaUiAutomationNative" -as [type])) {
     Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 public static class HenkaUiAutomationNative
 {
     public const int SW_RESTORE = 9;
+    public const int GWL_STYLE = -16;
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+    public delegate bool EnumWindowsProc(IntPtr handle, IntPtr parameter);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -34,6 +39,125 @@ public static class HenkaUiAutomationNative
 
     [DllImport("kernel32.dll")]
     public static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetWindowRect(IntPtr handle, out RECT rect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetClientRect(IntPtr handle, out RECT rect);
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowText(IntPtr handle, StringBuilder text, int capacity);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsIconic(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PrintWindow(IntPtr handle, IntPtr hdcBlt, uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter,
+        int x, int y, int width, int height, uint flags);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr handle, int index);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+    private static extern int GetWindowLong32(IntPtr handle, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr handle, int index, IntPtr value);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
+    private static extern int SetWindowLong32(IntPtr handle, int index, int value);
+
+    [DllImport("user32.dll")]
+    public static extern int GetSystemMetrics(int index);
+
+    private static IntPtr GetWindowStyle(IntPtr handle)
+    {
+        return IntPtr.Size == 8
+            ? GetWindowLongPtr64(handle, GWL_STYLE)
+            : new IntPtr(GetWindowLong32(handle, GWL_STYLE));
+    }
+
+    private static IntPtr SetWindowStyle(IntPtr handle, IntPtr value)
+    {
+        return IntPtr.Size == 8
+            ? SetWindowLongPtr64(handle, GWL_STYLE, value)
+            : new IntPtr(SetWindowLong32(handle, GWL_STYLE, value.ToInt32()));
+    }
+
+    public static bool SetBorderlessDesktopViewportNoActivate(
+        IntPtr handle, int width, int height)
+    {
+        const long WS_OVERLAPPEDWINDOW = 0x00CF0000L;
+        const long WS_POPUP = 0x80000000L;
+        const uint SWP_NOACTIVATE = 0x0010;
+        const uint SWP_NOZORDER = 0x0004;
+        const uint SWP_FRAMECHANGED = 0x0020;
+        IntPtr previousStyle;
+        long style;
+        long candidateStyle;
+        IntPtr candidateStylePointer;
+        int screenWidth;
+        int screenHeight;
+
+        if (handle == IntPtr.Zero || width <= 0 || height <= 0)
+            return false;
+        screenWidth = GetSystemMetrics(0);
+        screenHeight = GetSystemMetrics(1);
+        if (screenWidth != width || screenHeight != height)
+            return false;
+
+        previousStyle = GetWindowStyle(handle);
+        if (previousStyle == IntPtr.Zero)
+            return false;
+        style = previousStyle.ToInt64();
+        candidateStyle = (style & ~WS_OVERLAPPEDWINDOW) | WS_POPUP;
+        candidateStylePointer = IntPtr.Size == 8
+            ? new IntPtr(candidateStyle)
+            : new IntPtr(unchecked((int)candidateStyle));
+        if (SetWindowStyle(handle, candidateStylePointer) == IntPtr.Zero)
+            return false;
+        if (GetWindowStyle(handle).ToInt64() != candidateStyle)
+            return false;
+        return SetWindowPos(
+            handle, IntPtr.Zero, 0, 0, width, height,
+            SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    }
+
+    public static IntPtr FindWindowForProcess(uint targetProcessId, string titlePart)
+    {
+        IntPtr result = IntPtr.Zero;
+        EnumWindows(delegate(IntPtr handle, IntPtr parameter) {
+            uint owner;
+            GetWindowThreadProcessId(handle, out owner);
+            if (owner == targetProcessId && IsWindowVisible(handle)) {
+                StringBuilder title = new StringBuilder(512);
+                GetWindowText(handle, title, title.Capacity);
+                if (title.ToString().IndexOf(titlePart,
+                    StringComparison.OrdinalIgnoreCase) >= 0) {
+                    result = handle;
+                    return false;
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+        return result;
+    }
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -252,6 +376,139 @@ function Send-HenkaAutomationScroll {
     $wheelText = Format-HenkaAutomationFloat -Value $WheelDelta
     Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("move {0} {1}" -f $xText, $yText)
     Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("wheel 0 {0}" -f $wheelText)
+}
+
+function Find-HenkaAutomationWindow {
+    param(
+        [Parameter(Mandatory = $true)][int]$ProcessId,
+        [Parameter(Mandatory = $true)][string]$TitleContains
+    )
+
+    if ($ProcessId -le 0 -or [string]::IsNullOrWhiteSpace($TitleContains)) {
+        throw "The bounded Henka window lookup arguments were invalid."
+    }
+    return [HenkaUiAutomationNative]::FindWindowForProcess(
+        [uint32]$ProcessId,
+        $TitleContains)
+}
+
+function Get-HenkaAutomationWindowGeometry {
+    param([Parameter(Mandatory = $true)][System.IntPtr]$Handle)
+
+    $window = New-Object HenkaUiAutomationNative+RECT
+    $client = New-Object HenkaUiAutomationNative+RECT
+    if ($Handle -eq [IntPtr]::Zero -or
+        -not [HenkaUiAutomationNative]::GetWindowRect($Handle, [ref]$window) -or
+        -not [HenkaUiAutomationNative]::GetClientRect($Handle, [ref]$client)) {
+        throw "The Henka automation window geometry could not be read."
+    }
+    return [pscustomobject]@{
+        X = $window.Left
+        Y = $window.Top
+        Width = $window.Right - $window.Left
+        Height = $window.Bottom - $window.Top
+        ClientWidth = $client.Right - $client.Left
+        ClientHeight = $client.Bottom - $client.Top
+    }
+}
+
+function Set-HenkaAutomationWindowClientSize {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$Width,
+        [Parameter(Mandatory = $true)][int]$Height,
+        [switch]$BorderlessViewport
+    )
+
+    if ($Width -lt 640 -or $Height -lt 480 -or $Width -gt 4096 -or $Height -gt 2160) {
+        throw "The requested Henka client size is outside the supported evidence bounds."
+    }
+    if ($BorderlessViewport) {
+        if ($Width -ne [HenkaUiAutomationNative]::GetSystemMetrics(0) -or
+            $Height -ne [HenkaUiAutomationNative]::GetSystemMetrics(1)) {
+            throw "A borderless typography viewport must exactly match the current desktop dimensions."
+        }
+        if (-not [HenkaUiAutomationNative]::SetBorderlessDesktopViewportNoActivate(
+                $Handle, $Width, $Height)) {
+            throw "The Henka validation window could not enter a borderless desktop viewport without activation."
+        }
+        $borderlessGeometry = Get-HenkaAutomationWindowGeometry -Handle $Handle
+        if ($borderlessGeometry.ClientWidth -ne $Width -or
+            $borderlessGeometry.ClientHeight -ne $Height) {
+            throw "The borderless Henka viewport reached client size $($borderlessGeometry.ClientWidth)x$($borderlessGeometry.ClientHeight), expected ${Width}x${Height}."
+        }
+        return $borderlessGeometry
+    }
+
+    $before = Get-HenkaAutomationWindowGeometry -Handle $Handle
+    $outerWidth = $Width + ($before.Width - $before.ClientWidth)
+    $outerHeight = $Height + ($before.Height - $before.ClientHeight)
+    $flags = [uint32](0x0010 -bor 0x0004) # SWP_NOACTIVATE | SWP_NOZORDER
+    if (-not [HenkaUiAutomationNative]::SetWindowPos(
+            $Handle, [IntPtr]::Zero, $before.X, $before.Y,
+            $outerWidth, $outerHeight, $flags)) {
+        throw "The Henka window could not be resized without activation."
+    }
+    $deadline = (Get-Date).AddSeconds(5)
+    do {
+        $after = Get-HenkaAutomationWindowGeometry -Handle $Handle
+        if ($after.ClientWidth -eq $Width -and $after.ClientHeight -eq $Height) {
+            return $after
+        }
+        Start-Sleep -Milliseconds 50
+    } while ((Get-Date) -lt $deadline)
+    throw "The Henka client size did not reach the requested ${Width}x${Height}; actual client size is $($after.ClientWidth)x$($after.ClientHeight), desktop is $([HenkaUiAutomationNative]::GetSystemMetrics(0))x$([HenkaUiAutomationNative]::GetSystemMetrics(1))."
+}
+
+function Save-HenkaAutomationWindowScreenshot {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    if ($Handle -eq [IntPtr]::Zero -or
+        -not [HenkaUiAutomationNative]::IsWindowVisible($Handle) -or
+        [HenkaUiAutomationNative]::IsIconic($Handle)) {
+        throw "$Description requires a visible, non-minimized Henka window; no focus change was attempted."
+    }
+    Add-Type -AssemblyName System.Drawing
+    $geometry = Get-HenkaAutomationWindowGeometry -Handle $Handle
+    if ($geometry.Width -le 0 -or $geometry.Height -le 0) {
+        throw "$Description has invalid window dimensions."
+    }
+    $parent = Split-Path -Parent $Path
+    [System.IO.Directory]::CreateDirectory($parent) | Out-Null
+    $bitmap = New-Object System.Drawing.Bitmap($geometry.Width, $geometry.Height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $dc = $graphics.GetHdc()
+        try {
+            if (-not [HenkaUiAutomationNative]::PrintWindow($Handle, $dc, 2)) {
+                throw "$Description could not be captured by background-safe PrintWindow."
+            }
+        }
+        finally {
+            $graphics.ReleaseHdc($dc) | Out-Null
+        }
+        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+    $file = Get-Item -LiteralPath $Path -ErrorAction Stop
+    if ($file.Length -le 0) {
+        throw "$Description produced an empty screenshot: $Path"
+    }
+    return [pscustomobject]@{
+        Path = $file.FullName
+        Length = $file.Length
+        Width = $geometry.Width
+        Height = $geometry.Height
+        ClientWidth = $geometry.ClientWidth
+        ClientHeight = $geometry.ClientHeight
+    }
 }
 
 function Wait-FileContains {

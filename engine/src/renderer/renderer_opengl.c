@@ -97,6 +97,7 @@
 typedef struct henka_opengl_ui_font_residency
 {
     GLuint texture;
+    GLuint retired_texture;
     henka_ui_font_atlas_key key;
     uint32_t atlas_width;
     uint32_t atlas_height;
@@ -113,6 +114,21 @@ typedef struct henka_opengl_tool_window_target
     GLuint ui_vertex_buffer;
     henka_opengl_ui_font_residency ui_font;
 } henka_opengl_tool_window_target;
+
+typedef struct henka_opengl_ui_font_resource_update_entry
+{
+    henka_window_id window_id;
+    henka_opengl_ui_font_residency* live_residency;
+    henka_opengl_ui_font_residency candidate_residency;
+    bool replace;
+} henka_opengl_ui_font_resource_update_entry;
+
+struct henka_renderer_ui_font_resource_update
+{
+    struct henka_renderer* renderer;
+    size_t binding_count;
+    henka_opengl_ui_font_resource_update_entry entries[HENKA_MAX_TOOL_WINDOWS + 1U];
+};
 
 #define HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY 4096U
 #define HENKA_OPENGL_SCENE_DRAW_BUDGET 8192U
@@ -4787,6 +4803,10 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
         {
             glDeleteTextures(1, &state->ui_font.texture);
         }
+        if (state->ui_font.retired_texture != 0U)
+        {
+            glDeleteTextures(1, &state->ui_font.retired_texture);
+        }
         if (state->viewport_program != 0U)
         {
             g_gl.DeleteProgram(state->viewport_program);
@@ -7532,12 +7552,37 @@ static bool henka_opengl_ui_font_atlas_key_equal(
         left->graphics_context_identity == right->graphics_context_identity;
 }
 
-static henka_result henka_opengl_ensure_ui_font_residency(
-    const struct henka_ui_context* ui_context,
+static henka_result henka_opengl_delete_retired_ui_font_texture(
     henka_opengl_ui_font_residency* residency,
-    GLuint* out_texture)
+    const char* operation)
 {
-    const henka_ui_font_raster_profile* profile;
+    henka_result result;
+
+    if (residency == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (residency->retired_texture == 0U)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    henka_opengl_discard_prior_texture_errors(operation);
+    glDeleteTextures(1, &residency->retired_texture);
+    result = henka_opengl_collect_texture_errors(operation);
+    if (result == HENKA_SUCCESS)
+    {
+        residency->retired_texture = 0U;
+    }
+    return result;
+}
+
+static henka_result henka_opengl_upload_ui_font_atlas(
+    const henka_ui_font_raster_profile* profile,
+    uint16_t app_scale_percent,
+    uint64_t graphics_context_identity,
+    henka_opengl_ui_font_residency* out_candidate)
+{
     henka_ui_font_raster_profile_info profile_info;
     henka_opengl_texture_binding_state previous_texture_state;
     const uint8_t* atlas;
@@ -7548,44 +7593,30 @@ static henka_result henka_opengl_ensure_ui_font_residency(
     GLint previous_unpack_buffer = 0;
     GLint max_texture_size = 0;
     GLuint candidate_texture = 0U;
-    GLuint previous_texture;
     henka_result upload_result;
     henka_result restore_result;
 
-    if (out_texture != NULL)
+    if (out_candidate != NULL)
     {
-        *out_texture = 0U;
+        memset(out_candidate, 0, sizeof(*out_candidate));
     }
-    if (ui_context == NULL || residency == NULL || out_texture == NULL ||
-        ui_context->font_profile == NULL)
+    if (profile == NULL || out_candidate == NULL || graphics_context_identity == 0U ||
+        !henka_ui_font_raster_profile_get_info(profile, app_scale_percent, &profile_info))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    profile = ui_context->font_profile;
-    if (!henka_ui_font_raster_profile_get_info(
-            profile, ui_context->font_app_scale_percent, &profile_info))
-    {
-        return HENKA_ERROR_ASSET_SOURCE;
-    }
     atlas = henka_ui_font_raster_profile_get_atlas(
-        profile, ui_context->font_app_scale_percent, &atlas_width, &atlas_height);
+        profile, app_scale_percent, &atlas_width, &atlas_height);
     if (atlas == NULL || atlas_width == 0U || atlas_height == 0U ||
         atlas_width > (uint32_t)INT_MAX || atlas_height > (uint32_t)INT_MAX ||
         profile_info.atlas_width != atlas_width ||
         profile_info.atlas_height != atlas_height ||
-        profile_info.key.graphics_context_identity == 0U ||
-        profile_info.key.graphics_context_identity != ui_context->font_context_identity ||
+        profile_info.key.app_scale_percent != app_scale_percent ||
+        profile_info.key.graphics_context_identity != graphics_context_identity ||
         !henka_checked_size_multiply((size_t)atlas_width, (size_t)atlas_height, &atlas_bytes) ||
         atlas_bytes != profile_info.coverage_bytes)
     {
         return HENKA_ERROR_ASSET_SOURCE;
-    }
-    if (residency->valid && residency->texture != 0U &&
-        residency->atlas_width == atlas_width && residency->atlas_height == atlas_height &&
-        henka_opengl_ui_font_atlas_key_equal(&residency->key, &profile_info.key))
-    {
-        *out_texture = residency->texture;
-        return HENKA_SUCCESS;
     }
 
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
@@ -7604,6 +7635,13 @@ static henka_result henka_opengl_ensure_ui_font_residency(
     henka_opengl_discard_prior_texture_errors("UI font atlas upload");
     glGenTextures(1, &candidate_texture);
     upload_result = candidate_texture != 0U ? HENKA_SUCCESS : HENKA_ERROR_RENDERER;
+    if (candidate_texture != 0U)
+    {
+        out_candidate->texture = candidate_texture;
+        out_candidate->key = profile_info.key;
+        out_candidate->atlas_width = atlas_width;
+        out_candidate->atlas_height = atlas_height;
+    }
     if (upload_result == HENKA_SUCCESS)
     {
         g_gl.ActiveTexture(GL_TEXTURE0);
@@ -7633,27 +7671,409 @@ static henka_result henka_opengl_ensure_ui_font_residency(
     restore_result = henka_opengl_collect_texture_errors("UI font atlas state restoration");
     if (upload_result != HENKA_SUCCESS || restore_result != HENKA_SUCCESS)
     {
-        if (candidate_texture != 0U)
-        {
-            glDeleteTextures(1, &candidate_texture);
-        }
         HENKA_LOG_ERROR(
-            "UI font atlas candidate was rejected; the previously resident atlas remains intact");
+            "UI font atlas candidate was rejected before publication");
         return upload_result != HENKA_SUCCESS ? upload_result : restore_result;
     }
 
-    previous_texture = residency->texture;
-    residency->texture = candidate_texture;
-    residency->key = profile_info.key;
-    residency->atlas_width = atlas_width;
-    residency->atlas_height = atlas_height;
-    residency->valid = true;
-    if (previous_texture != 0U)
-    {
-        glDeleteTextures(1, &previous_texture);
-    }
-    *out_texture = candidate_texture;
+    out_candidate->valid = true;
     return HENKA_SUCCESS;
+}
+
+static henka_result henka_opengl_ensure_ui_font_residency(
+    const struct henka_ui_context* ui_context,
+    henka_opengl_ui_font_residency* residency,
+    GLuint* out_texture)
+{
+    henka_ui_font_raster_profile_info profile_info;
+    henka_opengl_ui_font_residency candidate;
+    henka_result result;
+
+    if (out_texture != NULL)
+    {
+        *out_texture = 0U;
+    }
+    if (ui_context == NULL || residency == NULL || out_texture == NULL ||
+        ui_context->font_profile == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_ui_font_raster_profile_get_info(
+            ui_context->font_profile,
+            ui_context->font_app_scale_percent,
+            &profile_info))
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    result = henka_opengl_delete_retired_ui_font_texture(
+        residency, "retired UI font atlas cleanup");
+    if (residency->valid && residency->texture != 0U &&
+        residency->atlas_width == profile_info.atlas_width &&
+        residency->atlas_height == profile_info.atlas_height &&
+        henka_opengl_ui_font_atlas_key_equal(&residency->key, &profile_info.key))
+    {
+        *out_texture = residency->texture;
+        return HENKA_SUCCESS;
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_opengl_upload_ui_font_atlas(
+        ui_context->font_profile,
+        ui_context->font_app_scale_percent,
+        ui_context->font_context_identity,
+        &candidate);
+    if (candidate.texture == 0U && result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        residency->retired_texture = candidate.texture;
+        return result;
+    }
+
+    candidate.retired_texture = residency->texture;
+    *residency = candidate;
+    *out_texture = residency->texture;
+    return HENKA_SUCCESS;
+}
+
+static henka_opengl_ui_font_residency* henka_opengl_find_ui_font_residency(
+    henka_opengl_renderer_state* state,
+    henka_window_id window_id,
+    SDL_Window** out_window,
+    SDL_GLContext* out_context)
+{
+    size_t index;
+
+    if (out_window != NULL)
+    {
+        *out_window = NULL;
+    }
+    if (out_context != NULL)
+    {
+        *out_context = NULL;
+    }
+    if (state == NULL || out_window == NULL || out_context == NULL)
+    {
+        return NULL;
+    }
+
+    if (window_id == HENKA_INVALID_WINDOW_ID)
+    {
+        *out_window = state->window;
+        *out_context = state->gl_context;
+        return &state->ui_font;
+    }
+
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        henka_opengl_tool_window_target* target = &state->tool_targets[index];
+        if (target->id != window_id)
+        {
+            continue;
+        }
+        *out_window = target->window;
+        *out_context = target->gl_context;
+        return &target->ui_font;
+    }
+    return NULL;
+}
+
+static henka_result henka_opengl_make_ui_font_context_current(
+    henka_opengl_renderer_state* state,
+    henka_window_id window_id)
+{
+    SDL_Window* window = NULL;
+    SDL_GLContext context = NULL;
+
+    if (henka_opengl_find_ui_font_residency(
+            state, window_id, &window, &context) == NULL ||
+        window == NULL || context == NULL)
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+    if (!SDL_GL_MakeCurrent(window, context))
+    {
+        HENKA_LOG_ERROR(
+            "could not make UI font graphics context %u current: %s",
+            (unsigned int)window_id,
+            SDL_GetError());
+        return HENKA_ERROR_RENDERER;
+    }
+    return HENKA_SUCCESS;
+}
+
+static void henka_opengl_track_ui_font_texture_for_retirement(
+    henka_opengl_ui_font_resource_update_entry* entry,
+    GLuint texture,
+    const char* reason)
+{
+    if (entry == NULL || texture == 0U)
+    {
+        return;
+    }
+    if (entry->live_residency == NULL ||
+        entry->live_residency->retired_texture != 0U)
+    {
+        HENKA_LOG_ERROR(
+            "UI font candidate texture %u could not be retired after %s; bounded residency slot is unavailable",
+            texture,
+            reason != NULL ? reason : "cleanup failure");
+        return;
+    }
+    entry->live_residency->retired_texture = texture;
+}
+
+static void henka_opengl_discard_ui_font_resource_update_candidates(
+    henka_opengl_renderer_state* state,
+    henka_renderer_ui_font_resource_update* update)
+{
+    size_t index;
+
+    if (state == NULL || update == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < update->binding_count; ++index)
+    {
+        henka_opengl_ui_font_resource_update_entry* entry = &update->entries[index];
+        const GLuint candidate_texture = entry->candidate_residency.texture;
+        henka_result delete_result;
+
+        if (!entry->replace || candidate_texture == 0U)
+        {
+            continue;
+        }
+        delete_result = henka_opengl_make_ui_font_context_current(
+            state, entry->window_id);
+        if (delete_result == HENKA_SUCCESS)
+        {
+            henka_opengl_discard_prior_texture_errors(
+                "discard prepared UI font atlas");
+            glDeleteTextures(1, &entry->candidate_residency.texture);
+            delete_result = henka_opengl_collect_texture_errors(
+                "discard prepared UI font atlas");
+        }
+        if (delete_result != HENKA_SUCCESS)
+        {
+            henka_opengl_track_ui_font_texture_for_retirement(
+                entry, candidate_texture, "prepared update discard");
+        }
+        entry->candidate_residency.texture = 0U;
+    }
+    (void)henka_opengl_restore_main_context(
+        state, "prepared UI font atlas cleanup");
+}
+
+henka_result henka_opengl_renderer_ui_font_resource_update_prepare(
+    struct henka_renderer* renderer,
+    const henka_renderer_ui_font_resource_binding* bindings,
+    size_t binding_count,
+    uint16_t app_scale_percent,
+    henka_renderer_ui_font_resource_update** out_update)
+{
+    henka_opengl_renderer_state* state;
+    henka_renderer_ui_font_resource_update* update;
+    size_t expected_binding_count = 1U;
+    size_t index;
+    henka_result result;
+
+    if (out_update != NULL)
+    {
+        *out_update = NULL;
+    }
+    if (renderer == NULL || renderer->backend_state == NULL ||
+        renderer->frame_active || bindings == NULL || out_update == NULL ||
+        binding_count == 0U || binding_count > HENKA_MAX_TOOL_WINDOWS + 1U ||
+        !henka_ui_font_app_scale_is_supported(app_scale_percent))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    state = (henka_opengl_renderer_state*)renderer->backend_state;
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (state->tool_targets[index].id != HENKA_INVALID_WINDOW_ID)
+        {
+            ++expected_binding_count;
+        }
+    }
+    if (binding_count != expected_binding_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    update = (henka_renderer_ui_font_resource_update*)henka_calloc(
+        1U, sizeof(*update));
+    if (update == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    update->renderer = renderer;
+
+    result = henka_opengl_restore_main_context(
+        state, "UI font resource preparation start");
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(update);
+        return result;
+    }
+
+    for (index = 0U; index < binding_count; ++index)
+    {
+        const henka_renderer_ui_font_resource_binding* binding = &bindings[index];
+        henka_opengl_ui_font_resource_update_entry* entry = &update->entries[index];
+        SDL_Window* window = NULL;
+        SDL_GLContext gl_context = NULL;
+        henka_ui_font_raster_profile_info profile_info;
+        const uint64_t candidate_context_identity = binding->profile != NULL
+            ? henka_ui_font_raster_profile_get_context_identity(binding->profile)
+            : 0U;
+        size_t prior_index;
+
+        entry->window_id = binding->window_id;
+        entry->live_residency = henka_opengl_find_ui_font_residency(
+            state, binding->window_id, &window, &gl_context);
+        update->binding_count = index + 1U;
+        if (entry->live_residency == NULL || window == NULL || gl_context == NULL ||
+            binding->context == NULL || binding->context->frame_active ||
+            binding->profile == NULL ||
+            (binding->context->font_profile == NULL
+                ? binding->context->font_context_identity != 0U
+                : binding->context->font_context_identity !=
+                    candidate_context_identity) ||
+            candidate_context_identity == 0U ||
+            !henka_ui_font_raster_profile_get_info(
+                binding->profile, app_scale_percent, &profile_info) ||
+            (binding->context->font_context_identity != 0U &&
+                profile_info.key.graphics_context_identity !=
+                    binding->context->font_context_identity))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto fail;
+        }
+        for (prior_index = 0U; prior_index < index; ++prior_index)
+        {
+            if (bindings[prior_index].window_id == binding->window_id ||
+                bindings[prior_index].context == binding->context)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto fail;
+            }
+        }
+        if (binding->window_id == HENKA_INVALID_WINDOW_ID)
+        {
+            for (prior_index = 0U; prior_index < index; ++prior_index)
+            {
+                if (bindings[prior_index].window_id == HENKA_INVALID_WINDOW_ID)
+                {
+                    result = HENKA_ERROR_INVALID_ARGUMENT;
+                    goto fail;
+                }
+            }
+        }
+
+        entry->replace = !entry->live_residency->valid ||
+            entry->live_residency->texture == 0U ||
+            entry->live_residency->atlas_width != profile_info.atlas_width ||
+            entry->live_residency->atlas_height != profile_info.atlas_height ||
+            !henka_opengl_ui_font_atlas_key_equal(
+                &entry->live_residency->key, &profile_info.key);
+        if (!entry->replace)
+        {
+            continue;
+        }
+
+        result = henka_opengl_make_ui_font_context_current(
+            state, binding->window_id);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        result = henka_opengl_delete_retired_ui_font_texture(
+            entry->live_residency,
+            "preparing a replacement UI font atlas");
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        result = henka_opengl_upload_ui_font_atlas(
+            binding->profile,
+            app_scale_percent,
+            candidate_context_identity,
+            &entry->candidate_residency);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        result = henka_opengl_restore_main_context(
+            state, "UI font resource preparation");
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+    }
+
+    result = henka_opengl_restore_main_context(
+        state, "UI font resource preparation completion");
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    *out_update = update;
+    return HENKA_SUCCESS;
+
+fail:
+    HENKA_LOG_ERROR(
+        "UI font graphics-resource preparation failed at context binding %zu (%s)",
+        update->binding_count,
+        henka_result_to_string(result));
+    henka_opengl_discard_ui_font_resource_update_candidates(state, update);
+    henka_free(update);
+    return result;
+}
+
+void henka_opengl_renderer_ui_font_resource_update_publish(
+    struct henka_renderer* renderer,
+    henka_renderer_ui_font_resource_update* update)
+{
+    size_t index;
+
+    if (renderer == NULL || update == NULL || update->renderer != renderer)
+    {
+        HENKA_LOG_ERROR("UI font graphics-resource publish received a foreign update");
+        return;
+    }
+    for (index = 0U; index < update->binding_count; ++index)
+    {
+        henka_opengl_ui_font_resource_update_entry* entry = &update->entries[index];
+        if (!entry->replace)
+        {
+            continue;
+        }
+        entry->candidate_residency.retired_texture =
+            entry->live_residency->texture;
+        *entry->live_residency = entry->candidate_residency;
+        entry->candidate_residency.texture = 0U;
+    }
+    henka_free(update);
+}
+
+void henka_opengl_renderer_ui_font_resource_update_discard(
+    struct henka_renderer* renderer,
+    henka_renderer_ui_font_resource_update* update)
+{
+    if (renderer == NULL || update == NULL || update->renderer != renderer)
+    {
+        HENKA_LOG_ERROR("UI font graphics-resource discard received a foreign update");
+        return;
+    }
+    henka_opengl_discard_ui_font_resource_update_candidates(
+        (henka_opengl_renderer_state*)renderer->backend_state, update);
+    henka_free(update);
 }
 
 static henka_result henka_opengl_renderer_draw_ui_resources(
@@ -7851,6 +8271,16 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
         vertices[base_index + 3U] = (henka_ui_vertex){(float)x0, (float)y0, color.x, color.y, color.z, color.w};
         vertices[base_index + 4U] = (henka_ui_vertex){(float)x2, (float)y2, color.x, color.y, color.z, color.w};
         vertices[base_index + 5U] = (henka_ui_vertex){(float)x3, (float)y3, color.x, color.y, color.z, color.w};
+    }
+
+    {
+        const henka_result transform_result = henka_ui_context_apply_output_transform(
+            ui_context, vertices, vertex_count);
+        if (transform_result != HENKA_SUCCESS)
+        {
+            henka_free(vertices);
+            return transform_result;
+        }
     }
 
     glDisable(GL_DEPTH_TEST);
@@ -8162,6 +8592,10 @@ void henka_opengl_renderer_destroy_tool_window_target(
             if (target->ui_font.texture != 0U)
             {
                 glDeleteTextures(1, &target->ui_font.texture);
+            }
+            if (target->ui_font.retired_texture != 0U)
+            {
+                glDeleteTextures(1, &target->ui_font.retired_texture);
             }
             if (target->ui_vertex_buffer != 0U)
             {

@@ -146,6 +146,7 @@ typedef struct henka_platform_desc
     int window_width;
     int window_height;
     bool enable_vsync;
+    bool window_start_hidden;
 } henka_platform_desc;
 
 typedef struct henka_viewport_render_policy
@@ -184,6 +185,16 @@ typedef struct henka_tool_window_slot
     henka_window_id id;
     struct henka_ui_context* ui_context;
 } henka_tool_window_slot;
+
+typedef struct henka_renderer_ui_font_resource_binding
+{
+    henka_window_id window_id;
+    const struct henka_ui_context* context;
+    const henka_ui_font_raster_profile* profile;
+} henka_renderer_ui_font_resource_binding;
+
+typedef struct henka_renderer_ui_font_resource_update
+    henka_renderer_ui_font_resource_update;
 
 /* Renderer and editor internals iterate the backing slot array directly.
  * This is deliberately separate from the public active-ordinal accessor. */
@@ -504,6 +515,7 @@ struct henka_engine
     struct henka_asset_manager* asset_manager;
     struct henka_scene* active_scene;
     struct henka_ui_context* active_ui;
+    henka_engine_ui_font_resource_update* pending_ui_font_resource_update;
     char* application_name;
     char* asset_base_path;
     char* user_data_base_path;
@@ -562,6 +574,14 @@ void* henka_platform_get_native_tool_window(struct henka_platform* platform, hen
 henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enabled);
 bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* out_width, int* out_height);
 bool henka_platform_get_window_size(struct henka_platform* platform, int* out_width, int* out_height);
+bool henka_platform_get_window_content_size(
+    const struct henka_platform* platform,
+    int* out_width,
+    int* out_height);
+bool henka_platform_get_window_display_scale(
+    const struct henka_platform* platform,
+    uint32_t* out_numerator,
+    uint32_t* out_denominator);
 bool henka_platform_get_window_position(struct henka_platform* platform, int* out_x, int* out_y);
 henka_result henka_platform_set_mouse_capture(struct henka_platform* platform, bool enabled);
 henka_result henka_platform_set_cursor(struct henka_platform* platform, henka_cursor_shape shape);
@@ -585,6 +605,18 @@ henka_result henka_renderer_draw_tool_window_ui(
     struct henka_renderer* renderer,
     henka_window_id window_id,
     const struct henka_ui_context* ui_context);
+henka_result henka_renderer_ui_font_resource_update_prepare(
+    struct henka_renderer* renderer,
+    const henka_renderer_ui_font_resource_binding* bindings,
+    size_t binding_count,
+    uint16_t app_scale_percent,
+    henka_renderer_ui_font_resource_update** out_update);
+void henka_renderer_ui_font_resource_update_publish(
+    struct henka_renderer* renderer,
+    henka_renderer_ui_font_resource_update* update);
+void henka_renderer_ui_font_resource_update_discard(
+    struct henka_renderer* renderer,
+    henka_renderer_ui_font_resource_update* update);
 void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
 void henka_renderer_set_scene_viewport(struct henka_renderer* renderer, henka_viewport viewport);
 henka_viewport henka_renderer_get_scene_viewport(const struct henka_renderer* renderer);
@@ -709,6 +741,18 @@ henka_result henka_opengl_renderer_draw_tool_window_ui(
     struct henka_renderer* renderer,
     henka_window_id window_id,
     const struct henka_ui_context* ui_context);
+henka_result henka_opengl_renderer_ui_font_resource_update_prepare(
+    struct henka_renderer* renderer,
+    const henka_renderer_ui_font_resource_binding* bindings,
+    size_t binding_count,
+    uint16_t app_scale_percent,
+    henka_renderer_ui_font_resource_update** out_update);
+void henka_opengl_renderer_ui_font_resource_update_publish(
+    struct henka_renderer* renderer,
+    henka_renderer_ui_font_resource_update* update);
+void henka_opengl_renderer_ui_font_resource_update_discard(
+    struct henka_renderer* renderer,
+    henka_renderer_ui_font_resource_update* update);
 void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
 void henka_opengl_renderer_sync_scene_target(struct henka_renderer* renderer);
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);

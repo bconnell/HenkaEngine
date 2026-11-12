@@ -1,10 +1,12 @@
 #include "test_suite.h"
 
+#include <float.h>
 #include <henka/memory.h>
 
 #include "../examples/sandbox3d/editor_font_bootstrap.h"
 #include "../examples/sandbox3d/editor_text_layout.h"
 #include "../engine/src/core/memory_internal.h"
+#include "../engine/src/platform/window_scale.h"
 #include "../engine/src/ui/ui_font_internal.h"
 #include "../engine/src/ui/ui_internal.h"
 
@@ -498,6 +500,64 @@ static void henka_test_ui_font_application_bootstrap_verifies_asset_identity(voi
     henka_ui_font_test_fixture_dispose(&fixture);
 }
 
+static void henka_test_ui_font_application_bundle_loader_is_confined_and_verifies_bytes(void)
+{
+    static const char invalid_sha256[] =
+        "0000000000000000000000000000000000000000000000000000000000000000";
+    henka_ui_font_test_fixture fixture;
+    sandbox3d_editor_font_file_asset_desc asset;
+    henka_ui_font_resource* resource = NULL;
+    henka_ui_font_diagnostic diagnostic;
+    henka_ui_font_info info;
+    size_t allocations_before;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    allocations_before = henka_memory_get_allocation_count();
+    memset(&asset, 0, sizeof(asset));
+    asset.asset_path = HENKA_UI_FONT_TEST_FIXTURE;
+    asset.asset_identity = "test/AtkinsonHyperlegible-Regular.ttf";
+    asset.expected_sha256_hex = HENKA_UI_FONT_TEST_SHA256;
+    asset.required_codepoints = fixture.codepoints;
+    asset.required_codepoint_count = HENKA_UI_FONT_TEST_CODEPOINT_COUNT;
+    asset.raster_pixel_height = 20U;
+    asset.atlas_width = 1024U;
+    asset.atlas_height = 1024U;
+    memset(&diagnostic, 0, sizeof(diagnostic));
+
+    HENKA_TEST_ASSERT(sandbox3d_editor_font_bootstrap_load(
+        ".", &asset, &resource, &diagnostic) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(resource != NULL);
+    HENKA_TEST_ASSERT(henka_ui_font_resource_get_info(resource, &info));
+    HENKA_TEST_ASSERT(strcmp(info.sha256_hex, HENKA_UI_FONT_TEST_SHA256) == 0);
+    henka_ui_font_resource_destroy(resource);
+    resource = NULL;
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before);
+
+    asset.expected_sha256_hex = invalid_sha256;
+    HENKA_TEST_ASSERT(sandbox3d_editor_font_bootstrap_load(
+        ".", &asset, &resource, &diagnostic) == HENKA_ERROR_ASSET_SOURCE);
+    HENKA_TEST_ASSERT(resource == NULL);
+    HENKA_TEST_ASSERT(diagnostic.stage == HENKA_UI_FONT_STAGE_HASH);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before);
+
+    asset.expected_sha256_hex = HENKA_UI_FONT_TEST_SHA256;
+    asset.asset_path = "tests/fixtures/fonts/missing-font.ttf";
+    HENKA_TEST_ASSERT(sandbox3d_editor_font_bootstrap_load(
+        ".", &asset, &resource, &diagnostic) == HENKA_ERROR_ASSET_SOURCE);
+    HENKA_TEST_ASSERT(resource == NULL);
+    HENKA_TEST_ASSERT(diagnostic.stage == HENKA_UI_FONT_STAGE_ASSET_READ);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before);
+
+    asset.asset_path = "../outside-font.ttf";
+    HENKA_TEST_ASSERT(sandbox3d_editor_font_bootstrap_load(
+        ".", &asset, &resource, &diagnostic) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(resource == NULL);
+    HENKA_TEST_ASSERT(diagnostic.stage == HENKA_UI_FONT_STAGE_ASSET_READ);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before);
+
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
 static void henka_test_ui_atlas_uses_effective_raster_pixel_size(void)
 {
     static const uint16_t app_scales[HENKA_UI_FONT_APP_SCALE_COUNT] =
@@ -547,6 +607,179 @@ static void henka_test_ui_atlas_uses_effective_raster_pixel_size(void)
     henka_ui_font_raster_profile_destroy(profile);
     henka_ui_font_resource_destroy(font);
     henka_ui_font_test_fixture_dispose(&fixture);
+}
+
+static void henka_test_ui_output_scale_aligns_draw_and_hit_coordinates(void)
+{
+    static const uint32_t output_numerators[] = {5U, 3U, 2U};
+    static const uint32_t output_denominators[] = {4U, 2U, 1U};
+    static const float output_scales[] = {1.25f, 1.5f, 2.0f};
+    static const uint16_t app_scales[] = {100U, 125U, 150U, 200U};
+    henka_ui_font_test_fixture fixture;
+    bool all_hits_aligned = true;
+    bool all_draws_aligned = true;
+    bool all_output_scales_published = true;
+    bool all_logical_mouse_positions_preserved = true;
+    bool all_controls_contain_logical_mouse = true;
+    bool all_logical_measurements_scale_consistent = true;
+    bool failed_transform_was_atomic = true;
+    size_t output_index;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    for (output_index = 0U; output_index < 3U; ++output_index)
+    {
+        henka_ui_font_resource* font = NULL;
+        henka_ui_font_raster_profile* profile = NULL;
+        henka_ui_context* ui = NULL;
+        int reference_measurement_width = -1;
+        int reference_measurement_height = -1;
+        size_t app_index;
+
+        HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+            &fixture,
+            UINT64_C(0x301) + (uint64_t)output_index,
+            output_numerators[output_index],
+            output_denominators[output_index],
+            &font,
+            &profile));
+        HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+        henka_ui_set_visible(ui, true);
+
+        for (app_index = 0U; app_index < 4U; ++app_index)
+        {
+            const float app_scale = (float)app_scales[app_index] / 100.0f;
+            const float combined_scale = output_scales[output_index] * app_scale;
+            henka_ui_frame_desc frame_desc;
+            henka_ui_draw_vertex vertices[256U];
+            int measured_width = 0;
+            int measured_height = 0;
+            size_t vertex_count = 0U;
+
+            memset(&frame_desc, 0, sizeof(frame_desc));
+            frame_desc.framebuffer_width = (int)(1280.0f * combined_scale);
+            frame_desc.framebuffer_height = (int)(720.0f * combined_scale);
+            frame_desc.mouse_position = (henka_vec2){
+                50.0f * combined_scale,
+                40.0f * combined_scale};
+            frame_desc.mouse_left_down = true;
+
+            HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(
+                ui, profile, app_scales[app_index]) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(ui->font_app_scale_percent == app_scales[app_index]);
+            {
+                henka_vec2 logical_mouse = {-1.0f, -1.0f};
+                HENKA_TEST_ASSERT(henka_ui_framebuffer_to_logical(
+                    ui,
+                    (henka_vec2){
+                        50.0f * combined_scale,
+                        40.0f * combined_scale},
+                    &logical_mouse) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(fabsf(logical_mouse.x - 50.0f) < 0.001f);
+                HENKA_TEST_ASSERT(fabsf(logical_mouse.y - 40.0f) < 0.001f);
+            }
+            if (fabsf(ui->output_scale - output_scales[output_index]) > 0.001f)
+            {
+                all_output_scales_published = false;
+            }
+            HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+                ui,
+                "I/l/1 O/0 125%",
+                1.0f,
+                &measured_width,
+                &measured_height) == HENKA_SUCCESS);
+            if (app_index == 0U)
+            {
+                reference_measurement_width = measured_width;
+                reference_measurement_height = measured_height;
+            }
+            else if (abs(measured_width - reference_measurement_width) > 1 ||
+                abs(measured_height - reference_measurement_height) > 1)
+            {
+                all_logical_measurements_scale_consistent = false;
+            }
+            if (fabsf(ui->mouse_position.x - 50.0f) > 0.001f ||
+                fabsf(ui->mouse_position.y - 40.0f) > 0.001f)
+            {
+                all_logical_mouse_positions_preserved = false;
+            }
+            if (!henka_ui_rect_contains(
+                    (henka_ui_rect){40.0f, 20.0f, 40.0f, 40.0f},
+                    ui->mouse_position))
+            {
+                all_controls_contain_logical_mouse = false;
+            }
+            HENKA_TEST_ASSERT(henka_ui_overlay_rect(
+                ui,
+                (henka_ui_rect){10.0f, 20.0f, 30.0f, 40.0f},
+                (henka_vec4){0.2f, 0.3f, 0.4f, 1.0f}) == HENKA_SUCCESS);
+            (void)henka_ui_button(
+                ui,
+                "display_scale_hit",
+                (henka_ui_rect){40.0f, 20.0f, 40.0f, 40.0f},
+                "I");
+            if (!henka_ui_get_wants_mouse(ui))
+            {
+                all_hits_aligned = false;
+            }
+            HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_ui_context_build_quad_vertices(
+                ui, vertices, 256U, &vertex_count) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_ui_context_apply_output_transform(
+                ui, vertices, vertex_count) == HENKA_SUCCESS);
+            if (vertex_count < 6U ||
+                fabsf(vertices[0U].x - 10.0f * combined_scale) > 0.001f ||
+                fabsf(vertices[0U].y - 20.0f * combined_scale) > 0.001f ||
+                fabsf(vertices[2U].x - 40.0f * combined_scale) > 0.001f ||
+                fabsf(vertices[2U].y - 60.0f * combined_scale) > 0.001f)
+            {
+                all_draws_aligned = false;
+            }
+        }
+
+        if (output_index == 2U)
+        {
+            henka_ui_frame_desc frame_desc;
+            henka_ui_draw_vertex vertices[2U] = {{0}};
+            const float original_first_x = 10.0f;
+            const float original_first_y = 20.0f;
+            const float original_second_x = FLT_MAX;
+            const float original_second_y = 30.0f;
+
+            memset(&frame_desc, 0, sizeof(frame_desc));
+            frame_desc.framebuffer_width = 2560;
+            frame_desc.framebuffer_height = 1440;
+            frame_desc.mouse_position = (henka_vec2){40.0f, 40.0f};
+            HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+            vertices[0U].x = original_first_x;
+            vertices[0U].y = original_first_y;
+            vertices[1U].x = original_second_x;
+            vertices[1U].y = original_second_y;
+            if (henka_ui_context_apply_output_transform(ui, vertices, 2U) !=
+                    HENKA_ERROR_NUMERIC_RANGE ||
+                vertices[0U].x != original_first_x ||
+                vertices[0U].y != original_first_y ||
+                vertices[1U].x != original_second_x ||
+                vertices[1U].y != original_second_y)
+            {
+                failed_transform_was_atomic = false;
+            }
+        }
+
+        henka_ui_destroy(ui);
+        henka_ui_font_raster_profile_destroy(profile);
+        henka_ui_font_resource_destroy(font);
+    }
+    henka_ui_font_test_fixture_dispose(&fixture);
+
+    HENKA_TEST_ASSERT(all_output_scales_published);
+    HENKA_TEST_ASSERT(all_logical_mouse_positions_preserved);
+    HENKA_TEST_ASSERT(all_controls_contain_logical_mouse);
+    HENKA_TEST_ASSERT(all_hits_aligned);
+    HENKA_TEST_ASSERT(all_draws_aligned);
+    HENKA_TEST_ASSERT(all_logical_measurements_scale_consistent);
+    HENKA_TEST_ASSERT(failed_transform_was_atomic);
 }
 
 static void henka_test_ui_atlas_identity_includes_font_scale_output_and_context(void)
@@ -674,6 +907,114 @@ static void henka_test_ui_context_profile_replacement_is_atomic(void)
     henka_ui_font_resource_destroy(font_b);
     henka_ui_font_resource_destroy(font_a);
     henka_ui_font_test_fixture_dispose(&fixture);
+}
+
+static void henka_test_ui_font_scale_update_publishes_all_contexts_atomically(void)
+{
+    henka_ui_frame_desc frame_desc = {0};
+    henka_ui_context* first_context = NULL;
+    henka_ui_context* second_context = NULL;
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* first_font = NULL;
+    henka_ui_font_resource* second_font = NULL;
+    henka_ui_font_raster_profile* first_profile = NULL;
+    henka_ui_font_raster_profile* second_profile = NULL;
+    henka_ui_font_context_scale_binding bindings[2U];
+    henka_ui_font_context_scale_update* update = NULL;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x403U, 1U, 1U, &first_font, &first_profile));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x404U, 1U, 1U, &second_font, &second_profile));
+    HENKA_TEST_ASSERT(henka_ui_create(&first_context) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_create(&second_context) == HENKA_SUCCESS);
+    frame_desc.framebuffer_width = 1280;
+    frame_desc.framebuffer_height = 720;
+    bindings[0] = (henka_ui_font_context_scale_binding){first_context, first_profile};
+    bindings[1] = (henka_ui_font_context_scale_binding){second_context, second_profile};
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(second_context, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_font_context_scale_update_prepare(
+        bindings, 2U, 150U, &update) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(update == NULL);
+    HENKA_TEST_ASSERT(first_context->font_profile == NULL);
+    HENKA_TEST_ASSERT(second_context->font_profile == NULL);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(second_context) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_font_context_scale_update_prepare(
+        bindings, 2U, 150U, &update) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(update != NULL);
+    HENKA_TEST_ASSERT(first_context->font_profile == NULL);
+    HENKA_TEST_ASSERT(second_context->font_profile == NULL);
+    henka_ui_font_context_scale_update_dispose(update);
+    update = NULL;
+    HENKA_TEST_ASSERT(first_context->font_profile == NULL);
+    HENKA_TEST_ASSERT(second_context->font_profile == NULL);
+
+    HENKA_TEST_ASSERT(henka_ui_font_context_scale_update_prepare(
+        bindings, 2U, 150U, &update) == HENKA_SUCCESS);
+    henka_ui_font_context_scale_update_publish(update);
+    update = NULL;
+    HENKA_TEST_ASSERT(first_context->font_profile == first_profile);
+    HENKA_TEST_ASSERT(second_context->font_profile == second_profile);
+    HENKA_TEST_ASSERT(first_context->font_app_scale_percent == 150U);
+    HENKA_TEST_ASSERT(second_context->font_app_scale_percent == 150U);
+    HENKA_TEST_ASSERT(first_context->font_context_identity == 0x403U);
+    HENKA_TEST_ASSERT(second_context->font_context_identity == 0x404U);
+
+    henka_ui_destroy(second_context);
+    henka_ui_destroy(first_context);
+    henka_ui_font_raster_profile_destroy(second_profile);
+    henka_ui_font_raster_profile_destroy(first_profile);
+    henka_ui_font_resource_destroy(second_font);
+    henka_ui_font_resource_destroy(first_font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
+static void henka_test_ui_font_scale_update_keeps_unprofiled_contexts_scale_aware(void)
+{
+    henka_ui_context* first_context = NULL;
+    henka_ui_context* second_context = NULL;
+    henka_ui_font_context_scale_binding bindings[2U];
+    henka_ui_font_context_scale_update* update = NULL;
+    uint16_t first_initial_scale;
+    uint16_t second_initial_scale;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&first_context) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_create(&second_context) == HENKA_SUCCESS);
+    first_initial_scale = first_context->font_app_scale_percent;
+    second_initial_scale = second_context->font_app_scale_percent;
+    bindings[0] = (henka_ui_font_context_scale_binding){first_context, NULL};
+    bindings[1] = (henka_ui_font_context_scale_binding){second_context, NULL};
+
+    HENKA_TEST_ASSERT(henka_ui_font_context_scale_update_prepare(
+        bindings, 2U, 110U, &update) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(update == NULL);
+    HENKA_TEST_ASSERT(first_context->font_app_scale_percent == first_initial_scale);
+    HENKA_TEST_ASSERT(second_context->font_app_scale_percent == second_initial_scale);
+    HENKA_TEST_ASSERT(first_context->font_profile == NULL);
+    HENKA_TEST_ASSERT(second_context->font_profile == NULL);
+    HENKA_TEST_ASSERT(first_context->font_context_identity == 0U);
+    HENKA_TEST_ASSERT(second_context->font_context_identity == 0U);
+
+    HENKA_TEST_ASSERT(henka_ui_font_context_scale_update_prepare(
+        bindings, 2U, 150U, &update) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(update != NULL);
+    HENKA_TEST_ASSERT(first_context->font_profile == NULL);
+    HENKA_TEST_ASSERT(second_context->font_profile == NULL);
+    henka_ui_font_context_scale_update_publish(update);
+    update = NULL;
+
+    HENKA_TEST_ASSERT(first_context->font_profile == NULL);
+    HENKA_TEST_ASSERT(second_context->font_profile == NULL);
+    HENKA_TEST_ASSERT(first_context->font_context_identity == 0U);
+    HENKA_TEST_ASSERT(second_context->font_context_identity == 0U);
+    HENKA_TEST_ASSERT(first_context->font_app_scale_percent == 150U);
+    HENKA_TEST_ASSERT(second_context->font_app_scale_percent == 150U);
+
+    henka_ui_destroy(second_context);
+    henka_ui_destroy(first_context);
 }
 
 static void henka_test_ui_mixed_glyph_solid_quads_keep_submission_order(void)
@@ -915,7 +1256,10 @@ static void henka_test_ui_context_measurement_uses_active_font_metrics(void)
     HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(ui, profile, 200U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
         ui, "WWWW", 1.0f, &measured_run_width, &measured_run_height) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(measured_run_width > wide_width);
+    HENKA_TEST_ASSERT(measured_run_width >= wide_width - 1 &&
+        measured_run_width <= wide_width + 1);
+    HENKA_TEST_ASSERT(measured_run_height >= one_line_height - 1 &&
+        measured_run_height <= one_line_height + 1);
 
     memset(&run, 0, sizeof(run));
     HENKA_TEST_ASSERT(henka_ui_text_layout_build_limited(
@@ -957,8 +1301,121 @@ static void henka_test_ui_context_measurement_uses_active_font_metrics(void)
     henka_ui_font_test_fixture_dispose(&fixture);
 }
 
+static void henka_test_platform_window_display_scale_contract(void)
+{
+    static const struct
+    {
+        float scale;
+        uint32_t numerator;
+        uint32_t denominator;
+    } cases[] = {
+        {1.0f, 1U, 1U},
+        {1.25f, 5U, 4U},
+        {1.5f, 3U, 2U},
+        {1.75f, 7U, 4U},
+        {2.0f, 2U, 1U},
+        {1.3333333f, 4U, 3U}};
+    size_t case_index;
+    uint32_t numerator = 0U;
+    uint32_t denominator = 0U;
+    uint32_t native_to_content_numerator = 0U;
+    uint32_t native_to_content_denominator = 0U;
+    int content_width = 0;
+    int content_height = 0;
+    int native_width = 0;
+    int native_height = 0;
+    float framebuffer_x = -99.0f;
+    float framebuffer_y = -99.0f;
+
+    for (case_index = 0U; case_index < sizeof(cases) / sizeof(cases[0]); ++case_index)
+    {
+        HENKA_TEST_ASSERT(henka_platform_window_scale_from_display_scale(
+            cases[case_index].scale, &numerator, &denominator));
+        HENKA_TEST_ASSERT(numerator == cases[case_index].numerator);
+        HENKA_TEST_ASSERT(denominator == cases[case_index].denominator);
+    }
+
+    HENKA_TEST_ASSERT(henka_platform_window_scale_point_to_framebuffer(
+        101.5f, 35.25f, 5U, 4U, &framebuffer_x, &framebuffer_y));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(framebuffer_x, 126.875f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(framebuffer_y, 44.0625f, 0.0001f);
+
+    numerator = 17U;
+    denominator = 19U;
+    HENKA_TEST_ASSERT(!henka_platform_window_scale_from_display_scale(
+        NAN, &numerator, &denominator));
+    HENKA_TEST_ASSERT(numerator == 17U && denominator == 19U);
+    HENKA_TEST_ASSERT(!henka_platform_window_scale_from_display_scale(
+        INFINITY, &numerator, &denominator));
+    HENKA_TEST_ASSERT(!henka_platform_window_scale_from_display_scale(
+        0.0f, &numerator, &denominator));
+    HENKA_TEST_ASSERT(!henka_platform_window_scale_from_display_scale(
+        4.01f, &numerator, &denominator));
+    HENKA_TEST_ASSERT(!henka_platform_window_scale_from_display_scale(
+        1.4142f, &numerator, &denominator));
+    HENKA_TEST_ASSERT(numerator == 17U && denominator == 19U);
+
+    HENKA_TEST_ASSERT(henka_platform_window_scale_from_native_geometry(
+        2.0f, 1.0f,
+        &native_to_content_numerator,
+        &native_to_content_denominator));
+    HENKA_TEST_ASSERT(native_to_content_numerator == 1U &&
+        native_to_content_denominator == 2U);
+    HENKA_TEST_ASSERT(henka_platform_window_scale_content_size_from_framebuffer(
+        2560, 1440, 2U, 1U, &content_width, &content_height));
+    HENKA_TEST_ASSERT(content_width == 1280 && content_height == 720);
+    HENKA_TEST_ASSERT(henka_platform_window_scale_content_size_to_native(
+        1280, 720, 1U, 2U, &native_width, &native_height));
+    HENKA_TEST_ASSERT(native_width == 2560 && native_height == 1440);
+
+    HENKA_TEST_ASSERT(henka_platform_window_scale_from_native_geometry(
+        2.0f, 2.0f,
+        &native_to_content_numerator,
+        &native_to_content_denominator));
+    HENKA_TEST_ASSERT(native_to_content_numerator == 1U &&
+        native_to_content_denominator == 1U);
+    HENKA_TEST_ASSERT(henka_platform_window_scale_from_native_geometry(
+        1.5f, 1.0f,
+        &native_to_content_numerator,
+        &native_to_content_denominator));
+    HENKA_TEST_ASSERT(native_to_content_numerator == 2U &&
+        native_to_content_denominator == 3U);
+    HENKA_TEST_ASSERT(henka_platform_window_scale_from_native_geometry(
+        1.25f, 1.0f,
+        &native_to_content_numerator,
+        &native_to_content_denominator));
+    HENKA_TEST_ASSERT(native_to_content_numerator == 4U &&
+        native_to_content_denominator == 5U);
+
+    native_to_content_numerator = 23U;
+    native_to_content_denominator = 29U;
+    HENKA_TEST_ASSERT(!henka_platform_window_scale_from_native_geometry(
+        0.0f, 1.0f,
+        &native_to_content_numerator,
+        &native_to_content_denominator));
+    HENKA_TEST_ASSERT(native_to_content_numerator == 23U &&
+        native_to_content_denominator == 29U);
+    content_width = 17;
+    content_height = 19;
+    HENKA_TEST_ASSERT(!henka_platform_window_scale_content_size_from_framebuffer(
+        0, 720, 3U, 2U, &content_width, &content_height));
+    HENKA_TEST_ASSERT(content_width == 0 && content_height == 0);
+    native_width = 17;
+    native_height = 19;
+    HENKA_TEST_ASSERT(!henka_platform_window_scale_content_size_to_native(
+        1280, 720, 0U, 1U, &native_width, &native_height));
+    HENKA_TEST_ASSERT(native_width == 0 && native_height == 0);
+
+    framebuffer_x = -99.0f;
+    framebuffer_y = -99.0f;
+    HENKA_TEST_ASSERT(!henka_platform_window_scale_point_to_framebuffer(
+        10.0f, 20.0f, 5U, 0U, &framebuffer_x, &framebuffer_y));
+    HENKA_TEST_ASSERT(framebuffer_x == -99.0f && framebuffer_y == -99.0f);
+}
+
 void henka_test_ui_font(void)
 {
+    henka_test_platform_window_display_scale_contract();
     henka_test_ui_font_sha256_and_static_font_resource();
     henka_test_ui_font_invalid_identity_and_source_are_not_published();
     henka_test_ui_font_resource_rejects_variable_font_table();
@@ -967,9 +1424,13 @@ void henka_test_ui_font(void)
     henka_test_ui_font_allocation_failures_are_atomic();
     henka_test_ui_font_application_bootstrap_verifies_asset_identity();
     henka_test_ui_atlas_uses_effective_raster_pixel_size();
+    henka_test_ui_output_scale_aligns_draw_and_hit_coordinates();
     henka_test_ui_atlas_identity_includes_font_scale_output_and_context();
     henka_test_ui_atlas_cache_is_bounded_per_context();
     henka_test_ui_context_profile_replacement_is_atomic();
+    henka_test_ui_font_scale_update_publishes_all_contexts_atomically();
+    henka_test_ui_font_scale_update_keeps_unprofiled_contexts_scale_aware();
+    henka_test_ui_font_application_bundle_loader_is_confined_and_verifies_bytes();
     henka_test_ui_mixed_glyph_solid_quads_keep_submission_order();
     henka_test_ui_font_text_draw_preserves_line_breaks();
     henka_test_ui_context_measurement_uses_active_font_metrics();

@@ -1116,6 +1116,73 @@ henka_result henka_settings_save_file(const henka_settings* settings, const char
     return result;
 }
 
+henka_result henka_settings_update_ints_and_save_file(
+    henka_settings* settings,
+    const char* path,
+    const henka_settings_int_update* updates,
+    size_t update_count)
+{
+    henka_settings* candidate = NULL;
+    henka_result result;
+    size_t index;
+
+    if (settings == NULL || path == NULL || path[0] == '\0' || updates == NULL ||
+        update_count == 0U || update_count > HENKA_SETTINGS_MAX_ATOMIC_INT_UPDATES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_settings_create(&candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    for (index = 0U; index < settings->count && result == HENKA_SUCCESS; ++index)
+    {
+        result = henka_settings_set_string(
+            candidate,
+            settings->entries[index].key,
+            settings->entries[index].value);
+    }
+
+    for (index = 0U; index < update_count && result == HENKA_SUCCESS; ++index)
+    {
+        size_t prior_index;
+
+        if (updates[index].key == NULL)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            break;
+        }
+        for (prior_index = 0U; prior_index < index; ++prior_index)
+        {
+            if (strcmp(updates[index].key, updates[prior_index].key) == 0)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                break;
+            }
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_settings_set_int(
+                candidate, updates[index].key, updates[index].value);
+        }
+    }
+
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_save_file(candidate, path);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        henka_settings_move_assign(settings, candidate);
+    }
+
+    henka_settings_destroy(candidate);
+    return result;
+}
+
 bool henka_settings_has_key(const henka_settings* settings, const char* key)
 {
     return henka_settings_find_entry(settings, key) != NULL;

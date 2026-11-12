@@ -9,7 +9,7 @@
 
 #include "ui_font_internal.h"
 
-#define HENKA_UI_MAX_DISCLOSURE_ROWS 256U
+#define HENKA_UI_MAX_NAVIGATION_ITEMS 256U
 #define HENKA_UI_MAX_SCALE 64.0f
 #define HENKA_UI_MAX_DRAW_ITEMS ((size_t)1048576U)
 
@@ -78,6 +78,7 @@ struct henka_ui_context
     henka_ui_theme theme;
     const henka_ui_font_raster_profile* font_profile;
     uint16_t font_app_scale_percent;
+    float output_scale;
     uint64_t font_context_identity;
     bool visible;
     bool frame_active;
@@ -96,10 +97,10 @@ struct henka_ui_context
     bool focused_text_id_set;
     char focused_text_id[256];
     henka_ui_flow_state flow;
-    char disclosure_ids[HENKA_UI_MAX_DISCLOSURE_ROWS][256];
-    size_t disclosure_id_count;
-    bool focused_disclosure_id_set;
-    char focused_disclosure_id[256];
+    char navigation_ids[HENKA_UI_MAX_NAVIGATION_ITEMS][256];
+    size_t navigation_id_count;
+    bool focused_navigation_id_set;
+    char focused_navigation_id[256];
     bool navigation_up_pressed;
     bool navigation_down_pressed;
     bool navigation_left_pressed;
@@ -135,6 +136,18 @@ henka_result henka_ui_context_build_quad_vertices(
     henka_ui_draw_vertex* out_vertices,
     size_t vertex_capacity,
     size_t* out_vertex_count);
+
+/* Applies the active output transform once to a complete UI vertex batch. */
+henka_result henka_ui_context_apply_output_transform(
+    const henka_ui_context* context,
+    henka_ui_draw_vertex* vertices,
+    size_t vertex_count);
+
+/* Converts physical input back to the logical coordinate space used by UI layout. */
+henka_result henka_ui_context_framebuffer_to_logical(
+    const henka_ui_context* context,
+    henka_vec2 framebuffer_position,
+    henka_vec2* out_logical_position);
 
 /* Internal proof seam used by the public label path when a font is attached. */
 henka_result henka_ui_draw_font_text(

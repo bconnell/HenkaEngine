@@ -708,6 +708,8 @@ bool sandbox3d_workspace_persistence_load_custom_layout_slots(
         slot.left_dock_width = henka_settings_get_float(settings, key, 320.0f);
         snprintf(key, sizeof(key), "%s.right_dock_width", prefix);
         slot.right_dock_width = henka_settings_get_float(settings, key, 356.0f);
+        /* Preserve the legacy slot value for round-tripping, but keep it inert:
+         * workspace slots no longer own or restore the global editor scale. */
         snprintf(key, sizeof(key), "%s.ui_scale", prefix);
         slot.ui_scale = henka_settings_get_float(settings, key, 1.0f);
         if (!isfinite(slot.left_dock_width) || slot.left_dock_width < 280.0f || slot.left_dock_width > 720.0f ||

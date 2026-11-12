@@ -18,6 +18,13 @@ static const char* g_compass_keys[] =
 
 static const float g_compass_scales[] = {0.85f, 1.0f, 1.15f};
 
+static const char* g_editor_scale_percent_key = "ui.editor.scale_percent";
+static const char* g_editor_scale_migration_version_key =
+    "ui.editor.scale_migration_version";
+static const char* g_legacy_editor_scale_key =
+    "ui.workspace.custom_layout.ui_scale";
+static const int g_editor_scale_migration_version = 1;
+
 static bool sandbox3d_editor_ui_scale_percent_is_supported(int scale_percent)
 {
     return scale_percent == 100 || scale_percent == 125 ||
@@ -96,6 +103,102 @@ bool sandbox3d_editor_ui_scale_legacy_candidate(
         *out_scale_percent = 200;
     }
     return true;
+}
+
+henka_result sandbox3d_editor_ui_preferences_resolve_startup(
+    const henka_settings* settings,
+    sandbox3d_editor_ui_preferences* out_preferences,
+    bool* out_migration_pending)
+{
+    sandbox3d_editor_ui_preferences candidate;
+    bool migration_pending;
+    bool canonical_scale_valid = false;
+
+    if (settings == NULL || out_preferences == NULL || out_migration_pending == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    migration_pending = !henka_settings_has_key(
+        settings, g_editor_scale_migration_version_key);
+    if (!migration_pending)
+    {
+        const int version = henka_settings_get_int(
+            settings, g_editor_scale_migration_version_key, -1);
+        if (version == 0)
+        {
+            migration_pending = true;
+        }
+        else if (version != g_editor_scale_migration_version)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
+    sandbox3d_editor_ui_preferences_defaults(&candidate);
+    if (henka_settings_has_key(settings, g_editor_scale_percent_key))
+    {
+        canonical_scale_valid = sandbox3d_editor_ui_preferences_set_scale_percent(
+            &candidate,
+            henka_settings_get_int(settings, g_editor_scale_percent_key, -1));
+    }
+
+    if (!canonical_scale_valid && migration_pending)
+    {
+        const bool legacy_scale_present = henka_settings_has_key(
+            settings, g_legacy_editor_scale_key);
+        const float legacy_multiplier = legacy_scale_present
+            ? henka_settings_get_float(settings, g_legacy_editor_scale_key, NAN)
+            : NAN;
+        int migrated_scale = 100;
+
+        if (!sandbox3d_editor_ui_scale_legacy_candidate(
+                legacy_scale_present,
+                legacy_multiplier,
+                &migrated_scale) ||
+            !sandbox3d_editor_ui_preferences_set_scale_percent(
+                &candidate, migrated_scale))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
+    *out_preferences = candidate;
+    *out_migration_pending = migration_pending;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_editor_ui_preferences_persist_scale(
+    henka_settings* settings,
+    const char* settings_path,
+    const sandbox3d_editor_ui_preferences* candidate_preferences,
+    bool complete_startup_migration)
+{
+    henka_settings_int_update updates[2];
+    size_t update_count = 1U;
+
+    if (settings == NULL || settings_path == NULL || settings_path[0] == '\0' ||
+        !sandbox3d_editor_ui_preferences_validate(candidate_preferences))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    updates[0] = (henka_settings_int_update){
+        g_editor_scale_percent_key,
+        candidate_preferences->scale_percent};
+    if (complete_startup_migration)
+    {
+        updates[1] = (henka_settings_int_update){
+            g_editor_scale_migration_version_key,
+            g_editor_scale_migration_version};
+        update_count = 2U;
+    }
+
+    return henka_settings_update_ints_and_save_file(
+        settings,
+        settings_path,
+        updates,
+        update_count);
 }
 
 static bool sandbox3d_compass_scale_is_supported(float scale)

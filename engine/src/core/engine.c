@@ -9,6 +9,13 @@
 #include <henka/log.h>
 #include <henka/memory.h>
 
+struct henka_engine_ui_font_resource_update
+{
+    henka_engine* owner;
+    henka_ui_font_context_scale_update* ui_update;
+    henka_renderer_ui_font_resource_update* renderer_update;
+};
+
 static char* henka_duplicate_string(const char* value)
 {
     char* copy;
@@ -915,6 +922,7 @@ henka_result henka_engine_create(
     platform_desc.window_width = engine->config.window_width;
     platform_desc.window_height = engine->config.window_height;
     platform_desc.enable_vsync = engine->config.enable_vsync;
+    platform_desc.window_start_hidden = engine->config.window_start_hidden;
 
     result = henka_platform_create(
         &platform_desc,
@@ -1064,6 +1072,12 @@ void henka_engine_destroy(henka_engine* engine)
         engine->config.on_shutdown(
             engine,
             engine->config.user_data);
+    }
+
+    if (engine->pending_ui_font_resource_update != NULL)
+    {
+        henka_engine_ui_font_resource_update_discard(
+            engine, engine->pending_ui_font_resource_update);
     }
 
     for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
@@ -1302,13 +1316,214 @@ henka_result henka_engine_set_scene(henka_engine* engine, henka_scene* scene)
 
 henka_result henka_engine_set_ui_context(henka_engine* engine, henka_ui_context* ui_context)
 {
-    if (engine == NULL)
+    if (engine == NULL || engine->pending_ui_font_resource_update != NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     engine->active_ui = ui_context;
     return HENKA_SUCCESS;
+}
+
+henka_result henka_engine_ui_font_resource_update_prepare(
+    henka_engine* engine,
+    const henka_ui_font_context_scale_binding* bindings,
+    size_t binding_count,
+    uint16_t app_scale_percent,
+    henka_engine_ui_font_resource_update** out_update)
+{
+    henka_renderer_ui_font_resource_binding renderer_bindings[
+        HENKA_MAX_TOOL_WINDOWS + 1U];
+    henka_engine_ui_font_resource_update* update;
+    size_t expected_binding_count = 1U;
+    size_t index;
+    henka_result result;
+
+    if (out_update != NULL)
+    {
+        *out_update = NULL;
+    }
+    if (engine == NULL || engine->destroying || engine->renderer == NULL ||
+        engine->active_ui == NULL || bindings == NULL || out_update == NULL ||
+        engine->pending_ui_font_resource_update != NULL ||
+        binding_count == 0U || binding_count > HENKA_MAX_TOOL_WINDOWS + 1U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (engine->tool_windows[index].id != HENKA_INVALID_WINDOW_ID)
+        {
+            if (engine->tool_windows[index].ui_context == NULL)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            ++expected_binding_count;
+        }
+    }
+    if (binding_count != expected_binding_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < binding_count; ++index)
+    {
+        const henka_ui_font_context_scale_binding* binding = &bindings[index];
+        henka_window_id window_id = HENKA_INVALID_WINDOW_ID;
+        size_t slot_index;
+        size_t prior_index;
+        bool found_context = binding->context == engine->active_ui;
+
+        if (!found_context)
+        {
+            for (slot_index = 0U; slot_index < HENKA_MAX_TOOL_WINDOWS; ++slot_index)
+            {
+                if (engine->tool_windows[slot_index].id != HENKA_INVALID_WINDOW_ID &&
+                    engine->tool_windows[slot_index].ui_context == binding->context)
+                {
+                    window_id = engine->tool_windows[slot_index].id;
+                    found_context = true;
+                    break;
+                }
+            }
+        }
+        if (!found_context || binding->context == NULL || binding->profile == NULL)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        for (prior_index = 0U; prior_index < index; ++prior_index)
+        {
+            if (bindings[prior_index].context == binding->context)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+        renderer_bindings[index] = (henka_renderer_ui_font_resource_binding){
+            window_id,
+            binding->context,
+            binding->profile};
+    }
+
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        size_t binding_index;
+        bool found = engine->tool_windows[index].id == HENKA_INVALID_WINDOW_ID;
+        if (!found)
+        {
+            for (binding_index = 0U; binding_index < binding_count; ++binding_index)
+            {
+                if (bindings[binding_index].context ==
+                    engine->tool_windows[index].ui_context)
+                {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    {
+        bool found_main = false;
+        for (index = 0U; index < binding_count; ++index)
+        {
+            if (bindings[index].context == engine->active_ui)
+            {
+                found_main = true;
+                break;
+            }
+        }
+        if (!found_main)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
+    update = (henka_engine_ui_font_resource_update*)henka_calloc(
+        1U, sizeof(*update));
+    if (update == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    update->owner = engine;
+
+    result = henka_ui_font_context_scale_update_prepare(
+        bindings, binding_count, app_scale_percent, &update->ui_update);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    result = henka_renderer_ui_font_resource_update_prepare(
+        engine->renderer,
+        renderer_bindings,
+        binding_count,
+        app_scale_percent,
+        &update->renderer_update);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
+    engine->pending_ui_font_resource_update = update;
+    *out_update = update;
+    return HENKA_SUCCESS;
+
+fail:
+    HENKA_LOG_ERROR(
+        "engine UI font scale resource preparation failed: %s",
+        henka_result_to_string(result));
+    if (update->renderer_update != NULL)
+    {
+        henka_renderer_ui_font_resource_update_discard(
+            engine->renderer, update->renderer_update);
+    }
+    henka_ui_font_context_scale_update_dispose(update->ui_update);
+    henka_free(update);
+    return result;
+}
+
+void henka_engine_ui_font_resource_update_publish(
+    henka_engine* engine,
+    henka_engine_ui_font_resource_update* update)
+{
+    if (engine == NULL || update == NULL || update->owner != engine ||
+        engine->pending_ui_font_resource_update != update ||
+        update->ui_update == NULL || update->renderer_update == NULL)
+    {
+        HENKA_LOG_ERROR("engine UI font resource publish received an invalid update");
+        return;
+    }
+
+    henka_renderer_ui_font_resource_update_publish(
+        engine->renderer, update->renderer_update);
+    update->renderer_update = NULL;
+    henka_ui_font_context_scale_update_publish(update->ui_update);
+    update->ui_update = NULL;
+    engine->pending_ui_font_resource_update = NULL;
+    henka_free(update);
+}
+
+void henka_engine_ui_font_resource_update_discard(
+    henka_engine* engine,
+    henka_engine_ui_font_resource_update* update)
+{
+    if (engine == NULL || update == NULL || update->owner != engine ||
+        engine->pending_ui_font_resource_update != update)
+    {
+        HENKA_LOG_ERROR("engine UI font resource discard received an invalid update");
+        return;
+    }
+
+    henka_renderer_ui_font_resource_update_discard(
+        engine->renderer, update->renderer_update);
+    update->renderer_update = NULL;
+    henka_ui_font_context_scale_update_dispose(update->ui_update);
+    update->ui_update = NULL;
+    engine->pending_ui_font_resource_update = NULL;
+    henka_free(update);
 }
 
 henka_result henka_engine_open_tool_window(
@@ -1326,7 +1541,7 @@ henka_result henka_engine_open_tool_window(
         *out_window_id = HENKA_INVALID_WINDOW_ID;
     }
 
-    if (engine == NULL ||
+    if (engine == NULL || engine->pending_ui_font_resource_update != NULL ||
         desc == NULL ||
         ui_context == NULL ||
         out_window_id == NULL)
@@ -1383,7 +1598,8 @@ henka_result henka_engine_close_tool_window(henka_engine* engine, henka_window_i
 {
     henka_tool_window_slot* slot;
 
-    if (engine == NULL || window_id == HENKA_INVALID_WINDOW_ID)
+    if (engine == NULL || engine->pending_ui_font_resource_update != NULL ||
+        window_id == HENKA_INVALID_WINDOW_ID)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1791,6 +2007,54 @@ henka_result henka_engine_get_window_size(
     }
 
     return HENKA_SUCCESS;
+}
+
+henka_result henka_engine_get_window_content_size(
+    const henka_engine* engine,
+    int* out_width,
+    int* out_height)
+{
+    if (out_width != NULL)
+    {
+        *out_width = 0;
+    }
+    if (out_height != NULL)
+    {
+        *out_height = 0;
+    }
+    if (engine == NULL || engine->platform == NULL ||
+        out_width == NULL || out_height == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_platform_get_window_content_size(
+        engine->platform, out_width, out_height)
+        ? HENKA_SUCCESS
+        : HENKA_ERROR_PLATFORM;
+}
+
+henka_result henka_engine_get_window_display_scale(
+    const henka_engine* engine,
+    uint32_t* out_numerator,
+    uint32_t* out_denominator)
+{
+    if (out_numerator != NULL)
+    {
+        *out_numerator = 0U;
+    }
+    if (out_denominator != NULL)
+    {
+        *out_denominator = 0U;
+    }
+    if (engine == NULL || engine->platform == NULL ||
+        out_numerator == NULL || out_denominator == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_platform_get_window_display_scale(
+        engine->platform, out_numerator, out_denominator)
+        ? HENKA_SUCCESS
+        : HENKA_ERROR_PLATFORM;
 }
 
 henka_result henka_engine_get_window_position(

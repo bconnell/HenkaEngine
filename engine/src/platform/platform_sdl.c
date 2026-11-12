@@ -14,6 +14,8 @@
 #include <henka/log.h>
 #include <henka/memory.h>
 
+#include "window_scale.h"
+
 #if defined(_WIN32)
 #include <share.h>
 #endif
@@ -649,6 +651,7 @@ struct henka_platform
 {
     SDL_Window* window;
     SDL_WindowID main_window_id;
+    bool window_start_hidden;
     bool multi_window_available;
     bool main_window_focused;
     henka_window_id next_tool_window_id;
@@ -1022,7 +1025,13 @@ henka_result henka_platform_create(
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
-    window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+    window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
+        SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    if (desc->window_start_hidden)
+    {
+        window_flags |= SDL_WINDOW_HIDDEN;
+    }
+    platform->window_start_hidden = desc->window_start_hidden;
     platform->window = SDL_CreateWindow(
         desc->application_name,
         desc->window_width,
@@ -1185,11 +1194,19 @@ henka_result henka_platform_create_tool_window(
     }
 
     memset(slot, 0, sizeof(*slot));
-    slot->window = SDL_CreateWindow(
+    {
+        Uint64 window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
+            SDL_WINDOW_HIGH_PIXEL_DENSITY;
+        if (platform->window_start_hidden)
+        {
+            window_flags |= SDL_WINDOW_HIDDEN;
+        }
+        slot->window = SDL_CreateWindow(
         desc->title,
         desc->width,
         desc->height,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+            window_flags);
+    }
     if (slot->window == NULL)
     {
         platform->multi_window_available = false;
@@ -1286,6 +1303,14 @@ bool henka_platform_get_tool_window_state(
     henka_tool_window_state* out_state)
 {
     const henka_platform_tool_window* slot;
+    uint32_t display_scale_denominator;
+    uint32_t display_scale_numerator;
+    int framebuffer_height;
+    int framebuffer_width;
+    int logical_height;
+    int logical_width;
+    int native_height;
+    int native_width;
 
     if (out_state != NULL)
     {
@@ -1303,12 +1328,45 @@ bool henka_platform_get_tool_window_state(
         return false;
     }
 
+    display_scale_numerator = 0U;
+    display_scale_denominator = 0U;
+    logical_width = 0;
+    logical_height = 0;
+    native_width = 0;
+    native_height = 0;
+    framebuffer_width = 0;
+    framebuffer_height = 0;
+    if (!SDL_GetWindowSize(slot->window, &native_width, &native_height) ||
+        !SDL_GetWindowSizeInPixels(
+            slot->window, &framebuffer_width, &framebuffer_height) ||
+        !henka_platform_window_scale_from_display_scale(
+            SDL_GetWindowDisplayScale(slot->window),
+            &display_scale_numerator,
+            &display_scale_denominator) ||
+        !henka_platform_window_scale_content_size_from_framebuffer(
+            framebuffer_width,
+            framebuffer_height,
+            display_scale_numerator,
+            display_scale_denominator,
+            &logical_width,
+            &logical_height))
+    {
+        memset(out_state, 0, sizeof(*out_state));
+        return false;
+    }
+
     out_state->id = slot->id;
     out_state->native_window_id = (uint32_t)slot->native_window_id;
     out_state->open = slot->open;
     out_state->focused = slot->focused;
-    out_state->width = slot->width;
-    out_state->height = slot->height;
+    out_state->width = framebuffer_width;
+    out_state->height = framebuffer_height;
+    out_state->logical_width = logical_width;
+    out_state->logical_height = logical_height;
+    out_state->display_scale_numerator = display_scale_numerator;
+    out_state->display_scale_denominator = display_scale_denominator;
+    out_state->native_width = native_width;
+    out_state->native_height = native_height;
     out_state->position_x = slot->position_x;
     out_state->position_y = slot->position_y;
     out_state->mouse_position = slot->mouse_position;
@@ -1475,14 +1533,21 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
 
             case SDL_EVENT_WINDOW_RESIZED:
             case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
             {
                 henka_platform_tool_window* tool_window;
 
                 if (henka_platform_event_is_main_window(platform, event.window.windowID))
                 {
                     out_state->resized = true;
-                    out_state->framebuffer_width = event.window.data1;
-                    out_state->framebuffer_height = event.window.data2;
+                    if (!SDL_GetWindowSizeInPixels(
+                            platform->window,
+                            &out_state->framebuffer_width,
+                            &out_state->framebuffer_height))
+                    {
+                        out_state->framebuffer_width = 0;
+                        out_state->framebuffer_height = 0;
+                    }
                     platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
                 }
                 else if ((tool_window = henka_platform_find_tool_window_by_native_id(platform, event.window.windowID)) != NULL)
@@ -1490,11 +1555,15 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     henka_platform_record_tool_event(
                         platform,
                         tool_window,
-                        "resized",
+                        event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED
+                            ? "display scale changed"
+                            : "resized",
                         false,
                         true);
-                    tool_window->width = event.window.data1;
-                    tool_window->height = event.window.data2;
+                    (void)SDL_GetWindowSizeInPixels(
+                        tool_window->window,
+                        &tool_window->width,
+                        &tool_window->height);
                     tool_window->resized = true;
                 }
                 else
@@ -1877,6 +1946,76 @@ bool henka_platform_get_framebuffer_size(
     *out_width = width;
     *out_height = height;
     return true;
+}
+
+bool henka_platform_get_window_display_scale(
+    const struct henka_platform* platform,
+    uint32_t* out_numerator,
+    uint32_t* out_denominator)
+{
+    if (out_numerator != NULL)
+    {
+        *out_numerator = 0U;
+    }
+    if (out_denominator != NULL)
+    {
+        *out_denominator = 0U;
+    }
+    if (platform == NULL || platform->window == NULL ||
+        out_numerator == NULL || out_denominator == NULL)
+    {
+        return false;
+    }
+
+    return henka_platform_window_scale_from_display_scale(
+        SDL_GetWindowDisplayScale(platform->window),
+        out_numerator,
+        out_denominator);
+}
+
+bool henka_platform_get_window_content_size(
+    const struct henka_platform* platform,
+    int* out_width,
+    int* out_height)
+{
+    uint32_t scale_denominator;
+    uint32_t scale_numerator;
+    int framebuffer_height;
+    int framebuffer_width;
+
+    if (out_width != NULL)
+    {
+        *out_width = 0;
+    }
+    if (out_height != NULL)
+    {
+        *out_height = 0;
+    }
+    if (platform == NULL || platform->window == NULL ||
+        out_width == NULL || out_height == NULL)
+    {
+        return false;
+    }
+
+    if (!SDL_GetWindowSizeInPixels(
+            platform->window,
+            &framebuffer_width,
+            &framebuffer_height) ||
+        !henka_platform_get_window_display_scale(
+            platform,
+            &scale_numerator,
+            &scale_denominator))
+    {
+        return false;
+    }
+
+    return henka_platform_window_scale_content_size_from_framebuffer(
+        framebuffer_width,
+        framebuffer_height,
+        scale_numerator,
+        scale_denominator,
+        out_width,
+        out_height);
 }
 
 bool henka_platform_get_window_size(

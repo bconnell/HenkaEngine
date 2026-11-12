@@ -60,6 +60,37 @@ if(NOT negative_output MATCHES "context-free henka_ui_measure_text")
         "result=${negative_result}\noutput:\n${negative_output}")
 endif()
 
+set(private_negative_dir "${NEGATIVE_CONTROL_ROOT}/textauth-${negative_id}-private")
+if(EXISTS "${private_negative_dir}")
+    message(FATAL_ERROR "Refusing to reuse an existing private-include test directory: ${private_negative_dir}")
+endif()
+file(MAKE_DIRECTORY "${private_negative_dir}")
+file(WRITE "${private_negative_dir}/negative_control.c"
+    "void private_include_negative_control(void) {}\n")
+file(WRITE "${private_negative_dir}/negative_control.h"
+    "#include \"../../engine/src/ui/ui_font_internal.h\"\n")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${private_negative_dir}"
+        "-DUI_TEXT_LAYOUT_SOURCE=${UI_TEXT_LAYOUT_SOURCE}"
+        "-DEDITOR_LAYOUT_SOURCE=${SANDBOX3D_SOURCE_DIR}/editor_layout.c"
+        "-DEDITOR_LAYOUT_HEADER=${SANDBOX3D_SOURCE_DIR}/editor_layout.h"
+        "-DSANDBOX3D_CMAKE_SOURCE=${SANDBOX3D_SOURCE_DIR}/CMakeLists.txt"
+        -P "${TEXT_AUTHORITY_CHECKER}"
+    RESULT_VARIABLE private_negative_result
+    OUTPUT_VARIABLE private_negative_stdout
+    ERROR_VARIABLE private_negative_stderr)
+set(private_negative_output "${private_negative_stdout}\n${private_negative_stderr}")
+file(REMOVE_RECURSE "${private_negative_dir}")
+if("${private_negative_result}" STREQUAL "0")
+    message(FATAL_ERROR "Text-authority checker accepted a Sandbox include into private engine/src")
+endif()
+if(NOT private_negative_output MATCHES "private engine source include")
+    message(FATAL_ERROR
+        "Private-engine-include negative control failed for an unexpected reason.\n"
+        "result=${private_negative_result}\noutput:\n${private_negative_output}")
+endif()
+
 set(negative_metrics_dir "${negative_dir}-metrics")
 if(EXISTS "${negative_metrics_dir}")
     message(FATAL_ERROR "Refusing to reuse an existing UI-metrics test directory: ${negative_metrics_dir}")

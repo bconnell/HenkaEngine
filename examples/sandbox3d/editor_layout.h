@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <henka/result.h>
 #include <henka/ui.h>
@@ -43,12 +44,28 @@ typedef struct sandbox3d_editor_layout_visibility
     bool debug_strip_visible;
 } sandbox3d_editor_layout_visibility;
 
+typedef struct sandbox3d_editor_scene_view_header_layout
+{
+    henka_ui_rect context_selector;
+    henka_ui_rect context_buttons[3];
+    size_t context_button_count;
+    henka_ui_rect tools_button;
+    henka_ui_rect focus_button;
+    henka_ui_rect shading_buttons[4];
+    size_t shading_button_count;
+    float height;
+    bool context_uses_buttons;
+    bool compact;
+    bool narrow;
+} sandbox3d_editor_scene_view_header_layout;
+
 typedef struct sandbox3d_editor_frame_layout
 {
     float outer_margin;
     float panel_gap;
     henka_ui_rect left_dock;
     henka_ui_rect scene_frame;
+    sandbox3d_editor_scene_view_header_layout scene_header;
     henka_ui_rect right_dock;
     henka_ui_rect controls_panel;
     henka_ui_rect scene_objects_panel;
@@ -61,6 +78,43 @@ typedef struct sandbox3d_editor_frame_layout
     sandbox3d_workspace_topology_layout left_topology;
     sandbox3d_workspace_topology_layout right_topology;
 } sandbox3d_editor_frame_layout;
+
+typedef struct sandbox3d_editor_controls_status_layout
+{
+    henka_ui_rect scroll_viewport;
+    henka_ui_rect footer_save_settings;
+    henka_ui_rect footer_reset_layout;
+    henka_ui_rect footer_reset_settings;
+    henka_ui_rect footer_open_legend;
+} sandbox3d_editor_controls_status_layout;
+
+typedef struct sandbox3d_editor_scene_objects_layout
+{
+    henka_ui_rect actions_viewport;
+    henka_ui_rect hierarchy_viewport;
+    henka_ui_rect page_footer;
+} sandbox3d_editor_scene_objects_layout;
+
+/* Convert a content-space Scene View rectangle to framebuffer pixels for the
+ * renderer and scene-picking path. The output is bounded to the real drawable
+ * size to absorb content-size rounding at fractional display scales. */
+henka_result sandbox3d_editor_layout_content_viewport_to_framebuffer(
+    henka_viewport content_viewport,
+    uint16_t app_scale_percent,
+    uint32_t display_scale_numerator,
+    uint32_t display_scale_denominator,
+    int framebuffer_width,
+    int framebuffer_height,
+    henka_viewport* out_framebuffer_viewport);
+
+/* Convert physical window-content dimensions to the editor's logical layout
+ * space. App scale is intentionally separate from OS display scale. */
+henka_result sandbox3d_editor_layout_content_size_for_app_scale(
+    int content_width,
+    int content_height,
+    uint16_t app_scale_percent,
+    int* out_logical_width,
+    int* out_logical_height);
 
 typedef struct sandbox3d_modeling_toolbar_layout
 {
@@ -90,14 +144,38 @@ henka_result sandbox3d_editor_layout_metrics_for_framebuffer(
     sandbox3d_editor_layout_metrics* out_metrics);
 
 henka_result sandbox3d_editor_frame_layout_build(
+    const henka_ui_context* ui_context,
     const sandbox3d_workspace_model* workspace,
     const sandbox3d_editor_layout_visibility* visibility,
     int framebuffer_width,
     int framebuffer_height,
     sandbox3d_editor_frame_layout* out_layout);
 
+/* Layout the actual Scene View header controls with the active text metrics.
+ * The returned bounds are shared by drawing, hit testing, and workspace
+ * viewport reservation. */
+henka_result sandbox3d_editor_layout_scene_view_header_for_context(
+    const henka_ui_context* ui_context,
+    henka_ui_rect bounds,
+    sandbox3d_editor_scene_view_header_layout* out_layout);
+
 bool sandbox3d_editor_frame_layout_is_valid(
     const sandbox3d_editor_frame_layout* layout);
+
+/* Keep Camera/Status page content in a scrollable viewport above its fixed
+ * footer actions. This prevents long page content from overlapping the
+ * Settings/Reset controls in compact dock heights. */
+henka_result sandbox3d_editor_layout_controls_status_page(
+    henka_ui_rect panel_bounds,
+    sandbox3d_editor_controls_status_layout* out_layout);
+
+/* Split Scene Objects content into independently usable action and hierarchy
+ * regions. The action area may scroll, while the hierarchy retains its own
+ * row paging and fixed page footer. */
+henka_result sandbox3d_editor_layout_scene_objects_regions(
+    henka_ui_rect panel_bounds,
+    float measured_line_height,
+    sandbox3d_editor_scene_objects_layout* out_layout);
 
 /* Return the editor-owned modeling toolbar bounds for the current scene
  * frame. The navigation overlay consumes the same bounds so it cannot cover
@@ -161,6 +239,23 @@ henka_result sandbox3d_editor_layout_text_control_row_for_context(
     henka_ui_rect* out_items,
     size_t item_capacity,
     size_t* out_item_count);
+
+/* Pack measured controls into as few full-size rows as fit. The output is
+ * published only when every item has a valid, contained hit rectangle. */
+henka_result sandbox3d_editor_layout_text_control_grid_for_context(
+    const henka_ui_context* ui_context,
+    henka_ui_rect bounds,
+    const char* const* labels,
+    size_t item_count,
+    float scale,
+    float minimum_item_width,
+    float horizontal_padding,
+    float horizontal_gap,
+    float row_height,
+    float row_gap,
+    henka_ui_rect* out_items,
+    size_t item_capacity,
+    size_t* out_row_count);
 
 #ifdef HENKA_SANDBOX3D_TEST_SEAM
 /* Regression-only coverage for the retired fixed-column display helpers.

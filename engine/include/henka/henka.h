@@ -39,6 +39,7 @@
 #include <henka/terrain_physics.h>
 #include <henka/terrain_prediction.h>
 #include <henka/ui.h>
+#include <henka/ui_font.h>
 #include <henka/ui_icons.h>
 #include <henka/workspace.h>
 

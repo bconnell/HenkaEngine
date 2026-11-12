@@ -25,7 +25,9 @@ if(NOT EXISTS "${sandbox3d_cmake_path}")
     message(FATAL_ERROR "The canonical Sandbox3D CMake source must exist")
 endif()
 
-file(GLOB sandbox3d_sources "${SANDBOX3D_SOURCE_DIR}/*.c")
+file(GLOB sandbox3d_sources
+    "${SANDBOX3D_SOURCE_DIR}/*.c"
+    "${SANDBOX3D_SOURCE_DIR}/*.h")
 if(NOT sandbox3d_sources)
     message(FATAL_ERROR "No Sandbox3D production C sources found under ${SANDBOX3D_SOURCE_DIR}")
 endif()
@@ -37,6 +39,10 @@ foreach(source_path IN LISTS sandbox3d_sources)
     # intact so a prohibited call embedded in a macro/string is still visible.
     string(REGEX REPLACE "/\\*([^*]|\\*+[^*/])*\\*+/" " " source_text "${source_text}")
     string(REGEX REPLACE "//[^\r\n]*" " " source_text "${source_text}")
+
+    if(source_text MATCHES "#[ \t]*include[ \t]*[<\"][^>\"]*engine[/\\\\]src[/\\\\]ui[/\\\\]")
+        list(APPEND violations "${source_path}: private engine source include")
+    endif()
 
     if(source_text MATCHES "henka_ui_measure_text[ \t\r\n]*\\(")
         list(APPEND violations "${source_path}: context-free henka_ui_measure_text()")
