@@ -24,6 +24,9 @@ camera_position_x=0.000000
 
 Blank lines and comment lines beginning with `#` or `;` are accepted when loading. Saved files are rewritten as plain records, so comments are not preserved.
 
+Embedded NUL bytes are rejected even when the bytes before them form valid
+records; they are never treated as an end-of-text marker.
+
 Keys use ASCII letters, digits, `.`, `_`, and `-`. Values may contain ordinary printable text but not control characters, tabs, carriage returns, or newlines. These restrictions prevent one setting from adding unintended records.
 
 ## Transactional behavior
