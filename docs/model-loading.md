@@ -101,6 +101,10 @@ The OBJ loader accepts:
 - cached mesh loading through the asset manager;
 - explicit retry after a failed cached source load is corrected.
 
+A UTF-8 BOM is accepted only at the beginning of the OBJ source. Embedded NUL
+bytes in file-based OBJ content are rejected instead of allowing a valid text
+prefix to hide trailing data.
+
 Asset-manager OBJ and glTF mesh loads require an empty output slot. Returned
 meshes are borrowed manager-owned resources. A rejected or failed load
 preserves a non-empty caller slot and leaves an empty slot empty.
@@ -222,7 +226,7 @@ preserves texture color space, filtering, wrapping, mipmap, orientation, usage,
 and anisotropy settings. The loader accepts legacy version 0 files without a
 version key and version 1 files with slot-default texture descriptors;
 malformed or newer unsupported versions fail closed. Material files are
-limited to 64 KiB.
+limited to 64 KiB. Embedded NUL bytes are rejected as malformed source content.
 
 `henka_assets_reload_native_material_asset` parses and validates a complete
 candidate before updating the existing asset identity. A failed source or

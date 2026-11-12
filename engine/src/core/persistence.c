@@ -896,9 +896,109 @@ void henka_settings_destroy(henka_settings* settings)
     henka_free(settings);
 }
 
+#define HENKA_SETTINGS_FILE_READ_BUFFER_SIZE 4096U
+
+typedef struct henka_settings_file_reader
+{
+    FILE* file;
+    unsigned char buffer[HENKA_SETTINGS_FILE_READ_BUFFER_SIZE];
+    size_t buffer_offset;
+    size_t buffer_length;
+    bool reached_eof;
+} henka_settings_file_reader;
+
+typedef enum henka_settings_line_result
+{
+    HENKA_SETTINGS_LINE_READ_ERROR = -1,
+    HENKA_SETTINGS_LINE_EOF = 0,
+    HENKA_SETTINGS_LINE_READY = 1
+} henka_settings_line_result;
+
+static henka_settings_line_result henka_settings_file_reader_read_line(
+    henka_settings_file_reader* reader,
+    char* line,
+    size_t line_capacity,
+    size_t* out_line_length,
+    bool* out_contains_nul,
+    bool* out_overlong)
+{
+    bool line_started;
+
+    if (reader == NULL || reader->file == NULL || line == NULL || line_capacity < 2U ||
+        out_line_length == NULL || out_contains_nul == NULL || out_overlong == NULL)
+    {
+        return HENKA_SETTINGS_LINE_READ_ERROR;
+    }
+
+    *out_line_length = 0U;
+    *out_contains_nul = false;
+    *out_overlong = false;
+    line_started = false;
+
+    for (;;)
+    {
+        unsigned char* segment;
+        unsigned char* newline;
+        size_t available;
+        size_t segment_length;
+        size_t copy_capacity;
+        size_t copy_length;
+
+        if (reader->buffer_offset >= reader->buffer_length)
+        {
+            if (reader->reached_eof)
+            {
+                return line_started ? HENKA_SETTINGS_LINE_READY : HENKA_SETTINGS_LINE_EOF;
+            }
+
+            reader->buffer_length = fread(
+                reader->buffer, 1U, sizeof(reader->buffer), reader->file);
+            reader->buffer_offset = 0U;
+            if (reader->buffer_length == 0U)
+            {
+                reader->reached_eof = true;
+                if (ferror(reader->file))
+                {
+                    return HENKA_SETTINGS_LINE_READ_ERROR;
+                }
+                return line_started ? HENKA_SETTINGS_LINE_READY : HENKA_SETTINGS_LINE_EOF;
+            }
+        }
+
+        segment = reader->buffer + reader->buffer_offset;
+        available = reader->buffer_length - reader->buffer_offset;
+        newline = (unsigned char*)memchr(segment, '\n', available);
+        segment_length = newline != NULL ? (size_t)(newline - segment) + 1U : available;
+        if (memchr(segment, '\0', segment_length) != NULL)
+        {
+            *out_contains_nul = true;
+        }
+
+        line_started = line_started || segment_length > 0U;
+        copy_capacity = line_capacity - 1U - *out_line_length;
+        copy_length = segment_length < copy_capacity ? segment_length : copy_capacity;
+        if (copy_length < segment_length)
+        {
+            *out_overlong = true;
+        }
+        if (copy_length > 0U)
+        {
+            memcpy(line + *out_line_length, segment, copy_length);
+            *out_line_length += copy_length;
+        }
+        reader->buffer_offset += segment_length;
+
+        if (newline != NULL)
+        {
+            return HENKA_SETTINGS_LINE_READY;
+        }
+    }
+}
+
 henka_result henka_settings_load_file(henka_settings* settings, const char* path)
 {
     FILE* file;
+    henka_settings_file_reader reader;
     bool had_parse_error;
     char line[1024];
     unsigned int line_number;
@@ -924,33 +1024,59 @@ henka_result henka_settings_load_file(henka_settings* settings, const char* path
         return HENKA_ERROR_UNKNOWN;
     }
 
+    reader.file = file;
+    reader.buffer_offset = 0U;
+    reader.buffer_length = 0U;
+    reader.reached_eof = false;
     had_parse_error = false;
     line_number = 0U;
 
-    while (fgets(line, (int)sizeof(line), file) != NULL)
+    for (;;)
     {
+        henka_settings_line_result line_result;
+        bool line_contains_nul;
+        bool line_overlong;
+        size_t line_length;
         char* equals;
         char* key;
-        size_t line_length;
         char* trimmed_line;
         char* value;
 
+        line_result = henka_settings_file_reader_read_line(
+            &reader,
+            line,
+            sizeof(line),
+            &line_length,
+            &line_contains_nul,
+            &line_overlong);
+        if (line_result == HENKA_SETTINGS_LINE_EOF)
+        {
+            break;
+        }
+        if (line_result == HENKA_SETTINGS_LINE_READ_ERROR)
+        {
+            HENKA_LOG_WARN("Unable to read settings file: %s", path);
+            had_parse_error = true;
+            break;
+        }
+
         ++line_number;
-        line_length = strlen(line);
-        if (line_length > 0U && line[line_length - 1U] != '\n' && !feof(file))
+        if (line_length == sizeof(line) - 1U && line[line_length - 1U] != '\n')
+        {
+            line_overlong = true;
+        }
+        line[line_length] = '\0';
+
+        if (line_contains_nul)
+        {
+            HENKA_LOG_WARN("Rejecting embedded NUL in settings line %u in %s", line_number, path);
+            had_parse_error = true;
+            continue;
+        }
+        if (line_overlong)
         {
             HENKA_LOG_WARN("Rejecting overlong settings line %u in %s", line_number, path);
             had_parse_error = true;
-
-            do
-            {
-                if (fgets(line, (int)sizeof(line), file) == NULL)
-                {
-                    break;
-                }
-                line_length = strlen(line);
-            } while (line_length == 0U || line[line_length - 1U] != '\n');
-
             continue;
         }
 

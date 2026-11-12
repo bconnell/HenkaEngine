@@ -611,7 +611,11 @@ henka_result henka_material_asset_file_save(
 static henka_result henka_material_file_check_size(const char* path)
 {
     FILE* file = NULL;
+    unsigned char bytes[4096];
     long size;
+    size_t bytes_read;
+    size_t bytes_checked = 0U;
+    henka_result result = HENKA_SUCCESS;
 
 #if defined(_WIN32)
     if (fopen_s(&file, path, "rb") != 0)
@@ -625,19 +629,43 @@ static henka_result henka_material_file_check_size(const char* path)
     {
         return HENKA_ERROR_ASSET_SOURCE;
     }
-    if (fseek(file, 0L, SEEK_END) != 0)
+    if (fseek(file, 0L, SEEK_END) != 0 ||
+        (size = ftell(file)) < 0L ||
+        fseek(file, 0L, SEEK_SET) != 0)
     {
         fclose(file);
         return HENKA_ERROR_ASSET_SOURCE;
     }
-    size = ftell(file);
-    fclose(file);
-    if (size < 0L)
+    if ((uint64_t)size > (uint64_t)HENKA_MATERIAL_MAX_FILE_BYTES)
     {
-        return HENKA_ERROR_ASSET_SOURCE;
+        fclose(file);
+        return HENKA_ERROR_LIMIT;
     }
-    return (uint64_t)size > (uint64_t)HENKA_MATERIAL_MAX_FILE_BYTES
-        ? HENKA_ERROR_LIMIT : HENKA_SUCCESS;
+
+    /* Material files are text; binary NULs may hide trailing settings. */
+    while ((bytes_read = fread(bytes, 1U, sizeof(bytes), file)) != 0U)
+    {
+        if (bytes_read > HENKA_MATERIAL_MAX_FILE_BYTES - bytes_checked)
+        {
+            result = HENKA_ERROR_LIMIT;
+            break;
+        }
+        bytes_checked += bytes_read;
+        if (memchr(bytes, '\0', bytes_read) != NULL)
+        {
+            result = HENKA_ERROR_ASSET_SOURCE;
+            break;
+        }
+    }
+    if (ferror(file))
+    {
+        result = HENKA_ERROR_ASSET_SOURCE;
+    }
+    if (fclose(file) != 0)
+    {
+        result = HENKA_ERROR_ASSET_SOURCE;
+    }
+    return result;
 }
 
 henka_result henka_material_asset_file_load(

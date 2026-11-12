@@ -146,6 +146,13 @@ static char* henka_read_binary_text_file(const char* path)
         return NULL;
     }
 
+    /* OBJ files are text; never parse a valid prefix and ignore trailing bytes. */
+    if (memchr(buffer, '\0', length) != NULL)
+    {
+        henka_free(buffer);
+        return NULL;
+    }
+
     buffer[length] = '\0';
     return buffer;
 }
@@ -1332,6 +1339,14 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
     context.line_number = 0;
     context.error_message = NULL;
     cursor = source;
+    /* UTF-8 BOM is valid only at the beginning of a text OBJ source. */
+    if (source_length >= 3U &&
+        (unsigned char)source[0] == 0xEFU &&
+        (unsigned char)source[1] == 0xBBU &&
+        (unsigned char)source[2] == 0xBFU)
+    {
+        cursor += 3;
+    }
     line_count = 0U;
     saw_face = false;
     saw_vertex_statement = false;
@@ -1480,7 +1495,7 @@ henka_result henka_model_data_load_obj(const char* path, henka_model_data* out_m
     source = henka_read_binary_text_file(path);
     if (source == NULL)
     {
-        HENKA_LOG_ERROR("Unable to open OBJ model '%s'", path);
+        HENKA_LOG_ERROR("Unable to read OBJ model '%s'", path);
         return HENKA_ERROR_PLATFORM;
     }
 

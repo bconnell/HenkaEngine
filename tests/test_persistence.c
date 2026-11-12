@@ -54,11 +54,44 @@ static bool henka_test_write_file(const char* path, const char* content)
     return fclose(file) == 0;
 }
 
+static bool henka_test_write_bytes(const char* path, const void* bytes, size_t size)
+{
+    FILE* file;
+    bool success;
+
+    if (path == NULL || (bytes == NULL && size > 0U))
+    {
+        return false;
+    }
+
+    file = henka_test_open_file(path, "wb");
+    if (file == NULL)
+    {
+        return false;
+    }
+
+    success = fwrite(bytes, 1U, size, file) == size;
+    if (fclose(file) != 0)
+    {
+        success = false;
+    }
+    return success;
+}
+
 void henka_test_persistence(void)
 {
     static const henka_settings_int_update scale_updates[] = {
         {"ui.editor.scale_percent", 150},
         {"ui.editor.scale_migration_version", 1}};
+
+    static const char* embedded_nul_path = "build/test_tmp/persistence_embedded_nul.settings";
+    static const unsigned char embedded_nul_settings[] =
+    {
+        'g', 'o', 'o', 'd', '=', 't', 'r', 'u', 'e', '\n',
+        0U,
+        'h', 'i', 'd', 'd', 'e', 'n', '=', 'f', 'a', 'l', 's', 'e', '\n'
+    };
+
     char long_flag_name[124];
     char long_slot_name[66];
     char max_flag_name[123];
@@ -77,6 +110,7 @@ void henka_test_persistence(void)
     henka_result result;
     henka_save_data* save_data;
     henka_settings* settings;
+    bool embedded_nul_rejected;
 
     HENKA_TEST_ASSERT(henka_settings_create(NULL) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_settings_create(&settings) == HENKA_SUCCESS);
@@ -216,7 +250,20 @@ void henka_test_persistence(void)
     HENKA_TEST_ASSERT(result == HENKA_ERROR_UNKNOWN);
     HENKA_TEST_ASSERT(strcmp(henka_settings_get_string(reloaded, "stable", ""), "unchanged") == 0);
     HENKA_TEST_ASSERT(henka_settings_has_key(reloaded, "good") == false);
+
+    embedded_nul_rejected = false;
+    if (henka_test_write_bytes(
+            embedded_nul_path, embedded_nul_settings, sizeof(embedded_nul_settings)))
+    {
+        result = henka_settings_load_file(reloaded, embedded_nul_path);
+        embedded_nul_rejected = result == HENKA_ERROR_UNKNOWN &&
+            strcmp(henka_settings_get_string(reloaded, "stable", ""), "unchanged") == 0 &&
+            henka_settings_has_key(reloaded, "good") == false &&
+            henka_settings_has_key(reloaded, "hidden") == false;
+    }
+    (void)remove(embedded_nul_path);
     henka_settings_destroy(reloaded);
+    HENKA_TEST_ASSERT(embedded_nul_rejected);
 
     result = henka_settings_load_file(settings, "build/test_tmp/does_not_exist.settings");
     HENKA_TEST_ASSERT(result == HENKA_ERROR_UNKNOWN);
@@ -391,6 +438,7 @@ void henka_test_persistence(void)
 
     remove("build/test_tmp/persistence_roundtrip.settings");
     remove("build/test_tmp/persistence_malformed.settings");
+    remove(embedded_nul_path);
     remove("build/test_tmp/save_roundtrip.save");
     remove("build/test_tmp/save_bad_version.save");
     remove("build/test_tmp/save_bad_float.save");

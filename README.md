@@ -90,6 +90,14 @@ in [docs/capability-statuses.tsv](docs/capability-statuses.tsv) and
 
 The Sandbox provides a native workspace for Scene View, utilities, object
 inspection, physics QA, materials, terrain, authoring, and layout tools.
+Workspace interaction guards prevent conflicting tab drag, panel drag,
+resize, and topology operations. Layout undo/redo is unavailable during
+active conflicting interactions; cancelled or interrupted tab extractions
+restore their original topology rather than adding unintended history.
+A read-only interaction status API exposes current editor-side ownership
+and valid layout-history actions for diagnostics. See [workspace interaction
+rules](docs/ui.md) for details.
+
 The Compass is an integrated viewport instrument that tracks the active camera,
 supports axis snapping and orbit drag, and exposes
 projection and info-strip controls. Detailed controls are in
