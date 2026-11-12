@@ -1699,6 +1699,13 @@ static void henka_test_mesh_source_failure_requires_fallback(void)
 
 static void henka_test_mesh_reimport_preserves_identity_and_transactionality(void)
 {
+    static const char obj_with_embedded_nul[] =
+        "v 0 0 0\n"
+        "v 1 0 0\n"
+        "v 0 1 0\n"
+        "f 1 2 3\n"
+        "\0"
+        "f 1 2 3\n";
     static const char* obj_initial =
         "v 0 0 0\n"
         "v 1 0 0\n"
@@ -1777,6 +1784,19 @@ static void henka_test_mesh_reimport_preserves_identity_and_transactionality(voi
     HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, obj_entity, &scene_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene_mesh == obj_mesh);
     HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == scene_revision_before_reload);
+
+    reloaded_obj_mesh = (henka_mesh*)1;
+    HENKA_TEST_ASSERT(henka_test_write_file(
+        obj_path, obj_with_embedded_nul, sizeof(obj_with_embedded_nul) - 1U));
+    HENKA_TEST_ASSERT(henka_assets_reload_obj_mesh(
+        manager, obj_path, &reloaded_obj_mesh) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reloaded_obj_mesh == NULL);
+    HENKA_TEST_ASSERT(obj_mesh->vertex_count == 6);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, obj_entity, &scene_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_mesh == obj_mesh);
+    HENKA_TEST_ASSERT(henka_scene_get_render_revision(scene) == scene_revision_before_reload);
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(manager, obj_mesh, &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(metadata.loaded && !metadata.fallback && metadata.reload_supported);
 
     reloaded_obj_mesh = (henka_mesh*)1;
     HENKA_TEST_ASSERT(henka_test_write_file(obj_path, malformed, strlen(malformed)));
