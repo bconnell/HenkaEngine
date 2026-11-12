@@ -412,11 +412,33 @@ static void henka_test_runtime_material_cannot_reload_matching_gltf_path(void)
     HENKA_TEST_ASSERT(metadata_preserved);
 }
 
+static bool henka_test_append_file(const char* path, const void* data, size_t size)
+{
+    FILE* file = NULL;
+    bool success;
+
+    if (path == NULL || (data == NULL && size > 0U)) return false;
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "ab") != 0) file = NULL;
+#else
+    file = fopen(path, "ab");
+#endif
+    if (file == NULL) return false;
+    success = fwrite(data, 1U, size, file) == size;
+    if (fclose(file) != 0) success = false;
+    return success;
+}
+
 static void henka_test_native_material_file_authority_and_reload(void)
 {
     static const char* material_path = "build/test_tmp/native-material-authority.material";
     static const char* tiny_float_path = "build/test_tmp/native-material-tiny-float.material";
     static const char* oversized_path = "build/test_tmp/native-material-oversized.material";
+    static const char* embedded_nul_path = "build/test_tmp/native-material-embedded-nul.material";
+    static const unsigned char embedded_nul_suffix[] =
+    {
+        0U, 'i', 'g', 'n', 'o', 'r', 'e', 'd', '=', '1'
+    };
     static const char* legacy_path = "build/test_tmp/native-material-legacy.material";
     static const char* malformed_text = "not a Henka material document\n";
     static const char* alias_path = "BUILD\\TEST_TMP\\NATIVE-MATERIAL-AUTHORITY.MATERIAL";
@@ -453,6 +475,8 @@ static void henka_test_native_material_file_authority_and_reload(void)
     bool malformed_version_rejected = false;
     bool unsupported_version_rejected = false;
     bool oversized_rejected = false;
+    bool embedded_nul_load_rejected = false;
+    bool embedded_nul_reload_transactional = false;
     bool traversal_rejected = false;
     bool revision_exhaustion_rejected = false;
 
@@ -583,6 +607,38 @@ static void henka_test_native_material_file_authority_and_reload(void)
                     legacy_material.roughness == authored.roughness;
             }
             henka_settings_destroy(legacy_settings);
+        }
+        if (henka_assets_save_native_material_file(
+                manager, ".", embedded_nul_path, &authored) == HENKA_SUCCESS &&
+            henka_test_append_file(
+                embedded_nul_path, embedded_nul_suffix, sizeof(embedded_nul_suffix)))
+        {
+            henka_material_asset* nul_asset = NULL;
+            const size_t material_count_before = manager->material_count;
+            embedded_nul_load_rejected = henka_assets_load_native_material_asset(
+                    manager, ".", embedded_nul_path, &authored, &nul_asset) ==
+                    HENKA_ERROR_ASSET_SOURCE &&
+                nul_asset == NULL && manager->material_count == material_count_before;
+        }
+        if (henka_test_append_file(
+                material_path, embedded_nul_suffix, sizeof(embedded_nul_suffix)))
+        {
+            const uint64_t revision_before = asset->revision;
+            const henka_material material_before = asset->material;
+            henka_material_asset* nul_reload = (henka_material_asset*)1;
+            const henka_result nul_result = henka_assets_reload_native_material_asset(
+                manager, material_path, &nul_reload);
+            embedded_nul_reload_transactional =
+                nul_result == HENKA_ERROR_ASSET_SOURCE &&
+                nul_reload == NULL && asset->revision == revision_before &&
+                asset->material.shader == material_before.shader &&
+                asset->material.base_color.y == material_before.base_color.y &&
+                asset->material.roughness == material_before.roughness;
+        }
+        if (henka_assets_save_native_material_file(
+                manager, ".", material_path, &authored) != HENKA_SUCCESS)
+        {
+            embedded_nul_reload_transactional = false;
         }
         preserved_output = (henka_material_asset*)1;
         output_slot_preserved = henka_assets_load_native_material_asset(
@@ -781,6 +837,7 @@ static void henka_test_native_material_file_authority_and_reload(void)
     (void)remove(material_path);
     (void)remove(tiny_float_path);
     (void)remove(oversized_path);
+    (void)remove(embedded_nul_path);
     (void)remove(legacy_path);
     HENKA_TEST_ASSERT(saved && loaded_ok);
     HENKA_TEST_ASSERT(tiny_float_round_trip);
@@ -791,6 +848,8 @@ static void henka_test_native_material_file_authority_and_reload(void)
     HENKA_TEST_ASSERT(unsupported_version_rejected);
     HENKA_TEST_ASSERT(malformed_integer_rejected);
     HENKA_TEST_ASSERT(malformed_boolean_rejected);
+    HENKA_TEST_ASSERT(embedded_nul_load_rejected);
+    HENKA_TEST_ASSERT(embedded_nul_reload_transactional);
     HENKA_TEST_ASSERT(malformed_reload_transactional && oversized_rejected &&
         traversal_rejected && revision_exhaustion_rejected);
 }
