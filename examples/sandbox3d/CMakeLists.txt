@@ -86,6 +86,7 @@ add_custom_command(OUTPUT ${HENKA_SHOWCASE_ASSET_OUTPUTS}
     DEPENDS
         ${CMAKE_SOURCE_DIR}/scripts/generate_showcase_assets.ps1
         ${CMAKE_SOURCE_DIR}/scripts/henka_script_common.ps1
+        ${CMAKE_SOURCE_DIR}/scripts/showcase_generation_cache.ps1
     VERBATIM
 )
 add_custom_target(henka_showcase_asset_generation DEPENDS ${HENKA_SHOWCASE_ASSET_OUTPUTS})

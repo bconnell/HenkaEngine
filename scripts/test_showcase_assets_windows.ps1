@@ -3,7 +3,9 @@ param(
     [string]$OutputDirectory,
 
     [Parameter(Mandatory = $true)]
-    [string]$BaselineDirectory
+    [string]$BaselineDirectory,
+
+    [switch]$RequireVerifiedCacheHit
 )
 
 Set-StrictMode -Version Latest
@@ -143,11 +145,10 @@ $candidateDirectory = Resolve-HenkaLocalPath `
     -RepositoryRoot $repoRoot `
     -Path (Join-Path $OutputDirectory "candidate_run")
 $cacheManifestPath = Join-Path $OutputDirectory "candidate-generation-manifest.json"
-if (Test-Path -LiteralPath $candidateDirectory) {
-    Remove-Item -LiteralPath $candidateDirectory -Recurse -Force
-}
-if (Test-Path -LiteralPath $cacheManifestPath -PathType Leaf) {
-    Remove-Item -LiteralPath $cacheManifestPath -Force
+if ($RequireVerifiedCacheHit -and
+    ((Test-Path -LiteralPath $candidateDirectory -PathType Container) -eq $false -or
+        (Test-Path -LiteralPath $cacheManifestPath -PathType Leaf) -eq $false)) {
+    throw "The verified Showcase cache-hit control requires a prior candidate and manifest."
 }
 [IO.Directory]::CreateDirectory($candidateDirectory) | Out-Null
 
@@ -156,8 +157,16 @@ $freshGenerationOutput = @(& $generator -OutputDirectory $candidateDirectory -Re
 if ($LASTEXITCODE -ne 0) {
     throw "Showcase generator failed with exit code $LASTEXITCODE."
 }
-if (-not (($freshGenerationOutput -join "`n").Contains("[generated] Wrote verified hashes for 10 Showcase assets."))) {
-    throw "Showcase semantic regression did not perform and record one fresh generation."
+$firstInvocationOutput = $freshGenerationOutput -join "`n"
+$firstInvocationGenerated = $firstInvocationOutput.Contains(
+    "[generated] Wrote verified hashes for 10 Showcase assets.")
+$firstInvocationReused = $firstInvocationOutput.Contains(
+    "[skip] Verified Showcase inputs and all generated output hashes are unchanged.")
+if ($firstInvocationGenerated -eq $firstInvocationReused) {
+    throw "Showcase generator did not report exactly one of fresh generation or verified cache reuse."
+}
+if ($RequireVerifiedCacheHit -and -not $firstInvocationReused) {
+    throw "Showcase test rerun discarded a valid candidate instead of reusing its verified cache."
 }
 foreach ($deterministicFile in $showcaseFiles) {
     $candidateHash = Get-ShowcaseFileHash (Join-Path $candidateDirectory $deterministicFile)
@@ -166,7 +175,11 @@ foreach ($deterministicFile in $showcaseFiles) {
         throw "Showcase generator output is not deterministic for '$deterministicFile'."
     }
 }
-Write-Output "[pass] One fresh Showcase generation matches all ten build-owned baseline outputs."
+if ($firstInvocationGenerated) {
+    Write-Output "[pass] Fresh Showcase generation matches all ten build-owned baseline outputs."
+} else {
+    Write-Output "[pass] Verified cached Showcase outputs match all ten build-owned baseline outputs."
+}
 foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
     $path = Join-Path $candidateDirectory ($name + ".gltf")
     $json = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json

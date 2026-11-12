@@ -10,6 +10,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
+. (Join-Path $PSScriptRoot "showcase_generation_cache.ps1")
 $repositoryRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 Add-Type -AssemblyName System.Drawing
 
@@ -1557,22 +1558,6 @@ $showcaseFileNames = @(
     "rocket_detail_normal.png",
     "rocket_metallic_roughness.png")
 
-function Get-ShowcaseSha256 {
-    param([Parameter(Mandatory = $true)][string]$Path)
-    $sha256 = [Security.Cryptography.SHA256]::Create()
-    $stream = $null
-    try {
-        $stream = [IO.File]::OpenRead($Path)
-        return ([BitConverter]::ToString($sha256.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
-    }
-    finally {
-        if ($null -ne $stream) {
-            $stream.Dispose()
-        }
-        $sha256.Dispose()
-    }
-}
-
 $generationFingerprint = $null
 if ($ReuseVerifiedOutput) {
     if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
@@ -1591,49 +1576,27 @@ if ($ReuseVerifiedOutput) {
 
     $fingerprintInputs = @(
         "format=1",
-        "generator=$(Get-ShowcaseSha256 -Path $PSCommandPath)",
-        "path-helper=$(Get-ShowcaseSha256 -Path (Join-Path $PSScriptRoot 'henka_script_common.ps1'))",
+        "generator=$(Get-ShowcaseCacheSha256 -Path $PSCommandPath)",
+        "path-helper=$(Get-ShowcaseCacheSha256 -Path (Join-Path $PSScriptRoot 'henka_script_common.ps1'))",
+        "cache-helper=$(Get-ShowcaseCacheSha256 -Path (Join-Path $PSScriptRoot 'showcase_generation_cache.ps1'))",
         "powershell=$($PSVersionTable.PSVersion.ToString())",
         "platform=$([Environment]::OSVersion.VersionString)",
         "drawing=$([System.Drawing.Bitmap].Assembly.GetName().Version.ToString())",
         "outputs=$($showcaseFileNames -join ',')")
-    $fingerprintBytes = [Text.Encoding]::UTF8.GetBytes(($fingerprintInputs -join "`n"))
-    $sha256 = [Security.Cryptography.SHA256]::Create()
-    try {
-        $generationFingerprint = ([BitConverter]::ToString($sha256.ComputeHash($fingerprintBytes))).Replace('-', '').ToLowerInvariant()
-    }
-    finally {
-        $sha256.Dispose()
-    }
-
-    $cacheHit = $false
-    if (Test-Path -LiteralPath $ManifestPath -PathType Leaf) {
-        try {
-            $cachedManifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json -ErrorAction Stop
-            $cachedOutputs = @($cachedManifest.outputs)
-            $cacheHit = ([int]$cachedManifest.format_version -eq 1) -and
-                ([string]$cachedManifest.input_fingerprint -ceq $generationFingerprint) -and
-                ($cachedOutputs.Count -eq $showcaseFileNames.Count)
-            if ($cacheHit) {
-                foreach ($showcaseFileName in $showcaseFileNames) {
-                    $cachedOutput = @($cachedOutputs | Where-Object { [string]$_.name -ceq $showcaseFileName })
-                    $showcasePath = Join-Path $OutputDirectory $showcaseFileName
-                    if ($cachedOutput.Count -ne 1 -or -not (Test-Path -LiteralPath $showcasePath -PathType Leaf) -or
-                        [string]$cachedOutput[0].sha256 -cne (Get-ShowcaseSha256 -Path $showcasePath)) {
-                        $cacheHit = $false
-                        break
-                    }
-                }
-            }
-        }
-        catch {
-            $cacheHit = $false
-        }
-    }
-    if ($cacheHit) {
+    $generationFingerprint = Get-ShowcaseGenerationFingerprint -Inputs $fingerprintInputs
+    $cacheStatus = Test-ShowcaseGenerationCache `
+        -ManifestPath $ManifestPath `
+        -OutputDirectory $OutputDirectory `
+        -InputFingerprint $generationFingerprint `
+        -OutputNames $showcaseFileNames
+    if ($cacheStatus.CacheHit) {
         Write-Output "[skip] Verified Showcase inputs and all generated output hashes are unchanged."
         return
     }
+    $missDetails = if ($cacheStatus.Reason -ceq "fingerprint-changed") {
+        " cached=$($cacheStatus.CachedFingerprint); expected=$generationFingerprint"
+    } else { "" }
+    Write-Output "[cache-miss] $($cacheStatus.Reason)$missDetails"
 }
 
 $giraffe = New-Giraffe
@@ -1650,30 +1613,13 @@ if ($ReuseVerifiedOutput) {
             if (-not (Test-Path -LiteralPath $showcasePath -PathType Leaf)) {
                 throw "Showcase generator did not produce expected output '$showcaseFileName'."
             }
-            [pscustomobject]@{ name = $showcaseFileName; sha256 = Get-ShowcaseSha256 -Path $showcasePath }
+            [pscustomobject]@{ name = $showcaseFileName; sha256 = Get-ShowcaseCacheSha256 -Path $showcasePath }
         })
     $manifest = [ordered]@{
         format_version = 1
         input_fingerprint = $generationFingerprint
         outputs = $manifestOutputs
     }
-    $manifestTemporaryPath = "$ManifestPath.$PID.tmp"
-    try {
-        [IO.File]::WriteAllText(
-            $manifestTemporaryPath,
-            ($manifest | ConvertTo-Json -Depth 4),
-            [Text.UTF8Encoding]::new($false))
-        if (Test-Path -LiteralPath $ManifestPath -PathType Leaf) {
-            [IO.File]::Replace($manifestTemporaryPath, $ManifestPath, $null)
-        }
-        else {
-            [IO.File]::Move($manifestTemporaryPath, $ManifestPath)
-        }
-    }
-    finally {
-        if (Test-Path -LiteralPath $manifestTemporaryPath -PathType Leaf) {
-            Remove-Item -LiteralPath $manifestTemporaryPath -Force
-        }
-    }
+    Write-ShowcaseGenerationManifest -ManifestPath $ManifestPath -Manifest $manifest
     Write-Output "[generated] Wrote verified hashes for $($showcaseFileNames.Count) Showcase assets."
 }

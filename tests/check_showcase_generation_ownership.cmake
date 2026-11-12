@@ -7,6 +7,7 @@ endif()
 
 file(READ "${SANDBOX_CMAKE}" sandbox_cmake_text)
 file(READ "${SHOWCASE_TEST_SCRIPT}" showcase_test_text)
+string(CONCAT cache_helper_dependency_ref "$" "{CMAKE_SOURCE_DIR}/scripts/showcase_generation_cache.ps1")
 
 function(validate_showcase_generation_ownership sandbox_text test_text out_ok out_reason)
     set(reason "")
@@ -16,8 +17,8 @@ function(validate_showcase_generation_ownership sandbox_text test_text out_ok ou
         set(reason "Showcase assets are still generated as an unconditional Sandbox POST_BUILD action")
     elseif(NOT sandbox_text MATCHES "add_custom_command\\(OUTPUT \\$\\{HENKA_SHOWCASE_ASSET_OUTPUTS\\}")
         set(reason "Showcase generation is not modeled as an output-driven custom command")
-    elseif(NOT sandbox_text MATCHES "DEPENDS[^)]*generate_showcase_assets\\.ps1[^)]*henka_script_common\\.ps1")
-        set(reason "Showcase generation does not depend on both generator and canonical path helper inputs")
+    elseif(NOT sandbox_text MATCHES "DEPENDS[^)]*generate_showcase_assets\\.ps1[^)]*henka_script_common\\.ps1[^)]*showcase_generation_cache\\.ps1")
+        set(reason "Showcase generation does not depend on its generator, canonical path helper, and cache authority inputs")
     elseif(NOT sandbox_text MATCHES "add_custom_target\\(henka_showcase_asset_generation DEPENDS \\$\\{HENKA_SHOWCASE_ASSET_OUTPUTS\\}")
         set(reason "Showcase generated outputs have no dedicated build target")
     elseif(NOT sandbox_text MATCHES "add_dependencies\\(henka_sandbox3d henka_showcase_asset_generation")
@@ -141,6 +142,21 @@ if(unverified_reuse_negative_control_ok OR
 endif()
 
 string(REPLACE
+    "${cache_helper_dependency_ref}"
+    ""
+    missing_cache_authority_dependency_sandbox_cmake_text
+    "${sandbox_cmake_text}")
+validate_showcase_generation_ownership(
+    "${missing_cache_authority_dependency_sandbox_cmake_text}"
+    "${showcase_test_text}"
+    missing_cache_authority_dependency_negative_control_ok
+    missing_cache_authority_dependency_negative_control_reason)
+if(missing_cache_authority_dependency_negative_control_ok OR
+    NOT missing_cache_authority_dependency_negative_control_reason MATCHES "cache authority inputs")
+    message(FATAL_ERROR "Negative control failed to require the Showcase cache helper as a declared generation dependency.")
+endif()
+
+string(REPLACE
     "$imagePath = Join-Path $candidateDirectory"
     "$imagePath = Join-Path $OutputDirectory"
     wrong_candidate_asset_root_test_text
@@ -169,4 +185,4 @@ if(negative_control_ok OR negative_control_reason STREQUAL "")
     message(FATAL_ERROR "Negative control failed to reject unconditional Showcase regeneration.")
 endif()
 
-message(STATUS "Showcase generation ownership passes shared-output/cache checks and rejects duplicated or unverified generation")
+message(STATUS "Showcase generation ownership passes shared-output/cache-source checks and rejects duplicated or unverified generation")
