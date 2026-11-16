@@ -90,12 +90,13 @@ $ordinaryBuildRoot = [System.IO.Path]::GetFullPath((Get-HenkaBuildRoot -Reposito
 
 foreach ($resolvedBuildRoot in @($buildRoot, $ordinaryBuildRoot)) {
     Assert-StorageContract $resolvedBuildRoot.StartsWith(
-        (Join-Path $localRoot "builds") + [System.IO.Path]::DirectorySeparatorChar,
-        [System.StringComparison]::OrdinalIgnoreCase) "A resolved build root is not beneath _local\builds."
+        (Join-Path $localRoot "bld") + [System.IO.Path]::DirectorySeparatorChar,
+        [System.StringComparison]::OrdinalIgnoreCase) "A resolved build root is not beneath the canonical _local build area."
     $sdlConfigurationObjectRoot = Join-Path $resolvedBuildRoot `
         "_deps\sdl3-build\SDL3-static.dir\RelWithDebInfo"
-    Assert-StorageContract ($sdlConfigurationObjectRoot.Length -le 128) `
-        "A resolved build root makes SDL's CMake object directory exceed the 128-character Windows path budget ($($sdlConfigurationObjectRoot.Length)): $sdlConfigurationObjectRoot"
+    $sdlObjectPath = Join-Path $sdlConfigurationObjectRoot "cmake_pch.cxx.obj"
+    Assert-StorageContract ($sdlObjectPath.Length -le 128) `
+        "A resolved build root makes SDL's full CMake object path exceed the 128-character Windows path budget ($($sdlObjectPath.Length)): $sdlObjectPath"
 }
 $cmakeLists = Get-Content -LiteralPath (Join-Path $RepositoryRoot "CMakeLists.txt") -Raw
 Assert-StorageContract ($cmakeLists -match '(?m)^\s*set\(CMAKE_OBJECT_PATH_MAX\s+128\b') `
@@ -144,21 +145,22 @@ try {
     $secondCandidateProbe = Join-Path $candidateRoot ("storage-guard-candidate-" + [Guid]::NewGuid().ToString("N"))
     $null = New-HenkaLocalDirectory -RepositoryRoot $RepositoryRoot -Path $secondCandidateProbe
     $secondCandidateBuildRoot = Get-HenkaBuildRoot -RepositoryRoot $secondCandidateProbe
-    $buildRootPrefix = (Join-Path $localRoot "builds") + [System.IO.Path]::DirectorySeparatorChar
+    $buildRootPrefix = (Join-Path $localRoot "bld") + [System.IO.Path]::DirectorySeparatorChar
     Assert-StorageContract ([System.IO.Path]::GetFullPath($candidateBuildRoot).StartsWith(
             $buildRootPrefix, [System.StringComparison]::OrdinalIgnoreCase) -and
         -not [System.IO.Path]::GetFullPath($candidateBuildRoot).Equals(
             [System.IO.Path]::GetFullPath((Join-Path $candidateProbe "build")),
             [System.StringComparison]::OrdinalIgnoreCase)) `
-        "An exact candidate's isolated build root is not beneath _local\builds."
+        "An exact candidate's isolated build root is not beneath the canonical _local build area."
     Assert-StorageContract (-not [System.IO.Path]::GetFullPath($candidateBuildRoot).Equals(
             [System.IO.Path]::GetFullPath($secondCandidateBuildRoot),
             [System.StringComparison]::OrdinalIgnoreCase)) `
         "Two distinct exact-candidate source paths resolved to one shared build root."
     $candidateSdlObjectRoot = Join-Path $candidateBuildRoot `
         "_deps\sdl3-build\SDL3-static.dir\RelWithDebInfo"
-    Assert-StorageContract ($candidateSdlObjectRoot.Length -le 128) `
-        "The exact-candidate build root exceeds the 128-character CMake object-path budget ($($candidateSdlObjectRoot.Length))."
+    $candidateSdlObjectPath = Join-Path $candidateSdlObjectRoot "cmake_pch.cxx.obj"
+    Assert-StorageContract ($candidateSdlObjectPath.Length -le 128) `
+        "The exact-candidate full SDL object path exceeds the 128-character CMake object-path budget ($($candidateSdlObjectPath.Length)): $candidateSdlObjectPath"
 
     $pathBudgetProbe = Join-Path (Join-Path $localRoot "worktrees") `
         ("storage-path-budget-" + [Guid]::NewGuid().ToString("N") + ("x" * 40))
@@ -166,8 +168,9 @@ try {
     $longCheckoutBuildRoot = Get-HenkaBuildRoot -RepositoryRoot $pathBudgetProbe
     $longCheckoutSdlObjectRoot = Join-Path $longCheckoutBuildRoot `
         "_deps\sdl3-build\SDL3-static.dir\RelWithDebInfo"
-    Assert-StorageContract ($longCheckoutSdlObjectRoot.Length -le 128) `
-        "A long checkout name pushed SDL's CMake object directory past 128 characters ($($longCheckoutSdlObjectRoot.Length))."
+    $longCheckoutSdlObjectPath = Join-Path $longCheckoutSdlObjectRoot "cmake_pch.cxx.obj"
+    Assert-StorageContract ($longCheckoutSdlObjectPath.Length -le 128) `
+        "A long checkout name pushed SDL's full CMake object path past 128 characters ($($longCheckoutSdlObjectPath.Length)): $longCheckoutSdlObjectPath"
 
     $nestedLocalProbe = Join-Path $markerProbe "_local\nested-project"
     $null = New-HenkaLocalDirectory -RepositoryRoot $RepositoryRoot -Path $nestedLocalProbe
@@ -385,7 +388,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Could not establish isolated clean-wrapper source provenance." }
 
     $cleanProbeLocalRoot = Join-Path $markerProbe "_local"
-    $cleanProbeBuildRoot = Join-Path (Join-Path $cleanProbeLocalRoot "builds") `
+    $cleanProbeBuildRoot = Join-Path (Join-Path $cleanProbeLocalRoot "bld") `
         (Get-HenkaCheckoutStorageKey -RepositoryRoot $cleanProbeRepository -CompactBuildKey)
     New-Item -ItemType Directory -Path $cleanProbeBuildRoot -Force | Out-Null
     $cleanProbeSourceSha = [string](& $git -C $cleanProbeRepository rev-parse HEAD)

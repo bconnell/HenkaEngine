@@ -6,11 +6,15 @@
 
 #include <henka/ui.h>
 
+#define SANDBOX3D_EDITOR_SCALE_COMPACT_INLINE_MIN_WIDTH 192.0f
+#define SANDBOX3D_EDITOR_SCALE_COMPACT_LABEL_WIDTH 64.0f
+
 typedef struct sandbox3d_editor_scale_control_layout_desc
 {
     henka_ui_rect label;
     henka_ui_rect choices;
     bool stacked;
+    bool compact;
 } sandbox3d_editor_scale_control_layout_desc;
 
 /* Shared geometry authority for scale-control measurement, automation

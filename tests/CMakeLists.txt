@@ -12,10 +12,26 @@ endif()
 
 if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
     add_test(
+        NAME henka_process_window_policy_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_henka_process_window_policy_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_ctest_working_directory_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_ctest_working_directory_windows.ps1
             -BuildDirectory ${CMAKE_BINARY_DIR})
+
+    add_test(
+        NAME henka_editor_typography_package_policy_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_editor_typography_package_policy_windows.ps1)
+
+    add_test(
+        NAME henka_editor_typography_capture_policy_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_editor_typography_capture_policy_windows.ps1)
 endif()
 
 if(HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
@@ -1056,6 +1072,7 @@ endif()
 
 if(HENKA_BUILD_CLIENT)
 add_executable(henka_tests
+    ../examples/sandbox3d/editor_automation_frame_capture.c
     ../examples/sandbox3d/editor_controls.c
     ../examples/sandbox3d/editor_ui_state.c
     ../examples/sandbox3d/camera_tools.c
@@ -1083,6 +1100,7 @@ add_executable(henka_tests
     ../examples/sandbox3d/workspace_persistence.c
     ../examples/sandbox3d/editor_layout.c
     ../examples/sandbox3d/editor_scale_control.c
+    ../examples/sandbox3d/editor_utility_settings_layout.c
     ../examples/sandbox3d/editor_scale_transaction.c
     test_action.c
     test_assets.c
@@ -1097,6 +1115,7 @@ add_executable(henka_tests
     test_sandbox3d_workspace.c
     test_sandbox3d_editor_ui.c
     test_sandbox3d_editor_scale_control.c
+    test_sandbox3d_automation_frame_capture.c
     test_sandbox3d_editor_font_bootstrap.c
     test_sandbox3d_editor_layout.c
     test_sandbox3d_camera_tools.c
@@ -1146,8 +1165,10 @@ henka_enable_project_warnings(henka_tests)
 add_test(NAME henka_tests COMMAND henka_tests)
 add_test(NAME henka_ui_font_tests COMMAND henka_tests --group ui_font)
 add_test(NAME henka_sandbox3d_editor_font_bootstrap_tests COMMAND henka_tests --group sandbox3d_editor_font_bootstrap)
+add_test(NAME henka_sandbox3d_automation_frame_capture_tests COMMAND henka_tests --group sandbox3d_automation_frame_capture)
+add_test(NAME henka_sandbox3d_editor_layout_tests COMMAND henka_tests --group sandbox3d_editor_layout)
 add_test(NAME henka_platform_display_scale_tests COMMAND henka_tests --group platform_display_scale)
-set_tests_properties(henka_ui_font_tests PROPERTIES
+set_tests_properties(henka_ui_font_tests henka_sandbox3d_editor_layout_tests PROPERTIES
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 endif()

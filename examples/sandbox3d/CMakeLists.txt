@@ -1,4 +1,5 @@
 add_executable(henka_sandbox3d
+    editor_automation_frame_capture.c
     editor_controls.c
     editor_ui_state.c
     camera_tools.c
@@ -27,6 +28,7 @@ add_executable(henka_sandbox3d
     workspace_persistence.c
     editor_layout.c
     editor_scale_control.c
+    editor_utility_settings_layout.c
     editor_scale_transaction.c
     scene_hierarchy_projection.c
     scene_document_bridge.c

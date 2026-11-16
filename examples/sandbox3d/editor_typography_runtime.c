@@ -949,6 +949,32 @@ henka_result sandbox3d_editor_typography_runtime_attach_context(
         runtime->profiles[slot] = candidates[slot];
         henka_ui_font_raster_profile_destroy(previous);
     }
+    if (sandbox3d_typography_automation_diagnostics_enabled())
+    {
+        henka_ui_font_raster_profile_info profile_info;
+        if (runtime->profiles[slot] != NULL &&
+            henka_ui_font_raster_profile_get_info(
+                runtime->profiles[slot],
+                (uint16_t)runtime->preferences.scale_percent,
+                &profile_info))
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC editor_typography_context stage=attached window_id=%u font=%s font_sha256=%s ui_scale_percent=%d os_display_scale=%u/%u\n",
+                (unsigned int)window_id,
+                sandbox3d_editor_font_candidate_get_alias(runtime->font_candidate),
+                runtime->font_asset->expected_sha256_hex,
+                runtime->preferences.scale_percent,
+                profile_info.key.output_scale_numerator,
+                profile_info.key.output_scale_denominator);
+        }
+        else
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC editor_typography_context stage=attached profile=unavailable window_id=%u\n",
+                (unsigned int)window_id);
+        }
+        fflush(stdout);
+    }
     return HENKA_SUCCESS;
 }
 
@@ -986,7 +1012,7 @@ henka_result sandbox3d_editor_typography_runtime_draw_scale_control(
         return result;
     }
     sandbox3d_typography_report_scale_control(runtime, bounds, &layout);
-    henka_ui_label(ui, layout.label.x, layout.label.y, 1.0f, "UI scale");
+    henka_ui_label(ui, layout.label.x, layout.label.y, 1.0f, "Scale %");
     result = sandbox3d_editor_scale_control_draw(
         ui,
         layout.choices,

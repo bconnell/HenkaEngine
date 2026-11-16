@@ -10,6 +10,8 @@ $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 . (Join-Path $PSScriptRoot "henka_ui_automation_helpers.ps1")
+. (Join-Path $PSScriptRoot "henka_typography_package_policy.ps1")
+. (Join-Path $PSScriptRoot "henka_typography_capture_policy.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $buildRoot = Get-HenkaBuildRoot -RepositoryRoot $repoRoot
@@ -35,6 +37,18 @@ foreach ($requiredPath in @($executable, $packageInfoPath, $buildInfoPath)) {
     }
 }
 $packageInfo = [System.IO.File]::ReadAllText($packageInfoPath)
+$comparisonModeMatch = [regex]::Match(
+    $packageInfo,
+    '(?im)^Typography comparison candidates:\s*(included|excluded)\s*$')
+if (-not $comparisonModeMatch.Success -or $comparisonModeMatch.Groups[1].Value -ne "included") {
+    throw "Typography comparison requires an explicitly marked comparison package. Repackage with -IncludeTypographyComparisonFonts."
+}
+$selectedFontMetadata = Get-HenkaTypographySelectedFontMetadata
+if ($packageInfo -notmatch ("(?im)^Typography font SHA-256:\s*{0}\s*$" -f [regex]::Escape($selectedFontMetadata.Sha256)) -or
+    $packageInfo -notmatch ("(?im)^Typography license SHA-256:\s*{0}\s*$" -f [regex]::Escape($selectedFontMetadata.LicenseSha256))) {
+    throw "The comparison package marker does not identify the selected font and license bytes."
+}
+Assert-HenkaTypographyPackageAssetSet -PackageRoot $PackageRoot -IncludeComparisonFonts
 $packageHashMatch = [regex]::Match(
     $packageInfo,
     '(?im)^Packaged executable SHA-256:\s*([0-9a-f]{64})\s*$')
@@ -93,6 +107,9 @@ $frameCaptureDirectory = Join-Path $scratchRoot "renderer-frames"
 [System.IO.Directory]::CreateDirectory((Join-Path $scratchRoot "window-captures")) | Out-Null
 Add-Type -AssemblyName System.Drawing
 $captures = New-Object System.Collections.Generic.List[object]
+$settingsScrollProofs = New-Object System.Collections.Generic.List[object]
+$detailsCompactProofs = New-Object System.Collections.Generic.List[object]
+$detachedContextProof = $null
 $completed = $false
 
 function Get-LogText {
@@ -137,6 +154,79 @@ function Find-LastLogLine {
     return $null
 }
 
+function Wait-TypographyStableReportedGeometry {
+    param(
+        [Parameter(Mandatory = $true)]$Session,
+        [Parameter(Mandatory = $true)][string]$GeometryPattern,
+        [Parameter(Mandatory = $true)][string]$Description,
+        [ValidateRange(1000, 30000)][int]$TimeoutMilliseconds = 10000
+    )
+
+    $framePattern = 'HENKA_AUTOMATION_DIAGNOSTIC frame seq=\d+ phase=render-complete'
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMilliseconds)
+    $lastFrame = -1L
+    $lastGeometryLine = $null
+    $stableRenderAdvances = 0
+
+    do {
+        if ($Session.Captured.Process.HasExited) {
+            throw "Packaged Sandbox exited while waiting for stable $Description geometry. Log: $($Session.StdoutPath)"
+        }
+
+        $frameLine = Find-LastLogLine -Path $Session.StdoutPath -Pattern $framePattern
+        $geometryLine = Find-LastLogLine -Path $Session.StdoutPath -Pattern $GeometryPattern
+        $frameMatch = [regex]::Match($frameLine, 'frame seq=(?<sequence>\d+) phase=render-complete')
+        if ($frameMatch.Success -and -not [string]::IsNullOrWhiteSpace($geometryLine)) {
+            $frameSequence = [int64]::Parse(
+                $frameMatch.Groups['sequence'].Value,
+                [System.Globalization.CultureInfo]::InvariantCulture)
+            if ($frameSequence -gt $lastFrame) {
+                if ($geometryLine -eq $lastGeometryLine) {
+                    $stableRenderAdvances++
+                }
+                else {
+                    $lastGeometryLine = $geometryLine
+                    $stableRenderAdvances = 0
+                }
+                $lastFrame = $frameSequence
+                if ($stableRenderAdvances -ge 1) {
+                    return $geometryLine
+                }
+            }
+        }
+        Start-Sleep -Milliseconds 50
+    } while ((Get-Date) -lt $deadline)
+
+    throw ("The product did not report stable $Description geometry across render progress. " +
+        "last_frame=$lastFrame last_geometry=$lastGeometryLine log=$($Session.StdoutPath)")
+}
+
+function Wait-TypographyStableToolsControl {
+    param(
+        [Parameter(Mandatory = $true)]$Session,
+        [ValidateRange(1000, 30000)][int]$TimeoutMilliseconds = 10000
+    )
+    return Wait-TypographyStableReportedGeometry `
+        -Session $Session `
+        -GeometryPattern 'Scene View Tools control: x=-?[0-9.]+ y=-?[0-9.]+ width=[0-9.]+ height=[0-9.]+' `
+        -Description 'Scene View Tools control' `
+        -TimeoutMilliseconds $TimeoutMilliseconds
+}
+
+function Wait-TypographyStableUtilityContextHeader {
+    param(
+        [Parameter(Mandatory = $true)]$Session,
+        [Parameter(Mandatory = $true)][ValidateSet(100, 125, 150, 200)][int]$Scale,
+        [ValidateRange(1000, 30000)][int]$TimeoutMilliseconds = 10000
+    )
+    $pattern = 'HENKA_AUTOMATION_DIAGNOSTIC workspace_context_header id=utility x=-?[0-9.]+ y=-?[0-9.]+ width=[0-9.]+ height=[0-9.]+ visible=1 ui_scale_percent=' + $Scale + ' frame=\d+'
+    return Wait-TypographyStableReportedGeometry `
+        -Session $Session `
+        -GeometryPattern $pattern `
+        -Description 'Utility workspace context header' `
+        -TimeoutMilliseconds $TimeoutMilliseconds
+}
+
 function Get-ReportedRect {
     param(
         [Parameter(Mandatory = $true)][string]$Line,
@@ -171,6 +261,106 @@ function Get-ReportedScrollState {
         Offset = [double]::Parse($match.Groups['offset'].Value, $culture)
         ContentHeight = [double]::Parse($match.Groups['content'].Value, $culture)
     }
+}
+
+function Get-ReportedUtilitySettingsLayout {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $number = '-?\d+(?:\.\d+)?'
+    $pattern = "HENKA_AUTOMATION_DIAGNOSTIC utility_settings_layout frame=(?<frame>\d+) viewport_x=(?<vx>$number) viewport_y=(?<vy>$number) viewport_width=(?<vw>$number) viewport_height=(?<vh>$number) content_height=(?<content>$number) scroll_offset=(?<offset>$number) smooth_snap_x=(?<sx>$number) smooth_snap_y=(?<sy>$number) smooth_snap_width=(?<sw>$number) smooth_snap_height=(?<sh>$number) smooth_snap_visible=(?<visible>[01]) smooth_snap_enabled=(?<enabled>[01])"
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success) {
+        throw "The product did not report a complete Utility Settings layout: $Line"
+    }
+    $culture = [System.Globalization.CultureInfo]::InvariantCulture
+    return [pscustomobject]@{
+        Frame = [UInt64]::Parse($match.Groups['frame'].Value, $culture)
+        Viewport = [pscustomobject]@{
+            X = [double]::Parse($match.Groups['vx'].Value, $culture)
+            Y = [double]::Parse($match.Groups['vy'].Value, $culture)
+            Width = [double]::Parse($match.Groups['vw'].Value, $culture)
+            Height = [double]::Parse($match.Groups['vh'].Value, $culture)
+        }
+        ContentHeight = [double]::Parse($match.Groups['content'].Value, $culture)
+        ScrollOffset = [double]::Parse($match.Groups['offset'].Value, $culture)
+        SmoothRect = [pscustomobject]@{
+            X = [double]::Parse($match.Groups['sx'].Value, $culture)
+            Y = [double]::Parse($match.Groups['sy'].Value, $culture)
+            Width = [double]::Parse($match.Groups['sw'].Value, $culture)
+            Height = [double]::Parse($match.Groups['sh'].Value, $culture)
+        }
+        SmoothVisible = $match.Groups['visible'].Value -eq '1'
+        SmoothEnabled = $match.Groups['enabled'].Value -eq '1'
+    }
+}
+
+function Get-ReportedUtilitySettingsScroll {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $number = '-?\d+(?:\.\d+)?'
+    $pattern = "HENKA_AUTOMATION_DIAGNOSTIC utility_settings_scroll frame=(?<frame>\d+) viewport_x=$number viewport_y=$number viewport_width=$number viewport_height=$number content_height=$number delta=(?<delta>$number) offset=(?<before>$number)->(?<after>$number) handled=(?<handled>[01])"
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success) {
+        throw "The product did not report a complete Utility Settings scroll event: $Line"
+    }
+    $culture = [System.Globalization.CultureInfo]::InvariantCulture
+    return [pscustomobject]@{
+        Frame = [UInt64]::Parse($match.Groups['frame'].Value, $culture)
+        Delta = [double]::Parse($match.Groups['delta'].Value, $culture)
+        OffsetBefore = [double]::Parse($match.Groups['before'].Value, $culture)
+        OffsetAfter = [double]::Parse($match.Groups['after'].Value, $culture)
+        Handled = $match.Groups['handled'].Value -eq '1'
+    }
+}
+
+function Wait-TypographyUtilitySettingsLayout {
+    param(
+        [Parameter(Mandatory = $true)]$Session,
+        [Parameter(Mandatory = $true)][UInt64]$AfterFrame
+    )
+
+    $deadline = (Get-Date).AddSeconds(6)
+    do {
+        if ($Session.Captured.Process.HasExited) {
+            throw "Packaged Sandbox exited while observing Utility Settings layout. Captured stdout: $($Session.StdoutPath)"
+        }
+        $line = Find-LastLogLine `
+            -Path $Session.StdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC utility_settings_layout frame=\d+'
+        if (-not [string]::IsNullOrWhiteSpace($line)) {
+            $layout = Get-ReportedUtilitySettingsLayout -Line $line
+            if ($layout.Frame -gt $AfterFrame) {
+                return $layout
+            }
+        }
+        Start-Sleep -Milliseconds 50
+    } while ((Get-Date) -lt $deadline)
+    throw "Timed out waiting for a new product-owned Utility Settings layout after frame $AfterFrame. Log: $($Session.StdoutPath)"
+}
+
+function Wait-TypographyUtilitySettingsScroll {
+    param(
+        [Parameter(Mandatory = $true)]$Session,
+        [Parameter(Mandatory = $true)][UInt64]$AfterFrame
+    )
+
+    $deadline = (Get-Date).AddSeconds(6)
+    do {
+        if ($Session.Captured.Process.HasExited) {
+            throw "Packaged Sandbox exited while observing Utility Settings scrolling. Captured stdout: $($Session.StdoutPath)"
+        }
+        $line = Find-LastLogLine `
+            -Path $Session.StdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC utility_settings_scroll frame=\d+'
+        if (-not [string]::IsNullOrWhiteSpace($line)) {
+            $scroll = Get-ReportedUtilitySettingsScroll -Line $line
+            if ($scroll.Frame -gt $AfterFrame) {
+                return $scroll
+            }
+        }
+        Start-Sleep -Milliseconds 50
+    } while ((Get-Date) -lt $deadline)
+    throw "Timed out waiting for a new product-owned Utility Settings scroll event after frame $AfterFrame. Log: $($Session.StdoutPath)"
 }
 
 function Get-ReportedWorkspaceTopology {
@@ -290,7 +480,8 @@ function Send-TypographyLogicalClick {
     param(
         [Parameter(Mandatory = $true)]$Session,
         [Parameter(Mandatory = $true)][double]$LogicalX,
-        [Parameter(Mandatory = $true)][double]$LogicalY
+        [Parameter(Mandatory = $true)][double]$LogicalY,
+        [ValidateSet("left", "right", "middle")][string]$Button = "left"
     )
 
     $framebufferPoint = Convert-TypographySessionLogicalPoint `
@@ -298,7 +489,8 @@ function Send-TypographyLogicalClick {
     Send-HenkaAutomationClick `
         -EventPath $Session.EventPath `
         -X $framebufferPoint.X `
-        -Y $framebufferPoint.Y
+        -Y $framebufferPoint.Y `
+        -Button $Button
 }
 
 function Send-TypographyLogicalScroll {
@@ -354,7 +546,7 @@ function Convert-TypographyLogicalPointToFramebufferPoint {
         [double]::IsNaN($LogicalY) -or [double]::IsInfinity($LogicalY) -or
         $LogicalX -lt 0.0 -or $LogicalY -lt 0.0 -or
         $EditorScalePercent -notin @(100, 125, 150, 200) -or
-        $DisplayScaleNumerator -eq 0U -or $DisplayScaleDenominator -eq 0U) {
+        $DisplayScaleNumerator -eq 0 -or $DisplayScaleDenominator -eq 0) {
         throw 'The product-reported typography pointer transform was invalid.'
     }
     $displayScale = [double]$DisplayScaleNumerator / [double]$DisplayScaleDenominator
@@ -493,6 +685,8 @@ function Start-TypographyCandidateProcess {
     $environmentNames = @(
         "HENKA_AUTOMATION_INPUT_OWNED",
         "HENKA_AUTOMATION_DIAGNOSTICS",
+        "HENKA_AUTOMATION_START_HIDDEN",
+        "HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN",
         "HENKA_AUTOMATION_INPUT_FILE",
         "HENKA_AUTOMATION_USER_DATA_BASE_PATH",
         "HENKA_AUTOMATION_EDITOR_FONT",
@@ -506,6 +700,8 @@ function Start-TypographyCandidateProcess {
     try {
         $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
         $env:HENKA_AUTOMATION_DIAGNOSTICS = "1"
+        $env:HENKA_AUTOMATION_START_HIDDEN = "1"
+        $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"
         $env:HENKA_AUTOMATION_INPUT_FILE = $eventPath
         $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH = $UserDataRoot
         $env:HENKA_AUTOMATION_EDITOR_FONT = $Font
@@ -517,7 +713,7 @@ function Start-TypographyCandidateProcess {
             -StdoutPath $stdoutPath `
             -StderrPath $stderrPath `
             -StartMinimized:$false `
-            -StartVisibleWithoutActivation
+            -StartHidden
     }
     finally {
         foreach ($name in $environmentNames) {
@@ -527,6 +723,41 @@ function Start-TypographyCandidateProcess {
     if ($null -eq $captured) {
         throw "Packaged Sandbox process creation returned no process handle."
     }
+    $window = [IntPtr]::Zero
+    try {
+        [void](Wait-LogLine `
+            -CapturedProcess $captured `
+            -Path $stderrPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC window_focus_policy focusable=0 input_focused=0' `
+            -TimeoutMilliseconds 30000)
+        [void](Wait-LogLine `
+            -CapturedProcess $captured `
+            -Path $stdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC window_start_hidden=1' `
+            -TimeoutMilliseconds 30000)
+        $windowDeadline = (Get-Date).AddSeconds(30)
+        do {
+            $window = Find-HenkaAutomationWindow `
+                -ProcessId $captured.Process.Id `
+                -TitleContains "Henka Engine Sandbox 3D" `
+                -IncludeHidden
+            if ($window -ne [IntPtr]::Zero) { break }
+            if ($captured.Process.HasExited) { throw "Packaged Sandbox exited before its hidden main window was created." }
+            Start-Sleep -Milliseconds 100
+        } while ((Get-Date) -lt $windowDeadline)
+        if ($window -eq [IntPtr]::Zero) { throw "Packaged Sandbox hidden main window was not found." }
+        $windowVisible = [HenkaUiAutomationNative]::IsWindowVisible($window)
+        $windowIconic = [HenkaUiAutomationNative]::IsIconic($window)
+        $foregroundWindow = [HenkaUiAutomationNative]::GetForegroundWindow()
+        if ($windowVisible -or $windowIconic -or $foregroundWindow -eq $window) {
+            throw ("The typography candidate must remain hidden and non-foreground " +
+                "(visible=$windowVisible iconic=$windowIconic foreground=$($foregroundWindow.ToInt64()) target=$($window.ToInt64())).")
+        }
+    }
+    catch {
+        Close-HenkaCapturedProcess $captured
+        throw
+    }
     return [pscustomobject]@{
         Captured = $captured
         EventPath = $eventPath
@@ -534,8 +765,8 @@ function Start-TypographyCandidateProcess {
         StderrPath = $stderrPath
         CaptureDirectory = $frameCaptureDirectory
         CaptureLabel = $CaptureLabel
-        Window = [IntPtr]::Zero
-        WindowPresentation = "windowed"
+        Window = $window
+        WindowPresentation = "hidden"
     }
 }
 
@@ -546,10 +777,7 @@ function Ensure-TypographySettingsVisible {
         -Path $Session.StdoutPath `
         -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC workspace_topology cause=startup tools_visible=[01] divider_count=\d+'
     if ($topologyLine -match 'tools_visible=0') {
-        $toolsLine = Wait-LogLine `
-            -CapturedProcess $Session.Captured `
-            -Path $Session.StdoutPath `
-            -Pattern 'Scene View Tools control: x=-?[0-9.]+ y=-?[0-9.]+ width=[0-9.]+ height=[0-9.]+'
+        $toolsLine = Wait-TypographyStableToolsControl -Session $Session
         $toolsRect = Get-ReportedRect -Line $toolsLine -Prefix 'Scene View Tools control:'
         Send-TypographyLogicalClick `
             -Session $Session `
@@ -684,10 +912,252 @@ function Ensure-TypographySettingsVisible {
     if ([string]::IsNullOrWhiteSpace($finalTabLine)) {
         throw "The Settings tab did not become active through the packaged UI. Log: $($Session.StdoutPath)"
     }
+
+    # The persisted Settings page may reopen at the last saved scroll offset.
+    # Navigate back to the scale control through the product-reported viewport;
+    # do not assume it is initially visible after a restart or resize.
+    $settingsLayoutLine = Wait-LogLine `
+        -CapturedProcess $Session.Captured `
+        -Path $Session.StdoutPath `
+        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC utility_settings_layout frame=\d+'
+    $settingsLayout = Get-ReportedUtilitySettingsLayout -Line $settingsLayoutLine
+    if ($settingsLayout.Viewport.Width -le 0.0 -or
+        $settingsLayout.Viewport.Height -le 0.0) {
+        throw "The active Settings page reported no usable scroll viewport: $settingsLayoutLine"
+    }
+    for ($attempt = 0; $attempt -lt 64 -and $settingsLayout.ScrollOffset -gt 0.5; ++$attempt) {
+        $before = $settingsLayout
+        Send-TypographyLogicalScroll `
+            -Session $Session `
+            -LogicalX ($before.Viewport.X + $before.Viewport.Width / 2.0) `
+            -LogicalY ($before.Viewport.Y + $before.Viewport.Height / 2.0) `
+            -WheelDelta 1.0
+        $scroll = Wait-TypographyUtilitySettingsScroll `
+            -Session $Session `
+            -AfterFrame $before.Frame
+        if (-not $scroll.Handled -or
+            [Math]::Abs($scroll.OffsetBefore - $before.ScrollOffset) -gt 0.6 -or
+            $scroll.OffsetAfter -ge ($before.ScrollOffset - 0.5)) {
+            throw "The real Settings wheel event did not return toward the scale control. Before=$($before.ScrollOffset), event=$($scroll.OffsetBefore)->$($scroll.OffsetAfter), handled=$($scroll.Handled)."
+        }
+        $settingsLayout = Wait-TypographyUtilitySettingsLayout `
+            -Session $Session `
+            -AfterFrame $before.Frame
+        if ([Math]::Abs($settingsLayout.ScrollOffset - $scroll.OffsetAfter) -gt 0.6) {
+            throw "Settings layout telemetry disagrees with the consumed scroll event. Layout=$($settingsLayout.ScrollOffset), event=$($scroll.OffsetBefore)->$($scroll.OffsetAfter)."
+        }
+    }
+    if ($settingsLayout.ScrollOffset -gt 0.5) {
+        throw "The persisted Settings page did not return to its top within the bounded real-wheel sequence. Offset=$($settingsLayout.ScrollOffset)."
+    }
     [void](Wait-LogLine `
         -CapturedProcess $Session.Captured `
         -Path $Session.StdoutPath `
         -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC editor_scale_control .* selected_percent=100|HENKA_AUTOMATION_DIAGNOSTIC editor_scale_control .* selected_percent=125|HENKA_AUTOMATION_DIAGNOSTIC editor_scale_control .* selected_percent=150|HENKA_AUTOMATION_DIAGNOSTIC editor_scale_control .* selected_percent=200')
+}
+
+function Test-TypographySettingsScrollControl {
+    param(
+        [Parameter(Mandatory = $true)]$Session,
+        [Parameter(Mandatory = $true)][string]$Font
+    )
+
+    $layoutLine = Wait-LogLine `
+        -CapturedProcess $Session.Captured `
+        -Path $Session.StdoutPath `
+        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC utility_settings_layout frame=\d+'
+    $layout = Get-ReportedUtilitySettingsLayout -Line $layoutLine
+    if ($layout.Viewport.Width -le 0.0 -or
+        $layout.Viewport.Height -le 0.0 -or
+        $layout.ContentHeight -le $layout.Viewport.Height) {
+        throw "The 1280x720 Settings page did not expose a scrollable product-owned viewport at the selected scale: $layoutLine"
+    }
+
+    $initialScrollOffset = $layout.ScrollOffset
+    $scrollEvents = 0
+    for ($attempt = 0; $attempt -lt 32; ++$attempt) {
+        if ($attempt -gt 0 -and $layout.SmoothVisible) {
+            break
+        }
+
+        $before = $layout
+        Send-TypographyLogicalScroll `
+            -Session $Session `
+            -LogicalX ($before.Viewport.X + $before.Viewport.Width / 2.0) `
+            -LogicalY ($before.Viewport.Y + $before.Viewport.Height / 2.0) `
+            -WheelDelta -1.0
+        $scroll = Wait-TypographyUtilitySettingsScroll `
+            -Session $Session `
+            -AfterFrame $before.Frame
+        if (-not $scroll.Handled -or
+            [Math]::Abs($scroll.OffsetBefore - $before.ScrollOffset) -gt 0.6 -or
+            $scroll.OffsetAfter -le ($before.ScrollOffset + 0.5)) {
+            throw "The real Utility Settings wheel event did not advance its own scroll state. Before=$($before.ScrollOffset), event=$($scroll.OffsetBefore)->$($scroll.OffsetAfter), handled=$($scroll.Handled)."
+        }
+        $layout = Wait-TypographyUtilitySettingsLayout `
+            -Session $Session `
+            -AfterFrame $before.Frame
+        if ([Math]::Abs($layout.ScrollOffset - $scroll.OffsetAfter) -gt 0.6) {
+            throw "Utility Settings layout telemetry disagrees with the consumed scroll event. Layout=$($layout.ScrollOffset), event=$($scroll.OffsetAfter)."
+        }
+        ++$scrollEvents
+    }
+
+    if ($scrollEvents -eq 0 -or -not $layout.SmoothVisible) {
+        throw "Smooth Snap did not become visible through bounded real Settings scrolling after $scrollEvents wheel events. Last state: $($Session.StdoutPath)"
+    }
+    if ($layout.SmoothRect.Width -le 0.0 -or
+        $layout.SmoothRect.Height -le 0.0 -or
+        $layout.SmoothRect.X -lt $layout.Viewport.X -or
+        $layout.SmoothRect.Y -lt $layout.Viewport.Y -or
+        ($layout.SmoothRect.X + $layout.SmoothRect.Width) -gt ($layout.Viewport.X + $layout.Viewport.Width + 0.1) -or
+        ($layout.SmoothRect.Y + $layout.SmoothRect.Height) -gt ($layout.Viewport.Y + $layout.Viewport.Height + 0.1)) {
+        throw "The product-reported Smooth Snap control is not fully inside its visible Settings viewport: $($Session.StdoutPath)"
+    }
+
+    $originalSmoothState = $layout.SmoothEnabled
+    $beforeClickFrame = $layout.Frame
+    Send-TypographyLogicalClick `
+        -Session $Session `
+        -LogicalX ($layout.SmoothRect.X + $layout.SmoothRect.Width / 2.0) `
+        -LogicalY ($layout.SmoothRect.Y + $layout.SmoothRect.Height / 2.0)
+    $changed = Wait-TypographyUtilitySettingsLayout `
+        -Session $Session `
+        -AfterFrame $beforeClickFrame
+    if ($changed.SmoothEnabled -eq $originalSmoothState -or
+        -not $changed.SmoothVisible -or
+        [Math]::Abs($changed.SmoothRect.X - $layout.SmoothRect.X) -gt 0.1 -or
+        [Math]::Abs($changed.SmoothRect.Y - $layout.SmoothRect.Y) -gt 0.1) {
+        throw "Clicking the real Smooth Snap hit target did not change its authoritative setting while it remained visible. Log: $($Session.StdoutPath)"
+    }
+
+    $restoreFrame = $changed.Frame
+    Send-TypographyLogicalClick `
+        -Session $Session `
+        -LogicalX ($changed.SmoothRect.X + $changed.SmoothRect.Width / 2.0) `
+        -LogicalY ($changed.SmoothRect.Y + $changed.SmoothRect.Height / 2.0)
+    $restored = Wait-TypographyUtilitySettingsLayout `
+        -Session $Session `
+        -AfterFrame $restoreFrame
+    if ($restored.SmoothEnabled -ne $originalSmoothState -or
+        -not $restored.SmoothVisible) {
+        throw "The real Smooth Snap control did not restore its original authoritative state. Log: $($Session.StdoutPath)"
+    }
+
+    while ($restored.ScrollOffset -gt 0.5) {
+        $before = $restored
+        Send-TypographyLogicalScroll `
+            -Session $Session `
+            -LogicalX ($before.Viewport.X + $before.Viewport.Width / 2.0) `
+            -LogicalY ($before.Viewport.Y + $before.Viewport.Height / 2.0) `
+            -WheelDelta 1.0
+        $scroll = Wait-TypographyUtilitySettingsScroll `
+            -Session $Session `
+            -AfterFrame $before.Frame
+        if (-not $scroll.Handled -or
+            $scroll.OffsetAfter -ge ($before.ScrollOffset - 0.5)) {
+            throw "The real Utility Settings wheel event did not return toward the top. Before=$($before.ScrollOffset), event=$($scroll.OffsetBefore)->$($scroll.OffsetAfter), handled=$($scroll.Handled)."
+        }
+        $restored = Wait-TypographyUtilitySettingsLayout `
+            -Session $Session `
+            -AfterFrame $before.Frame
+        if ([Math]::Abs($restored.ScrollOffset - $scroll.OffsetAfter) -gt 0.6) {
+            throw "Utility Settings layout telemetry disagrees while returning to the top. Layout=$($restored.ScrollOffset), event=$($scroll.OffsetAfter)."
+        }
+    }
+    if ($restored.ScrollOffset -gt 0.5 -or
+        $restored.SmoothEnabled -ne $originalSmoothState) {
+        throw "Utility Settings did not return to its initial scroll and Smooth Snap state. Log: $($Session.StdoutPath)"
+    }
+    return [pscustomobject]@{
+        font = $Font
+        client_resolution = '1280x720'
+        editor_ui_scale_percent = 200
+        initial_scroll_offset = $initialScrollOffset
+        wheel_events_to_reveal_control = $scrollEvents
+        product_reported_control_visible = $true
+        real_click_changed_authoritative_setting = $true
+        second_real_click_restored_authoritative_setting = $true
+        final_scroll_offset = $restored.ScrollOffset
+    }
+}
+
+function Test-TypographyObjectDetailsCompactLayout {
+    param(
+        [Parameter(Mandatory = $true)]$Session,
+        [Parameter(Mandatory = $true)][string]$Font
+    )
+
+    $scalePattern = 'HENKA_AUTOMATION_DIAGNOSTIC editor_typography stage=scale_applied .* ui_scale_percent=200(?:\s|$)'
+    $footerPattern = 'Native authoring project controls: name=Ground save_x=(?<saveX>-?[0-9.]+) save_y=(?<saveY>-?[0-9.]+) reload_x=(?<reloadX>-?[0-9.]+) reload_y=(?<reloadY>-?[0-9.]+) width=(?<width>-?[0-9.]+) height=24\.0\.'
+    $deadline = (Get-Date).AddSeconds(8)
+    $footerLine = $null
+
+    do {
+        if ($Session.Captured.Process.HasExited) {
+            throw "Packaged Sandbox exited while checking compact Object Details controls. Log: $($Session.StdoutPath)"
+        }
+        $lines = (Get-LogText -Path $Session.StdoutPath) -split "`r?`n"
+        $scaleIndex = -1
+        for ($index = $lines.Length - 1; $index -ge 0; --$index) {
+            if ($lines[$index] -match $scalePattern) {
+                $scaleIndex = $index
+                break
+            }
+        }
+        if ($scaleIndex -ge 0) {
+            for ($index = $lines.Length - 1; $index -gt $scaleIndex; --$index) {
+                if ($lines[$index] -match $footerPattern) {
+                    $footerLine = $lines[$index]
+                    break
+                }
+            }
+        }
+        if ($null -eq $footerLine) {
+            Start-Sleep -Milliseconds 100
+        }
+    } while ($null -eq $footerLine -and (Get-Date) -lt $deadline)
+
+    if ($null -eq $footerLine) {
+        throw "At 200% UI scale and 1280x720, the packaged Object Details panel did not publish reachable Save Project and Reload Project button geometry for $Font. Earlier 100% geometry is not accepted as proof. Log: $($Session.StdoutPath)"
+    }
+
+    $footerMatch = [regex]::Match($footerLine, $footerPattern)
+    if (-not $footerMatch.Success) {
+        throw "The compact Object Details footer geometry was malformed: $footerLine"
+    }
+    $culture = [System.Globalization.CultureInfo]::InvariantCulture
+    $saveX = [double]::Parse($footerMatch.Groups['saveX'].Value, $culture)
+    $saveY = [double]::Parse($footerMatch.Groups['saveY'].Value, $culture)
+    $reloadX = [double]::Parse($footerMatch.Groups['reloadX'].Value, $culture)
+    $reloadY = [double]::Parse($footerMatch.Groups['reloadY'].Value, $culture)
+    $buttonWidth = [double]::Parse($footerMatch.Groups['width'].Value, $culture)
+    if ($buttonWidth -lt 96.0 -or $buttonWidth -gt 140.0 -or
+        $reloadY -lt ($saveY + 20.0) -or
+        [Math]::Abs($reloadX - $saveX) -gt 0.5) {
+        throw "The compact Object Details footer must preserve full-size stacked targets at 200% and 1280x720: $footerLine"
+    }
+
+    Send-TypographyLogicalClick `
+        -Session $Session `
+        -LogicalX ($saveX + $buttonWidth / 2.0) `
+        -LogicalY ($saveY + 12.0)
+    [void](Wait-LogLine `
+        -CapturedProcess $Session.Captured `
+        -Path $Session.StdoutPath `
+        -Pattern 'Native authoring project request: save=1 reload=0 result=success\.' `
+        -TimeoutMilliseconds 12000)
+
+    return [pscustomobject]@{
+        font = $Font
+        client_resolution = '1280x720'
+        editor_ui_scale_percent = 200
+        save_reload_stacked = $true
+        save_button_width = $buttonWidth
+        save_geometry = @{ x = $saveX; y = $saveY }
+        reload_geometry = @{ x = $reloadX; y = $reloadY }
+        real_save_click_succeeded = $true
+    }
 }
 
 function Select-TypographyGroundThroughUi {
@@ -828,12 +1298,7 @@ function Hide-TypographyToolsThroughUi {
     }
     $topology = Get-ReportedWorkspaceTopology -Line $topologyLine
     if ($topology.ToolsVisible) {
-        $toolsLine = Find-LastLogLine `
-            -Path $Session.StdoutPath `
-            -Pattern 'Scene View Tools control: x=-?[0-9.]+ y=-?[0-9.]+ width=[0-9.]+ height=[0-9.]+'
-        if ([string]::IsNullOrWhiteSpace($toolsLine)) {
-            throw 'The product did not report the real Scene View Tools toggle geometry.'
-        }
+        $toolsLine = Wait-TypographyStableToolsControl -Session $Session
         $toolsRect = Get-ReportedRect -Line $toolsLine -Prefix 'Scene View Tools control:'
         Send-TypographyLogicalClick `
             -Session $Session `
@@ -1001,6 +1466,12 @@ function Save-TypographyCapture {
         -CapturedProcess $Session.Captured `
         -Path $Session.StdoutPath `
         -Pattern "HENKA_AUTOMATION_DIAGNOSTIC editor_typography stage=(loaded|scale_applied) font=$Font .* ui_scale_percent=$Scale(?:\s|$)"
+    $runtimeScales = Get-TypographyRuntimeScales -Session $Session
+    if ($runtimeScales.EditorScalePercent -ne $Scale -or
+        $runtimeScales.DisplayScaleNumerator -eq 0 -or
+        $runtimeScales.DisplayScaleDenominator -eq 0) {
+        throw "The product-reported editor or OS display scale is invalid for the $Scale percent capture."
+    }
     $scaleLine = Wait-LogLine `
         -CapturedProcess $Session.Captured `
         -Path $Session.StdoutPath `
@@ -1018,13 +1489,7 @@ function Save-TypographyCapture {
     if ($topology.ToolsVisible) {
         throw "The Tools dock was not in the normalized collapsed state for the $Scale percent capture: $topologyLine"
     }
-    $settingsTabLine = Find-LastLogLine `
-        -Path $Session.StdoutPath `
-        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC utility_tab id=settings .* active=[01]'
-    if ([string]::IsNullOrWhiteSpace($settingsTabLine) -or
-        $settingsTabLine -notmatch 'active=1(?:\s|$)') {
-        throw "The Settings utility page was not active for the $Scale percent capture: $settingsTabLine"
-    }
+    [void](Wait-TypographySettingsNavigationTab -Session $Session -Scale $Scale)
     $selectionProof = $Session.SelectedEntityProof
     if ($null -eq $selectionProof -or
         $selectionProof.Name -ne 'Ground' -or
@@ -1054,13 +1519,16 @@ function Save-TypographyCapture {
     $windowCapture = Save-HenkaAutomationWindowScreenshot `
         -Handle $Session.Window `
         -Path $windowCapturePath `
-        -Description "$Font window surface at $Scale percent, ${Width}x${Height}"
+        -Description "$Font window surface at $Scale percent, ${Width}x${Height}" `
+        -AllowHidden
     $fontRect = Get-ReportedRect -Line $scaleLine -Prefix 'HENKA_AUTOMATION_DIAGNOSTIC editor_scale_control'
     $captures.Add([pscustomobject]@{
         font = $Font
         font_identity = ($fontLine -replace '^.*font_identity=([^ ]+(?: [^ ]+)*) font_sha256=.*$', '$1')
         font_sha256 = $fontHashes[$Font]
         ui_scale_percent = $Scale
+        os_display_scale_numerator = $runtimeScales.DisplayScaleNumerator
+        os_display_scale_denominator = $runtimeScales.DisplayScaleDenominator
         client_width = $Width
         client_height = $Height
         framebuffer_capture_width = $frameWidth
@@ -1085,6 +1553,174 @@ function Stop-TypographyCandidateProcess {
     param($Session)
     if ($null -ne $Session -and $null -ne $Session.Captured) {
         Close-HenkaCapturedProcess -CapturedProcess $Session.Captured
+    }
+}
+
+function Wait-TypographySettingsNavigationTab {
+    param(
+        [Parameter(Mandatory = $true)]$Session,
+        [Parameter(Mandatory = $true)][ValidateSet(100, 125, 150, 200)][int]$Scale
+    )
+
+    $pattern = "HENKA_AUTOMATION_DIAGNOSTIC utility_navigation_tab id=settings x=-?[0-9.]+ y=-?[0-9.]+ width=[0-9.]+ height=[0-9.]+ visible=1 active=1 ui_scale_percent=$Scale frame=\d+"
+    return Wait-LogLine `
+        -CapturedProcess $Session.Captured `
+        -Path $Session.StdoutPath `
+        -Pattern $pattern `
+        -TimeoutMilliseconds 10000
+}
+
+function Test-TypographyDetachedUtilityContext {
+    param(
+        [Parameter(Mandatory = $true)][string]$Font,
+        [Parameter(Mandatory = $true)][string]$ExpectedDisplayScale,
+        [Parameter(Mandatory = $true)][string]$UserDataRoot
+    )
+
+    $label = "$Font-detached-utility"
+    [System.IO.Directory]::CreateDirectory($UserDataRoot) | Out-Null
+    $session = Start-TypographyCandidateProcess `
+        -Font $Font `
+        -Label $label `
+        -CaptureLabel $label `
+        -UserDataRoot $UserDataRoot
+    try {
+        [void](Wait-LogLine `
+            -CapturedProcess $session.Captured `
+            -Path $session.StdoutPath `
+            -Pattern "HENKA_AUTOMATION_DIAGNOSTIC editor_typography stage=loaded font=$Font .* font_sha256=$($fontHashes[$Font]) ui_scale_percent=100" `
+            -TimeoutMilliseconds 60000)
+        [void](Set-HenkaAutomationWindowClientSize `
+            -Handle $session.Window `
+            -Width 1280 `
+            -Height 720)
+        Ensure-TypographySettingsVisible -Session $session
+        Set-TypographyScaleThroughUi -Session $session -TargetScale 200
+
+        $headerLine = Wait-TypographyStableUtilityContextHeader `
+            -Session $session `
+            -Scale 200 `
+            -TimeoutMilliseconds 20000
+        $headerRect = Get-ReportedRect -Line $headerLine -Prefix 'workspace_context_header id=utility'
+        if ($headerRect.Width -le 0.0 -or $headerRect.Height -le 0.0) {
+            throw "The product-reported Utility title-strip rectangle was not a valid context-menu hit target: $headerLine"
+        }
+        $headerTopLeft = Convert-TypographySessionLogicalPoint `
+            -Session $session `
+            -LogicalX $headerRect.X `
+            -LogicalY $headerRect.Y
+        $headerBottomRight = Convert-TypographySessionLogicalPoint `
+            -Session $session `
+            -LogicalX ($headerRect.X + $headerRect.Width) `
+            -LogicalY ($headerRect.Y + $headerRect.Height)
+        $headerWindowGeometry = Get-HenkaAutomationWindowGeometry -Handle $session.Window
+        $headerInsideViewport =
+            $headerTopLeft.X -ge 0.0 -and
+            $headerTopLeft.Y -ge 0.0 -and
+            $headerBottomRight.X -le $headerWindowGeometry.ClientWidth -and
+            $headerBottomRight.Y -le $headerWindowGeometry.ClientHeight
+        if (-not $headerInsideViewport) {
+            throw ("The current-scale Utility title-strip rectangle is outside the packaged window " +
+                "({0},{1})-({2},{3}) within {4}x{5}: {6}" -f
+                $headerTopLeft.X,
+                $headerTopLeft.Y,
+                $headerBottomRight.X,
+                $headerBottomRight.Y,
+                $headerWindowGeometry.ClientWidth,
+                $headerWindowGeometry.ClientHeight,
+                $headerLine)
+        }
+        Send-TypographyLogicalClick `
+            -Session $session `
+            -LogicalX ($headerRect.X + $headerRect.Width / 2.0) `
+            -LogicalY ($headerRect.Y + $headerRect.Height / 2.0) `
+            -Button right
+        [void](Wait-LogLine `
+            -CapturedProcess $session.Captured `
+            -Path $session.StdoutPath `
+            -Pattern 'Workspace context menu: section=Utility horizontal=available vertical=available\.')
+        for ($index = 0; $index -lt 6; ++$index) {
+            Send-HenkaAutomationKey -EventPath $session.EventPath -KeyName down
+        }
+        Send-HenkaAutomationKey -EventPath $session.EventPath -KeyName enter
+
+        $displayScaleMatch = [regex]::Match(
+            $ExpectedDisplayScale,
+            '^(?<numerator>\d+)/(?<denominator>\d+)$')
+        if (-not $displayScaleMatch.Success) {
+            throw "The expected detached-context display scale was invalid: $ExpectedDisplayScale"
+        }
+        $contextPattern = "HENKA_AUTOMATION_DIAGNOSTIC editor_typography_context stage=attached window_id=\d+ font=$Font font_sha256=$($fontHashes[$Font]) ui_scale_percent=200 os_display_scale=$ExpectedDisplayScale(?:\s|$)"
+        $contextLine = Wait-LogLine `
+            -CapturedProcess $session.Captured `
+            -Path $session.StdoutPath `
+            -Pattern $contextPattern `
+            -TimeoutMilliseconds 20000
+
+        $detachedWindow = [IntPtr]::Zero
+        $windowDeadline = (Get-Date).AddSeconds(15)
+        do {
+            $detachedWindow = Find-HenkaAutomationWindow `
+                -ProcessId $session.Captured.Process.Id `
+                -TitleContains "Henka - Utility" `
+                -IncludeHidden
+            if ($detachedWindow -ne [IntPtr]::Zero) { break }
+            if ($session.Captured.Process.HasExited) {
+                throw "Packaged Sandbox exited before its detached Utility window appeared."
+            }
+            Start-Sleep -Milliseconds 100
+        } while ((Get-Date) -lt $windowDeadline)
+        if ($detachedWindow -eq [IntPtr]::Zero) {
+            throw "The normal Utility detach action did not create its native tool window."
+        }
+
+        $foregroundBeforeCapture = [HenkaUiAutomationNative]::GetForegroundWindow()
+        if ([HenkaUiAutomationNative]::IsWindowVisible($detachedWindow) -or
+            $foregroundBeforeCapture -eq $detachedWindow -or
+            $foregroundBeforeCapture -eq $session.Window) {
+            throw "The detached Utility left its hidden, non-foreground automation state before capture."
+        }
+        $windowGeometry = Get-HenkaAutomationWindowGeometry -Handle $detachedWindow
+        if ($windowGeometry.ClientWidth -lt 320 -or $windowGeometry.ClientHeight -lt 240) {
+            throw "The detached Utility window did not provide a usable rendering surface."
+        }
+        $screenshotPath = Join-Path $OutputDirectory "detached-utility-$Font-200.png"
+        $windowCapture = Save-HenkaAutomationWindowScreenshot `
+            -Handle $detachedWindow `
+            -Path $screenshotPath `
+            -Description "$Font detached Utility at 200 percent Editor UI Scale" `
+            -AllowHidden
+        if (-not (Test-Path -LiteralPath $screenshotPath -PathType Leaf) -or
+            (Get-Item -LiteralPath $screenshotPath).Length -le 0) {
+            throw "The detached Utility screenshot was not written."
+        }
+        $foregroundAfterCapture = [HenkaUiAutomationNative]::GetForegroundWindow()
+        if ([HenkaUiAutomationNative]::IsWindowVisible($detachedWindow) -or
+            $foregroundAfterCapture -eq $detachedWindow -or
+            $foregroundAfterCapture -eq $session.Window) {
+            throw "Capturing the hidden detached Utility changed visibility or foreground state."
+        }
+
+        return [pscustomobject]@{
+            window_title = "Henka - Utility"
+            font = $Font
+            font_sha256 = $fontHashes[$Font]
+            ui_scale_percent = 200
+            os_display_scale = $ExpectedDisplayScale
+            context_attachment_diagnostic = $contextLine.Trim()
+            tool_window_hidden_confirmed = $true
+            hidden_capture_confirmed = $true
+            foreground_before_capture = $foregroundBeforeCapture.ToInt64()
+            foreground_after_capture = $foregroundAfterCapture.ToInt64()
+            client_width = $windowGeometry.ClientWidth
+            client_height = $windowGeometry.ClientHeight
+            screenshot = (Split-Path -Leaf $screenshotPath)
+            screenshot_sha256 = (Get-FileHash -LiteralPath $screenshotPath -Algorithm SHA256).Hash.ToUpperInvariant()
+            capture_method = "PrintWindow background capture of the real hidden detached product window"
+        }
+    }
+    finally {
+        Stop-TypographyCandidateProcess -Session $session
     }
 }
 
@@ -1143,17 +1779,6 @@ try {
             $startupPattern = "HENKA_AUTOMATION_DIAGNOSTIC editor_typography stage=loaded font=$font .* font_sha256=$($fontHashes[$font]) ui_scale_percent=100"
             [void](Wait-LogLine -CapturedProcess $session.Captured -Path $session.StdoutPath -Pattern $startupPattern -TimeoutMilliseconds 60000)
             [void](Wait-LogLine -CapturedProcess $session.Captured -Path $session.StdoutPath -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC user_data_base_path=isolated')
-            $windowDeadline = (Get-Date).AddSeconds(30)
-            do {
-                $session.Window = Find-HenkaAutomationWindow -ProcessId $session.Captured.Process.Id -TitleContains "Henka Engine Sandbox 3D"
-                if ($session.Window -ne [IntPtr]::Zero) { break }
-                if ($session.Captured.Process.HasExited) { throw "Packaged Sandbox exited before its window appeared." }
-                Start-Sleep -Milliseconds 100
-            } while ((Get-Date) -lt $windowDeadline)
-            if ($session.Window -eq [IntPtr]::Zero) { throw "Packaged Sandbox window did not appear within 30 seconds." }
-            if (-not [HenkaUiAutomationNative]::IsWindowVisible($session.Window) -or [HenkaUiAutomationNative]::IsIconic($session.Window)) {
-                throw "The packaged comparison window is not visible and capturable without activation."
-            }
             $size = Get-HenkaAutomationWindowGeometry -Handle $session.Window
             if ($size.ClientWidth -ne 1280 -or $size.ClientHeight -ne 720) {
                 $size = Set-HenkaAutomationWindowClientSize -Handle $session.Window -Width 1280 -Height 720
@@ -1168,6 +1793,12 @@ try {
                     -TargetScale $scale `
                     -RefreshCapture
                 if ($scale -eq 200) {
+                    $detailsCompactProofs.Add((Test-TypographyObjectDetailsCompactLayout `
+                        -Session $session `
+                        -Font $font))
+                    $settingsScrollProofs.Add((Test-TypographySettingsScrollControl `
+                        -Session $session `
+                        -Font $font))
                     Test-TypographySceneObjectsActionScroll -Session $session
                 }
                 $selectionProof = Select-TypographyGroundThroughUi -Session $session
@@ -1191,20 +1822,12 @@ try {
                 -Path $session.StdoutPath `
                 -Pattern "HENKA_AUTOMATION_DIAGNOSTIC editor_typography stage=loaded font=$font .* font_sha256=$($fontHashes[$font]) ui_scale_percent=$persistedScale(?:\s|$)" `
                 -TimeoutMilliseconds 60000)
-            $windowDeadline = (Get-Date).AddSeconds(30)
-            do {
-                $session.Window = Find-HenkaAutomationWindow -ProcessId $session.Captured.Process.Id -TitleContains "Henka Engine Sandbox 3D"
-                if ($session.Window -ne [IntPtr]::Zero) { break }
-                if ($session.Captured.Process.HasExited) { throw "Packaged Sandbox exited before its window appeared after persistence restart." }
-                Start-Sleep -Milliseconds 100
-            } while ((Get-Date) -lt $windowDeadline)
-            if ($session.Window -eq [IntPtr]::Zero) { throw "Packaged Sandbox window did not reappear after persistence restart." }
             [void](Set-HenkaAutomationWindowClientSize `
                 -Handle $session.Window `
                 -Width 1920 `
                 -Height 1080 `
                 -BorderlessViewport)
-            $session.WindowPresentation = "borderless-desktop"
+            $session.WindowPresentation = "hidden-borderless-desktop"
             Ensure-TypographySettingsVisible -Session $session
             Set-TypographyScaleThroughUi -Session $session -TargetScale 100
             $selectionProof = Select-TypographyGroundThroughUi -Session $session
@@ -1224,6 +1847,20 @@ try {
             Stop-TypographyCandidateProcess -Session $session
         }
     }
+
+    $atkinsonBaselineCapture = @($captures | Where-Object {
+        $_.font -eq 'atkinson' -and $_.ui_scale_percent -eq 100
+    } | Select-Object -First 1)
+    if ($atkinsonBaselineCapture.Count -ne 1 -or
+        $atkinsonBaselineCapture[0].os_display_scale_numerator -le 0 -or
+        $atkinsonBaselineCapture[0].os_display_scale_denominator -le 0) {
+        throw 'The completed Atkinson baseline capture did not provide a valid product-reported OS display scale.'
+    }
+    $detachedUserDataRoot = Join-Path $userDataRoot 'atkinson-detached'
+    $detachedContextProof = Test-TypographyDetachedUtilityContext `
+        -Font atkinson `
+        -ExpectedDisplayScale ("{0}/{1}" -f $atkinsonBaselineCapture[0].os_display_scale_numerator, $atkinsonBaselineCapture[0].os_display_scale_denominator) `
+        -UserDataRoot $detachedUserDataRoot
 
     foreach ($font in @("atkinson", "noto")) {
         foreach ($resolution in @(@{Width=1280;Height=720}, @{Width=1920;Height=1080})) {
@@ -1266,8 +1903,13 @@ foreach ($scale in @(100, 125, 150, 200)) {
     }
 }
 
+    $scalePairViolation = Get-HenkaTypographyCaptureScalePairViolation -Captures $captures.ToArray()
+    if ($null -ne $scalePairViolation) {
+        throw "Typography capture scale-pair policy failed: $scalePairViolation"
+    }
+
     $manifest = [pscustomobject]@{
-        schema_version = 1
+        schema_version = 3
         created_utc = [DateTime]::UtcNow.ToString("o")
         product_executable_provenance = @{
             build_commit_sha = [string]$buildInfo.commit_sha
@@ -1283,13 +1925,16 @@ foreach ($scale in @(100, 125, 150, 200)) {
             shared_automation_helper_sha256 = $automationHelperHash
         }
         package_root_relative_to_local = $packageRootRelativeToLocal
-        proof = "real packaged startup font verification; real Settings tab and scale-control input; persisted 200 percent restart; visual evidence from Henka's completed main-window framebuffer at 1280x720 and borderless desktop 1920x1080; PrintWindow surface hashes retained as a comparison diagnostic"
+        proof = "real packaged startup font verification; real Settings tab and scale-control input; persisted 200 percent restart; at 1280x720 and 200 percent, real Utility Settings wheel input reveals the Smooth Snap control inside the reported viewport, and two real clicks change then restore the authoritative setting; real product-reported Object Details footer geometry and Save Project click at 200 percent; visual evidence from Henka's completed main-window framebuffer at 1280x720 and borderless desktop 1920x1080; a real Utility detach through its section context menu, product-reported per-context font/atlas scale identity, and a background PrintWindow capture while the detached automation window remains hidden"
         ui_scales = @(100, 125, 150, 200)
         client_resolutions = @("1280x720", "1920x1080")
+        settings_scroll_control_tests = $settingsScrollProofs.ToArray()
+        object_details_compact_layout_tests = $detailsCompactProofs.ToArray()
         fonts = @{
             atkinson = $fontHashes.atkinson
             noto = $fontHashes.noto
         }
+        detached_context = $detachedContextProof
         captures = $captures.ToArray()
     }
     $manifestPath = Join-Path $OutputDirectory "comparison-manifest.json"

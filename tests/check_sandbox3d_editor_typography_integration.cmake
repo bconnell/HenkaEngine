@@ -12,11 +12,28 @@ if(NOT EXISTS "${SANDBOX3D_MAIN_SOURCE}")
 endif()
 
 file(READ "${SANDBOX3D_MAIN_SOURCE}" main_source)
-file(READ "${SANDBOX3D_SOURCE_DIR}/editor_typography_runtime.c" runtime_source)
+if(DEFINED TYPOGRAPHY_RUNTIME_SOURCE)
+    file(READ "${TYPOGRAPHY_RUNTIME_SOURCE}" runtime_source)
+else()
+    file(READ "${SANDBOX3D_SOURCE_DIR}/editor_typography_runtime.c" runtime_source)
+endif()
 file(READ "${SANDBOX3D_SOURCE_DIR}/editor_font_bootstrap.c" bootstrap_source)
 file(READ "${SANDBOX3D_SOURCE_DIR}/editor_font_bootstrap.h" bootstrap_header)
-file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/test_editor_typography_windows.ps1" typography_package_test_source)
-file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/henka_ui_automation_helpers.ps1" ui_automation_helper_source)
+file(READ "${SANDBOX3D_SOURCE_DIR}/../../engine/src/platform/platform_sdl.c" platform_source)
+file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/package_sandbox3d_windows.ps1" package_source)
+if(DEFINED TYPOGRAPHY_PACKAGE_TEST_SOURCE)
+    file(READ "${TYPOGRAPHY_PACKAGE_TEST_SOURCE}" typography_package_test_source)
+else()
+    file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/test_editor_typography_windows.ps1" typography_package_test_source)
+endif()
+file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/check_packaged_sandbox3d_windows.ps1" packaged_sandbox_checker_source)
+file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/henka_typography_package_policy.ps1" typography_package_policy_source)
+file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/henka_typography_capture_policy.ps1" typography_capture_policy_source)
+if(DEFINED HENKA_UI_AUTOMATION_HELPERS_SOURCE)
+    file(READ "${HENKA_UI_AUTOMATION_HELPERS_SOURCE}" ui_automation_helper_source)
+else()
+    file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/henka_ui_automation_helpers.ps1" ui_automation_helper_source)
+endif()
 set(violations "")
 
 if(NOT main_source MATCHES "editor_typography_runtime.h")
@@ -82,11 +99,20 @@ if(utility_switch_start LESS 0 OR settings_start LESS 0 OR settings_end LESS 0 O
 else()
     math(EXPR settings_length "${settings_end} - ${settings_start}")
     string(SUBSTRING "${utility_source}" ${settings_start} ${settings_length} settings_source)
+    string(FIND "${settings_source}" "sandbox3d_utility_settings_layout_build(" settings_layout_position)
+    string(FIND "${settings_source}" "sandbox3d_editor_scale_control_layout(" scale_layout_position)
+    string(FIND "${settings_source}" "sandbox3d_utility_settings_rect_visible(" scale_visibility_position)
+    string(FIND "${settings_source}" "settings_layout.scale_bounds" scale_bounds_position)
     string(FIND "${settings_source}" "sandbox3d_editor_typography_runtime_draw_scale_control(" scale_control_position)
-    string(FIND "${settings_source}" "y_start += 12.0f" settings_body_position)
-    if(scale_control_position LESS 0 OR settings_body_position LESS 0 OR
-       scale_control_position GREATER settings_body_position OR
-       settings_source MATCHES "y_start[ \t\r\n]*\\+[ \t\r\n]*552\\.0f")
+    string(FIND "${settings_source}" "sandbox3d_utility_settings_draw_value_row(" settings_body_position)
+    if(settings_layout_position LESS 0 OR scale_layout_position LESS 0 OR
+       scale_visibility_position LESS 0 OR scale_bounds_position LESS 0 OR
+       scale_control_position LESS 0 OR settings_body_position LESS 0 OR
+       settings_layout_position GREATER scale_layout_position OR
+       scale_layout_position GREATER scale_control_position OR
+       scale_visibility_position GREATER scale_control_position OR
+       scale_bounds_position GREATER scale_control_position OR
+       scale_control_position GREATER settings_body_position)
         list(APPEND violations "Settings scale control must remain reachable in the Settings header row before its content body")
     endif()
 endif()
@@ -95,8 +121,8 @@ if(NOT main_source MATCHES "sandbox3d_editor_layout_text_control_grid_for_contex
    NOT main_source MATCHES "utility_navigation_row_count")
     list(APPEND violations "Utility navigation must use the canonical measured wrapping layout and derive content placement from its actual row count")
 endif()
-if(NOT main_source MATCHES "state->automation_diagnostic_terrain_utility_tabs_visible = false;[ \t\r\n]*utility_navigation_row_count = 0U;[ \t\r\n]*navigation_result =")
-    list(APPEND violations "Utility tab visibility telemetry must reset before each measured layout attempt so failed layout cannot reuse stale visibility")
+if(NOT main_source MATCHES "state->automation_diagnostic_terrain_utility_tabs_visible = false;[ \t\r\n]*utility_navigation_row_count = 0U;[ \t\r\n]*utility_navigation_row_height = 0\\.0f;[ \t\r\n]*navigation_result =")
+    list(APPEND violations "Utility tab visibility telemetry and measured geometry outputs must reset before each layout attempt so failed layout cannot reuse stale state")
 endif()
 if(NOT runtime_source MATCHES "sandbox3d_editor_scale_control_layout\\(" OR
    NOT runtime_source MATCHES "layout\\.choices" OR
@@ -114,6 +140,24 @@ if(NOT bootstrap_header MATCHES "sandbox3d_editor_font_candidate_resolve" OR
    NOT bootstrap_source MATCHES "478C558EA716033CD60C03438F628DFA75694DCF6B5F6D505A2F05FD2B4F3823")
     list(APPEND violations "the bundled Atkinson and Noto candidates must have one bounded descriptor authority with pinned identities and hashes")
 endif()
+
+string(FIND "${package_source}" "IncludeTypographyComparisonFonts" comparison_package_switch_position)
+string(FIND "${package_source}" "Remove-Item -LiteralPath $comparisonAssetPath" comparison_asset_removal_position)
+string(FIND "${package_source}" "Typography comparison candidates: $comparisonFontDisposition" comparison_package_marker_position)
+string(FIND "${package_source}" "Get-HenkaTypographySelectedFontMetadata" selected_font_metadata_position)
+if(comparison_package_switch_position LESS 0 OR
+   comparison_asset_removal_position LESS 0 OR
+   comparison_package_marker_position LESS 0 OR
+   NOT package_source MATCHES "NotoSans-Regular\\.ttf" OR
+   selected_font_metadata_position LESS 0 OR
+   NOT package_source MATCHES "Assert-HenkaTypographyPackageAssetSet" OR
+   NOT typography_package_policy_source MATCHES "AtkinsonHyperlegible-Regular\\.ttf" OR
+   NOT typography_package_policy_source MATCHES "7FB917C89019896D0B52EE84B7CBB3304C18CB90B19A62F5E32712BD23E97669" OR
+   NOT typography_package_policy_source MATCHES "478C558EA716033CD60C03438F628DFA75694DCF6B5F6D505A2F05FD2B4F3823" OR
+   NOT typography_package_test_source MATCHES "Typography comparison candidates" OR
+   NOT typography_package_test_source MATCHES "Assert-HenkaTypographyPackageAssetSet")
+    list(APPEND violations "normal Sandbox packages must ship the selected Atkinson face only; Noto must require the explicit local comparison-package path")
+endif()
 if(NOT runtime_source MATCHES "HENKA_AUTOMATION_EDITOR_FONT" OR
    NOT runtime_source MATCHES "HENKA_AUTOMATION_INPUT_OWNED" OR
    NOT runtime_source MATCHES "HENKA_AUTOMATION_DIAGNOSTICS" OR
@@ -122,11 +166,57 @@ if(NOT runtime_source MATCHES "HENKA_AUTOMATION_EDITOR_FONT" OR
    NOT runtime_source MATCHES "ui_scale_percent=")
     list(APPEND violations "packaged typography comparison must select only a whitelisted automation-owned candidate and report the verified font and active scale")
 endif()
+if(NOT platform_source MATCHES "SDL_WINDOW_NOT_FOCUSABLE" OR
+   NOT platform_source MATCHES "window_focus_policy focusable=%u input_focused=%u" OR
+   NOT typography_package_test_source MATCHES "window_focus_policy focusable=0 input_focused=0" OR
+   NOT typography_package_test_source MATCHES "-Path[ \t]+\\$stderrPath[^\r\n]*`[ \t\r\n]*-Pattern[ \t\r\n]*'HENKA_AUTOMATION_DIAGNOSTIC window_focus_policy")
+    list(APPEND violations "automation-owned typography windows must use and report the SDL non-focusable policy, and the packaged test must require its observed state")
+endif()
+
+string(FIND "${platform_source}" "if (platform->window_start_hidden)" hidden_main_policy_position)
+string(FIND "${platform_source}" "window_flags |= SDL_WINDOW_HIDDEN;" hidden_main_flag_position)
+string(FIND "${platform_source}" "platform->window = SDL_CreateWindow(" main_window_create_position)
+string(FIND "${platform_source}" "platform->tool_windows_start_hidden = platform->window_start_hidden;" hidden_tool_policy_position)
+string(FIND "${platform_source}" "if (platform->tool_windows_start_hidden)" hidden_tool_flag_position)
+string(FIND "${platform_source}" "slot->window = SDL_CreateWindow(" tool_window_create_position)
+string(FIND "${platform_source}" "desc->window_start_hidden || platform->automation_input_owned" effective_hidden_policy_position)
+if(hidden_main_policy_position LESS 0 OR hidden_main_flag_position LESS 0 OR
+   main_window_create_position LESS 0 OR hidden_main_policy_position GREATER hidden_main_flag_position OR
+   hidden_main_flag_position GREATER main_window_create_position OR
+   hidden_tool_policy_position LESS 0 OR hidden_tool_flag_position LESS 0 OR
+   tool_window_create_position LESS 0 OR hidden_tool_policy_position GREATER hidden_tool_flag_position OR
+   hidden_tool_flag_position GREATER tool_window_create_position OR
+   effective_hidden_policy_position LESS 0 OR effective_hidden_policy_position GREATER main_window_create_position)
+    list(APPEND violations "automation-owned SDL main and tool windows must start hidden so late window creation cannot flash across the user's desktop")
+endif()
+
+string(FIND "${packaged_sandbox_checker_source}" [=[HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"]=] packaged_hidden_tool_env_position)
+string(FIND "${packaged_sandbox_checker_source}" "Show-HenkaAutomationWindowOffscreen -Handle $nativeWindowHandle" native_window_safe_reveal_position)
+string(FIND "${packaged_sandbox_checker_source}" [=[-Description "Packaged native panel screenshot"]=] native_window_capture_position)
+if(packaged_hidden_tool_env_position LESS 0 OR native_window_safe_reveal_position LESS 0 OR
+   native_window_capture_position LESS 0 OR native_window_safe_reveal_position GREATER native_window_capture_position)
+    list(APPEND violations "packaged automation must keep late tool windows hidden and reveal only the capture target after moving it fully outside the virtual desktop")
+endif()
+
+string(FIND "${typography_package_test_source}" [=[HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"]=] typography_hidden_tool_env_position)
+if(typography_hidden_tool_env_position LESS 0)
+    list(APPEND violations "typography comparison automation must never opt into on-desktop native tool windows")
+endif()
 
 if(NOT main_source MATCHES "utility_settings" OR
    NOT main_source MATCHES "utility_settings_rect" OR
    NOT main_source MATCHES "HENKA_AUTOMATION_DIAGNOSTIC utility_tab")
     list(APPEND violations "the packaged typography path must expose the real Settings tab geometry and active state only through bounded automation telemetry")
+endif()
+if(NOT main_source MATCHES "sandbox3d_utility_settings_layout_build" OR
+   NOT main_source MATCHES "SANDBOX3D_PANEL_SCROLL_UTILITY" OR
+   NOT main_source MATCHES "sandbox3d_utility_settings_rect_visible" OR
+   NOT main_source MATCHES "HENKA_AUTOMATION_DIAGNOSTIC utility_settings_layout" OR
+   NOT typography_package_test_source MATCHES "Test-TypographySettingsScrollControl" OR
+   NOT typography_package_test_source MATCHES "settings_scroll_control_tests" OR
+   NOT typography_package_test_source MATCHES "real_click_changed_authoritative_setting" OR
+   NOT typography_package_test_source MATCHES "wheel_events_to_reveal_control")
+    list(APPEND violations "Utility Settings must use one product geometry authority, bounded visible hit targets, independent scrolling, and a packaged control interaction regression")
 endif()
 if(NOT main_source MATCHES "HENKA_AUTOMATION_DIAGNOSTIC controls_page_rect id=camera_status" OR
    NOT main_source MATCHES "HENKA_AUTOMATION_DIAGNOSTIC controls_page id=camera_status selected=1" OR
@@ -160,9 +250,30 @@ else()
 endif()
 if(NOT typography_package_test_source MATCHES "Get-ReportedScrollState" OR
    NOT typography_package_test_source MATCHES "Send-HenkaAutomationScroll" OR
-   NOT typography_package_test_source MATCHES "utility_tab id=settings" OR
+   NOT typography_package_test_source MATCHES "Wait-TypographyStableToolsControl" OR
+   NOT typography_package_test_source MATCHES "phase=render-complete" OR
+   NOT typography_package_test_source MATCHES "Wait-TypographySettingsNavigationTab" OR
+   NOT typography_package_test_source MATCHES "utility_navigation_tab id=settings" OR
+   NOT typography_package_test_source MATCHES "visible=1 active=1 ui_scale_percent=" OR
+   NOT main_source MATCHES "utility_navigation_tab id=settings" OR
    NOT typography_package_test_source MATCHES "insideViewport")
-    list(APPEND violations "the packaged typography workflow must reach Settings by bounded real wheel input using product-reported scroll and tab geometry")
+    list(APPEND violations "the packaged typography workflow must reach Settings by bounded real wheel input and use the canonical visible Utility-tab rectangle for the active Editor UI Scale")
+endif()
+if(NOT typography_package_test_source MATCHES "Wait-TypographyStableUtilityContextHeader" OR
+   NOT typography_package_test_source MATCHES "workspace_context_header id=utility" OR
+   NOT typography_package_test_source MATCHES "headerInsideViewport" OR
+   NOT typography_package_test_source MATCHES "Send-TypographyLogicalClick" OR
+   NOT main_source MATCHES "workspace_context_header id=utility" OR
+   NOT main_source MATCHES "sandbox3d_workspace_docked_title_drag_rect" OR
+   NOT main_source MATCHES "ui_scale_percent=%d frame=%llu")
+    list(APPEND violations "the detached-context workflow must right-click the product-reported Utility title-strip hit rectangle used by the production context-menu handler")
+endif()
+if(NOT ui_automation_helper_source MATCHES "function Convert-HenkaUiLogicalPointToWindowPoint" OR
+   NOT ui_automation_helper_source MATCHES "function Send-HenkaAutomationUiClick" OR
+   NOT ui_automation_helper_source MATCHES "function Send-HenkaAutomationUiScroll" OR
+   NOT typography_package_test_source MATCHES "Send-TypographyLogicalClick" OR
+   NOT typography_package_test_source MATCHES "Send-TypographyLogicalScroll")
+    list(APPEND violations "typography package interactions must use the canonical logical-to-window input helper at the selected Editor UI Scale")
 endif()
 string(FIND "${typography_package_test_source}"
     "$fontUserDataRoot = Join-Path $userDataRoot $font"
@@ -223,6 +334,97 @@ if(typography_coordinate_transform_position LESS 0 OR
    typography_transformed_click_x_position LESS 0 OR
    typography_transformed_click_y_position LESS 0)
     list(APPEND violations "scale-control automation must transform product-reported logical rectangles using the runtime UI and OS display scales before sending framebuffer pointer input")
+endif()
+
+if(NOT typography_package_test_source MATCHES "os_display_scale_numerator = \\$runtimeScales.DisplayScaleNumerator" OR
+   NOT typography_package_test_source MATCHES "os_display_scale_denominator = \\$runtimeScales.DisplayScaleDenominator" OR
+   NOT typography_package_test_source MATCHES "schema_version = 3" OR
+   NOT typography_package_test_source MATCHES "Get-HenkaTypographyCaptureScalePairViolation" OR
+   NOT typography_capture_policy_source MATCHES "different product-reported OS display scales")
+    list(APPEND violations "each packaged capture must record product-reported OS display scale and reject unmatched Atkinson/Noto comparison pairs")
+endif()
+
+string(FIND "${typography_package_test_source}" [=[detached_context = $detachedContextProof]=]
+    detached_context_assignment_position)
+string(FIND "${typography_package_test_source}" [=[HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"]=]
+    detached_context_hidden_launch_position)
+string(FIND "${typography_package_test_source}" "IsWindowVisible($detachedWindow)"
+    detached_context_hidden_state_check_position)
+string(FIND "${typography_package_test_source}" "-AllowHidden"
+    detached_context_background_capture_position)
+string(FIND "${typography_package_test_source}"
+    "PrintWindow background capture of the real hidden detached product window"
+    detached_context_capture_proof_position)
+if(NOT main_source MATCHES "HENKA_AUTOMATION_START_HIDDEN" OR
+   NOT main_source MATCHES "window_start_hidden=%u" OR
+    NOT runtime_source MATCHES "editor_typography_context stage=attached" OR
+   NOT typography_package_test_source MATCHES "Test-TypographyDetachedUtilityContext" OR
+   detached_context_hidden_launch_position LESS 0 OR
+   detached_context_hidden_state_check_position LESS 0 OR
+   detached_context_background_capture_position LESS 0 OR
+   detached_context_capture_proof_position LESS 0 OR
+   detached_context_assignment_position LESS 0)
+    list(APPEND violations "packaged typography must exercise a real detached-font context and prove its automation window remains hidden and non-foreground during background capture")
+endif()
+
+string(FIND "${typography_package_test_source}"
+    [=[HENKA_AUTOMATION_START_HIDDEN = "1"]=]
+    typography_main_window_hidden_mode_position)
+string(FIND "${typography_package_test_source}"
+    "window_start_hidden=1"
+    typography_main_window_hidden_assertion_position)
+string(FIND "${typography_package_test_source}"
+    "-IncludeHidden"
+    typography_main_window_discovery_position)
+string(FIND "${typography_package_test_source}"
+    "-AllowHidden"
+    typography_main_window_capture_position)
+string(FIND "${typography_package_test_source}"
+    "-StartVisibleWithoutActivation"
+    typography_main_window_activation_position)
+string(FIND "${typography_package_test_source}"
+    [=[if ($windowVisible -or $windowIconic -or $foregroundWindow -eq $window)]=]
+    typography_main_window_state_assertion_position)
+if(typography_main_window_hidden_mode_position LESS 0 OR
+   typography_main_window_hidden_assertion_position LESS 0 OR
+   typography_main_window_discovery_position LESS 0 OR
+   typography_main_window_capture_position LESS 0 OR
+   typography_main_window_state_assertion_position LESS 0 OR
+   NOT typography_main_window_activation_position LESS 0)
+    list(APPEND violations "packaged typography must launch and capture the main Sandbox window hidden, without an activation request")
+endif()
+
+string(REGEX MATCHALL "-StartOffscreenWithoutActivation" packaged_offscreen_launches
+    "${packaged_sandbox_checker_source}")
+list(LENGTH packaged_offscreen_launches packaged_offscreen_launch_count)
+if(packaged_offscreen_launch_count LESS 2)
+    list(APPEND violations "both packaged Sandbox launch paths must keep capture windows outside the owner's desktop")
+endif()
+string(FIND "${typography_package_test_source}"
+    "function Ensure-TypographySettingsVisible"
+    typography_settings_path_position)
+string(FIND "${typography_package_test_source}"
+    "workspace_topology cause=tools_toggle tools_visible=1"
+    typography_tools_visibility_position)
+string(FIND "${typography_package_test_source}"
+    "controls_page_rect id=camera_status"
+    typography_camera_status_geometry_position)
+string(FIND "${typography_package_test_source}"
+    "controls_page id=camera_status selected=1"
+    typography_camera_status_selection_position)
+string(FIND "${typography_package_test_source}"
+    "controls_scroll_viewport page=camera_status"
+    typography_camera_status_scroll_viewport_position)
+string(FIND "${typography_package_test_source}"
+    "utility_tab id=settings"
+    typography_settings_tab_position)
+if(typography_settings_path_position LESS 0 OR
+   typography_tools_visibility_position LESS 0 OR
+   typography_camera_status_geometry_position LESS 0 OR
+   typography_camera_status_selection_position LESS 0 OR
+   typography_camera_status_scroll_viewport_position LESS 0 OR
+   typography_settings_tab_position LESS 0)
+    list(APPEND violations "the typography package workflow must reach Editor UI Scale through the actual Tools, Camera/Status, scroll, and Settings controls")
 endif()
 
 string(FIND "${main_source}" "henka_ui_context_set_font_profile(" direct_profile_setter_position)

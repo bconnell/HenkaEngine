@@ -34,6 +34,37 @@ file(MAKE_DIRECTORY "${probe_dir}")
 file(READ "${SANDBOX3D_SOURCE_DIR}/main.c" main_source)
 set(candidate_main "${main_source}")
 string(REPLACE
+    "state->automation_diagnostic_terrain_utility_tabs_visible = false;\n        utility_navigation_row_count = 0U;"
+    "state->automation_diagnostic_terrain_utility_tabs_visible = true;\n        utility_navigation_row_count = 0U;"
+    candidate_main "${candidate_main}")
+if(candidate_main STREQUAL main_source)
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Could not construct the Utility layout-reset negative control")
+endif()
+file(WRITE "${probe_dir}/main.c" "${candidate_main}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DSANDBOX3D_MAIN_SOURCE=${probe_dir}/main.c"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE utility_reset_negative_result
+    OUTPUT_VARIABLE utility_reset_negative_stdout
+    ERROR_VARIABLE utility_reset_negative_stderr)
+set(utility_reset_negative_output "${utility_reset_negative_stdout}\n${utility_reset_negative_stderr}")
+if("${utility_reset_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted stale Utility layout state")
+endif()
+if(NOT utility_reset_negative_output MATCHES "Utility tab visibility telemetry and measured geometry outputs must reset")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Utility layout-reset negative control failed for an unexpected reason.\n"
+        "result=${utility_reset_negative_result}\noutput:\n${utility_reset_negative_output}")
+endif()
+
+set(candidate_main "${main_source}")
+string(REPLACE
     "sandbox3d_editor_typography_runtime_initialize("
     "sandbox3d_editor_typography_runtime_startup_removed("
     candidate_main "${candidate_main}")
@@ -138,6 +169,99 @@ if(NOT display_scale_negative_output MATCHES "renderer scene viewport must conve
         "result=${display_scale_negative_result}\noutput:\n${display_scale_negative_output}")
 endif()
 
+file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/test_editor_typography_windows.ps1" typography_test_source)
+string(REPLACE
+    "os_display_scale_numerator = \$runtimeScales.DisplayScaleNumerator"
+    "os_display_scale_numerator_removed = \$runtimeScales.DisplayScaleNumerator"
+    candidate_typography_test_source "${typography_test_source}")
+if(candidate_typography_test_source STREQUAL typography_test_source)
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Could not construct the OS display-scale capture negative control")
+endif()
+file(WRITE "${probe_dir}/test_editor_typography_windows.ps1" "${candidate_typography_test_source}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DTYPOGRAPHY_PACKAGE_TEST_SOURCE=${probe_dir}/test_editor_typography_windows.ps1"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE capture_scale_negative_result
+    OUTPUT_VARIABLE capture_scale_negative_stdout
+    ERROR_VARIABLE capture_scale_negative_stderr)
+set(capture_scale_negative_output "${capture_scale_negative_stdout}\n${capture_scale_negative_stderr}")
+if("${capture_scale_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted capture evidence with its OS display-scale field removed")
+endif()
+if(NOT capture_scale_negative_output MATCHES "each packaged capture must record product-reported OS display scale")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Typography capture display-scale negative control failed for an unexpected reason.\n"
+        "result=${capture_scale_negative_result}\noutput:\n${capture_scale_negative_output}")
+endif()
+
+file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/henka_ui_automation_helpers.ps1" ui_automation_helper_source)
+string(REPLACE
+    "function Convert-HenkaUiLogicalPointToWindowPoint"
+    "function Convert-HenkaUiLogicalPointToFramebufferPoint"
+    candidate_ui_automation_helper_source "${ui_automation_helper_source}")
+if(candidate_ui_automation_helper_source STREQUAL ui_automation_helper_source)
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Could not construct the non-100% UI automation coordinate-transform negative control")
+endif()
+file(WRITE "${probe_dir}/henka_ui_automation_helpers.ps1" "${candidate_ui_automation_helper_source}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DHENKA_UI_AUTOMATION_HELPERS_SOURCE=${probe_dir}/henka_ui_automation_helpers.ps1"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE ui_input_scale_negative_result
+    OUTPUT_VARIABLE ui_input_scale_negative_stdout
+    ERROR_VARIABLE ui_input_scale_negative_stderr)
+set(ui_input_scale_negative_output "${ui_input_scale_negative_stdout}\n${ui_input_scale_negative_stderr}")
+if("${ui_input_scale_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted removal of the non-100% UI input-coordinate transform")
+endif()
+if(NOT ui_input_scale_negative_output MATCHES "typography package interactions must use the canonical logical-to-window input helper")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Typography UI input-scale negative control failed for an unexpected reason.\n"
+        "result=${ui_input_scale_negative_result}\noutput:\n${ui_input_scale_negative_output}")
+endif()
+
+file(READ "${SANDBOX3D_SOURCE_DIR}/editor_typography_runtime.c" runtime_source)
+string(REPLACE
+    "editor_typography_context stage=attached"
+    "editor_typography_context stage=removed"
+    candidate_runtime_source "${runtime_source}")
+if(candidate_runtime_source STREQUAL runtime_source)
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Could not construct the detached-font-context telemetry negative control")
+endif()
+file(WRITE "${probe_dir}/editor_typography_runtime.c" "${candidate_runtime_source}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DTYPOGRAPHY_RUNTIME_SOURCE=${probe_dir}/editor_typography_runtime.c"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE detached_context_negative_result
+    OUTPUT_VARIABLE detached_context_negative_stdout
+    ERROR_VARIABLE detached_context_negative_stderr)
+set(detached_context_negative_output "${detached_context_negative_stdout}\n${detached_context_negative_stderr}")
+if("${detached_context_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted missing detached-context telemetry")
+endif()
+if(NOT detached_context_negative_output MATCHES "packaged typography must exercise a real detached-font context")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Typography detached-context negative control failed for an unexpected reason.\n"
+        "result=${detached_context_negative_result}\noutput:\n${detached_context_negative_output}")
+endif()
+
 file(REMOVE_RECURSE "${probe_dir}")
 
-message(STATUS "Sandbox3D typography integration passes and rejects missing startup, Settings scale control, runtime layout-scale use, or display-scale viewport conversion")
+message(STATUS "Sandbox3D typography integration passes and rejects missing startup, Settings scale control, runtime layout-scale use, display-scale viewport conversion, capture provenance, scale-aware typography input conversion, or detached-context telemetry")

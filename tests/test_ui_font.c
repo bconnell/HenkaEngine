@@ -412,6 +412,60 @@ static void henka_test_ui_font_text_layout_uses_shared_glyph_placements(void)
     henka_ui_font_test_fixture_dispose(&fixture);
 }
 
+static void henka_test_ui_segmented_select_fits_compact_labels_at_200_percent(void)
+{
+    static const char* const labels[] = {"100", "125", "150", "200"};
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* font = NULL;
+    henka_ui_font_raster_profile* profile = NULL;
+    henka_ui_context* ui = NULL;
+    henka_ui_frame_desc frame_desc;
+    size_t selected_index = 0U;
+    size_t glyph_quad_count = 0U;
+    size_t index;
+    bool changed = true;
+    bool labels_complete;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x520U, 1U, 1U, &font, &profile));
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_ui_context_set_font_profile(ui, profile, 200U) == HENKA_SUCCESS);
+    henka_ui_set_visible(ui, true);
+
+    memset(&frame_desc, 0, sizeof(frame_desc));
+    frame_desc.framebuffer_width = 1280;
+    frame_desc.framebuffer_height = 720;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_segmented_select(
+        ui,
+        "compact.scale",
+        (henka_ui_rect){0.0f, 0.0f, 129.0f, 24.0f},
+        labels,
+        sizeof(labels) / sizeof(labels[0]),
+        &selected_index,
+        &changed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(selected_index == 0U && !changed);
+    for (index = 0U; index < ui->draw_quad_count; ++index)
+    {
+        if (ui->draw_quads[index].kind == HENKA_UI_DRAW_QUAD_GLYPH)
+        {
+            ++glyph_quad_count;
+        }
+    }
+    /* Four three-digit labels must remain whole at 32.25 logical pixels each;
+     * ellipsis glyphs would make this count smaller. */
+    labels_complete = glyph_quad_count == 12U;
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    henka_ui_destroy(ui);
+    henka_ui_font_raster_profile_destroy(profile);
+    henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+    HENKA_TEST_ASSERT(labels_complete);
+}
+
 static void henka_test_ui_font_allocation_failures_are_atomic(void)
 {
     henka_ui_font_test_fixture fixture;
@@ -606,6 +660,195 @@ static void henka_test_ui_atlas_uses_effective_raster_pixel_size(void)
     }
     henka_ui_font_raster_profile_destroy(profile);
     henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
+typedef enum henka_test_ui_centered_control
+{
+    HENKA_TEST_UI_CENTERED_BUTTON = 0,
+    HENKA_TEST_UI_CENTERED_PRIMARY_BUTTON,
+    HENKA_TEST_UI_CENTERED_SELECTABLE,
+    HENKA_TEST_UI_CENTERED_TAB,
+    HENKA_TEST_UI_CENTERED_SEGMENT,
+    HENKA_TEST_UI_CENTERED_TOGGLE,
+    HENKA_TEST_UI_CENTERED_DISCLOSURE_ROW,
+    HENKA_TEST_UI_CENTERED_CONTROL_COUNT
+} henka_test_ui_centered_control;
+
+static void henka_test_ui_assert_centered_control_label(
+    henka_ui_context* ui,
+    uint16_t app_scale_percent,
+    float output_scale,
+    henka_ui_frame_desc frame_desc,
+    henka_ui_rect bounds,
+    henka_test_ui_centered_control control,
+    const char* label)
+{
+    const char* segment_labels[] = {label, "I"};
+    const float app_scale_factor = (float)app_scale_percent / 100.0f;
+    float glyph_top = FLT_MAX;
+    float glyph_bottom = -FLT_MAX;
+    float ink_center_error_pixels;
+    size_t glyph_count = 0U;
+    size_t quad_index;
+    henka_result result;
+    bool toggle_value = false;
+    bool ink_centered;
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    switch (control)
+    {
+    case HENKA_TEST_UI_CENTERED_BUTTON:
+        (void)henka_ui_button(ui, "font.centered.button", bounds, label);
+        break;
+    case HENKA_TEST_UI_CENTERED_PRIMARY_BUTTON:
+        (void)henka_ui_primary_button(ui, "font.centered.primary", bounds, label);
+        break;
+    case HENKA_TEST_UI_CENTERED_SELECTABLE:
+        (void)henka_ui_selectable(ui, "font.centered.selectable", bounds, label, false);
+        break;
+    case HENKA_TEST_UI_CENTERED_TAB:
+        (void)henka_ui_tab(ui, "font.centered.tab", bounds, label, false);
+        break;
+    case HENKA_TEST_UI_CENTERED_SEGMENT:
+    {
+        size_t selected_index = 2U;
+        bool changed = false;
+        result = henka_ui_segmented_select(
+            ui,
+            "font.centered.segment",
+            bounds,
+            segment_labels,
+            2U,
+            &selected_index,
+            &changed);
+        HENKA_TEST_ASSERT(result == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(selected_index == 2U && !changed);
+        break;
+    }
+    case HENKA_TEST_UI_CENTERED_TOGGLE:
+        (void)henka_ui_toggle(
+            ui, "font.centered.toggle", bounds, label, &toggle_value);
+        HENKA_TEST_ASSERT(!toggle_value);
+        break;
+    case HENKA_TEST_UI_CENTERED_DISCLOSURE_ROW:
+    {
+        bool expanded = false;
+        bool changed = false;
+        result = henka_ui_disclosure_row(
+            ui,
+            "font.centered.disclosure",
+            bounds,
+            label,
+            &expanded,
+            &changed);
+        HENKA_TEST_ASSERT(result == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!expanded && !changed);
+        break;
+    }
+    default:
+        HENKA_TEST_ASSERT(false);
+        break;
+    }
+
+    for (quad_index = 0U; quad_index < ui->draw_quad_count; ++quad_index)
+    {
+        const henka_ui_draw_quad* quad = &ui->draw_quads[quad_index];
+        if (quad->kind == HENKA_UI_DRAW_QUAD_GLYPH)
+        {
+            if (quad->bounds.y < glyph_top)
+            {
+                glyph_top = quad->bounds.y;
+            }
+            if (quad->bounds.y + quad->bounds.height > glyph_bottom)
+            {
+                glyph_bottom = quad->bounds.y + quad->bounds.height;
+            }
+            ++glyph_count;
+        }
+    }
+    HENKA_TEST_ASSERT(glyph_count ==
+        strlen(label) + (control == HENKA_TEST_UI_CENTERED_SEGMENT ? 1U : 0U));
+    HENKA_TEST_ASSERT(glyph_top >= bounds.y - 0.01f);
+    HENKA_TEST_ASSERT(glyph_bottom <= bounds.y + bounds.height + 0.01f);
+    ink_center_error_pixels = fabsf(
+        ((glyph_top + glyph_bottom) * 0.5f - (bounds.y + bounds.height * 0.5f)) *
+        output_scale * app_scale_factor);
+    ink_centered = ink_center_error_pixels <= 1.0f;
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(ink_centered);
+}
+
+static void henka_test_ui_control_labels_use_centered_font_metrics(void)
+{
+    static const char* const labels[] = {"Hg", "menu"};
+    static const uint32_t output_numerators[] = {1U, 5U, 3U, 2U};
+    static const uint32_t output_denominators[] = {1U, 4U, 2U, 1U};
+    static const float output_scales[] = {1.0f, 1.25f, 1.5f, 2.0f};
+    static const uint16_t app_scales[] = {100U, 125U, 150U, 200U};
+    henka_ui_font_test_fixture fixture;
+    size_t output_index;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    for (output_index = 0U;
+         output_index < sizeof(output_scales) / sizeof(output_scales[0]);
+         ++output_index)
+    {
+        henka_ui_font_resource* font = NULL;
+        henka_ui_font_raster_profile* profile = NULL;
+        henka_ui_context* ui = NULL;
+        size_t app_index;
+
+        HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+            &fixture,
+            UINT64_C(0x401) + (uint64_t)output_index,
+            output_numerators[output_index],
+            output_denominators[output_index],
+            &font,
+            &profile));
+        HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+        henka_ui_set_visible(ui, true);
+
+        for (app_index = 0U;
+             app_index < sizeof(app_scales) / sizeof(app_scales[0]);
+             ++app_index)
+        {
+            const henka_ui_rect button_bounds = {100.0f, 100.0f, 120.0f, 24.0f};
+            henka_ui_frame_desc frame_desc;
+            size_t label_index;
+            size_t control_index;
+
+            memset(&frame_desc, 0, sizeof(frame_desc));
+            frame_desc.framebuffer_width = (int)(1280.0f * output_scales[output_index]);
+            frame_desc.framebuffer_height = (int)(720.0f * output_scales[output_index]);
+            frame_desc.mouse_position = (henka_vec2){-1.0f, -1.0f};
+
+            HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(
+                ui, profile, app_scales[app_index]) == HENKA_SUCCESS);
+            for (label_index = 0U;
+                 label_index < sizeof(labels) / sizeof(labels[0]);
+                 ++label_index)
+            {
+                for (control_index = 0U;
+                     control_index < HENKA_TEST_UI_CENTERED_CONTROL_COUNT;
+                     ++control_index)
+                {
+                    henka_test_ui_assert_centered_control_label(
+                        ui,
+                        app_scales[app_index],
+                        output_scales[output_index],
+                        frame_desc,
+                        button_bounds,
+                        (henka_test_ui_centered_control)control_index,
+                        labels[label_index]);
+                }
+            }
+        }
+
+        henka_ui_destroy(ui);
+        henka_ui_font_raster_profile_destroy(profile);
+        henka_ui_font_resource_destroy(font);
+    }
     henka_ui_font_test_fixture_dispose(&fixture);
 }
 
@@ -1421,9 +1664,11 @@ void henka_test_ui_font(void)
     henka_test_ui_font_resource_rejects_variable_font_table();
     henka_test_ui_font_bounds_and_packing_fail_closed();
     henka_test_ui_font_text_layout_uses_shared_glyph_placements();
+    henka_test_ui_segmented_select_fits_compact_labels_at_200_percent();
     henka_test_ui_font_allocation_failures_are_atomic();
     henka_test_ui_font_application_bootstrap_verifies_asset_identity();
     henka_test_ui_atlas_uses_effective_raster_pixel_size();
+    henka_test_ui_control_labels_use_centered_font_metrics();
     henka_test_ui_output_scale_aligns_draw_and_hit_coordinates();
     henka_test_ui_atlas_identity_includes_font_scale_output_and_context();
     henka_test_ui_atlas_cache_is_bounded_per_context();

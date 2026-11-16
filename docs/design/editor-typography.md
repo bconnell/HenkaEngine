@@ -1,18 +1,16 @@
 # Editor Typography and UI Scale Foundation
 
-**Status:** Owner-approved native implementation in progress. The current local candidate wires the bundled Atkinson resource and persisted Editor UI Scale through Sandbox startup and Settings; the source-level integration, text-authority, and renderer-resource transaction checks passed on this tree. No font winner is selected. Packaged visual comparison, real OS display-scale integration, and fresh current-tree full Debug/Release validation remain open.
-**Approval and implementation base:** Owner approved the amended plan for native implementation on 2026-10-11 after PR #31 merged; implementation worktree was fast-forwarded to published `main` at `dab197e23938d6d6af6e12041b1ea90e3ba630b2` before coding
-**Review revision:** 2026-10-11 — rechecked global Editor UI Scale ownership and one-time workspace-scale migration, heuristic retirement, bundled-byte bootstrap, failure-atomic scale/raster publication, font/output/context cache identity, bounded context-profile replacement, one measurement authority, independent OS display-scale proof, and exact static-TTF provenance against the current owner review
-**Historical design inspection base (not an implementation base):** published `main` at `b311915ffcc35acb2de99f93d06e08374b865718`
-**Scope:** Henka editor UI typography and persisted editor scale; no implementation is included in this review artifact.
-
+**Typography authority:** Atkinson Hyperlegible Regular is the production editor face; Noto Sans is reserved for explicit comparison validation. Text measurement, fitting, truncation, layout, and drawing share one font authority.
+**Editor scale:** The persisted global Editor UI Scale offers 100%, 125%, 150%, and 200%. Operating-system display scale remains a separate output transform.
+**Validation boundary:** Deterministic non-1.0 display-scale transforms are covered. Packaged behavior at a non-100% operating-system display scale remains a separate open validation item until the environment supports it.
+**Scope:** Bundled typography, editor-scale authority, and their application to Henka editor UI.
 ## Problem and intent
 
-At the historical design-inspection base recorded below, Henka's editor drew text from a fixed 5×7 bitmap table. Glyphs were expanded into solid UI rectangles, and the corresponding measurement path used fixed glyph dimensions. At that same base, workspace UI scale was derived from the framebuffer-to-window size ratio each frame, so the stored scale was not yet an owner-controlled, stable typography/layout preference. These are source-inspection findings at that revision, not assertions about a later live `main`; recheck the current implementation base before acting on them.
+Henka's earlier editor used fixed 5×7 bitmap glyphs expanded into UI rectangles and fixed-width measurement. Workspace scale also followed the framebuffer-to-window ratio rather than an independent persisted preference. The current text subsystem uses bundled font resources and shared text metrics; the sections below define its ownership, compatibility, and validation requirements.
 
 The goal is a bundled, predictable, readable editor font with one canonical text-layout authority. Font measurement, fitting, truncation, layout decisions, glyph placement, and rendering must agree. A real, persisted Editor UI Scale of 100%, 125%, 150%, or 200% must affect workspace geometry and text together. Operating-system display scale is a separate raster/output concern and must not be applied twice.
 
-## Approved direction and constraints
+## Design direction and constraints
 
 - Reuse the already-pinned `stb` FetchContent revision (`2c980bb59875b0d32144a71867fbdebb2f77cd20`) for `stb_truetype` and `stb_rect_pack`; do not add FreeType or a second font-library pin.
 - Build a focused Henka UI font/text subsystem. Do not place substantial font parsing, atlas management, or text-layout responsibility in `ui.c`.
@@ -100,6 +98,10 @@ For every paired Atkinson/Noto comparison, hold the actual OS display scale cons
 
 The comparison must include normal-size body/status text, tabs, buttons, Scene Objects, Object Details, numeric values, punctuation, `I/l/1`, `O/0`, narrow rows, truncation, and compact layouts. Inspect actual working-size captures for legibility, practical metrics, clipping, overlap, and layout stability. Choose the winner from that evidence, not family resemblance or enlarged glyph specimens. Package only the selected font in the final product; comparison candidates may both appear in a local validation package if their provenance is independently recorded.
 
+### Comparison outcome
+
+Matched packaged captures at 1280×720 and 1920×1080 covered Editor UI Scale 100%, 125%, 150%, and 200%, with operating-system display scale held at 100%. Both Atkinson and Noto were readable at normal working size, with no clear readability winner; Atkinson is the selected default by preference, not a claim of objective superiority. The comparison manifest records executable identity, font hashes, restart persistence, and the capture set.
+
 ## Persistence, settings, and failure behavior
 
 Utility → Settings contains a real, one-click, keyboard-accessible Editor UI Scale control with exactly four choices: 100%, 125%, 150%, and 200%. Selecting a value immediately updates layout and font raster/metrics together and persists through the global editor-settings authority; it is not a test-only switch and does not persist in a workspace preset. The selected value remains clear in Settings and in bounded diagnostic/package telemetry. Reset behavior must be explicit and covered by regression tests. Resource preparation precedes preference publication and persistence; injected preparation or save failure must leave the prior complete working state intact and report the failed stage.
@@ -138,7 +140,7 @@ The package includes the exact required font license/provenance. Asset hashes an
 - Run package contract, startup, settings interaction, resize, row/truncation, and UI hit-test workflows on the exact packaged executable.
 - Verify the font and license are present in the package and no host-installed font is required.
 
-## Review amendments — normative authority clarifications
+## Authority clarifications
 
 These clarifications are normative where earlier prose could be read differently:
 
@@ -154,6 +156,6 @@ These clarifications are normative where earlier prose could be read differently
 
 This slice does not redesign the editor, change hidden-row thresholds, remove or rename controls, shrink fonts or hit targets to fit layouts, author replacement icons, change game-runtime text, implement shaping/complex scripts/rich text, add FreeType, or introduce a public general-purpose texture API. Any newly exposed layout defect is repaired through the existing layout authority and tested, not hidden by per-panel spacing hacks.
 
-## Review and implementation-plan boundary
+## Implementation status
 
-The owner approved the direction and required amendments on 2026-10-11. This design inspection used `b311915ffcc35acb2de99f93d06e08374b865718`, which is historical and is not the implementation base. Repository-specific APIs, persistence, renderer-context ownership, and SDL facts must be revalidated against live protected `main` before implementation. The bounded implementation plan is a separate review artifact at `docs/design/editor-typography-implementation-plan.md`. **No production implementation should begin until that implementation plan is approved.** Exact static font files/hashes and licenses are fixed during the plan's first source-provenance task, before either candidate is bundled or packaged.
+The integrated editor path provides bundled-font startup, shared font metrics, persisted scale selection, and context-specific raster resources. Settings interaction and restart behavior have packaged coverage, and layout regressions cover compact and wider editor arrangements. Packaged proof at non-100% operating-system display scale remains open because the available captures report 100%; Editor UI Scale captures do not satisfy that separate check.

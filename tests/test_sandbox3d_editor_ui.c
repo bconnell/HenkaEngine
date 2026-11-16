@@ -1,11 +1,14 @@
 #include "test_suite.h"
 
+#include <float.h>
 #include <math.h>
 #include <string.h>
 
 #include <henka/persistence.h>
 
 #include "../examples/sandbox3d/editor_ui_state.h"
+#include "../examples/sandbox3d/editor_scale_control.h"
+#include "../examples/sandbox3d/editor_utility_settings_layout.h"
 #include "../examples/sandbox3d/modeling_toolbar.h"
 
 void henka_test_sandbox3d_editor_ui(void)
@@ -15,6 +18,7 @@ void henka_test_sandbox3d_editor_ui(void)
     char toolbar_options_summary[96];
     henka_settings* settings;
     sandbox3d_editor_ui_state invalid_state;
+    sandbox3d_editor_ui_state legacy_state;
     sandbox3d_editor_ui_state state;
     sandbox3d_editor_ui_state stored;
 
@@ -102,9 +106,10 @@ void henka_test_sandbox3d_editor_ui(void)
     HENKA_TEST_ASSERT(state.controls_viewport_expanded);
     HENKA_TEST_ASSERT(!state.controls_viewport_tool_expanded);
 
-    HENKA_TEST_ASSERT(state.details_overview_expanded);
+    HENKA_TEST_ASSERT(!state.details_overview_expanded);
     HENKA_TEST_ASSERT(state.details_transform_expanded);
-    HENKA_TEST_ASSERT(state.details_materials_expanded);
+    HENKA_TEST_ASSERT(!state.details_materials_expanded);
+    HENKA_TEST_ASSERT(!state.details_authoring_expanded);
     HENKA_TEST_ASSERT(!state.details_audio_expanded);
     HENKA_TEST_ASSERT(!state.details_physics_expanded);
     HENKA_TEST_ASSERT(!state.details_interaction_expanded);
@@ -114,6 +119,12 @@ void henka_test_sandbox3d_editor_ui(void)
             state.details_group_order));
     HENKA_TEST_ASSERT(
         state.details_group_order[0] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[1] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[2] ==
             SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW);
     HENKA_TEST_ASSERT(
         state.details_group_order[
@@ -153,9 +164,9 @@ void henka_test_sandbox3d_editor_ui(void)
     HENKA_TEST_ASSERT(!state.controls_viewer_expanded);
     HENKA_TEST_ASSERT(state.controls_viewport_expanded);
     HENKA_TEST_ASSERT(!state.controls_viewport_tool_expanded);
-    HENKA_TEST_ASSERT(state.details_overview_expanded);
+    HENKA_TEST_ASSERT(!state.details_overview_expanded);
     HENKA_TEST_ASSERT(state.details_transform_expanded);
-    HENKA_TEST_ASSERT(state.details_materials_expanded);
+    HENKA_TEST_ASSERT(!state.details_materials_expanded);
     HENKA_TEST_ASSERT(!state.details_physics_expanded);
     HENKA_TEST_ASSERT(!state.details_interaction_expanded);
     HENKA_TEST_ASSERT(state.details_actions_expanded);
@@ -183,11 +194,26 @@ void henka_test_sandbox3d_editor_ui(void)
     stored.controls_scroll_offset = 96.0f;
     stored.scene_objects_actions_scroll_offset = 192.0f;
     stored.details_scroll_offset = 144.0f;
-    HENKA_TEST_ASSERT(
-        sandbox3d_editor_ui_reorder_details_group(
-            &stored,
-            SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS,
-            0U));
+    {
+        size_t group_position;
+        for (group_position = 0U;
+             group_position < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT;
+             ++group_position)
+        {
+            if (stored.details_group_order[group_position] ==
+                SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS)
+            {
+                break;
+            }
+        }
+        HENKA_TEST_ASSERT(
+            group_position < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_ui_reorder_details_group(
+                &stored,
+                group_position,
+                0U));
+    }
     HENKA_TEST_ASSERT(
         stored.details_group_order[0] ==
             SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS);
@@ -347,7 +373,7 @@ void henka_test_sandbox3d_editor_ui(void)
     sandbox3d_editor_ui_state_load(settings, &state);
     HENKA_TEST_ASSERT(
         state.details_group_order[0] ==
-            SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW);
+            SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM);
 
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         sandbox3d_editor_ui_clamp_scroll(
@@ -666,5 +692,417 @@ void henka_test_sandbox3d_editor_ui(void)
             NULL,
             100.0f,
             1));
+
+    state.utility_settings_scroll_offset = 0.0f;
+    state.utility_settings_content_height = 640.0f;
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_utility_settings(
+            &state,
+            240.0f,
+            1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.utility_settings_scroll_offset,
+        48.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_utility_settings(
+            &state,
+            240.0f,
+            20));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.utility_settings_scroll_offset,
+        400.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_utility_settings(
+            &state,
+            240.0f,
+            -1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.utility_settings_scroll_offset,
+        352.0f,
+        0.0001f);
+    state.controls_scroll_offset = 96.0f;
+    state.details_scroll_offset = 72.0f;
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_state_store(settings, &state) == HENKA_SUCCESS);
+    sandbox3d_editor_ui_state_reset(&stored);
+    sandbox3d_editor_ui_state_load(settings, &stored);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        stored.utility_settings_scroll_offset,
+        352.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        stored.controls_scroll_offset,
+        96.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        stored.details_scroll_offset,
+        72.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        stored.utility_settings_content_height,
+        0.0f,
+        0.0001f);
+
+    state.utility_settings_scroll_offset = 24.0f;
+    state.utility_settings_content_height = 120.0f;
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_utility_settings(
+            &state,
+            240.0f,
+            1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.utility_settings_scroll_offset,
+        0.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_utility_settings(
+            NULL,
+            240.0f,
+            1));
+
+    {
+        sandbox3d_utility_settings_layout settings_layout;
+        sandbox3d_editor_scale_control_layout_desc scale_layout;
+        henka_ui_rect settings_viewport = {10.0f, 20.0f, 400.0f, 200.0f};
+        henka_ui_rect partial_rect;
+        const float boundary_widths[] = {
+            112.0f, 127.0f, 128.0f, 183.0f, 184.0f, 231.0f, 232.0f,
+            273.0f, 274.0f, 327.0f, 328.0f, 400.0f};
+        size_t width_index;
+        size_t control_index;
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_layout_build(
+                settings_viewport,
+                false,
+                0.0f,
+                &settings_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(settings_layout.adjustment_row_count == 1U);
+        HENKA_TEST_ASSERT(settings_layout.environment_row_count == 1U);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            settings_layout.content_height,
+            570.0f,
+            0.0001f);
+        HENKA_TEST_ASSERT(
+            !sandbox3d_utility_settings_rect_is_fully_visible(
+                settings_viewport,
+                settings_layout.controls[
+                    SANDBOX3D_UTILITY_SETTINGS_CONTROL_COMPASS_SMOOTH]));
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_rect_is_fully_visible(
+                settings_viewport,
+                settings_layout.scale_bounds));
+
+        /* At 200% UI scale the real 1280x720 package leaves a compact
+         * Settings viewport. The scale control must remain fully reachable
+         * there so the user can return to a smaller scale. */
+        settings_viewport = (henka_ui_rect){409.0f, 302.0f, 193.0f, 32.0f};
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_layout_build(
+                settings_viewport,
+                false,
+                0.0f,
+                &settings_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_rect_is_fully_visible(
+                settings_viewport,
+                settings_layout.scale_bounds));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            settings_layout.scale_bounds.height,
+            24.0f,
+            0.0001f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_scale_control_layout(
+                settings_layout.scale_bounds,
+                &scale_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(scale_layout.compact);
+        HENKA_TEST_ASSERT(!scale_layout.stacked);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scale_layout.choices.x,
+            settings_viewport.x + SANDBOX3D_EDITOR_SCALE_COMPACT_LABEL_WIDTH,
+            0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scale_layout.choices.width / 4.0f,
+            (settings_viewport.width - SANDBOX3D_EDITOR_SCALE_COMPACT_LABEL_WIDTH) / 4.0f,
+            0.0001f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_rect_is_fully_visible(
+                settings_viewport,
+                scale_layout.choices));
+
+        settings_viewport = (henka_ui_rect){10.0f, 20.0f, 191.0f, 44.0f};
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_layout_build(
+                settings_viewport,
+                false,
+                0.0f,
+                &settings_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_scale_control_layout(
+                settings_layout.scale_bounds,
+                &scale_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!scale_layout.compact);
+        HENKA_TEST_ASSERT(scale_layout.stacked);
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_rect_is_fully_visible(
+                settings_viewport,
+                scale_layout.choices));
+
+        settings_viewport.width = 260.0f;
+        settings_viewport.height = 220.0f;
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_layout_build(
+                settings_viewport,
+                true,
+                0.0f,
+                &settings_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(settings_layout.adjustment_row_count == 2U);
+        HENKA_TEST_ASSERT(settings_layout.environment_row_count == 2U);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            settings_layout.controls[
+                SANDBOX3D_UTILITY_SETTINGS_CONTROL_SPEED_LESS].y -
+                settings_layout.controls[
+                    SANDBOX3D_UTILITY_SETTINGS_CONTROL_SENSITIVITY_LESS].y,
+            30.0f,
+            0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            settings_layout.controls[
+                SANDBOX3D_UTILITY_SETTINGS_CONTROL_SKY_PRESET].y -
+                settings_layout.controls[
+                    SANDBOX3D_UTILITY_SETTINGS_CONTROL_SKY_CYCLE].y,
+            30.0f,
+            0.0001f);
+        HENKA_TEST_ASSERT(
+            settings_layout.controls[
+                SANDBOX3D_UTILITY_SETTINGS_CONTROL_SENSITIVITY_MORE].x +
+                    settings_layout.controls[
+                        SANDBOX3D_UTILITY_SETTINGS_CONTROL_SENSITIVITY_MORE].width <=
+                settings_viewport.x + settings_viewport.width);
+        HENKA_TEST_ASSERT(
+            !sandbox3d_utility_settings_rect_is_fully_visible(
+                settings_viewport,
+                settings_layout.controls[
+                    SANDBOX3D_UTILITY_SETTINGS_CONTROL_COMPASS_SMOOTH]));
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_layout_build(
+                settings_viewport,
+                true,
+                settings_layout.content_height - settings_viewport.height,
+                &settings_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_rect_is_fully_visible(
+                settings_viewport,
+                settings_layout.controls[
+                    SANDBOX3D_UTILITY_SETTINGS_CONTROL_COMPASS_SMOOTH]));
+        HENKA_TEST_ASSERT(
+            !sandbox3d_utility_settings_rect_is_fully_visible(
+                settings_viewport,
+                settings_layout.scale_bounds));
+
+        settings_viewport.width = 128.0f;
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_layout_build(
+                settings_viewport,
+                false,
+                0.0f,
+                &settings_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(settings_layout.adjustment_row_count == 2U);
+        HENKA_TEST_ASSERT(settings_layout.environment_row_count == 3U);
+        HENKA_TEST_ASSERT(
+            settings_layout.controls[
+                SANDBOX3D_UTILITY_SETTINGS_CONTROL_SPEED_MORE].x +
+                    settings_layout.controls[
+                        SANDBOX3D_UTILITY_SETTINGS_CONTROL_SPEED_MORE].width <=
+                settings_viewport.x + settings_viewport.width);
+        partial_rect = settings_layout.controls[
+            SANDBOX3D_UTILITY_SETTINGS_CONTROL_SKY_CYCLE];
+        partial_rect.y = settings_viewport.y - 1.0f;
+        HENKA_TEST_ASSERT(
+            !sandbox3d_utility_settings_rect_is_fully_visible(
+                settings_viewport,
+                partial_rect));
+        settings_viewport.width = 96.0f;
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_layout_build(
+                settings_viewport,
+                false,
+                0.0f,
+                &settings_layout) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(settings_layout.content_height, 0.0f, 0.0001f);
+
+        settings_viewport.x = 0.0f;
+        settings_viewport.y = 0.0f;
+        settings_viewport.height = 240.0f;
+        for (width_index = 0U;
+             width_index < sizeof(boundary_widths) / sizeof(boundary_widths[0]);
+             ++width_index)
+        {
+            settings_viewport.width = boundary_widths[width_index];
+            HENKA_TEST_ASSERT(
+                sandbox3d_utility_settings_layout_build(
+                    settings_viewport,
+                    true,
+                    0.0f,
+                    &settings_layout) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(
+                settings_layout.adjustment_row_count ==
+                (settings_viewport.width >= 274.0f ? 1U :
+                    settings_viewport.width >= 128.0f ? 2U : 4U));
+            HENKA_TEST_ASSERT(
+                settings_layout.environment_row_count ==
+                (settings_viewport.width >= 328.0f ? 1U :
+                    settings_viewport.width >= 232.0f ? 2U : 3U));
+            HENKA_TEST_ASSERT(
+                settings_layout.exposure_stacked ==
+                (settings_viewport.width < 184.0f));
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                settings_layout.controls[
+                    SANDBOX3D_UTILITY_SETTINGS_CONTROL_EXPOSURE_MORE].x,
+                settings_layout.controls[
+                    SANDBOX3D_UTILITY_SETTINGS_CONTROL_EXPOSURE_LESS].x +
+                    (settings_layout.exposure_stacked ? 0.0f : 96.0f),
+                0.0001f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                settings_layout.controls[
+                    SANDBOX3D_UTILITY_SETTINGS_CONTROL_EXPOSURE_MORE].y,
+                settings_layout.controls[
+                    SANDBOX3D_UTILITY_SETTINGS_CONTROL_EXPOSURE_LESS].y +
+                    (settings_layout.exposure_stacked ? 30.0f : 0.0f),
+                0.0001f);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                settings_layout.rows[
+                    SANDBOX3D_UTILITY_SETTINGS_ROW_SENSITIVITY_SPEED].y,
+                settings_layout.controls[
+                    SANDBOX3D_UTILITY_SETTINGS_CONTROL_EXPOSURE_MORE].y +
+                    30.0f,
+                0.0001f);
+            for (control_index = 0U;
+                 control_index < SANDBOX3D_UTILITY_SETTINGS_CONTROL_COUNT;
+                 ++control_index)
+            {
+                const henka_ui_rect control = settings_layout.controls[control_index];
+                HENKA_TEST_ASSERT(control.x >= settings_viewport.x);
+                HENKA_TEST_ASSERT(control.width > 0.0f);
+                HENKA_TEST_ASSERT(
+                    control.x + control.width <=
+                    settings_viewport.x + settings_viewport.width);
+            }
+        }
+
+        settings_viewport.width = FLT_MAX;
+        settings_viewport.x = FLT_MAX;
+        HENKA_TEST_ASSERT(
+            sandbox3d_utility_settings_layout_build(
+                settings_viewport,
+                false,
+                0.0f,
+                &settings_layout) == HENKA_ERROR_NUMERIC_RANGE);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(settings_layout.content_height, 0.0f, 0.0001f);
+    }
+    /* Existing installations persisted the former expanded, Overview-first
+     * defaults. Migrate only that exact untouched default; retain custom
+     * expansion and section-order choices. */
+    sandbox3d_editor_ui_state_reset(&legacy_state);
+    legacy_state.details_overview_expanded = true;
+    legacy_state.details_transform_expanded = true;
+    legacy_state.details_materials_expanded = true;
+    legacy_state.details_authoring_expanded = true;
+    {
+        size_t group_index;
+        for (group_index = 0U;
+             group_index < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT;
+             ++group_index)
+        {
+            legacy_state.details_group_order[group_index] =
+                (unsigned char)group_index;
+        }
+    }
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_state_store(settings, &legacy_state) ==
+            HENKA_SUCCESS);
+    sandbox3d_editor_ui_state_load(settings, &state);
+    HENKA_TEST_ASSERT(!state.details_overview_expanded);
+    HENKA_TEST_ASSERT(state.details_transform_expanded);
+    HENKA_TEST_ASSERT(!state.details_materials_expanded);
+    HENKA_TEST_ASSERT(!state.details_authoring_expanded);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[0] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[1] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[2] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW);
+
+    /* A changed expansion choice prevents the legacy-default migration even
+     * when the saved section order still matches the old default. */
+    sandbox3d_editor_ui_state_reset(&legacy_state);
+    legacy_state.details_overview_expanded = true;
+    legacy_state.details_transform_expanded = true;
+    legacy_state.details_materials_expanded = true;
+    legacy_state.details_authoring_expanded = true;
+    legacy_state.details_physics_expanded = true;
+    {
+        size_t group_index;
+        for (group_index = 0U;
+             group_index < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT;
+             ++group_index)
+        {
+            legacy_state.details_group_order[group_index] =
+                (unsigned char)group_index;
+        }
+    }
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_state_store(settings, &legacy_state) ==
+            HENKA_SUCCESS);
+    sandbox3d_editor_ui_state_load(settings, &state);
+    HENKA_TEST_ASSERT(state.details_overview_expanded);
+    HENKA_TEST_ASSERT(state.details_transform_expanded);
+    HENKA_TEST_ASSERT(state.details_materials_expanded);
+    HENKA_TEST_ASSERT(state.details_authoring_expanded);
+    HENKA_TEST_ASSERT(state.details_physics_expanded);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[0] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW);
+
+    /* A user-reordered legacy layout also retains its old section state. */
+    sandbox3d_editor_ui_state_reset(&legacy_state);
+    legacy_state.details_overview_expanded = true;
+    legacy_state.details_transform_expanded = true;
+    legacy_state.details_materials_expanded = true;
+    legacy_state.details_authoring_expanded = true;
+    {
+        size_t group_index;
+        for (group_index = 0U;
+             group_index < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT;
+             ++group_index)
+        {
+            legacy_state.details_group_order[group_index] =
+                (unsigned char)group_index;
+        }
+    }
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_reorder_details_group(&legacy_state, 0U, 2U));
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_state_store(settings, &legacy_state) ==
+            HENKA_SUCCESS);
+    sandbox3d_editor_ui_state_load(settings, &state);
+    HENKA_TEST_ASSERT(state.details_overview_expanded);
+    HENKA_TEST_ASSERT(state.details_transform_expanded);
+    HENKA_TEST_ASSERT(state.details_materials_expanded);
+    HENKA_TEST_ASSERT(state.details_authoring_expanded);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[0] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[1] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[2] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW);
+
     henka_settings_destroy(settings);
 }

@@ -168,6 +168,16 @@ henka_result henka_ui_draw_font_text_limited(
     float maximum_width,
     size_t maximum_line_count);
 
+henka_result henka_ui_draw_font_text_centered_limited(
+    henka_ui_context* context,
+    float x,
+    float center_y,
+    float scale,
+    const char* text,
+    henka_vec4 color,
+    float maximum_width,
+    size_t maximum_line_count);
+
 /* Context metrics share the font/profile authority used by font drawing. */
 henka_result henka_ui_measure_font_text(
     const henka_ui_context* context,

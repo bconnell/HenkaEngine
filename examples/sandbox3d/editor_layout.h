@@ -257,6 +257,32 @@ henka_result sandbox3d_editor_layout_text_control_grid_for_context(
     size_t item_capacity,
     size_t* out_row_count);
 
+#define SANDBOX3D_EDITOR_UTILITY_TAB_COUNT 10U
+
+/* Canonical product labels and measured geometry for Utility destinations. */
+const char* sandbox3d_editor_utility_tab_label(size_t index);
+henka_result sandbox3d_editor_layout_utility_tabs_for_context(
+    const henka_ui_context* ui_context,
+    henka_ui_rect panel_bounds,
+    float app_ui_scale,
+    henka_ui_rect* out_tab_rects,
+    size_t tab_rect_capacity,
+    size_t* out_row_count,
+    float* out_row_height);
+
+typedef struct sandbox3d_editor_details_footer_layout
+{
+    henka_ui_rect save_project;
+    henka_ui_rect reload_project;
+    float scroll_reserve;
+    size_t row_count;
+} sandbox3d_editor_details_footer_layout;
+
+henka_result sandbox3d_editor_layout_details_footer_for_context(
+    const henka_ui_context* ui_context,
+    henka_ui_rect panel_bounds,
+    sandbox3d_editor_details_footer_layout* out_layout);
+
 #ifdef HENKA_SANDBOX3D_TEST_SEAM
 /* Regression-only coverage for the retired fixed-column display helpers.
  * Product layout must use editor_text_layout's active font metrics. */

@@ -152,7 +152,7 @@ try {
     Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $active) -ExpectedText "active"
     Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $unmarked) -ExpectedText "unmarked"
     Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $outside) -ExpectedText "canonical local or cleanup-only legacy generated roots"
-    Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", (Join-Path $localRoot "builds")) -ExpectedText "approved generated root itself"
+    Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", (Join-Path $localRoot "bld")) -ExpectedText "approved generated root itself"
 
     $cleanup = Invoke-Manager -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $eligible)
     if ($cleanup.ExitCode -ne 0 -or (Test-Path -LiteralPath $eligible)) {

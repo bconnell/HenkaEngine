@@ -744,15 +744,43 @@ void henka_test_sandbox3d_editor_scale_control(void)
         sandbox3d_editor_scale_control_layout(
             (henka_ui_rect){12.0f, 20.0f, 204.0f, 44.0f},
             &geometry) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(geometry.stacked);
+    HENKA_TEST_ASSERT(!geometry.stacked);
+    HENKA_TEST_ASSERT(geometry.compact);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.label.x, 12.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.label.y, 20.0f, 0.0001f);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.label.width, 204.0f, 0.0001f);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.label.height, 16.0f, 0.0001f);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.choices.x, 12.0f, 0.0001f);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.choices.y, 40.0f, 0.0001f);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.choices.width, 204.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        geometry.label.width,
+        SANDBOX3D_EDITOR_SCALE_COMPACT_LABEL_WIDTH,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.label.height, 24.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        geometry.choices.x,
+        12.0f + SANDBOX3D_EDITOR_SCALE_COMPACT_LABEL_WIDTH,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.choices.y, 20.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        geometry.choices.width,
+        204.0f - SANDBOX3D_EDITOR_SCALE_COMPACT_LABEL_WIDTH,
+        0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.choices.height, 24.0f, 0.0001f);
+    HENKA_TEST_ASSERT(geometry.choices.width / 4.0f >= 32.0f);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_scale_control_layout(
+            (henka_ui_rect){12.0f, 20.0f, 192.0f, 24.0f},
+            &geometry) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(geometry.compact);
+    HENKA_TEST_ASSERT(!geometry.stacked);
+    HENKA_TEST_ASSERT(geometry.choices.width / 4.0f >= 32.0f);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_scale_control_layout(
+            (henka_ui_rect){12.0f, 20.0f, 191.0f, 44.0f},
+            &geometry) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!geometry.compact);
+    HENKA_TEST_ASSERT(geometry.stacked);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.label.width, 191.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(geometry.choices.width, 191.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         geometry.choices.y + geometry.choices.height,
         64.0f,
@@ -766,7 +794,7 @@ void henka_test_sandbox3d_editor_scale_control(void)
     HENKA_TEST_ASSERT(geometry.choices.width == 0.0f);
     HENKA_TEST_ASSERT(
         sandbox3d_editor_scale_control_layout(
-            (henka_ui_rect){12.0f, 20.0f, 204.0f, 43.0f},
+            (henka_ui_rect){12.0f, 20.0f, 191.0f, 43.0f},
             &geometry) == HENKA_ERROR_LIMIT);
     HENKA_TEST_ASSERT(geometry.label.width == 0.0f);
     HENKA_TEST_ASSERT(geometry.choices.width == 0.0f);

@@ -39,6 +39,8 @@ $assetName = "Cheeky" + $Asset
 $capturedProcess = $null
 $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
 $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
+$previousStartHidden = $env:HENKA_AUTOMATION_START_HIDDEN
+$previousToolWindowsStartHidden = $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN
 
 . (Join-Path $repoRoot "scripts\henka_ui_automation_helpers.ps1")
 
@@ -119,56 +121,14 @@ function Clear-TextField {
 function Save-WindowScreenshot {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    Add-Type -AssemblyName System.Drawing
-    if (-not ("HenkaShowcaseAuthoringNative" -as [type])) {
-        Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-
-public static class HenkaShowcaseAuthoringNative
-{
-    [StructLayout(LayoutKind.Sequential)]
-    public struct RECT
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
-}
-"@
-    }
-
     $handle = $capturedProcess.Process.MainWindowHandle
-    Set-HenkaAutomationForeground -Handle $handle
-    $rect = New-Object HenkaShowcaseAuthoringNative+RECT
-    if (-not [HenkaShowcaseAuthoringNative]::GetWindowRect($handle, [ref]$rect)) {
-        throw "The showcase authoring window bounds could not be read."
+    if ($handle -eq [System.IntPtr]::Zero) {
+        throw "The showcase authoring window handle was unavailable for background capture."
     }
-    $width = $rect.Right - $rect.Left
-    $height = $rect.Bottom - $rect.Top
-    if ($width -le 0 -or $height -le 0) {
-        throw "The showcase authoring window bounds were invalid."
-    }
-    $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $width, $height
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    try {
-        $graphics.CopyFromScreen(
-            $rect.Left,
-            $rect.Top,
-            0,
-            0,
-            (New-Object System.Drawing.Size -ArgumentList $width, $height))
-        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
-    }
-    finally {
-        $graphics.Dispose()
-        $bitmap.Dispose()
-    }
+    $null = Save-HenkaAutomationWindowScreenshot `
+        -Handle $handle `
+        -Path $Path `
+        -Description "Showcase authoring capture"
 }
 
 try {
@@ -182,12 +142,15 @@ try {
 
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
+    $env:HENKA_AUTOMATION_START_HIDDEN = "1"
+    $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"
     $capturedProcess = Start-HenkaCapturedProcess `
         -FilePath $runtimeExecutable `
         -Arguments @("--primitive-gallery") `
         -WorkingDirectory $runtimeDirectory `
         -StdoutPath $stdoutPath `
-        -StderrPath $stderrPath
+        -StderrPath $stderrPath `
+        -StartOffscreenWithoutActivation
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 30000)) {
         throw "The editor did not report a usable UI."
     }
@@ -476,6 +439,18 @@ finally {
     }
     else {
         $env:HENKA_AUTOMATION_INPUT_FILE = $previousAutomationFile
+    }
+    if ($null -eq $previousStartHidden) {
+        Remove-Item Env:HENKA_AUTOMATION_START_HIDDEN -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_START_HIDDEN = $previousStartHidden
+    }
+    if ($null -eq $previousToolWindowsStartHidden) {
+        Remove-Item Env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = $previousToolWindowsStartHidden
     }
     if ($null -ne $capturedProcess) {
         Close-HenkaCapturedProcess -CapturedProcess $capturedProcess

@@ -254,6 +254,11 @@ bool henka_ui_selectable(henka_ui_context* context, const char* id, henka_ui_rec
 /* Logical horizontal text inset consumed inside henka_ui_tab bounds.
  * Layout callers reserve this inset on both sides of measured text. */
 #define HENKA_UI_TAB_TEXT_HORIZONTAL_PADDING 10.0f
+/* Logical horizontal text insets consumed inside shared button bounds. */
+#define HENKA_UI_BUTTON_TEXT_HORIZONTAL_PADDING 10.0f
+#define HENKA_UI_PRIMARY_BUTTON_TEXT_HORIZONTAL_PADDING 11.0f
+/* Text fields retain their independent inset while button sizing is shared. */
+#define HENKA_UI_TEXT_FIELD_HORIZONTAL_PADDING 8.0f
 
 bool henka_ui_tab(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool selected);
 /*

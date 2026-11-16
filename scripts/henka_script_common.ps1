@@ -162,8 +162,9 @@ function Get-HenkaCheckoutStorageKey {
     }
     finally { $hashAlgorithm.Dispose() }
     if ($CompactBuildKey) {
-        $leaf = $leaf.Substring(0, [Math]::Min(4, $leaf.Length))
-        $hashText = $hashText.Substring(0, 16)
+        # Keep the full nested CMake object-file path within Henka's
+        # 128-character Windows path budget.
+        return $hashText.Substring(0, 11)
     }
     else {
         $hashText = $hashText.Substring(0, 12)
@@ -178,7 +179,7 @@ function Get-HenkaBuildRoot {
     $localRoot = Get-HenkaLocalRoot -RepositoryRoot $repository
     $buildKey = Get-HenkaCheckoutStorageKey -RepositoryRoot $repository -CompactBuildKey
     return Resolve-HenkaLocalPath -RepositoryRoot $repository `
-        -Path (Join-Path (Join-Path $localRoot "builds") $buildKey)
+        -Path (Join-Path (Join-Path $localRoot "bld") $buildKey)
 }
 
 function Get-HenkaPackageRoot {
@@ -1148,12 +1149,19 @@ public sealed class HenkaCapturedProcess : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags);
 
     [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
+    private static extern int GetSystemMetrics(int index);
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
@@ -1168,6 +1176,13 @@ public sealed class HenkaCapturedProcess : IDisposable
 
     private const int SW_SHOWMINNOACTIVE = 7;
     private const int SW_SHOWNOACTIVATE = 4;
+    private const int SM_XVIRTUALSCREEN = 76;
+    private const int SM_YVIRTUALSCREEN = 77;
+    private const int SM_CXVIRTUALSCREEN = 78;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOOWNERZORDER = 0x0200;
 
     public Process Process { get; private set; }
 
@@ -1190,8 +1205,10 @@ public sealed class HenkaCapturedProcess : IDisposable
         string stdoutPath,
         string stderrPath,
         bool createNoWindow,
+        bool startHidden,
         bool startMinimized,
         bool startVisibleWithoutActivation,
+        bool startOffscreenWithoutActivation,
         string windowsPowerShellModulePath)
     {
         ProcessStartInfo startInfo = new ProcessStartInfo();
@@ -1204,11 +1221,12 @@ public sealed class HenkaCapturedProcess : IDisposable
         {
             startInfo.EnvironmentVariables["PSModulePath"] = windowsPowerShellModulePath;
         }
-        if (!createNoWindow && (startMinimized || startVisibleWithoutActivation))
+        if (!createNoWindow &&
+            (startHidden || startMinimized || startVisibleWithoutActivation || startOffscreenWithoutActivation))
         {
-            // Validation may need a native window for PrintWindow or an
-            // event-driven UI path, but it must not take ownership of the
-            // user's typing focus merely by being launched.
+            // Validation may need a native offscreen window for application
+            // rendering and event-driven UI checks, but it must not take
+            // ownership of the user's focus merely by being launched.
             // Native GUI frameworks can ignore a minimized startup hint while
             // creating their first window. Hidden startup prevents a transient
             // foreground activation; StartMinimize then exposes it minimized
@@ -1239,11 +1257,12 @@ public sealed class HenkaCapturedProcess : IDisposable
             }
             if (!createNoWindow && startMinimized)
             {
-                StartMinimize(process, GetForegroundWindow());
+                StartMinimize(process);
             }
-            else if (!createNoWindow && startVisibleWithoutActivation)
+            else if (!createNoWindow &&
+                (startVisibleWithoutActivation || startOffscreenWithoutActivation))
             {
-                StartShowWithoutActivation(process);
+                StartShowWithoutActivation(process, startOffscreenWithoutActivation);
             }
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
@@ -1256,19 +1275,47 @@ public sealed class HenkaCapturedProcess : IDisposable
         }
     }
 
-    public static void StartMinimize(Process process)
-    {
-        StartMinimize(process, GetForegroundWindow());
-    }
-
-    public static IntPtr CurrentForegroundWindow()
-    {
-        return GetForegroundWindow();
-    }
-
-    private static void MinimizeOwnedWindows(
+    private static void ShowOwnedWindowsWithoutActivation(
         int processId,
-        IntPtr previousForeground)
+        HashSet<IntPtr> handledWindows,
+        bool startOffscreen)
+    {
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+        {
+            uint ownerProcessId;
+            GetWindowThreadProcessId(hWnd, out ownerProcessId);
+            if (ownerProcessId == (uint)processId && !handledWindows.Contains(hWnd))
+            {
+                if (startOffscreen)
+                {
+                    int virtualRight = GetSystemMetrics(SM_XVIRTUALSCREEN) +
+                        GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                    int offscreenX = virtualRight + 64;
+                    int offscreenY = GetSystemMetrics(SM_YVIRTUALSCREEN) + 64;
+                    uint positionFlags = SWP_NOSIZE | SWP_NOZORDER |
+                        SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+                    if (!SetWindowPos(
+                        hWnd,
+                        IntPtr.Zero,
+                        offscreenX,
+                        offscreenY,
+                        0,
+                        0,
+                        positionFlags))
+                    {
+                        // Fail closed: do not expose a capture window on the
+                        // owner's desktop if isolation could not be applied.
+                        return true;
+                    }
+                }
+                handledWindows.Add(hWnd);
+                ShowWindow(hWnd, SW_SHOWNOACTIVATE);
+            }
+            return true;
+        }, IntPtr.Zero);
+    }
+
+    private static void MinimizeOwnedWindows(int processId)
     {
         EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
         {
@@ -1277,35 +1324,12 @@ public sealed class HenkaCapturedProcess : IDisposable
             if (ownerProcessId == (uint)processId)
             {
                 ShowWindow(hWnd, SW_SHOWMINNOACTIVE);
-                if (previousForeground != IntPtr.Zero &&
-                    GetForegroundWindow() == hWnd)
-                {
-                    // Restore the user's existing foreground owner; never
-                    // activate the newly launched validation window here.
-                    SetForegroundWindow(previousForeground);
-                }
             }
             return true;
         }, IntPtr.Zero);
     }
 
-    private static void ShowOwnedWindowsWithoutActivation(
-        int processId,
-        HashSet<IntPtr> handledWindows)
-    {
-        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
-        {
-            uint ownerProcessId;
-            GetWindowThreadProcessId(hWnd, out ownerProcessId);
-            if (ownerProcessId == (uint)processId && handledWindows.Add(hWnd))
-            {
-                ShowWindow(hWnd, SW_SHOWNOACTIVATE);
-            }
-            return true;
-        }, IntPtr.Zero);
-    }
-
-    public static void StartMinimize(Process process, IntPtr previousForeground)
+    public static void StartMinimize(Process process)
     {
         // Apply one synchronous pass before returning the launch helper to its
         // caller. This closes the gap where a native window is created between
@@ -1315,7 +1339,7 @@ public sealed class HenkaCapturedProcess : IDisposable
             if (!process.HasExited)
             {
                 process.Refresh();
-                MinimizeOwnedWindows(process.Id, previousForeground);
+                MinimizeOwnedWindows(process.Id);
             }
         }
         catch
@@ -1339,7 +1363,7 @@ public sealed class HenkaCapturedProcess : IDisposable
                         return;
                     }
                     target.Refresh();
-                    MinimizeOwnedWindows(target.Id, previousForeground);
+                    MinimizeOwnedWindows(target.Id);
                 }
                 catch
                 {
@@ -1351,7 +1375,8 @@ public sealed class HenkaCapturedProcess : IDisposable
     }
 
     public static void StartShowWithoutActivation(
-        Process process)
+        Process process,
+        bool startOffscreen)
     {
         ThreadPool.QueueUserWorkItem(delegate(object state)
         {
@@ -1368,7 +1393,8 @@ public sealed class HenkaCapturedProcess : IDisposable
                     target.Refresh();
                     ShowOwnedWindowsWithoutActivation(
                         target.Id,
-                        handledWindows);
+                        handledWindows,
+                        startOffscreen);
                 }
                 catch
                 {
@@ -1534,13 +1560,25 @@ function Start-HenkaProcess {
 
         [switch]$CreateNoWindow,
 
-        # Native validation windows start minimized by default. A capturable
-        # visible surface can instead opt into a non-activating show state.
+        # Keep the launched application hidden when capture is entirely
+        # renderer-owned and needs no desktop window.
+        [switch]$StartHidden,
+
+        # Native validation windows start minimized by default. Captures may
+        # opt into a visible non-activating window outside the virtual desktop.
         [bool]$StartMinimized = $true,
 
-        [switch]$StartVisibleWithoutActivation
+        [switch]$StartVisibleWithoutActivation,
+
+        [switch]$StartOffscreenWithoutActivation
     )
 
+    $startOffscreen = [bool]$StartOffscreenWithoutActivation
+    if ($StartHidden -and ($StartVisibleWithoutActivation -or $StartOffscreenWithoutActivation)) {
+        throw "StartHidden cannot be combined with a visible capture-window mode."
+    }
+    $startMinimized = [bool]$StartMinimized -and -not $startOffscreen -and -not $StartHidden
+    $startVisible = [bool]$StartVisibleWithoutActivation -or $startOffscreen
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
     $startInfo.FileName = $FilePath
     $startInfo.Arguments = ConvertTo-HenkaNativeArgumentString -Arguments $Arguments
@@ -1552,7 +1590,7 @@ function Start-HenkaProcess {
         $startInfo.EnvironmentVariables["PSModulePath"] = $windowsPowerShellModulePath
     }
     if (-not $CreateNoWindow -and
-        ($StartMinimized -or $StartVisibleWithoutActivation)) {
+        ($StartHidden -or $startMinimized -or $startVisible)) {
         # See the captured-process path: hidden creation avoids a transient
         # foreground activation, then the shared callback exposes the window
         # minimized without activation when its native handle exists.
@@ -1562,24 +1600,19 @@ function Start-HenkaProcess {
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
     if (-not $CreateNoWindow -and
-        ($StartMinimized -or $StartVisibleWithoutActivation)) {
+        ($startMinimized -or $startVisible)) {
         Initialize-HenkaCapturedProcessType
-    }
-    $previousForeground = if (-not $CreateNoWindow -and
-        ($StartMinimized -or $StartVisibleWithoutActivation)) {
-        [HenkaCapturedProcess]::CurrentForegroundWindow()
-    } else {
-        [IntPtr]::Zero
     }
     if (-not $process.Start()) {
         $process.Dispose()
         throw "The process did not start: $FilePath"
     }
-    if (-not $CreateNoWindow -and $StartMinimized) {
-        [HenkaCapturedProcess]::StartMinimize($process, $previousForeground)
-    }
-    elseif (-not $CreateNoWindow -and $StartVisibleWithoutActivation) {
-        [HenkaCapturedProcess]::StartShowWithoutActivation($process)
+    if (-not $CreateNoWindow -and $startMinimized) {
+        [HenkaCapturedProcess]::StartMinimize($process)
+    } elseif (-not $CreateNoWindow -and $startVisible) {
+        [HenkaCapturedProcess]::StartShowWithoutActivation(
+            $process,
+            $startOffscreen)
     }
     return $process
 }
@@ -1602,11 +1635,15 @@ function Start-HenkaCapturedProcess {
 
         [switch]$CreateNoWindow,
 
-        # Native validation windows start minimized by default. A capturable
-        # visible surface can instead opt into a non-activating show state.
+        [switch]$StartHidden,
+
+        # Native validation windows start minimized by default. Captures may
+        # opt into a visible non-activating window outside the virtual desktop.
         [bool]$StartMinimized = $true,
 
-        [switch]$StartVisibleWithoutActivation
+        [switch]$StartVisibleWithoutActivation,
+
+        [switch]$StartOffscreenWithoutActivation
     )
 
     Initialize-HenkaCapturedProcessType
@@ -1620,6 +1657,12 @@ function Start-HenkaCapturedProcess {
     }
     $windowsPowerShellModulePath = Get-HenkaWindowsPowerShellModulePath -FilePath $FilePath
 
+    $startOffscreen = [bool]$StartOffscreenWithoutActivation
+    if ($StartHidden -and ($StartVisibleWithoutActivation -or $StartOffscreenWithoutActivation)) {
+        throw "StartHidden cannot be combined with a visible capture-window mode."
+    }
+    $startMinimized = [bool]$StartMinimized -and -not $startOffscreen -and -not $StartHidden
+    $startVisible = [bool]$StartVisibleWithoutActivation -or $startOffscreen
     return [HenkaCapturedProcess]::Start(
         $FilePath,
         (ConvertTo-HenkaNativeArgumentString -Arguments $Arguments),
@@ -1627,8 +1670,10 @@ function Start-HenkaCapturedProcess {
         $StdoutPath,
         $StderrPath,
         [bool]$CreateNoWindow,
-        $StartMinimized,
-        [bool]$StartVisibleWithoutActivation,
+        [bool]$StartHidden,
+        $startMinimized,
+        $startVisible,
+        $startOffscreen,
         $windowsPowerShellModulePath)
 }
 

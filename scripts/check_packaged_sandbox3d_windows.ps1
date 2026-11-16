@@ -5,12 +5,8 @@ param(
 
     [switch]$TerrainStartupOnly,
 
-    [switch]$ProductStartupPrimitiveOnly,
+    [switch]$ProductStartupPrimitiveOnly
 
-    # Ordinary packaged validation is application-local and must not take
-    # ownership of the user's foreground window.  Use this only for a test
-    # that explicitly covers Windows foreground integration itself.
-    [switch]$AllowForegroundIntegration
 )
 
 Set-StrictMode -Version Latest
@@ -24,132 +20,31 @@ if ($ContractOnly -and -not $NonInteractive) {
 . (Join-Path $PSScriptRoot "henka_ui_automation_helpers.ps1")
 . (Join-Path $PSScriptRoot "henka_packaged_startup_readiness.ps1")
 . (Join-Path $PSScriptRoot "henka_packaged_scene_objects.ps1")
+. (Join-Path $PSScriptRoot "henka_typography_package_policy.ps1")
 
-$script:allowForegroundIntegration = $AllowForegroundIntegration.IsPresent
-if (-not $script:allowForegroundIntegration) {
-    Write-Output "[safe] Packaged UI validation will not acquire foreground focus."
-}
+Write-Output "[safe] Packaged UI validation never activates or foregrounds the Sandbox window."
 
-if (-not ("HenkaUiAutomationNative" -as [type])) {
-    Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-
-public static class HenkaUiAutomationNative
-{
-    public const uint WM_MOUSEMOVE = 0x0200;
-    public const uint WM_RBUTTONDOWN = 0x0204;
-    public const uint WM_RBUTTONUP = 0x0205;
-    public const uint MK_RBUTTON = 0x0002;
-    public const int SW_RESTORE = 9;
-
-    [DllImport("user32.dll")]
-    public static extern IntPtr GetForegroundWindow();
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool BringWindowToTop(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern void SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool PostMessage(
-        IntPtr hWnd,
-        uint msg,
-        UIntPtr wParam,
-        IntPtr lParam);
-}
-"@
-}
-
-function Set-HenkaAutomationForeground {
+function Assert-HenkaAutomationBackground {
     param([Parameter(Mandatory = $true)][System.IntPtr]$Handle)
 
     if ($Handle -eq [System.IntPtr]::Zero) {
         throw "The Henka automation target handle is invalid."
     }
 
-    if (-not $script:allowForegroundIntegration) {
-        return
+    if ([HenkaUiAutomationNative]::IsWindowVisible($Handle)) {
+        $geometry = Get-HenkaAutomationWindowGeometry -Handle $Handle
+        if (-not (Test-HenkaAutomationRectOutsideVirtualScreen `
+                -X $geometry.X `
+                -Y $geometry.Y `
+                -Width $geometry.Width `
+                -Height $geometry.Height)) {
+            throw "The visible packaged automation window overlaps the virtual desktop."
+        }
     }
 
     if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
-        return
+        throw "The packaged Sandbox unexpectedly owns foreground focus; no activation or desktop capture was attempted."
     }
-
-    $targetThread = [uint32]0
-    $foregroundThread = [uint32]0
-    [uint32]$processId = 0
-    [uint32]$foregroundProcessId = 0
-    $currentThread = [HenkaUiAutomationNative]::GetCurrentThreadId()
-    $foregroundWindow = [HenkaUiAutomationNative]::GetForegroundWindow()
-    $targetThread = [HenkaUiAutomationNative]::GetWindowThreadProcessId($Handle, [ref]$processId)
-    $foregroundThread = [HenkaUiAutomationNative]::GetWindowThreadProcessId($foregroundWindow, [ref]$foregroundProcessId)
-    $attachedCurrent = $false
-    $attachedForeground = $false
-    $foregroundAcquired = $false
-    $deadline = (Get-Date).AddSeconds(3)
-
-    try {
-        if ($targetThread -ne 0 -and $currentThread -ne $targetThread) {
-            $attachedCurrent = [HenkaUiAutomationNative]::AttachThreadInput(
-                $currentThread,
-                $targetThread,
-                $true)
-        }
-        if ($targetThread -ne 0 -and $foregroundThread -ne 0 -and $foregroundThread -ne $targetThread) {
-            $attachedForeground = [HenkaUiAutomationNative]::AttachThreadInput(
-                $foregroundThread,
-                $targetThread,
-                $true)
-        }
-        [HenkaUiAutomationNative]::ShowWindowAsync(
-            $Handle,
-            [HenkaUiAutomationNative]::SW_RESTORE) | Out-Null
-        [HenkaUiAutomationNative]::BringWindowToTop($Handle) | Out-Null
-        [HenkaUiAutomationNative]::SwitchToThisWindow($Handle, $true)
-
-        do {
-            [HenkaUiAutomationNative]::SetForegroundWindow($Handle) | Out-Null
-
-            if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
-                $foregroundAcquired = $true
-                break
-            }
-
-            Start-Sleep -Milliseconds 100
-        } while ((Get-Date) -lt $deadline)
-    }
-    finally {
-        if ($attachedForeground) {
-            [HenkaUiAutomationNative]::AttachThreadInput(
-                $foregroundThread,
-                $targetThread,
-                $false) | Out-Null
-        }
-        if ($attachedCurrent) {
-            [HenkaUiAutomationNative]::AttachThreadInput(
-                $currentThread,
-                $targetThread,
-                $false) | Out-Null
-        }
-    }
-
-    if ($foregroundAcquired) {
-        Start-Sleep -Milliseconds 150
-        return
-    }
-
-    throw (
-        "The packaged UI harness could not acquire the Henka window as " +
-        "foreground within three seconds. This is an automation-environment " +
-        "failure; no engine UI assertion was made.")
 }
 
 function New-HenkaMouseLParam {
@@ -417,57 +312,90 @@ function New-HenkaCapturedWindowBitmap {
         [Parameter(Mandatory = $true)][string]$Description
     )
 
-    $rect = Get-WindowRect -Handle $Handle
-    $width = $rect.Right - $rect.Left
-    $height = $rect.Bottom - $rect.Top
-    if ($width -le 0 -or $height -le 0) {
-        throw "$Description window bounds are invalid for screenshot capture."
+    if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
+        throw "$Description refused to capture while the Sandbox owns foreground focus."
+    }
+    if ([string]::IsNullOrWhiteSpace($script:automationFrameCaptureOutputDirectory) -or
+        [string]::IsNullOrWhiteSpace($script:automationFrameCaptureRequestFile)) {
+        throw "$Description has no application-owned framebuffer capture channel."
     }
 
-    $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $width, $height
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $label = "pkg" + [guid]::NewGuid().ToString("N").Substring(0, 16)
+    $requestTemporaryPath = $script:automationFrameCaptureRequestFile + "." + $label + ".tmp"
+    $startingOffset = Get-FileLengthSafe -Path $stdoutPath
     try {
-        # A window that is already foreground can be sampled directly without
-        # changing focus. This keeps ordinary validation application-local,
-        # while avoiding stale OpenGL pixels from background PrintWindow when
-        # Windows has naturally foregrounded the newly launched test window.
-        $window_already_foreground =
-            [HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle
-        if ($script:allowForegroundIntegration -or $window_already_foreground) {
-            $size = New-Object System.Drawing.Size -ArgumentList $width, $height
-            $graphics.CopyFromScreen(
-                $rect.Left,
-                $rect.Top,
-                0,
-                0,
-                $size)
+        if (Test-Path -LiteralPath $script:automationFrameCaptureRequestFile) {
+            throw "$Description found an unconsumed framebuffer capture request."
         }
-        else {
-            $deviceContext = $graphics.GetHdc()
-            try {
-                if (-not [NativeMethods]::PrintWindow(
-                        $Handle,
-                        $deviceContext,
-                        2)) {
-                    throw (
-                        "$Description background-safe capture is unavailable: " +
-                        "the window did not render through PrintWindow. " +
-                        "No desktop or foreground capture was attempted.")
-                }
-            }
-            finally {
-                $graphics.ReleaseHdc($deviceContext) | Out-Null
-            }
-        }
-    }
-    catch {
-        $bitmap.Dispose()
-        throw
+        Write-Utf8NoBom -Path $requestTemporaryPath -Content ($label + "`n")
+        [System.IO.File]::Move(
+            $requestTemporaryPath,
+            $script:automationFrameCaptureRequestFile)
     }
     finally {
-        $graphics.Dispose()
+        if (Test-Path -LiteralPath $requestTemporaryPath -PathType Leaf) {
+            Remove-Item -LiteralPath $requestTemporaryPath -Force -ErrorAction SilentlyContinue
+        }
     }
 
+    $requestPattern = 'HENKA_AUTOMATION_DIAGNOSTIC app_frame_capture status=requested sequence=(?<sequence>[1-9][0-9]*) label=' +
+        [Regex]::Escape($label) + '$'
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern $requestPattern `
+            -StartingOffset $startingOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "$Description was not acknowledged by the Sandbox application capture path."
+    }
+    $captureMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $requestPattern
+    if ($null -eq $captureMatch) {
+        throw "$Description has no matching application capture sequence."
+    }
+    $sequence = [uint32]::Parse(
+        $captureMatch.Groups["sequence"].Value,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $framePath = Join-Path $script:automationFrameCaptureOutputDirectory (
+        "frame-{0:D4}-{1}.bmp" -f $sequence, $label)
+    $deadline = (Get-Date).AddSeconds(10)
+    $lastLength = -1L
+    $stableSamples = 0
+    while ((Get-Date) -lt $deadline) {
+        $length = Get-FileLengthSafe -Path $framePath
+        if ($length -gt 54 -and $length -eq $lastLength) {
+            $stableSamples++
+            if ($stableSamples -ge 2) {
+                break
+            }
+        }
+        else {
+            $stableSamples = 0
+        }
+        $lastLength = $length
+        Start-Sleep -Milliseconds 75
+    }
+    if ($stableSamples -lt 2) {
+        throw "$Description did not produce a complete application framebuffer image."
+    }
+
+    $sourceBitmap = $null
+    try {
+        $sourceBitmap = New-Object System.Drawing.Bitmap -ArgumentList $framePath
+        if ($sourceBitmap.Width -le 0 -or $sourceBitmap.Height -le 0 -or
+            $sourceBitmap.Width -gt 8192 -or $sourceBitmap.Height -gt 8192 -or
+            ([long]$sourceBitmap.Width * [long]$sourceBitmap.Height) -gt 16777216) {
+            throw "$Description application framebuffer dimensions exceed the bounded capture contract."
+        }
+        $bitmap = $sourceBitmap.Clone(
+            (New-Object System.Drawing.Rectangle -ArgumentList 0, 0, $sourceBitmap.Width, $sourceBitmap.Height),
+            [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    }
+    finally {
+        if ($null -ne $sourceBitmap) {
+            $sourceBitmap.Dispose()
+        }
+    }
+
+    Remove-Item -LiteralPath $framePath -Force -ErrorAction Stop
     return $bitmap
 }
 
@@ -478,7 +406,7 @@ function Save-WindowScreenshot {
         [Parameter(Mandatory = $true)][string]$Description
     )
 
-    Set-HenkaAutomationForeground -Handle $Handle
+    Assert-HenkaAutomationBackground -Handle $Handle
     $bitmap = New-HenkaCapturedWindowBitmap `
         -Handle $Handle `
         -Description $Description
@@ -527,7 +455,7 @@ function Click-WindowPoint {
         $windowX -ge $clientWidth -or $windowY -ge $clientHeight) {
         throw "The packaged window-relative automation point was outside the client area."
     }
-    Set-HenkaAutomationForeground -Handle $Handle
+    Assert-HenkaAutomationBackground -Handle $Handle
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X $windowX `
@@ -747,7 +675,7 @@ function Click-FramebufferPoint {
         -WindowHeight $clientHeight `
         -FramebufferX $FramebufferX `
         -FramebufferY $FramebufferY
-    Set-HenkaAutomationForeground -Handle $Handle
+    Assert-HenkaAutomationBackground -Handle $Handle
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X $windowPoint.X `
@@ -761,7 +689,7 @@ function Click-AuthoringWindowPoint {
         [Parameter(Mandatory = $true)][double]$Y
     )
 
-    Set-HenkaAutomationForeground -Handle $Handle
+    Assert-HenkaAutomationBackground -Handle $Handle
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X $X `
@@ -800,7 +728,7 @@ function Scroll-FramebufferPoint {
         -WindowHeight $clientHeight `
         -FramebufferX $FramebufferX `
         -FramebufferY $FramebufferY
-    Set-HenkaAutomationForeground -Handle $Handle
+    Assert-HenkaAutomationBackground -Handle $Handle
     Send-HenkaAutomationScroll `
         -EventPath $automationInputPath `
         -X $windowPoint.X `
@@ -1933,7 +1861,7 @@ function Click-FramebufferPointRight {
         throw "The packaged sandbox right-click coordinate is outside the client area."
     }
 
-    Set-HenkaAutomationForeground -Handle $Handle
+    Assert-HenkaAutomationBackground -Handle $Handle
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X $windowPoint.X `
@@ -1952,37 +1880,30 @@ function Save-FramebufferRegionScreenshot {
         [Parameter(Mandatory = $true)][double]$Height,
         [Parameter(Mandatory = $true)][string]$Path
     )
-    Set-HenkaAutomationForeground -Handle $Handle
-    $clientRect = New-Object NativeMethods+RECT
-    if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
-        throw "The packaged sandbox client bounds could not be read for scene capture."
-    }
-    $clientWidth = $clientRect.Right - $clientRect.Left
-    $clientHeight = $clientRect.Bottom - $clientRect.Top
-    $origin = New-Object NativeMethods+POINT
-    $origin.X = 0
-    $origin.Y = 0
-    if (-not [NativeMethods]::ClientToScreen($Handle, [ref]$origin)) {
-        throw "The packaged sandbox client origin could not be converted to screen coordinates."
-    }
-    $windowRect = Get-WindowRect -Handle $Handle
+    Assert-HenkaAutomationBackground -Handle $Handle
     $fullBitmap = New-HenkaCapturedWindowBitmap `
         -Handle $Handle `
         -Description "Static scene"
-    $screenWidth = [Math]::Max(1, [int][Math]::Round($Width * $clientWidth / $FramebufferWidth))
-    $screenHeight = [Math]::Max(1, [int][Math]::Round($Height * $clientHeight / $FramebufferHeight))
-    $cropX = $origin.X - $windowRect.Left + [int][Math]::Round($X * $clientWidth / $FramebufferWidth)
-    $cropY = $origin.Y - $windowRect.Top + [int][Math]::Round($Y * $clientHeight / $FramebufferHeight)
-    if ($cropX -lt 0 -or $cropY -lt 0 -or
-        $cropX + $screenWidth -gt $fullBitmap.Width -or
-        $cropY + $screenHeight -gt $fullBitmap.Height) {
+    if ($fullBitmap.Width -ne $FramebufferWidth -or
+        $fullBitmap.Height -ne $FramebufferHeight) {
         $fullBitmap.Dispose()
-        throw "Static scene capture region was outside the captured window bounds."
+        throw "The application framebuffer size disagreed with the reported UI coordinate space."
+    }
+    $cropX = [int][Math]::Floor($X)
+    $cropY = [int][Math]::Floor($Y)
+    $cropRight = [int][Math]::Ceiling($X + $Width)
+    $cropBottom = [int][Math]::Ceiling($Y + $Height)
+    $cropWidth = $cropRight - $cropX
+    $cropHeight = $cropBottom - $cropY
+    if ($cropX -lt 0 -or $cropY -lt 0 -or $cropWidth -le 0 -or $cropHeight -le 0 -or
+        $cropRight -gt $fullBitmap.Width -or $cropBottom -gt $fullBitmap.Height) {
+        $fullBitmap.Dispose()
+        throw "Static scene capture region was outside the captured application framebuffer."
     }
     $bitmap = $null
     try {
         $bitmap = $fullBitmap.Clone(
-            (New-Object System.Drawing.Rectangle -ArgumentList $cropX,$cropY,$screenWidth,$screenHeight),
+            (New-Object System.Drawing.Rectangle -ArgumentList $cropX,$cropY,$cropWidth,$cropHeight),
             [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
         $bitmap.Save($Path,[System.Drawing.Imaging.ImageFormat]::Png)
     }
@@ -2111,6 +2032,8 @@ $startupRestoreStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_startup_
 $startupRestoreStderrPath = Join-Path $logDir "check_packaged_sandbox3d_startup_restore_stderr.log"
 $physicsCapturePath = Join-Path $logDir "physics-reference-wide.bmp"
 $automationInputPath = Join-Path $logDir "check_packaged_sandbox3d_automation.events"
+$script:automationFrameCaptureOutputDirectory = Join-Path $logDir ("app-frame-captures-" + [guid]::NewGuid().ToString("N"))
+$script:automationFrameCaptureRequestFile = Join-Path $logDir ("app-frame-capture-request-" + [guid]::NewGuid().ToString("N") + ".txt")
 $showcaseAuthoringLaunchArguments = @("--capture-showcase-view", "wide", "solid")
 # This face ID came from the previously classified adjacent-face-collapse
 # observation. It is optional runtime evidence: the deterministic in-memory
@@ -2147,8 +2070,6 @@ public static class NativeMethods {
     public const uint MOUSEEVENTF_WHEEL = 0x0800;
 
     [DllImport("user32.dll")]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
-
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
 
@@ -2157,9 +2078,6 @@ public static class NativeMethods {
 
     [DllImport("user32.dll")]
     public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
-
-    [DllImport("user32.dll")]
-    public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
 
     [DllImport("user32.dll")]
     public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
@@ -2242,13 +2160,19 @@ $buildRef = Get-PackageInfoValue -Path $packageInfoPath -Name "Build ref"
 $detachedHead = Get-PackageInfoValue -Path $packageInfoPath -Name "Detached HEAD"
 $sourceHash = Get-PackageInfoValue -Path $packageInfoPath -Name "Source executable SHA-256"
 $packagedHash = Get-PackageInfoValue -Path $packageInfoPath -Name "Packaged executable SHA-256"
+$typographyFont = Get-PackageInfoValue -Path $packageInfoPath -Name "Typography font"
+$typographyFontAsset = Get-PackageInfoValue -Path $packageInfoPath -Name "Typography font asset"
+$typographyFontHash = Get-PackageInfoValue -Path $packageInfoPath -Name "Typography font SHA-256"
+$typographyLicense = Get-PackageInfoValue -Path $packageInfoPath -Name "Typography license"
+$typographyLicenseHash = Get-PackageInfoValue -Path $packageInfoPath -Name "Typography license SHA-256"
+$typographyComparisonCandidates = Get-PackageInfoValue -Path $packageInfoPath -Name "Typography comparison candidates"
 $actualPackagedHash = (Get-FileHash -LiteralPath $packagedExe -Algorithm SHA256).Hash.ToLowerInvariant()
 $currentCommitLines = @(& $gitCommand -C $repoRoot rev-parse HEAD 2>$null)
 if ($LASTEXITCODE -ne 0 -or $currentCommitLines.Count -ne 1) { throw "Current commit could not be read for package verification." }
 $currentCommit = ([string]$currentCommitLines[0]).Trim()
 $currentSourceIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
 $currentSourceState = $currentSourceIdentity.source_state
-if ($packageSchema -ne "4") { throw "Packaged build marker has an unsupported schema." }
+if ($packageSchema -ne "5") { throw "Packaged build marker has an unsupported schema." }
 if ($sourceCommit -ne $currentCommit) { throw "Packaged source commit does not match current HEAD." }
 if ($sourceState -ne $currentSourceState) { throw "Packaged source state does not match the current working tree." }
 if ($sourceIdentity -ne $currentSourceIdentity.source_identity) { throw "Packaged source identity does not match the current candidate." }
@@ -2256,10 +2180,23 @@ if ($buildConfiguration -ne "Debug" -and $buildConfiguration -ne "Release") { th
 if ([string]::IsNullOrWhiteSpace($buildRef)) { throw "Packaged build ref is missing." }
 if ($detachedHead -ne "True" -and $detachedHead -ne "False") { throw "Packaged detached-HEAD value is invalid." }
 if ($sourceHash -ne $packagedHash -or $packagedHash -ne $actualPackagedHash) { throw "Packaged executable provenance hash verification failed." }
+if ($typographyComparisonCandidates -ne "excluded") {
+    throw "The ordinary packaged-runtime gate requires a production package with comparison candidates excluded."
+}
+$selectedFontMetadata = Get-HenkaTypographySelectedFontMetadata
+if ($typographyFont -ne $selectedFontMetadata.Name -or
+    $typographyFontAsset -ne $selectedFontMetadata.RelativePath -or
+    $typographyFontHash -ne $selectedFontMetadata.Sha256 -or
+    $typographyLicense -ne $selectedFontMetadata.LicenseRelativePath -or
+    $typographyLicenseHash -ne $selectedFontMetadata.LicenseSha256) {
+    throw "Packaged font and license provenance does not match the selected editor typography authority."
+}
+Assert-HenkaTypographyPackageAssetSet -PackageRoot $packageRoot
 Write-Output "[pass] Package provenance schema"
 Write-Output "[pass] Package source commit"
 Write-Output "[pass] Package build configuration"
 Write-Output "[pass] Packaged executable SHA-256"
+Write-Output "[pass] Selected editor font, license, and production-only asset set"
 Assert-FileContains -Path $readmePath -Pattern "Use the in-window utilities" -Description "Packaged utility guidance"
 Assert-FileContains -Path $readmePath -Pattern "panels open automatically" -Description "Packaged automatic panel guidance"
 Assert-FileContains -Path $readmePath -Pattern "no selected scene object" -Description "Packaged startup no-selection guidance"
@@ -2306,6 +2243,7 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
     $persistenceSourcePath = Join-Path $script:repoRoot "engine\src\core\persistence.c"
     $packageUserSnapshotBefore = @(Get-HenkaDirectorySnapshot -Path $packageUserRoot)
     $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
+    $previousAutomationToolWindowsStartHidden = $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN
     $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
     $previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
     $previousAutomationUserDataBasePath = $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH
@@ -2340,6 +2278,7 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
         [System.IO.Directory]::CreateDirectory($isolatedUserRoot) | Out-Null
         [System.IO.File]::WriteAllText($automationInputPath, "")
         $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
+        $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"
         $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
         $env:HENKA_AUTOMATION_DIAGNOSTICS = "1"
         $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH = $isolatedUserRoot
@@ -2374,6 +2313,12 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
         }
         else {
             $env:HENKA_AUTOMATION_INPUT_OWNED = $previousAutomationOwned
+        }
+        if ($null -eq $previousAutomationToolWindowsStartHidden) {
+            Remove-Item Env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = $previousAutomationToolWindowsStartHidden
         }
         if ($null -eq $previousAutomationFile) {
             Remove-Item Env:HENKA_AUTOMATION_INPUT_FILE -ErrorAction SilentlyContinue
@@ -2621,14 +2566,29 @@ $sandboxPanelsVisible = $false
 $packagedCheckSucceeded = $false
 $packageUserSnapshotBefore = @()
 $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
+$previousAutomationToolWindowsStartHidden = $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN
 $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
 $previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
 $previousAutomationDiagnosticFaceId = $env:HENKA_AUTOMATION_DIAGNOSTIC_FACE_ID
 $previousAutomationUserDataBasePath = $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH
+$previousAutomationCaptureOutputDirectory = $env:HENKA_AUTOMATION_CAPTURE_OUTPUT_DIRECTORY
+$previousAutomationCaptureRequestFile = $env:HENKA_AUTOMATION_CAPTURE_REQUEST_FILE
 try {
     $logDirectoryItem = Get-Item -LiteralPath $logDir -Force -ErrorAction Stop
     if (($logDirectoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
         throw "Refusing to place isolated packaged user data under a reparse-point test directory: $logDir"
+    }
+    if ((Test-Path -LiteralPath $script:automationFrameCaptureOutputDirectory) -or
+        (Test-Path -LiteralPath $script:automationFrameCaptureRequestFile)) {
+        throw "The unique application-frame capture paths unexpectedly already exist."
+    }
+    New-Item -ItemType Directory -Path $script:automationFrameCaptureOutputDirectory -ErrorAction Stop | Out-Null
+    $captureDirectoryItem = Get-Item -LiteralPath $script:automationFrameCaptureOutputDirectory -Force -ErrorAction Stop
+    $captureDirectoryParent = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($script:automationFrameCaptureOutputDirectory)).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $expectedCaptureParent = [IO.Path]::GetFullPath($logDir).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    if (($captureDirectoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        $captureDirectoryParent -ine $expectedCaptureParent) {
+        throw "The application-frame capture directory is not a direct, ordinary child of the canonical test root."
     }
     $packageUserSnapshotBefore = @(Get-HenkaDirectorySnapshot -Path $packageUserRoot)
     if (Test-Path -LiteralPath $automationUserDataRoot) {
@@ -2637,10 +2597,13 @@ try {
     New-Item -ItemType Directory -Path $automationUserDataRoot -ErrorAction Stop | Out-Null
     New-Item -ItemType File -Path $automationInputPath -Force | Out-Null
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
+    $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
     $env:HENKA_AUTOMATION_DIAGNOSTICS = "1"
     $env:HENKA_AUTOMATION_DIAGNOSTIC_FACE_ID = [string]$nativeFaceMoveCollapseTargetId
     $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH = $automationUserDataRoot
+    $env:HENKA_AUTOMATION_CAPTURE_OUTPUT_DIRECTORY = $script:automationFrameCaptureOutputDirectory
+    $env:HENKA_AUTOMATION_CAPTURE_REQUEST_FILE = $script:automationFrameCaptureRequestFile
     Write-Step "Launching the packaged sandbox"
     # The native authoring workflow is an explicit reference-asset path.
     # Ordinary no-argument startup is validated separately as the clean
@@ -2651,8 +2614,7 @@ try {
             -WorkingDirectory $packageRoot `
             -StdoutPath $stdoutPath `
             -StderrPath $stderrPath `
-            -StartMinimized:$false `
-            -StartVisibleWithoutActivation
+            -StartOffscreenWithoutActivation
     }
     else {
         $capturedProcess = Start-HenkaCapturedProcess `
@@ -2661,8 +2623,7 @@ try {
             -Arguments $showcaseAuthoringLaunchArguments `
             -StdoutPath $stdoutPath `
             -StderrPath $stderrPath `
-            -StartMinimized:$false `
-            -StartVisibleWithoutActivation
+            -StartOffscreenWithoutActivation
     }
     $process = $capturedProcess.Process
 
@@ -2714,10 +2675,7 @@ try {
     }
 
     Write-Step "Checking packaged UI open and close"
-    Set-HenkaAutomationForeground -Handle $mainWindowHandle
-    if ($script:allowForegroundIntegration) {
-        $null = $shell.AppActivate($process.Id)
-    }
+    Assert-HenkaAutomationBackground -Handle $mainWindowHandle
     Start-Sleep -Milliseconds 600
     if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 1500) {
         Assert-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -Description "Startup UI readiness output"
@@ -2729,7 +2687,7 @@ try {
     else {
         Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F4"
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 2000)) {
-            Set-HenkaAutomationForeground -Handle $mainWindowHandle
+            Assert-HenkaAutomationBackground -Handle $mainWindowHandle
             Start-Sleep -Milliseconds 250
             Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F4"
         }
@@ -2745,7 +2703,7 @@ try {
 
     if ($uiAutomationVerified) {
         Write-Step "Capturing packaged startup workspace visual proof"
-        Set-HenkaAutomationForeground -Handle $mainWindowHandle
+        Assert-HenkaAutomationBackground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 350
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
@@ -3256,7 +3214,7 @@ try {
                 throw "The normal Scene Objects click did not select the product-native Ground row for its long Details text."
             }
             Write-Output "[pass] Product-native Ground selection reached the authoritative Scene Objects state"
-            Set-HenkaAutomationForeground -Handle $mainWindowHandle
+            Assert-HenkaAutomationBackground -Handle $mainWindowHandle
             Start-Sleep -Milliseconds 500
             Save-WindowScreenshot `
                 -Handle $mainWindowHandle `
@@ -3302,7 +3260,7 @@ try {
                 throw "The ordinary default-scene Add Cube path created an asset document instead of using the canonical scene operation."
             }
             Write-Output "[pass] Default-scene Add Cube reached the canonical scene operation and Scene Document binding"
-            Set-HenkaAutomationForeground -Handle $mainWindowHandle
+            Assert-HenkaAutomationBackground -Handle $mainWindowHandle
             Start-Sleep -Milliseconds 700
             Save-WindowScreenshot `
                 -Handle $mainWindowHandle `
@@ -3798,7 +3756,7 @@ try {
             throw "The visible Utility > Terrain tab did not become active after a real framebuffer click."
         }
         Write-Output "[pass] Utility > Terrain activated through a real packaged UI click"
-        Set-HenkaAutomationForeground -Handle $mainWindowHandle
+        Assert-HenkaAutomationBackground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 350
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
@@ -3846,7 +3804,7 @@ try {
             throw "The visible Create Terrain action did not initialize the production Terrain render path."
         }
         Write-Output "[pass] Create Terrain activated the production streaming, render, and collision path"
-        Set-HenkaAutomationForeground -Handle $mainWindowHandle
+        Assert-HenkaAutomationBackground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 700
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
@@ -3880,7 +3838,7 @@ try {
             $previousLayout =
                 $inspectLayout
 
-            Set-HenkaAutomationForeground `
+            Assert-HenkaAutomationBackground `
                 -Handle $mainWindowHandle
 
             Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F5"
@@ -3922,19 +3880,22 @@ try {
         }
 
         Write-Output "[pass] Packaged workspace entered Standard deterministically"
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring row:" -TimeoutMilliseconds 4000)) {
+        $nativeAuthoringSourceName = "Showcase Giraffe Anatomical Giraffe Study Primitive"
+        $nativeAuthoringSourceRowPattern =
+            '^Native authoring source row: name=' + [Regex]::Escape($nativeAuthoringSourceName) + ' .+\.$'
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern $nativeAuthoringSourceRowPattern -TimeoutMilliseconds 4000)) {
             throw "The Standard layout did not expose a showcase primitive authoring row."
         }
-        $nativeRowMatch = Get-LastLogRegexMatch `
+        $nativeRow = Get-HenkaNativeAuthoringSourceRowGeometry `
             -Path $stdoutPath `
-            -Pattern 'Native authoring row: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)\.'
-        if ($null -eq $nativeRowMatch) {
-            throw "The native authoring row geometry could not be parsed."
+            -Name $nativeAuthoringSourceName
+        if ($null -eq $nativeRow) {
+            throw "The latest product-owned native authoring source-row geometry could not be parsed."
         }
-        $nativeRowX = [double]$nativeRowMatch.Groups[2].Value
-        $nativeRowY = [double]$nativeRowMatch.Groups[3].Value
-        $nativeRowWidth = [double]$nativeRowMatch.Groups[4].Value
-        $nativeRowHeight = [double]$nativeRowMatch.Groups[5].Value
+        $nativeRowX = $nativeRow.X
+        $nativeRowY = $nativeRow.Y
+        $nativeRowWidth = $nativeRow.Width
+        $nativeRowHeight = $nativeRow.Height
         Assert-FramebufferRect `
             -Name "Native authoring showcase row" `
             -FramebufferWidth $framebufferWidth `
@@ -6356,7 +6317,7 @@ try {
         if (-not $contextMenuObserved) {
             Write-Output "[retry] Tools context menu was not observed after the first verified right click; retrying once."
 
-            Set-HenkaAutomationForeground -Handle $mainWindowHandle
+            Assert-HenkaAutomationBackground -Handle $mainWindowHandle
             Start-Sleep -Milliseconds 250
 
             Click-FramebufferPointRight `
@@ -6525,7 +6486,7 @@ try {
         }
 
         Write-Step "Capturing Tools QA page visual proof"
-        Set-HenkaAutomationForeground -Handle $mainWindowHandle
+        Assert-HenkaAutomationBackground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 350
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
@@ -6621,15 +6582,21 @@ try {
             throw "The Native Panel Test window was not visible as a separate OS-level window."
         }
 
-        Write-Output "[pass] Native test panel visible as a separate OS-level window"
+        $nativeWindowGeometry = Show-HenkaAutomationWindowOffscreen -Handle $nativeWindowHandle
+        Assert-HenkaAutomationBackground -Handle $nativeWindowHandle
+        Write-Output ("[pass] Native test panel shown for capture outside the virtual desktop at {0},{1} ({2}x{3}); it cannot cover or activate the user's screen" -f `
+            $nativeWindowGeometry.X,
+            $nativeWindowGeometry.Y,
+            $nativeWindowGeometry.Width,
+            $nativeWindowGeometry.Height)
         Write-Step "Capturing native panel visual proof"
-        Set-HenkaAutomationForeground -Handle $nativeWindowHandle
+        Assert-HenkaAutomationBackground -Handle $nativeWindowHandle
         Start-Sleep -Milliseconds 350
         Save-WindowScreenshot `
             -Handle $nativeWindowHandle `
             -Path $nativeScreenshotPath `
             -Description "Packaged native panel screenshot"
-        Set-HenkaAutomationForeground -Handle $mainWindowHandle
+        Assert-HenkaAutomationBackground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 250
 
         [NativeMethods]::PostMessage(
@@ -6870,7 +6837,7 @@ try {
             Write-Output "[warn] Some packaged UI click checks could not be confirmed automatically. Manual packaged UI QA is still needed."
         }
         if ($sandboxPanelsVisible) {
-            Set-HenkaAutomationForeground -Handle $mainWindowHandle
+            Assert-HenkaAutomationBackground -Handle $mainWindowHandle
             Start-Sleep -Milliseconds 400
             $panelCloseObserved = $false
             for ($panelCloseAttempt = 0; $panelCloseAttempt -lt 2 -and -not $panelCloseObserved; ++$panelCloseAttempt) {
@@ -6882,7 +6849,7 @@ try {
                     -StartingOffset $panelCloseOffset `
                     -TimeoutMilliseconds 2500
                 if (-not $panelCloseObserved -and $panelCloseAttempt -eq 0) {
-                    Set-HenkaAutomationForeground -Handle $mainWindowHandle
+                    Assert-HenkaAutomationBackground -Handle $mainWindowHandle
                     Start-Sleep -Milliseconds 250
                 }
             }
@@ -6939,7 +6906,7 @@ try {
 
     Write-Step "Checking generic engine-native asset authoring"
     if (-not $sandboxPanelsVisible) {
-        Set-HenkaAutomationForeground -Handle $mainWindowHandle
+        Assert-HenkaAutomationBackground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 300
         $genericAssetPanelOffset = Get-FileLengthSafe -Path $stdoutPath
         Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F4"
@@ -7234,6 +7201,12 @@ finally {
     else {
         $env:HENKA_AUTOMATION_INPUT_OWNED = $previousAutomationOwned
     }
+    if ($null -eq $previousAutomationToolWindowsStartHidden) {
+        Remove-Item Env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = $previousAutomationToolWindowsStartHidden
+    }
     if ($null -eq $previousAutomationFile) {
         Remove-Item Env:HENKA_AUTOMATION_INPUT_FILE -ErrorAction SilentlyContinue
     }
@@ -7258,6 +7231,18 @@ finally {
     else {
         $env:HENKA_AUTOMATION_USER_DATA_BASE_PATH = $previousAutomationUserDataBasePath
     }
+    if ($null -eq $previousAutomationCaptureOutputDirectory) {
+        Remove-Item Env:HENKA_AUTOMATION_CAPTURE_OUTPUT_DIRECTORY -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_CAPTURE_OUTPUT_DIRECTORY = $previousAutomationCaptureOutputDirectory
+    }
+    if ($null -eq $previousAutomationCaptureRequestFile) {
+        Remove-Item Env:HENKA_AUTOMATION_CAPTURE_REQUEST_FILE -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_CAPTURE_REQUEST_FILE = $previousAutomationCaptureRequestFile
+    }
     if ($null -ne $startupRestoreCapture) {
         Close-HenkaCapturedProcess -CapturedProcess $startupRestoreCapture
     }
@@ -7269,6 +7254,29 @@ finally {
             Stop-HenkaProcessTree -ProcessId $process.Id
         }
         $process.Dispose()
+    }
+
+    if ($packagedCheckSucceeded) {
+        if (Test-Path -LiteralPath $script:automationFrameCaptureRequestFile -PathType Leaf) {
+            Remove-Item -LiteralPath $script:automationFrameCaptureRequestFile -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path -LiteralPath $script:automationFrameCaptureOutputDirectory -PathType Container) {
+            try {
+                $captureDirectoryItem = Get-Item -LiteralPath $script:automationFrameCaptureOutputDirectory -Force -ErrorAction Stop
+                $captureChildren = @(Get-ChildItem -LiteralPath $script:automationFrameCaptureOutputDirectory -Force -ErrorAction Stop)
+                $captureDirectoryParent = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($script:automationFrameCaptureOutputDirectory)).TrimEnd([IO.Path]::DirectorySeparatorChar)
+                $expectedCaptureParent = [IO.Path]::GetFullPath($logDir).TrimEnd([IO.Path]::DirectorySeparatorChar)
+                if (($captureDirectoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+                    $captureChildren.Count -ne 0 -or
+                    $captureDirectoryParent -ine $expectedCaptureParent) {
+                    throw "The consumed application-frame capture directory is not empty and directly owned."
+                }
+                Remove-Item -LiteralPath $script:automationFrameCaptureOutputDirectory -Force -ErrorAction Stop
+            }
+            catch {
+                Write-Warning ("Preserving unexpected application-frame capture remainder: " + $_.Exception.Message)
+            }
+        }
     }
 
     if (Test-Path -LiteralPath $automationUserDataRoot -PathType Container) {

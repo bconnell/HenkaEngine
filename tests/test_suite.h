@@ -54,6 +54,7 @@ void henka_test_sandbox3d_physics(void);
 void henka_test_sandbox3d_workspace(void);
 void henka_test_sandbox3d_editor_ui(void);
 void henka_test_sandbox3d_editor_scale_control(void);
+void henka_test_sandbox3d_automation_frame_capture(void);
 void henka_test_sandbox3d_editor_font_bootstrap(void);
 void henka_test_sandbox3d_modeling_selection(void);
 void henka_test_sandbox3d_editor_layout(void);

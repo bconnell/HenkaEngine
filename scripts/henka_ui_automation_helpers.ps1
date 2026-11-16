@@ -8,22 +8,10 @@ using System.Text;
 
 public static class HenkaUiAutomationNative
 {
-    public const int SW_RESTORE = 9;
     public const int GWL_STYLE = -16;
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
     public delegate bool EnumWindowsProc(IntPtr handle, IntPtr parameter);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool BringWindowToTop(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern void SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -141,11 +129,18 @@ public static class HenkaUiAutomationNative
 
     public static IntPtr FindWindowForProcess(uint targetProcessId, string titlePart)
     {
+        return FindWindowForProcess(targetProcessId, titlePart, false);
+    }
+
+    public static IntPtr FindWindowForProcess(
+        uint targetProcessId, string titlePart, bool includeHidden)
+    {
         IntPtr result = IntPtr.Zero;
         EnumWindows(delegate(IntPtr handle, IntPtr parameter) {
             uint owner;
             GetWindowThreadProcessId(handle, out owner);
-            if (owner == targetProcessId && IsWindowVisible(handle)) {
+            if (owner == targetProcessId &&
+                (includeHidden || IsWindowVisible(handle))) {
                 StringBuilder title = new StringBuilder(512);
                 GetWindowText(handle, title, title.Capacity);
                 if (title.ToString().IndexOf(titlePart,
@@ -159,53 +154,8 @@ public static class HenkaUiAutomationNative
         return result;
     }
 
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool AttachThreadInput(
-        uint idAttach,
-        uint idAttachTo,
-        bool fAttach);
 }
 "@
-}
-
-function Set-HenkaAutomationForeground {
-    param([Parameter(Mandatory = $true)][System.IntPtr]$Handle)
-
-    if ($Handle -eq [System.IntPtr]::Zero) {
-        throw "The Henka automation target handle is invalid."
-    }
-
-    # Application-local automation uses Henka's event channel and must not
-    # seize the user's desktop.  A foreground call is available only to an
-    # explicitly selected Windows-integration test process.
-    if ($env:HENKA_ALLOW_FOREGROUND_AUTOMATION -ne "1") {
-        return
-    }
-
-    if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
-        return
-    }
-
-    [HenkaUiAutomationNative]::ShowWindowAsync(
-        $Handle,
-        [HenkaUiAutomationNative]::SW_RESTORE) | Out-Null
-    [HenkaUiAutomationNative]::BringWindowToTop($Handle) | Out-Null
-    [HenkaUiAutomationNative]::SwitchToThisWindow($Handle, $true)
-
-    $deadline = (Get-Date).AddSeconds(3)
-    do {
-        [HenkaUiAutomationNative]::SetForegroundWindow($Handle) | Out-Null
-        if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
-            Start-Sleep -Milliseconds 150
-            return
-        }
-        Start-Sleep -Milliseconds 100
-    } while ((Get-Date) -lt $deadline)
-
-    throw (
-        "The Henka UI harness could not acquire its target window as " +
-        "foreground within three seconds. No UI assertion was made.")
 }
 
 function Send-HenkaAutomationEvent {
@@ -378,10 +328,114 @@ function Send-HenkaAutomationScroll {
     Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("wheel 0 {0}" -f $wheelText)
 }
 
+function Convert-HenkaUiLogicalPointToWindowPoint {
+    param(
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet(100, 125, 150, 200)]
+        [int]$EditorScalePercent
+    )
+
+    if ([double]::IsNaN($X) -or [double]::IsInfinity($X) -or
+        [double]::IsNaN($Y) -or [double]::IsInfinity($Y) -or
+        $X -lt 0.0 -or $Y -lt 0.0 -or $X -gt 65536.0 -or $Y -gt 65536.0) {
+        throw "The Henka logical UI point was invalid."
+    }
+
+    # Product-reported control rectangles are in editor logical units. Convert
+    # those points to window coordinates using only the persisted Editor UI
+    # Scale. The normal application path performs the independent window-to-
+    # framebuffer and OS display-scale conversion after this input is consumed.
+    $scale = [double]$EditorScalePercent / 100.0
+    return [pscustomobject]@{
+        X = $X * $scale
+        Y = $Y * $scale
+    }
+}
+
+function Send-HenkaAutomationUiClick {
+    param(
+        [Parameter(Mandatory = $true)][string]$EventPath,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet(100, 125, 150, 200)]
+        [int]$EditorScalePercent,
+        [ValidateSet("left", "right", "middle")][string]$Button = "left"
+    )
+
+    $windowPoint = Convert-HenkaUiLogicalPointToWindowPoint `
+        -X $X -Y $Y -EditorScalePercent $EditorScalePercent
+    Send-HenkaAutomationClick `
+        -EventPath $EventPath `
+        -X $windowPoint.X `
+        -Y $windowPoint.Y `
+        -Button $Button
+}
+
+function Send-HenkaAutomationUiDrag {
+    param(
+        [Parameter(Mandatory = $true)][string]$EventPath,
+        [Parameter(Mandatory = $true)][double]$StartX,
+        [Parameter(Mandatory = $true)][double]$StartY,
+        [Parameter(Mandatory = $true)][double]$EndX,
+        [Parameter(Mandatory = $true)][double]$EndY,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet(100, 125, 150, 200)]
+        [int]$EditorScalePercent,
+        [ValidateSet("left", "right", "middle")][string]$Button = "left"
+    )
+
+    $startPoint = Convert-HenkaUiLogicalPointToWindowPoint `
+        -X $StartX -Y $StartY -EditorScalePercent $EditorScalePercent
+    $endPoint = Convert-HenkaUiLogicalPointToWindowPoint `
+        -X $EndX -Y $EndY -EditorScalePercent $EditorScalePercent
+    foreach ($point in @($startPoint, $endPoint)) {
+        if ($point.X -lt 0.0 -or $point.Y -lt 0.0 -or
+            $point.X -gt 65536.0 -or $point.Y -gt 65536.0) {
+            throw "The scaled Henka UI drag point was outside the bounded input range."
+        }
+    }
+    if ($startPoint.X -eq $endPoint.X -and $startPoint.Y -eq $endPoint.Y) {
+        throw "The Henka UI drag must move to a distinct endpoint."
+    }
+
+    $startXText = Format-HenkaAutomationFloat -Value $startPoint.X
+    $startYText = Format-HenkaAutomationFloat -Value $startPoint.Y
+    $endXText = Format-HenkaAutomationFloat -Value $endPoint.X
+    $endYText = Format-HenkaAutomationFloat -Value $endPoint.Y
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("move {0} {1}" -f $startXText, $startYText)
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("button {0} down {1} {2}" -f $Button, $startXText, $startYText)
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("move {0} {1}" -f $endXText, $endYText)
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("button {0} up {1} {2}" -f $Button, $endXText, $endYText)
+}
+
+function Send-HenkaAutomationUiScroll {
+    param(
+        [Parameter(Mandatory = $true)][string]$EventPath,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [Parameter(Mandatory = $true)][double]$WheelDelta,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet(100, 125, 150, 200)]
+        [int]$EditorScalePercent
+    )
+
+    $windowPoint = Convert-HenkaUiLogicalPointToWindowPoint `
+        -X $X -Y $Y -EditorScalePercent $EditorScalePercent
+    Send-HenkaAutomationScroll `
+        -EventPath $EventPath `
+        -X $windowPoint.X `
+        -Y $windowPoint.Y `
+        -WheelDelta $WheelDelta
+}
+
 function Find-HenkaAutomationWindow {
     param(
         [Parameter(Mandatory = $true)][int]$ProcessId,
-        [Parameter(Mandatory = $true)][string]$TitleContains
+        [Parameter(Mandatory = $true)][string]$TitleContains,
+        [switch]$IncludeHidden
     )
 
     if ($ProcessId -le 0 -or [string]::IsNullOrWhiteSpace($TitleContains)) {
@@ -389,7 +443,8 @@ function Find-HenkaAutomationWindow {
     }
     return [HenkaUiAutomationNative]::FindWindowForProcess(
         [uint32]$ProcessId,
-        $TitleContains)
+        $TitleContains,
+        [bool]$IncludeHidden)
 }
 
 function Get-HenkaAutomationWindowGeometry {
@@ -409,6 +464,118 @@ function Get-HenkaAutomationWindowGeometry {
         Height = $window.Bottom - $window.Top
         ClientWidth = $client.Right - $client.Left
         ClientHeight = $client.Bottom - $client.Top
+    }
+}
+
+function Test-HenkaAutomationRectOutsideVirtualScreen {
+    param(
+        [Parameter(Mandatory = $true)][int]$X,
+        [Parameter(Mandatory = $true)][int]$Y,
+        [Parameter(Mandatory = $true)][int]$Width,
+        [Parameter(Mandatory = $true)][int]$Height
+    )
+
+    if ($Width -le 0 -or $Height -le 0) {
+        return $false
+    }
+
+    [long]$screenLeft = [HenkaUiAutomationNative]::GetSystemMetrics(76)
+    [long]$screenTop = [HenkaUiAutomationNative]::GetSystemMetrics(77)
+    [long]$screenRight = $screenLeft +
+        [HenkaUiAutomationNative]::GetSystemMetrics(78)
+    [long]$screenBottom = $screenTop +
+        [HenkaUiAutomationNative]::GetSystemMetrics(79)
+    [long]$windowRight = [long]$X + [long]$Width
+    [long]$windowBottom = [long]$Y + [long]$Height
+
+    return ($windowRight -le $screenLeft -or
+        [long]$X -ge $screenRight -or
+        $windowBottom -le $screenTop -or
+        [long]$Y -ge $screenBottom)
+}
+
+function Show-HenkaAutomationWindowOffscreen {
+    param([Parameter(Mandatory = $true)][System.IntPtr]$Handle)
+
+    if ($Handle -eq [IntPtr]::Zero) {
+        throw "The Henka automation window handle is invalid."
+    }
+
+    $bounds = New-Object HenkaUiAutomationNative+RECT
+    if (-not [HenkaUiAutomationNative]::GetWindowRect($Handle, [ref]$bounds)) {
+        throw "The Henka automation window bounds could not be read before off-screen placement."
+    }
+    $width = $bounds.Right - $bounds.Left
+    $height = $bounds.Bottom - $bounds.Top
+    if ($width -le 0 -or $height -le 0) {
+        throw "The Henka automation window has invalid bounds before off-screen placement."
+    }
+
+    [long]$virtualLeft = [HenkaUiAutomationNative]::GetSystemMetrics(76)
+    [long]$virtualTop = [HenkaUiAutomationNative]::GetSystemMetrics(77)
+    [long]$virtualWidth = [HenkaUiAutomationNative]::GetSystemMetrics(78)
+    [long]$virtualHeight = [HenkaUiAutomationNative]::GetSystemMetrics(79)
+    if ($virtualWidth -le 0 -or $virtualHeight -le 0) {
+        throw "Windows did not report valid virtual-desktop bounds for background capture."
+    }
+    [long]$targetX = $virtualLeft + $virtualWidth + 64
+    [long]$targetY = $virtualTop + 64
+    if ($targetX -gt [int]::MaxValue -or $targetX -lt [int]::MinValue -or
+        $targetY -gt [int]::MaxValue -or $targetY -lt [int]::MinValue) {
+        throw "The off-screen capture position exceeded the supported native coordinate range."
+    }
+
+    $positionFlags = [uint32](0x0010 -bor 0x0004 -bor 0x0200) # NOACTIVATE | NOZORDER | NOOWNERZORDER
+    if (-not [HenkaUiAutomationNative]::SetWindowPos(
+            $Handle,
+            [IntPtr]::Zero,
+            [int]$targetX,
+            [int]$targetY,
+            $width,
+            $height,
+            $positionFlags)) {
+        throw "The native capture window could not be moved outside the virtual desktop without activation."
+    }
+
+    # Show only after its complete frame has been moved beyond every monitor.
+    [void][HenkaUiAutomationNative]::ShowWindowAsync($Handle, 4) # SW_SHOWNOACTIVATE
+    $deadline = (Get-Date).AddSeconds(2)
+    do {
+        $bounds = New-Object HenkaUiAutomationNative+RECT
+        if (-not [HenkaUiAutomationNative]::GetWindowRect($Handle, [ref]$bounds)) {
+            throw "The native capture window bounds could not be read after off-screen placement."
+        }
+        $outside = Test-HenkaAutomationRectOutsideVirtualScreen `
+            -X $bounds.Left `
+            -Y $bounds.Top `
+            -Width ($bounds.Right - $bounds.Left) `
+            -Height ($bounds.Bottom - $bounds.Top)
+        if ($outside -and
+            [HenkaUiAutomationNative]::IsWindowVisible($Handle) -and
+            -not [HenkaUiAutomationNative]::IsIconic($Handle)) {
+            break
+        }
+        Start-Sleep -Milliseconds 25
+    } while ((Get-Date) -lt $deadline)
+
+    if (-not $outside -or
+        -not [HenkaUiAutomationNative]::IsWindowVisible($Handle) -or
+        [HenkaUiAutomationNative]::IsIconic($Handle)) {
+        throw "The capture window did not become visible entirely outside the virtual desktop."
+    }
+    if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
+        throw "The off-screen capture window unexpectedly acquired foreground focus."
+    }
+
+    return [pscustomobject]@{
+        X = $bounds.Left
+        Y = $bounds.Top
+        Width = $bounds.Right - $bounds.Left
+        Height = $bounds.Bottom - $bounds.Top
+        VirtualDesktopLeft = $virtualLeft
+        VirtualDesktopTop = $virtualTop
+        VirtualDesktopWidth = $virtualWidth
+        VirtualDesktopHeight = $virtualHeight
     }
 }
 
@@ -464,13 +631,16 @@ function Save-HenkaAutomationWindowScreenshot {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Description
+        [Parameter(Mandatory = $true)][string]$Description,
+        [switch]$AllowHidden
     )
 
+    $isVisible = $Handle -ne [IntPtr]::Zero -and
+        [HenkaUiAutomationNative]::IsWindowVisible($Handle)
     if ($Handle -eq [IntPtr]::Zero -or
-        -not [HenkaUiAutomationNative]::IsWindowVisible($Handle) -or
-        [HenkaUiAutomationNative]::IsIconic($Handle)) {
-        throw "$Description requires a visible, non-minimized Henka window; no focus change was attempted."
+        (-not $isVisible -and -not $AllowHidden) -or
+        ($isVisible -and [HenkaUiAutomationNative]::IsIconic($Handle))) {
+        throw "$Description requires a valid non-minimized Henka window in an allowed visibility state; no focus change was attempted."
     }
     Add-Type -AssemblyName System.Drawing
     $geometry = Get-HenkaAutomationWindowGeometry -Handle $Handle

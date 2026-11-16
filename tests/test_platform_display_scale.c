@@ -23,6 +23,10 @@ typedef struct henka_platform_scale_profile_fixture
     henka_ui_font_raster_profile* first_profile;
     henka_ui_font_raster_profile* replacement_profile;
     henka_ui_font_raster_profile* wrong_context_profile;
+    henka_ui_font_raster_profile* detached_profile;
+    henka_ui_font_raster_profile* detached_replacement_profile;
+    henka_ui_font_raster_profile* detached_second_replacement_profile;
+    henka_ui_font_raster_profile* detached_wrong_context_profile;
     uint8_t* font_bytes;
 } henka_platform_scale_profile_fixture;
 
@@ -233,6 +237,187 @@ cleanup:
     return passed;
 }
 
+static bool henka_test_platform_display_scale_context_replacement_reuses_and_retires_profile(
+    henka_engine* engine,
+    henka_ui_context* detached_ui,
+    uint32_t initial_scale_numerator,
+    uint32_t initial_scale_denominator,
+    henka_platform_scale_profile_fixture* fixture)
+{
+    henka_ui_font_context_scale_binding bindings[2U];
+    henka_engine_ui_font_resource_update* update = NULL;
+    henka_ui_font_raster_profile_desc profile_desc;
+    henka_ui_font_diagnostic diagnostic;
+    uint32_t replacement_scale_numerator = 3U;
+    uint32_t replacement_scale_denominator = 2U;
+    uint32_t second_replacement_scale_numerator = 1U;
+    uint32_t second_replacement_scale_denominator = 1U;
+    const uint64_t detached_identity = UINT64_C(0x48454e4b415002);
+    const char* stage = "detached profile inputs";
+    bool passed = false;
+
+    if (engine == NULL || detached_ui == NULL || fixture == NULL ||
+        fixture->ui == NULL || fixture->font == NULL ||
+        fixture->replacement_profile == NULL ||
+        initial_scale_numerator == 0U || initial_scale_denominator == 0U)
+    {
+        goto cleanup;
+    }
+    if ((uint64_t)initial_scale_numerator * replacement_scale_denominator ==
+        (uint64_t)replacement_scale_numerator * initial_scale_denominator)
+    {
+        replacement_scale_numerator = 5U;
+        replacement_scale_denominator = 4U;
+    }
+    if (initial_scale_numerator == initial_scale_denominator)
+    {
+        second_replacement_scale_numerator = 2U;
+    }
+
+    memset(&profile_desc, 0, sizeof(profile_desc));
+    profile_desc.graphics_context_identity = detached_identity;
+    profile_desc.output_scale_numerator = initial_scale_numerator;
+    profile_desc.output_scale_denominator = initial_scale_denominator;
+    profile_desc.atlas_width = 1024U;
+    profile_desc.atlas_height = 1024U;
+    stage = "detached initial profile creation";
+    if (henka_ui_font_raster_profile_create(
+            fixture->font, &profile_desc, &fixture->detached_profile,
+            &diagnostic) != HENKA_SUCCESS || fixture->detached_profile == NULL)
+    {
+        goto cleanup;
+    }
+
+    bindings[0U] = (henka_ui_font_context_scale_binding){
+        fixture->ui, fixture->replacement_profile};
+    bindings[1U] = (henka_ui_font_context_scale_binding){
+        detached_ui, fixture->detached_profile};
+    stage = "detached profile initial publication prepare";
+    if (henka_engine_ui_font_resource_update_prepare(
+            engine, bindings, 2U, 100U, &update) != HENKA_SUCCESS || update == NULL ||
+        fixture->ui->font_profile != fixture->replacement_profile ||
+        detached_ui->font_profile != NULL)
+    {
+        goto cleanup;
+    }
+    henka_engine_ui_font_resource_update_publish(engine, update);
+    update = NULL;
+    if (fixture->ui->font_profile != fixture->replacement_profile ||
+        fabsf(fixture->ui->output_scale - 1.5f) > 0.0001f ||
+        detached_ui->font_profile != fixture->detached_profile ||
+        detached_ui->font_context_identity != detached_identity ||
+        detached_ui->font_app_scale_percent != 100U ||
+        fabsf(detached_ui->output_scale -
+            (float)initial_scale_numerator / (float)initial_scale_denominator) > 0.0001f)
+    {
+        goto cleanup;
+    }
+
+    profile_desc.output_scale_numerator = replacement_scale_numerator;
+    profile_desc.output_scale_denominator = replacement_scale_denominator;
+    stage = "detached replacement profile creation";
+    if (henka_ui_font_raster_profile_create(
+            fixture->font, &profile_desc, &fixture->detached_replacement_profile,
+            &diagnostic) != HENKA_SUCCESS ||
+        fixture->detached_replacement_profile == NULL)
+    {
+        goto cleanup;
+    }
+    bindings[1U].profile = fixture->detached_replacement_profile;
+    stage = "detached replacement prepare remains unpublished";
+    if (henka_engine_ui_font_resource_update_prepare(
+            engine, bindings, 2U, 100U, &update) != HENKA_SUCCESS || update == NULL ||
+        fixture->ui->font_profile != fixture->replacement_profile ||
+        detached_ui->font_profile != fixture->detached_profile)
+    {
+        goto cleanup;
+    }
+    henka_engine_ui_font_resource_update_publish(engine, update);
+    update = NULL;
+    if (fixture->ui->font_profile != fixture->replacement_profile ||
+        fabsf(fixture->ui->output_scale - 1.5f) > 0.0001f ||
+        detached_ui->font_profile != fixture->detached_replacement_profile ||
+        detached_ui->font_context_identity != detached_identity ||
+        detached_ui->font_app_scale_percent != 100U ||
+        fabsf(detached_ui->output_scale -
+            (float)replacement_scale_numerator / (float)replacement_scale_denominator) > 0.0001f)
+    {
+        goto cleanup;
+    }
+
+    profile_desc.output_scale_numerator = second_replacement_scale_numerator;
+    profile_desc.output_scale_denominator = second_replacement_scale_denominator;
+    stage = "second detached replacement profile creation";
+    if (henka_ui_font_raster_profile_create(
+            fixture->font, &profile_desc,
+            &fixture->detached_second_replacement_profile, &diagnostic) != HENKA_SUCCESS ||
+        fixture->detached_second_replacement_profile == NULL)
+    {
+        goto cleanup;
+    }
+    bindings[1U].profile = fixture->detached_second_replacement_profile;
+    stage = "second detached replacement prepare remains unpublished";
+    if (henka_engine_ui_font_resource_update_prepare(
+            engine, bindings, 2U, 100U, &update) != HENKA_SUCCESS || update == NULL ||
+        fixture->ui->font_profile != fixture->replacement_profile ||
+        fabsf(fixture->ui->output_scale - 1.5f) > 0.0001f ||
+        detached_ui->font_profile != fixture->detached_replacement_profile ||
+        fabsf(detached_ui->output_scale -
+            (float)replacement_scale_numerator / (float)replacement_scale_denominator) > 0.0001f)
+    {
+        goto cleanup;
+    }
+    henka_engine_ui_font_resource_update_publish(engine, update);
+    update = NULL;
+    if (fixture->ui->font_profile != fixture->replacement_profile ||
+        fabsf(fixture->ui->output_scale - 1.5f) > 0.0001f ||
+        detached_ui->font_profile != fixture->detached_second_replacement_profile ||
+        detached_ui->font_context_identity != detached_identity ||
+        detached_ui->font_app_scale_percent != 100U ||
+        fabsf(detached_ui->output_scale -
+            (float)second_replacement_scale_numerator /
+                (float)second_replacement_scale_denominator) > 0.0001f)
+    {
+        goto cleanup;
+    }
+
+    profile_desc.graphics_context_identity = detached_identity + 1U;
+    stage = "detached wrong-context negative control creation";
+    if (henka_ui_font_raster_profile_create(
+            fixture->font, &profile_desc,
+            &fixture->detached_wrong_context_profile, &diagnostic) != HENKA_SUCCESS ||
+        fixture->detached_wrong_context_profile == NULL)
+    {
+        goto cleanup;
+    }
+    bindings[1U].profile = fixture->detached_wrong_context_profile;
+    stage = "detached wrong-context rejection preserves both profiles";
+    if (henka_engine_ui_font_resource_update_prepare(
+            engine, bindings, 2U, 100U, &update) == HENKA_SUCCESS || update != NULL ||
+        fixture->ui->font_profile != fixture->replacement_profile ||
+        fabsf(fixture->ui->output_scale - 1.5f) > 0.0001f ||
+        detached_ui->font_profile != fixture->detached_second_replacement_profile ||
+        detached_ui->font_context_identity != detached_identity ||
+        fabsf(detached_ui->output_scale -
+            (float)second_replacement_scale_numerator /
+                (float)second_replacement_scale_denominator) > 0.0001f)
+    {
+        goto cleanup;
+    }
+    passed = true;
+
+cleanup:
+    if (!passed)
+    {
+        fprintf(stderr, "detached display-scale font profile regression failed at %s\n", stage);
+    }
+    if (update != NULL)
+    {
+        henka_engine_ui_font_resource_update_discard(engine, update);
+    }
+    return passed;
+}
+
 static bool henka_test_platform_display_scale_matches_content_size(
     int framebuffer_width,
     int framebuffer_height,
@@ -335,6 +520,16 @@ static bool henka_test_platform_display_scale_contract(void)
         goto cleanup;
     }
 
+    if (!henka_test_platform_display_scale_context_replacement_reuses_and_retires_profile(
+            engine,
+            tool_ui,
+            tool_state.display_scale_numerator,
+            tool_state.display_scale_denominator,
+            &profile_fixture))
+    {
+        goto cleanup;
+    }
+
     passed = true;
 
 cleanup:
@@ -345,15 +540,20 @@ cleanup:
     if (engine != NULL)
     {
         (void)henka_engine_set_ui_context(engine, NULL);
+        henka_engine_destroy(engine);
+        engine = NULL;
     }
     henka_ui_destroy(profile_fixture.ui);
     henka_ui_destroy(tool_ui);
     henka_ui_font_raster_profile_destroy(profile_fixture.wrong_context_profile);
+    henka_ui_font_raster_profile_destroy(profile_fixture.detached_wrong_context_profile);
+    henka_ui_font_raster_profile_destroy(profile_fixture.detached_second_replacement_profile);
+    henka_ui_font_raster_profile_destroy(profile_fixture.detached_replacement_profile);
+    henka_ui_font_raster_profile_destroy(profile_fixture.detached_profile);
     henka_ui_font_raster_profile_destroy(profile_fixture.replacement_profile);
     henka_ui_font_raster_profile_destroy(profile_fixture.first_profile);
     henka_ui_font_resource_destroy(profile_fixture.font);
     free(profile_fixture.font_bytes);
-    henka_engine_destroy(engine);
     return passed;
 }
 

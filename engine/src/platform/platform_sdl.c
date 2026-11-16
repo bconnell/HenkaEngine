@@ -16,6 +16,8 @@
 
 #include "window_scale.h"
 
+#define HENKA_PLATFORM_AUTOMATION_INPUT_DIAGNOSTIC_RECORD_LIMIT 4096U
+
 #if defined(_WIN32)
 #include <share.h>
 #endif
@@ -486,7 +488,8 @@ static void henka_platform_poll_automation_event(henka_input_state* input)
                 type = "text";
             }
             if (henka_platform_automation_diagnostics_enabled() &&
-                input->automation_input_record_sequence <= 512U)
+                input->automation_input_record_sequence <=
+                    HENKA_PLATFORM_AUTOMATION_INPUT_DIAGNOSTIC_RECORD_LIMIT)
             {
                 printf(
                     "HENKA_AUTOMATION_DIAGNOSTIC input record=%llu type=%s button=%s release_consumed=%u\n",
@@ -652,6 +655,8 @@ struct henka_platform
     SDL_Window* window;
     SDL_WindowID main_window_id;
     bool window_start_hidden;
+    bool tool_windows_start_hidden;
+    bool automation_input_owned;
     bool multi_window_available;
     bool main_window_focused;
     henka_window_id next_tool_window_id;
@@ -996,6 +1001,8 @@ henka_result henka_platform_create(
     struct henka_platform** out_platform)
 {
     struct henka_platform* platform;
+    const char* automation_input_owned;
+    const char* tool_windows_start_hidden;
     Uint64 window_flags;
 
     if (out_platform != NULL)
@@ -1027,11 +1034,32 @@ henka_result henka_platform_create(
 
     window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
         SDL_WINDOW_HIGH_PIXEL_DENSITY;
-    if (desc->window_start_hidden)
+    automation_input_owned = SDL_getenv("HENKA_AUTOMATION_INPUT_OWNED");
+    platform->automation_input_owned =
+        automation_input_owned != NULL &&
+        strcmp(automation_input_owned, "1") == 0;
+    platform->window_start_hidden =
+        desc->window_start_hidden || platform->automation_input_owned;
+    platform->tool_windows_start_hidden = platform->window_start_hidden;
+    if (platform->window_start_hidden)
     {
         window_flags |= SDL_WINDOW_HIDDEN;
     }
-    platform->window_start_hidden = desc->window_start_hidden;
+    tool_windows_start_hidden = SDL_getenv("HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN");
+    if (!platform->tool_windows_start_hidden &&
+        platform->automation_input_owned &&
+        tool_windows_start_hidden != NULL &&
+        strcmp(tool_windows_start_hidden, "1") == 0)
+    {
+        platform->tool_windows_start_hidden = true;
+    }
+    if (platform->automation_input_owned)
+    {
+        /* Automation consumes its own event stream; create hidden and
+         * non-focusable so no newly created UI window can flash over the
+         * owner's desktop before the background launcher relocates it. */
+        window_flags |= SDL_WINDOW_NOT_FOCUSABLE;
+    }
     platform->window = SDL_CreateWindow(
         desc->application_name,
         desc->window_width,
@@ -1077,6 +1105,21 @@ henka_result henka_platform_create(
     platform->main_window_focused =
         (SDL_GetWindowFlags(platform->window) &
             SDL_WINDOW_INPUT_FOCUS) != 0U;
+    if (platform->automation_input_owned)
+    {
+        const char* automation_diagnostics =
+            SDL_getenv("HENKA_AUTOMATION_DIAGNOSTICS");
+        if (automation_diagnostics != NULL &&
+            strcmp(automation_diagnostics, "1") == 0)
+        {
+            const Uint64 actual_window_flags =
+                SDL_GetWindowFlags(platform->window);
+            HENKA_LOG_INFO(
+                "HENKA_AUTOMATION_DIAGNOSTIC window_focus_policy focusable=%u input_focused=%u",
+                (actual_window_flags & SDL_WINDOW_NOT_FOCUSABLE) != 0U ? 0U : 1U,
+                (actual_window_flags & SDL_WINDOW_INPUT_FOCUS) != 0U ? 1U : 0U);
+        }
+    }
     platform->next_tool_window_id = 2U;
     platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_NONE;
     platform->last_tool_window_id = HENKA_INVALID_WINDOW_ID;
@@ -1197,9 +1240,13 @@ henka_result henka_platform_create_tool_window(
     {
         Uint64 window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
             SDL_WINDOW_HIGH_PIXEL_DENSITY;
-        if (platform->window_start_hidden)
+        if (platform->tool_windows_start_hidden)
         {
             window_flags |= SDL_WINDOW_HIDDEN;
+        }
+        if (platform->automation_input_owned)
+        {
+            window_flags |= SDL_WINDOW_NOT_FOCUSABLE;
         }
         slot->window = SDL_CreateWindow(
         desc->title,

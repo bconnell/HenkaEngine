@@ -958,7 +958,8 @@ static henka_result henka_ui_draw_font_text_with_limits(
     const char* text,
     henka_vec4 color,
     float maximum_width,
-    size_t maximum_line_count)
+    size_t maximum_line_count,
+    bool center_visible_ink)
 {
     const henka_ui_font_resource* font;
     henka_ui_font_info font_info;
@@ -1013,7 +1014,23 @@ static henka_result henka_ui_draw_font_text_with_limits(
     {
         return result;
     }
-    baseline_y = (double)y + (double)font_info.ascent * logical_scale;
+    if (center_visible_ink && run.ink_bottom > run.ink_top)
+    {
+        const double ink_center =
+            ((double)run.ink_top + (double)run.ink_bottom) * 0.5;
+        baseline_y = (double)y - ink_center * logical_scale;
+    }
+    else if (center_visible_ink)
+    {
+        /* Empty/whitespace-only runs still occupy a typographic line box. */
+        baseline_y = (double)y +
+            ((double)font_info.ascent - (double)font_info.line_height * 0.5) *
+                logical_scale;
+    }
+    else
+    {
+        baseline_y = (double)y + (double)font_info.ascent * logical_scale;
+    }
     if (!isfinite(baseline_y) || baseline_y < -(double)FLT_MAX || baseline_y > (double)FLT_MAX)
     {
         henka_ui_text_run_dispose(&run);
@@ -1095,7 +1112,7 @@ henka_result henka_ui_draw_font_text(
     henka_vec4 color)
 {
     return henka_ui_draw_font_text_with_limits(
-        context, x, y, scale, text, color, 0.0f, SIZE_MAX);
+        context, x, y, scale, text, color, 0.0f, SIZE_MAX, false);
 }
 
 henka_result henka_ui_draw_font_text_limited(
@@ -1120,5 +1137,32 @@ henka_result henka_ui_draw_font_text_limited(
         text,
         color,
         maximum_width,
-        maximum_line_count);
+        maximum_line_count,
+        false);
+}
+
+henka_result henka_ui_draw_font_text_centered_limited(
+    henka_ui_context* context,
+    float x,
+    float center_y,
+    float scale,
+    const char* text,
+    henka_vec4 color,
+    float maximum_width,
+    size_t maximum_line_count)
+{
+    if (!isfinite((double)maximum_width) || maximum_width <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_ui_draw_font_text_with_limits(
+        context,
+        x,
+        center_y,
+        scale,
+        text,
+        color,
+        maximum_width,
+        maximum_line_count,
+        true);
 }

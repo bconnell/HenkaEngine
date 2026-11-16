@@ -12,10 +12,10 @@ static const uint16_t g_editor_scale_percentages[] = {
     200U};
 
 static const char* const g_editor_scale_labels[] = {
-    "100%",
-    "125%",
-    "150%",
-    "200%"};
+    "100",
+    "125",
+    "150",
+    "200"};
 
 henka_result sandbox3d_editor_scale_control_layout(
     henka_ui_rect bounds,
@@ -54,6 +54,25 @@ henka_result sandbox3d_editor_scale_control_layout(
             bounds.width - 72.0f,
             24.0f};
         out_layout->stacked = false;
+        out_layout->compact = false;
+        return HENKA_SUCCESS;
+    }
+
+    if (bounds.width >= SANDBOX3D_EDITOR_SCALE_COMPACT_INLINE_MIN_WIDTH &&
+        bounds.height >= 24.0f)
+    {
+        out_layout->label = (henka_ui_rect){
+            bounds.x,
+            bounds.y,
+            SANDBOX3D_EDITOR_SCALE_COMPACT_LABEL_WIDTH,
+            24.0f};
+        out_layout->choices = (henka_ui_rect){
+            bounds.x + SANDBOX3D_EDITOR_SCALE_COMPACT_LABEL_WIDTH,
+            bounds.y,
+            bounds.width - SANDBOX3D_EDITOR_SCALE_COMPACT_LABEL_WIDTH,
+            24.0f};
+        out_layout->stacked = false;
+        out_layout->compact = true;
         return HENKA_SUCCESS;
     }
 
@@ -67,6 +86,7 @@ henka_result sandbox3d_editor_scale_control_layout(
             bounds.width,
             24.0f};
         out_layout->stacked = true;
+        out_layout->compact = false;
         return HENKA_SUCCESS;
     }
 

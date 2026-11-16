@@ -30,8 +30,6 @@ if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "The packaged Compass executable was not found: $executable"
 }
 
-Add-Type -AssemblyName System.Drawing
-
 if (-not ("HenkaCompassVisualNative" -as [type])) {
     Add-Type -TypeDefinition @"
 using System;
@@ -41,24 +39,6 @@ using System.Text;
 public static class HenkaCompassVisualNative
 {
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct RECT
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [DllImport("user32.dll")]
-    public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
-
-    [DllImport("user32.dll")]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern bool BringWindowToTop(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
@@ -103,6 +83,8 @@ $capturedProcess = $null
 $handle = [System.IntPtr]::Zero
 $previousOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
 $previousFile = $env:HENKA_AUTOMATION_INPUT_FILE
+$previousStartHidden = $env:HENKA_AUTOMATION_START_HIDDEN
+$previousToolWindowsStartHidden = $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN
 $encoding = New-Object System.Text.UTF8Encoding($false)
 
 Remove-Item -LiteralPath @($stdoutPath, $stderrPath, $eventPath) -Force -ErrorAction SilentlyContinue
@@ -149,30 +131,11 @@ function Send-CompassClick {
 function Capture-Compass {
     param([Parameter(Mandatory = $true)][string]$Name)
     $path = Join-Path $outputRoot ($Name + ".png")
-    $rect = [HenkaCompassVisualNative+RECT]::new()
-    if (-not [HenkaCompassVisualNative]::GetWindowRect($handle, [ref]$rect) -or
-        $rect.Right -le $rect.Left -or $rect.Bottom -le $rect.Top) {
-        throw "The Compass target window rectangle was invalid."
-    }
-    $windowWidth = [int]$rect.Right - [int]$rect.Left
-    $windowHeight = [int]$rect.Bottom - [int]$rect.Top
-    $bitmap = New-Object System.Drawing.Bitmap($windowWidth, $windowHeight)
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    try {
-        $graphics.CopyFromScreen(
-            $rect.Left,
-            $rect.Top,
-            0,
-            0,
-            $bitmap.Size,
-            [System.Drawing.CopyPixelOperation]::SourceCopy)
-        $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-    }
-    finally {
-        $graphics.Dispose()
-        $bitmap.Dispose()
-    }
-    Write-Output ("[capture] {0}" -f $path)
+    $capture = Save-HenkaAutomationWindowScreenshot `
+        -Handle $handle `
+        -Path $path `
+        -Description "Compass visual capture '$Name'"
+    Write-Output ("[capture] {0} ({1}x{2})" -f $capture.Path, $capture.ClientWidth, $capture.ClientHeight)
 }
 
 function Get-CompassViewport {
@@ -188,12 +151,14 @@ function Get-CompassViewport {
 try {
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $eventPath
+    $env:HENKA_AUTOMATION_START_HIDDEN = "1"
+    $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"
     $capturedProcess = Start-HenkaCapturedProcess `
         -FilePath $executable `
         -WorkingDirectory (Split-Path -Parent $executable) `
         -StdoutPath $stdoutPath `
         -StderrPath $stderrPath `
-        -CreateNoWindow
+        -StartOffscreenWithoutActivation
     $process = $capturedProcess.Process
 
     for ($attempt = 0; $attempt -lt 100 -and $handle -eq [System.IntPtr]::Zero; ++$attempt) {
@@ -208,7 +173,7 @@ try {
         throw "The packaged runtime did not report UI readiness."
     }
 
-    Set-HenkaAutomationForeground -Handle $handle
+    $null = Show-HenkaAutomationWindowOffscreen -Handle $handle
     Send-CompassKey -KeyName "F5"
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox layout: Focus Viewport" -TimeoutMilliseconds 5000)) {
         throw "The packaged runtime did not enter Focus Viewport layout."
@@ -226,7 +191,6 @@ try {
     $infoCenterX = $compassCenterX
     $infoCenterY = $compassCenterY + $compassRadius + 6.0 + 14.5
 
-    Set-HenkaAutomationForeground -Handle $handle
     Capture-Compass -Name "A-normal-perspective"
 
     Send-CompassMove -X ($compassCenterX + 36.0) -Y $compassCenterY
@@ -265,6 +229,18 @@ finally {
     }
     else {
         $env:HENKA_AUTOMATION_INPUT_FILE = $previousFile
+    }
+    if ($null -eq $previousStartHidden) {
+        Remove-Item Env:HENKA_AUTOMATION_START_HIDDEN -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_START_HIDDEN = $previousStartHidden
+    }
+    if ($null -eq $previousToolWindowsStartHidden) {
+        Remove-Item Env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = $previousToolWindowsStartHidden
     }
     if ($null -ne $capturedProcess) {
         Close-HenkaCapturedProcess -CapturedProcess $capturedProcess

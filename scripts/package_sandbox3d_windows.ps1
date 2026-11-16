@@ -1,5 +1,6 @@
 param(
     [switch]$ResetUserData,
+    [switch]$IncludeTypographyComparisonFonts,
 
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug"
@@ -10,6 +11,7 @@ $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 . (Join-Path $PSScriptRoot "henka_package_user_data.ps1")
+. (Join-Path $PSScriptRoot "henka_typography_package_policy.ps1")
 
 $repoRoot = [System.IO.Path]::GetFullPath((Resolve-Path (Join-Path $PSScriptRoot "..")))
 $git = Get-HenkaGitPath
@@ -145,7 +147,23 @@ function Test-HenkaPackageDirectoryComplete {
         }
     }
 
-    return $true
+    try {
+        $packageInfo = [System.IO.File]::ReadAllText((Join-Path $Path "PACKAGE_INFO.txt"))
+        $comparisonMatch = [regex]::Match(
+            $packageInfo,
+            '(?im)^Typography comparison candidates:\s*(included|excluded)\s*$')
+        if (-not $comparisonMatch.Success) {
+            return $false
+        }
+        $includeComparison = $comparisonMatch.Groups[1].Value -eq "included"
+        $assetViolation = Get-HenkaTypographyPackageAssetViolation `
+            -PackageRoot $Path `
+            -IncludeComparisonFonts:$includeComparison
+        return ($null -eq $assetViolation)
+    }
+    catch {
+        return $false
+    }
 }
 
 [System.IO.Directory]::CreateDirectory($outRoot) | Out-Null
@@ -222,6 +240,10 @@ if ($manifest.executable_sha256 -ne $currentHash) {
 }
 
 $assetsSource = Join-Path $repoRoot "assets"
+$fontMetadata = Get-HenkaTypographySelectedFontMetadata
+Assert-HenkaTypographyPackageAssetSet `
+    -PackageRoot $repoRoot `
+    -IncludeComparisonFonts
 $helpSource = Join-Path $repoRoot "docs\help\sandbox3d.md"
 $residencyFixtureSource = Join-Path $buildRoot "examples\sandbox3d\$Configuration\assets\textures\residency"
 $residencyGenerator = Join-Path $repoRoot "scripts\generate_residency_fixtures_windows.ps1"
@@ -282,6 +304,20 @@ try {
 
     Copy-Item -LiteralPath $expectedExeFull -Destination $stagingExe
     Copy-Item -LiteralPath $assetsSource -Destination $stagingRoot -Recurse
+    $stagingFontDirectory = Join-Path $stagingRoot "assets\ui\fonts"
+    if (-not $IncludeTypographyComparisonFonts) {
+        foreach ($comparisonAssetName in @("NotoSans-Regular.ttf", "NotoSans-OFL.txt")) {
+            $comparisonAssetPath = Join-Path $stagingFontDirectory $comparisonAssetName
+            if (-not (Test-Path -LiteralPath $comparisonAssetPath -PathType Leaf)) {
+                throw "The source comparison asset is missing from package staging: $comparisonAssetName"
+            }
+            Assert-NoReparsePoints -Path $comparisonAssetPath -Description "Staged comparison typography asset"
+            Remove-Item -LiteralPath $comparisonAssetPath -Force -ErrorAction Stop
+        }
+    }
+    Assert-HenkaTypographyPackageAssetSet `
+        -PackageRoot $stagingRoot `
+        -IncludeComparisonFonts:$IncludeTypographyComparisonFonts
     $stagingAudioDir = Join-Path $stagingRoot "assets\audio"
     [System.IO.Directory]::CreateDirectory($stagingAudioDir) | Out-Null
     foreach ($fixture in @(
@@ -375,9 +411,10 @@ Local settings:
 "@
     Write-HenkaUtf8NoBom -Path $stagingReadme -Text ($runGuide.TrimStart() + [Environment]::NewLine)
 
+    $comparisonFontDisposition = if ($IncludeTypographyComparisonFonts) { "included" } else { "excluded" }
     $packageInfo = @"
 Henka Engine Sandbox 3D package
-Package schema: 4
+Package schema: 5
 Package refreshed UTC: $([DateTime]::UtcNow.ToString("o"))
 Build generated UTC: $($manifest.generated_utc)
 Source commit: $currentCommit
@@ -394,6 +431,12 @@ Source executable SHA-256: $currentHash
 Packaged executable SHA-256: $packagedHash
 Executable: HenkaSandbox3D.exe
 Runtime mode: Packaged
+Typography font: $($fontMetadata.Name)
+Typography font asset: $($fontMetadata.RelativePath)
+Typography font SHA-256: $($fontMetadata.Sha256)
+Typography license: $($fontMetadata.LicenseRelativePath)
+Typography license SHA-256: $($fontMetadata.LicenseSha256)
+Typography comparison candidates: $comparisonFontDisposition
 "@
     Write-HenkaUtf8NoBom -Path $stagingInfo -Text ($packageInfo.TrimStart() + [Environment]::NewLine)
 
@@ -408,6 +451,9 @@ Runtime mode: Packaged
         if (-not (Test-Path -LiteralPath $requiredPath)) {
             throw "The staged package is incomplete: $requiredPath"
         }
+    }
+    if (-not (Test-HenkaPackageDirectoryComplete -Path $stagingRoot)) {
+        throw "The staged package does not satisfy its recorded typography asset contract."
     }
 
     if (Test-Path -LiteralPath $packageRoot) {

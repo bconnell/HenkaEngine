@@ -39,6 +39,65 @@ void henka_test_sandbox3d_editor_layout(void)
     HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
 
     {
+        henka_ui_context* footer_ui = NULL;
+        henka_ui_frame_desc frame_desc = {0};
+        sandbox3d_editor_details_footer_layout footer = {0};
+        const henka_ui_rect compact_panel = {
+            395.0f, 12.0f, 233.0f, 155.0f};
+        const henka_ui_rect wide_panel = {
+            300.0f, 12.0f, 340.0f, 155.0f};
+
+        HENKA_TEST_ASSERT(henka_ui_create(&footer_ui) == HENKA_SUCCESS);
+        frame_desc.framebuffer_width = 1280;
+        frame_desc.framebuffer_height = 720;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(footer_ui, &frame_desc) == HENKA_SUCCESS);
+
+        /* At 200% UI scale, the 1280x720 right dock has about 233 logical
+         * units of width. The shared footer layout must stack both full-size
+         * project actions instead of dropping them below a width threshold. */
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_footer_for_context(
+                footer_ui,
+                compact_panel,
+                &footer) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(footer.row_count == 2U);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(footer.save_project.width, 140.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(footer.reload_project.width, 140.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(footer.save_project.height, 24.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(footer.reload_project.height, 24.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            footer.save_project.x, footer.reload_project.x, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            footer.reload_project.y, footer.save_project.y + 28.0f, 0.01f);
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            compact_panel, footer.save_project));
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            compact_panel, footer.reload_project));
+        HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+            footer.save_project, footer.reload_project));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(footer.scroll_reserve, 62.0f, 0.01f);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_footer_for_context(
+                footer_ui,
+                wide_panel,
+                &footer) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(footer.row_count == 1U);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            footer.save_project.y, footer.reload_project.y, 0.01f);
+        HENKA_TEST_ASSERT(
+            footer.reload_project.x >= footer.save_project.x +
+                footer.save_project.width);
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            wide_panel, footer.save_project));
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            wide_panel, footer.reload_project));
+
+        henka_ui_destroy(footer_ui);
+    }
+
+    {
         const henka_ui_rect panel_cases[] = {
             {0.0f, 0.0f, 138.0f, 342.0f},
             {0.0f, 0.0f, 276.0f, 684.0f}
@@ -701,6 +760,234 @@ void henka_test_sandbox3d_editor_layout(void)
             }
         }
 
+        {
+            henka_ui_rect narrow_tabs[
+                SANDBOX3D_EDITOR_UTILITY_TAB_COUNT] = {{0}};
+            henka_ui_rect wide_tabs[
+                SANDBOX3D_EDITOR_UTILITY_TAB_COUNT] = {{0}};
+            const henka_ui_rect narrow_panel = {
+                12.0f, 38.0f, 204.0f, 240.0f};
+            const henka_ui_rect wide_panel = {
+                12.0f, 38.0f, 420.0f, 240.0f};
+            const henka_ui_rect narrow_content = {
+                narrow_panel.x + 14.0f,
+                narrow_panel.y + 38.0f,
+                narrow_panel.width - 28.0f,
+                narrow_panel.height - 38.0f};
+            const henka_ui_rect wide_content = {
+                wide_panel.x + 14.0f,
+                wide_panel.y + 38.0f,
+                wide_panel.width - 28.0f,
+                wide_panel.height - 38.0f};
+            size_t narrow_rows = 0U;
+            size_t wide_rows = 0U;
+            float narrow_row_height = 0.0f;
+            float wide_row_height = 0.0f;
+            size_t tab_index;
+
+            HENKA_TEST_ASSERT(strcmp(
+                sandbox3d_editor_utility_tab_label(1U),
+                "Scene Legend") == 0);
+            HENKA_TEST_ASSERT(strcmp(
+                sandbox3d_editor_utility_tab_label(2U),
+                "Object Info") == 0);
+            HENKA_TEST_ASSERT(strcmp(
+                sandbox3d_editor_utility_tab_label(7U),
+                "Diagnostics") == 0);
+            HENKA_TEST_ASSERT(strcmp(
+                sandbox3d_editor_utility_tab_label(8U),
+                "Transform QA") == 0);
+            HENKA_TEST_ASSERT(strcmp(
+                sandbox3d_editor_utility_tab_label(9U),
+                "Physics QA") == 0);
+            HENKA_TEST_ASSERT(sandbox3d_editor_utility_tab_label(
+                SANDBOX3D_EDITOR_UTILITY_TAB_COUNT) == NULL);
+
+            HENKA_TEST_ASSERT(
+                sandbox3d_editor_layout_utility_tabs_for_context(
+                    ui_context,
+                    narrow_panel,
+                    1.0f,
+                    narrow_tabs,
+                    SANDBOX3D_EDITOR_UTILITY_TAB_COUNT,
+                    &narrow_rows,
+                    &narrow_row_height) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(narrow_rows > 0U);
+            HENKA_TEST_ASSERT(narrow_rows <
+                SANDBOX3D_EDITOR_UTILITY_TAB_COUNT);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(narrow_row_height, 24.0f, 0.0001f);
+
+            HENKA_TEST_ASSERT(
+                sandbox3d_editor_layout_utility_tabs_for_context(
+                    ui_context,
+                    wide_panel,
+                    1.0f,
+                    wide_tabs,
+                    SANDBOX3D_EDITOR_UTILITY_TAB_COUNT,
+                    &wide_rows,
+                    &wide_row_height) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(wide_rows > 0U);
+            HENKA_TEST_ASSERT(wide_rows < narrow_rows);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(wide_row_height, 24.0f, 0.0001f);
+
+            for (tab_index = 0U;
+                 tab_index < SANDBOX3D_EDITOR_UTILITY_TAB_COUNT;
+                 ++tab_index)
+            {
+                int measured_width = 0;
+                int utility_label_height = 0;
+                size_t previous_index;
+
+                HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+                    ui_context,
+                    sandbox3d_editor_utility_tab_label(tab_index),
+                    1.0f,
+                    &measured_width,
+                    &utility_label_height) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(measured_width > 0);
+                HENKA_TEST_ASSERT(utility_label_height > 0);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    narrow_tabs[tab_index].width,
+                    (float)measured_width + 24.0f,
+                    0.0001f);
+                HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                    narrow_content, narrow_tabs[tab_index]));
+                HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                    wide_content, wide_tabs[tab_index]));
+
+                for (previous_index = 0U;
+                     previous_index < tab_index;
+                     ++previous_index)
+                {
+                    HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                        narrow_tabs[previous_index], narrow_tabs[tab_index]));
+                    HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                        wide_tabs[previous_index], wide_tabs[tab_index]));
+                }
+            }
+
+            {
+                const henka_ui_rect before[
+                    SANDBOX3D_EDITOR_UTILITY_TAB_COUNT] = {
+                        narrow_tabs[0], narrow_tabs[1], narrow_tabs[2],
+                        narrow_tabs[3], narrow_tabs[4], narrow_tabs[5],
+                        narrow_tabs[6], narrow_tabs[7], narrow_tabs[8],
+                        narrow_tabs[9]};
+                size_t failed_rows = 99U;
+                float failed_row_height = 99.0f;
+
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_utility_tabs_for_context(
+                        ui_context,
+                        (henka_ui_rect){12.0f, 38.0f, 204.0f, 100.0f},
+                        1.0f,
+                        narrow_tabs,
+                        SANDBOX3D_EDITOR_UTILITY_TAB_COUNT,
+                        &failed_rows,
+                        &failed_row_height) == HENKA_ERROR_NUMERIC_RANGE);
+                HENKA_TEST_ASSERT(failed_rows == 0U);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    failed_row_height,
+                    0.0f,
+                    0.0001f);
+                for (tab_index = 0U;
+                     tab_index < SANDBOX3D_EDITOR_UTILITY_TAB_COUNT;
+                     ++tab_index)
+                {
+                    HENKA_TEST_ASSERT(narrow_tabs[tab_index].x == before[tab_index].x);
+                    HENKA_TEST_ASSERT(narrow_tabs[tab_index].y == before[tab_index].y);
+                    HENKA_TEST_ASSERT(
+                        narrow_tabs[tab_index].width == before[tab_index].width);
+                    HENKA_TEST_ASSERT(
+                        narrow_tabs[tab_index].height == before[tab_index].height);
+                }
+            }
+
+            /* At 200% Editor UI Scale, 1280x720 is laid out at 640x360.
+             * The narrow Utility dock must retain enough visible content for
+             * the stacked scale control after all ten destinations are laid
+             * out. The ordinary 24px rows currently leave only 8px here. */
+            {
+                henka_ui_rect compact_tabs[
+                    SANDBOX3D_EDITOR_UTILITY_TAB_COUNT] = {{0}};
+                const henka_ui_rect compact_panel = {
+                    0.0f, 0.0f, 225.0f, 180.0f};
+                size_t compact_rows = 0U;
+                size_t compact_index;
+                float compact_row_height = 0.0f;
+                float settings_viewport_height;
+
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_utility_tabs_for_context(
+                        ui_context,
+                        compact_panel,
+                        2.0f,
+                        compact_tabs,
+                        SANDBOX3D_EDITOR_UTILITY_TAB_COUNT,
+                        &compact_rows,
+                        &compact_row_height) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(compact_rows == 5U);
+                HENKA_TEST_ASSERT(compact_row_height < 24.0f);
+                HENKA_TEST_ASSERT(compact_row_height * 2.0f >= 32.0f);
+                settings_viewport_height = compact_panel.height - 38.0f -
+                    (float)compact_rows * compact_row_height - 14.0f;
+                HENKA_TEST_ASSERT(settings_viewport_height >= 44.0f);
+                for (compact_index = 0U;
+                     compact_index < SANDBOX3D_EDITOR_UTILITY_TAB_COUNT;
+                     ++compact_index)
+                {
+                    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                        compact_tabs[compact_index].height,
+                        compact_row_height,
+                        0.0001f);
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        compact_panel,
+                        compact_tabs[compact_index]));
+                }
+
+                /* Compact hit targets must remain readable and large enough
+                 * after the editor-scale transform. At 100%, fail closed and
+                 * preserve the prior published geometry. */
+                {
+                    const henka_ui_rect before[
+                        SANDBOX3D_EDITOR_UTILITY_TAB_COUNT] = {
+                            compact_tabs[0], compact_tabs[1], compact_tabs[2],
+                            compact_tabs[3], compact_tabs[4], compact_tabs[5],
+                            compact_tabs[6], compact_tabs[7], compact_tabs[8],
+                            compact_tabs[9]};
+                    size_t rejected_rows = 99U;
+                    float rejected_row_height = 99.0f;
+
+                    HENKA_TEST_ASSERT(
+                        sandbox3d_editor_layout_utility_tabs_for_context(
+                            ui_context,
+                            compact_panel,
+                            1.0f,
+                            compact_tabs,
+                            SANDBOX3D_EDITOR_UTILITY_TAB_COUNT,
+                            &rejected_rows,
+                            &rejected_row_height) == HENKA_ERROR_LIMIT);
+                    HENKA_TEST_ASSERT(rejected_rows == 0U);
+                    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                        rejected_row_height,
+                        0.0f,
+                        0.0001f);
+                    for (compact_index = 0U;
+                         compact_index < SANDBOX3D_EDITOR_UTILITY_TAB_COUNT;
+                         ++compact_index)
+                    {
+                        HENKA_TEST_ASSERT(compact_tabs[compact_index].x ==
+                            before[compact_index].x);
+                        HENKA_TEST_ASSERT(compact_tabs[compact_index].y ==
+                            before[compact_index].y);
+                        HENKA_TEST_ASSERT(compact_tabs[compact_index].width ==
+                            before[compact_index].width);
+                        HENKA_TEST_ASSERT(compact_tabs[compact_index].height ==
+                            before[compact_index].height);
+                    }
+                }
+            }
+        }
         {
             const char* scene_action_labels[] = {
                 "Add Cube", "Clone", "Delete"};

@@ -48,12 +48,34 @@ static const char* g_details_hierarchy_key =
 
 static const char* g_details_group_order_prefix =
     "ui.object_details.group_order.";
+static const unsigned char g_legacy_details_default_order[] = {
+    SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_PHYSICS,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_INTERACTION,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_AUDIO,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_HIERARCHY};
+static const unsigned char g_details_default_order[] = {
+    SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_PHYSICS,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_INTERACTION,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_AUDIO,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_HIERARCHY};
 static const char* g_controls_scroll_offset_key =
     "ui.controls.scroll.offset";
 static const char* g_scene_objects_actions_scroll_offset_key =
     "ui.scene_objects.actions.scroll.offset";
 static const char* g_details_scroll_offset_key =
     "ui.object_details.scroll.offset";
+static const char* g_utility_settings_scroll_offset_key =
+    "ui.utility.settings.scroll.offset";
 
 static float sandbox3d_editor_ui_sanitize_scroll_offset(float value)
 {
@@ -63,16 +85,11 @@ static float sandbox3d_editor_ui_sanitize_scroll_offset(float value)
 static void sandbox3d_editor_ui_details_group_order_reset(
     unsigned char* order)
 {
-    size_t index;
-
     if (order == NULL)
     {
         return;
     }
-    for (index = 0U; index < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT; ++index)
-    {
-        order[index] = (unsigned char)index;
-    }
+    memcpy(order, g_details_default_order, sizeof(g_details_default_order));
 }
 
 void sandbox3d_editor_ui_state_reset(
@@ -88,10 +105,10 @@ void sandbox3d_editor_ui_state_reset(
     state->controls_viewport_expanded = true;
     state->controls_viewport_tool_expanded = false;
 
-    state->details_overview_expanded = true;
+    state->details_overview_expanded = false;
     state->details_transform_expanded = true;
-    state->details_materials_expanded = true;
-    state->details_authoring_expanded = true;
+    state->details_materials_expanded = false;
+    state->details_authoring_expanded = false;
     state->details_physics_expanded = false;
     state->details_interaction_expanded = false;
     state->details_actions_expanded = false;
@@ -105,12 +122,16 @@ void sandbox3d_editor_ui_state_reset(
     state->scene_objects_actions_content_height = 0.0f;
     state->details_scroll_offset = 0.0f;
     state->details_content_height = 0.0f;
+    state->utility_settings_scroll_offset = 0.0f;
+    state->utility_settings_content_height = 0.0f;
     state->controls_scroll_dragging = false;
     state->scene_objects_actions_scroll_dragging = false;
     state->details_scroll_dragging = false;
+    state->utility_settings_scroll_dragging = false;
     state->controls_scroll_grab_offset = 0.0f;
     state->scene_objects_actions_scroll_grab_offset = 0.0f;
     state->details_scroll_grab_offset = 0.0f;
+    state->utility_settings_scroll_grab_offset = 0.0f;
 }
 
 void sandbox3d_editor_ui_state_load(
@@ -118,6 +139,7 @@ void sandbox3d_editor_ui_state_load(
     sandbox3d_editor_ui_state* state)
 {
     size_t index;
+    bool legacy_default_order = false;
 
     if (state == NULL)
     {
@@ -181,6 +203,12 @@ void sandbox3d_editor_ui_state_load(
                     settings,
                     g_details_scroll_offset_key,
                     0.0f));
+        state->utility_settings_scroll_offset =
+            sandbox3d_editor_ui_sanitize_scroll_offset(
+                henka_settings_get_float(
+                    settings,
+                    g_utility_settings_scroll_offset_key,
+                    0.0f));
 
         {
             unsigned char loaded_order[SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT];
@@ -211,11 +239,37 @@ void sandbox3d_editor_ui_state_load(
             if (has_complete_order &&
                 sandbox3d_editor_ui_details_group_order_is_valid(loaded_order))
             {
+                legacy_default_order = memcmp(
+                    loaded_order,
+                    g_legacy_details_default_order,
+                    sizeof(state->details_group_order)) == 0;
                 memcpy(
                     state->details_group_order,
                     loaded_order,
                     sizeof(state->details_group_order));
             }
+        }
+
+        /* Migrate only the complete former built-in Inspector defaults.
+         * Any changed section state or order remains user-owned. */
+        if (legacy_default_order &&
+            state->details_overview_expanded &&
+            state->details_transform_expanded &&
+            state->details_materials_expanded &&
+            state->details_authoring_expanded &&
+            !state->details_physics_expanded &&
+            !state->details_interaction_expanded &&
+            !state->details_actions_expanded &&
+            !state->details_audio_expanded &&
+            !state->details_hierarchy_expanded)
+        {
+            memcpy(
+                state->details_group_order,
+                g_details_default_order,
+                sizeof(state->details_group_order));
+            state->details_overview_expanded = false;
+            state->details_materials_expanded = false;
+            state->details_authoring_expanded = false;
         }
     }
 }
@@ -300,6 +354,17 @@ henka_result sandbox3d_editor_ui_state_store(
             if (scene_objects_result != HENKA_SUCCESS)
             {
                 return scene_objects_result;
+            }
+        }
+        {
+            const henka_result utility_settings_result = henka_settings_set_float(
+                settings,
+                g_utility_settings_scroll_offset_key,
+                sandbox3d_editor_ui_sanitize_scroll_offset(
+                    state->utility_settings_scroll_offset));
+            if (utility_settings_result != HENKA_SUCCESS)
+            {
+                return utility_settings_result;
             }
         }
 
@@ -539,6 +604,18 @@ bool sandbox3d_editor_ui_scroll_details_by(
         delta_pixels);
 }
 
+bool sandbox3d_editor_ui_scroll_utility_settings_by(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    float delta_pixels)
+{
+    return state != NULL && sandbox3d_editor_ui_scroll_by(
+        &state->utility_settings_scroll_offset,
+        state->utility_settings_content_height,
+        viewport_height,
+        delta_pixels);
+}
+
 float sandbox3d_editor_ui_scene_objects_scroll_delta(
     float requested_delta_pixels,
     float viewport_height)
@@ -610,6 +687,27 @@ bool sandbox3d_editor_ui_scroll_details(
         return false;
     }
     return sandbox3d_editor_ui_scroll_details_by(
+        state,
+        viewport_height,
+        (float)direction * 48.0f);
+}
+
+bool sandbox3d_editor_ui_scroll_utility_settings(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    int direction)
+{
+    if (state == NULL ||
+        !isfinite(viewport_height) || viewport_height <= 0.0f ||
+        direction == 0)
+    {
+        if (state != NULL)
+        {
+            state->utility_settings_scroll_offset = 0.0f;
+        }
+        return false;
+    }
+    return sandbox3d_editor_ui_scroll_utility_settings_by(
         state,
         viewport_height,
         (float)direction * 48.0f);

@@ -32,6 +32,7 @@ function Get-AbsolutePath {
 function Get-ApprovedRoots {
     $localRoot = Get-HenkaLocalRoot -RepositoryRoot $repoRoot
     return @(
+        [System.IO.Path]::GetFullPath((Join-Path $localRoot "bld")).TrimEnd("\"),
         [System.IO.Path]::GetFullPath((Join-Path $localRoot "builds")).TrimEnd("\"),
         [System.IO.Path]::GetFullPath((Join-Path $localRoot "packages")).TrimEnd("\"),
         [System.IO.Path]::GetFullPath((Join-Path $localRoot "evidence")).TrimEnd("\"),

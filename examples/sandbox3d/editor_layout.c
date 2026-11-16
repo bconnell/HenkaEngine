@@ -1404,6 +1404,247 @@ henka_result sandbox3d_editor_layout_text_control_grid_for_context(
     return HENKA_SUCCESS;
 }
 
+static const char* const g_sandbox3d_editor_utility_tab_labels[
+    SANDBOX3D_EDITOR_UTILITY_TAB_COUNT] = {
+        "Help",
+        "Scene Legend",
+        "Object Info",
+        "Terrain",
+        "Assets",
+        "Paths",
+        "Settings",
+        "Diagnostics",
+        "Transform QA",
+        "Physics QA"};
+
+const char* sandbox3d_editor_utility_tab_label(size_t index)
+{
+    return index < SANDBOX3D_EDITOR_UTILITY_TAB_COUNT
+        ? g_sandbox3d_editor_utility_tab_labels[index]
+        : NULL;
+}
+
+henka_result sandbox3d_editor_layout_utility_tabs_for_context(
+    const henka_ui_context* ui_context,
+    henka_ui_rect panel_bounds,
+    float app_ui_scale,
+    henka_ui_rect* out_tab_rects,
+    size_t tab_rect_capacity,
+    size_t* out_row_count,
+    float* out_row_height)
+{
+    const henka_ui_rect navigation_bounds = {
+        panel_bounds.x + 14.0f,
+        panel_bounds.y + 38.0f,
+        panel_bounds.width - 28.0f,
+        panel_bounds.height - 38.0f};
+    henka_ui_rect candidate_tabs[SANDBOX3D_EDITOR_UTILITY_TAB_COUNT];
+    size_t candidate_rows = 0U;
+    float candidate_row_height = 24.0f;
+    henka_result result;
+
+    if (out_row_count != NULL)
+    {
+        *out_row_count = 0U;
+    }
+    if (out_row_height != NULL)
+    {
+        *out_row_height = 0.0f;
+    }
+    if (ui_context == NULL || out_tab_rects == NULL ||
+        out_row_count == NULL || out_row_height == NULL ||
+        tab_rect_capacity < SANDBOX3D_EDITOR_UTILITY_TAB_COUNT ||
+        !sandbox3d_editor_layout_float_is_valid(app_ui_scale) ||
+        app_ui_scale < 1.0f || app_ui_scale > 2.0f ||
+        !sandbox3d_editor_layout_float_is_valid(panel_bounds.x) ||
+        !sandbox3d_editor_layout_float_is_valid(panel_bounds.y) ||
+        !sandbox3d_editor_layout_float_is_valid(panel_bounds.width) ||
+        !sandbox3d_editor_layout_float_is_valid(panel_bounds.height) ||
+        panel_bounds.width <= 28.0f || panel_bounds.height <= 38.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = sandbox3d_editor_layout_text_control_grid_for_context(
+        ui_context,
+        navigation_bounds,
+        g_sandbox3d_editor_utility_tab_labels,
+        SANDBOX3D_EDITOR_UTILITY_TAB_COUNT,
+        1.0f,
+        0.0f,
+        12.0f,
+        8.0f,
+        candidate_row_height,
+        0.0f,
+        candidate_tabs,
+        SANDBOX3D_EDITOR_UTILITY_TAB_COUNT,
+        &candidate_rows);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    if (panel_bounds.height - 38.0f -
+            (float)candidate_rows * candidate_row_height - 14.0f < 44.0f)
+    {
+        const float available_for_rows = panel_bounds.height - 38.0f - 14.0f - 44.0f;
+        const float minimum_hit_height = 32.0f / app_ui_scale;
+
+        if (candidate_rows == 0U || available_for_rows <= 0.0f)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        candidate_row_height = available_for_rows / (float)candidate_rows;
+        if (candidate_row_height > 24.0f)
+        {
+            candidate_row_height = 24.0f;
+        }
+        if (!isfinite(candidate_row_height) ||
+            candidate_row_height < minimum_hit_height)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+
+        result = sandbox3d_editor_layout_text_control_grid_for_context(
+            ui_context,
+            navigation_bounds,
+            g_sandbox3d_editor_utility_tab_labels,
+            SANDBOX3D_EDITOR_UTILITY_TAB_COUNT,
+            1.0f,
+            0.0f,
+            12.0f,
+            8.0f,
+            candidate_row_height,
+            0.0f,
+            candidate_tabs,
+            SANDBOX3D_EDITOR_UTILITY_TAB_COUNT,
+            &candidate_rows);
+        if (result != HENKA_SUCCESS || candidate_rows == 0U ||
+            panel_bounds.height - 38.0f -
+                (float)candidate_rows * candidate_row_height - 14.0f < 44.0f)
+        {
+            return result != HENKA_SUCCESS ? result : HENKA_ERROR_LIMIT;
+        }
+    }
+
+    memcpy(
+        out_tab_rects,
+        candidate_tabs,
+        sizeof(candidate_tabs));
+    *out_row_count = candidate_rows;
+    *out_row_height = candidate_row_height;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_editor_layout_details_footer_for_context(
+    const henka_ui_context* ui_context,
+    henka_ui_rect panel_bounds,
+    sandbox3d_editor_details_footer_layout* out_layout)
+{
+    static const char* const labels[] = {"Save Project", "Reload Project"};
+    henka_ui_rect measured[2];
+    sandbox3d_editor_details_footer_layout candidate;
+    const henka_ui_rect inner = {
+        panel_bounds.x + 14.0f,
+        panel_bounds.y + 14.0f,
+        panel_bounds.width - 40.0f,
+        panel_bounds.height - 28.0f};
+    size_t measured_rows = 0U;
+    float common_width;
+    float content_height;
+    float top;
+    double panel_right;
+    double panel_bottom;
+
+    if (out_layout == NULL || ui_context == NULL ||
+        !sandbox3d_editor_layout_float_is_valid(panel_bounds.x) ||
+        !sandbox3d_editor_layout_float_is_valid(panel_bounds.y) ||
+        !sandbox3d_editor_layout_float_is_valid(panel_bounds.width) ||
+        !sandbox3d_editor_layout_float_is_valid(panel_bounds.height) ||
+        panel_bounds.width <= 40.0f || panel_bounds.height <= 28.0f ||
+        inner.width <= 0.0f || inner.height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (sandbox3d_editor_layout_text_control_grid_for_context(
+            ui_context,
+            inner,
+            labels,
+            sizeof(labels) / sizeof(labels[0]),
+            1.0f,
+            140.0f,
+            12.0f,
+            8.0f,
+            24.0f,
+            4.0f,
+            measured,
+            sizeof(measured) / sizeof(measured[0]),
+            &measured_rows) != HENKA_SUCCESS ||
+        measured_rows == 0U || measured_rows > 2U)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    /* Keep both buttons the same size. If the measured one-row placement
+     * cannot accommodate that common width, use the stacked presentation. */
+    common_width = fmaxf(measured[0].width, measured[1].width);
+    candidate.row_count = measured_rows;
+    if (candidate.row_count == 1U &&
+        common_width * 2.0f + 8.0f > inner.width)
+    {
+        candidate.row_count = 2U;
+    }
+    if (!sandbox3d_editor_layout_float_is_valid(common_width) ||
+        common_width < 140.0f || common_width > inner.width)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    content_height = (float)candidate.row_count * 24.0f +
+        (float)(candidate.row_count - 1U) * 4.0f;
+    if (content_height > inner.height)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    top = panel_bounds.y + panel_bounds.height - 14.0f - content_height;
+    candidate.save_project = (henka_ui_rect){
+        inner.x,
+        top,
+        common_width,
+        24.0f};
+    candidate.reload_project = (henka_ui_rect){
+        candidate.row_count == 1U
+            ? inner.x + common_width + 8.0f
+            : inner.x,
+        top + (candidate.row_count == 1U ? 0.0f : 28.0f),
+        common_width,
+        24.0f};
+    candidate.scroll_reserve = content_height + 10.0f;
+
+    if (!sandbox3d_editor_layout_float_is_valid(candidate.scroll_reserve) ||
+        !isfinite((double)panel_bounds.x + (double)panel_bounds.width) ||
+        !isfinite((double)panel_bounds.y + (double)panel_bounds.height))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    panel_right = (double)panel_bounds.x + (double)panel_bounds.width;
+    panel_bottom = (double)panel_bounds.y + (double)panel_bounds.height;
+    if ((double)candidate.save_project.x < (double)panel_bounds.x ||
+        (double)candidate.reload_project.x < (double)panel_bounds.x ||
+        (double)candidate.save_project.y < (double)panel_bounds.y ||
+        (double)candidate.reload_project.y < (double)panel_bounds.y ||
+        (double)candidate.save_project.x + (double)candidate.save_project.width > panel_right ||
+        (double)candidate.reload_project.x + (double)candidate.reload_project.width > panel_right ||
+        (double)candidate.save_project.y + (double)candidate.save_project.height > panel_bottom ||
+        (double)candidate.reload_project.y + (double)candidate.reload_project.height > panel_bottom)
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    *out_layout = candidate;
+    return HENKA_SUCCESS;
+}
+
 static bool sandbox3d_editor_layout_is_wrap_space(char value)
 {
     return value == ' ' || value == '\t';

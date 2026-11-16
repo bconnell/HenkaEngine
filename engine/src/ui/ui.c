@@ -1367,6 +1367,80 @@ static henka_result henka_ui_draw_fit_text(
         color);
 }
 
+static henka_result henka_ui_draw_fit_text_centered(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    float padding_x,
+    float scale,
+    const char* text,
+    henka_vec4 color)
+{
+    double available_width;
+    int measured_width = 0;
+    int measured_height = 0;
+    float center_y;
+    float text_y;
+    henka_result result;
+
+    if (context == NULL || text == NULL || !henka_ui_rect_is_finite(bounds) ||
+        !henka_ui_float_is_finite(padding_x) || !henka_ui_float_is_finite(scale) ||
+        scale <= 0.0f || scale > HENKA_UI_MAX_SCALE ||
+        bounds.width <= 0.0f || bounds.height <= 0.0f ||
+        !henka_ui_vec4_is_finite(color))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    available_width = (double)bounds.width - (double)padding_x * 2.0;
+    center_y = bounds.y + bounds.height * 0.5f;
+    if (!isfinite(available_width) || available_width <= 0.0 ||
+        available_width > (double)FLT_MAX || !henka_ui_float_is_finite(center_y))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (context->font_profile != NULL)
+    {
+        return henka_ui_draw_font_text_centered_limited(
+            context,
+            bounds.x + padding_x,
+            center_y,
+            scale,
+            text,
+            color,
+            (float)available_width,
+            1U);
+    }
+
+    result = henka_ui_measure_text_for_context(
+        context,
+        text,
+        scale,
+        &measured_width,
+        &measured_height);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (measured_height <= 0)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+
+    text_y = bounds.y + (bounds.height - (float)measured_height) * 0.5f;
+    if (!henka_ui_float_is_finite(text_y))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    return henka_ui_draw_fit_text(
+        context,
+        bounds,
+        padding_x,
+        text_y,
+        scale,
+        text,
+        color);
+}
+
 static bool henka_ui_button_internal(
     henka_ui_context* context,
     const char* id,
@@ -1427,11 +1501,12 @@ static bool henka_ui_button_internal(
     }
 
     if (result != HENKA_SUCCESS ||
-        henka_ui_draw_fit_text(
+        henka_ui_draw_fit_text_centered(
             context,
             bounds,
-            emphasized ? 11.0f : 10.0f,
-            bounds.y + 9.0f,
+            emphasized ?
+                HENKA_UI_PRIMARY_BUTTON_TEXT_HORIZONTAL_PADDING :
+                HENKA_UI_BUTTON_TEXT_HORIZONTAL_PADDING,
             1.0f,
             label,
             g_ui_text_color) != HENKA_SUCCESS)
@@ -2521,11 +2596,10 @@ henka_result henka_ui_disclosure_row(
 
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_draw_fit_text(
+        result = henka_ui_draw_fit_text_centered(
             context,
             bounds,
             24.0f,
-            bounds.y + (bounds.height - 7.0f) * 0.5f,
             1.0f,
             label,
             g_ui_text_color);
@@ -3253,11 +3327,10 @@ bool henka_ui_selectable(
     }
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_draw_fit_text(
+        result = henka_ui_draw_fit_text_centered(
             context,
             bounds,
             selected ? 12.0f : 10.0f,
-            bounds.y + 9.0f,
             1.0f,
             label,
             selected ? g_ui_text_color : g_ui_muted_text_color);
@@ -3352,11 +3425,10 @@ bool henka_ui_tab(
     }
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_draw_fit_text(
+        result = henka_ui_draw_fit_text_centered(
             context,
             bounds,
             HENKA_UI_TAB_TEXT_HORIZONTAL_PADDING,
-            bounds.y + 8.0f,
             1.0f,
             label,
             selected ? g_ui_text_color : g_ui_muted_text_color);
@@ -3399,6 +3471,9 @@ static henka_result henka_ui_segment_internal(
     henka_ui_draw_checkpoint checkpoint;
     henka_result result;
     henka_vec4 fill_color;
+    float text_padding_x;
+    int measured_text_width;
+    int measured_text_height;
 
     if (out_clicked != NULL)
     {
@@ -3440,6 +3515,35 @@ static henka_result henka_ui_segment_internal(
     active = context->mouse_left_down && owns_active;
     clicked = hot && context->mouse_left_released && owns_active;
 
+    result = henka_ui_measure_text_for_context(
+        context,
+        label,
+        1.0f,
+        &measured_text_width,
+        &measured_text_height);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+        return result;
+    }
+    (void)measured_text_height;
+
+    text_padding_x = HENKA_UI_TEXT_FIELD_HORIZONTAL_PADDING;
+    if ((double)measured_text_width + (double)text_padding_x * 2.0 >
+        (double)bounds.width)
+    {
+        text_padding_x =
+            (bounds.width - (float)measured_text_width - 1.0f) * 0.5f;
+        if (text_padding_x < 0.5f)
+        {
+            text_padding_x = 0.5f;
+        }
+        if (text_padding_x > HENKA_UI_TEXT_FIELD_HORIZONTAL_PADDING)
+        {
+            text_padding_x = HENKA_UI_TEXT_FIELD_HORIZONTAL_PADDING;
+        }
+    }
+
     fill_color = active
         ? g_ui_primary_active
         : (hot
@@ -3462,11 +3566,10 @@ static henka_result henka_ui_segment_internal(
 
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_draw_fit_text(
+        result = henka_ui_draw_fit_text_centered(
             context,
             bounds,
-            8.0f,
-            bounds.y + (bounds.height - 7.0f) * 0.5f,
+            text_padding_x,
             1.0f,
             label,
             selected ? g_ui_text_color : g_ui_muted_text_color);
@@ -3857,11 +3960,10 @@ bool henka_ui_toggle(
 
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_draw_fit_text(
+        result = henka_ui_draw_fit_text_centered(
             context,
             label_bounds,
             10.0f,
-            bounds.y + 9.0f,
             1.0f,
             label,
             displayed_value ? g_ui_text_color : g_ui_muted_text_color);

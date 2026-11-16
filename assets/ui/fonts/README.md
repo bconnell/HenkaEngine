@@ -1,12 +1,20 @@
-# Editor font comparison assets
+# Editor typography assets
 
-These two static TrueType files are packaged solely to compare the approved
-editor typography candidates in Henka. Neither candidate is selected as the
-final editor font until matched native-size captures have been reviewed.
+Atkinson Hyperlegible Regular is Henka's current bundled editor font. Noto
+Sans Regular remains a comparison-only candidate for the local packaged
+readability harness; the ordinary product package excludes it. The matched
+packaged captures were reviewed at normal working size on 2026-11-14 at 100%,
+125%, 150%, and 200% UI scale, at 1280×720 and 1920×1080. Both fonts looked
+good and no clear visual winner emerged. Atkinson remains the current product
+default because it was the selected default; the comparison did not establish an objective readability advantage over Noto. The refreshed schema-2
+comparison manifest records OS display scale for every capture; this set
+reported 1/1 throughout, so it does not prove non-100% Windows display scaling.
 
-Both font files and their complete SIL Open Font License 1.1 texts are kept
-beside this record. These assets are application-owned UI resources; the core
-text renderer receives verified bytes and does not open filesystem paths.
+Both static TrueType files and their complete SIL Open Font License 1.1 texts
+are kept beside this record so the comparison remains reproducible. Only
+Atkinson and its license are part of ordinary Sandbox packages. These assets
+are application-owned UI resources; the core text renderer receives verified
+bytes and does not open filesystem paths.
 
 ## Atkinson Hyperlegible Regular
 
@@ -31,5 +39,13 @@ text renderer receives verified bytes and does not open filesystem paths.
 - Static hinted TrueType artifact; no variable-font tables.
 
 The exact source artifact and license hashes were checked against the local
-source record on 2026-10-12 before importing these files. The pinned stb
-parser/raster path and packaged runtime still require executable validation.
+source record on 2026-10-12 before importing these files. On 2026-11-13, the
+rebuilt packaged runtime comparison verified both font identities across all
+four Editor UI Scale values and two window sizes, including persisted 200%
+scale after restart. It also exposed clipped scale-choice labels in the compact
+200% Settings row. The shared segmented-control text inset now follows the
+active context's measured font width; refreshed packaged captures show all
+four values without truncation. Atkinson is the current product default and
+Noto remains a validation-only package option. The pinned stb parser/raster
+path, layout metrics, and package policy remain covered by executable
+validation.
