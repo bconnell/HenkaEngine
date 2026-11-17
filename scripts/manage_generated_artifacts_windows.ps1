@@ -232,6 +232,13 @@ function Assert-GeneratedFetchContentGitMetadataSafe {
         if ($LASTEXITCODE -ne 0 -or $status.Count -ne 0) {
             throw "FetchContent dependency '$matchedName' has local changes; refusing cleanup: $sourceRoot"
         }
+        $stashes = @(& $git -C $sourceRoot stash list --format=%H 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not inspect stashed work for FetchContent dependency '$matchedName'; refusing cleanup: $sourceRoot"
+        }
+        if ($stashes.Count -ne 0) {
+            throw "FetchContent dependency '$matchedName' has stashed work; refusing cleanup: $sourceRoot"
+        }
     }
 }
 

@@ -193,9 +193,20 @@ try {
     Remove-Item -LiteralPath (Join-Path $stbSharedSource "ignored-cache-probe.txt") -Force
 
     Copy-FixtureProviders -DestinationRoot $partialBuildRoot -Definitions $fixtureProviders -Names @("SDL3", "KTXSoftware", "ENet", "Lua", "miniaudio")
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $repoRoot
+    $invalidUnusedSharedRoot = [System.IO.Path]::GetFullPath(
+        (Join-Path $localRoot "..\invalid-unused-fetchcontent-cache"))
+    $invalidSharedRootRejected = $false
+    try {
+        $null = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $invalidUnusedSharedRoot
+    } catch {
+        $invalidSharedRootRejected = $_.Exception.Message -match "outside the canonical project-owned _local root"
+    }
+    Assert-Condition $invalidSharedRootRejected `
+        "The no-shared-cache regression requires a path that the local-root authority rejects."
     $explicitOnly = Get-HenkaCMakeFetchContentArguments `
         -DependencyRoot $partialBuildRoot `
-        -SharedDependencyRoot $sharedRoot `
+        -SharedDependencyRoot $invalidUnusedSharedRoot `
         -PinSourceRoot $pinSourceRoot `
         -NoSharedDependencyCache `
         -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
@@ -206,7 +217,7 @@ try {
 
     $network = Get-HenkaCMakeFetchContentArguments `
         -DependencyRoot $fullBuildRoot `
-        -SharedDependencyRoot $sharedRoot `
+        -SharedDependencyRoot $invalidUnusedSharedRoot `
         -PinSourceRoot $pinSourceRoot `
         -NoLocalProviders `
         -Providers @("ENET", "LUA")

@@ -521,10 +521,43 @@ FetchContent_Declare(
         -not (Test-Path -LiteralPath $cleanProbeBuildRoot)) `
         "The clean wrapper did not retire its isolated eligible build root after explicit confirmation. Output: $($confirmedClean.Output)"
 
+    $stashProbeBuildRoot = Join-Path (Join-Path $cleanProbeLocalRoot "builds") "stash-safety-regression"
+    New-Item -ItemType Directory -Path (Join-Path $stashProbeBuildRoot "_deps\sdl3-src") -Force | Out-Null
+    $stashProbeDependencyCheckout = Join-Path $stashProbeBuildRoot "_deps\sdl3-src"
+    & $git clone --quiet $dependencyOrigin $stashProbeDependencyCheckout 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not clone the isolated stash-safety dependency fixture." }
+    Set-Content -LiteralPath (Join-Path $stashProbeBuildRoot "CMakeCache.txt") -Value "CMAKE_HOME_DIRECTORY:INTERNAL=$cleanProbeRepository"
+    [System.IO.File]::WriteAllText(
+        (Join-Path $stashProbeBuildRoot ".henka-generated.json"),
+        (ConvertTo-Json -InputObject $cleanProbeMarker -Depth 4) + [Environment]::NewLine,
+        [System.Text.UTF8Encoding]::new($false))
+    & $git -C $stashProbeDependencyCheckout config core.autocrlf false 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not configure the isolated stash-safety dependency checkout." }
+    [System.IO.File]::WriteAllText(
+        (Join-Path $stashProbeDependencyCheckout "fixture-source.txt"),
+        "preserved stashed fixture work`n")
+    & $git -C $stashProbeDependencyCheckout stash push --include-untracked --message "cleanup guard stash regression" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not create the isolated cleanup-guard stash fixture." }
+    $stashEntries = @(& $git -C $stashProbeDependencyCheckout stash list --format=%H 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $stashEntries.Count -eq 0) {
+        throw "The isolated cleanup-guard stash fixture was not created."
+    }
+    $cleanStashStatus = @(& $git -C $stashProbeDependencyCheckout status --porcelain --untracked-files=all --ignored=matching 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $cleanStashStatus.Count -ne 0) {
+        throw "The stash regression must have a clean checkout so only saved Git work exercises the guard."
+    }
+    $stashedDependencyDryRun = Invoke-StorageProbeScript `
+        -ScriptPath $cleanProbeManager `
+        -Arguments @("-Mode", "DryRun", "-CandidatePath", $stashProbeBuildRoot)
+    Assert-StorageContract ($stashedDependencyDryRun.ExitCode -ne 0 -and
+        $stashedDependencyDryRun.Output -match "stashed work" -and
+        (Test-Path -LiteralPath $stashProbeBuildRoot -PathType Container)) `
+        "The lifecycle manager approved cleanup despite a clean working tree containing stashed dependency work. Output: $($stashedDependencyDryRun.Output)"
+
     Write-Output "[pass] Build, package, evidence, exact-candidate, and generated marker roots resolve beneath canonical _local."
     Write-Output "[pass] Ordinary and exact-candidate build paths fit the unchanged 128-character CMake object-path budget and remain isolated."
     Write-Output "[pass] External root creation and traversal are rejected before filesystem mutation."
-    Write-Output "[pass] Artifact lifecycle cleanup accepts exact generated children and clean pinned FetchContent clones while rejecting dirty or foreign Git metadata."
+    Write-Output "[pass] Artifact lifecycle cleanup accepts exact generated children and clean pinned FetchContent clones while rejecting dirty, stashed, or foreign Git metadata."
     Write-Output "[pass] The clean wrapper preserves a generated build root unless the caller explicitly confirms no active process uses it."
 }
 finally {

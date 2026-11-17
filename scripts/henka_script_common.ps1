@@ -692,10 +692,13 @@ function Get-HenkaCMakeFetchContentArguments {
         [System.IO.Path]::GetFullPath($RepositoryRoot)
     }
     $pinRoot = if ([string]::IsNullOrWhiteSpace($PinSourceRoot)) { $repository } else { [System.IO.Path]::GetFullPath($PinSourceRoot) }
-    $sharedRoot = if ([string]::IsNullOrWhiteSpace($SharedDependencyRoot)) {
-        Get-HenkaCMakeSharedDependencyRoot -RepositoryRoot $repository
-    } else {
-        Resolve-HenkaLocalPath -RepositoryRoot $repository -Path $SharedDependencyRoot
+    $sharedRoot = ""
+    if (-not $NoSharedDependencyCache -and -not $NoLocalProviders) {
+        $sharedRoot = if ([string]::IsNullOrWhiteSpace($SharedDependencyRoot)) {
+            Get-HenkaCMakeSharedDependencyRoot -RepositoryRoot $repository
+        } else {
+            Resolve-HenkaLocalPath -RepositoryRoot $repository -Path $SharedDependencyRoot
+        }
     }
     $localRoot = if ([string]::IsNullOrWhiteSpace($DependencyRoot)) {
         ""
