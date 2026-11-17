@@ -24655,6 +24655,20 @@ static void sandbox3d_draw_panel_workspace_controls(
         return;
     }
 
+    if (panel_id == SANDBOX3D_WORKSPACE_PANEL_UTILITY)
+    {
+        const henka_ui_rect context_header_rect =
+            panel->dock == SANDBOX3D_WORKSPACE_DOCK_FLOATING
+                ? sandbox3d_workspace_title_drag_rect(bounds)
+                : sandbox3d_workspace_docked_title_drag_rect(bounds);
+
+        /* Share the exact header hit region used by workspace input. */
+        sandbox3d_report_workspace_utility_context_header(
+            state,
+            context_header_rect.width > 0.0f && context_header_rect.height > 0.0f,
+            context_header_rect);
+    }
+
     tab_count = sandbox3d_workspace_get_topology_section_tab_count(
         &state->workspace.model,
         section_id);
