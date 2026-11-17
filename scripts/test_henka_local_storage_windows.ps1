@@ -554,10 +554,56 @@ FetchContent_Declare(
         (Test-Path -LiteralPath $stashProbeBuildRoot -PathType Container)) `
         "The lifecycle manager approved cleanup despite a clean working tree containing stashed dependency work. Output: $($stashedDependencyDryRun.Output)"
 
+    $uniqueCommitProbeBuildRoot = Join-Path (Join-Path $cleanProbeLocalRoot "builds") "unique-local-commit-safety-regression"
+    New-Item -ItemType Directory -Path (Join-Path $uniqueCommitProbeBuildRoot "_deps\sdl3-src") -Force | Out-Null
+    $uniqueCommitProbeDependencyCheckout = Join-Path $uniqueCommitProbeBuildRoot "_deps\sdl3-src"
+    & $git clone --quiet --config core.autocrlf=false $dependencyOrigin $uniqueCommitProbeDependencyCheckout 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not clone the isolated unique-commit dependency fixture." }
+    Set-Content -LiteralPath (Join-Path $uniqueCommitProbeBuildRoot "CMakeCache.txt") -Value "CMAKE_HOME_DIRECTORY:INTERNAL=$cleanProbeRepository"
+    [System.IO.File]::WriteAllText(
+        (Join-Path $uniqueCommitProbeBuildRoot ".henka-generated.json"),
+        (ConvertTo-Json -InputObject $cleanProbeMarker -Depth 4) + [Environment]::NewLine,
+        [System.Text.UTF8Encoding]::new($false))
+    & $git -C $uniqueCommitProbeDependencyCheckout checkout --quiet -b "henka-cleanup-unique-commit-regression" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not create the isolated unique-commit branch fixture." }
+    & $git -C $uniqueCommitProbeDependencyCheckout -c user.name="Henka cleanup regression" -c user.email="henka-cleanup-regression@invalid" commit --allow-empty --quiet -m "unique local dependency commit" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not commit the isolated unique-commit fixture." }
+    $uniqueLocalCommit = [string](& $git -C $uniqueCommitProbeDependencyCheckout rev-parse HEAD 2>$null)
+    $pinnedDependencyCommit = [string](& $git -C $dependencyOrigin rev-parse HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $uniqueLocalCommit.Trim() -eq $pinnedDependencyCommit.Trim()) {
+        throw "The unique-commit fixture did not create a commit distinct from its dependency pin. unique=$uniqueLocalCommit pin=$pinnedDependencyCommit"
+    }
+    & $git -C $uniqueCommitProbeDependencyCheckout checkout --quiet --detach $pinnedDependencyCommit 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not return the isolated checkout to its pinned dependency commit." }
+    $uniqueCommitStatus = @(& $git -C $uniqueCommitProbeDependencyCheckout status --porcelain --untracked-files=all --ignored=matching 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $uniqueCommitStatus.Count -ne 0) {
+        throw "The unique-commit regression checkout is not clean at the pinned dependency revision. Status: $($uniqueCommitStatus -join '; ')"
+    }
+    $uniqueLocalRefCommit = [string](& $git -C $uniqueCommitProbeDependencyCheckout rev-parse --verify refs/heads/henka-cleanup-unique-commit-regression 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $uniqueLocalRefCommit.Trim() -ne $uniqueLocalCommit.Trim()) {
+        throw "The unique-commit regression did not retain its local branch ref. ref=$uniqueLocalRefCommit commit=$uniqueLocalCommit"
+    }
+    $uniqueCommitDryRun = Invoke-StorageProbeScript `
+        -ScriptPath $cleanProbeManager `
+        -Arguments @("-Mode", "DryRun", "-CandidatePath", $uniqueCommitProbeBuildRoot)
+    Assert-StorageContract ($uniqueCommitDryRun.ExitCode -ne 0 -and
+        $uniqueCommitDryRun.Output -match "unique local commits" -and
+        (Test-Path -LiteralPath $uniqueCommitProbeBuildRoot -PathType Container)) `
+        "The lifecycle manager approved cleanup despite a clean pinned dependency checkout retaining a unique local commit. Output: $($uniqueCommitDryRun.Output)"
+    $uniqueCommitCleanup = Invoke-StorageProbeScript `
+        -ScriptPath $cleanProbeManager `
+        -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $uniqueCommitProbeBuildRoot)
+    $uniqueCommitAfterCleanup = [string](& $git -C $uniqueCommitProbeDependencyCheckout rev-parse --verify refs/heads/henka-cleanup-unique-commit-regression 2>$null)
+    Assert-StorageContract ($uniqueCommitCleanup.ExitCode -ne 0 -and
+        $uniqueCommitCleanup.Output -match "unique local commits" -and
+        (Test-Path -LiteralPath $uniqueCommitProbeBuildRoot -PathType Container) -and
+        $uniqueCommitAfterCleanup.Trim() -eq $uniqueLocalCommit.Trim()) `
+        "Cleanup did not fail closed while preserving the generated root and unique local dependency commit. Output: $($uniqueCommitCleanup.Output)"
+
     Write-Output "[pass] Build, package, evidence, exact-candidate, and generated marker roots resolve beneath canonical _local."
     Write-Output "[pass] Ordinary and exact-candidate build paths fit the unchanged 128-character CMake object-path budget and remain isolated."
     Write-Output "[pass] External root creation and traversal are rejected before filesystem mutation."
-    Write-Output "[pass] Artifact lifecycle cleanup accepts exact generated children and clean pinned FetchContent clones while rejecting dirty, stashed, or foreign Git metadata."
+    Write-Output "[pass] Artifact lifecycle cleanup accepts exact generated children and clean pinned FetchContent clones while rejecting dirty, stashed, unique-commit, or foreign Git metadata."
     Write-Output "[pass] The clean wrapper preserves a generated build root unless the caller explicitly confirms no active process uses it."
 }
 finally {

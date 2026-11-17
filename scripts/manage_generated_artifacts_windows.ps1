@@ -239,6 +239,27 @@ function Assert-GeneratedFetchContentGitMetadataSafe {
         if ($stashes.Count -ne 0) {
             throw "FetchContent dependency '$matchedName' has stashed work; refusing cleanup: $sourceRoot"
         }
+
+        $allRefs = @(& $git -C $sourceRoot for-each-ref "--format=%(refname)" 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not inspect Git refs for FetchContent dependency '$matchedName'; refusing cleanup: $sourceRoot"
+        }
+        $localRefs = @($allRefs | Where-Object { $_ -notlike "refs/remotes/origin/*" })
+        if ($localRefs.Count -gt 0) {
+            $originRefs = @(& $git -C $sourceRoot for-each-ref "--format=%(refname)" refs/remotes/origin 2>$null)
+            if ($LASTEXITCODE -ne 0) {
+                throw "Could not inspect origin refs for FetchContent dependency '$matchedName'; refusing cleanup: $sourceRoot"
+            }
+            $revisionArguments = @("-C", $sourceRoot, "rev-list") + $localRefs +
+                @("--not", $declaration.Commit) + $originRefs
+            $uniqueCommits = @(& $git @revisionArguments 2>$null)
+            if ($LASTEXITCODE -ne 0) {
+                throw "Could not determine whether FetchContent dependency '$matchedName' has unique local commits; refusing cleanup: $sourceRoot"
+            }
+            if ($uniqueCommits.Count -ne 0) {
+                throw "FetchContent dependency '$matchedName' has unique local commits outside its declared pin and origin refs; refusing cleanup: $sourceRoot"
+            }
+        }
     }
 }
 
