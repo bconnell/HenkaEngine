@@ -181,6 +181,14 @@ function Get-HenkaBuildRoot {
         -Path (Join-Path (Join-Path $localRoot "builds") $buildKey)
 }
 
+function Get-HenkaCMakeSharedDependencyRoot {
+    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $RepositoryRoot
+    $sharedRoot = Join-Path (Join-Path $localRoot "dependencies") "fetchcontent"
+    return Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot -Path $sharedRoot
+}
+
 function Get-HenkaPackageRoot {
     param(
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
@@ -533,102 +541,265 @@ function Exit-HenkaBuildStateLock {
     }
 }
 
+function Convert-HenkaGitRepositoryIdentity {
+    param([Parameter(Mandatory = $true)][string]$Repository)
+
+    $value = $Repository.Trim().Trim('"').Trim("'")
+    if ($value -match '^(?i:https?|ssh|git)://') {
+        return $value.TrimEnd('/').ToLowerInvariant()
+    }
+    if ($value -match '^file://') {
+        $uri = [Uri]$value
+        return [System.IO.Path]::GetFullPath($uri.LocalPath).TrimEnd([char[]]@('\', '/')).Replace('\', '/').ToLowerInvariant()
+    }
+    if ($value -match '^[A-Za-z]:[\\/]') {
+        return [System.IO.Path]::GetFullPath($value).TrimEnd([char[]]@('\', '/')).Replace('\', '/').ToLowerInvariant()
+    }
+    return $value.TrimEnd('/').ToLowerInvariant()
+}
+
+function Get-HenkaCMakeFetchContentPins {
+    param([Parameter(Mandatory = $true)][string]$PinSourceRoot)
+
+    $cmakeLists = Join-Path ([System.IO.Path]::GetFullPath($PinSourceRoot)) "CMakeLists.txt"
+    if (-not (Test-Path -LiteralPath $cmakeLists -PathType Leaf)) {
+        throw "FetchContent pin source has no root CMakeLists.txt: $PinSourceRoot"
+    }
+
+    $content = [System.IO.File]::ReadAllText($cmakeLists)
+    $blocks = [regex]::Matches(
+        $content,
+        '(?ims)^[ \t]*FetchContent_Declare\s*\(\s*(?<name>[A-Za-z0-9_+-]+)(?<body>.*?)^[ \t]*\)')
+    $pins = @{}
+    foreach ($block in $blocks) {
+        $name = [string]$block.Groups["name"].Value
+        $key = $name.ToUpperInvariant()
+        if ($pins.ContainsKey($key)) {
+            throw "Duplicate FetchContent declaration in pin source: $name"
+        }
+        $body = [string]$block.Groups["body"].Value
+        $repositoryMatch = [regex]::Match($body, '(?im)^[ \t]*GIT_REPOSITORY[ \t]+(?<value>"[^"]+"|''[^'']+''|[^\s#]+)')
+        $tagMatch = [regex]::Match($body, '(?im)^[ \t]*GIT_TAG[ \t]+(?<value>"[^"]+"|''[^'']+''|[^\s#]+)')
+        $repository = if ($repositoryMatch.Success) { $repositoryMatch.Groups["value"].Value.Trim('"').Trim("'") } else { "" }
+        $tag = if ($tagMatch.Success) { $tagMatch.Groups["value"].Value.Trim('"').Trim("'") } else { "" }
+        $pins[$key] = [pscustomobject]@{
+            Name = $name
+            Repository = $repository
+            Commit = $tag
+            Immutable = (-not [string]::IsNullOrWhiteSpace($repository)) -and ($tag -match '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$')
+        }
+    }
+    return $pins
+}
+
+function Test-HenkaPinnedFetchContentSource {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$Marker,
+        [Parameter(Mandatory = $true)][string]$PinnedCommit,
+        [Parameter(Mandatory = $true)][string]$PinnedRepository
+    )
+
+    $result = [pscustomobject]@{
+        Available = $false
+        SourceRoot = ""
+        PinnedCommit = $PinnedCommit
+        Repository = $PinnedRepository
+        RejectionReason = ""
+    }
+    try {
+        $source = Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot -Path $SourceRoot
+    }
+    catch {
+        $result.RejectionReason = "unsafe-cache-path"
+        return $result
+    }
+    $result.SourceRoot = $source
+    if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+        $result.RejectionReason = "source-directory-missing"
+        return $result
+    }
+    $sourceItem = Get-Item -LiteralPath $source -Force
+    if (($sourceItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        $result.RejectionReason = "source-directory-is-reparse-point"
+        return $result
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $source $Marker) -PathType Leaf)) {
+        $result.RejectionReason = "required-source-marker-missing"
+        return $result
+    }
+    if ([string]::IsNullOrWhiteSpace($PinnedCommit) -or $PinnedCommit -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
+        $result.RejectionReason = "source-pin-is-not-an-immutable-commit"
+        return $result
+    }
+    $gitMetadata = Get-Item -LiteralPath (Join-Path $source ".git") -Force -ErrorAction SilentlyContinue
+    if ($null -eq $gitMetadata -or -not $gitMetadata.PSIsContainer -or
+        (($gitMetadata.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        $result.RejectionReason = "source-is-not-a-contained-git-clone"
+        return $result
+    }
+
+    $git = Get-HenkaGitPath
+    $topText = [string](& $git -C $source rev-parse --show-toplevel 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($topText)) {
+        $result.RejectionReason = "git-root-unavailable"
+        return $result
+    }
+    $top = [System.IO.Path]::GetFullPath($topText.Trim()).TrimEnd('\', '/')
+    if (-not [string]::Equals($top, $source.TrimEnd('\', '/'), [System.StringComparison]::OrdinalIgnoreCase)) {
+        $result.RejectionReason = "git-root-does-not-match-source-directory"
+        return $result
+    }
+    $head = [string](& $git -C $source rev-parse --verify HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $head.Trim() -ne $PinnedCommit) {
+        $result.RejectionReason = "source-commit-does-not-match-pin"
+        return $result
+    }
+    $origin = [string](& $git -C $source remote get-url origin 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($origin) -or
+        (Convert-HenkaGitRepositoryIdentity -Repository $origin) -ne
+        (Convert-HenkaGitRepositoryIdentity -Repository $PinnedRepository)) {
+        $result.RejectionReason = "source-origin-does-not-match-pin-source"
+        return $result
+    }
+    $status = @(& $git -C $source status --porcelain --untracked-files=all --ignored=matching 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $status.Count -ne 0) {
+        $result.RejectionReason = "source-working-tree-is-not-clean"
+        return $result
+    }
+
+    $result.Available = $true
+    $result.RejectionReason = ""
+    return $result
+}
+
 function Get-HenkaCMakeFetchContentArguments {
     param(
-        [Parameter(Mandatory = $true)]
-        [AllowEmptyString()]
-        [string]$DependencyRoot,
-
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$DependencyRoot,
         [ValidateSet("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")]
         [string[]]$Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB"),
-
+        [string]$RepositoryRoot = "",
+        [string]$PinSourceRoot = "",
+        [string]$SharedDependencyRoot = "",
+        [switch]$NoSharedDependencyCache,
         [switch]$NoLocalProviders
     )
 
+    $repository = if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+        Get-HenkaRepoRoot -ScriptDirectory $script:HenkaCommonScriptDirectory
+    } else {
+        [System.IO.Path]::GetFullPath($RepositoryRoot)
+    }
+    $pinRoot = if ([string]::IsNullOrWhiteSpace($PinSourceRoot)) { $repository } else { [System.IO.Path]::GetFullPath($PinSourceRoot) }
+    $sharedRoot = if ([string]::IsNullOrWhiteSpace($SharedDependencyRoot)) {
+        Get-HenkaCMakeSharedDependencyRoot -RepositoryRoot $repository
+    } else {
+        Resolve-HenkaLocalPath -RepositoryRoot $repository -Path $SharedDependencyRoot
+    }
+    $localRoot = if ([string]::IsNullOrWhiteSpace($DependencyRoot)) {
+        ""
+    } else {
+        Resolve-HenkaLocalPath -RepositoryRoot $repository -Path $DependencyRoot
+    }
+    $pins = Get-HenkaCMakeFetchContentPins -PinSourceRoot $pinRoot
+
     $definitions = @{
-        SDL3 = [pscustomobject]@{
-            CacheName = "SDL3"
-            RelativePath = "sdl3-src"
-            Marker = "CMakeLists.txt"
-            Label = "SDL3"
-        }
-        KTXSOFTWARE = [pscustomobject]@{
-            CacheName = "KTXSOFTWARE"
-            RelativePath = "ktxsoftware-src"
-            Marker = "CMakeLists.txt"
-            Label = "KTX-Software"
-        }
-        ENET = [pscustomobject]@{
-            CacheName = "ENET"
-            RelativePath = "enet-src"
-            Marker = "CMakeLists.txt"
-            Label = "ENet"
-        }
-        LUA = [pscustomobject]@{
-            CacheName = "LUA"
-            RelativePath = "lua-src"
-            Marker = "lua.h"
-            Label = "Lua"
-        }
-        MINIAUDIO = [pscustomobject]@{
-            CacheName = "MINIAUDIO"
-            RelativePath = "miniaudio-src"
-            Marker = "miniaudio.h"
-            Label = "miniaudio"
-        }
-        STB = [pscustomobject]@{
-            CacheName = "STB"
-            RelativePath = "stb-src"
-            Marker = "stb_vorbis.c"
-            Label = "stb"
-        }
+        SDL3 = [pscustomobject]@{ CacheName = "SDL3"; CMakeName = "SDL3"; RelativePath = "sdl3-src"; Marker = "CMakeLists.txt"; Label = "SDL3" }
+        KTXSOFTWARE = [pscustomobject]@{ CacheName = "KTXSOFTWARE"; CMakeName = "KTXSoftware"; RelativePath = "ktxsoftware-src"; Marker = "CMakeLists.txt"; Label = "KTX-Software" }
+        ENET = [pscustomobject]@{ CacheName = "ENET"; CMakeName = "ENet"; RelativePath = "enet-src"; Marker = "CMakeLists.txt"; Label = "ENet" }
+        LUA = [pscustomobject]@{ CacheName = "LUA"; CMakeName = "Lua"; RelativePath = "lua-src"; Marker = "lua.h"; Label = "Lua" }
+        MINIAUDIO = [pscustomobject]@{ CacheName = "MINIAUDIO"; CMakeName = "miniaudio"; RelativePath = "miniaudio-src"; Marker = "miniaudio.h"; Label = "miniaudio" }
+        STB = [pscustomobject]@{ CacheName = "STB"; CMakeName = "stb"; RelativePath = "stb-src"; Marker = "stb_vorbis.c"; Label = "stb" }
     }
 
     $arguments = @()
     $states = @()
     $missingCount = 0
-
     foreach ($provider in @($Providers)) {
         if (-not $definitions.ContainsKey($provider)) {
             throw "Unknown Henka FetchContent provider: $provider"
         }
-
         $definition = $definitions[$provider]
-        $sourceRoot = if ([string]::IsNullOrWhiteSpace($DependencyRoot)) {
-            $definition.RelativePath
-        } else {
-            Join-Path $DependencyRoot $definition.RelativePath
+        $pinKey = $definition.CMakeName.ToUpperInvariant()
+        $pin = if ($pins.ContainsKey($pinKey)) { $pins[$pinKey] } else { $null }
+        $chosen = $null
+        $sourceScope = "none"
+        $rejectionReason = if ($null -eq $pin) { "fetchcontent-declaration-not-found" } elseif (-not $pin.Immutable) { "fetchcontent-declaration-is-not-pinned" } else { "source-not-available" }
+        if (-not $NoLocalProviders -and $null -ne $pin -and $pin.Immutable) {
+            $candidates = @()
+            if (-not [string]::IsNullOrWhiteSpace($localRoot)) {
+                $candidates += [pscustomobject]@{ Scope = "build-local"; Path = (Join-Path $localRoot $definition.RelativePath) }
+            }
+            if (-not $NoSharedDependencyCache) {
+                $candidates += [pscustomobject]@{ Scope = "shared-cache"; Path = (Join-Path $sharedRoot $definition.RelativePath) }
+            }
+            foreach ($candidate in $candidates) {
+                $validation = Test-HenkaPinnedFetchContentSource `
+                    -RepositoryRoot $repository `
+                    -SourceRoot $candidate.Path `
+                    -Marker $definition.Marker `
+                    -PinnedCommit $pin.Commit `
+                    -PinnedRepository $pin.Repository
+                if ($validation.Available) {
+                    $chosen = $validation
+                    $sourceScope = $candidate.Scope
+                    break
+                }
+                $rejectionReason = $validation.RejectionReason
+            }
+        } elseif ($NoLocalProviders) {
+            $rejectionReason = "disabled-by-NoLocalProviders"
         }
-        $markerPath = Join-Path $sourceRoot $definition.Marker
-        $available = (-not $NoLocalProviders) -and
-            (Test-Path -LiteralPath $markerPath -PathType Leaf)
-        $sourceValue = if ($available) { [System.IO.Path]::GetFullPath($sourceRoot) } else { "" }
-        $arguments += "-DFETCHCONTENT_SOURCE_DIR_$($definition.CacheName)=$sourceValue"
-        if (-not $available) {
-            $missingCount++
-        }
+
+        $sourceValue = if ($null -ne $chosen -and $chosen.Available) { $chosen.SourceRoot } else { "" }
+        $argument = "-DFETCHCONTENT_SOURCE_DIR_$($definition.CacheName)=$sourceValue"
+        $arguments += $argument
+        if ([string]::IsNullOrWhiteSpace($sourceValue)) { $missingCount++ }
         $states += [pscustomobject]@{
             Name = $provider
             Label = $definition.Label
+            CMakeName = $definition.CMakeName
             SourceRoot = $sourceValue
-            Available = [bool]$available
-            CMakeArgument = [string]$arguments[$arguments.Count - 1]
+            SourceScope = $sourceScope
+            Available = -not [string]::IsNullOrWhiteSpace($sourceValue)
+            PinnedCommit = if ($null -ne $pin) { $pin.Commit } else { "" }
+            Repository = if ($null -ne $pin) { $pin.Repository } else { "" }
+            RejectionReason = $rejectionReason
+            CMakeArgument = $argument
         }
     }
 
     $fullyDisconnected = ($missingCount -eq 0)
-    $modeArgument = if ($fullyDisconnected) {
-        "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
-    } else {
-        "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
-    }
-    $arguments += $modeArgument
-
+    $arguments += if ($fullyDisconnected) { "-DFETCHCONTENT_FULLY_DISCONNECTED=ON" } else { "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF" }
     return [pscustomobject]@{
         Arguments = [string[]]$arguments
         ProviderStates = [object[]]$states
         MissingCount = $missingCount
         FullyDisconnected = $fullyDisconnected
+        SharedDependencyRoot = if ($NoSharedDependencyCache -or $NoLocalProviders) { "" } else { $sharedRoot }
+    }
+}
+
+function Write-HenkaCMakeFetchContentStatus {
+    param([Parameter(Mandatory = $true)][pscustomobject]$Resolution)
+
+    if (-not [string]::IsNullOrWhiteSpace($Resolution.SharedDependencyRoot)) {
+        Write-Host "Shared dependency source cache: $($Resolution.SharedDependencyRoot)"
+    } else {
+        Write-Host "Shared dependency source cache: disabled for this invocation."
+    }
+    foreach ($provider in $Resolution.ProviderStates) {
+        if ($provider.Available) {
+            Write-Host ("{0} provider: verified {1} source at {2} ({3})" -f $provider.Label, $provider.SourceScope, $provider.SourceRoot, $provider.PinnedCommit)
+        } else {
+            Write-Host ("{0} provider: FetchContent fallback ({1})" -f $provider.Label, $provider.RejectionReason)
+        }
+    }
+    if ($Resolution.FullyDisconnected) {
+        Write-Host "FetchContent mode: disconnected because every selected source matches its declared repository and immutable commit."
+    } else {
+        Write-Host "FetchContent mode: network fallback is enabled for unverified or unavailable sources."
     }
 }
 

@@ -106,6 +106,7 @@ function Get-HenkaTreeStats {
     $files = [int64]0
     $reparse = [int64]0
     $gitMetadata = [int64]0
+    $gitMetadataPaths = New-Object System.Collections.Generic.List[string]
     $stack = New-Object System.Collections.Generic.Stack[string]
     $stack.Push($Path)
     while ($stack.Count -gt 0) {
@@ -117,6 +118,7 @@ function Get-HenkaTreeStats {
             }
             if ([string]::Equals($item.Name, ".git", [System.StringComparison]::OrdinalIgnoreCase)) {
                 $gitMetadata++
+                $gitMetadataPaths.Add($item.FullName)
                 continue
             }
             if ($item.PSIsContainer) {
@@ -128,7 +130,109 @@ function Get-HenkaTreeStats {
             }
         }
     }
-    return [pscustomobject]@{ Bytes = $bytes; Files = $files; ReparseEntries = $reparse; GitMetadataEntries = $gitMetadata }
+    return [pscustomobject]@{
+        Bytes = $bytes
+        Files = $files
+        ReparseEntries = $reparse
+        GitMetadataEntries = $gitMetadata
+        GitMetadataPaths = [string[]]$gitMetadataPaths.ToArray()
+    }
+}
+
+function Get-FetchContentDeclaration {
+    param(
+        [Parameter(Mandatory = $true)][string]$CMakeListsText,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $namePattern = [regex]::Escape($Name)
+    $blockPattern = "(?is)FetchContent_Declare\s*\(\s*$namePattern\b(?<arguments>.*?)\)"
+    $block = [regex]::Match($CMakeListsText, $blockPattern)
+    if (-not $block.Success) { return $null }
+
+    $repositoryMatch = [regex]::Match($block.Groups["arguments"].Value, "(?im)^\s*GIT_REPOSITORY\s+(?<value>[^\s#]+)")
+    $tagMatch = [regex]::Match($block.Groups["arguments"].Value, "(?im)^\s*GIT_TAG\s+(?<value>[0-9a-fA-F]{40,64})\s*(?:#.*)?$")
+    if (-not $repositoryMatch.Success -or -not $tagMatch.Success) { return $null }
+
+    return [pscustomobject]@{
+        Repository = $repositoryMatch.Groups["value"].Value.Trim('"')
+        Commit = $tagMatch.Groups["value"].Value.ToLowerInvariant()
+    }
+}
+
+function Assert-GeneratedFetchContentGitMetadataSafe {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][pscustomobject]$Marker,
+        [Parameter(Mandatory = $true)][string[]]$MetadataPaths
+    )
+
+    if ($MetadataPaths.Count -eq 0) { return }
+    if (-not (Test-Path -LiteralPath (Join-Path $Path "CMakeCache.txt") -PathType Leaf)) {
+        throw "Generated artifact contains Git metadata outside a verified CMake dependency cache: $Path"
+    }
+
+    $sourceCMake = @(& $git -C $repoRoot show "$($Marker.source_sha):CMakeLists.txt" 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $sourceCMake.Count -eq 0) {
+        throw "Could not verify dependency Git metadata against the generated artifact's source revision: $Path"
+    }
+    $sourceCMakeText = $sourceCMake -join "`n"
+    $dependencies = @{
+        "sdl3-src" = "SDL3"
+        "ktxsoftware-src" = "KTXSoftware"
+        "enet-src" = "ENet"
+        "lua-src" = "Lua"
+        "miniaudio-src" = "miniaudio"
+        "stb-src" = "stb"
+    }
+
+    foreach ($metadataPath in $MetadataPaths) {
+        $metadataItem = Get-Item -LiteralPath $metadataPath -Force
+        if (-not $metadataItem.PSIsContainer) {
+            throw "Refusing to clean a generated artifact containing a Git worktree pointer file: $metadataPath"
+        }
+
+        $matchedSource = $null
+        $matchedName = $null
+        foreach ($relativeName in $dependencies.Keys) {
+            $expectedMetadataPath = Join-Path (Join-Path (Join-Path $Path "_deps") $relativeName) ".git"
+            if ([System.IO.Path]::GetFullPath($metadataPath).Equals(
+                    [System.IO.Path]::GetFullPath($expectedMetadataPath),
+                    [System.StringComparison]::OrdinalIgnoreCase)) {
+                $matchedSource = Split-Path -Parent $metadataPath
+                $matchedName = $dependencies[$relativeName]
+                break
+            }
+        }
+        if ([string]::IsNullOrWhiteSpace($matchedSource)) {
+            throw "Generated artifact contains Git metadata outside a recognized FetchContent source directory: $metadataPath"
+        }
+
+        $declaration = Get-FetchContentDeclaration -CMakeListsText $sourceCMakeText -Name $matchedName
+        if ($null -eq $declaration) {
+            throw "Could not establish the pinned FetchContent source for '$matchedName' at $metadataPath"
+        }
+        $sourceRoot = [System.IO.Path]::GetFullPath($matchedSource)
+        $repoTop = [string](& $git -C $sourceRoot rev-parse --show-toplevel 2>$null)
+        $head = [string](& $git -C $sourceRoot rev-parse HEAD 2>$null)
+        $repoTopFull = if ([string]::IsNullOrWhiteSpace($repoTop)) { "" } else { [System.IO.Path]::GetFullPath($repoTop.Trim()) }
+        if ($LASTEXITCODE -ne 0 -or -not $repoTopFull.Equals($sourceRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "FetchContent Git metadata does not describe the expected source directory: $metadataPath"
+        }
+        if (-not $head.Trim().Equals($declaration.Commit, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "FetchContent dependency '$matchedName' is not at the pinned source revision; refusing cleanup: $sourceRoot"
+        }
+        $remote = [string](& $git -C $sourceRoot remote get-url origin 2>$null)
+        if ($LASTEXITCODE -ne 0 -or -not $remote.TrimEnd("/").Equals(
+                $declaration.Repository.TrimEnd("/"),
+                [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "FetchContent dependency '$matchedName' origin does not match its pinned source declaration: $sourceRoot"
+        }
+        $status = @(& $git -C $sourceRoot status --porcelain --untracked-files=all --ignored=matching 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $status.Count -ne 0) {
+            throw "FetchContent dependency '$matchedName' has local changes; refusing cleanup: $sourceRoot"
+        }
+    }
 }
 
 function Get-ApprovedRootForPath {
@@ -229,7 +333,11 @@ function Assert-GeneratedMarker {
     if (-not [bool]$marker.cleanup_eligible) {
         throw "Generated artifact is not cleanup-eligible: $Path"
     }
-    if (([string]$marker.cleanup_condition).ToLowerInvariant() -notin @("proof_consumed", "superseded", "rebuildable")) {
+    $cleanupCondition = ([string]$marker.cleanup_condition).Trim().ToLowerInvariant()
+    $legacyRebuildableCondition = "source inputs are preserved and no validation process is using this build root"
+    $conditionIsSupported = $cleanupCondition -in @("proof_consumed", "superseded", "rebuildable") -or
+        ($retention -eq "REBUILDABLE" -and $cleanupCondition -ceq $legacyRebuildableCondition)
+    if (-not $conditionIsSupported) {
         throw "Generated artifact cleanup condition is not an approved retirement condition: $(Join-Path $Path $markerName)"
     }
     return $marker
@@ -256,7 +364,10 @@ function Assert-CandidateSafe {
         throw "Generated artifact contains reparse entries; refusing cleanup: $Path"
     }
     if ($stats.GitMetadataEntries -ne 0) {
-        throw "Generated artifact contains Git metadata; refusing cleanup: $Path"
+        Assert-GeneratedFetchContentGitMetadataSafe `
+            -Path $Path `
+            -Marker $marker `
+            -MetadataPaths $stats.GitMetadataPaths
     }
     return [pscustomobject]@{ Root = $root; Marker = $marker; Stats = $stats }
 }
