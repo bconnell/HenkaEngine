@@ -69,9 +69,13 @@ $configureArguments = @(
     "-B", $validationBuild,
     "-DHENKA_ENGINE_DIR=$repoRoot"
 )
+$dependencySelection = Resolve-HenkaBuildDependencyRoot `
+    -RepositoryRoot $repoRoot `
+    -BuildRoot $validationBuild
 $fetchArguments = @{
-    DependencyRoot = Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "_deps"
+    DependencyRoot = $dependencySelection.Root
     Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
+    PinnedRevisions = (Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot)
 }
 if ($NoLocalProviders) {
     $fetchArguments.NoLocalProviders = $true

@@ -146,6 +146,198 @@ function Resolve-HenkaDependencyRoot {
     return $resolvedRoot
 }
 
+function Select-HenkaDependencyRootCandidate {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [object[]]$Candidates
+    )
+
+    $usable = @($Candidates | Where-Object { [int]$_.AvailableProviders -gt 0 })
+    if ($usable.Count -eq 0) {
+        return $null
+    }
+    return ($usable | Sort-Object -Property `
+        @{ Expression = { [int]$_.AvailableProviders }; Descending = $true }, `
+        @{ Expression = { [int]$_.Priority }; Ascending = $true } |
+        Select-Object -First 1)
+}
+
+function Get-HenkaCMakeFetchContentDefinitions {
+    return @{
+        SDL3 = [pscustomobject]@{
+            CacheName = "SDL3"
+            FetchContentName = "SDL3"
+            RelativePath = "sdl3-src"
+            Marker = "CMakeLists.txt"
+            Label = "SDL3"
+        }
+        KTXSOFTWARE = [pscustomobject]@{
+            CacheName = "KTXSOFTWARE"
+            FetchContentName = "KTXSoftware"
+            RelativePath = "ktxsoftware-src"
+            Marker = "CMakeLists.txt"
+            Label = "KTX-Software"
+        }
+        ENET = [pscustomobject]@{
+            CacheName = "ENET"
+            FetchContentName = "ENet"
+            RelativePath = "enet-src"
+            Marker = "CMakeLists.txt"
+            Label = "ENet"
+        }
+        LUA = [pscustomobject]@{
+            CacheName = "LUA"
+            FetchContentName = "Lua"
+            RelativePath = "lua-src"
+            Marker = "lua.h"
+            Label = "Lua"
+        }
+        MINIAUDIO = [pscustomobject]@{
+            CacheName = "MINIAUDIO"
+            FetchContentName = "miniaudio"
+            RelativePath = "miniaudio-src"
+            Marker = "miniaudio.h"
+            Label = "miniaudio"
+        }
+        STB = [pscustomobject]@{
+            CacheName = "STB"
+            FetchContentName = "stb"
+            RelativePath = "stb-src"
+            Marker = "stb_vorbis.c"
+            Label = "stb"
+        }
+    }
+}
+
+function Get-HenkaCMakeDependencyPins {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot,
+
+        [ValidateSet("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")]
+        [string[]]$Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
+    )
+
+    $cmakePath = Join-Path $RepositoryRoot "CMakeLists.txt"
+    if (-not (Test-Path -LiteralPath $cmakePath -PathType Leaf)) {
+        throw "CMake dependency declarations were not found: $cmakePath"
+    }
+    $cmakeText = [System.IO.File]::ReadAllText($cmakePath)
+    $definitions = Get-HenkaCMakeFetchContentDefinitions
+    $pins = @{}
+    foreach ($provider in @($Providers)) {
+        $definition = $definitions[$provider]
+        if ($null -eq $definition) {
+            throw "Unknown Henka FetchContent provider: $provider"
+        }
+        $declarationPattern = "(?is)FetchContent_Declare\s*\(\s*" +
+            [regex]::Escape($definition.FetchContentName) + "\b(?<body>.*?)\)"
+        $declaration = [regex]::Match($cmakeText, $declarationPattern)
+        if (-not $declaration.Success) {
+            continue
+        }
+        $tag = [regex]::Match($declaration.Groups["body"].Value, "(?im)^\s*GIT_TAG\s+(?<tag>[^\s#\)]+)")
+        if ($tag.Success -and $tag.Groups["tag"].Value -match "^[0-9a-fA-F]{40}$") {
+            $pins[$provider] = $tag.Groups["tag"].Value.ToLowerInvariant()
+        }
+    }
+    return ,$pins
+}
+
+function Test-HenkaDependencySourceRevision {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedRevision
+    )
+
+    if ($ExpectedRevision -notmatch "^[0-9a-fA-F]{40}$" -or
+        -not (Test-Path -LiteralPath $SourceRoot -PathType Container)) {
+        return $false
+    }
+    $git = Get-HenkaGitPath
+    $head = ([string](& $git -C $SourceRoot rev-parse --verify HEAD 2>$null)).Trim()
+    if ($LASTEXITCODE -ne 0 -or $head -ine $ExpectedRevision) {
+        return $false
+    }
+    $status = @(& $git -C $SourceRoot status --porcelain --untracked-files=all 2>$null)
+    return ($LASTEXITCODE -eq 0 -and $status.Count -eq 0)
+}
+
+function Resolve-HenkaBuildDependencyRoot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$BuildRoot,
+
+        [AllowEmptyString()]
+        [string]$DependencyRoot = "",
+
+        [ValidateSet("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")]
+        [string[]]$Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($DependencyRoot)) {
+        $explicitRoot = Resolve-HenkaDependencyRoot `
+            -RepositoryRoot $RepositoryRoot `
+            -DependencyRoot $DependencyRoot
+        $explicitPins = Get-HenkaCMakeDependencyPins -RepositoryRoot $RepositoryRoot -Providers $Providers
+        $explicitArguments = Get-HenkaCMakeFetchContentArguments `
+            -DependencyRoot $explicitRoot `
+            -Providers $Providers `
+            -PinnedRevisions $explicitPins
+        $explicitAvailableCount = @($explicitArguments.ProviderStates | Where-Object { $_.Available }).Count
+        return [pscustomobject]@{
+            Root = $explicitRoot
+            Mode = "explicit"
+            AvailableProviders = $explicitAvailableCount
+        }
+    }
+
+    $pins = Get-HenkaCMakeDependencyPins -RepositoryRoot $RepositoryRoot -Providers $Providers
+    $localRoot = Get-HenkaLocalRoot -RepositoryRoot $RepositoryRoot
+    $candidates = @(
+        [pscustomobject]@{ Path = (Join-Path $BuildRoot "_deps"); Mode = "build-local"; Priority = 0 },
+        [pscustomobject]@{ Path = (Join-Path $localRoot "dependencies"); Mode = "shared"; Priority = 1 }
+    )
+    $evaluated = @()
+    foreach ($candidate in $candidates) {
+        if (-not (Test-Path -LiteralPath $candidate.Path -PathType Container)) {
+            continue
+        }
+        $resolved = Resolve-HenkaDependencyRoot `
+            -RepositoryRoot $RepositoryRoot `
+            -DependencyRoot $candidate.Path
+        $providerArguments = Get-HenkaCMakeFetchContentArguments `
+            -DependencyRoot $resolved `
+            -Providers $Providers `
+            -PinnedRevisions $pins
+        $availableCount = @($providerArguments.ProviderStates | Where-Object { $_.Available }).Count
+        if ($availableCount -gt 0) {
+            $evaluated += [pscustomobject]@{
+                Path = $resolved
+                Mode = $candidate.Mode
+                Priority = $candidate.Priority
+                AvailableProviders = $availableCount
+            }
+        }
+    }
+    $selected = Select-HenkaDependencyRootCandidate -Candidates $evaluated
+    if ($null -eq $selected) {
+        return [pscustomobject]@{ Root = ""; Mode = "network-fallback"; AvailableProviders = 0 }
+    }
+    return [pscustomobject]@{
+        Root = $selected.Path
+        Mode = $selected.Mode
+        AvailableProviders = $selected.AvailableProviders
+    }
+}
+
 function Get-HenkaCheckoutStorageKey {
     param(
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
@@ -543,47 +735,12 @@ function Get-HenkaCMakeFetchContentArguments {
         [ValidateSet("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")]
         [string[]]$Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB"),
 
+        [hashtable]$PinnedRevisions = $null,
+
         [switch]$NoLocalProviders
     )
 
-    $definitions = @{
-        SDL3 = [pscustomobject]@{
-            CacheName = "SDL3"
-            RelativePath = "sdl3-src"
-            Marker = "CMakeLists.txt"
-            Label = "SDL3"
-        }
-        KTXSOFTWARE = [pscustomobject]@{
-            CacheName = "KTXSOFTWARE"
-            RelativePath = "ktxsoftware-src"
-            Marker = "CMakeLists.txt"
-            Label = "KTX-Software"
-        }
-        ENET = [pscustomobject]@{
-            CacheName = "ENET"
-            RelativePath = "enet-src"
-            Marker = "CMakeLists.txt"
-            Label = "ENet"
-        }
-        LUA = [pscustomobject]@{
-            CacheName = "LUA"
-            RelativePath = "lua-src"
-            Marker = "lua.h"
-            Label = "Lua"
-        }
-        MINIAUDIO = [pscustomobject]@{
-            CacheName = "MINIAUDIO"
-            RelativePath = "miniaudio-src"
-            Marker = "miniaudio.h"
-            Label = "miniaudio"
-        }
-        STB = [pscustomobject]@{
-            CacheName = "STB"
-            RelativePath = "stb-src"
-            Marker = "stb_vorbis.c"
-            Label = "stb"
-        }
-    }
+    $definitions = Get-HenkaCMakeFetchContentDefinitions
 
     $arguments = @()
     $states = @()
@@ -601,8 +758,20 @@ function Get-HenkaCMakeFetchContentArguments {
             Join-Path $DependencyRoot $definition.RelativePath
         }
         $markerPath = Join-Path $sourceRoot $definition.Marker
-        $available = (-not $NoLocalProviders) -and
-            (Test-Path -LiteralPath $markerPath -PathType Leaf)
+        $hasMarker = Test-Path -LiteralPath $markerPath -PathType Leaf
+        $expectedRevision = ""
+        $revisionValid = $true
+        if ($null -ne $PinnedRevisions) {
+            if ($PinnedRevisions.ContainsKey($provider)) {
+                $expectedRevision = [string]$PinnedRevisions[$provider]
+                $revisionValid = Test-HenkaDependencySourceRevision `
+                    -SourceRoot $sourceRoot `
+                    -ExpectedRevision $expectedRevision
+            } else {
+                $revisionValid = $false
+            }
+        }
+        $available = (-not $NoLocalProviders) -and $hasMarker -and $revisionValid
         $sourceValue = if ($available) { [System.IO.Path]::GetFullPath($sourceRoot) } else { "" }
         $arguments += "-DFETCHCONTENT_SOURCE_DIR_$($definition.CacheName)=$sourceValue"
         if (-not $available) {
@@ -613,6 +782,8 @@ function Get-HenkaCMakeFetchContentArguments {
             Label = $definition.Label
             SourceRoot = $sourceValue
             Available = [bool]$available
+            ExpectedRevision = $expectedRevision
+            RevisionValid = [bool]$revisionValid
             CMakeArgument = [string]$arguments[$arguments.Count - 1]
         }
     }

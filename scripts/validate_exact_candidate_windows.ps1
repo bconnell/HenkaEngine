@@ -73,11 +73,12 @@ $null = Get-HenkaBuildArtifact `
     -Configuration $Configuration `
     -BuildTarget $BuildTarget
 
-$dependency = $DependencyRoot
-if ([string]::IsNullOrWhiteSpace($dependency)) {
-    $dependency = Join-Path $candidateBuildRoot "_deps"
-}
-$dependency = Resolve-HenkaDependencyRoot -RepositoryRoot $candidate -DependencyRoot $dependency
+$dependencySelection = Resolve-HenkaBuildDependencyRoot `
+    -RepositoryRoot $candidate `
+    -BuildRoot $candidateBuildRoot `
+    -DependencyRoot $DependencyRoot
+$dependency = $dependencySelection.Root
+Write-Host "Dependency selection: $($dependencySelection.Mode) ($($dependencySelection.AvailableProviders) pinned provider(s))"
 
 $buildScript = Join-Path $candidate "scripts\build_windows.ps1"
 $testScript = Join-Path $candidate "scripts\test_windows.ps1"

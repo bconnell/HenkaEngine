@@ -11,7 +11,7 @@ $localRoot = Get-HenkaLocalRoot -RepositoryRoot $repoRoot
 $testTemporaryRoot = Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot
 $captureExecutable = Join-Path $buildRoot "examples\sandbox3d\Debug\henka_sandbox3d.exe"
 $captureRuntimeRoot = $testTemporaryRoot
-$testRoot = Join-Path $testTemporaryRoot ("generated-artifact-lifecycle-regression-" + [Guid]::NewGuid().ToString("N"))
+$testRoot = Join-Path $testTemporaryRoot ("gal-" + [Guid]::NewGuid().ToString("N"))
 $outside = Join-Path $localRoot ("generated-artifact-lifecycle-outside-" + [Guid]::NewGuid().ToString("N"))
 $junction = Join-Path $testRoot "junction"
 $captureProbeNewPaths = @()
@@ -32,19 +32,24 @@ function Write-TestMarker {
         [Parameter(Mandatory = $true)] [string]$Path,
         [Parameter(Mandatory = $true)] [string]$RetentionClass,
         [Parameter(Mandatory = $true)] [bool]$Active,
-        [Parameter(Mandatory = $true)] [bool]$CleanupEligible
+        [Parameter(Mandatory = $true)] [bool]$CleanupEligible,
+        [string]$CleanupCondition = "",
+        [string]$Purpose = "bounded cleanup contract regression",
+        [string]$SourceSha = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     )
 
     $marker = [ordered]@{
         schema_version = 1
         owner = "generated-artifact-lifecycle-regression"
-        purpose = "bounded cleanup contract regression"
-        source_sha = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        purpose = $Purpose
+        source_sha = $SourceSha
         configuration = "Debug"
         created_utc = [DateTime]::UtcNow.ToString("o")
         retention_class = $RetentionClass
         cleanup_owner = "generated-artifact-lifecycle-regression"
-        cleanup_condition = if ($CleanupEligible) { "proof_consumed" } else { "active_or_protected" }
+        cleanup_condition = if (-not [string]::IsNullOrWhiteSpace($CleanupCondition)) {
+            $CleanupCondition
+        } elseif ($CleanupEligible) { "proof_consumed" } else { "active_or_protected" }
         active = $Active
         cleanup_eligible = $CleanupEligible
     }
@@ -80,17 +85,74 @@ function Assert-ManagerFailure {
     }
 }
 
+function New-CMakeFetchContentCleanupCandidate {
+    param(
+        [Parameter(Mandatory = $true)] [string]$Name,
+        [Parameter(Mandatory = $true)] [string]$PinnedRevision,
+        [switch]$DirtyDependency,
+        [switch]$MismatchedDependency,
+        [switch]$UnexpectedGitPath
+    )
+
+    $candidate = Join-Path $testRoot $Name
+    $sourceRoot = $repoRoot
+    $dependencyRoot = Join-Path $candidate "_deps"
+    $sharedDependency = Join-Path (Join-Path $localRoot "dependencies") "enet-src"
+    $dependencyClone = if ($UnexpectedGitPath.IsPresent) {
+        Join-Path $candidate "unexpected-src"
+    } else {
+        Join-Path $dependencyRoot "enet-src"
+    }
+    New-Item -ItemType Directory -Path $candidate,$dependencyRoot -Force | Out-Null
+    $gitPath = Get-HenkaGitPath
+    $sourceSha = ([string](& $gitPath -C $sourceRoot rev-parse HEAD)).Trim()
+    if ($LASTEXITCODE -ne 0 -or $sourceSha -notmatch "^[0-9a-f]{40}$") {
+        throw "Could not identify the Henka CMake source fixture commit."
+    }
+
+    & $gitPath clone --quiet --local --no-hardlinks $sharedDependency $dependencyClone
+    if ($LASTEXITCODE -ne 0) { throw "Could not clone the shared pinned ENet dependency into the generated CMake fixture." }
+    if ($DirtyDependency.IsPresent) {
+        Add-Content -LiteralPath (Join-Path $dependencyClone "CMakeLists.txt") -Value "`n# lifecycle dirty-source negative control"
+    }
+    if ($MismatchedDependency.IsPresent) {
+        Add-Content -LiteralPath (Join-Path $dependencyClone "CMakeLists.txt") -Value "`n# lifecycle revision-mismatch negative control"
+        & $gitPath -C $dependencyClone config user.name "Henka lifecycle regression"
+        if ($LASTEXITCODE -ne 0) { throw "Could not configure the generated ENet dependency fixture identity." }
+        & $gitPath -C $dependencyClone config user.email "henka-lifecycle-regression@example.invalid"
+        if ($LASTEXITCODE -ne 0) { throw "Could not configure the generated ENet dependency fixture identity." }
+        & $gitPath -C $dependencyClone add -- CMakeLists.txt
+        if ($LASTEXITCODE -ne 0) { throw "Could not stage the generated ENet dependency fixture change." }
+        & $gitPath -C $dependencyClone commit --quiet -m "fixture: mismatch pinned dependency revision"
+        if ($LASTEXITCODE -ne 0) { throw "Could not create the generated ENet dependency mismatch." }
+    }
+
+    $cache = @(
+        "CMAKE_HOME_DIRECTORY:INTERNAL=$($sourceRoot.Replace('\', '/'))",
+        "FETCHCONTENT_FULLY_DISCONNECTED:BOOL=OFF"
+    ) -join "`n"
+    Set-Content -LiteralPath (Join-Path $candidate "CMakeCache.txt") -Value $cache -Encoding ASCII
+    Write-TestMarker -Path $candidate -RetentionClass "REBUILDABLE" -Active $false -CleanupEligible $true `
+        -CleanupCondition "source inputs are preserved and no validation process is using this build root" `
+        -Purpose "CMake build output" -SourceSha $sourceSha
+    return [pscustomobject]@{ Candidate = $candidate; SourceRoot = $sourceRoot; DependencyClone = $dependencyClone }
+}
+
 try {
     New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
     $eligible = Join-Path $testRoot "eligible"
     $active = Join-Path $testRoot "active"
     $unmarked = Join-Path $testRoot "unmarked"
+    $legacyBuild = Join-Path $testRoot "legacy-rebuildable"
+    $unknownCondition = Join-Path $testRoot "unknown-cleanup-condition"
     $commonMarkerRoot = Join-Path $testRoot "common-marker"
-    New-Item -ItemType Directory -Path $eligible,$active,$unmarked,$outside -Force | Out-Null
+    New-Item -ItemType Directory -Path $eligible,$active,$unmarked,$legacyBuild,$unknownCondition,$outside -Force | Out-Null
     New-Item -ItemType Directory -Path $commonMarkerRoot -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $eligible "evidence.txt") -Value "eligible"
     Set-Content -LiteralPath (Join-Path $active "evidence.txt") -Value "active"
     Set-Content -LiteralPath (Join-Path $unmarked "evidence.txt") -Value "unmarked"
+    Set-Content -LiteralPath (Join-Path $legacyBuild "evidence.txt") -Value "legacy but rebuildable"
+    Set-Content -LiteralPath (Join-Path $unknownCondition "evidence.txt") -Value "must remain"
     Set-Content -LiteralPath (Join-Path $outside "evidence.txt") -Value "outside"
     $commonMarkerPath = Write-HenkaGeneratedRootMarker `
         -RepoRoot $repoRoot `
@@ -106,6 +168,52 @@ try {
     }
     Write-TestMarker -Path $eligible -RetentionClass "PROOF_CONSUMED" -Active $false -CleanupEligible $true
     Write-TestMarker -Path $active -RetentionClass "ACTIVE_CANDIDATE" -Active $true -CleanupEligible $false
+    Write-TestMarker -Path $legacyBuild -RetentionClass "REBUILDABLE" -Active $false -CleanupEligible $true `
+        -CleanupCondition "source inputs are preserved and no validation process is using this build root"
+    Write-TestMarker -Path $unknownCondition -RetentionClass "REBUILDABLE" -Active $false -CleanupEligible $true `
+        -CleanupCondition "old directory; assume it can be deleted"
+
+    $enetPins = Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot -Providers @("ENET")
+    $enetPin = [string]$enetPins.ENET
+    if ($enetPin -notmatch "^[0-9a-f]{40}$") {
+        throw "The lifecycle regression could not read Henka's pinned ENet revision."
+    }
+    $fetchContentCleanup = New-CMakeFetchContentCleanupCandidate -Name "cmfc-good" -PinnedRevision $enetPin
+    $fetchContentDryRun = Invoke-Manager -Arguments @("-Mode", "DryRun", "-CandidatePath", $fetchContentCleanup.Candidate)
+    if ($fetchContentDryRun.ExitCode -ne 0 -or
+        $fetchContentDryRun.Output -notmatch "git_metadata_entries=1" -or
+        $fetchContentDryRun.Output -notmatch "bytes=") {
+        throw "A CMake build with an exact clean dependency mirror was not accepted for cleanup. Output: $($fetchContentDryRun.Output)"
+    }
+    if (-not (Test-Path -LiteralPath $fetchContentCleanup.Candidate -PathType Container)) {
+        throw "CMake dependency cleanup dry-run altered its candidate."
+    }
+    $fetchContentCleanupResult = Invoke-Manager -Arguments @(
+        "-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $fetchContentCleanup.Candidate
+    )
+    if ($fetchContentCleanupResult.ExitCode -ne 0 -or (Test-Path -LiteralPath $fetchContentCleanup.Candidate)) {
+        throw "A safe CMake build dependency clone was not retired by exact cleanup. Output: $($fetchContentCleanupResult.Output)"
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $localRoot "dependencies\enet-src") -PathType Container)) {
+        throw "CMake build cleanup removed or damaged the shared dependency source."
+    }
+
+    $dirtyFetchContent = New-CMakeFetchContentCleanupCandidate -Name "cmfc-dirty" -PinnedRevision $enetPin -DirtyDependency
+    Assert-ManagerFailure -Arguments @(
+        "-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $dirtyFetchContent.Candidate
+    ) -ExpectedText "dependency checkout is not a clean pinned source"
+
+    $mismatchedFetchContent = New-CMakeFetchContentCleanupCandidate -Name "cmfc-mismatch" `
+        -PinnedRevision $enetPin -MismatchedDependency
+    Assert-ManagerFailure -Arguments @(
+        "-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $mismatchedFetchContent.Candidate
+    ) -ExpectedText "dependency checkout is not a clean pinned source"
+
+    $unexpectedFetchContent = New-CMakeFetchContentCleanupCandidate -Name "cmfc-stray" `
+        -PinnedRevision $enetPin -UnexpectedGitPath
+    Assert-ManagerFailure -Arguments @(
+        "-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $unexpectedFetchContent.Candidate
+    ) -ExpectedText "Git metadata is outside a recognized CMake FetchContent source"
 
     if (-not (Test-Path -LiteralPath $captureExecutable -PathType Leaf) -or
         -not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $captureExecutable) "assets") -PathType Container)) {
@@ -144,6 +252,10 @@ try {
     if (-not (Test-Path -LiteralPath $eligible -PathType Container)) {
         throw "Dry-run altered the eligible generated artifact."
     }
+    $legacyDryRun = Invoke-Manager -Arguments @("-Mode", "DryRun", "-CandidatePath", $legacyBuild)
+    if ($legacyDryRun.ExitCode -ne 0 -or $legacyDryRun.Output -notmatch "cleanup_eligible=True") {
+        throw "The recognized legacy rebuildable marker was not accepted. Output: $($legacyDryRun.Output)"
+    }
     $report = Invoke-Manager -Arguments @("-Mode", "Report", "-RootPath", $testRoot)
     if ($report.ExitCode -ne 0 -or $report.Output -notmatch "class=CACHE" -or $report.Output -notmatch "class=UNMARKED") {
         throw "The lifecycle report did not expose marked and unmarked roots. Output: $($report.Output)"
@@ -151,6 +263,8 @@ try {
 
     Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $active) -ExpectedText "active"
     Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $unmarked) -ExpectedText "unmarked"
+    Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $commonMarkerRoot) -ExpectedText "retention class 'CACHE' is not cleanup-eligible"
+    Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $unknownCondition) -ExpectedText "not an approved retirement condition"
     Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $outside) -ExpectedText "canonical local or cleanup-only legacy generated roots"
     Assert-ManagerFailure -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", (Join-Path $localRoot "bld")) -ExpectedText "approved generated root itself"
 
@@ -158,8 +272,13 @@ try {
     if ($cleanup.ExitCode -ne 0 -or (Test-Path -LiteralPath $eligible)) {
         throw "Eligible generated artifact was not removed by exact cleanup. Output: $($cleanup.Output)"
     }
+    $legacyCleanup = Invoke-Manager -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $legacyBuild)
+    if ($legacyCleanup.ExitCode -ne 0 -or (Test-Path -LiteralPath $legacyBuild)) {
+        throw "Recognized legacy rebuildable output was not retired by exact cleanup. Output: $($legacyCleanup.Output)"
+    }
     if (-not (Test-Path -LiteralPath $active -PathType Container) -or
         -not (Test-Path -LiteralPath $unmarked -PathType Container) -or
+        -not (Test-Path -LiteralPath $unknownCondition -PathType Container) -or
         -not (Test-Path -LiteralPath $outside -PathType Container)) {
         throw "Cleanup removed a protected, unmarked, or outside artifact."
     }
@@ -203,6 +322,15 @@ finally {
             }
         }
         if (Test-Path -LiteralPath $testRoot) {
+            foreach ($ownedFile in @(Get-ChildItem -LiteralPath $testRoot -File -Force -Recurse -ErrorAction SilentlyContinue)) {
+                if (($ownedFile.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0 -and
+                    ($ownedFile.Attributes -band [System.IO.FileAttributes]::ReadOnly) -ne 0) {
+                    [System.IO.File]::SetAttributes(
+                        $ownedFile.FullName,
+                        $ownedFile.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly)
+                    )
+                }
+            }
             [System.IO.Directory]::Delete($testRoot, $true)
         }
         if (Test-Path -LiteralPath $outside) {

@@ -35,12 +35,6 @@ $buildRoot = if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
     Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $BuildRoot
 }
 $resolvedDependencyRoot = $DependencyRoot
-$dependencyRootWasExplicit = -not [string]::IsNullOrWhiteSpace($resolvedDependencyRoot)
-if ($dependencyRootWasExplicit) {
-    $resolvedDependencyRoot = Resolve-HenkaDependencyRoot `
-        -RepositoryRoot $repoRoot `
-        -DependencyRoot $resolvedDependencyRoot
-}
 $cmake = Get-HenkaCMakePath
 $ctest = Get-HenkaCTestPath -CMakePath $cmake
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
@@ -70,17 +64,11 @@ if ($SkipBuild) {
     exit 0
 }
 
-if (-not $dependencyRootWasExplicit) {
-    $defaultDependencyRoot = Join-Path $buildRoot "_deps"
-    if (Test-Path -LiteralPath $defaultDependencyRoot -PathType Container) {
-        $resolvedDependencyRoot = Resolve-HenkaDependencyRoot `
-            -RepositoryRoot $repoRoot `
-            -DependencyRoot $defaultDependencyRoot
-    } else {
-        $resolvedDependencyRoot = ""
-        Write-Host "No populated local dependency root was found; FetchContent network fallback remains enabled."
-    }
-}
+$dependencySelection = Resolve-HenkaBuildDependencyRoot `
+    -RepositoryRoot $repoRoot `
+    -BuildRoot $buildRoot `
+    -DependencyRoot $DependencyRoot
+$resolvedDependencyRoot = $dependencySelection.Root
 
 # Reject invalid dependency storage before creating or marking the build root.
 $null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $buildRoot
@@ -91,12 +79,13 @@ $null = Write-HenkaGeneratedRootMarker `
     -RetentionClass "REBUILDABLE" `
     -Active $false `
     -CleanupEligible $true `
-    -CleanupCondition "source inputs are preserved and no validation process is using this build root" `
+    -CleanupCondition "rebuildable" `
     -Configuration "multi-configuration"
 
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
     -DependencyRoot $resolvedDependencyRoot `
-    -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
+    -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB") `
+    -PinnedRevisions (Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot)
 $configureArguments = @(
     "-S", $repoRoot,
     "-B", $buildRoot,
@@ -138,6 +127,7 @@ if ($fetchContent.FullyDisconnected) {
 Write-Host "cmake: $cmake"
 Write-Host "ctest: $ctest"
 Write-Host "repo: $repoRoot"
+Write-Host "dependency selection: $($dependencySelection.Mode) ($($dependencySelection.AvailableProviders) pinned provider(s))"
 $dependencyDescription = if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoot)) {
     "<none; FetchContent fallback>"
 } else {

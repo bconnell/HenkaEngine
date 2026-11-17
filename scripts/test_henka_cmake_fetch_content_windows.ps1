@@ -4,6 +4,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$git = Get-HenkaGitPath
 $fixtureRoot = Join-Path (Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot) ("cmake-fetch-content-fixture-" + [Guid]::NewGuid().ToString("N"))
 $dependencyRoot = Join-Path $fixtureRoot "_deps"
 
@@ -92,7 +93,74 @@ try {
     Assert-Condition (-not [bool]$emptyRoot.FullyDisconnected) "An empty dependency root must not claim disconnected operation."
     Assert-Condition ($emptyRoot.Arguments -contains "-DFETCHCONTENT_SOURCE_DIR_STB=") "Empty-root STB fallback is missing."
 
-    Write-Host "[pass] Shared FetchContent provider resolution reports availability, emits one argument per selected provider, and derives disconnected mode from complete local coverage."
+    $pins = Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot
+    Assert-Condition ($pins.Count -eq 6) "All six third-party sources must expose exact CMake commit pins."
+    foreach ($provider in @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")) {
+        Assert-Condition ($pins.ContainsKey($provider) -and $pins[$provider] -match "^[0-9a-f]{40}$") `
+            "The pinned CMake revision was not resolved for $provider."
+    }
+
+    $pinProbe = Join-Path $fixtureRoot "pinned-source-probe"
+    New-Item -ItemType Directory -Path $pinProbe -Force | Out-Null
+    & $git -C $pinProbe init --quiet
+    if ($LASTEXITCODE -ne 0) { throw "Could not initialize the pinned-source validation fixture." }
+    & $git -C $pinProbe config core.autocrlf false
+    & $git -C $pinProbe config user.name "Henka test"
+    & $git -C $pinProbe config user.email "henka-test@example.invalid"
+    [System.IO.File]::WriteAllText((Join-Path $pinProbe "source.txt"), "pinned baseline`n")
+    & $git -C $pinProbe add -- source.txt
+    & $git -C $pinProbe commit --quiet -m "baseline dependency source"
+    if ($LASTEXITCODE -ne 0) { throw "Could not commit the pinned-source validation fixture." }
+    $baselineRevision = ([string](& $git -C $pinProbe rev-parse HEAD)).Trim()
+    Assert-Condition (Test-HenkaDependencySourceRevision -SourceRoot $pinProbe -ExpectedRevision $baselineRevision) `
+        "An unchanged, clean pinned source was rejected."
+    [System.IO.File]::AppendAllText((Join-Path $pinProbe "source.txt"), "dirty`n")
+    Assert-Condition (-not (Test-HenkaDependencySourceRevision -SourceRoot $pinProbe -ExpectedRevision $baselineRevision)) `
+        "A modified dependency source was incorrectly accepted as reusable."
+    & $git -C $pinProbe add -- source.txt
+    & $git -C $pinProbe commit --quiet -m "changed dependency source"
+    if ($LASTEXITCODE -ne 0) { throw "Could not commit the changed-source negative control." }
+    Assert-Condition (-not (Test-HenkaDependencySourceRevision -SourceRoot $pinProbe -ExpectedRevision $baselineRevision)) `
+        "A changed pinned revision was incorrectly accepted as reusable."
+
+    $selected = Select-HenkaDependencyRootCandidate -Candidates @(
+        [pscustomobject]@{ Path = "build-local"; Mode = "build-local"; Priority = 0; AvailableProviders = 0 },
+        [pscustomobject]@{ Path = "shared"; Mode = "shared"; Priority = 1; AvailableProviders = 6 }
+    )
+    Assert-Condition ($selected.Path -eq "shared") `
+        "An empty build-local cache incorrectly displaced the complete pinned shared cache."
+    $selected = Select-HenkaDependencyRootCandidate -Candidates @(
+        [pscustomobject]@{ Path = "build-local"; Mode = "build-local"; Priority = 0; AvailableProviders = 6 },
+        [pscustomobject]@{ Path = "shared"; Mode = "shared"; Priority = 1; AvailableProviders = 6 }
+    )
+    Assert-Condition ($selected.Path -eq "build-local") `
+        "An equally complete build-local cache should be reused to preserve its configured build identity."
+    $selected = Select-HenkaDependencyRootCandidate -Candidates @(
+        [pscustomobject]@{ Path = "build-local"; Mode = "build-local"; Priority = 0; AvailableProviders = 0 },
+        [pscustomobject]@{ Path = "shared"; Mode = "shared"; Priority = 1; AvailableProviders = 0 }
+    )
+    Assert-Condition ($null -eq $selected) `
+        "The cache selector must leave CMake FetchContent fallback available when no compatible cache is available."
+
+    $emptyBuildRoot = Join-Path $fixtureRoot "empty-build-root"
+    New-Item -ItemType Directory -Path $emptyBuildRoot -Force | Out-Null
+    $sharedRoot = Join-Path (Get-HenkaLocalRoot -RepositoryRoot $repoRoot) "dependencies"
+    $resolved = Resolve-HenkaBuildDependencyRoot `
+        -RepositoryRoot $repoRoot `
+        -BuildRoot $emptyBuildRoot
+    Assert-Condition ($resolved.Mode -eq "shared" -and
+        [System.IO.Path]::GetFullPath($resolved.Root).TrimEnd('\') -ieq [System.IO.Path]::GetFullPath($sharedRoot).TrimEnd('\') -and
+        [int]$resolved.AvailableProviders -eq 6) `
+        "The real build resolver did not select and report the six-provider shared cache for an empty build-local cache."
+
+    $explicit = Resolve-HenkaBuildDependencyRoot `
+        -RepositoryRoot $repoRoot `
+        -BuildRoot $emptyBuildRoot `
+        -DependencyRoot $sharedRoot
+    Assert-Condition ($explicit.Mode -eq "explicit" -and [int]$explicit.AvailableProviders -eq 6) `
+        "An explicitly selected exact-pinned cache was not reported with its verified provider count."
+
+    Write-Host "[pass] Dependency cache selection reuses exact-pinned sources, rejects changed inputs, and falls back when no compatible cache is available."
 }
 finally {
     if (Test-Path -LiteralPath $fixtureRoot) {

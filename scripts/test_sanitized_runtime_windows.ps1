@@ -73,9 +73,14 @@ $configureArguments = @(
     "-DHENKA_BUILD_TESTS=ON"
 )
 
-$fetchContent = Get-HenkaCMakeFetchContentArguments `
-    -DependencyRoot (Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "_deps") `
+$dependencySelection = Resolve-HenkaBuildDependencyRoot `
+    -RepositoryRoot $repoRoot `
+    -BuildRoot $BuildDirectory `
     -Providers @("ENET", "LUA", "MINIAUDIO", "STB")
+$fetchContent = Get-HenkaCMakeFetchContentArguments `
+    -DependencyRoot $dependencySelection.Root `
+    -Providers @("ENET", "LUA", "MINIAUDIO", "STB") `
+    -PinnedRevisions (Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot -Providers @("ENET", "LUA", "MINIAUDIO", "STB"))
 $configureArguments += @($fetchContent.Arguments)
 
 Invoke-HenkaNative `
