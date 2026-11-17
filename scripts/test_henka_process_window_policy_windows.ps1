@@ -66,6 +66,42 @@ function Assert-HenkaAutomationWorkflowUsesBackgroundCapture {
 
 $packagedCheckerSource = [System.IO.File]::ReadAllText(
     (Join-Path $RepositoryRoot "scripts\check_packaged_sandbox3d_windows.ps1"))
+
+$packagedInteropMatch = [regex]::Match(
+    $packagedCheckerSource,
+    "(?s)Add-Type\s+@'\r?\n(?<definition>.*?)\r?\n'@")
+if (-not $packagedInteropMatch.Success) {
+    throw "The packaged checker Win32 interop declaration could not be located."
+}
+try {
+    Add-Type -TypeDefinition $packagedInteropMatch.Groups["definition"].Value -ErrorAction Stop
+}
+catch {
+    throw "The packaged checker Win32 interop declaration does not compile: $($_.Exception.Message)"
+}
+
+$duplicateImportProbe = @'
+using System;
+using System.Runtime.InteropServices;
+public static class HenkaDuplicateDllImportNegativeControl
+{
+    [DllImport("user32.dll")]
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr handle, out int rect);
+}
+'@
+$duplicateImportNegativeControlRejected = $false
+try {
+    Add-Type -TypeDefinition $duplicateImportProbe -ErrorAction Stop
+}
+catch {
+    $duplicateImportNegativeControlRejected = $true
+}
+if (-not $duplicateImportNegativeControlRejected) {
+    throw "The native interop regression did not reject duplicate DllImport attributes."
+}
+Write-Output "[pass] Packaged checker interop compiles and duplicate-import negative control is rejected."
+
 Assert-HenkaPackagedCheckerDoesNotActivateWindows -Source $packagedCheckerSource
 $activationNegativeControlRejected = $false
 try {

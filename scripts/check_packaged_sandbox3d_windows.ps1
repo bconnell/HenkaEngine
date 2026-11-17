@@ -2070,7 +2070,6 @@ public static class NativeMethods {
     public const uint MOUSEEVENTF_WHEEL = 0x0800;
 
     [DllImport("user32.dll")]
-    [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
 
     [DllImport("user32.dll")]
