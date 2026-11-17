@@ -14,7 +14,7 @@ The goal is a bundled, predictable, readable editor font with one canonical text
 
 - Reuse the already-pinned `stb` FetchContent revision (`2c980bb59875b0d32144a71867fbdebb2f77cd20`) for `stb_truetype` and `stb_rect_pack`; do not add FreeType or a second font-library pin.
 - Build a focused Henka UI font/text subsystem. Do not place substantial font parsing, atlas management, or text-layout responsibility in `ui.c`.
-- Evaluate Atkinson Hyperlegible first and Noto Sans as the comparison candidate. Select only after examining actual Henka editor captures at normal working size.
+- Completed matched local captures for Atkinson Hyperlegible Regular and Noto Sans Regular at 1280x720 and 1920x1080, with Editor UI Scale at 100%, 125%, 150%, and 200%. Both candidates remained readable at normal working size. Atkinson Hyperlegible Regular is selected for production because its lowercase forms and easily confused characters remained slightly more distinct at small UI sizes; the owner found both candidates good, with Atkinson already the leading preference.
 - Bundle the selected font files and exact redistribution license/provenance. Do not rely on installed system fonts. Verify the exact chosen font file, version, format compatibility, license text, and any reserved-name conditions before distribution.
 - Preserve the current bitmap glyphs only as an explicitly reported emergency fallback during migration or resource failure. Never silently fall back. Packaged acceptance must prove the bundled font is the active text path.
 - Keep the existing hidden-row contract unchanged: names remain canonical, and the complete textual `[Hidden]` marker remains visible.
