@@ -1164,6 +1164,11 @@ if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
     add_test(
+        NAME henka_cmake_fetch_content_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_henka_cmake_fetch_content_windows.ps1)
+
+    add_test(
         NAME henka_package_user_data_migration_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_package_user_data_migration_windows.ps1

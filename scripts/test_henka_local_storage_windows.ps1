@@ -347,6 +347,47 @@ try {
         -not (Test-Path -LiteralPath $managerProbe)) `
         "The artifact lifecycle manager did not retire its exact eligible _local child. Output: $($managerCleanup.Output)"
 
+    $rebuildablePhraseProbe = Join-Path $markerProbe "lifecycle-rebuildable-description-condition"
+    $null = New-HenkaLocalDirectory -RepositoryRoot $RepositoryRoot -Path $rebuildablePhraseProbe
+    $null = Write-HenkaGeneratedRootMarker `
+        -RepoRoot $RepositoryRoot `
+        -Path $rebuildablePhraseProbe `
+        -Purpose "legacy rebuildable cleanup-condition compatibility regression" `
+        -RetentionClass "REBUILDABLE" `
+        -Active $false `
+        -CleanupEligible $true `
+        -CleanupCondition "source inputs are preserved and no validation process is using this build root" `
+        -Configuration "multi-configuration"
+    $rebuildablePhraseDryRun = Invoke-ArtifactLifecycleManager -Arguments @(
+        "-Mode", "DryRun", "-CandidatePath", $rebuildablePhraseProbe)
+    Assert-StorageContract ($rebuildablePhraseDryRun.ExitCode -eq 0 -and
+        $rebuildablePhraseDryRun.Output -match "cleanup_eligible=True" -and
+        (Test-Path -LiteralPath $rebuildablePhraseProbe -PathType Container)) `
+        "A rebuildable artifact with the existing build-script cleanup condition was not safely recognized. Output: $($rebuildablePhraseDryRun.Output)"
+    $rebuildablePhraseCleanup = Invoke-ArtifactLifecycleManager -Arguments @(
+        "-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $rebuildablePhraseProbe)
+    Assert-StorageContract ($rebuildablePhraseCleanup.ExitCode -eq 0 -and
+        -not (Test-Path -LiteralPath $rebuildablePhraseProbe)) `
+        "The lifecycle manager did not retire the exact eligible rebuildable fixture. Output: $($rebuildablePhraseCleanup.Output)"
+
+    $unsupportedConditionProbe = Join-Path $markerProbe "lifecycle-unsupported-cleanup-condition-negative"
+    $null = New-HenkaLocalDirectory -RepositoryRoot $RepositoryRoot -Path $unsupportedConditionProbe
+    $null = Write-HenkaGeneratedRootMarker `
+        -RepoRoot $RepositoryRoot `
+        -Path $unsupportedConditionProbe `
+        -Purpose "unsupported cleanup-condition negative control" `
+        -RetentionClass "REBUILDABLE" `
+        -Active $false `
+        -CleanupEligible $true `
+        -CleanupCondition "unreviewed cleanup reason" `
+        -Configuration "multi-configuration"
+    $unsupportedConditionResult = Invoke-ArtifactLifecycleManager -Arguments @(
+        "-Mode", "DryRun", "-CandidatePath", $unsupportedConditionProbe)
+    Assert-StorageContract ($unsupportedConditionResult.ExitCode -ne 0 -and
+        $unsupportedConditionResult.Output -match "cleanup condition" -and
+        (Test-Path -LiteralPath $unsupportedConditionProbe -PathType Container)) `
+        "The lifecycle manager accepted an unsupported cleanup condition or changed its probe. Output: $($unsupportedConditionResult.Output)"
+
     $gitMetadataProbe = Join-Path $markerProbe "lifecycle-git-metadata-negative"
     $null = New-HenkaLocalDirectory -RepositoryRoot $RepositoryRoot -Path $gitMetadataProbe
     $null = Write-HenkaGeneratedRootMarker `
@@ -379,7 +420,31 @@ try {
     $git = Get-HenkaGitPath
     & $git -C $cleanProbeRepository init --quiet 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Could not initialize the isolated clean-wrapper regression repository." }
-    & $git -C $cleanProbeRepository -c core.autocrlf=false -c user.name="Henka cleanup regression" -c user.email="henka-cleanup-regression@invalid" add -- scripts 2>$null | Out-Null
+    $dependencyOrigin = Join-Path $markerProbe "fetchcontent-sdl3-origin"
+    New-Item -ItemType Directory -Path $dependencyOrigin -Force | Out-Null
+    & $git -C $dependencyOrigin init --quiet 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not initialize the FetchContent source fixture." }
+    & $git -C $dependencyOrigin -c user.name="Henka cleanup regression" -c user.email="henka-cleanup-regression@invalid" config core.autocrlf false 2>$null | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $dependencyOrigin ".gitignore"), "ignored-dependency-probe.txt`n")
+    Set-Content -LiteralPath (Join-Path $dependencyOrigin "fixture-source.txt") -Value "pinned source fixture"
+    & $git -C $dependencyOrigin add -- .gitignore fixture-source.txt 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not stage the FetchContent source fixture." }
+    & $git -C $dependencyOrigin -c user.name="Henka cleanup regression" -c user.email="henka-cleanup-regression@invalid" commit --quiet -m "pinned dependency fixture" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not commit the FetchContent source fixture." }
+    $dependencyCommit = [string](& $git -C $dependencyOrigin rev-parse HEAD)
+    $dependencyCMake = @"
+include(FetchContent)
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY $dependencyOrigin
+    GIT_TAG $dependencyCommit
+)
+"@
+    [System.IO.File]::WriteAllText(
+        (Join-Path $cleanProbeRepository "CMakeLists.txt"),
+        $dependencyCMake,
+        [System.Text.UTF8Encoding]::new($false))
+    & $git -C $cleanProbeRepository -c core.autocrlf=false -c user.name="Henka cleanup regression" -c user.email="henka-cleanup-regression@invalid" add -- CMakeLists.txt scripts 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Could not stage the isolated clean-wrapper regression scripts." }
     & $git -C $cleanProbeRepository -c user.name="Henka cleanup regression" -c user.email="henka-cleanup-regression@invalid" commit --quiet -m "clean wrapper fixture" 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Could not establish isolated clean-wrapper source provenance." }
@@ -388,6 +453,11 @@ try {
     $cleanProbeBuildRoot = Join-Path (Join-Path $cleanProbeLocalRoot "builds") `
         (Get-HenkaCheckoutStorageKey -RepositoryRoot $cleanProbeRepository -CompactBuildKey)
     New-Item -ItemType Directory -Path $cleanProbeBuildRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $cleanProbeBuildRoot "_deps\sdl3-src") -Force | Out-Null
+    $dependencyCheckout = Join-Path $cleanProbeBuildRoot "_deps\sdl3-src"
+    & $git clone --quiet $dependencyOrigin $dependencyCheckout 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not clone the pinned FetchContent source fixture." }
+    Set-Content -LiteralPath (Join-Path $cleanProbeBuildRoot "CMakeCache.txt") -Value "CMAKE_HOME_DIRECTORY:INTERNAL=$cleanProbeRepository"
     $cleanProbeSourceSha = [string](& $git -C $cleanProbeRepository rev-parse HEAD)
     if ($LASTEXITCODE -ne 0 -or $cleanProbeSourceSha -notmatch "^[0-9a-f]{40,64}$") {
         throw "Could not resolve isolated clean-wrapper fixture provenance."
@@ -410,6 +480,36 @@ try {
         (ConvertTo-Json -InputObject $cleanProbeMarker -Depth 4) + [Environment]::NewLine,
         [System.Text.UTF8Encoding]::new($false))
 
+    $cleanProbeManager = Join-Path $cleanProbeScripts "manage_generated_artifacts_windows.ps1"
+    $pinnedDependencyDryRun = Invoke-StorageProbeScript `
+        -ScriptPath $cleanProbeManager `
+        -Arguments @("-Mode", "DryRun", "-CandidatePath", $cleanProbeBuildRoot)
+    Assert-StorageContract ($pinnedDependencyDryRun.ExitCode -eq 0 -and
+        $pinnedDependencyDryRun.Output -match "cleanup_eligible=True") `
+        "The lifecycle manager rejected a clean FetchContent checkout exactly pinned by the generated source revision. Output: $($pinnedDependencyDryRun.Output)"
+
+    $ignoredDependencyProbe = Join-Path $dependencyCheckout "ignored-dependency-probe.txt"
+    [System.IO.File]::WriteAllText($ignoredDependencyProbe, "must prevent cleanup`n")
+    $ignoredDependencyDryRun = Invoke-StorageProbeScript `
+        -ScriptPath $cleanProbeManager `
+        -Arguments @("-Mode", "DryRun", "-CandidatePath", $cleanProbeBuildRoot)
+    Assert-StorageContract ($ignoredDependencyDryRun.ExitCode -ne 0 -and
+        $ignoredDependencyDryRun.Output -match "local changes" -and
+        (Test-Path -LiteralPath $cleanProbeBuildRoot -PathType Container)) `
+        "The lifecycle manager did not preserve a generated root containing ignored dependency data. Output: $($ignoredDependencyDryRun.Output)"
+    Remove-Item -LiteralPath $ignoredDependencyProbe -Force
+
+    $dependencyDirtyProbe = Join-Path $dependencyCheckout "uncommitted-source-probe.txt"
+    Set-Content -LiteralPath $dependencyDirtyProbe -Value "must prevent cleanup"
+    $dirtyDependencyDryRun = Invoke-StorageProbeScript `
+        -ScriptPath $cleanProbeManager `
+        -Arguments @("-Mode", "DryRun", "-CandidatePath", $cleanProbeBuildRoot)
+    Assert-StorageContract ($dirtyDependencyDryRun.ExitCode -ne 0 -and
+        $dirtyDependencyDryRun.Output -match "local changes" -and
+        (Test-Path -LiteralPath $cleanProbeBuildRoot -PathType Container)) `
+        "The lifecycle manager did not preserve a generated root containing modified dependency source. Output: $($dirtyDependencyDryRun.Output)"
+    Remove-Item -LiteralPath $dependencyDirtyProbe -Force
+
     $cleanWrapper = Join-Path $cleanProbeScripts "clean_windows.ps1"
     $unguardedClean = Invoke-StorageProbeScript -ScriptPath $cleanWrapper -Arguments @()
     Assert-StorageContract ($unguardedClean.ExitCode -ne 0 -and
@@ -421,10 +521,89 @@ try {
         -not (Test-Path -LiteralPath $cleanProbeBuildRoot)) `
         "The clean wrapper did not retire its isolated eligible build root after explicit confirmation. Output: $($confirmedClean.Output)"
 
+    $stashProbeBuildRoot = Join-Path (Join-Path $cleanProbeLocalRoot "builds") "stash-safety-regression"
+    New-Item -ItemType Directory -Path (Join-Path $stashProbeBuildRoot "_deps\sdl3-src") -Force | Out-Null
+    $stashProbeDependencyCheckout = Join-Path $stashProbeBuildRoot "_deps\sdl3-src"
+    & $git clone --quiet $dependencyOrigin $stashProbeDependencyCheckout 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not clone the isolated stash-safety dependency fixture." }
+    Set-Content -LiteralPath (Join-Path $stashProbeBuildRoot "CMakeCache.txt") -Value "CMAKE_HOME_DIRECTORY:INTERNAL=$cleanProbeRepository"
+    [System.IO.File]::WriteAllText(
+        (Join-Path $stashProbeBuildRoot ".henka-generated.json"),
+        (ConvertTo-Json -InputObject $cleanProbeMarker -Depth 4) + [Environment]::NewLine,
+        [System.Text.UTF8Encoding]::new($false))
+    & $git -C $stashProbeDependencyCheckout config core.autocrlf false 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not configure the isolated stash-safety dependency checkout." }
+    [System.IO.File]::WriteAllText(
+        (Join-Path $stashProbeDependencyCheckout "fixture-source.txt"),
+        "preserved stashed fixture work`n")
+    & $git -C $stashProbeDependencyCheckout stash push --include-untracked --message "cleanup guard stash regression" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not create the isolated cleanup-guard stash fixture." }
+    $stashEntries = @(& $git -C $stashProbeDependencyCheckout stash list --format=%H 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $stashEntries.Count -eq 0) {
+        throw "The isolated cleanup-guard stash fixture was not created."
+    }
+    $cleanStashStatus = @(& $git -C $stashProbeDependencyCheckout status --porcelain --untracked-files=all --ignored=matching 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $cleanStashStatus.Count -ne 0) {
+        throw "The stash regression must have a clean checkout so only saved Git work exercises the guard."
+    }
+    $stashedDependencyDryRun = Invoke-StorageProbeScript `
+        -ScriptPath $cleanProbeManager `
+        -Arguments @("-Mode", "DryRun", "-CandidatePath", $stashProbeBuildRoot)
+    Assert-StorageContract ($stashedDependencyDryRun.ExitCode -ne 0 -and
+        $stashedDependencyDryRun.Output -match "stashed work" -and
+        (Test-Path -LiteralPath $stashProbeBuildRoot -PathType Container)) `
+        "The lifecycle manager approved cleanup despite a clean working tree containing stashed dependency work. Output: $($stashedDependencyDryRun.Output)"
+
+    $uniqueCommitProbeBuildRoot = Join-Path (Join-Path $cleanProbeLocalRoot "builds") "unique-local-commit-safety-regression"
+    New-Item -ItemType Directory -Path (Join-Path $uniqueCommitProbeBuildRoot "_deps\sdl3-src") -Force | Out-Null
+    $uniqueCommitProbeDependencyCheckout = Join-Path $uniqueCommitProbeBuildRoot "_deps\sdl3-src"
+    & $git clone --quiet --config core.autocrlf=false $dependencyOrigin $uniqueCommitProbeDependencyCheckout 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not clone the isolated unique-commit dependency fixture." }
+    Set-Content -LiteralPath (Join-Path $uniqueCommitProbeBuildRoot "CMakeCache.txt") -Value "CMAKE_HOME_DIRECTORY:INTERNAL=$cleanProbeRepository"
+    [System.IO.File]::WriteAllText(
+        (Join-Path $uniqueCommitProbeBuildRoot ".henka-generated.json"),
+        (ConvertTo-Json -InputObject $cleanProbeMarker -Depth 4) + [Environment]::NewLine,
+        [System.Text.UTF8Encoding]::new($false))
+    & $git -C $uniqueCommitProbeDependencyCheckout checkout --quiet -b "henka-cleanup-unique-commit-regression" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not create the isolated unique-commit branch fixture." }
+    & $git -C $uniqueCommitProbeDependencyCheckout -c user.name="Henka cleanup regression" -c user.email="henka-cleanup-regression@invalid" commit --allow-empty --quiet -m "unique local dependency commit" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not commit the isolated unique-commit fixture." }
+    $uniqueLocalCommit = [string](& $git -C $uniqueCommitProbeDependencyCheckout rev-parse HEAD 2>$null)
+    $pinnedDependencyCommit = [string](& $git -C $dependencyOrigin rev-parse HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $uniqueLocalCommit.Trim() -eq $pinnedDependencyCommit.Trim()) {
+        throw "The unique-commit fixture did not create a commit distinct from its dependency pin. unique=$uniqueLocalCommit pin=$pinnedDependencyCommit"
+    }
+    & $git -C $uniqueCommitProbeDependencyCheckout checkout --quiet --detach $pinnedDependencyCommit 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not return the isolated checkout to its pinned dependency commit." }
+    $uniqueCommitStatus = @(& $git -C $uniqueCommitProbeDependencyCheckout status --porcelain --untracked-files=all --ignored=matching 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $uniqueCommitStatus.Count -ne 0) {
+        throw "The unique-commit regression checkout is not clean at the pinned dependency revision. Status: $($uniqueCommitStatus -join '; ')"
+    }
+    $uniqueLocalRefCommit = [string](& $git -C $uniqueCommitProbeDependencyCheckout rev-parse --verify refs/heads/henka-cleanup-unique-commit-regression 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $uniqueLocalRefCommit.Trim() -ne $uniqueLocalCommit.Trim()) {
+        throw "The unique-commit regression did not retain its local branch ref. ref=$uniqueLocalRefCommit commit=$uniqueLocalCommit"
+    }
+    $uniqueCommitDryRun = Invoke-StorageProbeScript `
+        -ScriptPath $cleanProbeManager `
+        -Arguments @("-Mode", "DryRun", "-CandidatePath", $uniqueCommitProbeBuildRoot)
+    Assert-StorageContract ($uniqueCommitDryRun.ExitCode -ne 0 -and
+        $uniqueCommitDryRun.Output -match "unique local commits" -and
+        (Test-Path -LiteralPath $uniqueCommitProbeBuildRoot -PathType Container)) `
+        "The lifecycle manager approved cleanup despite a clean pinned dependency checkout retaining a unique local commit. Output: $($uniqueCommitDryRun.Output)"
+    $uniqueCommitCleanup = Invoke-StorageProbeScript `
+        -ScriptPath $cleanProbeManager `
+        -Arguments @("-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $uniqueCommitProbeBuildRoot)
+    $uniqueCommitAfterCleanup = [string](& $git -C $uniqueCommitProbeDependencyCheckout rev-parse --verify refs/heads/henka-cleanup-unique-commit-regression 2>$null)
+    Assert-StorageContract ($uniqueCommitCleanup.ExitCode -ne 0 -and
+        $uniqueCommitCleanup.Output -match "unique local commits" -and
+        (Test-Path -LiteralPath $uniqueCommitProbeBuildRoot -PathType Container) -and
+        $uniqueCommitAfterCleanup.Trim() -eq $uniqueLocalCommit.Trim()) `
+        "Cleanup did not fail closed while preserving the generated root and unique local dependency commit. Output: $($uniqueCommitCleanup.Output)"
+
     Write-Output "[pass] Build, package, evidence, exact-candidate, and generated marker roots resolve beneath canonical _local."
     Write-Output "[pass] Ordinary and exact-candidate build paths fit the unchanged 128-character CMake object-path budget and remain isolated."
     Write-Output "[pass] External root creation and traversal are rejected before filesystem mutation."
-    Write-Output "[pass] Artifact lifecycle cleanup accepts exact generated children beneath _local and rejects Git metadata."
+    Write-Output "[pass] Artifact lifecycle cleanup accepts exact generated children and clean pinned FetchContent clones while rejecting dirty, stashed, unique-commit, or foreign Git metadata."
     Write-Output "[pass] The clean wrapper preserves a generated build root unless the caller explicitly confirms no active process uses it."
 }
 finally {

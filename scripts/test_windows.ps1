@@ -96,6 +96,7 @@ $null = Write-HenkaGeneratedRootMarker `
 
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
     -DependencyRoot $resolvedDependencyRoot `
+    -NoSharedDependencyCache:$dependencyRootWasExplicit `
     -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
 $configureArguments = @(
     "-S", $repoRoot,
@@ -122,28 +123,17 @@ if ($configurationReady -and
         Write-Host "Configure: required to refresh missing CTest metadata for the requested filter."
     }
 }
-foreach ($provider in $fetchContent.ProviderStates) {
-    if ($provider.Available) {
-        Write-Host "$($provider.Label) provider: repository-local populated source"
-    } else {
-        Write-Host "$($provider.Label) provider: FetchContent network fallback"
-    }
-}
-if ($fetchContent.FullyDisconnected) {
-    Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
-} else {
-    Write-Host "FetchContent mode: normal network-capable fallback for missing providers"
-}
+Write-HenkaCMakeFetchContentStatus -Resolution $fetchContent
 
 Write-Host "cmake: $cmake"
 Write-Host "ctest: $ctest"
 Write-Host "repo: $repoRoot"
 $dependencyDescription = if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoot)) {
-    "<none; FetchContent fallback>"
+    "<none; shared source cache checked, FetchContent fallback for missing pins>"
 } else {
     $resolvedDependencyRoot
 }
-Write-Host "dependency root: $dependencyDescription"
+Write-Host "build-local dependency root: $dependencyDescription"
 Write-Host "validation plan: $($validationPlan.Resolution)"
 if (-not [string]::IsNullOrWhiteSpace($validationPlan.BuildTarget)) {
     Write-Host "validation target: $($validationPlan.BuildTarget)"

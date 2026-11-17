@@ -58,18 +58,7 @@ if ($NoLocalProviders) {
 }
 $fetchContent = Get-HenkaCMakeFetchContentArguments @fetchArguments
 $configureArguments += @($fetchContent.Arguments)
-foreach ($provider in $fetchContent.ProviderStates) {
-    if ($provider.Available) {
-        Write-Host "$($provider.Label) provider: repository-local populated source"
-    } else {
-        Write-Host "$($provider.Label) provider: FetchContent network fallback"
-    }
-}
-if ($fetchContent.FullyDisconnected) {
-    Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
-} else {
-    Write-Host "FetchContent mode: normal network-capable fallback for missing providers"
-}
+Write-HenkaCMakeFetchContentStatus -Resolution $fetchContent
 
 Write-Host "cmake: $cmake"
 Write-Host "repo: $repoRoot"

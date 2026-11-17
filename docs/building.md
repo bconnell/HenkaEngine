@@ -46,7 +46,9 @@ Install or provide:
 - CMake on `PATH` or available through the Visual Studio installation;
 - network access during the first configure when pinned dependencies are not already cached locally.
 
-Henka can use populated local dependency sources under `_local/builds/<checkout-key>/_deps/` as optional offline acceleration. Clean builds clear absent local-source overrides and use the pinned network-capable FetchContent path.
+Henka first checks the current build's `_deps/` directory, then the verified shared source cache at `_local/dependencies/fetchcontent/`. A source is reused only when its Git origin, clean checkout, and `HEAD` match the immutable repository and commit declared by the current `CMakeLists.txt`. An explicitly supplied `-DependencyRoot` remains isolated from the shared cache; `-NoLocalProviders` disables both local sources and the shared cache. If no verified source is available, CMake retains its pinned network-capable FetchContent fallback.
+
+Only dependency source checkouts are shared. Each checkout keeps its own CMake build and generated dependency outputs, so Debug and Release can reuse one multi-configuration build root without sharing binaries across worktrees.
 
 The top-level project applies bounded Visual Studio path hardening for clean-clone builds. The KTX dependency also enables Git long-path handling inside its own clean clone. Machine-wide Git or MSBuild path changes are not required for the normal supported path.
 
