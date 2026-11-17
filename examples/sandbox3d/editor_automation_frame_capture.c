@@ -9,12 +9,14 @@
 #define SANDBOX3D_AUTOMATION_CAPTURE_LABEL_BYTES 48U
 #define SANDBOX3D_AUTOMATION_CAPTURE_REQUEST_BYTES 64U
 #define SANDBOX3D_AUTOMATION_CAPTURE_MAX_COUNT 128U
+#define SANDBOX3D_AUTOMATION_CAPTURE_MAX_REQUEST_RETRY_FRAMES 60U
 
 struct sandbox3d_automation_frame_capture
 {
     bool enabled;
     bool request_stream_failed;
     uint32_t sequence;
+    uint32_t request_retry_frames;
     char output_directory[SANDBOX3D_AUTOMATION_CAPTURE_PATH_BYTES];
     char request_file[SANDBOX3D_AUTOMATION_CAPTURE_PATH_BYTES];
 };
@@ -226,12 +228,17 @@ static bool sandbox3d_automation_capture_read_request(
     const char* request_file,
     char* out_label,
     size_t out_label_capacity,
-    bool* out_exists)
+    bool* out_exists,
+    bool* out_retryable,
+    const char** out_failure_reason,
+    int* out_error_code)
 {
     FILE* file;
     size_t bytes_read;
     size_t length;
     bool read_failed;
+    int open_error = 0;
+    int error_code = 0;
     char request[SANDBOX3D_AUTOMATION_CAPTURE_REQUEST_BYTES];
 
     if (out_label != NULL && out_label_capacity > 0U)
@@ -239,14 +246,19 @@ static bool sandbox3d_automation_capture_read_request(
         out_label[0] = '\0';
     }
     if (request_file == NULL || out_label == NULL || out_label_capacity == 0U ||
-        out_exists == NULL)
+        out_exists == NULL || out_retryable == NULL ||
+        out_failure_reason == NULL || out_error_code == NULL)
     {
         return false;
     }
     *out_exists = false;
+    *out_retryable = false;
+    *out_failure_reason = "invalid_request";
+    *out_error_code = 0;
     errno = 0;
 #if defined(_WIN32)
-    if (fopen_s(&file, request_file, "rb") != 0)
+    open_error = (int)fopen_s(&file, request_file, "rb");
+    if (open_error != 0)
     {
         file = NULL;
     }
@@ -255,23 +267,45 @@ static bool sandbox3d_automation_capture_read_request(
 #endif
     if (file == NULL)
     {
-        if (errno == ENOENT)
+        error_code = open_error != 0 ? open_error : errno;
+        if (error_code == ENOENT)
         {
             return true;
         }
         *out_exists = true;
+        *out_retryable = true;
+        *out_failure_reason = "open_failed";
+        *out_error_code = error_code;
         return false;
     }
     *out_exists = true;
     bytes_read = fread(request, 1U, sizeof(request), file);
     read_failed = ferror(file) != 0;
+    if (read_failed)
+    {
+        error_code = errno;
+    }
     if (fclose(file) != 0)
     {
         read_failed = true;
+        error_code = errno;
     }
-    if (read_failed || bytes_read >= sizeof(request) ||
-        memchr(request, '\0', bytes_read) != NULL)
+    if (read_failed)
     {
+        *out_retryable = true;
+        *out_failure_reason = "read_failed";
+        *out_error_code = error_code;
+        return false;
+    }
+    if (bytes_read >= sizeof(request))
+    {
+        *out_failure_reason = "request_too_large";
+        (void)remove(request_file);
+        return false;
+    }
+    if (memchr(request, '\0', bytes_read) != NULL)
+    {
+        *out_failure_reason = "request_contains_nul";
         (void)remove(request_file);
         return false;
     }
@@ -283,17 +317,22 @@ static bool sandbox3d_automation_capture_read_request(
     }
     if (length == 0U || length >= out_label_capacity)
     {
+        *out_failure_reason = "invalid_label_length";
         (void)remove(request_file);
         return false;
     }
     request[length] = '\0';
     if (!sandbox3d_automation_frame_capture_label_is_valid(request))
     {
+        *out_failure_reason = "invalid_label";
         (void)remove(request_file);
         return false;
     }
     if (remove(request_file) != 0)
     {
+        *out_retryable = true;
+        *out_failure_reason = "request_remove_failed";
+        *out_error_code = errno;
         return false;
     }
     memcpy(out_label, request, length + 1U);
@@ -306,8 +345,11 @@ void sandbox3d_automation_frame_capture_update(
 {
     char label[SANDBOX3D_AUTOMATION_CAPTURE_LABEL_BYTES + 1U];
     char output_path[SANDBOX3D_AUTOMATION_CAPTURE_PATH_BYTES];
+    const char* request_failure_reason = "invalid_request";
     bool request_exists = false;
+    bool request_retryable = false;
     uint32_t next_sequence;
+    int request_error_code = 0;
     henka_result result;
 
     if (capture == NULL || !capture->enabled || capture->request_stream_failed)
@@ -318,14 +360,36 @@ void sandbox3d_automation_frame_capture_update(
             capture->request_file,
             label,
             sizeof(label),
-            &request_exists))
+            &request_exists,
+            &request_retryable,
+            &request_failure_reason,
+            &request_error_code))
     {
         if (request_exists)
         {
+            if (request_retryable &&
+                capture->request_retry_frames <
+                    SANDBOX3D_AUTOMATION_CAPTURE_MAX_REQUEST_RETRY_FRAMES)
+            {
+                ++capture->request_retry_frames;
+                if (capture->request_retry_frames == 1U)
+                {
+                    fprintf(
+                        stderr,
+                        "HENKA_AUTOMATION_DIAGNOSTIC app_frame_capture status=request_retry reason=%s crt_error=%d attempt=%u\n",
+                        request_failure_reason,
+                        request_error_code,
+                        capture->request_retry_frames);
+                }
+                return;
+            }
             capture->request_stream_failed = true;
             fprintf(
                 stderr,
-                "HENKA_AUTOMATION_DIAGNOSTIC app_frame_capture status=request_failed reason=invalid_or_unreadable_request\n");
+                "HENKA_AUTOMATION_DIAGNOSTIC app_frame_capture status=request_failed reason=%s crt_error=%d retries=%u\n",
+                request_failure_reason,
+                request_error_code,
+                capture->request_retry_frames);
         }
         return;
     }
@@ -333,6 +397,7 @@ void sandbox3d_automation_frame_capture_update(
     {
         return;
     }
+    capture->request_retry_frames = 0U;
     if (engine == NULL ||
         capture->sequence >= SANDBOX3D_AUTOMATION_CAPTURE_MAX_COUNT)
     {
