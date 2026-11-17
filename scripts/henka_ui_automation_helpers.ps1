@@ -627,6 +627,100 @@ function Set-HenkaAutomationWindowClientSize {
     throw "The Henka client size did not reach the requested ${Width}x${Height}; actual client size is $($after.ClientWidth)x$($after.ClientHeight), desktop is $([HenkaUiAutomationNative]::GetSystemMetrics(0))x$([HenkaUiAutomationNative]::GetSystemMetrics(1))."
 }
 
+function Get-HenkaNativeAuthoringSourceRowGeometry {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [string]$Name,
+        [string]$NamePrefix,
+        [switch]$Latest
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Name) -eq [string]::IsNullOrWhiteSpace($NamePrefix)) {
+        throw 'Specify exactly one native authoring row name or name prefix.'
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    $nameExpression = if (-not [string]::IsNullOrWhiteSpace($Name)) {
+        '(?<name>' + [Regex]::Escape($Name) + ')'
+    }
+    else {
+        '(?<name>' + [Regex]::Escape($NamePrefix) + '[^\r\n]+?)'
+    }
+    $number = '-?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)'
+    $pattern = '(?m)^Native authoring source row: name=' + $nameExpression +
+        ' x=(?<x>' + $number + ') y=(?<y>' + $number +
+        ') width=(?<width>' + $number + ') height=(?<height>' + $number + ')\.\r?$'
+    $text = Read-HenkaSharedText -Path $Path
+    $matches = [Regex]::Matches($text, $pattern)
+    if ($matches.Count -eq 0) {
+        return $null
+    }
+    $match = if ($Latest) { $matches[$matches.Count - 1] } else { $matches[0] }
+    $culture = [Globalization.CultureInfo]::InvariantCulture
+    return [pscustomobject]@{
+        Name = $match.Groups['name'].Value
+        X = [double]::Parse($match.Groups['x'].Value, $culture)
+        Y = [double]::Parse($match.Groups['y'].Value, $culture)
+        Width = [double]::Parse($match.Groups['width'].Value, $culture)
+        Height = [double]::Parse($match.Groups['height'].Value, $culture)
+    }
+}
+
+function New-HenkaDetachedBitmapFromFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [ValidateRange(1, 8192)][int]$MaxDimension = 8192,
+        [ValidateRange(1, 16777216)][long]$MaxPixels = 16777216
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "The captured image does not exist: $Path"
+    }
+    Add-Type -AssemblyName System.Drawing
+    $source = $null
+    $copy = $null
+    $graphics = $null
+    $published = $false
+    try {
+        $source = New-Object System.Drawing.Bitmap -ArgumentList $Path
+        if ($source.Width -le 0 -or $source.Height -le 0 -or
+            $source.Width -gt $MaxDimension -or $source.Height -gt $MaxDimension -or
+            ([long]$source.Width * [long]$source.Height) -gt $MaxPixels) {
+            throw "The captured image dimensions exceed the bounded bitmap contract."
+        }
+
+        # Bitmap.Clone can retain the source file handle even after disposing
+        # the file-backed Bitmap. Draw into a newly allocated image so callers
+        # can retire the temporary capture while keeping the returned pixels.
+        $copy = New-Object System.Drawing.Bitmap -ArgumentList `
+            $source.Width, `
+            $source.Height, `
+            ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        $graphics = [System.Drawing.Graphics]::FromImage($copy)
+        $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+        $graphics.DrawImageUnscaled($source, 0, 0)
+        $graphics.Dispose()
+        $graphics = $null
+        $source.Dispose()
+        $source = $null
+        $published = $true
+        return $copy
+    }
+    finally {
+        if ($null -ne $graphics) {
+            $graphics.Dispose()
+        }
+        if ($null -ne $source) {
+            $source.Dispose()
+        }
+        if (-not $published -and $null -ne $copy) {
+            $copy.Dispose()
+        }
+    }
+}
+
 function Save-HenkaAutomationWindowScreenshot {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,

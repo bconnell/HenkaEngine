@@ -57,6 +57,28 @@ foreach(contract IN ITEMS
     endif()
 endforeach()
 
+string(FIND "${main_source}" "static henka_result sandbox3d_initialize(" app_initialize_start)
+string(FIND "${main_source}" "static void sandbox3d_update(" app_update_start)
+string(FIND "${main_source}" "static void sandbox3d_shutdown(" app_shutdown_start)
+string(FIND "${main_source}" "static bool sandbox3d_run_prefab_public_smoke(" app_shutdown_end)
+if(app_initialize_start LESS 0 OR app_update_start LESS app_initialize_start OR
+   app_shutdown_start LESS app_update_start OR app_shutdown_end LESS app_shutdown_start)
+    list(APPEND violations "Sandbox3D frame-capture lifecycle boundaries could not be identified")
+else()
+    math(EXPR app_initialize_length "${app_update_start} - ${app_initialize_start}")
+    math(EXPR app_update_length "${app_shutdown_start} - ${app_update_start}")
+    math(EXPR app_shutdown_length "${app_shutdown_end} - ${app_shutdown_start}")
+    string(SUBSTRING "${main_source}" ${app_initialize_start} ${app_initialize_length} app_initialize_source)
+    string(SUBSTRING "${main_source}" ${app_update_start} ${app_update_length} app_update_source)
+    string(SUBSTRING "${main_source}" ${app_shutdown_start} ${app_shutdown_length} app_shutdown_source)
+    if(NOT app_initialize_source MATCHES "sandbox3d_automation_frame_capture_create\\(" OR
+       NOT app_initialize_source MATCHES "sandbox3d_automation_frame_capture_destroy\\(" OR
+       NOT app_update_source MATCHES "sandbox3d_automation_frame_capture_update\\(" OR
+       NOT app_shutdown_source MATCHES "sandbox3d_automation_frame_capture_destroy\\(")
+        list(APPEND violations "the application-owned framebuffer capture request must be created, serviced in the frame update, and destroyed on normal and failed initialization paths")
+    endif()
+endif()
+
 if(NOT main_source MATCHES "henka_engine_get_window_content_size\\(")
     list(APPEND violations "workspace geometry must use the platform's content-space window dimensions")
 endif()
@@ -430,6 +452,71 @@ endif()
 string(FIND "${main_source}" "henka_ui_context_set_font_profile(" direct_profile_setter_position)
 if(NOT direct_profile_setter_position LESS 0)
     list(APPEND violations "main.c must not become a competing font-profile authority")
+endif()
+
+string(FIND "${main_source}"
+    "static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* user_data)"
+    typography_update_definition_position)
+if(typography_update_definition_position LESS 0)
+    list(APPEND violations "Sandbox3D update boundary must remain identifiable for deferred native-window resource work")
+else()
+    string(SUBSTRING "${main_source}" ${typography_update_definition_position} -1
+        typography_update_source)
+    string(FIND "${typography_update_source}"
+        "sandbox3d_process_pending_tool_window_open("
+        typography_deferred_window_process_position)
+    string(FIND "${typography_update_source}"
+        "sandbox3d_build_ui("
+        typography_main_ui_build_position)
+    if(typography_deferred_window_process_position LESS 0 OR
+       typography_main_ui_build_position LESS 0 OR
+       NOT typography_deferred_window_process_position LESS typography_main_ui_build_position)
+        list(APPEND violations "queued native-window font/resource preparation must run from Sandbox3D update before the next main UI frame")
+    endif()
+endif()
+
+string(FIND "${main_source}" "pending_tool_window_open_kind"
+    typography_pending_window_state_position)
+string(FIND "${main_source}" "sandbox3d_queue_tool_window_open("
+    typography_pending_window_queue_position)
+string(FIND "${main_source}"
+    "static bool sandbox3d_open_native_panel_test(henka_engine* engine, sandbox3d_state* state)"
+    typography_native_open_definition_position REVERSE)
+string(FIND "${main_source}"
+    "static bool sandbox3d_open_native_panel_test_now(henka_engine* engine, sandbox3d_state* state)"
+    typography_native_open_executor_position REVERSE)
+if(typography_pending_window_state_position LESS 0 OR
+   typography_pending_window_queue_position LESS 0 OR
+   typography_native_open_definition_position LESS 0 OR
+   typography_native_open_executor_position LESS typography_native_open_definition_position)
+    list(APPEND violations "native tool-window requests need explicit bounded pending state and a product-owned deferred processor")
+else()
+    math(EXPR typography_native_open_body_length
+        "${typography_native_open_executor_position} - ${typography_native_open_definition_position}")
+    string(SUBSTRING "${main_source}" ${typography_native_open_definition_position}
+        ${typography_native_open_body_length} typography_native_open_body)
+    if(NOT typography_native_open_body MATCHES "sandbox3d_queue_tool_window_open" OR
+       typography_native_open_body MATCHES "henka_engine_open_tool_window|sandbox3d_editor_typography_runtime_attach_context")
+        list(APPEND violations "the Native Panel Test UI action must queue its request without opening a window or preparing fonts during the active UI frame")
+    endif()
+endif()
+
+string(FIND "${main_source}" "static bool sandbox3d_open_detached_workspace_panel("
+    typography_detached_open_definition_position REVERSE)
+string(FIND "${main_source}" "static bool sandbox3d_open_detached_workspace_panel_now("
+    typography_detached_open_executor_position REVERSE)
+if(typography_detached_open_definition_position LESS 0 OR
+   typography_detached_open_executor_position LESS typography_detached_open_definition_position)
+    list(APPEND violations "detached workspace window requests must use the same deferred typography-safe boundary")
+else()
+    math(EXPR typography_detached_open_body_length
+        "${typography_detached_open_executor_position} - ${typography_detached_open_definition_position}")
+    string(SUBSTRING "${main_source}" ${typography_detached_open_definition_position}
+        ${typography_detached_open_body_length} typography_detached_open_body)
+    if(NOT typography_detached_open_body MATCHES "sandbox3d_queue_tool_window_open" OR
+       typography_detached_open_body MATCHES "henka_engine_open_tool_window|sandbox3d_editor_typography_runtime_attach_context")
+        list(APPEND violations "detaching a workspace panel must queue creation and leave workspace state unchanged until font attachment succeeds")
+    endif()
 endif()
 
 if(violations)

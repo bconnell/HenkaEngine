@@ -32,6 +32,12 @@ if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
         NAME henka_editor_typography_capture_policy_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_editor_typography_capture_policy_windows.ps1)
+
+    add_test(
+        NAME henka_ui_automation_helpers_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_henka_ui_automation_helpers_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
 endif()
 
 if(HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)

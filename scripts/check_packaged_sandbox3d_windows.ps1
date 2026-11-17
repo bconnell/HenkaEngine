@@ -377,25 +377,17 @@ function New-HenkaCapturedWindowBitmap {
         throw "$Description did not produce a complete application framebuffer image."
     }
 
-    $sourceBitmap = $null
+    $bitmap = New-HenkaDetachedBitmapFromFile `
+        -Path $framePath `
+        -MaxDimension 8192 `
+        -MaxPixels 16777216
     try {
-        $sourceBitmap = New-Object System.Drawing.Bitmap -ArgumentList $framePath
-        if ($sourceBitmap.Width -le 0 -or $sourceBitmap.Height -le 0 -or
-            $sourceBitmap.Width -gt 8192 -or $sourceBitmap.Height -gt 8192 -or
-            ([long]$sourceBitmap.Width * [long]$sourceBitmap.Height) -gt 16777216) {
-            throw "$Description application framebuffer dimensions exceed the bounded capture contract."
-        }
-        $bitmap = $sourceBitmap.Clone(
-            (New-Object System.Drawing.Rectangle -ArgumentList 0, 0, $sourceBitmap.Width, $sourceBitmap.Height),
-            [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        Remove-Item -LiteralPath $framePath -Force -ErrorAction Stop
     }
-    finally {
-        if ($null -ne $sourceBitmap) {
-            $sourceBitmap.Dispose()
-        }
+    catch {
+        $bitmap.Dispose()
+        throw
     }
-
-    Remove-Item -LiteralPath $framePath -Force -ErrorAction Stop
     return $bitmap
 }
 
@@ -3887,7 +3879,8 @@ try {
         }
         $nativeRow = Get-HenkaNativeAuthoringSourceRowGeometry `
             -Path $stdoutPath `
-            -Name $nativeAuthoringSourceName
+            -Name $nativeAuthoringSourceName `
+            -Latest
         if ($null -eq $nativeRow) {
             throw "The latest product-owned native authoring source-row geometry could not be parsed."
         }

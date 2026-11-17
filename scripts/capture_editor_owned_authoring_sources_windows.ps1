@@ -196,16 +196,9 @@ function Scroll-FramebufferPoint {
 
 function Get-SourceRow {
     param([Parameter(Mandatory = $true)][string]$Subject)
-    $text = Get-Content -LiteralPath $stdoutPath -Raw -ErrorAction SilentlyContinue
-    if ([string]::IsNullOrEmpty($text)) {
-        return $null
-    }
-    $pattern = "(?m)^Native authoring source row: name=Showcase $Subject .*? x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28\.0\."
-    $matches = [Regex]::Matches($text, $pattern)
-    if ($matches.Count -eq 0) {
-        return $null
-    }
-    return $matches[0]
+    return Get-HenkaNativeAuthoringSourceRowGeometry `
+        -Path $stdoutPath `
+        -NamePrefix "Showcase $Subject "
 }
 
 function Get-ProjectControls {
@@ -520,8 +513,8 @@ try {
             -Handle $handle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ([double]$row.Groups["x"].Value + [double]$row.Groups["width"].Value / 2.0) `
-            -FramebufferY ([double]$row.Groups["y"].Value + $(if ($subject -eq "Rocket") { 6.0 } else { 14.0 }))
+            -FramebufferX ($row.X + $row.Width / 2.0) `
+            -FramebufferY ($row.Y + $(if ($subject -eq "Rocket") { 6.0 } else { 14.0 }))
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring row clicked: name=Showcase $subject" -TimeoutMilliseconds 3000)) {
             throw "The visible $subject row was not selected."
         }

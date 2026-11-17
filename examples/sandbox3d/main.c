@@ -459,6 +459,13 @@ typedef struct sandbox3d_ui_geometry_report
     int state;
 } sandbox3d_ui_geometry_report;
 
+typedef enum sandbox3d_pending_tool_window_open_kind
+{
+    SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_NONE = 0,
+    SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_NATIVE_PANEL_TEST,
+    SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_DETACHED_WORKSPACE_PANEL
+} sandbox3d_pending_tool_window_open_kind;
+
 typedef struct sandbox3d_state
 {
     henka_engine* engine;
@@ -466,6 +473,7 @@ typedef struct sandbox3d_state
     henka_action_context* actions;
     henka_settings* settings;
     sandbox3d_editor_typography_runtime* typography_runtime;
+    sandbox3d_automation_frame_capture* automation_frame_capture;
     bool typography_scale_failure_reported;
     bool editor_display_metrics_failure_reported;
     henka_ui_context* ui;
@@ -473,6 +481,8 @@ typedef struct sandbox3d_state
     henka_window_id native_panel_window_id;
     henka_ui_context* detached_panel_ui[SANDBOX3D_WORKSPACE_PANEL_COUNT];
     henka_window_id detached_panel_window_ids[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    sandbox3d_pending_tool_window_open_kind pending_tool_window_open_kind;
+    sandbox3d_workspace_panel_id pending_detached_panel_id;
     henka_camera camera;
     henka_camera_preset camera_preset;
     henka_mesh* cube_mesh;
@@ -5406,13 +5416,25 @@ static void sandbox3d_draw_value_row(
     float width,
     const char* label,
     const char* value);
+static bool sandbox3d_queue_tool_window_open(
+    sandbox3d_state* state,
+    sandbox3d_pending_tool_window_open_kind kind,
+    sandbox3d_workspace_panel_id panel_id);
 static bool sandbox3d_open_native_panel_test(henka_engine* engine, sandbox3d_state* state);
+static bool sandbox3d_open_native_panel_test_now(henka_engine* engine, sandbox3d_state* state);
 static void sandbox3d_close_native_panel_test(henka_engine* engine, sandbox3d_state* state);
 static void sandbox3d_build_native_panel_test_ui(henka_engine* engine, sandbox3d_state* state);
 static bool sandbox3d_open_detached_workspace_panel(
     henka_engine* engine,
     sandbox3d_state* state,
     sandbox3d_workspace_panel_id panel_id);
+static bool sandbox3d_open_detached_workspace_panel_now(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    sandbox3d_workspace_panel_id panel_id);
+static void sandbox3d_process_pending_tool_window_open(
+    henka_engine* engine,
+    sandbox3d_state* state);
 static void sandbox3d_close_detached_workspace_panel(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -15441,7 +15463,54 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_panel_ui = NULL;
 }
 
+static bool sandbox3d_queue_tool_window_open(
+    sandbox3d_state* state,
+    sandbox3d_pending_tool_window_open_kind kind,
+    sandbox3d_workspace_panel_id panel_id)
+{
+    if (state == NULL || kind == SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_NONE ||
+        (kind == SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_DETACHED_WORKSPACE_PANEL &&
+            (panel_id < 0 || panel_id >= SANDBOX3D_WORKSPACE_PANEL_COUNT)))
+    {
+        return false;
+    }
+    if (state->pending_tool_window_open_kind !=
+        SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_NONE)
+    {
+        return state->pending_tool_window_open_kind == kind &&
+            (kind != SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_DETACHED_WORKSPACE_PANEL ||
+                state->pending_detached_panel_id == panel_id);
+    }
+    state->pending_tool_window_open_kind = kind;
+    state->pending_detached_panel_id = panel_id;
+    return true;
+}
+
 static bool sandbox3d_open_native_panel_test(henka_engine* engine, sandbox3d_state* state)
+{
+    if (engine == NULL || state == NULL || state->native_panel_ui == NULL)
+    {
+        return false;
+    }
+    if (state->native_panel_window_id != HENKA_INVALID_WINDOW_ID &&
+        henka_engine_get_tool_window_state(engine, state->native_panel_window_id, &(henka_tool_window_state){0}) == HENKA_SUCCESS)
+    {
+        sandbox3d_set_status(state, false, "Native Panel Test is already open.");
+        return true;
+    }
+    if (!sandbox3d_queue_tool_window_open(
+            state,
+            SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_NATIVE_PANEL_TEST,
+            (sandbox3d_workspace_panel_id)0))
+    {
+        sandbox3d_set_status(state, true, "Another native tool window request is already pending.");
+        return false;
+    }
+    sandbox3d_set_status(state, false, "Opening Native Panel Test...");
+    return true;
+}
+
+static bool sandbox3d_open_native_panel_test_now(henka_engine* engine, sandbox3d_state* state)
 {
     henka_tool_window_desc desc;
     henka_result result;
@@ -15577,6 +15646,38 @@ static bool sandbox3d_open_detached_workspace_panel(
     sandbox3d_state* state,
     sandbox3d_workspace_panel_id panel_id)
 {
+    if (engine == NULL || state == NULL || panel_id < 0 ||
+        panel_id >= SANDBOX3D_WORKSPACE_PANEL_COUNT ||
+        state->detached_panel_ui[panel_id] == NULL ||
+        sandbox3d_workspace_get_panel(&state->workspace.model, panel_id) == NULL)
+    {
+        return false;
+    }
+    if (state->detached_panel_window_ids[panel_id] != HENKA_INVALID_WINDOW_ID)
+    {
+        return true;
+    }
+    if (!sandbox3d_queue_tool_window_open(
+            state,
+            SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_DETACHED_WORKSPACE_PANEL,
+            panel_id))
+    {
+        sandbox3d_set_statusf(
+            state,
+            true,
+            false,
+            "%s could not be detached while another native window request is pending.",
+            sandbox3d_workspace_panel_name(panel_id));
+        return false;
+    }
+    return true;
+}
+
+static bool sandbox3d_open_detached_workspace_panel_now(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    sandbox3d_workspace_panel_id panel_id)
+{
     char title[64];
     henka_tool_window_desc desc;
     sandbox3d_workspace_panel* panel;
@@ -15642,6 +15743,41 @@ static bool sandbox3d_open_detached_workspace_panel(
     sandbox3d_workspace_detach_panel(&state->workspace.model, panel_id, window_id);
     sandbox3d_set_statusf(state, false, false, "%s detached into a separate window.", sandbox3d_workspace_panel_name(panel_id));
     return true;
+}
+
+static void sandbox3d_process_pending_tool_window_open(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    sandbox3d_pending_tool_window_open_kind kind;
+    sandbox3d_workspace_panel_id panel_id;
+
+    if (engine == NULL || state == NULL ||
+        state->pending_tool_window_open_kind ==
+            SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_NONE)
+    {
+        return;
+    }
+
+    kind = state->pending_tool_window_open_kind;
+    panel_id = state->pending_detached_panel_id;
+    state->pending_tool_window_open_kind =
+        SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_NONE;
+
+    switch (kind)
+    {
+        case SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_NATIVE_PANEL_TEST:
+            (void)sandbox3d_open_native_panel_test_now(engine, state);
+            break;
+        case SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_DETACHED_WORKSPACE_PANEL:
+            (void)sandbox3d_open_detached_workspace_panel_now(
+                engine, state, panel_id);
+            break;
+        case SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_NONE:
+        default:
+            HENKA_LOG_WARN("Discarding invalid pending tool-window request.");
+            break;
+    }
 }
 
 static void sandbox3d_close_detached_workspace_panel(
@@ -43469,6 +43605,13 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
+    result = sandbox3d_automation_frame_capture_create(
+        &state->automation_frame_capture);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
     sandbox3d_print_help(state);
     printf("Runtime mode: %s\n", henka_engine_get_package_mode_label(henka_engine_get_package_mode(engine)));
     printf("Startup selection: %s\n",
@@ -43479,6 +43622,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     return HENKA_SUCCESS;
 
 fail:
+    sandbox3d_automation_frame_capture_destroy(state->automation_frame_capture);
+    state->automation_frame_capture = NULL;
     henka_free(detail_normal_pixels);
     henka_free(macro_variation_pixels);
     henka_free(wood_grain_pixels);
@@ -44776,6 +44921,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    if (state != NULL)
+    {
+        sandbox3d_automation_frame_capture_update(
+            state->automation_frame_capture,
+            engine);
+    }
     scene_viewport_ready = false;
     typography_scale_ready = true;
     if (state != NULL && state->typography_runtime != NULL)
@@ -44801,6 +44952,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     {
         (void)sandbox3d_editor_typography_runtime_apply_pending_scale(
             state->typography_runtime);
+        sandbox3d_process_pending_tool_window_open(engine, state);
     }
     if (state != NULL)
     {
@@ -46528,6 +46680,8 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    sandbox3d_automation_frame_capture_destroy(state->automation_frame_capture);
+    state->automation_frame_capture = NULL;
     if (!state->smoke_test && !state->physics_smoke_test && !state->capture_mode_requested)
     {
         sandbox3d_save_settings(engine, state);
