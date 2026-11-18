@@ -871,7 +871,20 @@ function Test-HenkaPinnedFetchContentSource {
             -not $generatedVersionHeaderItem.PSIsContainer -and
             -not ($generatedVersionHeaderItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
             try {
-                $generatedVersionHeaderHash = (Get-FileHash -LiteralPath $generatedVersionHeader -Algorithm SHA256).Hash
+                $hashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
+                try {
+                    $hashStream = [System.IO.File]::OpenRead($generatedVersionHeader)
+                    try {
+                        $hashBytes = $hashAlgorithm.ComputeHash($hashStream)
+                        $generatedVersionHeaderHash = ([BitConverter]::ToString($hashBytes)).Replace("-", "")
+                    }
+                    finally {
+                        $hashStream.Dispose()
+                    }
+                }
+                finally {
+                    $hashAlgorithm.Dispose()
+                }
                 if ($generatedVersionHeaderHash -ieq 'F2272B43BE16731F3C390E1FFB7FAD93CDF10F83620D487C82D0457D86B8AEA5') {
                     $status = @()
                 }
