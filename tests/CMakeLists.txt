@@ -1156,6 +1156,11 @@ target_link_libraries(henka_tests
         henka
 )
 
+target_include_directories(henka_tests
+    PRIVATE
+        ${SDL3_SOURCE_DIR}/include
+)
+
 target_compile_definitions(henka_tests
     PRIVATE
         HENKA_SANDBOX3D_TEST_SEAM=1

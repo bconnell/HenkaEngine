@@ -1206,7 +1206,6 @@ henka_result henka_engine_run(henka_engine* engine)
             break;
         }
 
-        henka_engine_close_requested_tool_windows(engine);
         henka_engine_handle_resize(engine, &frame_state);
 
         if (engine->config.on_update != NULL)
@@ -1216,6 +1215,9 @@ henka_result henka_engine_run(henka_engine* engine)
                 engine->time.delta_seconds,
                 engine->config.user_data);
         }
+
+        /* Give the application owner one update to observe and retire tool-window close requests. */
+        henka_engine_close_requested_tool_windows(engine);
 
         if (report_automation_frame)
         {

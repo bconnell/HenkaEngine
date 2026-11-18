@@ -1381,6 +1381,8 @@ bool henka_platform_get_tool_window_state(
         out_state->native_window_id = (uint32_t)slot->native_window_id;
         out_state->open = slot->open;
         out_state->focused = slot->focused;
+        out_state->position_x = slot->position_x;
+        out_state->position_y = slot->position_y;
         out_state->close_requested = true;
         snprintf(out_state->last_event, sizeof(out_state->last_event), "%s", slot->last_event);
         return true;

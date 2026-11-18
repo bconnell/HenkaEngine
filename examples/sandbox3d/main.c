@@ -5441,6 +5441,9 @@ static void sandbox3d_close_detached_workspace_panel(
     sandbox3d_workspace_panel_id panel_id,
     sandbox3d_workspace_dock_zone dock_zone);
 static void sandbox3d_close_all_detached_workspace_panels(henka_engine* engine, sandbox3d_state* state);
+static void sandbox3d_service_tool_window_close_requests(
+    henka_engine* engine,
+    sandbox3d_state* state);
 static void sandbox3d_reconcile_title_bar_drag_back(henka_engine* engine, sandbox3d_state* state);
 static void sandbox3d_cancel_workspace_interaction(sandbox3d_state* state);
 static void sandbox3d_draw_detached_workspace_panel_content(
@@ -15875,6 +15878,75 @@ static void sandbox3d_close_all_detached_workspace_panels(henka_engine* engine, 
         if (panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_DETACHED)
         {
             sandbox3d_close_detached_workspace_panel(engine, state, (sandbox3d_workspace_panel_id)index, panel->last_docked_zone);
+        }
+    }
+}
+
+static void sandbox3d_service_tool_window_close_requests(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    henka_tool_window_state window_state;
+    henka_result result;
+    int panel_index;
+
+    if (engine == NULL || state == NULL)
+    {
+        return;
+    }
+
+    if (state->native_panel_window_id != HENKA_INVALID_WINDOW_ID)
+    {
+        result = henka_engine_get_tool_window_state(
+            engine, state->native_panel_window_id, &window_state);
+        if (result != HENKA_SUCCESS || !window_state.open || window_state.close_requested)
+        {
+            const bool close_requested = result == HENKA_SUCCESS && window_state.close_requested;
+            sandbox3d_close_native_panel_test(engine, state);
+            if (close_requested)
+            {
+                sandbox3d_set_status(state, false, "Native Panel Test closed.");
+            }
+        }
+    }
+
+    for (panel_index = 0; panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++panel_index)
+    {
+        const sandbox3d_workspace_panel_id panel_id =
+            (sandbox3d_workspace_panel_id)panel_index;
+        const sandbox3d_workspace_panel* panel;
+        sandbox3d_workspace_dock_zone restore_dock_zone;
+        bool close_requested;
+
+        if (state->detached_panel_window_ids[panel_index] == HENKA_INVALID_WINDOW_ID)
+        {
+            continue;
+        }
+
+        result = henka_engine_get_tool_window_state(
+            engine,
+            state->detached_panel_window_ids[panel_index],
+            &window_state);
+        close_requested = result == HENKA_SUCCESS && window_state.close_requested;
+        if (result == HENKA_SUCCESS && window_state.open && !close_requested)
+        {
+            continue;
+        }
+
+        panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, panel_id);
+        restore_dock_zone = panel != NULL
+            ? panel->last_docked_zone
+            : SANDBOX3D_WORKSPACE_DOCK_LEFT;
+        sandbox3d_close_detached_workspace_panel(
+            engine, state, panel_id, restore_dock_zone);
+        if (close_requested)
+        {
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "%s closed and returned to its dock.",
+                sandbox3d_workspace_panel_name(panel_id));
         }
     }
 }
@@ -45000,6 +45072,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         sandbox3d_automation_frame_capture_update(
             state->automation_frame_capture,
             engine);
+        sandbox3d_service_tool_window_close_requests(engine, state);
     }
     scene_viewport_ready = false;
     typography_scale_ready = true;

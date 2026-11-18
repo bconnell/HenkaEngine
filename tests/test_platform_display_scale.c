@@ -3,6 +3,7 @@
 #include <henka/engine.h>
 #include <henka/ui.h>
 #include <henka/ui_font.h>
+#include <SDL3/SDL.h>
 
 #include <math.h>
 #include <stdbool.h>
@@ -29,6 +30,50 @@ typedef struct henka_platform_scale_profile_fixture
     henka_ui_font_raster_profile* detached_wrong_context_profile;
     uint8_t* font_bytes;
 } henka_platform_scale_profile_fixture;
+
+typedef struct henka_platform_tool_window_close_fixture
+{
+    henka_window_id window_id;
+    uint32_t native_window_id;
+    henka_result state_result;
+    henka_result close_result;
+    bool observe_close_request;
+    bool update_called;
+    bool close_request_observed;
+    bool owner_closed_window;
+} henka_platform_tool_window_close_fixture;
+
+static void henka_test_platform_tool_window_close_update(
+    henka_engine* engine,
+    double delta_seconds,
+    void* user_data)
+{
+    henka_platform_tool_window_close_fixture* fixture =
+        (henka_platform_tool_window_close_fixture*)user_data;
+    henka_tool_window_state state;
+
+    (void)delta_seconds;
+    if (engine == NULL || fixture == NULL || !fixture->observe_close_request)
+    {
+        return;
+    }
+
+    fixture->observe_close_request = false;
+    fixture->update_called = true;
+    fixture->state_result = henka_engine_get_tool_window_state(
+        engine, fixture->window_id, &state);
+    if (fixture->state_result == HENKA_SUCCESS &&
+        state.id == fixture->window_id &&
+        state.native_window_id == fixture->native_window_id &&
+        state.close_requested)
+    {
+        fixture->close_request_observed = true;
+        fixture->close_result = henka_engine_close_tool_window(
+            engine, fixture->window_id);
+        fixture->owner_closed_window = fixture->close_result == HENKA_SUCCESS;
+    }
+    henka_engine_request_exit(engine);
+}
 
 static bool henka_test_platform_scale_load_font(
     uint8_t** out_bytes,
@@ -444,8 +489,10 @@ static bool henka_test_platform_display_scale_contract(void)
     henka_engine* engine = NULL;
     henka_ui_context* tool_ui = NULL;
     henka_platform_scale_profile_fixture profile_fixture;
+    henka_platform_tool_window_close_fixture close_fixture;
     henka_tool_window_state tool_state;
     henka_tool_window_desc tool_desc;
+    SDL_Event close_event;
     henka_window_id tool_window_id = HENKA_INVALID_WINDOW_ID;
     uint32_t display_scale_numerator = 0U;
     uint32_t display_scale_denominator = 0U;
@@ -457,6 +504,7 @@ static bool henka_test_platform_display_scale_contract(void)
     bool passed = false;
 
     memset(&profile_fixture, 0, sizeof(profile_fixture));
+    memset(&close_fixture, 0, sizeof(close_fixture));
     memset(&config, 0, sizeof(config));
     config.application_name = "Henka display scale contract";
     config.window_width = 640;
@@ -464,6 +512,8 @@ static bool henka_test_platform_display_scale_contract(void)
     config.window_start_hidden = true;
     config.enable_vsync = false;
     config.asset_base_path = ".";
+    config.on_update = henka_test_platform_tool_window_close_update;
+    config.user_data = &close_fixture;
     if (henka_engine_create(&config, &engine) != HENKA_SUCCESS || engine == NULL ||
         henka_engine_get_window_display_scale(
             engine,
@@ -529,6 +579,24 @@ static bool henka_test_platform_display_scale_contract(void)
     {
         goto cleanup;
     }
+
+    close_fixture.window_id = tool_window_id;
+    close_fixture.native_window_id = tool_state.native_window_id;
+    close_fixture.observe_close_request = true;
+    memset(&close_event, 0, sizeof(close_event));
+    close_event.type = SDL_EVENT_WINDOW_CLOSE_REQUESTED;
+    close_event.window.windowID = tool_state.native_window_id;
+    if (!SDL_PushEvent(&close_event) ||
+        henka_engine_run(engine) != HENKA_SUCCESS ||
+        !close_fixture.update_called ||
+        close_fixture.state_result != HENKA_SUCCESS ||
+        !close_fixture.close_request_observed ||
+        close_fixture.close_result != HENKA_SUCCESS ||
+        !close_fixture.owner_closed_window)
+    {
+        goto cleanup;
+    }
+    tool_window_open = false;
 
     passed = true;
 

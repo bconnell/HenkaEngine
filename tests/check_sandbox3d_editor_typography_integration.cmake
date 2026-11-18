@@ -20,6 +20,7 @@ endif()
 file(READ "${SANDBOX3D_SOURCE_DIR}/editor_font_bootstrap.c" bootstrap_source)
 file(READ "${SANDBOX3D_SOURCE_DIR}/editor_font_bootstrap.h" bootstrap_header)
 file(READ "${SANDBOX3D_SOURCE_DIR}/../../engine/src/platform/platform_sdl.c" platform_source)
+file(READ "${SANDBOX3D_SOURCE_DIR}/../../engine/src/core/engine.c" engine_source)
 file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/package_sandbox3d_windows.ps1" package_source)
 if(DEFINED TYPOGRAPHY_PACKAGE_TEST_SOURCE)
     file(READ "${TYPOGRAPHY_PACKAGE_TEST_SOURCE}" typography_package_test_source)
@@ -77,6 +78,22 @@ else()
        NOT app_shutdown_source MATCHES "sandbox3d_automation_frame_capture_destroy\\(")
         list(APPEND violations "the application-owned framebuffer capture request must be created, serviced in the frame update, and destroyed on normal and failed initialization paths")
     endif()
+    string(FIND "${app_update_source}"
+        "sandbox3d_service_tool_window_close_requests(engine, state);" typography_close_service_position)
+    string(FIND "${app_update_source}"
+        "sandbox3d_editor_typography_runtime_sync_display_scales(" typography_scale_sync_position)
+    if(typography_close_service_position LESS 0 OR typography_scale_sync_position LESS 0 OR
+       typography_close_service_position GREATER typography_scale_sync_position)
+        list(APPEND violations "owned tool-window close requests must be serviced before typography scale sync can reject a closing context")
+    endif()
+endif()
+
+string(FIND "${engine_source}" "engine->config.on_update(" typography_engine_update_position)
+string(FIND "${engine_source}" "henka_engine_close_requested_tool_windows(engine);"
+    typography_engine_close_fallback_position)
+if(typography_engine_update_position LESS 0 OR typography_engine_close_fallback_position LESS 0 OR
+   typography_engine_close_fallback_position LESS typography_engine_update_position)
+    list(APPEND violations "the application update must observe tool-window close requests before the engine applies its automatic close fallback")
 endif()
 
 if(NOT main_source MATCHES "henka_engine_get_window_content_size\\(")
