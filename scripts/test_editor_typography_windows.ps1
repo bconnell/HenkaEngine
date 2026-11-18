@@ -94,6 +94,18 @@ $validationHarnessIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
 if ($validationHarnessIdentity.source_state -ne "clean") {
     throw "The typography comparison harness must run from a clean committed candidate."
 }
+$buildCommitSha = [string]$buildInfo.commit_sha
+if ([string]::IsNullOrWhiteSpace($buildCommitSha) -or $buildInfo.source_state -ne "clean") {
+    throw "The packaged Sandbox build must identify a clean committed source tree."
+}
+$productSourceEquivalence = Get-HenkaTypographyProductSourceEquivalence `
+    -RepositoryRoot $repoRoot `
+    -BuildCommitSha $buildCommitSha `
+    -ValidationCommitSha $validationHarnessIdentity.commit_sha
+if (-not $productSourceEquivalence.equivalent) {
+    $changedPathText = @($productSourceEquivalence.changed_paths) -join ", "
+    throw "The package executable was built from $buildCommitSha, and the validation candidate changes product/build inputs; rebuild before typography capture. $($productSourceEquivalence.violation) Changed paths: $changedPathText"
+}
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path (Get-HenkaEvidenceRoot -RepositoryRoot $repoRoot) `
         ("editor-typography-comparison-" + $sourceIdentity.Substring(0, 12))
@@ -1976,6 +1988,13 @@ foreach ($scale in @(100, 125, 150, 200)) {
             source_identity = [string]$validationHarnessIdentity.source_identity
             comparison_script_sha256 = $comparisonScriptHash
             shared_automation_helper_sha256 = $automationHelperHash
+        }
+        product_source_equivalence = @{
+            policy_version = [string]$productSourceEquivalence.policy_version
+            build_commit_sha = [string]$productSourceEquivalence.build_commit_sha
+            validation_commit_sha = [string]$productSourceEquivalence.validation_commit_sha
+            verified = [bool]$productSourceEquivalence.equivalent
+            non_product_changed_paths = @($productSourceEquivalence.changed_paths)
         }
         package_root_relative_to_local = $packageRootRelativeToLocal
         proof = "real packaged startup font verification; real Settings tab and scale-control input; persisted 200 percent restart; at 1280x720 and 200 percent, real Utility Settings wheel input reveals the Smooth Snap control inside the reported viewport, and two real clicks change then restore the authoritative setting; real product-reported Object Details footer geometry and Save Project click at 200 percent; visual evidence from Henka's completed main-window framebuffer at 1280x720 and borderless desktop 1920x1080; a real Utility detach through its section context menu, product-reported per-context font/atlas scale identity, and a subsequent completed engine render frame while the detached automation window remains hidden and non-foreground. Detached OpenGL pixels are not represented by a Win32 PrintWindow screenshot."
