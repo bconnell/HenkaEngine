@@ -1025,6 +1025,20 @@ henka_result henka_platform_create(
 
     HENKA_LOG_INFO("platform video subsystem reference acquired");
 
+    /* Henka routes close requests per window. SDL's last-visible-window
+     * heuristic can emit a process-wide quit when the main window is hidden
+     * and the last detached/tool window closes. */
+    if (!SDL_SetHintWithPriority(
+            SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE,
+            "0",
+            SDL_HINT_OVERRIDE))
+    {
+        HENKA_LOG_ERROR(
+            "SDL last-window-close quit behavior could not be disabled.");
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        return HENKA_ERROR_PLATFORM;
+    }
+
     platform = henka_calloc(1U, sizeof(*platform));
     if (platform == NULL)
     {

@@ -514,7 +514,12 @@ static bool henka_test_platform_display_scale_contract(void)
     config.asset_base_path = ".";
     config.on_update = henka_test_platform_tool_window_close_update;
     config.user_data = &close_fixture;
-    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS || engine == NULL ||
+    if (!SDL_SetHintWithPriority(
+            SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE,
+            "1",
+            SDL_HINT_OVERRIDE) ||
+        henka_engine_create(&config, &engine) != HENKA_SUCCESS || engine == NULL ||
+        SDL_GetHintBoolean(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, true) ||
         henka_engine_get_window_display_scale(
             engine,
             &display_scale_numerator,
@@ -611,6 +616,7 @@ cleanup:
         henka_engine_destroy(engine);
         engine = NULL;
     }
+    (void)SDL_ResetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE);
     henka_ui_destroy(profile_fixture.ui);
     henka_ui_destroy(tool_ui);
     henka_ui_font_raster_profile_destroy(profile_fixture.wrong_context_profile);
