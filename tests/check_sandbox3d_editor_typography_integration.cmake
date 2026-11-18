@@ -562,6 +562,65 @@ else()
     endif()
 endif()
 
+string(FIND "${main_source}"
+    "static void sandbox3d_build_native_panel_test_ui(henka_engine* engine, sandbox3d_state* state)"
+    typography_native_panel_ui_definition_position REVERSE)
+string(FIND "${main_source}"
+    "static bool sandbox3d_open_detached_workspace_panel("
+    typography_native_panel_ui_end_position REVERSE)
+if(typography_native_panel_ui_definition_position LESS 0 OR
+   typography_native_panel_ui_end_position LESS typography_native_panel_ui_definition_position)
+    list(APPEND violations "native panel context teardown must remain in its product-owned update boundary")
+else()
+    math(EXPR typography_native_panel_ui_body_length
+        "${typography_native_panel_ui_end_position} - ${typography_native_panel_ui_definition_position}")
+    string(SUBSTRING "${main_source}" ${typography_native_panel_ui_definition_position}
+        ${typography_native_panel_ui_body_length} typography_native_panel_ui_body)
+    string(FIND "${typography_native_panel_ui_body}"
+        "if (window_state.close_requested)" typography_native_panel_close_condition_position)
+    string(FIND "${typography_native_panel_ui_body}"
+        "sandbox3d_close_native_panel_test(engine, state);" typography_native_panel_close_owner_position)
+    if(typography_native_panel_close_condition_position LESS 0 OR
+       typography_native_panel_close_owner_position LESS typography_native_panel_close_condition_position)
+        list(APPEND violations "the Native Panel Test must consume the platform close request, close through Henka, and detach its font context")
+    endif()
+endif()
+
+string(FIND "${packaged_sandbox_checker_source}"
+    [=[-Pattern "Native Panel Test: closed"]=]
+    typography_native_panel_close_ack_position)
+string(FIND "${packaged_sandbox_checker_source}"
+    [=[$nativeReopenOffset]=]
+    typography_native_panel_reopen_position)
+if(typography_native_panel_close_ack_position LESS 0 OR
+   typography_native_panel_reopen_position LESS typography_native_panel_close_ack_position)
+    list(APPEND violations "the packaged native-window reopen proof must wait for product acknowledgement of the OS close before clicking reopen")
+endif()
+
+string(FIND "${main_source}"
+    "static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sandbox3d_state* state)"
+    typography_detached_panel_ui_definition_position REVERSE)
+string(FIND "${main_source}"
+    "static bool sandbox3d_apply_camera_preset("
+    typography_detached_panel_ui_end_position REVERSE)
+if(typography_detached_panel_ui_definition_position LESS 0 OR
+   typography_detached_panel_ui_end_position LESS typography_detached_panel_ui_definition_position)
+    list(APPEND violations "detached panel close-request recovery must remain in its product-owned update boundary")
+else()
+    math(EXPR typography_detached_panel_ui_body_length
+        "${typography_detached_panel_ui_end_position} - ${typography_detached_panel_ui_definition_position}")
+    string(SUBSTRING "${main_source}" ${typography_detached_panel_ui_definition_position}
+        ${typography_detached_panel_ui_body_length} typography_detached_panel_ui_body)
+    string(FIND "${typography_detached_panel_ui_body}"
+        "window_state.close_requested" typography_detached_panel_close_condition_position)
+    string(FIND "${typography_detached_panel_ui_body}"
+        "panel->last_docked_zone" typography_detached_panel_restore_zone_position)
+    if(typography_detached_panel_close_condition_position LESS 0 OR
+       typography_detached_panel_restore_zone_position LESS 0)
+        list(APPEND violations "an OS-closed detached workspace panel must release its typography context and return to its canonical prior dock")
+    endif()
+endif()
+
 string(FIND "${main_source}" "static bool sandbox3d_open_detached_workspace_panel("
     typography_detached_open_definition_position REVERSE)
 string(FIND "${main_source}" "static bool sandbox3d_open_detached_workspace_panel_now("

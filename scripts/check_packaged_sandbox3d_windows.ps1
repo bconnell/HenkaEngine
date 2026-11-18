@@ -6591,6 +6591,7 @@ try {
         Assert-HenkaAutomationBackground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 250
 
+        $nativeCloseLogOffset = Get-FileLengthSafe -Path $stdoutPath
         [NativeMethods]::PostMessage(
             $nativeWindowHandle,
             0x0010,
@@ -6608,6 +6609,13 @@ try {
         }
         if (-not $nativeClosed) {
             throw "The Native Panel Test window did not close before the reopen check."
+        }
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native Panel Test: closed" `
+                -StartingOffset $nativeCloseLogOffset `
+                -TimeoutMilliseconds 4000)) {
+            throw "The Sandbox did not acknowledge and retire the OS-closed Native Panel Test window."
         }
 
         $nativeReopenOffset = Get-FileLengthSafe -Path $stdoutPath

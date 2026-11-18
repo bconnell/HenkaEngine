@@ -15622,12 +15622,19 @@ static void sandbox3d_build_native_panel_test_ui(henka_engine* engine, sandbox3d
         return;
     }
 
-    if (henka_engine_get_tool_window_state(engine, state->native_panel_window_id, &window_state) != HENKA_SUCCESS)
+    if (henka_engine_get_tool_window_state(engine, state->native_panel_window_id, &window_state) != HENKA_SUCCESS ||
+        !window_state.open)
     {
         sandbox3d_editor_typography_runtime_detach_context(
             state->typography_runtime, state->native_panel_ui);
         state->native_panel_window_id = HENKA_INVALID_WINDOW_ID;
         sandbox3d_set_status(state, false, "Native Panel Test was closed. Open it again from Tools.");
+        return;
+    }
+    if (window_state.close_requested)
+    {
+        sandbox3d_close_native_panel_test(engine, state);
+        sandbox3d_set_status(state, false, "Native Panel Test closed.");
         return;
     }
 
@@ -16142,10 +16149,13 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
 
     for (panel_index = 0; panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++panel_index)
     {
-        henka_tool_window_state window_state;
+        henka_tool_window_state window_state = {0};
         henka_ui_context* ui;
         henka_ui_frame_desc frame_desc = {0};
         sandbox3d_workspace_panel_id panel_id;
+        const sandbox3d_workspace_panel* panel;
+        sandbox3d_workspace_dock_zone restore_dock_zone;
+        henka_result window_state_result;
 
         panel_id = (sandbox3d_workspace_panel_id)panel_index;
         if (state->detached_panel_window_ids[panel_index] == HENKA_INVALID_WINDOW_ID)
@@ -16153,10 +16163,28 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
             continue;
         }
 
-        if (henka_engine_get_tool_window_state(engine, state->detached_panel_window_ids[panel_index], &window_state) != HENKA_SUCCESS ||
-            !window_state.open)
+        panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, panel_id);
+        restore_dock_zone = panel != NULL
+            ? panel->last_docked_zone
+            : SANDBOX3D_WORKSPACE_DOCK_LEFT;
+        window_state_result = henka_engine_get_tool_window_state(
+            engine,
+            state->detached_panel_window_ids[panel_index],
+            &window_state);
+        if (window_state_result != HENKA_SUCCESS || !window_state.open ||
+            window_state.close_requested)
         {
-            sandbox3d_close_detached_workspace_panel(engine, state, panel_id, SANDBOX3D_WORKSPACE_DOCK_LEFT);
+            sandbox3d_close_detached_workspace_panel(
+                engine, state, panel_id, restore_dock_zone);
+            if (window_state.close_requested)
+            {
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    false,
+                    "%s closed and returned to its dock.",
+                    sandbox3d_workspace_panel_name(panel_id));
+            }
             continue;
         }
 
