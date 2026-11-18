@@ -336,16 +336,31 @@ void henka_test_sandbox3d_editor_layout(void)
 
             HENKA_TEST_ASSERT(
                 sandbox3d_editor_layout_modeling_toolbar_compute(
-                    frame, 100U, true, false, &collapsed) == HENKA_SUCCESS);
+                    ui, frame, 100U, true, false, &collapsed) == HENKA_SUCCESS);
             HENKA_TEST_ASSERT(
                 sandbox3d_editor_layout_modeling_toolbar_compute(
-                    frame, 100U, true, true, &expanded) == HENKA_SUCCESS);
+                    ui, frame, 100U, true, true, &expanded) == HENKA_SUCCESS);
             HENKA_TEST_ASSERT(henka_test_rect_is_contained(frame, collapsed.bounds));
             HENKA_TEST_ASSERT(henka_test_rect_is_contained(frame, expanded.bounds));
             HENKA_TEST_ASSERT(henka_test_rect_is_contained(
                 collapsed.bounds, collapsed.selection_mode));
             HENKA_TEST_ASSERT(henka_test_rect_is_contained(
                 expanded.bounds, expanded.selection_mode));
+            HENKA_TEST_ASSERT(
+                collapsed.tool_count == (widths[width_index] < 760.0f ? 4U : 6U));
+            HENKA_TEST_ASSERT(expanded.tool_count == 6U);
+            HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                collapsed.bounds, collapsed.state_summary));
+            HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                expanded.bounds, expanded.state_summary));
+            HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                expanded.bounds, expanded.orientation_label));
+            HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                expanded.bounds, expanded.pivot_label));
+            HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                expanded.orientation_label, expanded.orientation));
+            HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                expanded.pivot_label, expanded.pivot));
 
             if (widths[width_index] < 760.0f)
             {
@@ -375,8 +390,8 @@ void henka_test_sandbox3d_editor_layout(void)
                     collapsed.tool_buttons[0].y + collapsed.tool_buttons[0].height * 0.5f};
 
                 HENKA_TEST_ASSERT(collapsed.compact);
-                HENKA_TEST_ASSERT(collapsed.bounds.height == 104.0f);
-                HENKA_TEST_ASSERT(expanded.bounds.height == 166.0f);
+                HENKA_TEST_ASSERT(collapsed.bounds.height > 104.0f);
+                HENKA_TEST_ASSERT(expanded.bounds.height > collapsed.bounds.height);
                 HENKA_TEST_ASSERT(collapsed.options_toggle.width >= 96.0f);
                 HENKA_TEST_ASSERT(collapsed.options_toggle.height >= 32.0f);
                 HENKA_TEST_ASSERT(henka_test_rect_is_contained(
@@ -421,7 +436,6 @@ void henka_test_sandbox3d_editor_layout(void)
                     expanded.bounds, expanded.pivot));
                 HENKA_TEST_ASSERT(henka_test_rect_is_empty(expanded.options_toggle) == false);
                 HENKA_TEST_ASSERT(expanded.options_expanded);
-                HENKA_TEST_ASSERT(expanded.bounds.height > collapsed.bounds.height);
                 tool_index = 6U;
             }
             else
@@ -457,6 +471,17 @@ void henka_test_sandbox3d_editor_layout(void)
                     collapsed.bounds, collapsed.tool_buttons[index]));
                 HENKA_TEST_ASSERT(henka_test_rect_is_contained(
                     expanded.bounds, expanded.tool_buttons[index]));
+                for (size_t other_index = index + 1U;
+                     other_index < tool_index;
+                     ++other_index)
+                {
+                    HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                        collapsed.tool_buttons[index],
+                        collapsed.tool_buttons[other_index]));
+                    HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                        expanded.tool_buttons[index],
+                        expanded.tool_buttons[other_index]));
+                }
             }
         }
 
@@ -479,7 +504,7 @@ void henka_test_sandbox3d_editor_layout(void)
 
                 HENKA_TEST_ASSERT(
                     sandbox3d_editor_layout_modeling_toolbar_compute(
-                        frame, scale_percent, true, false, &compact) ==
+                        ui, frame, scale_percent, true, false, &compact) ==
                     HENKA_SUCCESS);
                 HENKA_TEST_ASSERT(compact.compact);
                 HENKA_TEST_ASSERT(henka_test_rect_is_contained(
@@ -488,15 +513,34 @@ void henka_test_sandbox3d_editor_layout(void)
                     compact.bounds, compact.selection_mode));
                 HENKA_TEST_ASSERT(henka_test_rect_is_contained(
                     compact.bounds, compact.options_toggle));
+                HENKA_TEST_ASSERT(compact.tool_count == 4U);
+                HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                    compact.options_toggle, compact.selection_mode));
                 for (tool_index = 0U; tool_index < 4U; ++tool_index)
                 {
+                    int label_width = 0;
+                    int label_height = 0;
+
                     HENKA_TEST_ASSERT(henka_test_rect_is_contained(
                         compact.bounds, compact.tool_buttons[tool_index]));
                     HENKA_TEST_ASSERT(
-                        compact.tool_buttons[tool_index].width * scale >= 96.0f);
+                        henka_ui_measure_text_for_context(
+                            ui,
+                            sandbox3d_modeling_toolbar_tool_labels[tool_index],
+                            1.0f,
+                            &label_width,
+                            &label_height) == HENKA_SUCCESS);
+                    (void)label_height;
+                    /* henka_ui_tool_button draws its label at x + 32. Keep
+                     * the full active-font advance and a small right inset
+                     * inside the product-owned hit/draw rectangle. */
+                    HENKA_TEST_ASSERT(
+                        compact.tool_buttons[tool_index].width >=
+                            36.0f + (float)label_width);
                 }
                 HENKA_TEST_ASSERT(
                     sandbox3d_editor_layout_modeling_toolbar_compute(
+                        ui,
                         (henka_ui_rect){
                             frame.x, frame.y, frame.width - 0.1f, frame.height},
                         scale_percent,
@@ -507,6 +551,7 @@ void henka_test_sandbox3d_editor_layout(void)
 
             HENKA_TEST_ASSERT(
                 sandbox3d_editor_layout_modeling_toolbar_compute(
+                    ui,
                     (henka_ui_rect){17.0f, 23.0f, 224.0f, 420.0f},
                     100U,
                     true,
@@ -514,15 +559,72 @@ void henka_test_sandbox3d_editor_layout(void)
                     &rejected) == HENKA_ERROR_INVALID_ARGUMENT);
             HENKA_TEST_ASSERT(
                 sandbox3d_editor_layout_modeling_toolbar_compute(
+                    ui,
                     (henka_ui_rect){17.0f, 23.0f, 224.0f, 420.0f},
                     200U,
                     true,
                     false,
                     &exact_boundary) == HENKA_SUCCESS);
-            HENKA_TEST_ASSERT(
-                exact_boundary.tool_buttons[0].width * 2.0f >= 96.0f);
+            HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                exact_boundary.options_toggle,
+                exact_boundary.selection_mode));
+            HENKA_TEST_ASSERT(exact_boundary.tool_columns == 2U);
+            HENKA_TEST_ASSERT(exact_boundary.tool_rows == 2U);
+            for (size_t tool_index = 0U; tool_index < 4U; ++tool_index)
+            {
+                int label_width = 0;
+                int label_height = 0;
+
+                HENKA_TEST_ASSERT(
+                    henka_ui_measure_text_for_context(
+                        ui,
+                        sandbox3d_modeling_toolbar_tool_labels[tool_index],
+                        1.0f,
+                        &label_width,
+                        &label_height) == HENKA_SUCCESS);
+                (void)label_height;
+                HENKA_TEST_ASSERT(
+                    exact_boundary.tool_buttons[tool_index].width >=
+                        36.0f + (float)label_width);
+            }
+
+            {
+                sandbox3d_modeling_toolbar_layout expanded_at_200;
+
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_compute(
+                        ui,
+                        (henka_ui_rect){17.0f, 23.0f, 224.0f, 420.0f},
+                        200U,
+                        true,
+                        true,
+                        &expanded_at_200) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                    expanded_at_200.options_toggle,
+                    expanded_at_200.selection_mode));
+                HENKA_TEST_ASSERT(expanded_at_200.tool_columns == 2U);
+                HENKA_TEST_ASSERT(expanded_at_200.tool_rows == 3U);
+                for (size_t tool_index = 0U; tool_index < 6U; ++tool_index)
+                {
+                    int label_width = 0;
+                    int label_height = 0;
+
+                    HENKA_TEST_ASSERT(
+                        henka_ui_measure_text_for_context(
+                            ui,
+                            sandbox3d_modeling_toolbar_tool_labels[tool_index],
+                            1.0f,
+                            &label_width,
+                            &label_height) == HENKA_SUCCESS);
+                    (void)label_height;
+                    HENKA_TEST_ASSERT(
+                        expanded_at_200.tool_buttons[tool_index].width >=
+                            36.0f + (float)label_width);
+                }
+            }
             HENKA_TEST_ASSERT(
                 sandbox3d_editor_layout_modeling_toolbar_compute(
+                    ui,
                     (henka_ui_rect){17.0f, 23.0f, 223.99f, 420.0f},
                     200U,
                     true,
@@ -530,6 +632,7 @@ void henka_test_sandbox3d_editor_layout(void)
                     &rejected) == HENKA_ERROR_INVALID_ARGUMENT);
             HENKA_TEST_ASSERT(
                 sandbox3d_editor_layout_modeling_toolbar_compute(
+                    ui,
                     (henka_ui_rect){17.0f, 23.0f, 800.0f, 420.0f},
                     110U,
                     true,
@@ -543,6 +646,7 @@ void henka_test_sandbox3d_editor_layout(void)
             unchanged.bounds = (henka_ui_rect){1.0f, 2.0f, 3.0f, 4.0f};
             HENKA_TEST_ASSERT(
                 sandbox3d_editor_layout_modeling_toolbar_compute(
+                    ui,
                     (henka_ui_rect){0.0f, 0.0f, 447.9f, 720.0f},
                     100U,
                     true,
@@ -1742,12 +1846,13 @@ void henka_test_sandbox3d_editor_layout(void)
         {
             const henka_ui_rect collapsed_toolbar =
                 sandbox3d_editor_layout_modeling_toolbar_bounds(
+                    ui,
                     frame.scene_frame,
                     100U,
                     true,
                     false);
             HENKA_TEST_ASSERT(collapsed_toolbar.width > 0.0f);
-            HENKA_TEST_ASSERT(collapsed_toolbar.height <= 104.0f);
+            HENKA_TEST_ASSERT(collapsed_toolbar.height > 0.0f);
             HENKA_TEST_ASSERT(
                 collapsed_toolbar.x >= frame.scene_frame.x &&
                 collapsed_toolbar.y >= frame.scene_frame.y &&
@@ -1865,7 +1970,7 @@ void henka_test_sandbox3d_editor_layout(void)
             sandbox3d_view_compass_layout compass_layout;
             const henka_viewport navigation_viewport =
                 sandbox3d_editor_frame_layout_navigation_viewport(
-                    &frame, false, false, 100U);
+                    ui, &frame, false, false, 100U);
             const henka_ui_rect compact_toolbar = {
                 frame.scene_frame.x + 10.0f,
                 frame.scene_frame.y + 76.0f,

@@ -1,5 +1,12 @@
 #include "editor_layout.h"
 
+const char* const sandbox3d_modeling_toolbar_tool_labels[6] = {
+    "Select", "Move", "Rotate", "Scale", "Snap", "X-Ray"};
+const char* const sandbox3d_modeling_toolbar_orientation_labels[3] = {
+    "World", "Local", "Norm."};
+const char* const sandbox3d_modeling_toolbar_pivot_labels[3] = {
+    "Median", "Active", "Indiv."};
+
 #include <henka/workspace.h>
 
 #include <float.h>
@@ -784,7 +791,98 @@ bool sandbox3d_editor_frame_layout_is_valid(
     return layout != NULL && henka_viewport_is_valid(layout->scene_viewport);
 }
 
+static henka_result sandbox3d_editor_layout_measure_max_text_width(
+    const henka_ui_context* ui_context,
+    const char* const* labels,
+    size_t label_count,
+    float scale,
+    float* out_width)
+{
+    size_t index;
+    float maximum_width = 0.0f;
+
+    if (ui_context == NULL || labels == NULL || label_count == 0U ||
+        out_width == NULL ||
+        !sandbox3d_editor_layout_float_is_valid(scale) || scale <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < label_count; ++index)
+    {
+        int measured_width = 0;
+        int measured_height = 0;
+        henka_result result;
+
+        if (labels[index] == NULL)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = henka_ui_measure_text_for_context(
+            ui_context,
+            labels[index],
+            scale,
+            &measured_width,
+            &measured_height);
+        if (result != HENKA_SUCCESS || measured_width < 0)
+        {
+            return result == HENKA_SUCCESS ? HENKA_ERROR_NUMERIC_RANGE : result;
+        }
+        if ((float)measured_width > maximum_width)
+        {
+            maximum_width = (float)measured_width;
+        }
+    }
+
+    *out_width = maximum_width;
+    return HENKA_SUCCESS;
+}
+
+static size_t sandbox3d_editor_layout_toolbar_grid_columns(
+    float available_width,
+    float minimum_button_width,
+    size_t tool_count,
+    const size_t* candidates,
+    size_t candidate_count)
+{
+    const float gap = 4.0f;
+    size_t index;
+
+    if (candidates == NULL || candidate_count == 0U)
+    {
+        return 0U;
+    }
+    for (index = 0U; index < candidate_count; ++index)
+    {
+        const size_t columns = candidates[index];
+        const float cell_width = columns == 0U || columns > tool_count
+            ? 0.0f
+            : (available_width - gap * (float)(columns - 1U)) /
+                (float)columns;
+
+        if (cell_width >= 44.0f && cell_width >= minimum_button_width)
+        {
+            return columns;
+        }
+    }
+    return 0U;
+}
+
+static float sandbox3d_editor_layout_toolbar_grid_end_y(
+    float tool_y,
+    size_t tool_rows)
+{
+    const float button_height = 28.0f;
+    const float row_gap = 4.0f;
+
+    return tool_rows == 0U
+        ? tool_y
+        : tool_y + (float)tool_rows * button_height +
+            (float)(tool_rows - 1U) * row_gap;
+}
+
 henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
+    const henka_ui_context* ui_context,
     henka_ui_rect scene_frame,
     uint16_t app_scale_percent,
     bool authoring_available,
@@ -793,6 +891,7 @@ henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
     sandbox3d_modeling_toolbar_layout toolbar_layout;
 
     if (sandbox3d_editor_layout_modeling_toolbar_compute(
+            ui_context,
             scene_frame,
             app_scale_percent,
             authoring_available,
@@ -805,22 +904,35 @@ henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
 }
 
 henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
+    const henka_ui_context* ui_context,
     henka_ui_rect scene_frame,
     uint16_t app_scale_percent,
     bool authoring_available,
     bool options_expanded,
     sandbox3d_modeling_toolbar_layout* out_layout)
 {
+    static const size_t compact_primary_columns[] = {4U, 2U};
+    static const size_t compact_options_columns[] = {6U, 3U, 2U};
+    static const size_t wide_columns[] = {6U, 3U, 2U};
     sandbox3d_modeling_toolbar_layout layout;
     const bool compact_toolbar = scene_frame.width < 760.0f;
+    const size_t tool_count =
+        compact_toolbar && authoring_available && !options_expanded ? 4U :
+        authoring_available ? 6U : 6U;
+    const size_t* column_candidates;
+    size_t candidate_count;
     double effective_frame_width;
     float y;
     float width;
+    float maximum_tool_label_width;
+    float minimum_tool_button_width;
+    float tool_y;
+    float tool_bottom;
+    float summary_bottom;
     float toolbar_height;
-    bool narrow_compact_selection;
     size_t index;
 
-    if (out_layout == NULL ||
+    if (out_layout == NULL || ui_context == NULL ||
         !sandbox3d_editor_layout_float_is_valid(scene_frame.x) ||
         !sandbox3d_editor_layout_float_is_valid(scene_frame.y) ||
         !sandbox3d_editor_layout_float_is_valid(scene_frame.width) ||
@@ -848,87 +960,272 @@ henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
         ? scene_frame.y + 82.0f
         : compact_toolbar ? scene_frame.y + 76.0f : scene_frame.y + 34.0f;
     width = scene_frame.width - 20.0f;
-    if (!authoring_available && compact_toolbar)
-    {
-        toolbar_height = 52.0f;
-    }
-    else if (compact_toolbar)
-    {
-        toolbar_height = layout.options_expanded ? 166.0f : 104.0f;
-    }
-    else
-    {
-        toolbar_height = 136.0f;
-    }
-    layout.bounds = (henka_ui_rect){scene_frame.x + 10.0f, y, width, toolbar_height};
-    narrow_compact_selection = compact_toolbar && width < 270.0f;
+    layout.bounds = (henka_ui_rect){scene_frame.x + 10.0f, y, width, 0.0f};
 
     if (!authoring_available && compact_toolbar)
     {
+        layout.bounds.height = 52.0f;
         *out_layout = layout;
         return HENKA_SUCCESS;
     }
 
-    layout.selection_mode = (henka_ui_rect){
-        layout.bounds.x + (narrow_compact_selection ? 8.0f : 74.0f),
-        y + 20.0f,
-        narrow_compact_selection ? width - 16.0f : 196.0f,
-        22.0f};
+    layout.tool_count = tool_count;
+    if (sandbox3d_editor_layout_measure_max_text_width(
+            ui_context,
+            sandbox3d_modeling_toolbar_tool_labels,
+            tool_count,
+            1.0f,
+            &maximum_tool_label_width) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    minimum_tool_button_width = maximum_tool_label_width + 36.0f;
+    if (minimum_tool_button_width < 44.0f)
+    {
+        minimum_tool_button_width = 44.0f;
+    }
     if (compact_toolbar)
     {
+        column_candidates = layout.options_expanded
+            ? compact_options_columns
+            : compact_primary_columns;
+        candidate_count = layout.options_expanded
+            ? sizeof(compact_options_columns) / sizeof(compact_options_columns[0])
+            : sizeof(compact_primary_columns) / sizeof(compact_primary_columns[0]);
+    }
+    else
+    {
+        column_candidates = wide_columns;
+        candidate_count = sizeof(wide_columns) / sizeof(wide_columns[0]);
+    }
+    layout.tool_columns = sandbox3d_editor_layout_toolbar_grid_columns(
+        width,
+        minimum_tool_button_width,
+        tool_count,
+        column_candidates,
+        candidate_count);
+    if (layout.tool_columns == 0U)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    layout.tool_rows = (tool_count + layout.tool_columns - 1U) /
+        layout.tool_columns;
+
+    if (compact_toolbar)
+    {
+        const float inner_x = layout.bounds.x + 8.0f;
+        const float inner_width = width - 16.0f;
+        const bool narrow_compact_selection = width < 270.0f;
+
         layout.options_toggle = (henka_ui_rect){
             layout.bounds.x + width - 112.0f,
             y + 4.0f,
             104.0f,
             32.0f};
+        layout.selection_mode = (henka_ui_rect){
+            layout.bounds.x + (narrow_compact_selection ? 8.0f : 74.0f),
+            y + 40.0f,
+            narrow_compact_selection ? width - 16.0f : 196.0f,
+            22.0f};
+
         if (layout.options_expanded)
         {
-            layout.orientation = (henka_ui_rect){
-                layout.bounds.x + 82.0f, y + 50.0f, 196.0f, 22.0f};
-            layout.pivot = (henka_ui_rect){
-                layout.bounds.x + 74.0f, y + 80.0f, 196.0f, 22.0f};
+            float orientation_title_width = 0.0f;
+            float pivot_title_width = 0.0f;
+            float orientation_option_width = 0.0f;
+            float pivot_option_width = 0.0f;
+            float orientation_label_height = 14.0f;
+            float pivot_label_height = 14.0f;
+            float orientation_row_y;
+            float pivot_row_y;
+            float orientation_row_height;
+            float pivot_row_height;
+            float orientation_select_width;
+            float pivot_select_width;
+            bool orientation_inline;
+            bool pivot_inline;
+
+            if (sandbox3d_editor_layout_measure_max_text_width(
+                    ui_context,
+                    (const char* const[]) {"Orientation"},
+                    1U,
+                    0.82f,
+                    &orientation_title_width) != HENKA_SUCCESS ||
+                sandbox3d_editor_layout_measure_max_text_width(
+                    ui_context,
+                    (const char* const[]) {"Pivot"},
+                    1U,
+                    0.82f,
+                    &pivot_title_width) != HENKA_SUCCESS ||
+                sandbox3d_editor_layout_measure_max_text_width(
+                    ui_context,
+                    sandbox3d_modeling_toolbar_orientation_labels,
+                    sizeof(sandbox3d_modeling_toolbar_orientation_labels) /
+                        sizeof(sandbox3d_modeling_toolbar_orientation_labels[0]),
+                    1.0f,
+                    &orientation_option_width) != HENKA_SUCCESS ||
+                sandbox3d_editor_layout_measure_max_text_width(
+                    ui_context,
+                    sandbox3d_modeling_toolbar_pivot_labels,
+                    sizeof(sandbox3d_modeling_toolbar_pivot_labels) /
+                        sizeof(sandbox3d_modeling_toolbar_pivot_labels[0]),
+                    1.0f,
+                    &pivot_option_width) != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+
+            orientation_title_width += 8.0f;
+            pivot_title_width += 8.0f;
+            orientation_select_width = inner_width - orientation_title_width - 4.0f;
+            pivot_select_width = inner_width - pivot_title_width - 4.0f;
+            orientation_inline = orientation_select_width / 3.0f >=
+                orientation_option_width + 4.0f;
+            pivot_inline = pivot_select_width / 3.0f >= pivot_option_width + 4.0f;
+
+            orientation_row_y = y + 64.0f;
+            if (orientation_inline)
+            {
+                layout.orientation_label = (henka_ui_rect){
+                    inner_x,
+                    orientation_row_y + 3.0f,
+                    orientation_title_width - 8.0f,
+                    orientation_label_height};
+                layout.orientation = (henka_ui_rect){
+                    inner_x + orientation_title_width,
+                    orientation_row_y,
+                    orientation_select_width,
+                    22.0f};
+                orientation_row_height = 22.0f;
+            }
+            else
+            {
+                layout.orientation_label = (henka_ui_rect){
+                    inner_x,
+                    orientation_row_y,
+                    inner_width,
+                    orientation_label_height};
+                layout.orientation = (henka_ui_rect){
+                    inner_x,
+                    orientation_row_y + orientation_label_height + 2.0f,
+                    inner_width,
+                    22.0f};
+                orientation_row_height = orientation_label_height + 24.0f;
+            }
+
+            pivot_row_y = orientation_row_y + orientation_row_height + 2.0f;
+            if (pivot_inline)
+            {
+                layout.pivot_label = (henka_ui_rect){
+                    inner_x,
+                    pivot_row_y + 3.0f,
+                    pivot_title_width - 8.0f,
+                    pivot_label_height};
+                layout.pivot = (henka_ui_rect){
+                    inner_x + pivot_title_width,
+                    pivot_row_y,
+                    pivot_select_width,
+                    22.0f};
+                pivot_row_height = 22.0f;
+            }
+            else
+            {
+                layout.pivot_label = (henka_ui_rect){
+                    inner_x,
+                    pivot_row_y,
+                    inner_width,
+                    pivot_label_height};
+                layout.pivot = (henka_ui_rect){
+                    inner_x,
+                    pivot_row_y + pivot_label_height + 2.0f,
+                    inner_width,
+                    22.0f};
+                pivot_row_height = pivot_label_height + 24.0f;
+            }
+            tool_y = pivot_row_y + pivot_row_height + 8.0f;
         }
-        layout.state_summary = layout.options_expanded
-            ? (henka_ui_rect){layout.bounds.x + 8.0f, y + 142.0f, width - 16.0f, 18.0f}
-            : (henka_ui_rect){layout.bounds.x + 8.0f, y + 84.0f, width - 16.0f, 18.0f};
+        else
+        {
+            tool_y = layout.selection_mode.y +
+                layout.selection_mode.height + 8.0f;
+        }
     }
     else
     {
+        float orientation_title_width = 0.0f;
+        float pivot_title_width = 0.0f;
+
+        if (sandbox3d_editor_layout_measure_max_text_width(
+                ui_context,
+                (const char* const[]) {"Orientation"},
+                1U,
+                0.82f,
+                &orientation_title_width) != HENKA_SUCCESS ||
+            sandbox3d_editor_layout_measure_max_text_width(
+                ui_context,
+                (const char* const[]) {"Pivot"},
+                1U,
+                0.82f,
+                &pivot_title_width) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        layout.selection_mode = (henka_ui_rect){
+            layout.bounds.x + 74.0f, y + 20.0f, 196.0f, 22.0f};
+        layout.orientation_label = (henka_ui_rect){
+            layout.bounds.x + 278.0f, y + 24.0f,
+            orientation_title_width, 14.0f};
         layout.orientation = (henka_ui_rect){
             layout.bounds.x + 352.0f, y + 20.0f, 142.0f, 22.0f};
+        layout.pivot_label = (henka_ui_rect){
+            layout.bounds.x + 8.0f, y + 54.0f, pivot_title_width, 14.0f};
         layout.pivot = (henka_ui_rect){
             layout.bounds.x + 74.0f, y + 50.0f, 196.0f, 22.0f};
-        layout.state_summary = (henka_ui_rect){
-            layout.bounds.x + 8.0f, y + 112.0f, width - 16.0f, 18.0f};
+        tool_y = y + 80.0f;
     }
 
-    if (compact_toolbar && !layout.options_expanded)
     {
         const float gap = 4.0f;
-        const float button_width = (width - gap * 3.0f) / 4.0f;
-        for (index = 0U; index < 4U; ++index)
+        const float button_width =
+            (width - gap * (float)(layout.tool_columns - 1U)) /
+            (float)layout.tool_columns;
+
+        for (index = 0U; index < tool_count; ++index)
         {
+            const size_t column = index % layout.tool_columns;
+            const size_t row = index / layout.tool_columns;
+
             layout.tool_buttons[index] = (henka_ui_rect){
-                layout.bounds.x + (button_width + gap) * (float)index,
-                y + 52.0f,
+                layout.bounds.x + (button_width + gap) * (float)column,
+                tool_y + 32.0f * (float)row,
                 button_width,
                 28.0f};
         }
+    }
+
+    tool_bottom = sandbox3d_editor_layout_toolbar_grid_end_y(
+        tool_y, layout.tool_rows);
+    if (compact_toolbar)
+    {
+        layout.state_summary = (henka_ui_rect){
+            layout.bounds.x + 8.0f,
+            tool_bottom + 8.0f,
+            width - 16.0f,
+            18.0f};
     }
     else
     {
-        const float gap = 4.0f;
-        const float button_width = (width - gap * 5.0f) / 6.0f;
-        const float tool_y = y + (compact_toolbar ? 110.0f : 80.0f);
-        for (index = 0U; index < 6U; ++index)
-        {
-            layout.tool_buttons[index] = (henka_ui_rect){
-                layout.bounds.x + (button_width + gap) * (float)index,
-                tool_y,
-                button_width,
-                28.0f};
-        }
+        layout.state_summary = (henka_ui_rect){
+            layout.bounds.x + 8.0f,
+            fmaxf(y + 112.0f, tool_bottom + 4.0f),
+            width - 16.0f,
+            18.0f};
     }
+    summary_bottom = layout.state_summary.y + layout.state_summary.height;
+    toolbar_height = fmaxf(
+        compact_toolbar ? 0.0f : 136.0f,
+        summary_bottom - y + (compact_toolbar ? 8.0f : 6.0f));
+    layout.bounds.height = toolbar_height;
 
     *out_layout = layout;
     return HENKA_SUCCESS;
@@ -969,6 +1266,7 @@ bool sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
 }
 
 henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
+    const henka_ui_context* ui_context,
     const sandbox3d_editor_frame_layout* layout,
     bool authoring_available,
     bool options_expanded,
@@ -978,6 +1276,7 @@ henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
     const henka_ui_rect toolbar = layout == NULL
         ? (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f}
         : sandbox3d_editor_layout_modeling_toolbar_bounds(
+            ui_context,
             layout->scene_frame,
             app_scale_percent,
             authoring_available,

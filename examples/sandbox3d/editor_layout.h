@@ -121,14 +121,23 @@ typedef struct sandbox3d_modeling_toolbar_layout
     henka_ui_rect bounds;
     henka_ui_rect selection_mode;
     henka_ui_rect options_toggle;
+    henka_ui_rect orientation_label;
     henka_ui_rect orientation;
+    henka_ui_rect pivot_label;
     henka_ui_rect pivot;
     henka_ui_rect tool_buttons[6];
     henka_ui_rect state_summary;
+    size_t tool_count;
+    size_t tool_columns;
+    size_t tool_rows;
     bool compact;
     bool options_expanded;
     bool authoring_available;
 } sandbox3d_modeling_toolbar_layout;
+
+extern const char* const sandbox3d_modeling_toolbar_tool_labels[6];
+extern const char* const sandbox3d_modeling_toolbar_orientation_labels[3];
+extern const char* const sandbox3d_modeling_toolbar_pivot_labels[3];
 
 /*
  * Return the responsive policy for a positive framebuffer width. Invalid
@@ -181,12 +190,14 @@ henka_result sandbox3d_editor_layout_scene_objects_regions(
  * frame. The navigation overlay consumes the same bounds so it cannot cover
  * the toolbar or its hit targets. */
 henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
+    const henka_ui_context* ui_context,
     henka_ui_rect scene_frame,
     uint16_t app_scale_percent,
     bool authoring_available,
     bool options_expanded);
 
 henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
+    const henka_ui_context* ui_context,
     henka_ui_rect scene_frame,
     uint16_t app_scale_percent,
     bool authoring_available,
@@ -202,6 +213,7 @@ bool sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
 /* Return the scene viewport region reserved for navigation overlays. This is
  * editor presentation geometry; it does not change the renderer viewport. */
 henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
+    const henka_ui_context* ui_context,
     const sandbox3d_editor_frame_layout* layout,
     bool authoring_available,
     bool options_expanded,
