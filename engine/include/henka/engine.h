@@ -59,6 +59,7 @@ typedef struct henka_tool_window_state
     bool mouse_left_down;
     bool mouse_left_pressed;
     bool mouse_left_released;
+    /* A pending close keeps identity/lifecycle fields valid; live geometry and scale may be zero while the native window retires. */
     bool close_requested;
     bool resized;
     char last_event[48];

@@ -580,9 +580,41 @@ else()
         "if (window_state.close_requested)" typography_native_panel_close_condition_position)
     string(FIND "${typography_native_panel_ui_body}"
         "sandbox3d_close_native_panel_test(engine, state);" typography_native_panel_close_owner_position)
+    string(FIND "${typography_native_panel_ui_body}"
+        "!window_state.open" typography_native_panel_closed_state_position)
     if(typography_native_panel_close_condition_position LESS 0 OR
-       typography_native_panel_close_owner_position LESS typography_native_panel_close_condition_position)
-        list(APPEND violations "the Native Panel Test must consume the platform close request, close through Henka, and detach its font context")
+       typography_native_panel_close_owner_position LESS typography_native_panel_close_condition_position OR
+       (typography_native_panel_closed_state_position GREATER_EQUAL 0 AND
+        typography_native_panel_close_condition_position GREATER typography_native_panel_closed_state_position))
+        list(APPEND violations "the Native Panel Test must consume OS close requests before stale/closed-state handling, close through Henka, and detach its font context")
+    endif()
+endif()
+
+string(FIND "${platform_source}" "bool henka_platform_get_tool_window_state("
+    typography_platform_tool_state_start REVERSE)
+string(FIND "${platform_source}" "bool henka_platform_set_tool_window_position("
+    typography_platform_tool_state_end REVERSE)
+if(typography_platform_tool_state_start LESS 0 OR
+   typography_platform_tool_state_end LESS typography_platform_tool_state_start)
+    list(APPEND violations "the platform tool-window state boundary could not be identified")
+else()
+    math(EXPR typography_platform_tool_state_length
+        "${typography_platform_tool_state_end} - ${typography_platform_tool_state_start}")
+    string(SUBSTRING "${platform_source}" ${typography_platform_tool_state_start}
+        ${typography_platform_tool_state_length} typography_platform_tool_state_body)
+    string(FIND "${typography_platform_tool_state_body}"
+        "if (slot->close_requested)" typography_platform_close_request_guard_position)
+    string(FIND "${typography_platform_tool_state_body}"
+        "out_state->close_requested = true;" typography_platform_close_request_field_position)
+    string(FIND "${typography_platform_tool_state_body}"
+        "return true;" typography_platform_close_request_success_position)
+    string(FIND "${typography_platform_tool_state_body}"
+        "SDL_GetWindowSize(slot->window" typography_platform_live_metrics_position)
+    if(typography_platform_close_request_guard_position LESS 0 OR
+       typography_platform_close_request_field_position LESS typography_platform_close_request_guard_position OR
+       typography_platform_close_request_success_position LESS typography_platform_close_request_field_position OR
+       typography_platform_live_metrics_position LESS typography_platform_close_request_success_position)
+        list(APPEND violations "tool-window close requests must remain observable even when optional live display metrics are unavailable")
     endif()
 endif()
 

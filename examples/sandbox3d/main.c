@@ -15613,6 +15613,7 @@ static void sandbox3d_build_native_panel_test_ui(henka_engine* engine, sandbox3d
     henka_engine_diagnostics diagnostics;
     henka_tool_window_state window_state;
     henka_ui_frame_desc frame_desc = {0};
+    henka_result window_state_result;
     int content_height;
     int content_width;
 
@@ -15622,8 +15623,9 @@ static void sandbox3d_build_native_panel_test_ui(henka_engine* engine, sandbox3d
         return;
     }
 
-    if (henka_engine_get_tool_window_state(engine, state->native_panel_window_id, &window_state) != HENKA_SUCCESS ||
-        !window_state.open)
+    window_state_result = henka_engine_get_tool_window_state(
+        engine, state->native_panel_window_id, &window_state);
+    if (window_state_result != HENKA_SUCCESS)
     {
         sandbox3d_editor_typography_runtime_detach_context(
             state->typography_runtime, state->native_panel_ui);
@@ -15635,6 +15637,14 @@ static void sandbox3d_build_native_panel_test_ui(henka_engine* engine, sandbox3d
     {
         sandbox3d_close_native_panel_test(engine, state);
         sandbox3d_set_status(state, false, "Native Panel Test closed.");
+        return;
+    }
+    if (!window_state.open)
+    {
+        sandbox3d_editor_typography_runtime_detach_context(
+            state->typography_runtime, state->native_panel_ui);
+        state->native_panel_window_id = HENKA_INVALID_WINDOW_ID;
+        sandbox3d_set_status(state, false, "Native Panel Test was closed. Open it again from Tools.");
         return;
     }
 
