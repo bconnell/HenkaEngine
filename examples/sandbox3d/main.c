@@ -16232,16 +16232,13 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
 
         henka_ui_end_frame(ui);
 
+        panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, panel_id);
+        if (panel != NULL &&
+            panel->dock != SANDBOX3D_WORKSPACE_DOCK_DETACHED &&
+            state->detached_panel_window_ids[panel_index] != HENKA_INVALID_WINDOW_ID)
         {
-            const sandbox3d_workspace_panel* panel =
-                sandbox3d_workspace_get_panel_const(&state->workspace.model, panel_id);
-            if (panel != NULL &&
-                panel->dock != SANDBOX3D_WORKSPACE_DOCK_DETACHED &&
-                state->detached_panel_window_ids[panel_index] != HENKA_INVALID_WINDOW_ID)
-            {
-                (void)henka_engine_close_tool_window(engine, state->detached_panel_window_ids[panel_index]);
-                state->detached_panel_window_ids[panel_index] = HENKA_INVALID_WINDOW_ID;
-            }
+            (void)henka_engine_close_tool_window(engine, state->detached_panel_window_ids[panel_index]);
+            state->detached_panel_window_ids[panel_index] = HENKA_INVALID_WINDOW_ID;
         }
     }
 }
