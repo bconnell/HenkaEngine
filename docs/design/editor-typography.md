@@ -100,7 +100,7 @@ The comparison must include normal-size body/status text, tabs, buttons, Scene O
 
 ### Comparison outcome
 
-Matched packaged captures at 1280×720 and 1920×1080 covered Editor UI Scale 100%, 125%, 150%, and 200%, with operating-system display scale held at 100%. Both Atkinson and Noto were readable at normal working size, with no clear readability winner; Atkinson is the selected default by preference, not a claim of objective superiority. The comparison manifest records executable identity, font hashes, restart persistence, and the capture set.
+Matched packaged captures at 1280×720 and 1920×1080 covered Editor UI Scale 100%, 125%, 150%, and 200%, with operating-system display scale held at 100%. Both Atkinson and Noto were readable at normal working size, with no clear readability winner; Atkinson is the selected default by preference, not a claim of objective superiority. The comparison manifest records the product executable's build commit, source identity, and hash separately from the clean validation-harness commit, source identity, and hashes, along with font hashes, restart persistence, and the capture set. It never relabels an older executable as built from a newer harness commit.
 
 ## Persistence, settings, and failure behavior
 
