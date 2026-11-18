@@ -90,6 +90,10 @@ $sourceIdentity = [string]$buildInfo.source_identity
 if ([string]::IsNullOrWhiteSpace($sourceIdentity)) {
     throw "The exact Sandbox build has no source identity."
 }
+$validationHarnessIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
+if ($validationHarnessIdentity.source_state -ne "clean") {
+    throw "The typography comparison harness must run from a clean committed candidate."
+}
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path (Get-HenkaEvidenceRoot -RepositoryRoot $repoRoot) `
         ("editor-typography-comparison-" + $sourceIdentity.Substring(0, 12))
@@ -1947,8 +1951,15 @@ foreach ($scale in @(100, 125, 150, 200)) {
         throw "Typography capture scale-pair policy failed: $scalePairViolation"
     }
 
+    $finalHarnessIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
+    if ($finalHarnessIdentity.commit_sha -ne $validationHarnessIdentity.commit_sha -or
+        $finalHarnessIdentity.source_state -ne $validationHarnessIdentity.source_state -or
+        $finalHarnessIdentity.source_identity -ne $validationHarnessIdentity.source_identity) {
+        throw "The typography comparison source changed while packaged evidence was being captured."
+    }
+
     $manifest = [pscustomobject]@{
-        schema_version = 4
+        schema_version = 5
         created_utc = [DateTime]::UtcNow.ToString("o")
         product_executable_provenance = @{
             build_commit_sha = [string]$buildInfo.commit_sha
@@ -1960,6 +1971,9 @@ foreach ($scale in @(100, 125, 150, 200)) {
             package_info_sha256 = $packageInfoHash
         }
         validation_harness_provenance = @{
+            commit_sha = [string]$validationHarnessIdentity.commit_sha
+            source_state = [string]$validationHarnessIdentity.source_state
+            source_identity = [string]$validationHarnessIdentity.source_identity
             comparison_script_sha256 = $comparisonScriptHash
             shared_automation_helper_sha256 = $automationHelperHash
         }

@@ -27,6 +27,7 @@ This document summarizes the implementation boundaries and verification contract
 - Display-scale changes use deterministic forward-draw and inverse-hit-test coverage. Native and detached contexts replace or reuse profiles within bounded cache limits.
 - A non-100% Editor UI Scale capture does not substitute for packaged proof at a non-100% operating-system display scale.
 - A detached OpenGL context is not visually certified by Win32 `PrintWindow`; until app-owned readback exists, require detached font/scale identity plus a subsequent successful engine render frame and record that no detached screenshot was captured.
+- Packaged evidence records the executable's build commit/source identity separately from the clean validation harness commit/source identity; never relabel an older executable as built from a newer checker-only commit.
 
 ## Verification contract
 

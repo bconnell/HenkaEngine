@@ -358,12 +358,47 @@ if(typography_coordinate_transform_position LESS 0 OR
     list(APPEND violations "scale-control automation must transform product-reported logical rectangles using the runtime UI and OS display scales before sending framebuffer pointer input")
 endif()
 
+string(FIND "${typography_package_test_source}"
+    [=[$validationHarnessIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot]=]
+    validation_harness_identity_position)
+string(FIND "${typography_package_test_source}"
+    [=[$validationHarnessIdentity.source_state -ne "clean"]=]
+    validation_harness_clean_candidate_position)
+string(FIND "${typography_package_test_source}"
+    [=[$finalHarnessIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot]=]
+    validation_harness_final_identity_position)
+string(FIND "${typography_package_test_source}"
+    [=[$finalHarnessIdentity.source_identity -ne $validationHarnessIdentity.source_identity]=]
+    validation_harness_unchanged_check_position)
+string(FIND "${typography_package_test_source}"
+    [=[commit_sha = [string]$validationHarnessIdentity.commit_sha]=]
+    validation_harness_commit_field_position)
+string(FIND "${typography_package_test_source}"
+    [=[source_state = [string]$validationHarnessIdentity.source_state]=]
+    validation_harness_state_field_position)
+string(FIND "${typography_package_test_source}"
+    [=[source_identity = [string]$validationHarnessIdentity.source_identity]=]
+    validation_harness_source_identity_field_position)
+
 if(NOT typography_package_test_source MATCHES "os_display_scale_numerator = \\$runtimeScales.DisplayScaleNumerator" OR
    NOT typography_package_test_source MATCHES "os_display_scale_denominator = \\$runtimeScales.DisplayScaleDenominator" OR
-   NOT typography_package_test_source MATCHES "schema_version = 4" OR
+   NOT typography_package_test_source MATCHES "schema_version = 5" OR
    NOT typography_package_test_source MATCHES "Get-HenkaTypographyCaptureScalePairViolation" OR
    NOT typography_capture_policy_source MATCHES "different product-reported OS display scales")
     list(APPEND violations "each packaged capture must record product-reported OS display scale and reject unmatched Atkinson/Noto comparison pairs")
+endif()
+
+if(validation_harness_identity_position LESS 0 OR
+   validation_harness_clean_candidate_position LESS 0 OR
+   validation_harness_final_identity_position LESS 0 OR
+   validation_harness_unchanged_check_position LESS 0 OR
+   validation_harness_commit_field_position LESS 0 OR
+   validation_harness_state_field_position LESS 0 OR
+   validation_harness_source_identity_field_position LESS 0 OR
+   validation_harness_final_identity_position LESS validation_harness_identity_position OR
+   validation_harness_unchanged_check_position LESS validation_harness_final_identity_position OR
+   validation_harness_commit_field_position LESS validation_harness_final_identity_position)
+    list(APPEND violations "packaged typography evidence must bind the exact clean validation-harness commit and source identity separately from the executable build")
 endif()
 
 string(FIND "${typography_package_test_source}" [=[detached_context = $detachedContextProof]=]

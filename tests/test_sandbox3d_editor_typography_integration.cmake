@@ -200,6 +200,40 @@ if(NOT capture_scale_negative_output MATCHES "each packaged capture must record 
         "result=${capture_scale_negative_result}\noutput:\n${capture_scale_negative_output}")
 endif()
 
+file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/test_editor_typography_windows.ps1"
+    typography_package_source)
+string(REPLACE
+    [=[commit_sha = [string]$validationHarnessIdentity.commit_sha]=]
+    [=[reported_commit = 'missing']=]
+    candidate_typography_package_source "${typography_package_source}")
+if(candidate_typography_package_source STREQUAL typography_package_source)
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Could not construct the validation-harness provenance negative control")
+endif()
+file(WRITE "${probe_dir}/test_editor_typography_windows.ps1"
+    "${candidate_typography_package_source}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DTYPOGRAPHY_PACKAGE_TEST_SOURCE=${probe_dir}/test_editor_typography_windows.ps1"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE harness_provenance_negative_result
+    OUTPUT_VARIABLE harness_provenance_negative_stdout
+    ERROR_VARIABLE harness_provenance_negative_stderr)
+set(harness_provenance_negative_output "${harness_provenance_negative_stdout}\n${harness_provenance_negative_stderr}")
+if("${harness_provenance_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted missing validation-harness commit provenance")
+endif()
+if(NOT harness_provenance_negative_output MATCHES
+    "packaged typography evidence must bind the exact clean validation-harness commit and source identity")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Typography validation-harness provenance negative control failed for an unexpected reason.\n"
+        "result=${harness_provenance_negative_result}\noutput:\n${harness_provenance_negative_output}")
+endif()
+
 file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/henka_ui_automation_helpers.ps1" ui_automation_helper_source)
 string(REPLACE
     "function Convert-HenkaUiLogicalPointToWindowPoint"
