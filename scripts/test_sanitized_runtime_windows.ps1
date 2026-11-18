@@ -82,6 +82,7 @@ $fetchContent = Get-HenkaCMakeFetchContentArguments `
     -Providers @("ENET", "LUA", "MINIAUDIO", "STB") `
     -PinnedRevisions (Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot -Providers @("ENET", "LUA", "MINIAUDIO", "STB"))
 $configureArguments += @($fetchContent.Arguments)
+Write-HenkaCMakeFetchContentStatus -Resolution $fetchContent
 
 Invoke-HenkaNative `
     -FilePath $cmake `

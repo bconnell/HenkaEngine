@@ -44,32 +44,22 @@ $artifact = Get-HenkaBuildArtifact -BuildRoot $buildRoot -Configuration $Configu
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
     -DependencyRoot $resolvedDependencyRoot `
+    -NoSharedDependencyCache:($dependencySelection.Mode -eq "explicit") `
     -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB") `
     -PinnedRevisions (Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot)
 $configureArguments = @("-S", $repoRoot, "-B", $buildRoot) + @($fetchContent.Arguments)
-foreach ($provider in $fetchContent.ProviderStates) {
-    if ($provider.Available) {
-        Write-Host "$($provider.Label) provider: repository-local populated source"
-    } else {
-        Write-Host "$($provider.Label) provider: FetchContent network fallback"
-    }
-}
-if ($fetchContent.FullyDisconnected) {
-    Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
-} else {
-    Write-Host "FetchContent mode: normal network-capable fallback for missing providers"
-}
+Write-HenkaCMakeFetchContentStatus -Resolution $fetchContent
 
 Write-Host "cmake: $cmake"
 Write-Host "repo: $repoRoot"
 Write-Host "configuration: $Configuration"
 Write-Host "dependency selection: $($dependencySelection.Mode) ($($dependencySelection.AvailableProviders) pinned provider(s))"
 $dependencyDescription = if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoot)) {
-    "<none; FetchContent fallback>"
+    "<none; shared source cache checked, FetchContent fallback for missing pins>"
 } else {
     $resolvedDependencyRoot
 }
-Write-Host "dependency root: $dependencyDescription"
+Write-Host "build-local dependency root: $dependencyDescription"
 
 $buildStateLock = Enter-HenkaBuildStateLock
 try {
