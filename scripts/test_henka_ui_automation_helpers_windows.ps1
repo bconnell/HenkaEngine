@@ -35,6 +35,61 @@ try {
         throw 'The detached capture copy changed a representative source pixel.'
     }
 
+    $blankBitmap = New-Object System.Drawing.Bitmap -ArgumentList 80, 80
+    try {
+        $graphics = [System.Drawing.Graphics]::FromImage($blankBitmap)
+        try {
+            $graphics.Clear([System.Drawing.Color]::White)
+            $graphics.FillRectangle([System.Drawing.Brushes]::Black, 0, 0, 8, 80)
+            $graphics.FillRectangle([System.Drawing.Brushes]::DimGray, 8, 0, 64, 24)
+            $graphics.FillRectangle([System.Drawing.Brushes]::SteelBlue, 12, 4, 56, 2)
+            $graphics.FillRectangle([System.Drawing.Brushes]::LightGray, 12, 12, 24, 2)
+            $graphics.FillRectangle([System.Drawing.Brushes]::Black, 72, 0, 8, 80)
+            $graphics.FillRectangle([System.Drawing.Brushes]::Black, 0, 72, 80, 8)
+        }
+        finally { $graphics.Dispose() }
+        $blankSummary = Get-HenkaAutomationScreenshotContentSummary -Bitmap $blankBitmap
+        $blankClientSummary = Get-HenkaAutomationScreenshotContentSummary `
+            -Bitmap $blankBitmap -RegionX 8 -RegionY 24 -RegionWidth 64 -RegionHeight 48
+        if (-not $blankSummary.HasVisibleContent -or
+            $blankSummary.DistinctColorCount -lt 3 -or
+            $blankClientSummary.HasVisibleContent -or
+            $blankClientSummary.DistinctColorCount -ne 1) {
+            throw 'A capture containing only non-client frame decoration was accepted as rendered client UI.'
+        }
+
+        $graphics = [System.Drawing.Graphics]::FromImage($blankBitmap)
+        try {
+            $graphics.FillRectangle([System.Drawing.Brushes]::DimGray, 16, 32, 48, 8)
+            $graphics.FillRectangle([System.Drawing.Brushes]::Black, 20, 42, 18, 3)
+            $graphics.FillRectangle([System.Drawing.Brushes]::SteelBlue, 16, 48, 48, 16)
+        }
+        finally { $graphics.Dispose() }
+        $visibleSummary = Get-HenkaAutomationScreenshotContentSummary `
+            -Bitmap $blankBitmap -RegionX 8 -RegionY 24 -RegionWidth 64 -RegionHeight 48
+        if (-not $visibleSummary.HasVisibleContent -or $visibleSummary.DistinctColorCount -lt 4) {
+            throw 'A representative nonuniform UI capture was rejected as blank.'
+        }
+    }
+    finally {
+        $blankBitmap.Dispose()
+    }
+
+    $boundedBitmap = New-Object System.Drawing.Bitmap -ArgumentList 257, 255
+    try {
+        $graphics = [System.Drawing.Graphics]::FromImage($boundedBitmap)
+        try { $graphics.Clear([System.Drawing.Color]::White) }
+        finally { $graphics.Dispose() }
+        $boundedSummary = Get-HenkaAutomationScreenshotContentSummary `
+            -Bitmap $boundedBitmap -MaximumSamplesPerAxis 128
+        if ($boundedSummary.SampleCount -gt (128 * 128)) {
+            throw "Screenshot sampling exceeded its per-axis bound: $($boundedSummary.SampleCount) samples."
+        }
+    }
+    finally {
+        $boundedBitmap.Dispose()
+    }
+
     try {
         $exclusiveStream = [System.IO.File]::Open(
             $imagePath,

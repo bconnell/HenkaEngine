@@ -11,6 +11,8 @@ public static class HenkaUiAutomationNative
     public const int GWL_STYLE = -16;
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT { public int X; public int Y; }
     public delegate bool EnumWindowsProc(IntPtr handle, IntPtr parameter);
 
     [DllImport("user32.dll")]
@@ -38,6 +40,10 @@ public static class HenkaUiAutomationNative
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetClientRect(IntPtr handle, out RECT rect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ClientToScreen(IntPtr handle, ref POINT point);
 
     [DllImport("user32.dll")]
     public static extern int GetWindowText(IntPtr handle, StringBuilder text, int capacity);
@@ -452,9 +458,11 @@ function Get-HenkaAutomationWindowGeometry {
 
     $window = New-Object HenkaUiAutomationNative+RECT
     $client = New-Object HenkaUiAutomationNative+RECT
+    $clientOrigin = New-Object HenkaUiAutomationNative+POINT
     if ($Handle -eq [IntPtr]::Zero -or
         -not [HenkaUiAutomationNative]::GetWindowRect($Handle, [ref]$window) -or
-        -not [HenkaUiAutomationNative]::GetClientRect($Handle, [ref]$client)) {
+        -not [HenkaUiAutomationNative]::GetClientRect($Handle, [ref]$client) -or
+        -not [HenkaUiAutomationNative]::ClientToScreen($Handle, [ref]$clientOrigin)) {
         throw "The Henka automation window geometry could not be read."
     }
     return [pscustomobject]@{
@@ -464,6 +472,8 @@ function Get-HenkaAutomationWindowGeometry {
         Height = $window.Bottom - $window.Top
         ClientWidth = $client.Right - $client.Left
         ClientHeight = $client.Bottom - $client.Top
+        ClientOffsetX = $clientOrigin.X - $window.Left
+        ClientOffsetY = $clientOrigin.Y - $window.Top
     }
 }
 
@@ -721,12 +731,73 @@ function New-HenkaDetachedBitmapFromFile {
     }
 }
 
+function Get-HenkaAutomationScreenshotContentSummary {
+    param(
+        [Parameter(Mandatory = $true)][System.Drawing.Bitmap]$Bitmap,
+        [int]$RegionX = 0,
+        [int]$RegionY = 0,
+        [int]$RegionWidth = 0,
+        [int]$RegionHeight = 0,
+        [ValidateRange(8, 512)][int]$MaximumSamplesPerAxis = 128
+    )
+
+    if ($Bitmap.Width -le 0 -or $Bitmap.Height -le 0) {
+        throw 'A Henka automation screenshot must have positive dimensions.'
+    }
+    if ($RegionWidth -eq 0) { $RegionWidth = $Bitmap.Width - $RegionX }
+    if ($RegionHeight -eq 0) { $RegionHeight = $Bitmap.Height - $RegionY }
+    if ($RegionX -lt 0 -or $RegionY -lt 0 -or $RegionWidth -le 0 -or $RegionHeight -le 0 -or
+        $RegionX -gt ($Bitmap.Width - $RegionWidth) -or
+        $RegionY -gt ($Bitmap.Height - $RegionHeight)) {
+        throw 'The Henka screenshot content region was outside the captured image.'
+    }
+
+    $stepX = [Math]::Max(1, [int][Math]::Ceiling($RegionWidth / $MaximumSamplesPerAxis))
+    $stepY = [Math]::Max(1, [int][Math]::Ceiling($RegionHeight / $MaximumSamplesPerAxis))
+    $colorCounts = [System.Collections.Generic.Dictionary[int, int]]::new()
+    $sampleCount = 0
+    for ($y = $RegionY; $y -lt ($RegionY + $RegionHeight); $y += $stepY) {
+        for ($x = $RegionX; $x -lt ($RegionX + $RegionWidth); $x += $stepX) {
+            $color = $Bitmap.GetPixel($x, $y).ToArgb()
+            if ($colorCounts.ContainsKey($color)) {
+                $colorCounts[$color] += 1
+            }
+            else {
+                $colorCounts[$color] = 1
+            }
+            $sampleCount += 1
+        }
+    }
+
+    $dominantCount = 0
+    foreach ($count in $colorCounts.Values) {
+        if ($count -gt $dominantCount) {
+            $dominantCount = $count
+        }
+    }
+    $nonDominantSamples = $sampleCount - $dominantCount
+    $minimumNonDominantSamples = [Math]::Max(32, [int][Math]::Ceiling($sampleCount * 0.002))
+    return [pscustomobject]@{
+        SampleCount = $sampleCount
+        RegionX = $RegionX
+        RegionY = $RegionY
+        RegionWidth = $RegionWidth
+        RegionHeight = $RegionHeight
+        DistinctColorCount = $colorCounts.Count
+        NonDominantSamples = $nonDominantSamples
+        MinimumNonDominantSamples = $minimumNonDominantSamples
+        HasVisibleContent = ($colorCounts.Count -ge 4 -and
+            $nonDominantSamples -ge $minimumNonDominantSamples)
+    }
+}
+
 function Save-HenkaAutomationWindowScreenshot {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Description,
-        [switch]$AllowHidden
+        [switch]$AllowHidden,
+        [switch]$RequireVisibleContent
     )
 
     $isVisible = $Handle -ne [IntPtr]::Zero -and
@@ -755,6 +826,24 @@ function Save-HenkaAutomationWindowScreenshot {
         finally {
             $graphics.ReleaseHdc($dc) | Out-Null
         }
+        if ($RequireVisibleContent) {
+            $content = Get-HenkaAutomationScreenshotContentSummary `
+                -Bitmap $bitmap `
+                -RegionX $geometry.ClientOffsetX `
+                -RegionY $geometry.ClientOffsetY `
+                -RegionWidth $geometry.ClientWidth `
+                -RegionHeight $geometry.ClientHeight
+            if (-not $content.HasVisibleContent) {
+                $contentMessage = ("{0} returned a blank or uniform capture; sampled={1}, distinct_colors={2}, " +
+                    "non_dominant_samples={3}, minimum={4}.")
+                throw ($contentMessage -f
+                    $Description,
+                    $content.SampleCount,
+                    $content.DistinctColorCount,
+                    $content.NonDominantSamples,
+                    $content.MinimumNonDominantSamples)
+            }
+        }
         $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
     }
     finally {
@@ -772,6 +861,7 @@ function Save-HenkaAutomationWindowScreenshot {
         Height = $geometry.Height
         ClientWidth = $geometry.ClientWidth
         ClientHeight = $geometry.ClientHeight
+        ContentSummary = if ($RequireVisibleContent) { $content } else { $null }
     }
 }
 

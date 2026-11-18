@@ -227,6 +227,50 @@ function Wait-TypographyStableUtilityContextHeader {
         -TimeoutMilliseconds $TimeoutMilliseconds
 }
 
+function Get-TypographyLastRenderCompleteSequence {
+    param([Parameter(Mandatory = $true)]$Session)
+
+    $line = Find-LastLogLine `
+        -Path $Session.StdoutPath `
+        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC frame seq=\d+ phase=render-complete'
+    $match = [regex]::Match($line, 'frame seq=(?<sequence>\d+) phase=render-complete')
+    if (-not $match.Success) {
+        throw 'The packaged application has not reported a completed render frame.'
+    }
+    return [int64]::Parse(
+        $match.Groups['sequence'].Value,
+        [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Wait-TypographyRenderCompleteAfterSequence {
+    param(
+        [Parameter(Mandatory = $true)]$Session,
+        [Parameter(Mandatory = $true)][int64]$PreviousSequence,
+        [ValidateRange(1000, 30000)][int]$TimeoutMilliseconds = 10000
+    )
+
+    $pattern = 'HENKA_AUTOMATION_DIAGNOSTIC frame seq=\d+ phase=render-complete'
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMilliseconds)
+    do {
+        if ($Session.Captured.Process.HasExited) {
+            throw 'The packaged Sandbox exited before the detached Utility render completed.'
+        }
+        $line = Find-LastLogLine -Path $Session.StdoutPath -Pattern $pattern
+        $match = [regex]::Match($line, 'frame seq=(?<sequence>\d+) phase=render-complete')
+        if ($match.Success) {
+            $sequence = [int64]::Parse(
+                $match.Groups['sequence'].Value,
+                [System.Globalization.CultureInfo]::InvariantCulture)
+            if ($sequence -gt $PreviousSequence) {
+                return [pscustomobject]@{ Sequence = $sequence; Line = $line }
+            }
+        }
+        Start-Sleep -Milliseconds 50
+    } while ((Get-Date) -lt $deadline)
+
+    throw "The detached Utility did not complete a packaged render after attachment; previous frame sequence=$PreviousSequence."
+}
+
 function Get-ReportedRect {
     param(
         [Parameter(Mandatory = $true)][string]$Line,
@@ -1674,31 +1718,25 @@ function Test-TypographyDetachedUtilityContext {
             throw "The normal Utility detach action did not create its native tool window."
         }
 
-        $foregroundBeforeCapture = [HenkaUiAutomationNative]::GetForegroundWindow()
+        $foregroundBeforeDetach = [HenkaUiAutomationNative]::GetForegroundWindow()
         if ([HenkaUiAutomationNative]::IsWindowVisible($detachedWindow) -or
-            $foregroundBeforeCapture -eq $detachedWindow -or
-            $foregroundBeforeCapture -eq $session.Window) {
-            throw "The detached Utility left its hidden, non-foreground automation state before capture."
+            $foregroundBeforeDetach -eq $detachedWindow -or
+            $foregroundBeforeDetach -eq $session.Window) {
+            throw "The detached Utility left its hidden, non-foreground automation state before render verification."
         }
         $windowGeometry = Get-HenkaAutomationWindowGeometry -Handle $detachedWindow
         if ($windowGeometry.ClientWidth -lt 320 -or $windowGeometry.ClientHeight -lt 240) {
             throw "The detached Utility window did not provide a usable rendering surface."
         }
-        $screenshotPath = Join-Path $OutputDirectory "detached-utility-$Font-200.png"
-        $windowCapture = Save-HenkaAutomationWindowScreenshot `
-            -Handle $detachedWindow `
-            -Path $screenshotPath `
-            -Description "$Font detached Utility at 200 percent Editor UI Scale" `
-            -AllowHidden
-        if (-not (Test-Path -LiteralPath $screenshotPath -PathType Leaf) -or
-            (Get-Item -LiteralPath $screenshotPath).Length -le 0) {
-            throw "The detached Utility screenshot was not written."
-        }
-        $foregroundAfterCapture = [HenkaUiAutomationNative]::GetForegroundWindow()
+        $renderSequenceAtContextReady = Get-TypographyLastRenderCompleteSequence -Session $session
+        $detachedRender = Wait-TypographyRenderCompleteAfterSequence `
+            -Session $session `
+            -PreviousSequence $renderSequenceAtContextReady
+        $foregroundAfterDetach = [HenkaUiAutomationNative]::GetForegroundWindow()
         if ([HenkaUiAutomationNative]::IsWindowVisible($detachedWindow) -or
-            $foregroundAfterCapture -eq $detachedWindow -or
-            $foregroundAfterCapture -eq $session.Window) {
-            throw "Capturing the hidden detached Utility changed visibility or foreground state."
+            $foregroundAfterDetach -eq $detachedWindow -or
+            $foregroundAfterDetach -eq $session.Window) {
+            throw "Detaching and rendering Utility changed the hidden-window or foreground state."
         }
 
         return [pscustomobject]@{
@@ -1709,14 +1747,15 @@ function Test-TypographyDetachedUtilityContext {
             os_display_scale = $ExpectedDisplayScale
             context_attachment_diagnostic = $contextLine.Trim()
             tool_window_hidden_confirmed = $true
-            hidden_capture_confirmed = $true
-            foreground_before_capture = $foregroundBeforeCapture.ToInt64()
-            foreground_after_capture = $foregroundAfterCapture.ToInt64()
+            render_complete_after_context_attach = $true
+            render_complete_sequence = $detachedRender.Sequence
+            render_complete_line = $detachedRender.Line.Trim()
+            foreground_before_detach = $foregroundBeforeDetach.ToInt64()
+            foreground_after_detach = $foregroundAfterDetach.ToInt64()
             client_width = $windowGeometry.ClientWidth
             client_height = $windowGeometry.ClientHeight
-            screenshot = (Split-Path -Leaf $screenshotPath)
-            screenshot_sha256 = (Get-FileHash -LiteralPath $screenshotPath -Algorithm SHA256).Hash.ToUpperInvariant()
-            capture_method = "PrintWindow background capture of the real hidden detached product window"
+            screenshot_status = 'not_captured'
+            screenshot_reason = 'PrintWindow exposed the native window frame but not its OpenGL client framebuffer; detached visual output is not claimed.'
         }
     }
     finally {
@@ -1909,7 +1948,7 @@ foreach ($scale in @(100, 125, 150, 200)) {
     }
 
     $manifest = [pscustomobject]@{
-        schema_version = 3
+        schema_version = 4
         created_utc = [DateTime]::UtcNow.ToString("o")
         product_executable_provenance = @{
             build_commit_sha = [string]$buildInfo.commit_sha
@@ -1925,7 +1964,7 @@ foreach ($scale in @(100, 125, 150, 200)) {
             shared_automation_helper_sha256 = $automationHelperHash
         }
         package_root_relative_to_local = $packageRootRelativeToLocal
-        proof = "real packaged startup font verification; real Settings tab and scale-control input; persisted 200 percent restart; at 1280x720 and 200 percent, real Utility Settings wheel input reveals the Smooth Snap control inside the reported viewport, and two real clicks change then restore the authoritative setting; real product-reported Object Details footer geometry and Save Project click at 200 percent; visual evidence from Henka's completed main-window framebuffer at 1280x720 and borderless desktop 1920x1080; a real Utility detach through its section context menu, product-reported per-context font/atlas scale identity, and a background PrintWindow capture while the detached automation window remains hidden"
+        proof = "real packaged startup font verification; real Settings tab and scale-control input; persisted 200 percent restart; at 1280x720 and 200 percent, real Utility Settings wheel input reveals the Smooth Snap control inside the reported viewport, and two real clicks change then restore the authoritative setting; real product-reported Object Details footer geometry and Save Project click at 200 percent; visual evidence from Henka's completed main-window framebuffer at 1280x720 and borderless desktop 1920x1080; a real Utility detach through its section context menu, product-reported per-context font/atlas scale identity, and a subsequent completed engine render frame while the detached automation window remains hidden and non-foreground. Detached OpenGL pixels are not represented by a Win32 PrintWindow screenshot."
         ui_scales = @(100, 125, 150, 200)
         client_resolutions = @("1280x720", "1920x1080")
         settings_scroll_control_tests = $settingsScrollProofs.ToArray()

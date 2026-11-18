@@ -14,7 +14,7 @@ The goal is a bundled, predictable, readable editor font with one canonical text
 
 - Reuse the already-pinned `stb` FetchContent revision (`2c980bb59875b0d32144a71867fbdebb2f77cd20`) for `stb_truetype` and `stb_rect_pack`; do not add FreeType or a second font-library pin.
 - Build a focused Henka UI font/text subsystem. Do not place substantial font parsing, atlas management, or text-layout responsibility in `ui.c`.
-- Completed matched local captures for Atkinson Hyperlegible Regular and Noto Sans Regular at 1280x720 and 1920x1080, with Editor UI Scale at 100%, 125%, 150%, and 200%. Both candidates remained readable at normal working size. Atkinson Hyperlegible Regular is selected for production because its lowercase forms and easily confused characters remained slightly more distinct at small UI sizes; the owner found both candidates good, with Atkinson already the leading preference.
+- Completed matched local captures for Atkinson Hyperlegible Regular and Noto Sans Regular at 1280x720 and 1920x1080, with Editor UI Scale at 100%, 125%, 150%, and 200%. Both candidates remained readable at normal working size, with no decisive readability winner. Atkinson Hyperlegible Regular is selected for production because it was the owner's leading candidate before comparison.
 - Bundle the selected font files and exact redistribution license/provenance. Do not rely on installed system fonts. Verify the exact chosen font file, version, format compatibility, license text, and any reserved-name conditions before distribution.
 - Preserve the current bitmap glyphs only as an explicitly reported emergency fallback during migration or resource failure. Never silently fall back. Packaged acceptance must prove the bundled font is the active text path.
 - Keep the existing hidden-row contract unchanged: names remain canonical, and the complete textual `[Hidden]` marker remains visible.
@@ -137,6 +137,7 @@ The package includes the exact required font license/provenance. Asset hashes an
 - Prove the packaged editor loads the bundled font and reports its exact identity/hash and selected app scale; deliberately missing/corrupt-font controls prove fallback is visible and rejected by packaged acceptance.
 - Capture matched Atkinson/Noto views at the four app scales with OS display scale recorded. Inspect native working-size captures and matched before/after views.
 - Exercise native/detached UI contexts through a display-scale profile replacement when feasible, proving replacement is atomic and old GPU residency is bounded and retired only after the new profile is ready.
+- A detached OpenGL window must not be visually certified by Win32 `PrintWindow`: it can return the native frame and a blank client surface. Until an application-owned detached framebuffer capture exists, report detached font/scale identity and a subsequent engine `render-complete` after tool-window draws while the detached test window remains hidden and non-foreground; mark detached screenshots as not captured.
 - Run package contract, startup, settings interaction, resize, row/truncation, and UI hit-test workflows on the exact packaged executable.
 - Verify the font and license are present in the package and no host-installed font is required.
 
@@ -158,4 +159,4 @@ This slice does not redesign the editor, change hidden-row thresholds, remove or
 
 ## Implementation status
 
-The integrated editor path provides bundled-font startup, shared font metrics, persisted scale selection, and context-specific raster resources. Settings interaction and restart behavior have packaged coverage, and layout regressions cover compact and wider editor arrangements. Packaged proof at non-100% operating-system display scale remains open because the available captures report 100%; Editor UI Scale captures do not satisfy that separate check.
+The integrated editor path provides bundled-font startup, shared font metrics, persisted scale selection, and context-specific raster resources. Settings interaction and restart behavior have packaged coverage, and layout regressions cover compact and wider editor arrangements. The packaged detach workflow verifies the per-context font/scale identity and a later successful engine render frame while its window stays hidden; Win32 `PrintWindow` output is not counted as detached OpenGL visual proof. Packaged proof at non-100% operating-system display scale remains open because the available captures report 100%; Editor UI Scale captures do not satisfy that separate check.

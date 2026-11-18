@@ -51,13 +51,13 @@ It currently uses:
 - no ImGui dependency;
 - no FreeType dependency;
 - no external UI library;
-- no bundled font file.
+- one bundled, licensed editor font delivered through Henka's asset/application-resource path.
 
 Applications use public Henka UI headers. SDL stays inside the platform layer. OpenGL stays inside renderer implementation files.
 
 The UI overlay is rendered after the 3D scene through Henka's existing renderer path.
 
-Current scope excludes a complete runtime game-UI framework, full asset browser, complete hierarchy editor, complete property inspector, and full typography system.
+The editor has a bundled typography foundation; this does not claim a complete runtime game-UI framework, full asset browser, complete hierarchy editor, or complete property inspector.
 
 ## Frame and transaction contract
 
@@ -95,24 +95,24 @@ The renderer consumes completed UI frames only. Scene/UI draw failure after rend
 
 ## Text rendering
 
-Henka currently renders text from a small built-in glyph table stored in source code.
+The Sandbox editor uses the bundled static Atkinson Hyperlegible Regular font through the focused `stb_truetype`/`stb_rect_pack` UI font subsystem. One active text-layout authority supplies measurement, fitting, truncation, row capacity, glyph placement, and drawing. Per-context atlases are bounded and cached. The persisted Editor UI Scale offers 100%, 125%, 150%, and 200%; operating-system display scale is a separate output transform.
 
 ### Current capabilities
 
-- fixed-size glyph rendering;
-- mixed-case labels used by the Sandbox;
-- ASCII-oriented coverage for current engine labels;
-- self-contained packaging.
+- bundled-font rasterization at the effective output scale;
+- kerning and mixed-case editor labels;
+- shared measured text layout for editor controls and panels;
+- explicit font identity, license, and package provenance;
+- a fixed-glyph emergency path that is diagnostic and rejected by packaged typography acceptance.
 
 ### Current text limitations
 
-- no kerning;
 - no text shaping;
 - no general word-wrapping system;
-- no Unicode layout support;
-- no production font stack.
+- no complete Unicode coverage or complex-script shaping;
+- no complete runtime HUD typography framework.
 
-A broader font/text system belongs to the future Runtime Game UI / HUD roadmap work.
+Runtime game UI, localization, rich text, and broader script coverage remain separate roadmap work.
 
 ## Sandbox workspace
 

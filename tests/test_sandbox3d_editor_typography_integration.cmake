@@ -255,7 +255,7 @@ if("${detached_context_negative_result}" STREQUAL "0")
     file(REMOVE_RECURSE "${probe_dir}")
     message(FATAL_ERROR "Typography integration checker accepted missing detached-context telemetry")
 endif()
-if(NOT detached_context_negative_output MATCHES "packaged typography must exercise a real detached-font context")
+if(NOT detached_context_negative_output MATCHES "packaged typography must prove a real detached-font context and completed render")
     file(REMOVE_RECURSE "${probe_dir}")
     message(FATAL_ERROR
         "Typography detached-context negative control failed for an unexpected reason.\n"
@@ -264,4 +264,4 @@ endif()
 
 file(REMOVE_RECURSE "${probe_dir}")
 
-message(STATUS "Sandbox3D typography integration passes and rejects missing startup, Settings scale control, runtime layout-scale use, display-scale viewport conversion, capture provenance, scale-aware typography input conversion, or detached-context telemetry")
+message(STATUS "Sandbox3D typography integration passes and rejects missing startup, Settings scale control, runtime layout-scale use, display-scale viewport conversion, capture provenance, scale-aware typography input conversion, or detached-context render proof")

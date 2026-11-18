@@ -360,7 +360,7 @@ endif()
 
 if(NOT typography_package_test_source MATCHES "os_display_scale_numerator = \\$runtimeScales.DisplayScaleNumerator" OR
    NOT typography_package_test_source MATCHES "os_display_scale_denominator = \\$runtimeScales.DisplayScaleDenominator" OR
-   NOT typography_package_test_source MATCHES "schema_version = 3" OR
+   NOT typography_package_test_source MATCHES "schema_version = 4" OR
    NOT typography_package_test_source MATCHES "Get-HenkaTypographyCaptureScalePairViolation" OR
    NOT typography_capture_policy_source MATCHES "different product-reported OS display scales")
     list(APPEND violations "each packaged capture must record product-reported OS display scale and reject unmatched Atkinson/Noto comparison pairs")
@@ -372,21 +372,47 @@ string(FIND "${typography_package_test_source}" [=[HENKA_AUTOMATION_TOOL_WINDOWS
     detached_context_hidden_launch_position)
 string(FIND "${typography_package_test_source}" "IsWindowVisible($detachedWindow)"
     detached_context_hidden_state_check_position)
-string(FIND "${typography_package_test_source}" "-AllowHidden"
-    detached_context_background_capture_position)
 string(FIND "${typography_package_test_source}"
-    "PrintWindow background capture of the real hidden detached product window"
-    detached_context_capture_proof_position)
+    [=[$contextLine = Wait-LogLine]=]
+    detached_context_attach_position)
+string(FIND "${typography_package_test_source}"
+    [=[$renderSequenceAtContextReady = Get-TypographyLastRenderCompleteSequence]=]
+    detached_context_frame_baseline_position)
+string(FIND "${typography_package_test_source}"
+    [=[$detachedRender = Wait-TypographyRenderCompleteAfterSequence]=]
+    detached_context_frame_wait_position)
+string(FIND "${typography_package_test_source}"
+    [=[$foregroundAfterDetach = [HenkaUiAutomationNative]::GetForegroundWindow()]=]
+    detached_context_post_render_state_position)
+string(FIND "${typography_package_test_source}"
+    [=[render_complete_after_context_attach = $true]=]
+    detached_context_render_proof_position)
+string(FIND "${typography_package_test_source}"
+    [=[screenshot_status = 'not_captured']=]
+    detached_context_screenshot_disposition_position)
+string(FIND "${typography_package_test_source}"
+    "Detached OpenGL pixels are not represented by a Win32 PrintWindow screenshot."
+    detached_context_capture_scope_position)
 if(NOT main_source MATCHES "HENKA_AUTOMATION_START_HIDDEN" OR
    NOT main_source MATCHES "window_start_hidden=%u" OR
     NOT runtime_source MATCHES "editor_typography_context stage=attached" OR
    NOT typography_package_test_source MATCHES "Test-TypographyDetachedUtilityContext" OR
    detached_context_hidden_launch_position LESS 0 OR
    detached_context_hidden_state_check_position LESS 0 OR
-   detached_context_background_capture_position LESS 0 OR
-   detached_context_capture_proof_position LESS 0 OR
-   detached_context_assignment_position LESS 0)
-    list(APPEND violations "packaged typography must exercise a real detached-font context and prove its automation window remains hidden and non-foreground during background capture")
+   detached_context_attach_position LESS 0 OR
+   detached_context_frame_baseline_position LESS 0 OR
+   detached_context_frame_wait_position LESS 0 OR
+   detached_context_post_render_state_position LESS 0 OR
+   detached_context_render_proof_position LESS 0 OR
+   detached_context_screenshot_disposition_position LESS 0 OR
+   detached_context_capture_scope_position LESS 0 OR
+   detached_context_assignment_position LESS 0 OR
+   detached_context_frame_baseline_position LESS detached_context_attach_position OR
+   detached_context_frame_wait_position LESS detached_context_frame_baseline_position OR
+   detached_context_post_render_state_position LESS detached_context_frame_wait_position OR
+   detached_context_render_proof_position LESS detached_context_post_render_state_position OR
+   detached_context_capture_scope_position LESS detached_context_render_proof_position)
+    list(APPEND violations "packaged typography must prove a real detached-font context and completed render while hidden, and must not claim Win32 PrintWindow output as detached OpenGL pixels")
 endif()
 
 string(FIND "${typography_package_test_source}"
