@@ -459,6 +459,21 @@ typedef struct sandbox3d_ui_geometry_report
     int state;
 } sandbox3d_ui_geometry_report;
 
+typedef enum sandbox3d_scene_objects_control_report_index
+{
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_ADD_CUBE = 0,
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_CYLINDER,
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_CONE,
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_UV_SPHERE,
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_QUAD_SPHERE,
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_ASSET_NAME,
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_NEW_ASSET,
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_OPEN_ASSET,
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_SAVE_ASSET,
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_CLOSE_ASSET,
+    SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_COUNT
+} sandbox3d_scene_objects_control_report_index;
+
 typedef enum sandbox3d_pending_tool_window_open_kind
 {
     SANDBOX3D_PENDING_TOOL_WINDOW_OPEN_NONE = 0,
@@ -599,6 +614,8 @@ typedef struct sandbox3d_state
     sandbox3d_ui_geometry_report default_scene_ground_display_report;
     sandbox3d_ui_geometry_report default_scene_new_cube_row_report;
     sandbox3d_ui_geometry_report scene_objects_layout_report;
+    sandbox3d_ui_geometry_report scene_objects_authoring_control_reports[
+        SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_COUNT];
     sandbox3d_ui_geometry_report object_details_actions_disclosure_report;
     sandbox3d_ui_geometry_report object_details_visibility_button_report;
     sandbox3d_ui_geometry_report game_authoring_physics_disclosure_report;
@@ -877,6 +894,8 @@ static void sandbox3d_reset_ui_geometry_reports(sandbox3d_state* state)
         sizeof(state->default_scene_new_cube_row_report));
     memset(&state->scene_objects_layout_report, 0,
         sizeof(state->scene_objects_layout_report));
+    memset(state->scene_objects_authoring_control_reports, 0,
+        sizeof(state->scene_objects_authoring_control_reports));
     memset(&state->object_details_actions_disclosure_report, 0,
         sizeof(state->object_details_actions_disclosure_report));
     memset(&state->object_details_visibility_button_report, 0,
@@ -905,6 +924,42 @@ static bool sandbox3d_automation_input_is_owned(void)
     const char* value = getenv("HENKA_AUTOMATION_INPUT_OWNED");
     return value != NULL && value[0] != '\0';
 #endif
+}
+
+static void sandbox3d_report_scene_objects_control_geometry(
+    sandbox3d_state* state,
+    bool automation_owned,
+    sandbox3d_scene_objects_control_report_index report_index,
+    const char* control_id,
+    henka_ui_rect bounds,
+    bool available,
+    bool asset_document_open)
+{
+    const int report_state = (available ? 1 : 0) |
+        (asset_document_open ? 2 : 0);
+
+    if (state == NULL || control_id == NULL ||
+        report_index >= SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_COUNT ||
+        !automation_owned ||
+        !sandbox3d_ui_geometry_report_changed(
+            &state->scene_objects_authoring_control_reports[report_index],
+            HENKA_INVALID_ENTITY,
+            bounds,
+            report_state))
+    {
+        return;
+    }
+
+    printf(
+        "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=%s available=%u asset_open=%u rect=%.1f,%.1f,%.1f,%.1f.\n",
+        control_id,
+        available ? 1U : 0U,
+        asset_document_open ? 1U : 0U,
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height);
+    fflush(stdout);
 }
 
 static void sandbox3d_mark_smoke_validation_failed(
@@ -28466,9 +28521,9 @@ static void sandbox3d_draw_scene_objects_panel(
     henka_ui_rect panel_bounds;
     henka_ui_rect previous_page_button;
     henka_ui_rect next_page_button;
-    henka_ui_rect action_rects[3];
-    henka_ui_rect primitive_action_rects[2];
-    henka_ui_rect asset_action_rects[2];
+    henka_ui_rect action_rects[3] = {0};
+    henka_ui_rect primitive_action_rects[2] = {0};
+    henka_ui_rect asset_action_rects[2] = {0};
     size_t action_count;
     size_t action_row_count;
     size_t primitive_action_count;
@@ -28509,6 +28564,7 @@ static void sandbox3d_draw_scene_objects_panel(
     sandbox3d_scene_hierarchy_row* hierarchy_rows;
     bool has_selection;
     bool scene_objects_layout_report_changed;
+    bool scene_objects_geometry_reports_enabled;
 
     if (engine == NULL || state == NULL || layout == NULL || state->scene == NULL || !sandbox3d_workspace_shows_scene_panel(state))
     {
@@ -28520,6 +28576,7 @@ static void sandbox3d_draw_scene_objects_panel(
     {
         return;
     }
+    scene_objects_geometry_reports_enabled = sandbox3d_automation_input_is_owned();
     hierarchy_capacity = henka_scene_get_entity_count(state->scene);
     if (hierarchy_capacity == 0U)
     {
@@ -28629,6 +28686,16 @@ static void sandbox3d_draw_scene_objects_panel(
         }
     }
     native_action_y = action_y + (float)action_row_count * 30.0f;
+    sandbox3d_report_scene_objects_control_geometry(
+        state,
+        scene_objects_geometry_reports_enabled,
+        SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_ADD_CUBE,
+        "add_cube",
+        action_rects[0],
+        action_count >= 1U && sandbox3d_scene_objects_control_fits_viewport(
+            actions_viewport, action_rects[0]),
+        sandbox3d_authoring_asset_controller_get_document(
+            state->authoring_asset_controller) != NULL);
     if (action_count >= 1U &&
         sandbox3d_scene_objects_control_fits_viewport(
             actions_viewport, action_rects[0]) &&
@@ -28752,6 +28819,31 @@ static void sandbox3d_draw_scene_objects_panel(
             primitive_action_count = 2U;
         }
     }
+    {
+        const bool asset_document_open =
+            sandbox3d_authoring_asset_controller_get_document(
+                state->authoring_asset_controller) != NULL;
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_CYLINDER,
+            "cylinder",
+            primitive_action_rects[0],
+            primitive_action_count >= 2U &&
+                sandbox3d_scene_objects_control_fits_viewport(
+                    actions_viewport, primitive_action_rects[0]),
+            asset_document_open);
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_CONE,
+            "cone",
+            primitive_action_rects[1],
+            primitive_action_count >= 2U &&
+                sandbox3d_scene_objects_control_fits_viewport(
+                    actions_viewport, primitive_action_rects[1]),
+            asset_document_open);
+    }
     if (primitive_action_count >= 2U &&
         sandbox3d_scene_objects_control_fits_viewport(
             actions_viewport, primitive_action_rects[0]) &&
@@ -28818,6 +28910,31 @@ static void sandbox3d_draw_scene_objects_panel(
         {
             primitive_action_count = 0U;
         }
+    }
+    {
+        const bool asset_document_open =
+            sandbox3d_authoring_asset_controller_get_document(
+                state->authoring_asset_controller) != NULL;
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_UV_SPHERE,
+            "uv_sphere",
+            primitive_action_rects[0],
+            primitive_action_count >= 2U &&
+                sandbox3d_scene_objects_control_fits_viewport(
+                    actions_viewport, primitive_action_rects[0]),
+            asset_document_open);
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_QUAD_SPHERE,
+            "quad_sphere",
+            primitive_action_rects[1],
+            primitive_action_count >= 2U &&
+                sandbox3d_scene_objects_control_fits_viewport(
+                    actions_viewport, primitive_action_rects[1]),
+            asset_document_open);
     }
     if (primitive_action_count >= 2U &&
         sandbox3d_scene_objects_control_fits_viewport(
@@ -28889,6 +29006,50 @@ static void sandbox3d_draw_scene_objects_panel(
         {
             asset_action_count = 2U;
         }
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_NEW_ASSET,
+            "new_asset",
+            (henka_ui_rect){0},
+            false,
+            true);
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_OPEN_ASSET,
+            "open_asset",
+            (henka_ui_rect){0},
+            false,
+            true);
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_ASSET_NAME,
+            "asset_name",
+            (henka_ui_rect){0},
+            false,
+            true);
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_SAVE_ASSET,
+            "save_asset",
+            asset_action_rects[0],
+            asset_action_count >= 2U &&
+                sandbox3d_scene_objects_control_fits_viewport(
+                    actions_viewport, asset_action_rects[0]),
+            true);
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_CLOSE_ASSET,
+            "close_asset",
+            asset_action_rects[1],
+            asset_action_count >= 2U &&
+                sandbox3d_scene_objects_control_fits_viewport(
+                    actions_viewport, asset_action_rects[1]),
+            true);
         {
             const henka_ui_rect active_asset_bounds = {
                 actions_viewport.x,
@@ -28948,6 +29109,11 @@ static void sandbox3d_draw_scene_objects_panel(
             (float)sphere_row_count * 30.0f;
         const float name_field_y = name_label_y + 13.0f;
         const float asset_action_y = name_field_y + 30.0f;
+        const henka_ui_rect asset_name_field_bounds = {
+            actions_viewport.x,
+            name_field_y,
+            primitive_action_width,
+            24.0f};
         const char* asset_labels[] = {"New Asset", "Open Asset"};
         asset_action_count = 0U;
         asset_action_row_count = 0U;
@@ -28973,6 +29139,52 @@ static void sandbox3d_draw_scene_objects_panel(
             asset_action_count = 2U;
         }
 
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_SAVE_ASSET,
+            "save_asset",
+            (henka_ui_rect){0},
+            false,
+            false);
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_CLOSE_ASSET,
+            "close_asset",
+            (henka_ui_rect){0},
+            false,
+            false);
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_NEW_ASSET,
+            "new_asset",
+            asset_action_rects[0],
+            asset_action_count >= 2U &&
+                sandbox3d_scene_objects_control_fits_viewport(
+                    actions_viewport, asset_action_rects[0]),
+            false);
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_OPEN_ASSET,
+            "open_asset",
+            asset_action_rects[1],
+            asset_action_count >= 2U &&
+                sandbox3d_scene_objects_control_fits_viewport(
+                    actions_viewport, asset_action_rects[1]),
+            false);
+        sandbox3d_report_scene_objects_control_geometry(
+            state,
+            scene_objects_geometry_reports_enabled,
+            SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_ASSET_NAME,
+            "asset_name",
+            asset_name_field_bounds,
+            sandbox3d_scene_objects_control_fits_viewport(
+                actions_viewport, asset_name_field_bounds),
+            false);
+
         if (sandbox3d_scene_objects_control_fits_viewport(
                 actions_viewport,
                 (henka_ui_rect){
@@ -28989,20 +29201,11 @@ static void sandbox3d_draw_scene_objects_panel(
                 "Asset Name");
         }
         if (sandbox3d_scene_objects_control_fits_viewport(
-                actions_viewport,
-                (henka_ui_rect){
-                    actions_viewport.x,
-                    name_field_y,
-                    primitive_action_width,
-                    24.0f}) &&
+                actions_viewport, asset_name_field_bounds) &&
             henka_ui_text_field(
                 state->ui,
                 "scene_asset_name",
-                (henka_ui_rect){
-                    actions_viewport.x,
-                    name_field_y,
-                    primitive_action_width,
-                    24.0f},
+                asset_name_field_bounds,
                 state->authoring_asset_name,
                 sizeof(state->authoring_asset_name),
                 &name_changed) != HENKA_SUCCESS)

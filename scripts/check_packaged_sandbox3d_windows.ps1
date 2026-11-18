@@ -6933,13 +6933,23 @@ try {
     $genericPanelY = [double]$sceneObjectsMatch.Groups["y"].Value
     $genericPanelWidth = [double]$sceneObjectsMatch.Groups["width"].Value
     $genericPanelHeight = [double]$sceneObjectsMatch.Groups["height"].Value
-    $genericActionWidth = [Math]::Max(56.0, ($genericPanelWidth - 40.0) / 3.0)
-    $genericActionY = $genericPanelY + 60.0
-    $genericPrimitiveY = $genericActionY + 30.0
-    $genericNameFieldY = $genericPrimitiveY + 73.0
-    $genericNewAssetY = $genericNameFieldY + 30.0
-    $genericSaveAssetY = $genericPrimitiveY + 88.0
-    $genericPrimitiveActionWidth = [Math]::Max(72.0, ($genericPanelWidth - 34.0) / 2.0)
+    $genericSceneObjectsPanel = [PSCustomObject]@{
+        X = $genericPanelX
+        Y = $genericPanelY
+        Width = $genericPanelWidth
+        Height = $genericPanelHeight
+    }
+    function Get-GenericSceneObjectsControlTarget {
+        param(
+            [Parameter(Mandatory = $true)][string]$Id,
+            [Parameter(Mandatory = $true)][bool]$ExpectedAssetOpen
+        )
+
+        return Get-HenkaSceneObjectsControlClickPoint `
+            -Path $stdoutPath -Id $Id -ExpectedAssetOpen $ExpectedAssetOpen `
+            -SceneObjects $genericSceneObjectsPanel `
+            -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight
+    }
     # The production editor starts with the bounded NativeAsset default. Append
     # a unique suffix instead of queueing dozens of erase events through the
     # one-event-per-frame automation stream on a slow Debug renderer. The
@@ -6947,23 +6957,14 @@ try {
     $genericAssetNameSuffix = "_" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
     $genericAssetName = "NativeAsset" + $genericAssetNameSuffix
     $genericAssetNamePattern = [Regex]::Escape($genericAssetName)
-    $genericAssetNameX = $genericPanelX + 14.0 + ($genericActionWidth * 2.0 + 6.0) / 2.0
-    $genericNewAssetX = $genericPanelX + 14.0 + $genericActionWidth / 2.0
-    $genericPrimitiveX = @(
-        $genericNewAssetX,
-        ($genericPanelX + 14.0 + $genericPrimitiveActionWidth / 2.0),
-        ($genericPanelX + 20.0 + $genericPrimitiveActionWidth + $genericPrimitiveActionWidth / 2.0),
-        ($genericPanelX + 20.0 + $genericPrimitiveActionWidth + $genericPrimitiveActionWidth / 2.0))
-    $genericOpenAssetX = $genericPrimitiveX[2]
-
-    Assert-FramebufferRect -Name "Generic asset name field" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X $genericAssetNameX -Y $genericNameFieldY -Width ($genericActionWidth * 2.0 + 6.0) -Height 24.0
-    Assert-FramebufferRect -Name "Generic New Asset control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0) -Y $genericNewAssetY -Width $genericActionWidth -Height 24.0
-    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAssetNameX -Y ($genericNameFieldY + 12.0)
+    $genericNameTarget = Get-GenericSceneObjectsControlTarget -Id 'asset_name' -ExpectedAssetOpen $false
+    $genericNewAssetTarget = Get-GenericSceneObjectsControlTarget -Id 'new_asset' -ExpectedAssetOpen $false
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNameTarget.X -Y $genericNameTarget.Y
     Start-Sleep -Milliseconds 600
     Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetNameSuffix
     Start-Sleep -Milliseconds 600
     $genericCreationOffset = Get-FileLengthSafe -Path $stdoutPath
-    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetX -Y ($genericNewAssetY + 12.0)
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetTarget.X -Y $genericNewAssetTarget.Y
     if (-not (Wait-FileContainsAfterOffset `
             -Path $stdoutPath `
             -Pattern "Native asset document: name=$genericAssetNamePattern action=created parts=0\." `
@@ -6976,12 +6977,14 @@ try {
                 -TimeoutMilliseconds 250) {
             throw "The generic New Asset action created a document with an unexpected name."
         }
-        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAssetNameX -Y ($genericNameFieldY + 12.0)
+        $genericNameTarget = Get-GenericSceneObjectsControlTarget -Id 'asset_name' -ExpectedAssetOpen $false
+        $genericNewAssetTarget = Get-GenericSceneObjectsControlTarget -Id 'new_asset' -ExpectedAssetOpen $false
+        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNameTarget.X -Y $genericNameTarget.Y
         Start-Sleep -Milliseconds 600
         Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetNameSuffix
         Start-Sleep -Milliseconds 600
         $genericCreationRetryOffset = Get-FileLengthSafe -Path $stdoutPath
-        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetX -Y ($genericNewAssetY + 12.0)
+        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetTarget.X -Y $genericNewAssetTarget.Y
         if (-not (Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native asset document: name=$genericAssetNamePattern action=created parts=0\." `
@@ -6991,28 +6994,26 @@ try {
         }
     }
 
-    Assert-FramebufferRect -Name "Generic Add Cube control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0) -Y $genericActionY -Width $genericActionWidth -Height 24.0
-    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericPrimitiveX[0] -Y ($genericActionY + 12.0)
+    $genericAddCubeTarget = Get-GenericSceneObjectsControlTarget -Id 'add_cube' -ExpectedAssetOpen $true
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAddCubeTarget.X -Y $genericAddCubeTarget.Y
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=part-added parts=1\." -TimeoutMilliseconds 5000)) {
         throw "The generic Box primitive was not added to the new asset document."
     }
     Start-Sleep -Milliseconds 350
-    foreach ($primitiveIndex in 1..3) {
-        $genericPrimitiveClickY = $genericPrimitiveY + 12.0
-        if ($primitiveIndex -ge 3) {
-            $genericPrimitiveClickY += 30.0
-        }
-        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericPrimitiveX[$primitiveIndex] -Y $genericPrimitiveClickY
-        $expectedPartCount = $primitiveIndex + 1
+    $genericPrimitiveIds = @('cylinder', 'cone', 'quad_sphere')
+    for ($primitiveIndex = 0; $primitiveIndex -lt $genericPrimitiveIds.Count; $primitiveIndex++) {
+        $primitiveId = $genericPrimitiveIds[$primitiveIndex]
+        $primitiveTarget = Get-GenericSceneObjectsControlTarget -Id $primitiveId -ExpectedAssetOpen $true
+        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $primitiveTarget.X -Y $primitiveTarget.Y
+        $expectedPartCount = $primitiveIndex + 2
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=part-added parts=$expectedPartCount\." -TimeoutMilliseconds 5000)) {
             throw "The generic primitive authoring path did not add part $expectedPartCount."
         }
         Start-Sleep -Milliseconds 350
     }
 
-    Assert-FramebufferRect -Name "Generic Save Asset control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0) -Y $genericSaveAssetY -Width $genericActionWidth -Height 24.0
-    Assert-FramebufferRect -Name "Generic Close Asset control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0 + $genericActionWidth + 6.0) -Y $genericSaveAssetY -Width $genericActionWidth -Height 24.0
-    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetX -Y ($genericSaveAssetY + 12.0)
+    $genericSaveAssetTarget = Get-GenericSceneObjectsControlTarget -Id 'save_asset' -ExpectedAssetOpen $true
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericSaveAssetTarget.X -Y $genericSaveAssetTarget.Y
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=saved parts=4\." -TimeoutMilliseconds 5000)) {
         throw "The generic authored asset did not save transactionally."
     }
@@ -7030,11 +7031,13 @@ try {
             throw "The generic authored asset manifest was missing: $requiredManifestLine"
         }
     }
-    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericOpenAssetX -Y ($genericSaveAssetY + 12.0)
+    $genericCloseAssetTarget = Get-GenericSceneObjectsControlTarget -Id 'close_asset' -ExpectedAssetOpen $true
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericCloseAssetTarget.X -Y $genericCloseAssetTarget.Y
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=closed parts=4\." -TimeoutMilliseconds 5000)) {
         throw "The generic authored asset did not close cleanly."
     }
-    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericOpenAssetX -Y ($genericNewAssetY + 12.0)
+    $genericOpenAssetTarget = Get-GenericSceneObjectsControlTarget -Id 'open_asset' -ExpectedAssetOpen $false
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericOpenAssetTarget.X -Y $genericOpenAssetTarget.Y
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=opened parts=4\." -TimeoutMilliseconds 5000)) {
         throw "The generic authored asset did not reopen from its persisted manifest."
     }

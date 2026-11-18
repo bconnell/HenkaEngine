@@ -60,6 +60,8 @@ if ($null -eq $logMatchFunction) {
 $requiredSceneFunctions = @(
     "Wait-HenkaSceneObjectsRowDrawAfterOffset",
     "Get-HenkaSceneObjectsPagerReport",
+    "Get-HenkaSceneObjectsControlReport",
+    "Get-HenkaSceneObjectsControlClickPoint",
     "Move-HenkaSceneObjectsPagerThroughUi",
     "Test-HenkaSceneObjectsRowAuthorityCurrent",
     "Get-HenkaSceneObjectsOneLinePanelHeightFromRow",
@@ -73,6 +75,36 @@ foreach ($functionName in $requiredSceneFunctions) {
     if ($null -eq $sceneFunction) {
         throw "The packaged Scene Objects helper is missing $functionName."
     }
+}
+$checkerSource = [System.IO.File]::ReadAllText($checkerPath)
+$genericAuthoringStart = $checkerSource.IndexOf(
+    'Write-Step "Checking generic engine-native asset authoring"',
+    [StringComparison]::Ordinal)
+if ($genericAuthoringStart -lt 0) {
+    throw "The packaged checker generic-authoring boundary could not be identified for geometry-authority review."
+}
+$genericAuthoringEnd = $checkerSource.IndexOf(
+    'Write-Step "Checking clean close-window shutdown"',
+    $genericAuthoringStart,
+    [StringComparison]::Ordinal)
+if ($genericAuthoringEnd -le $genericAuthoringStart) {
+    throw "The packaged checker generic-authoring boundary could not be identified for geometry-authority review."
+}
+$genericAuthoringSource = $checkerSource.Substring(
+    $genericAuthoringStart,
+    $genericAuthoringEnd - $genericAuthoringStart)
+foreach ($controlId in @(
+        'asset_name', 'new_asset', 'add_cube', 'save_asset', 'close_asset', 'open_asset')) {
+    if ($genericAuthoringSource -notmatch "Get-GenericSceneObjectsControlTarget -Id '$controlId'") {
+        throw "The packaged checker does not resolve $controlId from product-owned control geometry."
+    }
+}
+if (-not $genericAuthoringSource.Contains("`$genericPrimitiveIds = @('cylinder', 'cone', 'quad_sphere')") -or
+    -not $genericAuthoringSource.Contains('Get-GenericSceneObjectsControlTarget -Id $primitiveId')) {
+    throw "The packaged checker primitive loop does not resolve Cylinder, Cone, and Quad Sphere through product-owned geometry."
+}
+if ($genericAuthoringSource -match 'genericActionWidth|genericPrimitiveActionWidth|genericPrimitiveX|genericOpenAssetX') {
+    throw "The packaged generic-authoring path still duplicates measured production control geometry."
 }
 $fileLengthFunction = $checkerAst.Find({
     param($node)
@@ -195,6 +227,59 @@ try {
         throw "A pager record without the product-owned previous-button geometry was accepted as complete."
     }
     Write-Output "[pass] Incomplete pager telemetry cannot authorize a synthetic page click"
+
+    $controlReportPath = Join-Path $temporaryRoot "scene-objects-control-geometry.log"
+    $controlRecords = @(
+        "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=cone available=1 asset_open=1 rect=123.0,81.0,62.0,24.0.",
+        "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=save_asset available=0 asset_open=0 rect=0.0,0.0,0.0,0.0."
+    ) -join "`r`n"
+    [System.IO.File]::WriteAllText($controlReportPath, $controlRecords + "`r`n", $encoding)
+    $coneControl = Get-HenkaSceneObjectsControlReport -Path $controlReportPath -Id "cone"
+    if ($null -eq $coneControl -or -not $coneControl.Available -or
+        $coneControl.Rect.X -ne 123.0 -or $coneControl.Rect.Y -ne 81.0 -or
+        $coneControl.Rect.Width -ne 62.0 -or $coneControl.Rect.Height -ne 24.0 -or
+        -not $coneControl.AssetOpen -or
+        [Math]::Abs(($coneControl.Rect.X + $coneControl.Rect.Width / 2.0) - 154.0) -gt 0.001) {
+        throw "The packaged checker did not preserve and center the product-owned unequal-width Cone rectangle."
+    }
+    $coneTarget = Get-HenkaSceneObjectsControlClickPoint `
+        -Path $controlReportPath -Id "cone" -ExpectedAssetOpen $true `
+        -SceneObjects ([PSCustomObject]@{ X = 100.0; Y = 50.0; Width = 200.0; Height = 100.0 }) `
+        -FramebufferWidth 1280 -FramebufferHeight 720
+    if ($coneTarget.X -ne 154.0 -or $coneTarget.Y -ne 93.0 -or
+        $coneTarget.X -eq 202.5) {
+        throw "The packaged target resolver did not use the actual product Cone hit rectangle instead of the equal-cell guess."
+    }
+    $unavailableControl = Get-HenkaSceneObjectsControlReport -Path $controlReportPath -Id "save_asset"
+    if ($null -eq $unavailableControl -or $unavailableControl.Available -or
+        $unavailableControl.Rect.Width -ne 0.0 -or $unavailableControl.Rect.Height -ne 0.0) {
+        throw "An unavailable Scene Objects control incorrectly produced an actionable hit rectangle."
+    }
+    $unavailableRejected = $false
+    try {
+        $null = Get-HenkaSceneObjectsControlClickPoint `
+            -Path $controlReportPath -Id "save_asset" -ExpectedAssetOpen $true `
+            -SceneObjects ([PSCustomObject]@{ X = 100.0; Y = 50.0; Width = 200.0; Height = 100.0 }) `
+            -FramebufferWidth 1280 -FramebufferHeight 720
+    }
+    catch {
+        $unavailableRejected = $true
+    }
+    if (-not $unavailableRejected) {
+        throw "The packaged click-target resolver authorized an unavailable button."
+    }
+    Write-Output "[pass] Unequal text-measured control geometry is parsed from product telemetry; unavailable controls cannot authorize clicks"
+
+    $malformedControlPath = Join-Path $temporaryRoot "scene-objects-control-geometry-malformed.log"
+    [System.IO.File]::WriteAllText(
+        $malformedControlPath,
+        "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=cone available=1 asset_open=1 rect=0.0,0.0,0.0,0.0.`r`n",
+        $encoding)
+    if ($null -ne (Get-HenkaSceneObjectsControlReport -Path $malformedControlPath -Id "cone")) {
+        throw "Invalid available-control geometry was accepted as a real Scene Objects hit target."
+    }
+    Write-Output "[pass] Invalid product control geometry cannot authorize a packaged click"
+    Write-Output "[pass] Packaged authoring consumes product rectangles for every interaction and rejects equal-cell geometry guesses"
 
     function Send-HenkaBackgroundFramebufferClickAndWait {
         param(

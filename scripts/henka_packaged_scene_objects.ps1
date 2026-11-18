@@ -141,6 +141,96 @@ function Move-HenkaSceneObjectsPagerThroughUi {
     return $nextPager
 }
 
+function Get-HenkaSceneObjectsControlReport {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('add_cube', 'cylinder', 'cone', 'uv_sphere', 'quad_sphere',
+            'asset_name', 'new_asset', 'open_asset', 'save_asset', 'close_asset')]
+        [string]$Id
+    )
+
+    $number = '[-0-9.]+'
+    $pattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control ' +
+        'id=' + [Regex]::Escape($Id) +
+        ' available=(?<available>[01]) asset_open=(?<assetOpen>[01]) ' +
+        'rect=(?<x>' + $number + '),(?<y>' + $number + '),(?<width>' + $number + '),(?<height>' + $number + ')\.'
+    $match = Get-LastLogRegexMatch -Path $Path -Pattern $pattern
+    if ($null -eq $match) {
+        return $null
+    }
+
+    try {
+        $groups = $match.Groups
+        $available = $groups['available'].Value -eq '1'
+        $assetOpen = $groups['assetOpen'].Value -eq '1'
+        $rect = [PSCustomObject]@{
+            X = [double]::Parse($groups['x'].Value, [Globalization.CultureInfo]::InvariantCulture)
+            Y = [double]::Parse($groups['y'].Value, [Globalization.CultureInfo]::InvariantCulture)
+            Width = [double]::Parse($groups['width'].Value, [Globalization.CultureInfo]::InvariantCulture)
+            Height = [double]::Parse($groups['height'].Value, [Globalization.CultureInfo]::InvariantCulture)
+        }
+    }
+    catch {
+        return $null
+    }
+
+    foreach ($value in @($rect.X, $rect.Y, $rect.Width, $rect.Height)) {
+        if ([double]::IsNaN($value) -or [double]::IsInfinity($value)) {
+            return $null
+        }
+    }
+    if ($available -and ($rect.X -lt 0.0 -or $rect.Y -lt 0.0 -or
+            $rect.Width -le 0.0 -or $rect.Height -le 0.0)) {
+        return $null
+    }
+
+    return [PSCustomObject]@{
+        Id = $Id
+        Available = $available
+        AssetOpen = $assetOpen
+        Rect = $rect
+        LogIndex = $match.Index
+    }
+}
+
+function Get-HenkaSceneObjectsControlClickPoint {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Id,
+        [Parameter(Mandatory = $true)][bool]$ExpectedAssetOpen,
+        [Parameter(Mandatory = $true)][PSCustomObject]$SceneObjects,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight
+    )
+
+    $report = Get-HenkaSceneObjectsControlReport -Path $Path -Id $Id
+    if ($null -eq $report -or -not $report.Available) {
+        throw "The product did not report an available Scene Objects control '$Id'."
+    }
+    if ($report.AssetOpen -ne $ExpectedAssetOpen) {
+        throw "The product reported Scene Objects control '$Id' for the wrong asset-document state."
+    }
+
+    $rect = $report.Rect
+    $null = Assert-FramebufferRect `
+        -Name "Product-owned Scene Objects control $Id" `
+        -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
+        -X $rect.X -Y $rect.Y -Width $rect.Width -Height $rect.Height
+    if ($rect.X -lt $SceneObjects.X -or $rect.Y -lt $SceneObjects.Y -or
+        $rect.X + $rect.Width -gt $SceneObjects.X + $SceneObjects.Width -or
+        $rect.Y + $rect.Height -gt $SceneObjects.Y + $SceneObjects.Height) {
+        throw "The product-owned Scene Objects control '$Id' lies outside its panel."
+    }
+
+    return [PSCustomObject]@{
+        X = $rect.X + $rect.Width * 0.5
+        Y = $rect.Y + $rect.Height * 0.5
+        Rect = $rect
+        Report = $report
+    }
+}
+
 function Test-HenkaSceneObjectsRowAuthorityCurrent {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
