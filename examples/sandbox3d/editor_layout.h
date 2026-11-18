@@ -182,11 +182,13 @@ henka_result sandbox3d_editor_layout_scene_objects_regions(
  * the toolbar or its hit targets. */
 henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
     henka_ui_rect scene_frame,
+    uint16_t app_scale_percent,
     bool authoring_available,
     bool options_expanded);
 
 henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
     henka_ui_rect scene_frame,
+    uint16_t app_scale_percent,
     bool authoring_available,
     bool options_expanded,
     sandbox3d_modeling_toolbar_layout* out_layout);
@@ -202,7 +204,8 @@ bool sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
 henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
     const sandbox3d_editor_frame_layout* layout,
     bool authoring_available,
-    bool options_expanded);
+    bool options_expanded,
+    uint16_t app_scale_percent);
 
 henka_ui_rect sandbox3d_editor_frame_layout_panel_rect(
     const sandbox3d_editor_frame_layout* layout,

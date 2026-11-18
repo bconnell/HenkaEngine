@@ -16,6 +16,7 @@
 #define SANDBOX3D_EDITOR_LAYOUT_DEFAULT_DETAILS_WIDTH 352.0f
 #define SANDBOX3D_EDITOR_LAYOUT_DEFAULT_UTILITY_HEIGHT 228.0f
 #define SANDBOX3D_EDITOR_LAYOUT_DEBUG_STRIP_HEIGHT 58.0f
+#define SANDBOX3D_EDITOR_LAYOUT_MODELING_TOOLBAR_MIN_FRAME_PIXELS 448.0
 
 static bool sandbox3d_editor_layout_float_is_valid(float value)
 {
@@ -785,6 +786,7 @@ bool sandbox3d_editor_frame_layout_is_valid(
 
 henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
     henka_ui_rect scene_frame,
+    uint16_t app_scale_percent,
     bool authoring_available,
     bool options_expanded)
 {
@@ -792,6 +794,7 @@ henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
 
     if (sandbox3d_editor_layout_modeling_toolbar_compute(
             scene_frame,
+            app_scale_percent,
             authoring_available,
             options_expanded,
             &toolbar_layout) != HENKA_SUCCESS)
@@ -803,15 +806,18 @@ henka_ui_rect sandbox3d_editor_layout_modeling_toolbar_bounds(
 
 henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
     henka_ui_rect scene_frame,
+    uint16_t app_scale_percent,
     bool authoring_available,
     bool options_expanded,
     sandbox3d_modeling_toolbar_layout* out_layout)
 {
     sandbox3d_modeling_toolbar_layout layout;
     const bool compact_toolbar = scene_frame.width < 760.0f;
+    double effective_frame_width;
     float y;
     float width;
     float toolbar_height;
+    bool narrow_compact_selection;
     size_t index;
 
     if (out_layout == NULL ||
@@ -819,7 +825,17 @@ henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
         !sandbox3d_editor_layout_float_is_valid(scene_frame.y) ||
         !sandbox3d_editor_layout_float_is_valid(scene_frame.width) ||
         !sandbox3d_editor_layout_float_is_valid(scene_frame.height) ||
-        scene_frame.width < 500.0f || scene_frame.height < 150.0f)
+        (app_scale_percent != 100U && app_scale_percent != 125U &&
+         app_scale_percent != 150U && app_scale_percent != 200U) ||
+        scene_frame.height < 150.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    effective_frame_width = (double)scene_frame.width *
+        (double)app_scale_percent / 100.0;
+    if (!isfinite(effective_frame_width) ||
+        effective_frame_width < SANDBOX3D_EDITOR_LAYOUT_MODELING_TOOLBAR_MIN_FRAME_PIXELS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -845,6 +861,7 @@ henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
         toolbar_height = 136.0f;
     }
     layout.bounds = (henka_ui_rect){scene_frame.x + 10.0f, y, width, toolbar_height};
+    narrow_compact_selection = compact_toolbar && width < 270.0f;
 
     if (!authoring_available && compact_toolbar)
     {
@@ -853,9 +870,9 @@ henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
     }
 
     layout.selection_mode = (henka_ui_rect){
-        layout.bounds.x + 74.0f,
+        layout.bounds.x + (narrow_compact_selection ? 8.0f : 74.0f),
         y + 20.0f,
-        196.0f,
+        narrow_compact_selection ? width - 16.0f : 196.0f,
         22.0f};
     if (compact_toolbar)
     {
@@ -954,13 +971,15 @@ bool sandbox3d_editor_layout_modeling_toolbar_contains_interactive_point(
 henka_viewport sandbox3d_editor_frame_layout_navigation_viewport(
     const sandbox3d_editor_frame_layout* layout,
     bool authoring_available,
-    bool options_expanded)
+    bool options_expanded,
+    uint16_t app_scale_percent)
 {
     henka_viewport navigation_viewport;
     const henka_ui_rect toolbar = layout == NULL
         ? (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f}
         : sandbox3d_editor_layout_modeling_toolbar_bounds(
             layout->scene_frame,
+            app_scale_percent,
             authoring_available,
             options_expanded);
     float safe_top;

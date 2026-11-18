@@ -7829,6 +7829,34 @@ static bool sandbox3d_modeling_toolbar_has_editable_selection(
         sandbox3d_authoring_object_get_entity(state->authoring_object) == selected_entity;
 }
 
+static uint16_t sandbox3d_get_editor_ui_scale_percent(
+    const sandbox3d_state* state)
+{
+    float layout_scale;
+
+    if (state == NULL)
+    {
+        return 0U;
+    }
+    if (state->typography_runtime == NULL)
+    {
+        return 100U;
+    }
+
+    layout_scale = sandbox3d_editor_typography_runtime_get_layout_scale(
+        state->typography_runtime);
+    if (!isfinite(layout_scale) || layout_scale <= 0.0f ||
+        layout_scale > 2.0f)
+    {
+        return 0U;
+    }
+    if (layout_scale == 1.0f) { return 100U; }
+    if (layout_scale == 1.25f) { return 125U; }
+    if (layout_scale == 1.5f) { return 150U; }
+    if (layout_scale == 2.0f) { return 200U; }
+    return 0U;
+}
+
 static henka_ui_rect sandbox3d_get_modeling_toolbar_bounds(
     const sandbox3d_state* state,
     henka_ui_rect scene_frame)
@@ -7840,6 +7868,7 @@ static henka_ui_rect sandbox3d_get_modeling_toolbar_bounds(
     }
     return sandbox3d_editor_layout_modeling_toolbar_bounds(
         scene_frame,
+        sandbox3d_get_editor_ui_scale_percent(state),
         sandbox3d_modeling_toolbar_has_editable_selection(state),
         state->modeling_toolbar.options_expanded);
 }
@@ -20855,9 +20884,15 @@ static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka
 {
     henka_ui_rect panels[6];
     sandbox3d_modeling_toolbar_layout modeling_toolbar_layout;
+    uint16_t app_scale_percent;
     size_t panel_count;
 
     if (state == NULL || state->ui == NULL || !henka_ui_is_visible(state->ui))
+    {
+        return false;
+    }
+    app_scale_percent = sandbox3d_get_editor_ui_scale_percent(state);
+    if (app_scale_percent == 0U)
     {
         return false;
     }
@@ -20879,6 +20914,7 @@ static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka
      * selection and drag operations. */
     if (sandbox3d_editor_layout_modeling_toolbar_compute(
             state->frame_layout.scene_frame,
+            app_scale_percent,
             sandbox3d_modeling_toolbar_has_editable_selection(state),
             state->modeling_toolbar.options_expanded,
             &modeling_toolbar_layout) == HENKA_SUCCESS &&
@@ -22216,10 +22252,16 @@ static void sandbox3d_draw_modeling_toolbar(
     char summary[128];
     char options_summary[96];
     const bool compact_toolbar = viewport_bounds.width < 760.0f;
+    uint16_t app_scale_percent;
 
     if (engine == NULL || state == NULL || state->ui == NULL ||
         state->workspace.context.active != SANDBOX3D_WORK_CONTEXT_BUILD ||
-        viewport_bounds.width < 500.0f || viewport_bounds.height < 150.0f)
+        viewport_bounds.height < 150.0f)
+    {
+        return;
+    }
+    app_scale_percent = sandbox3d_get_editor_ui_scale_percent(state);
+    if (app_scale_percent == 0U)
     {
         return;
     }
@@ -22227,6 +22269,7 @@ static void sandbox3d_draw_modeling_toolbar(
     sandbox3d_sync_modeling_toolbar_state(state);
     if (sandbox3d_editor_layout_modeling_toolbar_compute(
             viewport_bounds,
+            app_scale_percent,
             state->modeling_toolbar.authoring_available,
             state->modeling_toolbar.options_expanded,
             &toolbar_layout) != HENKA_SUCCESS)
@@ -22275,6 +22318,7 @@ static void sandbox3d_draw_modeling_toolbar(
             !state->modeling_toolbar.options_expanded;
         (void)sandbox3d_editor_layout_modeling_toolbar_compute(
             viewport_bounds,
+            app_scale_percent,
             state->modeling_toolbar.authoring_available,
             state->modeling_toolbar.options_expanded,
             &toolbar_layout);
@@ -23868,8 +23912,7 @@ static henka_result sandbox3d_editor_content_size_for_current_scale(
 {
     int logical_width = 0;
     int logical_height = 0;
-    int app_scale_percent;
-    float layout_scale = 1.0f;
+    uint16_t app_scale_percent;
     henka_result result;
 
     if (out_app_scale_percent != NULL)
@@ -23882,17 +23925,8 @@ static henka_result sandbox3d_editor_content_size_for_current_scale(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (state->typography_runtime != NULL)
-    {
-        layout_scale = sandbox3d_editor_typography_runtime_get_layout_scale(
-            state->typography_runtime);
-    }
-    if (!isfinite(layout_scale) || layout_scale <= 0.0f || layout_scale > 2.0f)
-    {
-        return HENKA_ERROR_NUMERIC_RANGE;
-    }
-    app_scale_percent = (int)lroundf(layout_scale * 100.0f);
-    if (app_scale_percent < 100 || app_scale_percent > 200)
+    app_scale_percent = sandbox3d_get_editor_ui_scale_percent(state);
+    if (app_scale_percent == 0U)
     {
         return HENKA_ERROR_NUMERIC_RANGE;
     }
@@ -41182,7 +41216,8 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
                 sandbox3d_editor_frame_layout_navigation_viewport(
                     &layout,
                     sandbox3d_modeling_toolbar_has_editable_selection(state),
-                    state->modeling_toolbar.options_expanded);
+                    state->modeling_toolbar.options_expanded,
+                    sandbox3d_get_editor_ui_scale_percent(state));
             const bool compass_changed = sandbox3d_view_compass_draw(
                 state->ui,
                 compass_viewport,

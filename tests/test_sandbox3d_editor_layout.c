@@ -336,10 +336,10 @@ void henka_test_sandbox3d_editor_layout(void)
 
             HENKA_TEST_ASSERT(
                 sandbox3d_editor_layout_modeling_toolbar_compute(
-                    frame, true, false, &collapsed) == HENKA_SUCCESS);
+                    frame, 100U, true, false, &collapsed) == HENKA_SUCCESS);
             HENKA_TEST_ASSERT(
                 sandbox3d_editor_layout_modeling_toolbar_compute(
-                    frame, true, true, &expanded) == HENKA_SUCCESS);
+                    frame, 100U, true, true, &expanded) == HENKA_SUCCESS);
             HENKA_TEST_ASSERT(henka_test_rect_is_contained(frame, collapsed.bounds));
             HENKA_TEST_ASSERT(henka_test_rect_is_contained(frame, expanded.bounds));
             HENKA_TEST_ASSERT(henka_test_rect_is_contained(
@@ -461,12 +461,90 @@ void henka_test_sandbox3d_editor_layout(void)
         }
 
         {
+            const uint16_t scales[] = {100U, 125U, 150U, 200U};
+            sandbox3d_modeling_toolbar_layout rejected;
+            sandbox3d_modeling_toolbar_layout exact_boundary;
+            size_t scale_index;
+
+            for (scale_index = 0U;
+                 scale_index < sizeof(scales) / sizeof(scales[0]);
+                 ++scale_index)
+            {
+                const uint16_t scale_percent = scales[scale_index];
+                const float scale = (float)scale_percent / 100.0f;
+                const henka_ui_rect frame = {
+                    17.0f, 23.0f, 448.05f / scale, 420.0f};
+                sandbox3d_modeling_toolbar_layout compact;
+                size_t tool_index;
+
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_compute(
+                        frame, scale_percent, true, false, &compact) ==
+                    HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(compact.compact);
+                HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                    frame, compact.bounds));
+                HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                    compact.bounds, compact.selection_mode));
+                HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                    compact.bounds, compact.options_toggle));
+                for (tool_index = 0U; tool_index < 4U; ++tool_index)
+                {
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        compact.bounds, compact.tool_buttons[tool_index]));
+                    HENKA_TEST_ASSERT(
+                        compact.tool_buttons[tool_index].width * scale >= 96.0f);
+                }
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_modeling_toolbar_compute(
+                        (henka_ui_rect){
+                            frame.x, frame.y, frame.width - 0.1f, frame.height},
+                        scale_percent,
+                        true,
+                        false,
+                        &compact) == HENKA_ERROR_INVALID_ARGUMENT);
+            }
+
+            HENKA_TEST_ASSERT(
+                sandbox3d_editor_layout_modeling_toolbar_compute(
+                    (henka_ui_rect){17.0f, 23.0f, 224.0f, 420.0f},
+                    100U,
+                    true,
+                    false,
+                    &rejected) == HENKA_ERROR_INVALID_ARGUMENT);
+            HENKA_TEST_ASSERT(
+                sandbox3d_editor_layout_modeling_toolbar_compute(
+                    (henka_ui_rect){17.0f, 23.0f, 224.0f, 420.0f},
+                    200U,
+                    true,
+                    false,
+                    &exact_boundary) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(
+                exact_boundary.tool_buttons[0].width * 2.0f >= 96.0f);
+            HENKA_TEST_ASSERT(
+                sandbox3d_editor_layout_modeling_toolbar_compute(
+                    (henka_ui_rect){17.0f, 23.0f, 223.99f, 420.0f},
+                    200U,
+                    true,
+                    false,
+                    &rejected) == HENKA_ERROR_INVALID_ARGUMENT);
+            HENKA_TEST_ASSERT(
+                sandbox3d_editor_layout_modeling_toolbar_compute(
+                    (henka_ui_rect){17.0f, 23.0f, 800.0f, 420.0f},
+                    110U,
+                    true,
+                    false,
+                    &rejected) == HENKA_ERROR_INVALID_ARGUMENT);
+        }
+
+        {
             sandbox3d_modeling_toolbar_layout unchanged;
             memset(&unchanged, 0, sizeof(unchanged));
             unchanged.bounds = (henka_ui_rect){1.0f, 2.0f, 3.0f, 4.0f};
             HENKA_TEST_ASSERT(
                 sandbox3d_editor_layout_modeling_toolbar_compute(
-                    (henka_ui_rect){0.0f, 0.0f, 499.0f, 720.0f},
+                    (henka_ui_rect){0.0f, 0.0f, 447.9f, 720.0f},
+                    100U,
                     true,
                     false,
                     &unchanged) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -1665,6 +1743,7 @@ void henka_test_sandbox3d_editor_layout(void)
             const henka_ui_rect collapsed_toolbar =
                 sandbox3d_editor_layout_modeling_toolbar_bounds(
                     frame.scene_frame,
+                    100U,
                     true,
                     false);
             HENKA_TEST_ASSERT(collapsed_toolbar.width > 0.0f);
@@ -1785,7 +1864,8 @@ void henka_test_sandbox3d_editor_layout(void)
             sandbox3d_view_compass_preferences compass_preferences;
             sandbox3d_view_compass_layout compass_layout;
             const henka_viewport navigation_viewport =
-                sandbox3d_editor_frame_layout_navigation_viewport(&frame, false, false);
+                sandbox3d_editor_frame_layout_navigation_viewport(
+                    &frame, false, false, 100U);
             const henka_ui_rect compact_toolbar = {
                 frame.scene_frame.x + 10.0f,
                 frame.scene_frame.y + 76.0f,
