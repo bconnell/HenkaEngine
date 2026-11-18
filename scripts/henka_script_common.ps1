@@ -854,7 +854,33 @@ function Test-HenkaPinnedFetchContentSource {
         return $result
     }
     $status = @(& $git -C $source status --porcelain --untracked-files=all --ignored=matching 2>$null)
-    if ($LASTEXITCODE -ne 0 -or $status.Count -ne 0) {
+    $statusExitCode = $LASTEXITCODE
+    # KTX-Software's pinned Windows CMake configure/build generates this
+    # ignored header directly in its source tree (cmake/version.cmake:
+    # create_version_header(lib ktx)). Permit only the deterministic output
+    # for the current immutable KTX pin. Other ignored or untracked files must
+    # continue to invalidate the source cache.
+    if ($statusExitCode -eq 0 -and
+        $status.Count -eq 1 -and
+        $status[0] -match '^!!\s+lib/version\.h$' -and
+        $PinnedRepository -ieq 'https://github.com/KhronosGroup/KTX-Software.git' -and
+        $PinnedCommit -ieq '91ace88675ac59a97e55d0378a6602a9ae6b98bd') {
+        $generatedVersionHeader = Join-Path $source 'lib\version.h'
+        $generatedVersionHeaderItem = Get-Item -LiteralPath $generatedVersionHeader -Force -ErrorAction SilentlyContinue
+        if ($null -ne $generatedVersionHeaderItem -and
+            -not $generatedVersionHeaderItem.PSIsContainer -and
+            -not ($generatedVersionHeaderItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            try {
+                $generatedVersionHeaderHash = (Get-FileHash -LiteralPath $generatedVersionHeader -Algorithm SHA256).Hash
+                if ($generatedVersionHeaderHash -ieq 'F2272B43BE16731F3C390E1FFB7FAD93CDF10F83620D487C82D0457D86B8AEA5') {
+                    $status = @()
+                }
+            } catch {
+                # A changing or unreadable generated file is not cache evidence.
+            }
+        }
+    }
+    if ($statusExitCode -ne 0 -or $status.Count -ne 0) {
         $result.RejectionReason = "source-working-tree-is-not-clean"
         return $result
     }

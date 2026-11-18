@@ -289,10 +289,18 @@ try {
     $resolved = Resolve-HenkaBuildDependencyRoot `
         -RepositoryRoot $repoRoot `
         -BuildRoot $resolverEmptyBuildRoot
+    $sharedResolution = Get-HenkaCMakeFetchContentArguments `
+        -DependencyRoot "" `
+        -PinnedRevisions (Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot)
+    $sharedProviderSummary = @($sharedResolution.ProviderStates | ForEach-Object {
+        "{0}={1}({2})" -f $_.Name,$_.Available,$_.RejectionReason
+    }) -join "; "
     Assert-Condition ($resolved.Mode -eq "shared" -and
         [string]::IsNullOrWhiteSpace($resolved.Root) -and
         [int]$resolved.AvailableProviders -eq 6) `
-        "The real build resolver did not select and report the six-provider shared cache for an empty build-local cache."
+        ("The real build resolver did not select and report the six-provider shared cache for an empty build-local cache. " +
+            "Actual mode='$($resolved.Mode)', root='$($resolved.Root)', provider count=$($resolved.AvailableProviders); " +
+            "shared providers: $sharedProviderSummary")
 
     $explicit = Resolve-HenkaBuildDependencyRoot `
         -RepositoryRoot $repoRoot `
