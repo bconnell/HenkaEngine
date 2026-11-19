@@ -1,8 +1,12 @@
 add_executable(henka_sandbox3d
+    editor_automation_frame_capture.c
     editor_controls.c
     editor_ui_state.c
     camera_tools.c
     editor_preferences.c
+    editor_font_bootstrap.c
+    editor_typography_runtime.c
+    editor_text_layout.c
     view_compass.c
     asset_browser_tools.c
     authoring_asset_controller.c
@@ -23,6 +27,9 @@ add_executable(henka_sandbox3d
     workspace_tools.c
     workspace_persistence.c
     editor_layout.c
+    editor_scale_control.c
+    editor_utility_settings_layout.c
+    editor_scale_transaction.c
     scene_hierarchy_projection.c
     scene_document_bridge.c
     play_session.c
@@ -48,16 +55,58 @@ endif()
 
 henka_enable_project_warnings(henka_sandbox3d)
 
-add_custom_command(TARGET henka_sandbox3d POST_BUILD
+# Showcase source assets do not vary by configuration. Keep one generated
+# output set for the whole multi-config build tree, then copy it into the
+# active executable configuration after that target is built.
+set(HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/showcase_assets/assets/models")
+set(HENKA_SHOWCASE_ASSET_MANIFEST "${CMAKE_CURRENT_BINARY_DIR}/showcase_assets/showcase-assets-manifest.json")
+
+set(HENKA_SHOWCASE_ASSET_FILENAMES
+    cheeky_giraffe.gltf
+    cheeky_giraffe.bin
+    giraffe_base_color.png
+    giraffe_detail_normal.png
+    giraffe_metallic_roughness.png
+    original_realistic_rocket.gltf
+    original_realistic_rocket.bin
+    rocket_base_color.png
+    rocket_detail_normal.png
+    rocket_metallic_roughness.png
+)
+set(HENKA_SHOWCASE_ASSET_OUTPUTS)
+foreach(showcase_filename IN LISTS HENKA_SHOWCASE_ASSET_FILENAMES)
+    list(APPEND HENKA_SHOWCASE_ASSET_OUTPUTS
+        "${HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY}/${showcase_filename}")
+endforeach()
+list(APPEND HENKA_SHOWCASE_ASSET_OUTPUTS "${HENKA_SHOWCASE_ASSET_MANIFEST}")
+
+add_custom_command(OUTPUT ${HENKA_SHOWCASE_ASSET_OUTPUTS}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "${HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY}"
     COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
         ${CMAKE_SOURCE_DIR}/scripts/generate_showcase_assets.ps1
-        -OutputDirectory $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models
+        -OutputDirectory "${HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY}"
+        -ReuseVerifiedOutput
+        -ManifestPath "${HENKA_SHOWCASE_ASSET_MANIFEST}"
+    DEPENDS
+        ${CMAKE_SOURCE_DIR}/scripts/generate_showcase_assets.ps1
+        ${CMAKE_SOURCE_DIR}/scripts/henka_script_common.ps1
+        ${CMAKE_SOURCE_DIR}/scripts/showcase_generation_cache.ps1
+    VERBATIM
 )
+add_custom_target(henka_showcase_asset_generation DEPENDS ${HENKA_SHOWCASE_ASSET_OUTPUTS})
+add_dependencies(henka_sandbox3d henka_showcase_asset_generation)
 
 add_custom_command(TARGET henka_sandbox3d POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:henka_sandbox3d>/assets
+)
+
+add_custom_command(TARGET henka_sandbox3d POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${HENKA_SHOWCASE_ASSET_OUTPUT_DIRECTORY}
+        $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models
 )
 
 add_custom_command(TARGET henka_sandbox3d POST_BUILD

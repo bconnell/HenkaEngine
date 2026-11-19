@@ -14,6 +14,10 @@
 #include <henka/log.h>
 #include <henka/memory.h>
 
+#include "window_scale.h"
+
+#define HENKA_PLATFORM_AUTOMATION_INPUT_DIAGNOSTIC_RECORD_LIMIT 4096U
+
 #if defined(_WIN32)
 #include <share.h>
 #endif
@@ -484,7 +488,8 @@ static void henka_platform_poll_automation_event(henka_input_state* input)
                 type = "text";
             }
             if (henka_platform_automation_diagnostics_enabled() &&
-                input->automation_input_record_sequence <= 512U)
+                input->automation_input_record_sequence <=
+                    HENKA_PLATFORM_AUTOMATION_INPUT_DIAGNOSTIC_RECORD_LIMIT)
             {
                 printf(
                     "HENKA_AUTOMATION_DIAGNOSTIC input record=%llu type=%s button=%s release_consumed=%u\n",
@@ -649,6 +654,9 @@ struct henka_platform
 {
     SDL_Window* window;
     SDL_WindowID main_window_id;
+    bool window_start_hidden;
+    bool tool_windows_start_hidden;
+    bool automation_input_owned;
     bool multi_window_available;
     bool main_window_focused;
     henka_window_id next_tool_window_id;
@@ -993,6 +1001,8 @@ henka_result henka_platform_create(
     struct henka_platform** out_platform)
 {
     struct henka_platform* platform;
+    const char* automation_input_owned;
+    const char* tool_windows_start_hidden;
     Uint64 window_flags;
 
     if (out_platform != NULL)
@@ -1015,6 +1025,20 @@ henka_result henka_platform_create(
 
     HENKA_LOG_INFO("platform video subsystem reference acquired");
 
+    /* Henka routes close requests per window. SDL's last-visible-window
+     * heuristic can emit a process-wide quit when the main window is hidden
+     * and the last detached/tool window closes. */
+    if (!SDL_SetHintWithPriority(
+            SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE,
+            "0",
+            SDL_HINT_OVERRIDE))
+    {
+        HENKA_LOG_ERROR(
+            "SDL last-window-close quit behavior could not be disabled.");
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        return HENKA_ERROR_PLATFORM;
+    }
+
     platform = henka_calloc(1U, sizeof(*platform));
     if (platform == NULL)
     {
@@ -1022,7 +1046,34 @@ henka_result henka_platform_create(
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
-    window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+    window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
+        SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    automation_input_owned = SDL_getenv("HENKA_AUTOMATION_INPUT_OWNED");
+    platform->automation_input_owned =
+        automation_input_owned != NULL &&
+        strcmp(automation_input_owned, "1") == 0;
+    platform->window_start_hidden =
+        desc->window_start_hidden || platform->automation_input_owned;
+    platform->tool_windows_start_hidden = platform->window_start_hidden;
+    if (platform->window_start_hidden)
+    {
+        window_flags |= SDL_WINDOW_HIDDEN;
+    }
+    tool_windows_start_hidden = SDL_getenv("HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN");
+    if (!platform->tool_windows_start_hidden &&
+        platform->automation_input_owned &&
+        tool_windows_start_hidden != NULL &&
+        strcmp(tool_windows_start_hidden, "1") == 0)
+    {
+        platform->tool_windows_start_hidden = true;
+    }
+    if (platform->automation_input_owned)
+    {
+        /* Automation consumes its own event stream; create hidden and
+         * non-focusable so no newly created UI window can flash over the
+         * owner's desktop before the background launcher relocates it. */
+        window_flags |= SDL_WINDOW_NOT_FOCUSABLE;
+    }
     platform->window = SDL_CreateWindow(
         desc->application_name,
         desc->window_width,
@@ -1068,6 +1119,21 @@ henka_result henka_platform_create(
     platform->main_window_focused =
         (SDL_GetWindowFlags(platform->window) &
             SDL_WINDOW_INPUT_FOCUS) != 0U;
+    if (platform->automation_input_owned)
+    {
+        const char* automation_diagnostics =
+            SDL_getenv("HENKA_AUTOMATION_DIAGNOSTICS");
+        if (automation_diagnostics != NULL &&
+            strcmp(automation_diagnostics, "1") == 0)
+        {
+            const Uint64 actual_window_flags =
+                SDL_GetWindowFlags(platform->window);
+            HENKA_LOG_INFO(
+                "HENKA_AUTOMATION_DIAGNOSTIC window_focus_policy focusable=%u input_focused=%u",
+                (actual_window_flags & SDL_WINDOW_NOT_FOCUSABLE) != 0U ? 0U : 1U,
+                (actual_window_flags & SDL_WINDOW_INPUT_FOCUS) != 0U ? 1U : 0U);
+        }
+    }
     platform->next_tool_window_id = 2U;
     platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_NONE;
     platform->last_tool_window_id = HENKA_INVALID_WINDOW_ID;
@@ -1185,11 +1251,23 @@ henka_result henka_platform_create_tool_window(
     }
 
     memset(slot, 0, sizeof(*slot));
-    slot->window = SDL_CreateWindow(
+    {
+        Uint64 window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
+            SDL_WINDOW_HIGH_PIXEL_DENSITY;
+        if (platform->tool_windows_start_hidden)
+        {
+            window_flags |= SDL_WINDOW_HIDDEN;
+        }
+        if (platform->automation_input_owned)
+        {
+            window_flags |= SDL_WINDOW_NOT_FOCUSABLE;
+        }
+        slot->window = SDL_CreateWindow(
         desc->title,
         desc->width,
         desc->height,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+            window_flags);
+    }
     if (slot->window == NULL)
     {
         platform->multi_window_available = false;
@@ -1286,6 +1364,14 @@ bool henka_platform_get_tool_window_state(
     henka_tool_window_state* out_state)
 {
     const henka_platform_tool_window* slot;
+    uint32_t display_scale_denominator;
+    uint32_t display_scale_numerator;
+    int framebuffer_height;
+    int framebuffer_width;
+    int logical_height;
+    int logical_width;
+    int native_height;
+    int native_width;
 
     if (out_state != NULL)
     {
@@ -1303,12 +1389,58 @@ bool henka_platform_get_tool_window_state(
         return false;
     }
 
+    if (slot->close_requested)
+    {
+        out_state->id = slot->id;
+        out_state->native_window_id = (uint32_t)slot->native_window_id;
+        out_state->open = slot->open;
+        out_state->focused = slot->focused;
+        out_state->position_x = slot->position_x;
+        out_state->position_y = slot->position_y;
+        out_state->close_requested = true;
+        snprintf(out_state->last_event, sizeof(out_state->last_event), "%s", slot->last_event);
+        return true;
+    }
+
+    display_scale_numerator = 0U;
+    display_scale_denominator = 0U;
+    logical_width = 0;
+    logical_height = 0;
+    native_width = 0;
+    native_height = 0;
+    framebuffer_width = 0;
+    framebuffer_height = 0;
+    if (!SDL_GetWindowSize(slot->window, &native_width, &native_height) ||
+        !SDL_GetWindowSizeInPixels(
+            slot->window, &framebuffer_width, &framebuffer_height) ||
+        !henka_platform_window_scale_from_display_scale(
+            SDL_GetWindowDisplayScale(slot->window),
+            &display_scale_numerator,
+            &display_scale_denominator) ||
+        !henka_platform_window_scale_content_size_from_framebuffer(
+            framebuffer_width,
+            framebuffer_height,
+            display_scale_numerator,
+            display_scale_denominator,
+            &logical_width,
+            &logical_height))
+    {
+        memset(out_state, 0, sizeof(*out_state));
+        return false;
+    }
+
     out_state->id = slot->id;
     out_state->native_window_id = (uint32_t)slot->native_window_id;
     out_state->open = slot->open;
     out_state->focused = slot->focused;
-    out_state->width = slot->width;
-    out_state->height = slot->height;
+    out_state->width = framebuffer_width;
+    out_state->height = framebuffer_height;
+    out_state->logical_width = logical_width;
+    out_state->logical_height = logical_height;
+    out_state->display_scale_numerator = display_scale_numerator;
+    out_state->display_scale_denominator = display_scale_denominator;
+    out_state->native_width = native_width;
+    out_state->native_height = native_height;
     out_state->position_x = slot->position_x;
     out_state->position_y = slot->position_y;
     out_state->mouse_position = slot->mouse_position;
@@ -1475,14 +1607,21 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
 
             case SDL_EVENT_WINDOW_RESIZED:
             case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
             {
                 henka_platform_tool_window* tool_window;
 
                 if (henka_platform_event_is_main_window(platform, event.window.windowID))
                 {
                     out_state->resized = true;
-                    out_state->framebuffer_width = event.window.data1;
-                    out_state->framebuffer_height = event.window.data2;
+                    if (!SDL_GetWindowSizeInPixels(
+                            platform->window,
+                            &out_state->framebuffer_width,
+                            &out_state->framebuffer_height))
+                    {
+                        out_state->framebuffer_width = 0;
+                        out_state->framebuffer_height = 0;
+                    }
                     platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
                 }
                 else if ((tool_window = henka_platform_find_tool_window_by_native_id(platform, event.window.windowID)) != NULL)
@@ -1490,11 +1629,15 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     henka_platform_record_tool_event(
                         platform,
                         tool_window,
-                        "resized",
+                        event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED
+                            ? "display scale changed"
+                            : "resized",
                         false,
                         true);
-                    tool_window->width = event.window.data1;
-                    tool_window->height = event.window.data2;
+                    (void)SDL_GetWindowSizeInPixels(
+                        tool_window->window,
+                        &tool_window->width,
+                        &tool_window->height);
                     tool_window->resized = true;
                 }
                 else
@@ -1877,6 +2020,76 @@ bool henka_platform_get_framebuffer_size(
     *out_width = width;
     *out_height = height;
     return true;
+}
+
+bool henka_platform_get_window_display_scale(
+    const struct henka_platform* platform,
+    uint32_t* out_numerator,
+    uint32_t* out_denominator)
+{
+    if (out_numerator != NULL)
+    {
+        *out_numerator = 0U;
+    }
+    if (out_denominator != NULL)
+    {
+        *out_denominator = 0U;
+    }
+    if (platform == NULL || platform->window == NULL ||
+        out_numerator == NULL || out_denominator == NULL)
+    {
+        return false;
+    }
+
+    return henka_platform_window_scale_from_display_scale(
+        SDL_GetWindowDisplayScale(platform->window),
+        out_numerator,
+        out_denominator);
+}
+
+bool henka_platform_get_window_content_size(
+    const struct henka_platform* platform,
+    int* out_width,
+    int* out_height)
+{
+    uint32_t scale_denominator;
+    uint32_t scale_numerator;
+    int framebuffer_height;
+    int framebuffer_width;
+
+    if (out_width != NULL)
+    {
+        *out_width = 0;
+    }
+    if (out_height != NULL)
+    {
+        *out_height = 0;
+    }
+    if (platform == NULL || platform->window == NULL ||
+        out_width == NULL || out_height == NULL)
+    {
+        return false;
+    }
+
+    if (!SDL_GetWindowSizeInPixels(
+            platform->window,
+            &framebuffer_width,
+            &framebuffer_height) ||
+        !henka_platform_get_window_display_scale(
+            platform,
+            &scale_numerator,
+            &scale_denominator))
+    {
+        return false;
+    }
+
+    return henka_platform_window_scale_content_size_from_framebuffer(
+        framebuffer_width,
+        framebuffer_height,
+        scale_numerator,
+        scale_denominator,
+        out_width,
+        out_height);
 }
 
 bool henka_platform_get_window_size(

@@ -82,6 +82,7 @@ if(HENKA_BUILD_CLIENT)
         src/core/gizmo.c
         src/core/workspace.c
         src/platform/platform_sdl.c
+        src/platform/window_scale.c
         src/platform/audio_output_sdl.c
         src/renderer/mesh.c
         src/renderer/mesh_validation.c
@@ -99,6 +100,8 @@ if(HENKA_BUILD_CLIENT)
         src/scene/camera_follow.c
         src/scene/scene.c
         src/ui/ui.c
+        src/ui/ui_font.c
+        src/ui/ui_text_layout.c
         src/ui/ui_icons.c
     )
 
@@ -108,6 +111,7 @@ if(HENKA_BUILD_CLIENT)
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/src
             ${CMAKE_CURRENT_LIST_DIR}/../third_party/stb
+            ${stb_SOURCE_DIR}
     )
 
     target_link_libraries(henka

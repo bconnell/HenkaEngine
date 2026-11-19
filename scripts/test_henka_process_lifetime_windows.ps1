@@ -21,6 +21,9 @@ $failureLauncherScript = Join-Path $fixtureRoot "failure-launcher.ps1"
 $markerPath = Join-Path $fixtureRoot "child-complete.txt"
 $failureMarkerPath = Join-Path $fixtureRoot "failure-child-complete.txt"
 $failurePidPath = Join-Path $fixtureRoot "failure-child.pid"
+$liveOutputScript = Join-Path $fixtureRoot "live-output-child.ps1"
+$liveOutputPath = Join-Path $fixtureRoot "live-output.stdout.log"
+$liveErrorPath = Join-Path $fixtureRoot "live-output.stderr.log"
 New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
 
 try {
@@ -44,6 +47,13 @@ Start-Sleep -Milliseconds 400
 exit 17
 '@
     Write-HenkaUtf8NoBom -Path $failureChildScript -Text $failureChildScriptText
+
+    $liveOutputScriptText = @'
+Write-Output "captured-process-live-log-ready"
+Start-Sleep -Milliseconds 1200
+Write-Output "captured-process-live-log-done"
+'@
+    Write-HenkaUtf8NoBom -Path $liveOutputScript -Text $liveOutputScriptText
 
     $launcherTemplate = @'
 $startInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -115,6 +125,46 @@ exit $LASTEXITCODE
         throw "The expected-failure child process remained alive after the owned command returned: $failurePid."
     }
     Write-Output "[pass] Expected child failure propagated exit code and stdout/stderr capture without an orphan (exit=17)."
+
+    $liveCapture = Start-HenkaCapturedProcess `
+        -FilePath "powershell.exe" `
+        -Arguments @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", $liveOutputScript) `
+        -WorkingDirectory $RepositoryRoot `
+        -StdoutPath $liveOutputPath `
+        -StderrPath $liveErrorPath `
+        -CreateNoWindow
+    try {
+        $liveReadDeadline = [DateTime]::UtcNow.AddSeconds(5)
+        $liveText = ""
+        do {
+            $liveText = Read-HenkaSharedText -Path $liveOutputPath
+            if ($liveText -match "captured-process-live-log-ready") { break }
+            if ($liveCapture.Process.HasExited) {
+                throw "Captured process exited before its live stdout became readable."
+            }
+            Start-Sleep -Milliseconds 40
+        } while ([DateTime]::UtcNow -lt $liveReadDeadline)
+        if ($liveText -notmatch "captured-process-live-log-ready" -or
+            $liveCapture.Process.HasExited) {
+            throw "Captured-process stdout could not be read while the producer was still running."
+        }
+        if (-not $liveCapture.Process.WaitForExit(5000)) {
+            throw "Captured-process live-log regression child did not exit within its bound."
+        }
+        $liveCapture.Process.Refresh()
+        $liveText = Read-HenkaSharedText -Path $liveOutputPath
+        if ($liveText -notmatch "captured-process-live-log-ready" -or
+            $liveText -notmatch "captured-process-live-log-done") {
+            throw "Captured-process live stdout did not retain both bounded child messages."
+        }
+    }
+    finally {
+        Close-HenkaCapturedProcess -CapturedProcess $liveCapture
+    }
+    Write-Output "[pass] Captured-process stdout is readable while the owned producer is still active."
 
     $timeoutStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $timeoutObserved = $false

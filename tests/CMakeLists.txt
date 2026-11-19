@@ -12,10 +12,59 @@ endif()
 
 if(WIN32 AND HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
     add_test(
+        NAME henka_process_window_policy_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_henka_process_window_policy_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_ctest_working_directory_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_ctest_working_directory_windows.ps1
             -BuildDirectory ${CMAKE_BINARY_DIR})
+
+    add_test(
+        NAME henka_editor_typography_package_policy_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_editor_typography_package_policy_windows.ps1)
+
+    add_test(
+        NAME henka_editor_typography_capture_policy_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_editor_typography_capture_policy_windows.ps1)
+
+    add_test(
+        NAME henka_ui_automation_helpers_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_henka_ui_automation_helpers_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+endif()
+
+if(HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
+    add_test(
+        NAME henka_sandbox3d_text_measurement_authority_tests
+        COMMAND ${CMAKE_COMMAND}
+            -DSANDBOX3D_SOURCE_DIR=${CMAKE_SOURCE_DIR}/examples/sandbox3d
+            -DTEXT_AUTHORITY_CHECKER=${CMAKE_CURRENT_SOURCE_DIR}/check_sandbox3d_text_measurement_authority.cmake
+            -DUI_TEXT_LAYOUT_SOURCE=${CMAKE_SOURCE_DIR}/engine/src/ui/ui_text_layout.c
+            -DNEGATIVE_CONTROL_ROOT=${CMAKE_CURRENT_BINARY_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test_sandbox3d_text_measurement_authority.cmake)
+
+    add_test(
+        NAME henka_sandbox3d_ui_font_scale_resource_transaction_tests
+        COMMAND ${CMAKE_COMMAND}
+            -DENGINE_SOURCE_DIR=${CMAKE_SOURCE_DIR}/engine/src
+            -DENGINE_INCLUDE_DIR=${CMAKE_SOURCE_DIR}/engine/include
+            -DSANDBOX3D_SOURCE_DIR=${CMAKE_SOURCE_DIR}/examples/sandbox3d
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_sandbox3d_ui_font_scale_resource_transaction.cmake)
+
+    add_test(
+        NAME henka_sandbox3d_editor_typography_integration_tests
+        COMMAND ${CMAKE_COMMAND}
+            -DSANDBOX3D_SOURCE_DIR=${CMAKE_SOURCE_DIR}/examples/sandbox3d
+            -DTYPOGRAPHY_CHECKER=${CMAKE_CURRENT_SOURCE_DIR}/check_sandbox3d_editor_typography_integration.cmake
+            -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test_sandbox3d_editor_typography_integration.cmake)
 endif()
 
 add_executable(henka_headless_runtime_tests
@@ -386,16 +435,42 @@ endif()
 
 if(WIN32)
     add_test(
+        NAME henka_showcase_generation_cache_contract_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/tests/test_showcase_generation_cache_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_fullscreen_presentation_mapping_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_fullscreen_presentation_windows.ps1
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
+    if(TARGET henka_sandbox3d)
+        add_test(
+            NAME henka_showcase_asset_generator_tests
+            COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+                ${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
+                -OutputDirectory ${CMAKE_BINARY_DIR}/showcase_asset_test
+                -BaselineDirectory $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models)
+
+        add_test(
+            NAME henka_showcase_asset_cache_reuse_tests
+            COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+                ${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
+                -OutputDirectory ${CMAKE_BINARY_DIR}/showcase_asset_test
+                -BaselineDirectory $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models
+                -RequireVerifiedCacheHit)
+        set_tests_properties(henka_showcase_asset_cache_reuse_tests PROPERTIES
+            DEPENDS henka_showcase_asset_generator_tests)
+    endif()
+
     add_test(
-        NAME henka_showcase_asset_generator_tests
-        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
-            ${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
-            -OutputDirectory ${CMAKE_BINARY_DIR}/showcase_asset_test)
+        NAME henka_showcase_generation_ownership_tests
+        COMMAND ${CMAKE_COMMAND}
+            -DSANDBOX_CMAKE=${CMAKE_SOURCE_DIR}/examples/sandbox3d/CMakeLists.txt
+            -DSHOWCASE_TEST_SCRIPT=${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
+            -P ${CMAKE_SOURCE_DIR}/tests/check_showcase_generation_ownership.cmake)
 
     add_test(
         NAME henka_branding_asset_tests
@@ -1005,10 +1080,13 @@ endif()
 
 if(HENKA_BUILD_CLIENT)
 add_executable(henka_tests
+    ../examples/sandbox3d/editor_automation_frame_capture.c
     ../examples/sandbox3d/editor_controls.c
     ../examples/sandbox3d/editor_ui_state.c
     ../examples/sandbox3d/camera_tools.c
     ../examples/sandbox3d/editor_preferences.c
+    ../examples/sandbox3d/editor_font_bootstrap.c
+    ../examples/sandbox3d/editor_text_layout.c
     ../examples/sandbox3d/view_compass.c
     ../examples/sandbox3d/object_details_tools.c
     ../examples/sandbox3d/authoring_asset_controller.c
@@ -1029,6 +1107,9 @@ add_executable(henka_tests
     ../examples/sandbox3d/workspace_tools.c
     ../examples/sandbox3d/workspace_persistence.c
     ../examples/sandbox3d/editor_layout.c
+    ../examples/sandbox3d/editor_scale_control.c
+    ../examples/sandbox3d/editor_utility_settings_layout.c
+    ../examples/sandbox3d/editor_scale_transaction.c
     test_action.c
     test_assets.c
     test_camera.c
@@ -1041,6 +1122,9 @@ add_executable(henka_tests
     test_sandbox3d_physics.c
     test_sandbox3d_workspace.c
     test_sandbox3d_editor_ui.c
+    test_sandbox3d_editor_scale_control.c
+    test_sandbox3d_automation_frame_capture.c
+    test_sandbox3d_editor_font_bootstrap.c
     test_sandbox3d_editor_layout.c
     test_sandbox3d_camera_tools.c
     test_camera_hardening.c
@@ -1062,6 +1146,8 @@ add_executable(henka_tests
     test_scene.c
     test_shader.c
     test_ui.c
+    test_ui_font.c
+    test_platform_display_scale.c
     test_viewport_shading.c
     test_workspace.c
     test_view_compass.c
@@ -1070,6 +1156,11 @@ add_executable(henka_tests
 target_link_libraries(henka_tests
     PRIVATE
         henka
+)
+
+target_include_directories(henka_tests
+    PRIVATE
+        ${SDL3_SOURCE_DIR}/include
 )
 
 target_compile_definitions(henka_tests
@@ -1085,6 +1176,14 @@ endif()
 henka_enable_project_warnings(henka_tests)
 
 add_test(NAME henka_tests COMMAND henka_tests)
+add_test(NAME henka_ui_font_tests COMMAND henka_tests --group ui_font)
+add_test(NAME henka_sandbox3d_editor_font_bootstrap_tests COMMAND henka_tests --group sandbox3d_editor_font_bootstrap)
+add_test(NAME henka_sandbox3d_automation_frame_capture_tests COMMAND henka_tests --group sandbox3d_automation_frame_capture)
+add_test(NAME henka_sandbox3d_editor_layout_tests COMMAND henka_tests --group sandbox3d_editor_layout)
+add_test(NAME henka_platform_display_scale_tests COMMAND henka_tests --group platform_display_scale)
+set_tests_properties(henka_ui_font_tests henka_sandbox3d_editor_layout_tests PROPERTIES
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
 endif()
 
 add_executable(henka_authoring_quad_recovery_tests

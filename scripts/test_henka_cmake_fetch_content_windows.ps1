@@ -4,13 +4,14 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$git = Get-HenkaGitPath
 $fixtureRoot = Join-Path (Get-HenkaTestTemporaryRoot -RepositoryRoot $repoRoot) ("cmake-fetch-content-fixture-" + [Guid]::NewGuid().ToString("N"))
 $sharedRoot = Join-Path $fixtureRoot "shared"
 $emptyBuildRoot = Join-Path $fixtureRoot "empty-build-deps"
 $fullBuildRoot = Join-Path $fixtureRoot "full-build-deps"
 $partialBuildRoot = Join-Path $fixtureRoot "partial-build-deps"
+$resolverSharedRoot = Join-Path $fixtureRoot "resolver-shared"
 $pinSourceRoot = Join-Path $fixtureRoot "pin-source"
-$git = Get-HenkaGitPath
 
 function Assert-Condition {
     param(
@@ -234,6 +235,123 @@ try {
     $pins.stb = $changedPin
     Write-PinSourceCMakeLists -Definitions $fixtureProviders -Pins $pins
 
+    $repositoryPins = Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot
+    Assert-Condition ($repositoryPins.Count -eq 6) "All six third-party sources must expose exact CMake commit pins."
+    foreach ($provider in @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")) {
+        Assert-Condition ($repositoryPins.ContainsKey($provider) -and $repositoryPins[$provider] -match "^[0-9a-f]{40}$") `
+            "The pinned CMake revision was not resolved for $provider."
+    }
+
+    $pinProbe = Join-Path $fixtureRoot "pinned-source-probe"
+    New-Item -ItemType Directory -Path $pinProbe -Force | Out-Null
+    & $git -C $pinProbe init --quiet
+    if ($LASTEXITCODE -ne 0) { throw "Could not initialize the pinned-source validation fixture." }
+    & $git -C $pinProbe config core.autocrlf false
+    & $git -C $pinProbe config user.name "Henka test"
+    & $git -C $pinProbe config user.email "henka-test@example.invalid"
+    [System.IO.File]::WriteAllText((Join-Path $pinProbe "source.txt"), "pinned baseline`n")
+    & $git -C $pinProbe add -- source.txt
+    & $git -C $pinProbe commit --quiet -m "baseline dependency source"
+    if ($LASTEXITCODE -ne 0) { throw "Could not commit the pinned-source validation fixture." }
+    $baselineRevision = ([string](& $git -C $pinProbe rev-parse HEAD)).Trim()
+    Assert-Condition (Test-HenkaDependencySourceRevision -SourceRoot $pinProbe -ExpectedRevision $baselineRevision) `
+        "An unchanged, clean pinned source was rejected."
+    [System.IO.File]::AppendAllText((Join-Path $pinProbe "source.txt"), "dirty`n")
+    Assert-Condition (-not (Test-HenkaDependencySourceRevision -SourceRoot $pinProbe -ExpectedRevision $baselineRevision)) `
+        "A modified dependency source was incorrectly accepted as reusable."
+    & $git -C $pinProbe add -- source.txt
+    & $git -C $pinProbe commit --quiet -m "changed dependency source"
+    if ($LASTEXITCODE -ne 0) { throw "Could not commit the changed-source negative control." }
+    Assert-Condition (-not (Test-HenkaDependencySourceRevision -SourceRoot $pinProbe -ExpectedRevision $baselineRevision)) `
+        "A changed pinned revision was incorrectly accepted as reusable."
+
+    $selected = Select-HenkaDependencyRootCandidate -Candidates @(
+        [pscustomobject]@{ Path = "build-local"; Mode = "build-local"; Priority = 0; AvailableProviders = 0 },
+        [pscustomobject]@{ Path = "shared"; Mode = "shared"; Priority = 1; AvailableProviders = 6 }
+    )
+    Assert-Condition ($selected.Path -eq "shared") `
+        "An empty build-local cache incorrectly displaced the complete pinned shared cache."
+    $selected = Select-HenkaDependencyRootCandidate -Candidates @(
+        [pscustomobject]@{ Path = "build-local"; Mode = "build-local"; Priority = 0; AvailableProviders = 6 },
+        [pscustomobject]@{ Path = "shared"; Mode = "shared"; Priority = 1; AvailableProviders = 6 }
+    )
+    Assert-Condition ($selected.Path -eq "build-local") `
+        "An equally complete build-local cache should be reused to preserve its configured build identity."
+    $selected = Select-HenkaDependencyRootCandidate -Candidates @(
+        [pscustomobject]@{ Path = "build-local"; Mode = "build-local"; Priority = 0; AvailableProviders = 0 },
+        [pscustomobject]@{ Path = "shared"; Mode = "shared"; Priority = 1; AvailableProviders = 0 }
+    )
+    Assert-Condition ($null -eq $selected) `
+        "The cache selector must leave CMake FetchContent fallback available when no compatible cache is available."
+
+    $resolverEmptyBuildRoot = Join-Path $fixtureRoot "empty-build-root"
+    New-Item -ItemType Directory -Path $resolverEmptyBuildRoot -Force | Out-Null
+    # Earlier negative controls intentionally mutate the primary shared fixture.
+    # Give the resolver integration checks an independent, clean six-provider cache.
+    Copy-FixtureProviders -DestinationRoot $resolverSharedRoot -Definitions $fixtureProviders
+    $repositorySharedRoot = Get-HenkaCMakeSharedDependencyRoot -RepositoryRoot $repoRoot
+    $expectedSharedRoot = Resolve-HenkaLocalPath `
+        -RepositoryRoot $repoRoot `
+        -Path (Join-Path (Join-Path (Get-HenkaLocalRoot -RepositoryRoot $repoRoot) "dependencies") "fetchcontent")
+    Assert-Condition ([System.IO.Path]::GetFullPath($repositorySharedRoot).Equals(
+        [System.IO.Path]::GetFullPath($expectedSharedRoot),
+        [System.StringComparison]::OrdinalIgnoreCase)) `
+        "The default shared source cache must remain under Henka's canonical _local dependency root."
+
+    $resolved = Resolve-HenkaBuildDependencyRoot `
+        -RepositoryRoot $repoRoot `
+        -BuildRoot $resolverEmptyBuildRoot `
+        -SharedDependencyRoot $resolverSharedRoot `
+        -PinSourceRoot $pinSourceRoot
+    $sharedResolution = Get-HenkaCMakeFetchContentArguments `
+        -DependencyRoot "" `
+        -SharedDependencyRoot $resolverSharedRoot `
+        -PinnedRevisions (Get-HenkaCMakeDependencyPins -RepositoryRoot $pinSourceRoot) `
+        -PinSourceRoot $pinSourceRoot
+    $sharedProviderSummary = @($sharedResolution.ProviderStates | ForEach-Object {
+        "{0}={1}({2})" -f $_.Name,$_.Available,$_.RejectionReason
+    }) -join "; "
+    Assert-Condition ($resolved.Mode -eq "shared" -and
+        [string]::IsNullOrWhiteSpace($resolved.Root) -and
+        [int]$resolved.AvailableProviders -eq 6) `
+        ("The real build resolver did not select and report the six-provider shared cache for an empty build-local cache. " +
+            "Actual mode='$($resolved.Mode)', root='$($resolved.Root)', provider count=$($resolved.AvailableProviders); " +
+            "shared providers: $sharedProviderSummary")
+
+    $explicit = Resolve-HenkaBuildDependencyRoot `
+        -RepositoryRoot $repoRoot `
+        -BuildRoot $resolverEmptyBuildRoot `
+        -DependencyRoot $resolverSharedRoot `
+        -PinSourceRoot $pinSourceRoot
+    Assert-Condition ($explicit.Mode -eq "explicit" -and [int]$explicit.AvailableProviders -eq 6) `
+        "An explicitly selected exact-pinned fixture cache was not reported with its verified provider count."
+
+    $outsidePinSourceRejected = $false
+    try {
+        $outsideLocalRoot = Split-Path -Parent (Get-HenkaLocalRoot -RepositoryRoot $repoRoot)
+        $null = Resolve-HenkaBuildDependencyRoot `
+            -RepositoryRoot $repoRoot `
+            -BuildRoot $resolverEmptyBuildRoot `
+            -PinSourceRoot $outsideLocalRoot
+    } catch {
+        $outsidePinSourceRejected = $true
+    }
+    Assert-Condition $outsidePinSourceRejected `
+        "A test pin-source override outside canonical _local must be rejected."
+
+    $actualDefaultResolution = Get-HenkaCMakeFetchContentArguments `
+        -DependencyRoot "" `
+        -PinnedRevisions (Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot)
+    $actualDefaultCount = @($actualDefaultResolution.ProviderStates | Where-Object { $_.Available }).Count
+    $actualDefaultMode = if ($actualDefaultCount -gt 0) { "shared" } else { "network-fallback" }
+    $actualDefault = Resolve-HenkaBuildDependencyRoot `
+        -RepositoryRoot $repoRoot `
+        -BuildRoot $resolverEmptyBuildRoot
+    Assert-Condition ($actualDefault.Mode -eq $actualDefaultMode -and
+        [int]$actualDefault.AvailableProviders -eq $actualDefaultCount) `
+        "The default resolver must report the actual verified machine cache or truthful FetchContent fallback."
+
+    Write-Host "[pass] Dependency cache selection reuses exact-pinned sources, rejects changed inputs, and falls back when no compatible cache is available."
     $changedInput = Get-HenkaCMakeFetchContentArguments `
         -DependencyRoot $emptyBuildRoot `
         -SharedDependencyRoot $sharedRoot `

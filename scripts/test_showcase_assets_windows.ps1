@@ -1,6 +1,11 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$OutputDirectory
+    [string]$OutputDirectory,
+
+    [Parameter(Mandatory = $true)]
+    [string]$BaselineDirectory,
+
+    [switch]$RequireVerifiedCacheHit
 )
 
 Set-StrictMode -Version Latest
@@ -10,7 +15,27 @@ Add-Type -AssemblyName System.Drawing
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $OutputDirectory = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $OutputDirectory
+$BaselineDirectory = Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $BaselineDirectory
 $null = New-HenkaLocalDirectory -RepositoryRoot $repoRoot -Path $OutputDirectory
+$showcaseFiles = @(
+    "cheeky_giraffe.gltf",
+    "cheeky_giraffe.bin",
+    "giraffe_base_color.png",
+    "giraffe_detail_normal.png",
+    "giraffe_metallic_roughness.png",
+    "original_realistic_rocket.gltf",
+    "original_realistic_rocket.bin",
+    "rocket_base_color.png",
+    "rocket_detail_normal.png",
+    "rocket_metallic_roughness.png")
+if (-not (Test-Path -LiteralPath $BaselineDirectory -PathType Container)) {
+    throw "Build-owned Showcase baseline is missing: $BaselineDirectory. Build henka_sandbox3d for this configuration before running the generator test."
+}
+foreach ($showcaseFile in $showcaseFiles) {
+    if (-not (Test-Path -LiteralPath (Join-Path $BaselineDirectory $showcaseFile) -PathType Leaf)) {
+        throw "Build-owned Showcase baseline is incomplete: missing $showcaseFile."
+    }
+}
 $generator = Join-Path $repoRoot "scripts\generate_showcase_assets.ps1"
 $generatorText = Get-Content -LiteralPath $generator -Raw
 if ($generatorText -notmatch 'Resolve-HenkaLocalPath\s+-RepositoryRoot\s+\$repositoryRoot\s+-Path\s+\$OutputDirectory') {
@@ -116,49 +141,47 @@ if (Test-Path -LiteralPath $externalOutputProbe) {
 }
 Write-Output "[pass] Standalone Showcase generation rejects external output roots before mutation."
 
-[IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
+$candidateDirectory = Resolve-HenkaLocalPath `
+    -RepositoryRoot $repoRoot `
+    -Path (Join-Path $OutputDirectory "candidate_run")
+$cacheManifestPath = Join-Path $OutputDirectory "candidate-generation-manifest.json"
+if ($RequireVerifiedCacheHit -and
+    ((Test-Path -LiteralPath $candidateDirectory -PathType Container) -eq $false -or
+        (Test-Path -LiteralPath $cacheManifestPath -PathType Leaf) -eq $false)) {
+    throw "The verified Showcase cache-hit control requires a prior candidate and manifest."
+}
+[IO.Directory]::CreateDirectory($candidateDirectory) | Out-Null
 
 $LASTEXITCODE = 0
-& $generator -OutputDirectory $OutputDirectory
+$freshGenerationOutput = @(& $generator -OutputDirectory $candidateDirectory -ReuseVerifiedOutput -ManifestPath $cacheManifestPath 2>&1)
 if ($LASTEXITCODE -ne 0) {
     throw "Showcase generator failed with exit code $LASTEXITCODE."
 }
-$determinismDirectory = Join-Path $OutputDirectory "determinism_second_run"
-try {
-    if (Test-Path -LiteralPath $determinismDirectory) {
-        Remove-Item -LiteralPath $determinismDirectory -Recurse -Force
-    }
-    [IO.Directory]::CreateDirectory($determinismDirectory) | Out-Null
-    $LASTEXITCODE = 0
-    & $generator -OutputDirectory $determinismDirectory
-    if ($LASTEXITCODE -ne 0) {
-        throw "Showcase generator determinism rerun failed with exit code $LASTEXITCODE."
-    }
-    foreach ($deterministicFile in @(
-            "cheeky_giraffe.gltf",
-            "cheeky_giraffe.bin",
-            "giraffe_base_color.png",
-            "giraffe_detail_normal.png",
-            "giraffe_metallic_roughness.png",
-            "original_realistic_rocket.gltf",
-            "original_realistic_rocket.bin",
-            "rocket_base_color.png",
-            "rocket_detail_normal.png",
-            "rocket_metallic_roughness.png")) {
-        $firstHash = Get-ShowcaseFileHash (Join-Path $OutputDirectory $deterministicFile)
-        $secondHash = Get-ShowcaseFileHash (Join-Path $determinismDirectory $deterministicFile)
-        if ($firstHash -ne $secondHash) {
-            throw "Showcase generator output is not deterministic for '$deterministicFile'."
-        }
+$firstInvocationOutput = $freshGenerationOutput -join "`n"
+$firstInvocationGenerated = $firstInvocationOutput.Contains(
+    "[generated] Wrote verified hashes for 10 Showcase assets.")
+$firstInvocationReused = $firstInvocationOutput.Contains(
+    "[skip] Verified Showcase inputs and all generated output hashes are unchanged.")
+if ($firstInvocationGenerated -eq $firstInvocationReused) {
+    throw "Showcase generator did not report exactly one of fresh generation or verified cache reuse."
+}
+if ($RequireVerifiedCacheHit -and -not $firstInvocationReused) {
+    throw "Showcase test rerun discarded a valid candidate instead of reusing its verified cache."
+}
+foreach ($deterministicFile in $showcaseFiles) {
+    $candidateHash = Get-ShowcaseFileHash (Join-Path $candidateDirectory $deterministicFile)
+    $baselineHash = Get-ShowcaseFileHash (Join-Path $BaselineDirectory $deterministicFile)
+    if ($candidateHash -ne $baselineHash) {
+        throw "Showcase generator output is not deterministic for '$deterministicFile'."
     }
 }
-finally {
-    if (Test-Path -LiteralPath $determinismDirectory) {
-        Remove-Item -LiteralPath $determinismDirectory -Recurse -Force
-    }
+if ($firstInvocationGenerated) {
+    Write-Output "[pass] Fresh Showcase generation matches all ten build-owned baseline outputs."
+} else {
+    Write-Output "[pass] Verified cached Showcase outputs match all ten build-owned baseline outputs."
 }
 foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
-    $path = Join-Path $OutputDirectory ($name + ".gltf")
+    $path = Join-Path $candidateDirectory ($name + ".gltf")
     $json = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
     if ($null -eq $json.materials -or $json.materials.Count -eq 0 -or
         $null -eq $json.meshes -or $json.meshes.Count -ne 1) {
@@ -175,7 +198,7 @@ foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
             [string]::IsNullOrWhiteSpace([string]$image.uri)) {
             throw "Showcase asset $name contains an invalid texture URI."
         }
-        $imagePath = Join-Path $OutputDirectory ([string]$image.uri)
+        $imagePath = Join-Path $candidateDirectory ([string]$image.uri)
         if (-not (Test-Path -LiteralPath $imagePath -PathType Leaf)) {
             throw "Showcase asset $name is missing generated texture $($image.uri)."
         }
@@ -272,9 +295,9 @@ function Get-DarkPixelRowCoverage {
     }
 }
 
-$giraffe = Get-Content -LiteralPath (Join-Path $OutputDirectory "cheeky_giraffe.gltf") -Raw | ConvertFrom-Json
+$giraffe = Get-Content -LiteralPath (Join-Path $candidateDirectory "cheeky_giraffe.gltf") -Raw | ConvertFrom-Json
 $giraffeMaterialNames = @($giraffe.materials | ForEach-Object { $_.name })
-$giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "cheeky_giraffe.bin"))
+$giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $candidateDirectory "cheeky_giraffe.bin"))
 foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye Detail", "Giraffe Ear Inner", "Giraffe Ossicone Cap", "Giraffe Hoof", "Giraffe Mane", "Giraffe Nose", "Giraffe Joint", "Giraffe Shoulder", "Giraffe Tail Tuft")) {
     if ($giraffeMaterialNames -notcontains $requiredName) {
         throw "Showcase giraffe is missing authored feature material '$requiredName'."
@@ -315,11 +338,11 @@ if ($giraffeTanWidth -gt 1.90 -or $giraffeTanHeight -lt 4.35 -or
     $giraffeTanDepth -lt 2.50 -or ($giraffeTanHeight / $giraffeTanDepth) -gt 1.95) {
     throw "Showcase giraffe silhouette lost its long-bodied, forward-necked quadruped proportion contract."
 }
-$giraffeHideAverage = Get-ImageChannelAverage (Join-Path $OutputDirectory "giraffe_base_color.png")
+$giraffeHideAverage = Get-ImageChannelAverage (Join-Path $candidateDirectory "giraffe_base_color.png")
 if ($giraffeHideAverage.Green -ge 205.0 -or $giraffeHideAverage.Blue -ge 150.0) {
     throw "Showcase giraffe hide does not use the restrained ochre palette required for an anatomical study."
 }
-$giraffeBaseColorBitmap = [System.Drawing.Bitmap]::new((Join-Path $OutputDirectory "giraffe_base_color.png"))
+$giraffeBaseColorBitmap = [System.Drawing.Bitmap]::new((Join-Path $candidateDirectory "giraffe_base_color.png"))
 try {
     if ($giraffeBaseColorBitmap.Width -lt 256 -or $giraffeBaseColorBitmap.Height -lt 256) {
         throw "Showcase giraffe base-color texture is under-resolved for close authored-detail inspection."
@@ -328,7 +351,7 @@ try {
 finally {
     $giraffeBaseColorBitmap.Dispose()
 }
-$giraffeHideCoverage = Get-DarkPixelRowCoverage (Join-Path $OutputDirectory "giraffe_base_color.png")
+$giraffeHideCoverage = Get-DarkPixelRowCoverage (Join-Path $candidateDirectory "giraffe_base_color.png")
 if ($giraffeHideCoverage.Total -lt 0.15 -or $giraffeHideCoverage.Total -gt 0.45 -or
     $giraffeHideCoverage.RowMaximum -gt 0.50) {
     throw "Showcase giraffe hide contains an implausible dark-patch band or coverage distribution."
@@ -406,8 +429,8 @@ if (($giraffeTailTuftBounds.Maximum[1] - $giraffeTailTuftBounds.Minimum[1]) -lt 
     ($giraffeTailTuftBounds.Maximum[2] - $giraffeTailTuftBounds.Minimum[2]) -lt 0.08) {
     throw "Showcase giraffe tail tuft does not establish a readable terminal feature."
 }
-$rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
-$rocketBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "original_realistic_rocket.bin"))
+$rocket = Get-Content -LiteralPath (Join-Path $candidateDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
+$rocketBinary = [IO.File]::ReadAllBytes((Join-Path $candidateDirectory "original_realistic_rocket.bin"))
 $rocketMaterialNames = @($rocket.materials | ForEach-Object { $_.name })
 if ($rocketMaterialNames -notcontains "Rocket Avionics" -or
     $rocketMaterialNames -notcontains "Rocket Launch Pad" -or
@@ -469,7 +492,7 @@ if ($null -eq $rocketPaint -or
     [int]$rocketPaint.pbrMetallicRoughness.baseColorTexture.index -ne 2) {
     throw "Showcase rocket does not bind its deterministic painted-surface base-color texture."
 }
-$rocketBaseColorBitmap = [System.Drawing.Bitmap]::new((Join-Path $OutputDirectory "rocket_base_color.png"))
+$rocketBaseColorBitmap = [System.Drawing.Bitmap]::new((Join-Path $candidateDirectory "rocket_base_color.png"))
 try {
     $warmCamouflagePixels = 0
     for ($y = 0; $y -lt $rocketBaseColorBitmap.Height; ++$y) {
@@ -546,4 +569,28 @@ if (($rocketInsulationBounds.Maximum[1] - $rocketInsulationBounds.Minimum[1]) -l
     ($rocketInsulationBounds.Maximum[0] - $rocketInsulationBounds.Minimum[0]) -lt 1.20) {
     throw "Showcase rocket interstage insulation does not establish a readable bounded thermal transition."
 }
+$showcaseCacheSnapshot = @(
+    foreach ($showcaseFile in $showcaseFiles) {
+        $showcasePath = Join-Path $candidateDirectory $showcaseFile
+        [pscustomobject]@{
+            Name = $showcaseFile
+            Hash = Get-ShowcaseFileHash $showcasePath
+            LastWriteUtcTicks = (Get-Item -LiteralPath $showcasePath).LastWriteTimeUtc.Ticks
+        }
+    })
+$cacheHitOutput = @(& $generator -OutputDirectory $candidateDirectory -ReuseVerifiedOutput -ManifestPath $cacheManifestPath 2>&1)
+if ($LASTEXITCODE -ne 0) {
+    throw "Showcase verified-output cache check failed with exit code $LASTEXITCODE."
+}
+if (-not (($cacheHitOutput -join "`n").Contains("[skip] Verified Showcase inputs and all generated output hashes are unchanged."))) {
+    throw "Showcase verified-output cache did not report an unchanged-input skip."
+}
+foreach ($cachedFile in $showcaseCacheSnapshot) {
+    $showcasePath = Join-Path $candidateDirectory $cachedFile.Name
+    if ((Get-ShowcaseFileHash $showcasePath) -cne $cachedFile.Hash -or
+        (Get-Item -LiteralPath $showcasePath).LastWriteTimeUtc.Ticks -ne $cachedFile.LastWriteUtcTicks) {
+        throw "Showcase cache hit rewrote or changed generated output '$($cachedFile.Name)'."
+    }
+}
+Write-Output "[pass] Unchanged Showcase inputs and outputs skip generation without rewriting assets."
 Write-Host "[pass] Deterministic showcase geometry, material ownership, and generated glTF contracts passed."

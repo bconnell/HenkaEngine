@@ -111,11 +111,69 @@ static void test_editor_model_focus_and_position_are_bounded(void)
     sandbox3d_script_editor_model_destroy(model);
 }
 
+static void test_editor_model_crlf_lines_exclude_terminator_from_columns(void)
+{
+    static const char source[] = "a\r\nbc\r\n";
+    sandbox3d_script_editor_model* model = NULL;
+    const size_t second_line_offset = 3U;
+    const char* loaded_source = NULL;
+    size_t loaded_source_size = 0U;
+    size_t line_offset = 0U;
+    size_t line_length = 0U;
+
+    assert(sandbox3d_script_editor_model_get_line_span(
+        source,
+        sizeof(source) - 1U,
+        0U,
+        &line_offset,
+        &line_length));
+    assert(line_offset == 0U);
+    assert(line_length == 1U);
+    assert(sandbox3d_script_editor_model_get_line_span(
+        source,
+        sizeof(source) - 1U,
+        1U,
+        &line_offset,
+        &line_length));
+    assert(line_offset == second_line_offset);
+    assert(line_length == 2U);
+
+    assert(sandbox3d_script_editor_model_create(
+               HENKA_SCRIPT_LANGUAGE_LUA, &model) == HENKA_SUCCESS);
+    assert(sandbox3d_script_editor_model_load_text(
+               model, source, sizeof(source) - 1U) == HENKA_SUCCESS);
+
+    /* The visible end of the first line is before CR, while source offsets
+     * continue to count both bytes of the original CRLF sequence. */
+    assert(sandbox3d_script_editor_model_set_caret_position(
+               model, 0U, 99U) == HENKA_SUCCESS);
+    assert(sandbox3d_script_editor_model_get_caret_offset(model) == 1U);
+    assert(sandbox3d_script_editor_model_get_caret_column(model) == 2U);
+
+    assert(sandbox3d_script_editor_model_set_caret_offset(model, 2U) == HENKA_SUCCESS);
+    /* An offset between CR and LF remains on the visible end of line one. */
+    assert(sandbox3d_script_editor_model_get_caret_line(model) == 1U);
+    assert(sandbox3d_script_editor_model_get_caret_column(model) == 2U);
+    assert(sandbox3d_script_editor_model_move_vertical(model, 1) == HENKA_SUCCESS);
+    assert(sandbox3d_script_editor_model_get_caret_offset(model) ==
+           second_line_offset + 1U);
+    assert(sandbox3d_script_editor_model_get_caret_column(model) == 2U);
+    assert(sandbox3d_script_editor_model_get_source(
+        model,
+        &loaded_source,
+        &loaded_source_size) == HENKA_SUCCESS);
+    assert(loaded_source_size == sizeof(source) - 1U);
+    assert(memcmp(loaded_source, source, loaded_source_size) == 0);
+
+    sandbox3d_script_editor_model_destroy(model);
+}
+
 int main(void)
 {
     test_editor_model_preserves_structure_and_moves_caret();
     test_editor_model_stages_invalid_text_and_reverts();
     test_editor_model_rejects_play_mutation();
     test_editor_model_focus_and_position_are_bounded();
+    test_editor_model_crlf_lines_exclude_terminator_from_columns();
     return 0;
 }

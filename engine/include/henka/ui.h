@@ -160,6 +160,12 @@ void henka_ui_set_visible(henka_ui_context* context, bool visible);
 bool henka_ui_is_visible(const henka_ui_context* context);
 bool henka_ui_get_wants_mouse(const henka_ui_context* context);
 henka_vec2 henka_ui_get_mouse_position(const henka_ui_context* context);
+/* Convert a framebuffer-space pointer to the same content-space coordinates
+ * used by UI layout and hit testing for this context's active output scale. */
+henka_result henka_ui_framebuffer_to_logical(
+    const henka_ui_context* context,
+    henka_vec2 framebuffer_position,
+    henka_vec2* out_logical_position);
 const char* henka_ui_get_text_input(
     const henka_ui_context* context,
     size_t* out_text_size);
@@ -196,6 +202,24 @@ henka_result henka_ui_measure_text_for_context(
     float scale,
     int* out_width,
     int* out_height);
+/* Return the exact logical x position of a UTF-8 byte boundary in a single
+ * line, including kerning before the glyph at that boundary. This is the
+ * shared position authority for caret, hit testing, and segmented drawing. */
+henka_result henka_ui_measure_text_byte_offsets_x_for_context(
+    const henka_ui_context* context,
+    const char* text,
+    size_t text_byte_count,
+    const size_t* byte_offsets,
+    size_t byte_offset_count,
+    float scale,
+    float* out_x_positions);
+henka_result henka_ui_measure_text_byte_offset_x_for_context(
+    const henka_ui_context* context,
+    const char* text,
+    size_t text_byte_count,
+    size_t byte_offset,
+    float scale,
+    float* out_x);
 henka_result henka_ui_overlay_rect(henka_ui_context* context, henka_ui_rect bounds, henka_vec4 color);
 henka_result henka_ui_overlay_line(henka_ui_context* context, henka_vec2 start, henka_vec2 end, float thickness, henka_vec4 color);
 henka_result henka_ui_overlay_triangle(
@@ -245,6 +269,15 @@ henka_result henka_ui_overlay_hint(henka_ui_context* context, henka_ui_rect boun
 bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label);
 bool henka_ui_primary_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label);
 bool henka_ui_selectable(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool selected);
+/* Logical horizontal text inset consumed inside henka_ui_tab bounds.
+ * Layout callers reserve this inset on both sides of measured text. */
+#define HENKA_UI_TAB_TEXT_HORIZONTAL_PADDING 10.0f
+/* Logical horizontal text insets consumed inside shared button bounds. */
+#define HENKA_UI_BUTTON_TEXT_HORIZONTAL_PADDING 10.0f
+#define HENKA_UI_PRIMARY_BUTTON_TEXT_HORIZONTAL_PADDING 11.0f
+/* Text fields retain their independent inset while button sizing is shared. */
+#define HENKA_UI_TEXT_FIELD_HORIZONTAL_PADDING 8.0f
+
 bool henka_ui_tab(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool selected);
 /*
  * Draw a compact exclusive-choice control as one bounded segmented row.

@@ -179,8 +179,12 @@ try {
     Assert-Condition ([string]::IsNullOrWhiteSpace($scriptPlan.BuildTarget)) `
         "A PowerShell CTest command was incorrectly treated as a CMake target."
 
+    $dependencySelection = Resolve-HenkaBuildDependencyRoot `
+        -RepositoryRoot $repoRoot `
+        -BuildRoot $buildRoot
     $fetchContent = Get-HenkaCMakeFetchContentArguments `
-        -DependencyRoot (Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "_deps")
+        -DependencyRoot $dependencySelection.Root `
+        -PinnedRevisions (Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot)
     $configureArguments = @("-DCMAKE_VS_GLOBALS=TrackFileAccess=true") +
         @($fetchContent.Arguments)
     $cacheLines = @("CMAKE_HOME_DIRECTORY:INTERNAL=$repoRoot")

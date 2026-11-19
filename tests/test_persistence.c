@@ -23,6 +23,18 @@ static FILE* henka_test_open_file(const char* path, const char* mode)
     return file;
 }
 
+static bool henka_test_file_is_absent(const char* path)
+{
+    FILE* file = henka_test_open_file(path, "rb");
+
+    if (file == NULL)
+    {
+        return true;
+    }
+    fclose(file);
+    return false;
+}
+
 static bool henka_test_write_file(const char* path, const char* content)
 {
     FILE* file = NULL;
@@ -68,6 +80,10 @@ static bool henka_test_write_bytes(const char* path, const void* bytes, size_t s
 
 void henka_test_persistence(void)
 {
+    static const henka_settings_int_update scale_updates[] = {
+        {"ui.editor.scale_percent", 150},
+        {"ui.editor.scale_migration_version", 1}};
+
     static const char* embedded_nul_path = "build/test_tmp/persistence_embedded_nul.settings";
     static const unsigned char embedded_nul_settings[] =
     {
@@ -75,6 +91,7 @@ void henka_test_persistence(void)
         0U,
         'h', 'i', 'd', 'd', 'e', 'n', '=', 'f', 'a', 'l', 's', 'e', '\n'
     };
+
     char long_flag_name[124];
     char long_slot_name[66];
     char max_flag_name[123];
@@ -169,8 +186,27 @@ void henka_test_persistence(void)
 
     HENKA_TEST_ASSERT(henka_settings_set_bool(settings, "grid_visible", true) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_settings_set_float(settings, "camera_position_x", 2.125f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_percent", 125) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_int(settings, "ui.editor.scale_migration_version", 0) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_set_float(
+        settings, "ui.workspace.custom_layout.ui_scale", 1.5f) == HENKA_SUCCESS);
     result = henka_settings_save_file(settings, "build/test_tmp/persistence_roundtrip.settings");
     HENKA_TEST_ASSERT(result == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_test_file_is_absent("build/test_tmp.henka-tmp"));
+    result = henka_settings_update_ints_and_save_file(
+        settings,
+        "build/test_tmp",
+        scale_updates,
+        sizeof(scale_updates) / sizeof(scale_updates[0]));
+    HENKA_TEST_ASSERT(result != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_file_is_absent("build/test_tmp.henka-tmp"));
+    HENKA_TEST_ASSERT(henka_settings_get_int(settings, "ui.editor.scale_percent", -1) == 125);
+    HENKA_TEST_ASSERT(henka_settings_get_int(settings, "ui.editor.scale_migration_version", -1) == 0);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(settings, "ui.workspace.custom_layout.ui_scale", 0.0f),
+        1.5f,
+        0.0001f);
 
     file = NULL;
     HENKA_TEST_ASSERT(fopen_s(&file, "build/test_tmp/persistence_roundtrip.settings.henka-tmp", "rb") != 0);
@@ -183,6 +219,25 @@ void henka_test_persistence(void)
     HENKA_TEST_ASSERT(henka_settings_has_key(reloaded, "old_value") == false);
     HENKA_TEST_ASSERT(henka_settings_get_bool(reloaded, "grid_visible", false) == true);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(henka_settings_get_float(reloaded, "camera_position_x", 0.0f), 2.125f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_settings_get_int(reloaded, "ui.editor.scale_percent", -1) == 125);
+    HENKA_TEST_ASSERT(henka_settings_get_int(reloaded, "ui.editor.scale_migration_version", -1) == 0);
+
+    result = henka_settings_update_ints_and_save_file(
+        settings,
+        "build/test_tmp/persistence_roundtrip.settings",
+        scale_updates,
+        sizeof(scale_updates) / sizeof(scale_updates[0]));
+    HENKA_TEST_ASSERT(result == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_get_int(settings, "ui.editor.scale_percent", -1) == 150);
+    HENKA_TEST_ASSERT(henka_settings_get_int(settings, "ui.editor.scale_migration_version", -1) == 1);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(settings, "ui.workspace.custom_layout.ui_scale", 0.0f),
+        1.5f,
+        0.0001f);
+    HENKA_TEST_ASSERT(henka_settings_load_file(
+        reloaded, "build/test_tmp/persistence_roundtrip.settings") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_settings_get_int(reloaded, "ui.editor.scale_percent", -1) == 150);
+    HENKA_TEST_ASSERT(henka_settings_get_int(reloaded, "ui.editor.scale_migration_version", -1) == 1);
 
     HENKA_TEST_ASSERT(henka_test_write_file(
         "build/test_tmp/persistence_malformed.settings",

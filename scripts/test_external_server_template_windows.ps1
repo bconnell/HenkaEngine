@@ -49,9 +49,14 @@ $configureArguments = @(
     "-DHENKA_ENGINE_DIR=$repoRoot",
     "-DCMAKE_SUPPRESS_REGENERATION=ON"
 )
+$dependencySelection = Resolve-HenkaBuildDependencyRoot `
+    -RepositoryRoot $repoRoot `
+    -BuildRoot $validationBuild `
+    -Providers @("ENET", "LUA")
 $fetchArguments = @{
-    DependencyRoot = Join-Path (Get-HenkaBuildRoot -RepositoryRoot $repoRoot) "_deps"
+    DependencyRoot = $dependencySelection.Root
     Providers = @("ENET", "LUA")
+    PinnedRevisions = (Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot -Providers @("ENET", "LUA"))
 }
 if ($NoLocalProviders) {
     $fetchArguments.NoLocalProviders = $true

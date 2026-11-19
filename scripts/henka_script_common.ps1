@@ -146,6 +146,215 @@ function Resolve-HenkaDependencyRoot {
     return $resolvedRoot
 }
 
+function Select-HenkaDependencyRootCandidate {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [object[]]$Candidates
+    )
+
+    $usable = @($Candidates | Where-Object { [int]$_.AvailableProviders -gt 0 })
+    if ($usable.Count -eq 0) {
+        return $null
+    }
+    return ($usable | Sort-Object -Property `
+        @{ Expression = { [int]$_.AvailableProviders }; Descending = $true }, `
+        @{ Expression = { [int]$_.Priority }; Ascending = $true } |
+        Select-Object -First 1)
+}
+
+function Get-HenkaCMakeFetchContentDefinitions {
+    return @{
+        SDL3 = [pscustomobject]@{
+            CacheName = "SDL3"
+            FetchContentName = "SDL3"
+            RelativePath = "sdl3-src"
+            Marker = "CMakeLists.txt"
+            Label = "SDL3"
+        }
+        KTXSOFTWARE = [pscustomobject]@{
+            CacheName = "KTXSOFTWARE"
+            FetchContentName = "KTXSoftware"
+            RelativePath = "ktxsoftware-src"
+            Marker = "CMakeLists.txt"
+            Label = "KTX-Software"
+        }
+        ENET = [pscustomobject]@{
+            CacheName = "ENET"
+            FetchContentName = "ENet"
+            RelativePath = "enet-src"
+            Marker = "CMakeLists.txt"
+            Label = "ENet"
+        }
+        LUA = [pscustomobject]@{
+            CacheName = "LUA"
+            FetchContentName = "Lua"
+            RelativePath = "lua-src"
+            Marker = "lua.h"
+            Label = "Lua"
+        }
+        MINIAUDIO = [pscustomobject]@{
+            CacheName = "MINIAUDIO"
+            FetchContentName = "miniaudio"
+            RelativePath = "miniaudio-src"
+            Marker = "miniaudio.h"
+            Label = "miniaudio"
+        }
+        STB = [pscustomobject]@{
+            CacheName = "STB"
+            FetchContentName = "stb"
+            RelativePath = "stb-src"
+            Marker = "stb_vorbis.c"
+            Label = "stb"
+        }
+    }
+}
+
+function Get-HenkaCMakeDependencyPins {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot,
+
+        [ValidateSet("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")]
+        [string[]]$Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
+    )
+
+    $parsedPins = Get-HenkaCMakeFetchContentPins -PinSourceRoot $RepositoryRoot
+    $definitions = Get-HenkaCMakeFetchContentDefinitions
+    $pins = @{}
+    foreach ($provider in @($Providers)) {
+        $definition = $definitions[$provider]
+        if ($null -eq $definition) {
+            throw "Unknown Henka FetchContent provider: $provider"
+        }
+        $pinKey = $definition.FetchContentName.ToUpperInvariant()
+        if ($parsedPins.ContainsKey($pinKey) -and $parsedPins[$pinKey].Immutable) {
+            $pins[$provider] = [string]$parsedPins[$pinKey].Commit.ToLowerInvariant()
+        }
+    }
+    return ,$pins
+}
+
+function Test-HenkaDependencySourceRevision {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedRevision
+    )
+
+    if ($ExpectedRevision -notmatch "^[0-9a-fA-F]{40}$" -or
+        -not (Test-Path -LiteralPath $SourceRoot -PathType Container)) {
+        return $false
+    }
+    $git = Get-HenkaGitPath
+    $head = ([string](& $git -C $SourceRoot rev-parse --verify HEAD 2>$null)).Trim()
+    if ($LASTEXITCODE -ne 0 -or $head -ine $ExpectedRevision) {
+        return $false
+    }
+    $status = @(& $git -C $SourceRoot status --porcelain --untracked-files=all 2>$null)
+    return ($LASTEXITCODE -eq 0 -and $status.Count -eq 0)
+}
+
+function Resolve-HenkaBuildDependencyRoot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$BuildRoot,
+
+        [AllowEmptyString()]
+        [string]$DependencyRoot = "",
+
+        # Tests can supply a fixture cache beneath _local. Production callers
+        # leave this empty and use the canonical project-owned cache location.
+        [AllowEmptyString()]
+        [string]$SharedDependencyRoot = "",
+
+        # Tests can supply fixture declarations beneath _local. Production
+        # callers leave this empty and read pins from the repository root.
+        [AllowEmptyString()]
+        [string]$PinSourceRoot = "",
+
+        [ValidateSet("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")]
+        [string[]]$Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
+    )
+
+    $pinSource = if ([string]::IsNullOrWhiteSpace($PinSourceRoot)) {
+        [System.IO.Path]::GetFullPath($RepositoryRoot)
+    } else {
+        Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot -Path $PinSourceRoot
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($DependencyRoot)) {
+        $explicitRoot = Resolve-HenkaDependencyRoot `
+            -RepositoryRoot $RepositoryRoot `
+            -DependencyRoot $DependencyRoot
+        $explicitPins = Get-HenkaCMakeDependencyPins -RepositoryRoot $pinSource -Providers $Providers
+        $explicitArguments = Get-HenkaCMakeFetchContentArguments `
+            -DependencyRoot $explicitRoot `
+            -Providers $Providers `
+            -PinnedRevisions $explicitPins `
+            -PinSourceRoot $pinSource `
+            -NoSharedDependencyCache
+        $explicitAvailableCount = @($explicitArguments.ProviderStates | Where-Object { $_.Available }).Count
+        return [pscustomobject]@{
+            Root = $explicitRoot
+            Mode = "explicit"
+            AvailableProviders = $explicitAvailableCount
+        }
+    }
+
+    $pins = Get-HenkaCMakeDependencyPins -RepositoryRoot $pinSource -Providers $Providers
+    $buildLocalRoot = Join-Path $BuildRoot "_deps"
+    $evaluated = @()
+    if (Test-Path -LiteralPath $buildLocalRoot -PathType Container) {
+        $buildLocal = Get-HenkaCMakeFetchContentArguments `
+            -DependencyRoot $buildLocalRoot `
+            -PinnedRevisions $pins `
+            -NoSharedDependencyCache `
+            -PinSourceRoot $pinSource `
+            -Providers $Providers
+        $buildLocalCount = @($buildLocal.ProviderStates | Where-Object { $_.Available }).Count
+        if ($buildLocalCount -gt 0) {
+            $evaluated += [pscustomobject]@{
+                Path = (Resolve-HenkaDependencyRoot -RepositoryRoot $RepositoryRoot -DependencyRoot $buildLocalRoot)
+                Mode = "build-local"
+                Priority = 0
+                AvailableProviders = $buildLocalCount
+            }
+        }
+    }
+
+    $shared = Get-HenkaCMakeFetchContentArguments `
+        -DependencyRoot "" `
+        -SharedDependencyRoot $SharedDependencyRoot `
+        -PinnedRevisions $pins `
+        -PinSourceRoot $pinSource `
+        -Providers $Providers
+    $sharedCount = @($shared.ProviderStates | Where-Object { $_.Available }).Count
+    if ($sharedCount -gt 0) {
+        $evaluated += [pscustomobject]@{
+            Path = $shared.SharedDependencyRoot
+            Mode = "shared"
+            Priority = 1
+            AvailableProviders = $sharedCount
+        }
+    }
+
+    $selected = Select-HenkaDependencyRootCandidate -Candidates $evaluated
+    if ($null -eq $selected) {
+        return [pscustomobject]@{ Root = ""; Mode = "network-fallback"; AvailableProviders = 0 }
+    }
+    return [pscustomobject]@{
+        Root = if ($selected.Mode -eq "shared") { "" } else { $selected.Path }
+        Mode = $selected.Mode
+        AvailableProviders = $selected.AvailableProviders
+    }
+}
+
 function Get-HenkaCheckoutStorageKey {
     param(
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
@@ -162,8 +371,9 @@ function Get-HenkaCheckoutStorageKey {
     }
     finally { $hashAlgorithm.Dispose() }
     if ($CompactBuildKey) {
-        $leaf = $leaf.Substring(0, [Math]::Min(4, $leaf.Length))
-        $hashText = $hashText.Substring(0, 16)
+        # Keep the full nested CMake object-file path within Henka's
+        # 128-character Windows path budget.
+        return $hashText.Substring(0, 11)
     }
     else {
         $hashText = $hashText.Substring(0, 12)
@@ -178,7 +388,7 @@ function Get-HenkaBuildRoot {
     $localRoot = Get-HenkaLocalRoot -RepositoryRoot $repository
     $buildKey = Get-HenkaCheckoutStorageKey -RepositoryRoot $repository -CompactBuildKey
     return Resolve-HenkaLocalPath -RepositoryRoot $repository `
-        -Path (Join-Path (Join-Path $localRoot "builds") $buildKey)
+        -Path (Join-Path (Join-Path $localRoot "bld") $buildKey)
 }
 
 function Get-HenkaCMakeSharedDependencyRoot {
@@ -664,7 +874,46 @@ function Test-HenkaPinnedFetchContentSource {
         return $result
     }
     $status = @(& $git -C $source status --porcelain --untracked-files=all --ignored=matching 2>$null)
-    if ($LASTEXITCODE -ne 0 -or $status.Count -ne 0) {
+    $statusExitCode = $LASTEXITCODE
+    # KTX-Software's pinned Windows CMake configure/build generates this
+    # ignored header directly in its source tree (cmake/version.cmake:
+    # create_version_header(lib ktx)). Permit only the deterministic output
+    # for the current immutable KTX pin. Other ignored or untracked files must
+    # continue to invalidate the source cache.
+    if ($statusExitCode -eq 0 -and
+        $status.Count -eq 1 -and
+        $status[0] -match '^!!\s+lib/version\.h$' -and
+        $PinnedRepository -ieq 'https://github.com/KhronosGroup/KTX-Software.git' -and
+        $PinnedCommit -ieq '91ace88675ac59a97e55d0378a6602a9ae6b98bd') {
+        $generatedVersionHeader = Join-Path $source 'lib\version.h'
+        $generatedVersionHeaderItem = Get-Item -LiteralPath $generatedVersionHeader -Force -ErrorAction SilentlyContinue
+        if ($null -ne $generatedVersionHeaderItem -and
+            -not $generatedVersionHeaderItem.PSIsContainer -and
+            -not ($generatedVersionHeaderItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            try {
+                $hashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
+                try {
+                    $hashStream = [System.IO.File]::OpenRead($generatedVersionHeader)
+                    try {
+                        $hashBytes = $hashAlgorithm.ComputeHash($hashStream)
+                        $generatedVersionHeaderHash = ([BitConverter]::ToString($hashBytes)).Replace("-", "")
+                    }
+                    finally {
+                        $hashStream.Dispose()
+                    }
+                }
+                finally {
+                    $hashAlgorithm.Dispose()
+                }
+                if ($generatedVersionHeaderHash -ieq 'F2272B43BE16731F3C390E1FFB7FAD93CDF10F83620D487C82D0457D86B8AEA5') {
+                    $status = @()
+                }
+            } catch {
+                # A changing or unreadable generated file is not cache evidence.
+            }
+        }
+    }
+    if ($statusExitCode -ne 0 -or $status.Count -ne 0) {
         $result.RejectionReason = "source-working-tree-is-not-clean"
         return $result
     }
@@ -679,6 +928,7 @@ function Get-HenkaCMakeFetchContentArguments {
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$DependencyRoot,
         [ValidateSet("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")]
         [string[]]$Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB"),
+        [hashtable]$PinnedRevisions = $null,
         [string]$RepositoryRoot = "",
         [string]$PinSourceRoot = "",
         [string]$SharedDependencyRoot = "",
@@ -706,15 +956,7 @@ function Get-HenkaCMakeFetchContentArguments {
         Resolve-HenkaLocalPath -RepositoryRoot $repository -Path $DependencyRoot
     }
     $pins = Get-HenkaCMakeFetchContentPins -PinSourceRoot $pinRoot
-
-    $definitions = @{
-        SDL3 = [pscustomobject]@{ CacheName = "SDL3"; CMakeName = "SDL3"; RelativePath = "sdl3-src"; Marker = "CMakeLists.txt"; Label = "SDL3" }
-        KTXSOFTWARE = [pscustomobject]@{ CacheName = "KTXSOFTWARE"; CMakeName = "KTXSoftware"; RelativePath = "ktxsoftware-src"; Marker = "CMakeLists.txt"; Label = "KTX-Software" }
-        ENET = [pscustomobject]@{ CacheName = "ENET"; CMakeName = "ENet"; RelativePath = "enet-src"; Marker = "CMakeLists.txt"; Label = "ENet" }
-        LUA = [pscustomobject]@{ CacheName = "LUA"; CMakeName = "Lua"; RelativePath = "lua-src"; Marker = "lua.h"; Label = "Lua" }
-        MINIAUDIO = [pscustomobject]@{ CacheName = "MINIAUDIO"; CMakeName = "miniaudio"; RelativePath = "miniaudio-src"; Marker = "miniaudio.h"; Label = "miniaudio" }
-        STB = [pscustomobject]@{ CacheName = "STB"; CMakeName = "stb"; RelativePath = "stb-src"; Marker = "stb_vorbis.c"; Label = "stb" }
-    }
+    $definitions = Get-HenkaCMakeFetchContentDefinitions
 
     $arguments = @()
     $states = @()
@@ -724,12 +966,30 @@ function Get-HenkaCMakeFetchContentArguments {
             throw "Unknown Henka FetchContent provider: $provider"
         }
         $definition = $definitions[$provider]
-        $pinKey = $definition.CMakeName.ToUpperInvariant()
+        $pinKey = $definition.FetchContentName.ToUpperInvariant()
         $pin = if ($pins.ContainsKey($pinKey)) { $pins[$pinKey] } else { $null }
+        $expectedRevision = ""
+        $revisionValid = $true
+        if ($null -ne $PinnedRevisions) {
+            if ($PinnedRevisions.ContainsKey($provider)) {
+                $expectedRevision = [string]$PinnedRevisions[$provider]
+                $revisionValid = $null -ne $pin -and $expectedRevision -ieq [string]$pin.Commit
+            } else {
+                $revisionValid = $false
+            }
+        }
         $chosen = $null
         $sourceScope = "none"
-        $rejectionReason = if ($null -eq $pin) { "fetchcontent-declaration-not-found" } elseif (-not $pin.Immutable) { "fetchcontent-declaration-is-not-pinned" } else { "source-not-available" }
-        if (-not $NoLocalProviders -and $null -ne $pin -and $pin.Immutable) {
+        $rejectionReason = if (-not $revisionValid) {
+            "supplied-revision-does-not-match-pin-source"
+        } elseif ($null -eq $pin) {
+            "fetchcontent-declaration-not-found"
+        } elseif (-not $pin.Immutable) {
+            "fetchcontent-declaration-is-not-pinned"
+        } else {
+            "source-not-available"
+        }
+        if (-not $NoLocalProviders -and $revisionValid -and $null -ne $pin -and $pin.Immutable) {
             $candidates = @()
             if (-not [string]::IsNullOrWhiteSpace($localRoot)) {
                 $candidates += [pscustomobject]@{ Scope = "build-local"; Path = (Join-Path $localRoot $definition.RelativePath) }
@@ -762,10 +1022,12 @@ function Get-HenkaCMakeFetchContentArguments {
         $states += [pscustomobject]@{
             Name = $provider
             Label = $definition.Label
-            CMakeName = $definition.CMakeName
+            CMakeName = $definition.FetchContentName
             SourceRoot = $sourceValue
             SourceScope = $sourceScope
             Available = -not [string]::IsNullOrWhiteSpace($sourceValue)
+            ExpectedRevision = $expectedRevision
+            RevisionValid = [bool]$revisionValid
             PinnedCommit = if ($null -ne $pin) { $pin.Commit } else { "" }
             Repository = if ($null -ne $pin) { $pin.Repository } else { "" }
             RejectionReason = $rejectionReason
@@ -1322,12 +1584,19 @@ public sealed class HenkaCapturedProcess : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags);
 
     [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
+    private static extern int GetSystemMetrics(int index);
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
@@ -1342,6 +1611,13 @@ public sealed class HenkaCapturedProcess : IDisposable
 
     private const int SW_SHOWMINNOACTIVE = 7;
     private const int SW_SHOWNOACTIVATE = 4;
+    private const int SM_XVIRTUALSCREEN = 76;
+    private const int SM_YVIRTUALSCREEN = 77;
+    private const int SM_CXVIRTUALSCREEN = 78;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOOWNERZORDER = 0x0200;
 
     public Process Process { get; private set; }
 
@@ -1364,8 +1640,10 @@ public sealed class HenkaCapturedProcess : IDisposable
         string stdoutPath,
         string stderrPath,
         bool createNoWindow,
+        bool startHidden,
         bool startMinimized,
         bool startVisibleWithoutActivation,
+        bool startOffscreenWithoutActivation,
         string windowsPowerShellModulePath)
     {
         ProcessStartInfo startInfo = new ProcessStartInfo();
@@ -1378,11 +1656,12 @@ public sealed class HenkaCapturedProcess : IDisposable
         {
             startInfo.EnvironmentVariables["PSModulePath"] = windowsPowerShellModulePath;
         }
-        if (!createNoWindow && (startMinimized || startVisibleWithoutActivation))
+        if (!createNoWindow &&
+            (startHidden || startMinimized || startVisibleWithoutActivation || startOffscreenWithoutActivation))
         {
-            // Validation may need a native window for PrintWindow or an
-            // event-driven UI path, but it must not take ownership of the
-            // user's typing focus merely by being launched.
+            // Validation may need a native offscreen window for application
+            // rendering and event-driven UI checks, but it must not take
+            // ownership of the user's focus merely by being launched.
             // Native GUI frameworks can ignore a minimized startup hint while
             // creating their first window. Hidden startup prevents a transient
             // foreground activation; StartMinimize then exposes it minimized
@@ -1413,11 +1692,12 @@ public sealed class HenkaCapturedProcess : IDisposable
             }
             if (!createNoWindow && startMinimized)
             {
-                StartMinimize(process, GetForegroundWindow());
+                StartMinimize(process);
             }
-            else if (!createNoWindow && startVisibleWithoutActivation)
+            else if (!createNoWindow &&
+                (startVisibleWithoutActivation || startOffscreenWithoutActivation))
             {
-                StartShowWithoutActivation(process);
+                StartShowWithoutActivation(process, startOffscreenWithoutActivation);
             }
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
@@ -1430,19 +1710,47 @@ public sealed class HenkaCapturedProcess : IDisposable
         }
     }
 
-    public static void StartMinimize(Process process)
-    {
-        StartMinimize(process, GetForegroundWindow());
-    }
-
-    public static IntPtr CurrentForegroundWindow()
-    {
-        return GetForegroundWindow();
-    }
-
-    private static void MinimizeOwnedWindows(
+    private static void ShowOwnedWindowsWithoutActivation(
         int processId,
-        IntPtr previousForeground)
+        HashSet<IntPtr> handledWindows,
+        bool startOffscreen)
+    {
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+        {
+            uint ownerProcessId;
+            GetWindowThreadProcessId(hWnd, out ownerProcessId);
+            if (ownerProcessId == (uint)processId && !handledWindows.Contains(hWnd))
+            {
+                if (startOffscreen)
+                {
+                    int virtualRight = GetSystemMetrics(SM_XVIRTUALSCREEN) +
+                        GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                    int offscreenX = virtualRight + 64;
+                    int offscreenY = GetSystemMetrics(SM_YVIRTUALSCREEN) + 64;
+                    uint positionFlags = SWP_NOSIZE | SWP_NOZORDER |
+                        SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+                    if (!SetWindowPos(
+                        hWnd,
+                        IntPtr.Zero,
+                        offscreenX,
+                        offscreenY,
+                        0,
+                        0,
+                        positionFlags))
+                    {
+                        // Fail closed: do not expose a capture window on the
+                        // owner's desktop if isolation could not be applied.
+                        return true;
+                    }
+                }
+                handledWindows.Add(hWnd);
+                ShowWindow(hWnd, SW_SHOWNOACTIVATE);
+            }
+            return true;
+        }, IntPtr.Zero);
+    }
+
+    private static void MinimizeOwnedWindows(int processId)
     {
         EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
         {
@@ -1451,35 +1759,12 @@ public sealed class HenkaCapturedProcess : IDisposable
             if (ownerProcessId == (uint)processId)
             {
                 ShowWindow(hWnd, SW_SHOWMINNOACTIVE);
-                if (previousForeground != IntPtr.Zero &&
-                    GetForegroundWindow() == hWnd)
-                {
-                    // Restore the user's existing foreground owner; never
-                    // activate the newly launched validation window here.
-                    SetForegroundWindow(previousForeground);
-                }
             }
             return true;
         }, IntPtr.Zero);
     }
 
-    private static void ShowOwnedWindowsWithoutActivation(
-        int processId,
-        HashSet<IntPtr> handledWindows)
-    {
-        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
-        {
-            uint ownerProcessId;
-            GetWindowThreadProcessId(hWnd, out ownerProcessId);
-            if (ownerProcessId == (uint)processId && handledWindows.Add(hWnd))
-            {
-                ShowWindow(hWnd, SW_SHOWNOACTIVATE);
-            }
-            return true;
-        }, IntPtr.Zero);
-    }
-
-    public static void StartMinimize(Process process, IntPtr previousForeground)
+    public static void StartMinimize(Process process)
     {
         // Apply one synchronous pass before returning the launch helper to its
         // caller. This closes the gap where a native window is created between
@@ -1489,7 +1774,7 @@ public sealed class HenkaCapturedProcess : IDisposable
             if (!process.HasExited)
             {
                 process.Refresh();
-                MinimizeOwnedWindows(process.Id, previousForeground);
+                MinimizeOwnedWindows(process.Id);
             }
         }
         catch
@@ -1513,7 +1798,7 @@ public sealed class HenkaCapturedProcess : IDisposable
                         return;
                     }
                     target.Refresh();
-                    MinimizeOwnedWindows(target.Id, previousForeground);
+                    MinimizeOwnedWindows(target.Id);
                 }
                 catch
                 {
@@ -1525,7 +1810,8 @@ public sealed class HenkaCapturedProcess : IDisposable
     }
 
     public static void StartShowWithoutActivation(
-        Process process)
+        Process process,
+        bool startOffscreen)
     {
         ThreadPool.QueueUserWorkItem(delegate(object state)
         {
@@ -1542,7 +1828,8 @@ public sealed class HenkaCapturedProcess : IDisposable
                     target.Refresh();
                     ShowOwnedWindowsWithoutActivation(
                         target.Id,
-                        handledWindows);
+                        handledWindows,
+                        startOffscreen);
                 }
                 catch
                 {
@@ -1708,13 +1995,25 @@ function Start-HenkaProcess {
 
         [switch]$CreateNoWindow,
 
-        # Native validation windows start minimized by default. A capturable
-        # visible surface can instead opt into a non-activating show state.
+        # Keep the launched application hidden when capture is entirely
+        # renderer-owned and needs no desktop window.
+        [switch]$StartHidden,
+
+        # Native validation windows start minimized by default. Captures may
+        # opt into a visible non-activating window outside the virtual desktop.
         [bool]$StartMinimized = $true,
 
-        [switch]$StartVisibleWithoutActivation
+        [switch]$StartVisibleWithoutActivation,
+
+        [switch]$StartOffscreenWithoutActivation
     )
 
+    $startOffscreen = [bool]$StartOffscreenWithoutActivation
+    if ($StartHidden -and ($StartVisibleWithoutActivation -or $StartOffscreenWithoutActivation)) {
+        throw "StartHidden cannot be combined with a visible capture-window mode."
+    }
+    $startMinimized = [bool]$StartMinimized -and -not $startOffscreen -and -not $StartHidden
+    $startVisible = [bool]$StartVisibleWithoutActivation -or $startOffscreen
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
     $startInfo.FileName = $FilePath
     $startInfo.Arguments = ConvertTo-HenkaNativeArgumentString -Arguments $Arguments
@@ -1726,7 +2025,7 @@ function Start-HenkaProcess {
         $startInfo.EnvironmentVariables["PSModulePath"] = $windowsPowerShellModulePath
     }
     if (-not $CreateNoWindow -and
-        ($StartMinimized -or $StartVisibleWithoutActivation)) {
+        ($StartHidden -or $startMinimized -or $startVisible)) {
         # See the captured-process path: hidden creation avoids a transient
         # foreground activation, then the shared callback exposes the window
         # minimized without activation when its native handle exists.
@@ -1736,24 +2035,19 @@ function Start-HenkaProcess {
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
     if (-not $CreateNoWindow -and
-        ($StartMinimized -or $StartVisibleWithoutActivation)) {
+        ($startMinimized -or $startVisible)) {
         Initialize-HenkaCapturedProcessType
-    }
-    $previousForeground = if (-not $CreateNoWindow -and
-        ($StartMinimized -or $StartVisibleWithoutActivation)) {
-        [HenkaCapturedProcess]::CurrentForegroundWindow()
-    } else {
-        [IntPtr]::Zero
     }
     if (-not $process.Start()) {
         $process.Dispose()
         throw "The process did not start: $FilePath"
     }
-    if (-not $CreateNoWindow -and $StartMinimized) {
-        [HenkaCapturedProcess]::StartMinimize($process, $previousForeground)
-    }
-    elseif (-not $CreateNoWindow -and $StartVisibleWithoutActivation) {
-        [HenkaCapturedProcess]::StartShowWithoutActivation($process)
+    if (-not $CreateNoWindow -and $startMinimized) {
+        [HenkaCapturedProcess]::StartMinimize($process)
+    } elseif (-not $CreateNoWindow -and $startVisible) {
+        [HenkaCapturedProcess]::StartShowWithoutActivation(
+            $process,
+            $startOffscreen)
     }
     return $process
 }
@@ -1776,11 +2070,15 @@ function Start-HenkaCapturedProcess {
 
         [switch]$CreateNoWindow,
 
-        # Native validation windows start minimized by default. A capturable
-        # visible surface can instead opt into a non-activating show state.
+        [switch]$StartHidden,
+
+        # Native validation windows start minimized by default. Captures may
+        # opt into a visible non-activating window outside the virtual desktop.
         [bool]$StartMinimized = $true,
 
-        [switch]$StartVisibleWithoutActivation
+        [switch]$StartVisibleWithoutActivation,
+
+        [switch]$StartOffscreenWithoutActivation
     )
 
     Initialize-HenkaCapturedProcessType
@@ -1794,6 +2092,12 @@ function Start-HenkaCapturedProcess {
     }
     $windowsPowerShellModulePath = Get-HenkaWindowsPowerShellModulePath -FilePath $FilePath
 
+    $startOffscreen = [bool]$StartOffscreenWithoutActivation
+    if ($StartHidden -and ($StartVisibleWithoutActivation -or $StartOffscreenWithoutActivation)) {
+        throw "StartHidden cannot be combined with a visible capture-window mode."
+    }
+    $startMinimized = [bool]$StartMinimized -and -not $startOffscreen -and -not $StartHidden
+    $startVisible = [bool]$StartVisibleWithoutActivation -or $startOffscreen
     return [HenkaCapturedProcess]::Start(
         $FilePath,
         (ConvertTo-HenkaNativeArgumentString -Arguments $Arguments),
@@ -1801,8 +2105,10 @@ function Start-HenkaCapturedProcess {
         $StdoutPath,
         $StderrPath,
         [bool]$CreateNoWindow,
-        $StartMinimized,
-        [bool]$StartVisibleWithoutActivation,
+        [bool]$StartHidden,
+        $startMinimized,
+        $startVisible,
+        $startOffscreen,
         $windowsPowerShellModulePath)
 }
 

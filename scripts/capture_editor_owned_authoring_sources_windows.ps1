@@ -196,16 +196,9 @@ function Scroll-FramebufferPoint {
 
 function Get-SourceRow {
     param([Parameter(Mandatory = $true)][string]$Subject)
-    $text = Get-Content -LiteralPath $stdoutPath -Raw -ErrorAction SilentlyContinue
-    if ([string]::IsNullOrEmpty($text)) {
-        return $null
-    }
-    $pattern = "(?m)^Native authoring source row: name=Showcase $Subject .*? x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28\.0\."
-    $matches = [Regex]::Matches($text, $pattern)
-    if ($matches.Count -eq 0) {
-        return $null
-    }
-    return $matches[0]
+    return Get-HenkaNativeAuthoringSourceRowGeometry `
+        -Path $stdoutPath `
+        -NamePrefix "Showcase $Subject "
 }
 
 function Get-ProjectControls {
@@ -298,26 +291,29 @@ function Get-FaceEditTools {
     if ([string]::IsNullOrEmpty($text)) {
         return $null
     }
-    $pattern = "(?m)^Native authoring face edit tools: name=Showcase $Subject .*? extrude_x=(?<extrudeX>[-0-9.]+) inset_x=(?<insetX>[-0-9.]+) y=(?<y>[-0-9.]+) width=54\.0 height=24\.0\."
+    $pattern = "(?m)^Native authoring face edit tools: name=Showcase $Subject .*? extrude_x=(?<extrudeX>[-0-9.]+) inset_x=(?<insetX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=24\.0 rows=(?<rows>[0-9]+) row_x=(?<rowX>[-0-9.]+) row_width=(?<rowWidth>[-0-9.]+) inset_width=(?<insetWidth>[-0-9.]+)\."
     $matches = [Regex]::Matches($text, $pattern)
     if ($matches.Count -eq 0) {
         return $null
     }
-    return $matches[$matches.Count - 1]
-}
-
-function Get-FaceNormalControls {
-    param([Parameter(Mandatory = $true)][string]$Subject)
-    $text = Get-Content -LiteralPath $stdoutPath -Raw -ErrorAction SilentlyContinue
-    if ([string]::IsNullOrEmpty($text)) {
-        return $null
+    $match = $matches[$matches.Count - 1]
+    $rowX = [double]$match.Groups['rowX'].Value
+    $rowWidth = [double]$match.Groups['rowWidth'].Value
+    $extrudeX = [double]$match.Groups['extrudeX'].Value
+    $extrudeWidth = [double]$match.Groups['width'].Value
+    $insetX = [double]$match.Groups['insetX'].Value
+    $insetWidth = [double]$match.Groups['insetWidth'].Value
+    if ([double]$match.Groups['rows'].Value -lt 1.0 -or
+        $rowWidth -lt 82.0 -or
+        $extrudeWidth -lt 82.0 -or
+        $insetWidth -lt 82.0 -or
+        $extrudeX -lt $rowX -or
+        $extrudeX + $extrudeWidth -gt $rowX + $rowWidth + 0.1 -or
+        $insetX -lt $rowX -or
+        $insetX + $insetWidth -gt $rowX + $rowWidth + 0.1) {
+        throw "The reported Face action controls do not fit their production detail rows for Showcase $Subject."
     }
-    $pattern = "(?m)^Native authoring face normal controls: name=Showcase $Subject .*? positive_x=(?<positiveX>[-0-9.]+) negative_x=(?<negativeX>[-0-9.]+) y=(?<y>[-0-9.]+) width=54\.0 height=24\.0\."
-    $matches = [Regex]::Matches($text, $pattern)
-    if ($matches.Count -eq 0) {
-        return $null
-    }
-    return $matches[$matches.Count - 1]
+    return $match
 }
 
 function Get-DetailsGeometry {
@@ -453,16 +449,20 @@ $handle = [System.IntPtr]::Zero
 $previousExportRoot = $env:HENKA_SANDBOX_AUTHORING_EXPORT_DIR
 $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
 $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
+$previousStartHidden = $env:HENKA_AUTOMATION_START_HIDDEN
+$previousToolWindowsStartHidden = $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN
 try {
     $env:HENKA_SANDBOX_AUTHORING_EXPORT_DIR = $authoringDirectory
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
+    $env:HENKA_AUTOMATION_START_HIDDEN = "1"
+    $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"
     $capturedProcess = Start-HenkaCapturedProcess `
         -FilePath $runtimeExecutable `
         -WorkingDirectory $runtimeDirectory `
         -StdoutPath $stdoutPath `
         -StderrPath $stderrPath `
-        -CreateNoWindow
+        -StartOffscreenWithoutActivation
     $process = $capturedProcess.Process
     for ($attempt = 0; $attempt -lt 80 -and $handle -eq [System.IntPtr]::Zero; ++$attempt) {
         Start-Sleep -Milliseconds 250
@@ -482,7 +482,7 @@ try {
     $framebufferWidth = [int]$framebuffer.Groups["width"].Value
     $framebufferHeight = [int]$framebuffer.Groups["height"].Value
 
-    Set-HenkaAutomationForeground -Handle $handle
+    $null = Show-HenkaAutomationWindowOffscreen -Handle $handle
     # Keep the Standard layout for the capture workflow.  Scene Objects and
     # Object Details are the visible authoring controls used by this script;
     # switching to Focus Viewport here hides both panels before the first
@@ -513,8 +513,8 @@ try {
             -Handle $handle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ([double]$row.Groups["x"].Value + [double]$row.Groups["width"].Value / 2.0) `
-            -FramebufferY ([double]$row.Groups["y"].Value + $(if ($subject -eq "Rocket") { 6.0 } else { 14.0 }))
+            -FramebufferX ($row.X + $row.Width / 2.0) `
+            -FramebufferY ($row.Y + $(if ($subject -eq "Rocket") { 6.0 } else { 14.0 }))
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring row clicked: name=Showcase $subject" -TimeoutMilliseconds 3000)) {
             throw "The visible $subject row was not selected."
         }
@@ -864,6 +864,18 @@ finally {
     }
     else {
         $env:HENKA_AUTOMATION_INPUT_FILE = $previousAutomationFile
+    }
+    if ($null -eq $previousStartHidden) {
+        Remove-Item Env:HENKA_AUTOMATION_START_HIDDEN -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_START_HIDDEN = $previousStartHidden
+    }
+    if ($null -eq $previousToolWindowsStartHidden) {
+        Remove-Item Env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = $previousToolWindowsStartHidden
     }
     if ($null -ne $capturedProcess) {
         Close-HenkaCapturedProcess -CapturedProcess $capturedProcess

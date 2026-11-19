@@ -1211,7 +1211,6 @@ bool sandbox3d_workspace_save_custom_layout(
     }
     model->custom_layout_left_dock_width = model->left_dock_width;
     model->custom_layout_right_dock_width = model->right_dock_width;
-    model->custom_layout_ui_scale = model->ui_scale;
     snprintf(model->custom_layout_name, sizeof(model->custom_layout_name), "%s", name);
     model->custom_layout_valid = true;
     snprintf(model->last_action, sizeof(model->last_action), "Custom workspace saved: %s", model->custom_layout_name);
@@ -1241,6 +1240,10 @@ bool sandbox3d_workspace_save_custom_layout_slot(
     }
 
     slot = &model->custom_layout_slots[slot_index - 1U];
+    if (!slot->valid)
+    {
+        slot->ui_scale = 1.0f;
+    }
     memcpy(slot->nodes, model->topology_nodes, sizeof(slot->nodes));
     slot->root = model->topology_root;
     slot->closed_sections_mask = model->closed_sections_mask;
@@ -1252,7 +1255,6 @@ bool sandbox3d_workspace_save_custom_layout_slot(
     }
     slot->left_dock_width = model->left_dock_width;
     slot->right_dock_width = model->right_dock_width;
-    slot->ui_scale = model->ui_scale;
     snprintf(slot->name, sizeof(slot->name), "%s", name);
     slot->valid = true;
     snprintf(model->last_action, sizeof(model->last_action), "Workspace slot %zu saved: %s", slot_index, slot->name);
@@ -1320,7 +1322,6 @@ bool sandbox3d_workspace_apply_custom_layout(
     candidate.maximized_section = model->custom_layout_maximized_section;
     candidate.left_dock_width = model->custom_layout_left_dock_width;
     candidate.right_dock_width = model->custom_layout_right_dock_width;
-    candidate.ui_scale = model->custom_layout_ui_scale;
     for (panel_index = 0U; panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++panel_index)
     {
         candidate.panels[panel_index].dock = model->custom_layout_docks[panel_index];
@@ -1396,7 +1397,6 @@ bool sandbox3d_workspace_apply_custom_layout_slot(
     candidate.maximized_section = slot.maximized_section;
     candidate.left_dock_width = slot.left_dock_width;
     candidate.right_dock_width = slot.right_dock_width;
-    candidate.ui_scale = slot.ui_scale;
     for (panel_index = 0U; panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++panel_index)
     {
         candidate.panels[panel_index].dock = slot.docks[panel_index];
@@ -1542,6 +1542,7 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
 void sandbox3d_workspace_reset_layout(sandbox3d_workspace_model* model)
 {
     bool saved_custom_layout_valid;
+    float saved_ui_scale;
     char saved_custom_layout_name[SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_NAME_MAX];
     sandbox3d_workspace_topology_node saved_custom_layout_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
     uint16_t saved_custom_layout_root;
@@ -1551,7 +1552,6 @@ void sandbox3d_workspace_reset_layout(sandbox3d_workspace_model* model)
     sandbox3d_workspace_dock_zone saved_custom_layout_last_docked_zones[SANDBOX3D_WORKSPACE_PANEL_COUNT];
     float saved_custom_layout_left_dock_width;
     float saved_custom_layout_right_dock_width;
-    float saved_custom_layout_ui_scale;
     sandbox3d_workspace_custom_layout_slot saved_custom_layout_slots[SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_SLOT_COUNT - 1U];
 
     if (model == NULL)
@@ -1559,6 +1559,7 @@ void sandbox3d_workspace_reset_layout(sandbox3d_workspace_model* model)
         return;
     }
     saved_custom_layout_valid = model->custom_layout_valid;
+    saved_ui_scale = sandbox3d_workspace_get_ui_scale(model);
     memcpy(saved_custom_layout_name, model->custom_layout_name, sizeof(saved_custom_layout_name));
     memcpy(saved_custom_layout_nodes, model->custom_layout_nodes, sizeof(saved_custom_layout_nodes));
     saved_custom_layout_root = model->custom_layout_root;
@@ -1571,10 +1572,10 @@ void sandbox3d_workspace_reset_layout(sandbox3d_workspace_model* model)
         sizeof(saved_custom_layout_last_docked_zones));
     saved_custom_layout_left_dock_width = model->custom_layout_left_dock_width;
     saved_custom_layout_right_dock_width = model->custom_layout_right_dock_width;
-    saved_custom_layout_ui_scale = model->custom_layout_ui_scale;
     memcpy(saved_custom_layout_slots, model->custom_layout_slots, sizeof(saved_custom_layout_slots));
 
     sandbox3d_workspace_model_reset(model);
+    sandbox3d_workspace_set_ui_scale(model, saved_ui_scale);
     memcpy(model->custom_layout_slots, saved_custom_layout_slots, sizeof(model->custom_layout_slots));
     if (!saved_custom_layout_valid)
     {
@@ -1593,7 +1594,6 @@ void sandbox3d_workspace_reset_layout(sandbox3d_workspace_model* model)
         sizeof(model->custom_layout_last_docked_zones));
     model->custom_layout_left_dock_width = saved_custom_layout_left_dock_width;
     model->custom_layout_right_dock_width = saved_custom_layout_right_dock_width;
-    model->custom_layout_ui_scale = saved_custom_layout_ui_scale;
 }
 
 bool sandbox3d_workspace_should_start_panels_visible(bool settings_file_found)

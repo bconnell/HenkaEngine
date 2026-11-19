@@ -20,23 +20,11 @@ $buildRoot = if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
 } else {
     Resolve-HenkaLocalPath -RepositoryRoot $repoRoot -Path $BuildRoot
 }
-$resolvedDependencyRoot = $DependencyRoot
-$dependencyRootWasExplicit = -not [string]::IsNullOrWhiteSpace($resolvedDependencyRoot)
-if ($dependencyRootWasExplicit) {
-    $resolvedDependencyRoot = Resolve-HenkaDependencyRoot `
-        -RepositoryRoot $repoRoot `
-        -DependencyRoot $resolvedDependencyRoot
-} else {
-    $defaultDependencyRoot = Join-Path $buildRoot "_deps"
-    if (Test-Path -LiteralPath $defaultDependencyRoot -PathType Container) {
-        $resolvedDependencyRoot = Resolve-HenkaDependencyRoot `
-            -RepositoryRoot $repoRoot `
-            -DependencyRoot $defaultDependencyRoot
-    } else {
-        $resolvedDependencyRoot = ""
-        Write-Host "No populated local dependency root was found; FetchContent network fallback remains enabled."
-    }
-}
+$dependencySelection = Resolve-HenkaBuildDependencyRoot `
+    -RepositoryRoot $repoRoot `
+    -BuildRoot $buildRoot `
+    -DependencyRoot $DependencyRoot
+$resolvedDependencyRoot = $dependencySelection.Root
 
 # Validate all caller-controlled storage paths before creating or marking a
 # build root, so a rejected external dependency root leaves no generated state.
@@ -48,7 +36,7 @@ $null = Write-HenkaGeneratedRootMarker `
     -RetentionClass "REBUILDABLE" `
     -Active $false `
     -CleanupEligible $true `
-    -CleanupCondition "source inputs are preserved and no validation process is using this build root" `
+    -CleanupCondition "rebuildable" `
     -Configuration "multi-configuration"
 $toolchain = Get-HenkaToolchain
 $cmake = $toolchain.CMakePath
@@ -56,14 +44,16 @@ $artifact = Get-HenkaBuildArtifact -BuildRoot $buildRoot -Configuration $Configu
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $fetchContent = Get-HenkaCMakeFetchContentArguments `
     -DependencyRoot $resolvedDependencyRoot `
-    -NoSharedDependencyCache:$dependencyRootWasExplicit `
-    -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
+    -NoSharedDependencyCache:($dependencySelection.Mode -eq "explicit") `
+    -Providers @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB") `
+    -PinnedRevisions (Get-HenkaCMakeDependencyPins -RepositoryRoot $repoRoot)
 $configureArguments = @("-S", $repoRoot, "-B", $buildRoot) + @($fetchContent.Arguments)
 Write-HenkaCMakeFetchContentStatus -Resolution $fetchContent
 
 Write-Host "cmake: $cmake"
 Write-Host "repo: $repoRoot"
 Write-Host "configuration: $Configuration"
+Write-Host "dependency selection: $($dependencySelection.Mode) ($($dependencySelection.AvailableProviders) pinned provider(s))"
 $dependencyDescription = if ([string]::IsNullOrWhiteSpace($resolvedDependencyRoot)) {
     "<none; shared source cache checked, FetchContent fallback for missing pins>"
 } else {

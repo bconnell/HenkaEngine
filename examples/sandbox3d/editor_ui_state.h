@@ -48,12 +48,20 @@ typedef struct sandbox3d_editor_ui_state
 
     float controls_scroll_offset;
     float controls_content_height;
+    float scene_objects_actions_scroll_offset;
+    float scene_objects_actions_content_height;
     float details_scroll_offset;
     float details_content_height;
+    float utility_settings_scroll_offset;
+    float utility_settings_content_height;
     bool controls_scroll_dragging;
+    bool scene_objects_actions_scroll_dragging;
     bool details_scroll_dragging;
+    bool utility_settings_scroll_dragging;
     float controls_scroll_grab_offset;
+    float scene_objects_actions_scroll_grab_offset;
     float details_scroll_grab_offset;
+    float utility_settings_scroll_grab_offset;
 } sandbox3d_editor_ui_state;
 
 void sandbox3d_editor_ui_state_reset(
@@ -110,6 +118,21 @@ bool sandbox3d_editor_ui_scroll_controls_by(
     float viewport_height,
     float delta_pixels);
 
+float sandbox3d_editor_ui_scene_objects_scroll_delta(
+    float requested_delta_pixels,
+    float viewport_height);
+
+bool sandbox3d_editor_ui_scroll_scene_objects_actions_by(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    float delta_pixels);
+
+/* Keep a wheel step from jumping over rows when a compact controls viewport
+ * is only slightly taller than a single interactive row. */
+float sandbox3d_editor_ui_controls_scroll_delta(
+    float requested_delta_pixels,
+    float viewport_height);
+
 bool sandbox3d_editor_ui_scroll_details_by(
     sandbox3d_editor_ui_state* state,
     float viewport_height,
@@ -122,6 +145,14 @@ bool sandbox3d_editor_ui_scroll_controls(
 
 
 bool sandbox3d_editor_ui_scroll_details(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    int direction);
+bool sandbox3d_editor_ui_scroll_utility_settings_by(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    float delta_pixels);
+bool sandbox3d_editor_ui_scroll_utility_settings(
     sandbox3d_editor_ui_state* state,
     float viewport_height,
     int direction);
