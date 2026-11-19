@@ -636,6 +636,10 @@ typedef struct sandbox3d_state
     bool native_authoring_material_control_reported;
     float native_authoring_material_control_reported_y;
     bool native_authoring_material_editor_reported;
+    float native_authoring_material_editor_reported_x;
+    float native_authoring_material_editor_reported_y;
+    float native_authoring_material_editor_reported_width;
+    size_t native_authoring_material_editor_reported_rows;
     bool native_authoring_material_optical_reported;
     float native_authoring_material_optical_reported_y;
     bool native_authoring_material_thickness_reported;
@@ -15484,6 +15488,10 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_material_control_reported = false;
     state->native_authoring_material_control_reported_y = -FLT_MAX;
     state->native_authoring_material_editor_reported = false;
+    state->native_authoring_material_editor_reported_x = -FLT_MAX;
+    state->native_authoring_material_editor_reported_y = -FLT_MAX;
+    state->native_authoring_material_editor_reported_width = -FLT_MAX;
+    state->native_authoring_material_editor_reported_rows = 0U;
     state->native_authoring_material_optical_reported = false;
     state->native_authoring_material_optical_reported_y = -FLT_MAX;
     state->native_authoring_material_thickness_reported = false;
@@ -17999,6 +18007,10 @@ static bool sandbox3d_promote_authoring_material(
     state->native_authoring_material_asset = native_asset;
     state->native_authoring_material_entity = entity;
     state->native_authoring_material_editor_reported = false;
+    state->native_authoring_material_editor_reported_x = -FLT_MAX;
+    state->native_authoring_material_editor_reported_y = -FLT_MAX;
+    state->native_authoring_material_editor_reported_width = -FLT_MAX;
+    state->native_authoring_material_editor_reported_rows = 0U;
     state->native_authoring_material_optical_reported = false;
     state->native_authoring_material_optical_reported_y = -FLT_MAX;
     state->native_authoring_material_thickness_reported = false;
@@ -18459,6 +18471,10 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
             state->native_authoring_material_control_reported = false;
             state->native_authoring_material_control_reported_y = -FLT_MAX;
             state->native_authoring_material_editor_reported = false;
+            state->native_authoring_material_editor_reported_x = -FLT_MAX;
+            state->native_authoring_material_editor_reported_y = -FLT_MAX;
+            state->native_authoring_material_editor_reported_width = -FLT_MAX;
+            state->native_authoring_material_editor_reported_rows = 0U;
             state->native_authoring_material_optical_reported = false;
             state->native_authoring_material_optical_reported_y = -FLT_MAX;
             state->native_authoring_material_thickness_reported = false;
@@ -32579,49 +32595,92 @@ details_group_authoring:
                 }
                 else if (material_view.editor_binding != NULL)
                 {
-                    henka_ui_rect material_secondary_row;
-                    /* Material actions use two readable rows. Six compact
-                     * controls in one row made the labels ambiguous and
-                     * obscured the actual authoring operation. */
-                    const float material_control_gap = 8.0f;
-                    const float material_control_width =
-                        (row.width - material_control_gap * 2.0f) / 3.0f;
-                    const float tint_x = row.x;
-                    const float metal_x = tint_x + material_control_width + material_control_gap;
-                    const float rough_x = metal_x + material_control_width + material_control_gap;
-                    if (sandbox3d_details_flow_next_row(
-                            state,
+                    const char* const material_control_labels[6] = {
+                        "Base Color", "Metallic", "Roughness",
+                        "Emission", "Texture", "Subsurface"};
+                    henka_ui_rect material_controls[6] = {{0}};
+                    bool material_control_visible[6] = {false};
+                    size_t material_control_rows = 0U;
+                    size_t material_control_index;
+                    bool material_controls_all_visible = false;
+                    const bool material_grid_valid =
+                        sandbox3d_editor_layout_flow_text_control_grid_for_context(
+                            state->ui,
                             flow_desc.bounds,
+                            flow_desc.row_spacing,
+                            material_control_labels,
+                            6U,
+                            1.0f,
+                            80.0f,
+                            8.0f,
+                            8.0f,
                             28.0f,
-                            1U,
-                            &material_secondary_row) &&
-                        row.width >= 210.0f &&
-                        material_secondary_row.width >= 210.0f)
+                            4.0f,
+                            material_controls,
+                            6U,
+                            &material_control_rows,
+                            &material_controls_all_visible);
+
+                    if (material_grid_valid)
                     {
-                        const float emissive_x = material_secondary_row.x;
-                        const float texture_x = emissive_x + material_control_width + material_control_gap;
-                        const float subsurface_x = texture_x + material_control_width + material_control_gap;
-                        if (!state->native_authoring_material_editor_reported)
+                        for (material_control_index = 0U;
+                             material_control_index < 6U;
+                             ++material_control_index)
+                        {
+                            material_control_visible[material_control_index] =
+                                sandbox3d_details_row_fully_visible(
+                                    flow_desc.bounds,
+                                    material_controls[material_control_index]);
+                        }
+
+                        if (!state->native_authoring_material_editor_reported ||
+                            fabsf(
+                                material_controls[0].x -
+                                state->native_authoring_material_editor_reported_x) > 0.5f ||
+                            fabsf(
+                                material_controls[0].y -
+                                state->native_authoring_material_editor_reported_y) > 0.5f ||
+                            fabsf(
+                                material_controls[0].width -
+                                state->native_authoring_material_editor_reported_width) > 0.5f ||
+                            material_control_rows !=
+                                state->native_authoring_material_editor_reported_rows)
                         {
                             printf(
-                                "Native authoring material controls: name=%s tint_x=%.1f metal_x=%.1f rough_x=%.1f emissive_x=%.1f texture_x=%.1f subsurface_x=%.1f first_y=%.1f second_y=%.1f width=%.1f height=28.0.\n",
+                                "Native authoring material controls: name=%s source_y=%.1f rows=%zu all_visible=%u",
                                 display_name,
-                                tint_x,
-                                metal_x,
-                                rough_x,
-                                emissive_x,
-                                texture_x,
-                                subsurface_x,
                                 row.y,
-                                material_secondary_row.y,
-                                material_control_width);
+                                material_control_rows,
+                                material_controls_all_visible ? 1U : 0U);
+                            for (material_control_index = 0U;
+                                 material_control_index < 6U;
+                                 ++material_control_index)
+                            {
+                                printf(
+                                    " item%zu=%.1f,%.1f,%.1f,%u",
+                                    material_control_index,
+                                    material_controls[material_control_index].x,
+                                    material_controls[material_control_index].y,
+                                    material_controls[material_control_index].width,
+                                    material_control_visible[material_control_index] ? 1U : 0U);
+                            }
+                            printf(".\n");
                             fflush(stdout);
                             state->native_authoring_material_editor_reported = true;
+                            state->native_authoring_material_editor_reported_x =
+                                material_controls[0].x;
+                            state->native_authoring_material_editor_reported_y =
+                                material_controls[0].y;
+                            state->native_authoring_material_editor_reported_width =
+                                material_controls[0].width;
+                            state->native_authoring_material_editor_reported_rows =
+                                material_control_rows;
                         }
-                    if (henka_ui_button(
+
+                    if (material_control_visible[0] && henka_ui_button(
                             state->ui,
                             "authoring_material_tint",
-                            (henka_ui_rect){tint_x, row.y, material_control_width, 28.0f},
+                            material_controls[0],
                             "Base Color"))
                     {
                         const henka_material_instance_parameter previous_parameter =
@@ -32640,10 +32699,10 @@ details_group_authoring:
                         }
                         state->material_editor_parameter = previous_parameter;
                     }
-                    if (henka_ui_button(
+                    if (material_control_visible[4] && henka_ui_button(
                             state->ui,
                             "authoring_material_texture",
-                            (henka_ui_rect){texture_x, material_secondary_row.y, material_control_width, 28.0f},
+                            material_controls[4],
                             "Texture"))
                     {
                         char detail_identity[96];
@@ -32684,10 +32743,10 @@ details_group_authoring:
                             sandbox3d_set_status(state, false, "Native procedural normal and metallic-roughness textures created and assigned transactionally.");
                         }
                     }
-                    if (henka_ui_button(
+                    if (material_control_visible[1] && henka_ui_button(
                             state->ui,
                             "authoring_material_metallic",
-                            (henka_ui_rect){metal_x, row.y, material_control_width, 28.0f},
+                            material_controls[1],
                             "Metallic"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
@@ -32702,10 +32761,10 @@ details_group_authoring:
                             sandbox3d_set_status(state, false, "Native metallic value edited transactionally.");
                         }
                     }
-                    if (henka_ui_button(
+                    if (material_control_visible[2] && henka_ui_button(
                             state->ui,
                             "authoring_material_roughness",
-                            (henka_ui_rect){rough_x, row.y, material_control_width, 28.0f},
+                            material_controls[2],
                             "Roughness"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
@@ -32720,10 +32779,10 @@ details_group_authoring:
                             sandbox3d_set_status(state, false, "Native roughness value edited transactionally.");
                         }
                     }
-                    if (henka_ui_button(
+                    if (material_control_visible[3] && henka_ui_button(
                             state->ui,
                             "authoring_material_emissive",
-                            (henka_ui_rect){emissive_x, material_secondary_row.y, material_control_width, 28.0f},
+                            material_controls[3],
                             "Emission"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
@@ -32738,10 +32797,10 @@ details_group_authoring:
                             sandbox3d_set_status(state, false, "Native emissive strength edited transactionally.");
                         }
                     }
-                    if (henka_ui_button(
+                    if (material_control_visible[5] && henka_ui_button(
                             state->ui,
                             "authoring_material_subsurface",
-                            (henka_ui_rect){subsurface_x, material_secondary_row.y, material_control_width, 28.0f},
+                            material_controls[5],
                             "Subsurface") &&
                         sandbox3d_native_authoring_edit_scalar(
                             state,
@@ -32761,8 +32820,8 @@ details_group_authoring:
                 state->native_authoring_material_entity == entity &&
                 material_view.editor_binding != NULL)
             {
-                /* Keep the optical controls below the two-row material
-                 * controls above; both sets are user-facing buttons and must
+                /* Keep the optical controls below the complete material
+                 * control grid; both groups are user-facing buttons and must
                  * never share a hit rectangle after scrolling. */
                 (void)sandbox3d_details_flow_next_row(
                     state,
