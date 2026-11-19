@@ -617,6 +617,9 @@ typedef struct sandbox3d_state
     sandbox3d_ui_geometry_report scene_objects_authoring_control_reports[
         SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_COUNT];
     sandbox3d_ui_geometry_report object_details_actions_disclosure_report;
+    sandbox3d_ui_geometry_report object_details_materials_disclosure_report;
+    sandbox3d_ui_geometry_report object_details_material_view_report;
+    sandbox3d_ui_geometry_report object_details_material_picker_row_report;
     sandbox3d_ui_geometry_report object_details_visibility_button_report;
     sandbox3d_ui_geometry_report game_authoring_physics_disclosure_report;
     sandbox3d_ui_geometry_report game_authoring_play_controls_report;
@@ -898,6 +901,12 @@ static void sandbox3d_reset_ui_geometry_reports(sandbox3d_state* state)
         sizeof(state->scene_objects_authoring_control_reports));
     memset(&state->object_details_actions_disclosure_report, 0,
         sizeof(state->object_details_actions_disclosure_report));
+    memset(&state->object_details_materials_disclosure_report, 0,
+        sizeof(state->object_details_materials_disclosure_report));
+    memset(&state->object_details_material_view_report, 0,
+        sizeof(state->object_details_material_view_report));
+    memset(&state->object_details_material_picker_row_report, 0,
+        sizeof(state->object_details_material_picker_row_report));
     memset(&state->object_details_visibility_button_report, 0,
         sizeof(state->object_details_visibility_button_report));
     memset(&state->game_authoring_physics_disclosure_report, 0,
@@ -29963,6 +29972,7 @@ static bool sandbox3d_details_flow_disclosure(
 {
     bool changed;
     bool visible;
+    bool row_visible;
     henka_ui_rect disclosure_bounds;
     henka_ui_rect bounds;
     size_t group_position;
@@ -29990,12 +30000,44 @@ static bool sandbox3d_details_flow_disclosure(
         return false;
     }
 
-    if (!visible ||
-        !sandbox3d_details_row_fully_visible(
+    row_visible = visible &&
+        sandbox3d_details_row_fully_visible(
             viewport,
-            bounds))
+            bounds);
+    if (group_id == SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS &&
+        sandbox3d_automation_input_is_owned() &&
+        row_visible)
     {
-        return true;
+        henka_ui_rect material_disclosure_bounds = bounds;
+        const henka_entity selected_entity =
+            sandbox3d_get_real_selected_entity(state);
+        const int report_state =
+            (*expanded ? 1 : 0) | (row_visible ? 2 : 0);
+        if (material_disclosure_bounds.width >= 86.0f)
+        {
+            material_disclosure_bounds.width -= 58.0f;
+        }
+        if (sandbox3d_ui_geometry_report_changed(
+                &state->object_details_materials_disclosure_report,
+                selected_entity,
+                material_disclosure_bounds,
+                report_state))
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC details_materials entity=%u expanded=%u visible=%u rect=%.0f,%.0f,%.0f,%.0f\n",
+                (unsigned int)selected_entity,
+                *expanded ? 1U : 0U,
+                row_visible ? 1U : 0U,
+                material_disclosure_bounds.x,
+                material_disclosure_bounds.y,
+                material_disclosure_bounds.width,
+                material_disclosure_bounds.height);
+            fflush(stdout);
+        }
+    }
+    if (!row_visible)
+    {
+        return false;
     }
 
     changed = false;
@@ -31430,6 +31472,26 @@ details_group_materials:
         &disclosure_changed);
     if (state->editor_ui.details_materials_expanded)
     {
+        if (sandbox3d_automation_input_is_owned())
+        {
+            const int report_state =
+                (int)material_view.access |
+                (material_view.editor_binding != NULL ? 16 : 0) |
+                32;
+            if (sandbox3d_ui_geometry_report_changed(
+                    &state->object_details_material_view_report,
+                    entity,
+                    flow_desc.bounds,
+                    report_state))
+            {
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC material_view entity=%u access=%u binding=%u expanded=1\n",
+                    (unsigned int)entity,
+                    (unsigned int)material_view.access,
+                    material_view.editor_binding != NULL ? 1U : 0U);
+                fflush(stdout);
+            }
+        }
         if (sandbox3d_details_flow_next_row(
                 state,
                 flow_desc.bounds,
@@ -31567,10 +31629,43 @@ details_group_materials:
                             slot_display.state);
                     }
 
-                    if (!sandbox3d_details_flow_next_row(
-                            state, flow_desc.bounds, 28.0f, 1U, &row))
                     {
-                        continue;
+                        const bool picker_row_visible =
+                            sandbox3d_details_flow_next_row(
+                                state, flow_desc.bounds, 28.0f, 1U, &row);
+                        if (texture_slot_index == 0U &&
+                            sandbox3d_automation_input_is_owned() &&
+                            picker_row_visible)
+                        {
+                            const int report_state =
+                                (int)material_view.access |
+                                (material_view.editor_binding != NULL ? 16 : 0) |
+                                (picker_row_visible ? 32 : 0) |
+                                (editable ? 64 : 0);
+                            if (sandbox3d_ui_geometry_report_changed(
+                                    &state->object_details_material_picker_row_report,
+                                    entity,
+                                    row,
+                                    report_state))
+                            {
+                                printf(
+                                    "HENKA_AUTOMATION_DIAGNOSTIC material_picker_row entity=%u access=%u binding=%u editable=%u visible=%u rect=%.0f,%.0f,%.0f,%.0f\n",
+                                    (unsigned int)entity,
+                                    (unsigned int)material_view.access,
+                                    material_view.editor_binding != NULL ? 1U : 0U,
+                                    editable ? 1U : 0U,
+                                    picker_row_visible ? 1U : 0U,
+                                    row.x,
+                                    row.y,
+                                    row.width,
+                                    row.height);
+                                fflush(stdout);
+                            }
+                        }
+                        if (!picker_row_visible)
+                        {
+                            continue;
+                        }
                     }
                     sandbox3d_draw_value_row(
                         state->ui, row.x, row.y, row.width, texture_slot_labels[texture_slot_index], slot_value);

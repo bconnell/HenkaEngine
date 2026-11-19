@@ -639,7 +639,7 @@ try {
         -StdoutPath $stdoutPath `
         -StderrPath $stderrPath `
         -StartMinimized:$false `
-        -StartVisibleWithoutActivation
+        -StartOffscreenWithoutActivation
 
     # Debug OpenGL startup on slower integrated GPUs can finish engine
     # creation near the existing timeout and still need a bounded first frame
@@ -1332,6 +1332,7 @@ try {
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material: editable runtime definition adopted" -TimeoutMilliseconds 5000)) {
         throw "The visible material ownership action did not commit successfully."
     }
+    $adoptedMaterial = Get-LastMatch -Path $stdoutPath -Pattern 'Native authoring material: editable runtime definition adopted for entity=(?<entity>\d+)'
 
     # Exercise the real slot-targeted material picker immediately after Own
     # Material establishes the manager-backed editable instance. The existing
@@ -1353,7 +1354,9 @@ try {
         $detailsGeometry.Groups["height"].Value,
         [Globalization.CultureInfo]::InvariantCulture)
     $pickerControlPattern =
-        'Material texture picker control: entity=\d+ slot=Base Color choose_x=(?<x>[-0-9.]+) choose_y=(?<y>[-0-9.]+) width=70\.0 height=24\.0\.'
+        ('Material texture picker control: entity=' + [Regex]::Escape($adoptedMaterial.Groups["entity"].Value) + ' slot=Base Color choose_x=(?<x>[-0-9.]+) choose_y=(?<y>[-0-9.]+) width=70\.0 height=24\.0\.')
+    $pickerRowVisiblePattern =
+        ('HENKA_AUTOMATION_DIAGNOSTIC material_picker_row entity=' + [Regex]::Escape($adoptedMaterial.Groups["entity"].Value) + ' access=(?<access>\d+) binding=1 editable=1 visible=1 rect=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)')
     $pickerControlFound = (Get-LogMatchCount `
         -Path $stdoutPath `
         -Pattern $pickerControlPattern) -gt 0
@@ -1384,10 +1387,44 @@ try {
             -Pattern $pickerControlPattern) -gt 0
     }
     if (-not $pickerControlFound) {
+        $materialsDisclosurePattern = 'HENKA_AUTOMATION_DIAGNOSTIC details_materials entity=(?<entity>\d+) expanded=(?<expanded>[01]) visible=(?<visible>[01]) rect=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)'
+        $materialsDisclosure = Get-LastMatch -Path $stdoutPath -Pattern $materialsDisclosurePattern
+        if ($materialsDisclosure.Groups["entity"].Value -ne $adoptedMaterial.Groups["entity"].Value) {
+            throw "The Materials disclosure geometry does not belong to the adopted authoring entity."
+        }
+        if ($materialsDisclosure.Groups["visible"].Value -ne "1") {
+            throw "The Materials disclosure was not reachable after the bounded details-panel navigation."
+        }
+        if ($materialsDisclosure.Groups["expanded"].Value -ne "1") {
+            $expandedDisclosurePattern = ('HENKA_AUTOMATION_DIAGNOSTIC details_materials entity=' + [Regex]::Escape($adoptedMaterial.Groups["entity"].Value) + ' expanded=1 visible=1 rect=')
+            $expandedDisclosureCount = Get-LogMatchCount -Path $stdoutPath -Pattern $expandedDisclosurePattern
+            Send-HenkaAutomationClick -EventPath $automationInputPath -X ([double]$materialsDisclosure.Groups["x"].Value + [double]$materialsDisclosure.Groups["width"].Value * 0.5) -Y ([double]$materialsDisclosure.Groups["y"].Value + [double]$materialsDisclosure.Groups["height"].Value * 0.5)
+            if (-not (Wait-LogMatchCountIncrease -Path $stdoutPath -InitialCount $expandedDisclosureCount -Pattern $expandedDisclosurePattern -TimeoutMilliseconds 5000)) {
+                throw "A real click on the visible Materials disclosure did not expand it for the adopted entity."
+            }
+        }
+        $editableViewPattern = ('HENKA_AUTOMATION_DIAGNOSTIC material_view entity=' + [Regex]::Escape($adoptedMaterial.Groups["entity"].Value) + ' access=(?<access>\d+) binding=1 expanded=1')
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern $editableViewPattern -TimeoutMilliseconds 5000)) {
+            throw "The expanded Materials view did not expose an editor binding for the adopted entity."
+        }
+        $editableView = Get-LastMatch -Path $stdoutPath -Pattern $editableViewPattern
+        if ($editableView.Groups["access"].Value -eq "0") {
+            throw "The expanded Materials view still reports no material access for the adopted entity."
+        }
+        for ($pickerScrollAttempt = 0; $pickerScrollAttempt -lt 48 -and -not $pickerControlFound; ++$pickerScrollAttempt) {
+            Send-HenkaAutomationScroll -EventPath $automationInputPath -X ($detailsX + $detailsWidth * 0.5) -Y ($detailsY + $detailsHeight * 0.5) -WheelDelta -1.0
+            Start-Sleep -Milliseconds 100
+            $pickerControlFound = (Get-LogMatchCount -Path $stdoutPath -Pattern $pickerControlPattern) -gt 0
+        }
+    }
+    if ($pickerControlFound -and -not (Wait-FileContains -Path $stdoutPath -Pattern $pickerRowVisiblePattern -TimeoutMilliseconds 5000)) {
+        throw "The Base Color picker control was reported without a visible editable row for the adopted entity."
+    }
+    if (-not $pickerControlFound) {
         $pickerFailureText = Read-SharedLogText -Path $stdoutPath
         $pickerFailureTrace = @($pickerFailureText -split "\r?\n" |
             Where-Object {
-                $_ -match 'HENKA_AUTOMATION_DIAGNOSTIC (?:input record=|details-scroll|frame seq=)' -or
+                $_ -match 'HENKA_AUTOMATION_DIAGNOSTIC (?:input record=|details-scroll|frame seq=|details_materials |material_view |material_picker_row )' -or
                 $_ -match 'Material texture picker control:|Native authoring material:|Native authoring component picked:|Workspace UI geometry:'
             } |
             Select-Object -Last 32)
