@@ -58,12 +58,16 @@ function Write-TestMarker {
 
 function Invoke-Manager {
     param(
-        [Parameter(Mandatory = $true)] [string[]]$Arguments
+        [Parameter(Mandatory = $true)] [string[]]$Arguments,
+        [string]$ManagerScript = ""
     )
+    if ([string]::IsNullOrWhiteSpace($ManagerScript)) {
+        $ManagerScript = $manager
+    }
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Continue"
-        $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $manager @Arguments 2>&1)
+        $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ManagerScript @Arguments 2>&1)
         return [pscustomobject]@{
             ExitCode = $LASTEXITCODE
             Output = (($output | ForEach-Object { [string]$_ }) -join "`n")
@@ -77,9 +81,10 @@ function Invoke-Manager {
 function Assert-ManagerFailure {
     param(
         [Parameter(Mandatory = $true)] [string[]]$Arguments,
-        [Parameter(Mandatory = $true)] [string]$ExpectedText
+        [Parameter(Mandatory = $true)] [string]$ExpectedText,
+        [string]$ManagerScript = ""
     )
-    $result = Invoke-Manager -Arguments $Arguments
+    $result = Invoke-Manager -Arguments $Arguments -ManagerScript $ManagerScript
     if ($result.ExitCode -eq 0 -or $result.Output -notmatch [regex]::Escape($ExpectedText)) {
         throw "Expected lifecycle manager failure containing '$ExpectedText'. Output: $($result.Output)"
     }
@@ -149,6 +154,45 @@ function New-CMakeFetchContentCleanupCandidate {
         throw "The resolved ENet source is not an exact clean mirror of Henka's pin: $($resolvedSourceValidation.RejectionReason)"
     }
 
+    # A generated build may be cleaned only when its nested FetchContent source
+    # also has a verified copy in Henka's shared dependency cache. Hosted jobs
+    # can start without that cache, so establish the exact pinned mirror from
+    # the already-resolved source before exercising the positive cleanup case.
+    $fetchContentDefinitions = Get-HenkaCMakeFetchContentDefinitions
+    $sharedDependencyRoot = Get-HenkaCMakeSharedDependencyRoot -RepositoryRoot $repoRoot
+    $sharedMirror = Join-Path $sharedDependencyRoot ([string]$fetchContentDefinitions["ENET"].RelativePath)
+    if (-not (Test-Path -LiteralPath $sharedMirror -PathType Container)) {
+        $sharedMirrorParent = Split-Path -Parent $sharedMirror
+        New-Item -ItemType Directory -Path $sharedMirrorParent -Force | Out-Null
+        $sharedMirrorStage = Join-Path $testRoot ("shared-enet-" + [Guid]::NewGuid().ToString("N"))
+        $gitPath = Get-HenkaGitPath
+        & $gitPath clone --quiet --local --no-hardlinks $resolvedDependency $sharedMirrorStage
+        if ($LASTEXITCODE -ne 0) { throw "Could not stage the canonical pinned ENet shared-cache fixture." }
+        & $gitPath -C $sharedMirrorStage remote set-url origin ([string]$fetchContentPin.Repository)
+        if ($LASTEXITCODE -ne 0) { throw "Could not set the canonical ENet shared-cache fixture origin." }
+        $stagedMirrorValidation = Test-HenkaPinnedFetchContentSource `
+            -RepositoryRoot $repoRoot `
+            -SourceRoot $sharedMirrorStage `
+            -Marker "CMakeLists.txt" `
+            -PinnedCommit ([string]$fetchContentPin.Commit) `
+            -PinnedRepository ([string]$fetchContentPin.Repository)
+        if (-not $stagedMirrorValidation.Available) {
+            throw "The staged canonical ENet shared-cache fixture is not an exact clean pin: $($stagedMirrorValidation.RejectionReason)"
+        }
+        if (-not (Test-Path -LiteralPath $sharedMirror -PathType Container)) {
+            Move-Item -LiteralPath $sharedMirrorStage -Destination $sharedMirror
+        }
+    }
+    $sharedMirrorValidation = Test-HenkaPinnedFetchContentSource `
+        -RepositoryRoot $repoRoot `
+        -SourceRoot $sharedMirror `
+        -Marker "CMakeLists.txt" `
+        -PinnedCommit ([string]$fetchContentPin.Commit) `
+        -PinnedRepository ([string]$fetchContentPin.Repository)
+    if (-not $sharedMirrorValidation.Available) {
+        throw "The canonical shared ENet source is not an exact clean pin: $($sharedMirrorValidation.RejectionReason)"
+    }
+
     & $gitPath clone --quiet --local --no-hardlinks $resolvedDependency $dependencyClone
     if ($LASTEXITCODE -ne 0) { throw "Could not clone the shared pinned ENet dependency into the generated CMake fixture." }
     $fixtureOrigin = [string]$fetchContentPin.Repository
@@ -188,6 +232,66 @@ function New-CMakeFetchContentCleanupCandidate {
         -CleanupCondition "source inputs are preserved and no validation process is using this build root" `
         -Purpose "CMake build output" -SourceSha $sourceSha
     return [pscustomobject]@{ Candidate = $candidate; SourceRoot = $sourceRoot; DependencyClone = $dependencyClone }
+}
+
+function New-MissingSharedMirrorCleanupFixture {
+    param(
+        [Parameter(Mandatory = $true)] [string]$PinnedRevision,
+        [Parameter(Mandatory = $true)] [string]$PinnedRepository,
+        [Parameter(Mandatory = $true)] [string]$DependencySource
+    )
+
+    $fixtureRepository = Join-Path $testRoot "missing-shared-mirror-repository"
+    $fixtureScripts = Join-Path $fixtureRepository "scripts"
+    $fixtureLocalRoot = Join-Path $testRoot "_local"
+    $fixtureSharedRoot = Join-Path $fixtureLocalRoot "dependencies\fetchcontent"
+    $candidate = Join-Path $fixtureLocalRoot "bld\missing-shared-mirror"
+    $candidateDependencyRoot = Join-Path $candidate "_deps"
+    $candidateDependency = Join-Path $candidateDependencyRoot "enet-src"
+    New-Item -ItemType Directory -Path $fixtureScripts,$fixtureSharedRoot,$candidateDependencyRoot -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repoRoot "CMakeLists.txt") -Destination (Join-Path $fixtureRepository "CMakeLists.txt")
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "henka_script_common.ps1") -Destination (Join-Path $fixtureScripts "henka_script_common.ps1")
+    $fixtureManager = Join-Path $fixtureScripts "manage_generated_artifacts_windows.ps1"
+    Copy-Item -LiteralPath $manager -Destination $fixtureManager
+
+    $gitPath = Get-HenkaGitPath
+    & $gitPath -C $fixtureRepository init --quiet
+    if ($LASTEXITCODE -ne 0) { throw "Could not initialize the isolated cleanup-manager regression repository." }
+    & $gitPath -C $fixtureRepository config user.name "Henka lifecycle regression"
+    if ($LASTEXITCODE -ne 0) { throw "Could not configure the isolated regression repository identity." }
+    & $gitPath -C $fixtureRepository config user.email "henka-lifecycle-regression@example.invalid"
+    if ($LASTEXITCODE -ne 0) { throw "Could not configure the isolated regression repository identity." }
+    & $gitPath -C $fixtureRepository add -- CMakeLists.txt
+    if ($LASTEXITCODE -ne 0) { throw "Could not stage the isolated regression CMake source." }
+    & $gitPath -C $fixtureRepository commit --quiet -m "fixture: pinned CMake source"
+    if ($LASTEXITCODE -ne 0) { throw "Could not commit the isolated regression CMake source." }
+    $sourceSha = ([string](& $gitPath -C $fixtureRepository rev-parse HEAD)).Trim()
+    if ($LASTEXITCODE -ne 0 -or $sourceSha -notmatch "^[0-9a-f]{40}$") {
+        throw "Could not identify the isolated regression CMake source commit."
+    }
+
+    & $gitPath clone --quiet --local --no-hardlinks $DependencySource $candidateDependency
+    if ($LASTEXITCODE -ne 0) { throw "Could not clone the pinned ENet source into the missing-mirror regression candidate." }
+    & $gitPath -C $candidateDependency remote set-url origin $PinnedRepository
+    if ($LASTEXITCODE -ne 0) { throw "Could not set the pinned origin for the missing-mirror regression candidate." }
+    $dependencyValidation = Test-HenkaPinnedFetchContentSource `
+        -RepositoryRoot $fixtureRepository `
+        -SourceRoot $candidateDependency `
+        -Marker "CMakeLists.txt" `
+        -PinnedCommit $PinnedRevision `
+        -PinnedRepository $PinnedRepository
+    if (-not $dependencyValidation.Available) {
+        throw "The missing-mirror regression candidate does not contain the exact clean ENet pin: $($dependencyValidation.RejectionReason)"
+    }
+    $cache = @(
+        "CMAKE_HOME_DIRECTORY:INTERNAL=$($fixtureRepository.Replace('\', '/'))",
+        "FETCHCONTENT_FULLY_DISCONNECTED:BOOL=OFF"
+    ) -join "`n"
+    Set-Content -LiteralPath (Join-Path $candidate "CMakeCache.txt") -Value $cache -Encoding ASCII
+    Write-TestMarker -Path $candidate -RetentionClass "REBUILDABLE" -Active $false -CleanupEligible $true `
+        -CleanupCondition "source inputs are preserved and no validation process is using this build root" `
+        -Purpose "CMake build output" -SourceSha $sourceSha
+    return [pscustomobject]@{ Candidate = $candidate; ManagerScript = $fixtureManager }
 }
 
 try {
@@ -230,6 +334,14 @@ try {
     if ($enetPin -notmatch "^[0-9a-f]{40}$") {
         throw "The lifecycle regression could not read Henka's pinned ENet revision."
     }
+    $fetchContentPins = Get-HenkaCMakeFetchContentPins -PinSourceRoot $repoRoot
+    $missingSharedMirror = New-MissingSharedMirrorCleanupFixture `
+        -PinnedRevision $enetPin `
+        -PinnedRepository ([string]$fetchContentPins["ENET"].Repository) `
+        -DependencySource (Join-Path (Join-Path $buildRoot "_deps") "enet-src")
+    Assert-ManagerFailure -ManagerScript $missingSharedMirror.ManagerScript -Arguments @(
+        "-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $missingSharedMirror.Candidate
+    ) -ExpectedText "Canonical shared pinned dependency is missing for provider ENET"
     $fetchContentCleanup = New-CMakeFetchContentCleanupCandidate -Name "cmfc-good" -PinnedRevision $enetPin
     $fetchContentDryRun = Invoke-Manager -Arguments @("-Mode", "DryRun", "-CandidatePath", $fetchContentCleanup.Candidate)
     if ($fetchContentDryRun.ExitCode -ne 0 -or
