@@ -1013,6 +1013,120 @@ void henka_test_sandbox3d_editor_layout(void)
                     }
                 }
             }
+
+            {
+                const henka_ui_rect flow_bounds = {
+                    48.0f, 36.0f, 230.0f, 160.0f};
+                const float flow_spacing = 6.0f;
+                const float action_row_height = 24.0f;
+                const float action_row_gap = 4.0f;
+                const float expected_row_step =
+                    action_row_height + action_row_gap + flow_spacing;
+                henka_ui_flow_desc flow = {0};
+                henka_ui_rect visible_controls[4] = {{0}};
+                henka_ui_rect scrolled_controls[4] = {{0}};
+                size_t visible_rows = 0U;
+                size_t scrolled_rows = 0U;
+                size_t control_index;
+                float visible_content_height = 0.0f;
+                float scrolled_content_height = 0.0f;
+                bool all_visible = false;
+
+                /* A multi-row action grid consumes the same flow spacing as
+                 * later controls. Scroll position may change visibility and
+                 * coordinates, but never its reserved content extent. */
+                flow.bounds = flow_bounds;
+                flow.row_spacing = flow_spacing;
+                HENKA_TEST_ASSERT(
+                    henka_ui_flow_begin(ui_context, &flow) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_flow_text_control_grid_for_context(
+                        ui_context,
+                        flow_bounds,
+                        flow.row_spacing,
+                        face_edit_labels,
+                        4U,
+                        2.0f,
+                        88.0f,
+                        12.0f,
+                        8.0f,
+                        action_row_height,
+                        action_row_gap,
+                        visible_controls,
+                        4U,
+                        &visible_rows,
+                        &all_visible));
+                HENKA_TEST_ASSERT(visible_rows > 1U);
+                HENKA_TEST_ASSERT(all_visible);
+                for (control_index = 0U; control_index < 4U; ++control_index)
+                {
+                    const float row_offset =
+                        visible_controls[control_index].y - flow_bounds.y;
+                    const float row_index = roundf(row_offset / expected_row_step);
+                    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                        row_offset,
+                        row_index * expected_row_step,
+                        0.01f);
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        flow_bounds, visible_controls[control_index]));
+                }
+                HENKA_TEST_ASSERT(
+                    henka_ui_flow_end(
+                        ui_context,
+                        &visible_content_height) == HENKA_SUCCESS);
+
+                flow.scroll_offset = 40.0f;
+                HENKA_TEST_ASSERT(
+                    henka_ui_flow_begin(ui_context, &flow) == HENKA_SUCCESS);
+                all_visible = true;
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_flow_text_control_grid_for_context(
+                        ui_context,
+                        flow_bounds,
+                        flow.row_spacing,
+                        face_edit_labels,
+                        4U,
+                        2.0f,
+                        88.0f,
+                        12.0f,
+                        8.0f,
+                        action_row_height,
+                        action_row_gap,
+                        scrolled_controls,
+                        4U,
+                        &scrolled_rows,
+                        &all_visible));
+                HENKA_TEST_ASSERT(scrolled_rows == visible_rows);
+                HENKA_TEST_ASSERT(!all_visible);
+                for (control_index = 0U; control_index < 4U; ++control_index)
+                {
+                    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                        scrolled_controls[control_index].x,
+                        visible_controls[control_index].x,
+                        0.01f);
+                    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                        scrolled_controls[control_index].y,
+                        visible_controls[control_index].y -
+                            flow.scroll_offset,
+                        0.01f);
+                    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                        scrolled_controls[control_index].width,
+                        visible_controls[control_index].width,
+                        0.01f);
+                    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                        scrolled_controls[control_index].height,
+                        visible_controls[control_index].height,
+                        0.01f);
+                }
+                HENKA_TEST_ASSERT(
+                    henka_ui_flow_end(
+                        ui_context,
+                        &scrolled_content_height) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    scrolled_content_height,
+                    visible_content_height,
+                    0.01f);
+            }
         }
 
         {

@@ -1734,6 +1734,191 @@ henka_result sandbox3d_editor_layout_text_control_grid_for_context(
     return HENKA_SUCCESS;
 }
 
+static bool sandbox3d_editor_layout_rect_contains_rect(
+    henka_ui_rect outer,
+    henka_ui_rect inner)
+{
+    const double outer_right = (double)outer.x + (double)outer.width;
+    const double outer_bottom = (double)outer.y + (double)outer.height;
+    const double inner_right = (double)inner.x + (double)inner.width;
+    const double inner_bottom = (double)inner.y + (double)inner.height;
+
+    return
+        sandbox3d_editor_layout_float_is_valid(outer.x) &&
+        sandbox3d_editor_layout_float_is_valid(outer.y) &&
+        sandbox3d_editor_layout_float_is_valid(outer.width) &&
+        sandbox3d_editor_layout_float_is_valid(outer.height) &&
+        sandbox3d_editor_layout_float_is_valid(inner.x) &&
+        sandbox3d_editor_layout_float_is_valid(inner.y) &&
+        sandbox3d_editor_layout_float_is_valid(inner.width) &&
+        sandbox3d_editor_layout_float_is_valid(inner.height) &&
+        outer.width > 0.0f && outer.height > 0.0f &&
+        inner.width > 0.0f && inner.height > 0.0f &&
+        (double)inner.x >= (double)outer.x &&
+        (double)inner.y >= (double)outer.y &&
+        inner_right <= outer_right + 0.01 &&
+        inner_bottom <= outer_bottom + 0.01;
+}
+
+bool sandbox3d_editor_layout_flow_text_control_grid_for_context(
+    henka_ui_context* ui_context,
+    henka_ui_rect viewport,
+    float flow_row_spacing,
+    const char* const* labels,
+    size_t item_count,
+    float scale,
+    float minimum_item_width,
+    float horizontal_padding,
+    float horizontal_gap,
+    float row_height,
+    float row_gap,
+    henka_ui_rect* out_items,
+    size_t item_capacity,
+    size_t* out_row_count,
+    bool* out_all_visible)
+{
+    henka_ui_rect candidate_items[SANDBOX3D_EDITOR_LAYOUT_MAX_TOOL_ITEMS];
+    henka_ui_rect first_flow_row;
+    double effective_row_gap;
+    double maximum_grid_height;
+    double flow_row_height;
+    size_t row_count = 0U;
+    size_t row_index;
+    bool visible = true;
+    bool row_intersects_viewport = false;
+
+    if (out_row_count != NULL)
+    {
+        *out_row_count = 0U;
+    }
+    if (out_all_visible != NULL)
+    {
+        *out_all_visible = false;
+    }
+    if (ui_context == NULL || labels == NULL || item_count == 0U ||
+        item_count > SANDBOX3D_EDITOR_LAYOUT_MAX_TOOL_ITEMS ||
+        out_items == NULL || item_capacity < item_count ||
+        out_row_count == NULL || out_all_visible == NULL ||
+        !sandbox3d_editor_layout_float_is_valid(viewport.x) ||
+        !sandbox3d_editor_layout_float_is_valid(viewport.y) ||
+        !sandbox3d_editor_layout_float_is_valid(viewport.width) ||
+        !sandbox3d_editor_layout_float_is_valid(viewport.height) ||
+        viewport.width <= 0.0f || viewport.height <= 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(flow_row_spacing) ||
+        flow_row_spacing < 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(row_height) ||
+        row_height <= 0.0f ||
+        !sandbox3d_editor_layout_float_is_valid(row_gap) || row_gap < 0.0f)
+    {
+        return false;
+    }
+
+    effective_row_gap = (double)row_gap + (double)flow_row_spacing;
+    flow_row_height = (double)row_height + (double)row_gap;
+    maximum_grid_height = (double)item_count * (double)row_height +
+        (double)(item_count - 1U) * effective_row_gap;
+    if (!isfinite(effective_row_gap) ||
+        !isfinite(flow_row_height) ||
+        !isfinite(maximum_grid_height) ||
+        effective_row_gap > (double)FLT_MAX ||
+        flow_row_height > (double)FLT_MAX ||
+        maximum_grid_height <= 0.0 ||
+        maximum_grid_height > (double)FLT_MAX)
+    {
+        return false;
+    }
+
+    /* Preflight measured geometry before advancing the active flow. Its
+     * height is the maximum bounded row count, not the remaining viewport;
+     * scroll position must not change whether later rows are reserved. */
+    if (sandbox3d_editor_layout_text_control_grid_for_context(
+            ui_context,
+            (henka_ui_rect){
+                viewport.x,
+                viewport.y,
+                viewport.width,
+                (float)maximum_grid_height},
+            labels,
+            item_count,
+            scale,
+            minimum_item_width,
+            horizontal_padding,
+            horizontal_gap,
+            row_height,
+            (float)effective_row_gap,
+            candidate_items,
+            SANDBOX3D_EDITOR_LAYOUT_MAX_TOOL_ITEMS,
+            &row_count) != HENKA_SUCCESS ||
+        row_count == 0U)
+    {
+        return false;
+    }
+
+    if (henka_ui_flow_next_row(
+            ui_context,
+            (float)flow_row_height,
+            0U,
+            &first_flow_row,
+            &row_intersects_viewport) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+    (void)row_intersects_viewport;
+
+    for (row_index = 1U; row_index < row_count; ++row_index)
+    {
+        henka_ui_rect reserved_row;
+        const double expected_y = (double)first_flow_row.y +
+            (double)row_index *
+                ((double)row_height + (double)row_gap +
+                 (double)flow_row_spacing);
+        if (!isfinite(expected_y) || expected_y < -(double)FLT_MAX ||
+            expected_y > (double)FLT_MAX ||
+            henka_ui_flow_next_row(
+                ui_context,
+                (float)flow_row_height,
+                0U,
+                &reserved_row,
+                &row_intersects_viewport) != HENKA_SUCCESS ||
+            fabs((double)reserved_row.y - expected_y) > 0.5 ||
+            fabs((double)reserved_row.x - (double)first_flow_row.x) > 0.5 ||
+            fabs((double)reserved_row.width -
+                (double)first_flow_row.width) > 0.5)
+        {
+            return false;
+        }
+        (void)row_intersects_viewport;
+    }
+
+    {
+        const double y_offset =
+            (double)first_flow_row.y - (double)viewport.y;
+        size_t item_index;
+        for (item_index = 0U; item_index < item_count; ++item_index)
+        {
+            const double item_y =
+                (double)candidate_items[item_index].y + y_offset;
+            if (!isfinite(item_y) || item_y < -(double)FLT_MAX ||
+                item_y > (double)FLT_MAX)
+            {
+                return false;
+            }
+            candidate_items[item_index].y = (float)item_y;
+            if (!sandbox3d_editor_layout_rect_contains_rect(
+                    viewport,
+                    candidate_items[item_index]))
+            {
+                visible = false;
+            }
+        }
+    }
+
+    memcpy(out_items, candidate_items, item_count * sizeof(*out_items));
+    *out_row_count = row_count;
+    *out_all_visible = visible;
+    return true;
+}
+
 static const char* const g_sandbox3d_editor_utility_tab_labels[
     SANDBOX3D_EDITOR_UTILITY_TAB_COUNT] = {
         "Help",

@@ -434,6 +434,115 @@ function Invoke-VisibleFaceExtrude {
     }
 }
 
+function Ensure-VisibleFaceEditTools {
+    param(
+        [Parameter(Mandatory = $true)][string]$ObjectName,
+        [ValidateRange(1, 64)][int]$MaximumScrollSteps = 48
+    )
+
+    $toolsPattern = 'Native authoring face edit tools: name=(?<name>' +
+        [Regex]::Escape($ObjectName) +
+        ') extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width='
+    $scrollPattern = 'HENKA_AUTOMATION_DIAGNOSTIC details-scroll frame=\d+ point=\((?<pointX>[-0-9.]+),(?<pointY>[-0-9.]+)\) content=(?<content>[-0-9.]+) viewport=(?<viewport>[-0-9.]+) delta=(?<delta>[-0-9.]+) offset=(?<before>[-0-9.]+)->(?<after>[-0-9.]+) handled=(?<handled>[01]) authored=(?<authored>[01]) document=\d+'
+    $workspacePattern = 'Workspace UI geometry: .*details=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)\.'
+    $workspace = Get-LastMatch -Path $stdoutPath -Pattern $workspacePattern
+    $scrollX = [double]::Parse($workspace.Groups["x"].Value, [Globalization.CultureInfo]::InvariantCulture) +
+        [double]::Parse($workspace.Groups["width"].Value, [Globalization.CultureInfo]::InvariantCulture) * 0.5
+    $scrollY = [double]::Parse($workspace.Groups["y"].Value, [Globalization.CultureInfo]::InvariantCulture) +
+        [double]::Parse($workspace.Groups["height"].Value, [Globalization.CultureInfo]::InvariantCulture) * 0.5
+
+    if ($scrollX -lt 0.0 -or $scrollY -lt 0.0) {
+        throw "The product-reported Object Details viewport was invalid for face-edit navigation."
+    }
+
+    $lastContentHeight = 0.0
+    $lastViewportHeight = 0.0
+    $lastOffset = 0.0
+    $maximumOffsetObserved = 0.0
+    $furthestOffsetObserved = 0.0
+    foreach ($wheelDelta in @(-1.0, 1.0)) {
+        for ($attempt = 0; $attempt -lt $MaximumScrollSteps; ++$attempt) {
+            $scrollCount = Get-LogMatchCount -Path $stdoutPath -Pattern $scrollPattern
+            $toolsCount = Get-LogMatchCount -Path $stdoutPath -Pattern $toolsPattern
+            Send-HenkaAutomationScroll `
+                -EventPath $automationInputPath `
+                -X $scrollX `
+                -Y $scrollY `
+                -WheelDelta $wheelDelta
+
+            if (-not (Wait-LogMatchCountIncrease `
+                    -Path $stdoutPath `
+                    -InitialCount $scrollCount `
+                    -Pattern $scrollPattern `
+                    -TimeoutMilliseconds 1500)) {
+                throw "The product did not report consumption of the Object Details scroll input."
+            }
+
+            $scroll = Get-LastMatch -Path $stdoutPath -Pattern $scrollPattern
+            if ($scroll.Groups["handled"].Value -ne "1") {
+                throw "Object Details did not own the face-edit navigation scroll input."
+            }
+
+            $offsetBefore = [double]::Parse(
+                $scroll.Groups["before"].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $offsetAfter = [double]::Parse(
+                $scroll.Groups["after"].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $lastContentHeight = [double]::Parse(
+                $scroll.Groups["content"].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $lastViewportHeight = [double]::Parse(
+                $scroll.Groups["viewport"].Value,
+                [Globalization.CultureInfo]::InvariantCulture)
+            $lastOffset = $offsetAfter
+            $maximumOffsetObserved = [Math]::Max(
+                $maximumOffsetObserved,
+                [Math]::Max(0.0, $lastContentHeight - $lastViewportHeight))
+            $furthestOffsetObserved = [Math]::Max($furthestOffsetObserved, $lastOffset)
+            if ([Math]::Abs($offsetAfter - $offsetBefore) -le 0.25) {
+                break
+            }
+
+            if (Wait-LogMatchCountIncrease `
+                    -Path $stdoutPath `
+                    -InitialCount $toolsCount `
+                    -Pattern $toolsPattern `
+                    -TimeoutMilliseconds 1000) {
+                $tools = Get-LastMatch -Path $stdoutPath -Pattern $toolsPattern
+                if ($tools.Groups["name"].Success -and
+                    $tools.Groups["name"].Value -ceq $ObjectName) {
+                    $reachMessage = ("[pass] Object Details scroll changed offset {0:F1}->{1:F1}; " +
+                        "the product reported fresh face-edit geometry for {2} at y={3}.") -f
+                        $offsetBefore,
+                        $offsetAfter,
+                        $ObjectName,
+                        $tools.Groups["y"].Value
+                    Write-Output $reachMessage
+                    return
+                }
+            }
+
+            $maximumOffset = [Math]::Max(0.0, $lastContentHeight - $lastViewportHeight)
+            if (($wheelDelta -lt 0.0 -and $lastOffset -ge ($maximumOffset - 0.25)) -or
+                ($wheelDelta -gt 0.0 -and $lastOffset -le 0.25)) {
+                break
+            }
+        }
+    }
+
+    throw ("The face-edit controls did not become visible after bounded real Object Details scrolling " +
+        "(content={0:F1}, viewport={1:F1}, last_offset={2:F1}, furthest_offset={3:F1}, " +
+        "largest_reported_max_offset={4:F1}, " +
+        "max_steps_per_direction={5}).") -f
+        $lastContentHeight,
+        $lastViewportHeight,
+        $lastOffset,
+        $furthestOffsetObserved,
+        $maximumOffsetObserved,
+        $MaximumScrollSteps
+}
+
 function Wait-AssetTransition {
     param(
         [Parameter(Mandatory = $true)][string]$LogPath,
@@ -1284,6 +1393,7 @@ try {
         throw "The visible numeric modeling move did not commit through the operator transaction."
     }
 
+    Ensure-VisibleFaceEditTools -ObjectName $authoringName
     Invoke-VisibleFaceExtrude `
         -Pattern ("Native authoring face edit tools: name=" + [Regex]::Escape($authoringName) + ' extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width=') `
         -XGroup "x" -YGroup "y" `
@@ -2077,6 +2187,7 @@ try {
     if (-not $reopenedPicked) {
         throw "The visible reopened asset did not produce a fresh selected face before re-edit."
     }
+    Ensure-VisibleFaceEditTools -ObjectName $authoringName
     Invoke-VisibleFaceExtrude `
         -Pattern 'Native authoring face edit tools: name=(?<name>.+?) extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width=' `
         -XGroup "x" -YGroup "y" `

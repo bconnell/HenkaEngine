@@ -272,6 +272,27 @@ henka_result sandbox3d_editor_layout_text_control_grid_for_context(
     size_t item_capacity,
     size_t* out_row_count);
 
+/* Reserve every wrapped control row in the active UI flow, even while some
+ * rows are outside the viewport. The produced hit rectangles include both
+ * the grid gap and the flow's row spacing. A valid offscreen grid succeeds
+ * with out_all_visible=false so scrolling cannot collapse its content extent. */
+bool sandbox3d_editor_layout_flow_text_control_grid_for_context(
+    henka_ui_context* ui_context,
+    henka_ui_rect viewport,
+    float flow_row_spacing,
+    const char* const* labels,
+    size_t item_count,
+    float scale,
+    float minimum_item_width,
+    float horizontal_padding,
+    float horizontal_gap,
+    float row_height,
+    float row_gap,
+    henka_ui_rect* out_items,
+    size_t item_capacity,
+    size_t* out_row_count,
+    bool* out_all_visible);
+
 #define SANDBOX3D_EDITOR_UTILITY_TAB_COUNT 10U
 
 /* Canonical product labels and measured geometry for Utility destinations. */

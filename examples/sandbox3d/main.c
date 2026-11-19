@@ -29982,6 +29982,7 @@ static bool sandbox3d_details_flow_next_row(
 static bool sandbox3d_details_flow_next_text_control_grid(
     sandbox3d_state* state,
     henka_ui_rect viewport,
+    float flow_row_spacing,
     const char* const* labels,
     size_t item_count,
     float scale,
@@ -29994,37 +29995,12 @@ static bool sandbox3d_details_flow_next_text_control_grid(
     size_t item_capacity,
     size_t* out_row_count)
 {
-    henka_ui_rect first_row;
-    henka_ui_rect grid_bounds;
-    size_t row_count = 0U;
-    size_t row_index;
-
-    if (out_row_count != NULL)
-    {
-        *out_row_count = 0U;
-    }
-    if (state == NULL || state->ui == NULL || labels == NULL ||
-        item_count == 0U || out_items == NULL || out_row_count == NULL ||
-        row_height <= 0.0f || row_gap < 0.0f ||
-        !sandbox3d_details_flow_next_row(
-            state,
-            viewport,
-            row_height + row_gap,
-            0U,
-            &first_row))
-    {
-        return false;
-    }
-
-    grid_bounds = (henka_ui_rect){
-        first_row.x,
-        first_row.y,
-        first_row.width,
-        viewport.y + viewport.height - first_row.y};
-    if (grid_bounds.height < row_height ||
-        sandbox3d_editor_layout_text_control_grid_for_context(
+    bool all_items_visible = false;
+    return state != NULL && state->ui != NULL &&
+        sandbox3d_editor_layout_flow_text_control_grid_for_context(
             state->ui,
-            grid_bounds,
+            viewport,
+            flow_row_spacing,
             labels,
             item_count,
             scale,
@@ -30035,32 +30011,9 @@ static bool sandbox3d_details_flow_next_text_control_grid(
             row_gap,
             out_items,
             item_capacity,
-            &row_count) != HENKA_SUCCESS ||
-        row_count == 0U)
-    {
-        return false;
-    }
-
-    for (row_index = 1U; row_index < row_count; ++row_index)
-    {
-        henka_ui_rect reserved_row;
-        const float expected_y = first_row.y +
-            (float)row_index * (row_height + row_gap);
-        if (!sandbox3d_details_flow_next_row(
-                state,
-                viewport,
-                row_height + row_gap,
-                0U,
-                &reserved_row) ||
-            fabsf(reserved_row.y - expected_y) > 0.5f ||
-            fabsf(reserved_row.x - first_row.x) > 0.5f)
-        {
-            return false;
-        }
-    }
-
-    *out_row_count = row_count;
-    return true;
+            out_row_count,
+            &all_items_visible) &&
+        all_items_visible;
 }
 
 static bool sandbox3d_details_flow_disclosure(
@@ -30814,6 +30767,7 @@ static void sandbox3d_draw_object_details_panel(
         sandbox3d_details_flow_next_text_control_grid(
             state,
             flow_desc.bounds,
+            flow_desc.row_spacing,
             face_priority_action_labels,
             3U,
             1.0f,
@@ -30981,6 +30935,7 @@ static void sandbox3d_draw_object_details_panel(
         sandbox3d_details_flow_next_text_control_grid(
             state,
             flow_desc.bounds,
+            flow_desc.row_spacing,
             face_edit_action_labels,
             4U,
             1.0f,
