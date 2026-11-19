@@ -144,6 +144,7 @@ Write-Output "[pass] Shared launch helper cannot reassert an earlier foreground 
 Write-Output "[pass] Foreground-restoration negative control is rejected."
 
 $automationWorkflowPaths = @(
+    "scripts\check_packaged_sandbox3d_windows.ps1",
     "scripts\author_showcase_assets_windows.ps1",
     "scripts\capture_compass_visual_evidence_windows.ps1",
     "scripts\capture_editor_owned_authoring_sources_windows.ps1")
@@ -152,6 +153,23 @@ foreach ($relativePath in $automationWorkflowPaths) {
         (Join-Path $RepositoryRoot $relativePath))
     Assert-HenkaAutomationWorkflowUsesBackgroundCapture -Source $workflowSource
 }
+$packagedCheckerSource = [System.IO.File]::ReadAllText(
+    (Join-Path $RepositoryRoot "scripts\check_packaged_sandbox3d_windows.ps1"))
+if ($packagedCheckerSource -notmatch '(?im)\$env:HENKA_AUTOMATION_START_HIDDEN\s*=\s*"1"' -or
+    $packagedCheckerSource -notmatch '(?im)HENKA_AUTOMATION_DIAGNOSTIC window_start_hidden=1') {
+    throw "The packaged checker must request and verify hidden startup for every automated Sandbox interaction."
+}
+$missingHiddenStartupRejected = $false
+try {
+    Assert-HenkaAutomationWorkflowUsesBackgroundCapture -Source '-StartOffscreenWithoutActivation'
+}
+catch {
+    $missingHiddenStartupRejected = $true
+}
+if (-not $missingHiddenStartupRejected) {
+    throw "The background-window policy negative control did not reject missing hidden startup."
+}
+Write-Output "[pass] Packaged Sandbox automation requires hidden startup; missing-hidden negative control rejected."
 $showcaseSource = [System.IO.File]::ReadAllText(
     (Join-Path $RepositoryRoot "scripts\author_showcase_assets_windows.ps1"))
 $compassSource = [System.IO.File]::ReadAllText(

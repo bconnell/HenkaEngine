@@ -2234,6 +2234,7 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
     $persistenceSourcePath = Join-Path $script:repoRoot "engine\src\core\persistence.c"
     $packageUserSnapshotBefore = @(Get-HenkaDirectorySnapshot -Path $packageUserRoot)
     $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
+    $previousAutomationStartHidden = $env:HENKA_AUTOMATION_START_HIDDEN
     $previousAutomationToolWindowsStartHidden = $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN
     $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
     $previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
@@ -2269,6 +2270,7 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
         [System.IO.Directory]::CreateDirectory($isolatedUserRoot) | Out-Null
         [System.IO.File]::WriteAllText($automationInputPath, "")
         $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
+        $env:HENKA_AUTOMATION_START_HIDDEN = "1"
         $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"
         $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
         $env:HENKA_AUTOMATION_DIAGNOSTICS = "1"
@@ -2281,6 +2283,10 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
             -Label $Label `
             -TimeoutMilliseconds $TimeoutMilliseconds `
             -Quiet:$Quiet
+
+        if ($capture.Stdout -notmatch "HENKA_AUTOMATION_DIAGNOSTIC window_start_hidden=1") {
+            throw "$Label did not confirm that its automated Sandbox window started hidden."
+        }
 
         if ($RequireIsolatedUserData -and
             $capture.Stdout -notmatch "HENKA_AUTOMATION_DIAGNOSTIC user_data_base_path=isolated") {
@@ -2304,6 +2310,12 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
         }
         else {
             $env:HENKA_AUTOMATION_INPUT_OWNED = $previousAutomationOwned
+        }
+        if ($null -eq $previousAutomationStartHidden) {
+            Remove-Item Env:HENKA_AUTOMATION_START_HIDDEN -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:HENKA_AUTOMATION_START_HIDDEN = $previousAutomationStartHidden
         }
         if ($null -eq $previousAutomationToolWindowsStartHidden) {
             Remove-Item Env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN -ErrorAction SilentlyContinue
@@ -2557,6 +2569,7 @@ $sandboxPanelsVisible = $false
 $packagedCheckSucceeded = $false
 $packageUserSnapshotBefore = @()
 $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
+$previousAutomationStartHidden = $env:HENKA_AUTOMATION_START_HIDDEN
 $previousAutomationToolWindowsStartHidden = $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN
 $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
 $previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
@@ -2588,6 +2601,7 @@ try {
     New-Item -ItemType Directory -Path $automationUserDataRoot -ErrorAction Stop | Out-Null
     New-Item -ItemType File -Path $automationInputPath -Force | Out-Null
     $env:HENKA_AUTOMATION_INPUT_OWNED = "1"
+    $env:HENKA_AUTOMATION_START_HIDDEN = "1"
     $env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN = "1"
     $env:HENKA_AUTOMATION_INPUT_FILE = $automationInputPath
     $env:HENKA_AUTOMATION_DIAGNOSTICS = "1"
@@ -2623,6 +2637,12 @@ try {
             -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC user_data_base_path=isolated' `
             -TimeoutMilliseconds 10000)) {
         throw "The packaged Sandbox did not confirm automation-owned isolated user data before the workflow began."
+    }
+    if (-not (Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC window_start_hidden=1' `
+            -TimeoutMilliseconds 10000)) {
+        throw "The packaged Sandbox did not confirm hidden startup before the workflow began."
     }
 
     for ($index = 0; $index -lt 80 -and $mainWindowHandle -eq [System.IntPtr]::Zero; $index++) {
@@ -7203,6 +7223,12 @@ finally {
     }
     else {
         $env:HENKA_AUTOMATION_INPUT_OWNED = $previousAutomationOwned
+    }
+    if ($null -eq $previousAutomationStartHidden) {
+        Remove-Item Env:HENKA_AUTOMATION_START_HIDDEN -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:HENKA_AUTOMATION_START_HIDDEN = $previousAutomationStartHidden
     }
     if ($null -eq $previousAutomationToolWindowsStartHidden) {
         Remove-Item Env:HENKA_AUTOMATION_TOOL_WINDOWS_START_HIDDEN -ErrorAction SilentlyContinue
