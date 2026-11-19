@@ -91,7 +91,8 @@ function New-CMakeFetchContentCleanupCandidate {
         [Parameter(Mandatory = $true)] [string]$PinnedRevision,
         [switch]$DirtyDependency,
         [switch]$MismatchedDependency,
-        [switch]$UnexpectedGitPath
+        [switch]$UnexpectedGitPath,
+        [switch]$WrongOrigin
     )
 
     $candidate = Join-Path $testRoot $Name
@@ -110,8 +111,41 @@ function New-CMakeFetchContentCleanupCandidate {
         throw "Could not identify the Henka CMake source fixture commit."
     }
 
+    $fetchContentPins = Get-HenkaCMakeFetchContentPins -PinSourceRoot $sourceRoot
+    if (-not $fetchContentPins.ContainsKey("ENET")) {
+        throw "The Henka CMake source fixture has no ENet FetchContent declaration."
+    }
+    $fetchContentPin = $fetchContentPins["ENET"]
+    if (-not $fetchContentPin.Immutable -or
+        -not [string]::Equals([string]$fetchContentPin.Commit, $PinnedRevision, [System.StringComparison]::OrdinalIgnoreCase) -or
+        [string]::IsNullOrWhiteSpace([string]$fetchContentPin.Repository)) {
+        throw "The ENet test fixture does not match Henka's immutable FetchContent declaration."
+    }
+    $sharedSourceValidation = Test-HenkaPinnedFetchContentSource `
+        -RepositoryRoot $repoRoot `
+        -SourceRoot $sharedDependency `
+        -Marker "CMakeLists.txt" `
+        -PinnedCommit ([string]$fetchContentPin.Commit) `
+        -PinnedRepository ([string]$fetchContentPin.Repository)
+    if (-not $sharedSourceValidation.Available) {
+        throw "The shared ENet source is not an exact clean mirror of Henka's pin: $($sharedSourceValidation.RejectionReason)"
+    }
+
     & $gitPath clone --quiet --local --no-hardlinks $sharedDependency $dependencyClone
     if ($LASTEXITCODE -ne 0) { throw "Could not clone the shared pinned ENet dependency into the generated CMake fixture." }
+    $fixtureOrigin = [string]$fetchContentPin.Repository
+    if ($WrongOrigin.IsPresent) {
+        $fixtureOrigin = $sharedDependency
+    }
+    & $gitPath -C $dependencyClone remote set-url origin $fixtureOrigin
+    if ($LASTEXITCODE -ne 0) { throw "Could not set the generated ENet fixture's origin metadata." }
+    $actualFixtureOrigin = ([string](& $gitPath -C $dependencyClone remote get-url origin)).Trim()
+    if ($LASTEXITCODE -ne 0 -or
+        -not $actualFixtureOrigin.TrimEnd("/").Equals(
+            $fixtureOrigin.TrimEnd("/"),
+            [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "The generated ENet fixture origin does not match its requested test value."
+    }
     if ($DirtyDependency.IsPresent) {
         Add-Content -LiteralPath (Join-Path $dependencyClone "CMakeLists.txt") -Value "`n# lifecycle dirty-source negative control"
     }
@@ -197,6 +231,12 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $localRoot "dependencies\enet-src") -PathType Container)) {
         throw "CMake build cleanup removed or damaged the shared dependency source."
     }
+
+    $wrongOriginFetchContent = New-CMakeFetchContentCleanupCandidate -Name "cmfc-wrong-origin" `
+        -PinnedRevision $enetPin -WrongOrigin
+    Assert-ManagerFailure -Arguments @(
+        "-Mode", "Cleanup", "-ConfirmNoActiveProcess", "-CandidatePath", $wrongOriginFetchContent.Candidate
+    ) -ExpectedText "origin does not match its pinned source declaration"
 
     $dirtyFetchContent = New-CMakeFetchContentCleanupCandidate -Name "cmfc-dirty" -PinnedRevision $enetPin -DirtyDependency
     Assert-ManagerFailure -Arguments @(
