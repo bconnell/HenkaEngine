@@ -52,7 +52,7 @@ static size_t sandbox3d_script_editor_model_max(
     return first > second ? first : second;
 }
 
-static bool sandbox3d_script_editor_model_line_bounds(
+bool sandbox3d_script_editor_model_get_line_span(
     const char* source,
     size_t source_size,
     size_t line_index,
@@ -80,8 +80,14 @@ static bool sandbox3d_script_editor_model_line_bounds(
         {
             if (current_line == line_index)
             {
+                size_t visible_end = index;
+                if (index < source_size && index > line_start &&
+                    source[index - 1U] == '\r')
+                {
+                    --visible_end;
+                }
                 *out_start = line_start;
-                *out_length = index - line_start;
+                *out_length = visible_end - line_start;
                 return true;
             }
             ++current_line;
@@ -120,8 +126,16 @@ static bool sandbox3d_script_editor_model_offset_location(
         {
             if (offset <= index)
             {
+                size_t visible_end = index;
+                size_t visible_offset;
+                if (index < source_size && index > line_start &&
+                    source[index - 1U] == '\r')
+                {
+                    --visible_end;
+                }
                 *out_line_index = current_line;
-                *out_column = offset - line_start;
+                visible_offset = offset < visible_end ? offset : visible_end;
+                *out_column = visible_offset - line_start;
                 return true;
             }
             ++current_line;
@@ -335,7 +349,7 @@ henka_result sandbox3d_script_editor_model_set_caret_position(
     if (model == NULL ||
         henka_script_source_get_text(
             model->document, &source, &source_size) != HENKA_SUCCESS ||
-        !sandbox3d_script_editor_model_line_bounds(
+        !sandbox3d_script_editor_model_get_line_span(
             source,
             source_size,
             line_index,
@@ -408,7 +422,7 @@ henka_result sandbox3d_script_editor_model_move_vertical(
             model->caret_offset,
             &line_index,
             &column) ||
-        !sandbox3d_script_editor_model_line_bounds(
+        !sandbox3d_script_editor_model_get_line_span(
             source,
             source_size,
             line_index,
@@ -425,7 +439,7 @@ henka_result sandbox3d_script_editor_model_move_vertical(
         model->has_vertical_column = true;
     }
     if ((direction < 0 && line_index == 0U) ||
-        (direction > 0 && !sandbox3d_script_editor_model_line_bounds(
+        (direction > 0 && !sandbox3d_script_editor_model_get_line_span(
             source,
             source_size,
             line_index + 1U,
@@ -439,7 +453,7 @@ henka_result sandbox3d_script_editor_model_move_vertical(
         return HENKA_SUCCESS;
     }
     target_line = direction < 0 ? line_index - 1U : line_index + 1U;
-    if (!sandbox3d_script_editor_model_line_bounds(
+    if (!sandbox3d_script_editor_model_get_line_span(
             source,
             source_size,
             target_line,

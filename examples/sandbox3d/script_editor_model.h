@@ -31,6 +31,16 @@ henka_result sandbox3d_script_editor_model_get_source(
 henka_script_language sandbox3d_script_editor_model_get_language(
     const sandbox3d_script_editor_model* model);
 
+/* Returns an original UTF-8 source byte offset and the visible byte length
+ * for a line. A CR immediately before LF remains in source but is excluded
+ * from the visible span used by layout and drawing. */
+bool sandbox3d_script_editor_model_get_line_span(
+    const char* source,
+    size_t source_size,
+    size_t line_index,
+    size_t* out_start,
+    size_t* out_length);
+
 /* Selection and caret offsets are UTF-8 source byte offsets. Untouched source
  * bytes, including indentation and line endings, remain byte-for-byte intact. */
 henka_result sandbox3d_script_editor_model_set_selection(

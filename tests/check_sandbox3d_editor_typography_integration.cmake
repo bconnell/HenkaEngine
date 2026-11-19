@@ -24,6 +24,11 @@ if(DEFINED SCRIPT_EDITOR_SOURCE)
 else()
     file(READ "${SANDBOX3D_SOURCE_DIR}/script_editor.c" script_editor_source)
 endif()
+if(DEFINED SCRIPT_EDITOR_MODEL_SOURCE)
+    file(READ "${SCRIPT_EDITOR_MODEL_SOURCE}" script_editor_model_source)
+else()
+    file(READ "${SANDBOX3D_SOURCE_DIR}/script_editor_model.c" script_editor_model_source)
+endif()
 file(READ "${SANDBOX3D_SOURCE_DIR}/../../engine/src/platform/platform_sdl.c" platform_source)
 file(READ "${SANDBOX3D_SOURCE_DIR}/../../engine/src/core/engine.c" engine_source)
 file(READ "${SANDBOX3D_SOURCE_DIR}/../../scripts/package_sandbox3d_windows.ps1" package_source)
@@ -76,6 +81,26 @@ else()
     if(caret_layout_call LESS 0 OR NOT rounded_caret_measure LESS 0)
         list(APPEND violations "script caret placement must use the exact byte-offset font position shared with token drawing and hit testing")
     endif()
+endif()
+string(FIND "${script_editor_source}"
+    "static bool sandbox3d_script_editor_get_line(" script_line_span_start)
+string(FIND "${script_editor_source}"
+    "static void sandbox3d_script_editor_copy_line(" script_line_span_end)
+if(script_line_span_start LESS 0 OR script_line_span_end LESS script_line_span_start)
+    list(APPEND violations "script editor line-span ownership must have an identifiable adapter")
+else()
+    math(EXPR script_line_span_length
+        "${script_line_span_end} - ${script_line_span_start}")
+    string(SUBSTRING "${script_editor_source}" ${script_line_span_start}
+        ${script_line_span_length} script_line_span_adapter)
+    if(NOT script_line_span_adapter MATCHES
+        "sandbox3d_script_editor_model_get_line_span\\(")
+        list(APPEND violations "script editor drawing, hit testing, and caret mapping must share the model line-span authority")
+    endif()
+endif()
+if(NOT script_editor_model_source MATCHES
+    "bool sandbox3d_script_editor_model_get_line_span\\(")
+    list(APPEND violations "the canonical script model must own a reusable source-byte line-span query")
 endif()
 if(NOT runtime_source MATCHES "return[ \t\r\n]+runtime->last_failed_display_scale_result;")
     list(APPEND violations "display-scale retry cooldown must continue returning the prior resource failure until replacement succeeds")
@@ -704,9 +729,81 @@ else()
         "window_state.close_requested" typography_detached_panel_close_condition_position)
     string(FIND "${typography_detached_panel_ui_body}"
         "panel->last_docked_zone" typography_detached_panel_restore_zone_position)
+    string(FIND "${typography_detached_panel_ui_body}"
+        "sandbox3d_editor_layout_content_size_for_app_scale("
+        typography_detached_panel_scale_conversion_position)
+    string(FIND "${typography_detached_panel_ui_body}"
+        "&layout_content_width" typography_detached_panel_layout_width_position)
+    string(FIND "${typography_detached_panel_ui_body}"
+        "&layout_content_height" typography_detached_panel_layout_height_position)
+    string(FIND "${typography_detached_panel_ui_body}"
+        "layout_content_width," typography_detached_panel_draw_width_position)
+    string(FIND "${typography_detached_panel_ui_body}"
+        "layout_content_height);" typography_detached_panel_draw_height_position)
     if(typography_detached_panel_close_condition_position LESS 0 OR
        typography_detached_panel_restore_zone_position LESS 0)
         list(APPEND violations "an OS-closed detached workspace panel must release its typography context and return to its canonical prior dock")
+    endif()
+    if(typography_detached_panel_scale_conversion_position LESS 0 OR
+       typography_detached_panel_layout_width_position LESS 0 OR
+       typography_detached_panel_layout_height_position LESS 0 OR
+       typography_detached_panel_draw_width_position LESS 0 OR
+       typography_detached_panel_draw_height_position LESS 0)
+        list(APPEND violations "detached panel layout must convert window dimensions through the global Editor UI Scale before drawing")
+    endif()
+    string(FIND "${typography_detached_panel_ui_body}"
+        "sandbox3d_close_detached_workspace_panel("
+        typography_detached_panel_redock_helper_position)
+    string(FIND "${typography_detached_panel_ui_body}"
+        "panel->dock);" typography_detached_panel_redock_dock_position)
+    if(typography_detached_panel_redock_helper_position LESS 0 OR
+       typography_detached_panel_redock_dock_position LESS 0)
+        list(APPEND violations "redocking a detached panel must retire its typography context through the canonical close helper and preserve the chosen dock")
+    endif()
+endif()
+
+string(FIND "${main_source}"
+    "camera_mouse_delta = henka_input_get_mouse_delta(engine)"
+    typography_camera_raw_delta_position)
+string(FIND "${main_source}"
+    "-camera_mouse_delta.x * sandbox3d_get_mouse_sensitivity(state)"
+    typography_camera_look_delta_position)
+string(FIND "${main_source}"
+    "-camera_mouse_delta.y * sandbox3d_get_mouse_sensitivity(state)"
+    typography_camera_look_vertical_delta_position)
+string(FIND "${main_source}"
+    "-camera_mouse_delta.x * pan_scale" typography_camera_pan_delta_position)
+string(FIND "${main_source}"
+    "camera_mouse_delta.y * pan_scale" typography_camera_pan_vertical_delta_position)
+if(typography_camera_raw_delta_position LESS 0 OR
+   typography_camera_look_delta_position LESS 0 OR
+   typography_camera_look_vertical_delta_position LESS 0 OR
+   typography_camera_pan_delta_position LESS 0 OR
+   typography_camera_pan_vertical_delta_position LESS 0)
+    list(APPEND violations "camera navigation must use the OS-window mouse delta independently of Editor UI Scale")
+endif()
+
+string(REGEX MATCHALL "sandbox3d_details_flow_next_text_control_grid\\("
+    typography_details_grid_calls "${main_source}")
+list(LENGTH typography_details_grid_calls typography_details_grid_call_count)
+string(FIND "${main_source}"
+    "face_priority_action_labels," typography_face_priority_labels_position)
+string(FIND "${main_source}"
+    "face_edit_action_labels," typography_face_edit_labels_position)
+if(typography_details_grid_call_count LESS 3 OR
+   typography_face_priority_labels_position LESS 0 OR
+   typography_face_edit_labels_position LESS 0 OR
+   NOT main_source MATCHES "face_edit_action_controls\\[0\\]" OR
+   NOT main_source MATCHES "face_edit_action_controls\\[1\\]" OR
+   NOT main_source MATCHES "face_edit_action_controls\\[2\\]" OR
+   NOT main_source MATCHES "face_edit_action_controls\\[3\\]")
+    list(APPEND violations "primary face actions must use the shared measured multi-row grid without dropping narrow-layout controls")
+endif()
+if(typography_face_edit_labels_position GREATER_EQUAL 0)
+    string(SUBSTRING "${main_source}" ${typography_face_edit_labels_position}
+        650 typography_face_edit_source)
+    if(typography_face_edit_source MATCHES "row\\.width >= 290\\.0f")
+        list(APPEND violations "primary face actions must not disappear behind a fixed wide-row width threshold")
     endif()
 endif()
 

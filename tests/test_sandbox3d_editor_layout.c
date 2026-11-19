@@ -943,6 +943,79 @@ void henka_test_sandbox3d_editor_layout(void)
         }
 
         {
+            const char* face_priority_labels[] = {
+                "Bevel", "Delete Faces", "Flip"};
+            const char* face_edit_labels[] = {
+                "Preview Extrude", "Inset", "N +", "N -"};
+            const henka_ui_rect bounds = {
+                48.0f, 36.0f, 230.0f, 88.0f};
+            henka_ui_rect face_action_controls[4] = {{0}};
+            size_t face_action_row_count = 0U;
+            size_t face_action_item_index;
+            size_t face_action_prior_index;
+            size_t face_action_label_set;
+            const char* const* label_sets[] = {
+                face_priority_labels,
+                face_edit_labels};
+            const size_t label_counts[] = {3U, 4U};
+
+            /* The 200% logical panel is narrower than the fixed one-row
+             * action groups.  Use measured wrapping so every control remains
+             * inside the same production row authority instead of omitting
+             * the group or placing its last hit target past the panel edge. */
+            for (face_action_label_set = 0U;
+                 face_action_label_set < 2U;
+                 ++face_action_label_set)
+            {
+                memset(face_action_controls, 0, sizeof(face_action_controls));
+                face_action_row_count = 0U;
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_text_control_grid_for_context(
+                        ui_context,
+                        bounds,
+                        label_sets[face_action_label_set],
+                        label_counts[face_action_label_set],
+                        2.0f,
+                        88.0f,
+                        12.0f,
+                        8.0f,
+                        24.0f,
+                        4.0f,
+                        face_action_controls,
+                        sizeof(face_action_controls) /
+                            sizeof(face_action_controls[0]),
+                        &face_action_row_count) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(face_action_row_count > 1U);
+                for (face_action_item_index = 0U;
+                     face_action_item_index <
+                         label_counts[face_action_label_set];
+                     ++face_action_item_index)
+                {
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        bounds, face_action_controls[face_action_item_index]));
+                    HENKA_TEST_ASSERT(
+                        face_action_controls[face_action_item_index].width >=
+                        88.0f);
+                    if (face_action_item_index > 0U)
+                    {
+                        HENKA_TEST_ASSERT(
+                            face_action_controls[face_action_item_index].y >=
+                            face_action_controls[
+                                face_action_item_index - 1U].y);
+                    }
+                    for (face_action_prior_index = 0U;
+                         face_action_prior_index < face_action_item_index;
+                         ++face_action_prior_index)
+                    {
+                        HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                            face_action_controls[face_action_prior_index],
+                            face_action_controls[face_action_item_index]));
+                    }
+                }
+            }
+        }
+
+        {
             henka_ui_rect narrow_tabs[
                 SANDBOX3D_EDITOR_UTILITY_TAB_COUNT] = {{0}};
             henka_ui_rect wide_tabs[

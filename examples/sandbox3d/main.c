@@ -16298,6 +16298,9 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
         henka_tool_window_state window_state = {0};
         henka_ui_context* ui;
         henka_ui_frame_desc frame_desc = {0};
+        int layout_content_width;
+        int layout_content_height;
+        uint16_t app_scale_percent;
         sandbox3d_workspace_panel_id panel_id;
         const sandbox3d_workspace_panel* panel;
         sandbox3d_workspace_dock_zone restore_dock_zone;
@@ -16363,6 +16366,17 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
             (void)henka_settings_set_int(state->settings, key, window_state.position_y);
         }
 
+        app_scale_percent = sandbox3d_get_editor_ui_scale_percent(state);
+        if (sandbox3d_editor_layout_content_size_for_app_scale(
+                window_state.logical_width,
+                window_state.logical_height,
+                app_scale_percent,
+                &layout_content_width,
+                &layout_content_height) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+
         if (henka_ui_begin_frame(ui, &frame_desc) != HENKA_SUCCESS)
         {
             continue;
@@ -16373,8 +16387,8 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
             state,
             panel_id,
             &window_state,
-            window_state.logical_width,
-            window_state.logical_height);
+            layout_content_width,
+            layout_content_height);
 
         henka_ui_end_frame(ui);
 
@@ -16383,8 +16397,11 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
             panel->dock != SANDBOX3D_WORKSPACE_DOCK_DETACHED &&
             state->detached_panel_window_ids[panel_index] != HENKA_INVALID_WINDOW_ID)
         {
-            (void)henka_engine_close_tool_window(engine, state->detached_panel_window_ids[panel_index]);
-            state->detached_panel_window_ids[panel_index] = HENKA_INVALID_WINDOW_ID;
+            sandbox3d_close_detached_workspace_panel(
+                engine,
+                state,
+                panel_id,
+                panel->dock);
         }
     }
 }
@@ -29960,6 +29977,92 @@ static bool sandbox3d_details_flow_next_row(
             *out_bounds);
 }
 
+/* Place a measured control grid in the Details flow and reserve every row
+ * through the same flow authority so later controls cannot overlap it. */
+static bool sandbox3d_details_flow_next_text_control_grid(
+    sandbox3d_state* state,
+    henka_ui_rect viewport,
+    const char* const* labels,
+    size_t item_count,
+    float scale,
+    float minimum_item_width,
+    float horizontal_padding,
+    float horizontal_gap,
+    float row_height,
+    float row_gap,
+    henka_ui_rect* out_items,
+    size_t item_capacity,
+    size_t* out_row_count)
+{
+    henka_ui_rect first_row;
+    henka_ui_rect grid_bounds;
+    size_t row_count = 0U;
+    size_t row_index;
+
+    if (out_row_count != NULL)
+    {
+        *out_row_count = 0U;
+    }
+    if (state == NULL || state->ui == NULL || labels == NULL ||
+        item_count == 0U || out_items == NULL || out_row_count == NULL ||
+        row_height <= 0.0f || row_gap < 0.0f ||
+        !sandbox3d_details_flow_next_row(
+            state,
+            viewport,
+            row_height + row_gap,
+            0U,
+            &first_row))
+    {
+        return false;
+    }
+
+    grid_bounds = (henka_ui_rect){
+        first_row.x,
+        first_row.y,
+        first_row.width,
+        viewport.y + viewport.height - first_row.y};
+    if (grid_bounds.height < row_height ||
+        sandbox3d_editor_layout_text_control_grid_for_context(
+            state->ui,
+            grid_bounds,
+            labels,
+            item_count,
+            scale,
+            minimum_item_width,
+            horizontal_padding,
+            horizontal_gap,
+            row_height,
+            row_gap,
+            out_items,
+            item_capacity,
+            &row_count) != HENKA_SUCCESS ||
+        row_count == 0U)
+    {
+        return false;
+    }
+
+    for (row_index = 1U; row_index < row_count; ++row_index)
+    {
+        henka_ui_rect reserved_row;
+        const float expected_y = first_row.y +
+            (float)row_index * (row_height + row_gap);
+        if (!sandbox3d_details_flow_next_row(
+                state,
+                viewport,
+                row_height + row_gap,
+                0U,
+                &reserved_row) ||
+            fabsf(reserved_row.y - expected_y) > 0.5f ||
+            fabsf(reserved_row.x - first_row.x) > 0.5f)
+        {
+            return false;
+        }
+    }
+
+    *out_row_count = row_count;
+    return true;
+}
+
 static bool sandbox3d_details_flow_disclosure(
     sandbox3d_state* state,
     henka_ui_rect viewport,
@@ -30698,8 +30801,8 @@ static void sandbox3d_draw_object_details_panel(
 
     const char* const face_priority_action_labels[] = {
         "Bevel", "Delete Faces", "Flip"};
-    henka_ui_rect face_priority_action_controls[3];
-    size_t face_priority_action_count = 0U;
+    henka_ui_rect face_priority_action_controls[3] = {{0}};
+    size_t face_priority_action_row_count = 0U;
 
     /* Face bevel is a primary authoring action. Keep its hit target in the
      * stable upper details region so a selected face never strands the only
@@ -30708,36 +30811,34 @@ static void sandbox3d_draw_object_details_panel(
         entity == sandbox3d_authoring_object_get_entity(state->authoring_object) &&
         sandbox3d_authoring_object_get_selection_mode(state->authoring_object) ==
             SANDBOX3D_AUTHORING_SELECTION_FACE &&
-        sandbox3d_details_flow_next_row(
+        sandbox3d_details_flow_next_text_control_grid(
             state,
             flow_desc.bounds,
-            28.0f,
-            0U,
-            &row) &&
-        sandbox3d_editor_layout_text_control_row_for_context(
-            state->ui,
-            (henka_ui_rect){row.x, row.y, row.width, 24.0f},
             face_priority_action_labels,
             3U,
             1.0f,
             88.0f,
             12.0f,
             8.0f,
+            24.0f,
+            4.0f,
             face_priority_action_controls,
             3U,
-            &face_priority_action_count) == HENKA_SUCCESS &&
-        face_priority_action_count == 3U)
+            &face_priority_action_row_count))
     {
         bevel_controls_prioritized = true;
         if (!state->native_authoring_bevel_reported ||
-            fabsf(row.y - state->native_authoring_bevel_reported_y) > 0.5f ||
-            fabsf(row.width - state->native_authoring_bevel_reported_row_width) > 0.5f)
+            fabsf(face_priority_action_controls[0].y -
+                state->native_authoring_bevel_reported_y) > 0.5f ||
+            fabsf(face_priority_action_controls[0].width -
+                state->native_authoring_bevel_reported_row_width) > 0.5f)
         {
             printf(
-                "Native authoring bevel control: name=%s x=%.1f y=%.1f width=88.0 height=24.0.\n",
+                "Native authoring bevel control: name=%s x=%.1f y=%.1f width=%.1f height=24.0.\n",
                 display_name,
-                row.x,
-                row.y);
+                face_priority_action_controls[0].x,
+                face_priority_action_controls[0].y,
+                face_priority_action_controls[0].width);
             fflush(stdout);
             printf(
                 "Native authoring priority face delete control: name=%s x=%.1f y=%.1f width=%.1f height=24.0.\n",
@@ -30753,8 +30854,10 @@ static void sandbox3d_draw_object_details_panel(
                 face_priority_action_controls[2].width);
             fflush(stdout);
             state->native_authoring_bevel_reported = true;
-            state->native_authoring_bevel_reported_y = row.y;
-            state->native_authoring_bevel_reported_row_width = row.width;
+            state->native_authoring_bevel_reported_y =
+                face_priority_action_controls[0].y;
+            state->native_authoring_bevel_reported_row_width =
+                face_priority_action_controls[0].width;
         }
         if (henka_ui_button(
                 state->ui,
@@ -30863,49 +30966,69 @@ static void sandbox3d_draw_object_details_panel(
         }
     }
 
-    /* Face editing is a primary modeling workflow. Keep the operations in a
-     * stable upper row so a selection-dependent detail flow cannot push the
-     * only real Extrude/Inset controls below the visible details viewport. */
+    const char* const face_edit_action_labels[] = {
+        "Preview Extrude", "Inset", "N +", "N -"};
+    henka_ui_rect face_edit_action_controls[4] = {{0}};
+    size_t face_edit_action_row_count = 0U;
+
+    /* Keep the primary face operations in the stable upper Details flow,
+     * wrapping measured hit targets instead of dropping the group at narrow
+     * or scaled panel widths. */
     if (state->authoring_object != NULL &&
         entity == sandbox3d_authoring_object_get_entity(state->authoring_object) &&
         sandbox3d_authoring_object_get_selection_mode(state->authoring_object) ==
             SANDBOX3D_AUTHORING_SELECTION_FACE &&
-        sandbox3d_details_flow_next_row(
+        sandbox3d_details_flow_next_text_control_grid(
             state,
             flow_desc.bounds,
-            28.0f,
-            0U,
-            &row) &&
-        row.width >= 290.0f)
+            face_edit_action_labels,
+            4U,
+            1.0f,
+            88.0f,
+            12.0f,
+            8.0f,
+            24.0f,
+            4.0f,
+            face_edit_action_controls,
+            4U,
+            &face_edit_action_row_count))
     {
         if (!state->native_authoring_face_edit_tools_reported ||
-            fabsf(row.y - state->native_authoring_face_edit_tools_reported_y) > 0.5f)
+            fabsf(face_edit_action_controls[0].y -
+                state->native_authoring_face_edit_tools_reported_y) > 0.5f)
         {
             printf(
-                "Native authoring face edit tools: name=%s extrude_x=%.1f inset_x=%.1f y=%.1f width=82.0 height=24.0.\n",
+                "Native authoring face edit tools: name=%s extrude_x=%.1f inset_x=%.1f y=%.1f width=%.1f height=24.0 rows=%zu row_x=%.1f row_width=%.1f inset_width=%.1f.\n",
                 display_name,
-                row.x,
-                row.x + 88.0f,
-                row.y);
+                face_edit_action_controls[0].x,
+                face_edit_action_controls[1].x,
+                face_edit_action_controls[0].y,
+                face_edit_action_controls[0].width,
+                face_edit_action_row_count,
+                face_edit_action_controls[0].x,
+                flow_desc.bounds.width,
+                face_edit_action_controls[1].width);
             fflush(stdout);
             state->native_authoring_face_edit_tools_reported = true;
-            state->native_authoring_face_edit_tools_reported_y = row.y;
+            state->native_authoring_face_edit_tools_reported_y =
+                face_edit_action_controls[0].y;
         }
         if (!state->native_authoring_face_normal_controls_reported)
         {
             printf(
-                "Native authoring face normal controls: name=%s positive_x=%.1f negative_x=%.1f y=%.1f width=82.0 height=24.0.\n",
+                "Native authoring face normal controls: name=%s positive_x=%.1f negative_x=%.1f y=%.1f width=%.1f height=24.0.\n",
                 display_name,
-                row.x + 176.0f,
-                row.x + 264.0f,
-                row.y);
+                face_edit_action_controls[2].x,
+                face_edit_action_controls[3].x,
+                face_edit_action_controls[2].y,
+                face_edit_action_controls[2].width);
             fflush(stdout);
             state->native_authoring_face_normal_controls_reported = true;
         }
         if (henka_ui_button(
                 state->ui,
                 "authoring_priority_face_extrude_stable",
-                (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
+                face_edit_action_controls[0],
                 "Preview Extrude"))
         {
             const henka_result extrude_result =
@@ -30938,7 +31061,7 @@ static void sandbox3d_draw_object_details_panel(
         if (henka_ui_button(
                 state->ui,
                 "authoring_priority_face_inset_stable",
-                (henka_ui_rect){row.x + 88.0f, row.y, 82.0f, 24.0f},
+                face_edit_action_controls[1],
                 "Inset"))
         {
             const henka_result inset_result =
@@ -30968,7 +31091,7 @@ static void sandbox3d_draw_object_details_panel(
         if (henka_ui_button(
                 state->ui,
                 "authoring_priority_face_normal_positive_stable",
-                (henka_ui_rect){row.x + 176.0f, row.y, 82.0f, 24.0f},
+                face_edit_action_controls[2],
                 "N +"))
         {
             const henka_result normal_result =
@@ -30997,7 +31120,7 @@ static void sandbox3d_draw_object_details_panel(
         if (henka_ui_button(
                 state->ui,
                 "authoring_priority_face_normal_negative_stable",
-                (henka_ui_rect){row.x + 264.0f, row.y, 82.0f, 24.0f},
+                face_edit_action_controls[3],
                 "N -"))
         {
             const henka_result normal_result =
@@ -45344,6 +45467,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 {
     henka_vec2 mouse_position;
     henka_vec2 mouse_delta;
+    henka_vec2 camera_mouse_delta;
     henka_vec2 mouse_wheel_delta;
     bool navigation_active;
     bool modeling_input_active;
@@ -46284,6 +46408,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     }
 
     mouse_position = (henka_vec2){0.0f, 0.0f};
+    mouse_delta = (henka_vec2){0.0f, 0.0f};
+    camera_mouse_delta = (henka_vec2){0.0f, 0.0f};
     if (!sandbox3d_try_get_mouse_content_position(
             engine, state->ui, &mouse_position) ||
         !sandbox3d_try_get_mouse_content_delta(
@@ -46293,6 +46419,10 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         mouse_delta = (henka_vec2){0.0f, 0.0f};
         scene_viewport_ready = false;
         workspace_input_active = true;
+    }
+    else
+    {
+        camera_mouse_delta = henka_input_get_mouse_delta(engine);
     }
     mouse_wheel_delta = henka_input_get_mouse_wheel_delta(engine);
     if (scene_viewport_ready &&
@@ -46346,8 +46476,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     {
         henka_camera_apply_mouse_look(
             &state->camera,
-            -mouse_delta.x * sandbox3d_get_mouse_sensitivity(state),
-            -mouse_delta.y * sandbox3d_get_mouse_sensitivity(state));
+            -camera_mouse_delta.x * sandbox3d_get_mouse_sensitivity(state),
+            -camera_mouse_delta.y * sandbox3d_get_mouse_sensitivity(state));
     }
     if (henka_engine_is_mouse_captured(engine) &&
         henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT) &&
@@ -46689,8 +46819,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             henka_camera_orbit_target(
                 &state->camera,
                 target,
-                -mouse_delta.x * sandbox3d_get_mouse_sensitivity(state),
-                -mouse_delta.y * sandbox3d_get_mouse_sensitivity(state));
+                -camera_mouse_delta.x * sandbox3d_get_mouse_sensitivity(state),
+                -camera_mouse_delta.y * sandbox3d_get_mouse_sensitivity(state));
             sandbox3d_set_view_navigation_target(state, target);
             navigation_active = true;
             sandbox3d_record_success_result(state, "Orbit updated");
@@ -46702,7 +46832,11 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             const float distance = henka_vec3_length(henka_vec3_subtract(target, state->camera.position));
             const float pan_scale = fmaxf(0.0035f, distance * 0.0016f);
 
-            henka_camera_pan_target(&state->camera, &target, -mouse_delta.x * pan_scale, mouse_delta.y * pan_scale);
+            henka_camera_pan_target(
+                &state->camera,
+                &target,
+                -camera_mouse_delta.x * pan_scale,
+                camera_mouse_delta.y * pan_scale);
             sandbox3d_set_view_navigation_target(state, target);
             navigation_active = true;
             sandbox3d_record_success_result(state, "Pan updated");

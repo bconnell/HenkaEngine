@@ -32,6 +32,32 @@ if(EXISTS "${probe_dir}")
 endif()
 file(MAKE_DIRECTORY "${probe_dir}")
 
+function(assert_main_source_mutation_rejected label needle replacement expected_message)
+    string(REPLACE "${needle}" "${replacement}" mutated_main_source "${main_source}")
+    if(mutated_main_source STREQUAL main_source)
+        file(REMOVE_RECURSE "${probe_dir}")
+        message(FATAL_ERROR "Could not construct the ${label} negative control")
+    endif()
+    set(candidate_path "${probe_dir}/${label}.c")
+    file(WRITE "${candidate_path}" "${mutated_main_source}")
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+            "-DSANDBOX3D_MAIN_SOURCE=${candidate_path}"
+            -P "${TYPOGRAPHY_CHECKER}"
+        RESULT_VARIABLE mutation_result
+        OUTPUT_VARIABLE mutation_stdout
+        ERROR_VARIABLE mutation_stderr)
+    set(mutation_output "${mutation_stdout}\n${mutation_stderr}")
+    if("${mutation_result}" STREQUAL "0" OR
+       NOT mutation_output MATCHES "${expected_message}")
+        file(REMOVE_RECURSE "${probe_dir}")
+        message(FATAL_ERROR
+            "The ${label} negative control did not fail at its owning contract.\n"
+            "result=${mutation_result}\noutput:\n${mutation_output}")
+    endif()
+endfunction()
+
 file(READ "${SANDBOX3D_SOURCE_DIR}/script_editor.c" script_editor_source)
 string(REPLACE
     "henka_ui_measure_text_byte_offsets_x_for_context("
@@ -390,6 +416,58 @@ if(NOT detached_context_negative_output MATCHES "packaged typography must prove 
     message(FATAL_ERROR
         "Typography detached-context negative control failed for an unexpected reason.\n"
         "result=${detached_context_negative_result}\noutput:\n${detached_context_negative_output}")
+endif()
+
+assert_main_source_mutation_rejected(
+    "detached-scale"
+    "sandbox3d_editor_layout_content_size_for_app_scale("
+    "sandbox3d_editor_layout_content_size_without_app_scale("
+    "detached panel layout must convert window dimensions through the global Editor UI Scale before drawing")
+assert_main_source_mutation_rejected(
+    "detached-redock"
+    "panel->dock);"
+    "panel->last_docked_zone);"
+    "redocking a detached panel must retire its typography context through the canonical close helper and preserve the chosen dock")
+assert_main_source_mutation_rejected(
+    "camera-scale"
+    "camera_mouse_delta = henka_input_get_mouse_delta(engine)"
+    "mouse_delta = henka_input_get_mouse_delta(engine)"
+    "camera navigation must use the OS-window mouse delta independently of Editor UI Scale")
+assert_main_source_mutation_rejected(
+    "face-action-grid"
+    "sandbox3d_details_flow_next_text_control_grid("
+    "sandbox3d_details_flow_next_row("
+    "primary face actions must use the shared measured multi-row grid without dropping narrow-layout controls")
+
+file(READ "${SANDBOX3D_SOURCE_DIR}/script_editor.c" script_editor_source_for_line_control)
+string(REPLACE
+    "sandbox3d_script_editor_model_get_line_span("
+    "sandbox3d_script_editor_model_line_span_removed("
+    candidate_script_editor_line_source
+    "${script_editor_source_for_line_control}")
+if(candidate_script_editor_line_source STREQUAL script_editor_source_for_line_control)
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Could not construct the canonical script-line-span negative control")
+endif()
+file(WRITE "${probe_dir}/script_editor_line_span.c"
+    "${candidate_script_editor_line_source}")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DSCRIPT_EDITOR_SOURCE=${probe_dir}/script_editor_line_span.c"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE script_line_span_negative_result
+    OUTPUT_VARIABLE script_line_span_negative_stdout
+    ERROR_VARIABLE script_line_span_negative_stderr)
+set(script_line_span_negative_output
+    "${script_line_span_negative_stdout}\n${script_line_span_negative_stderr}")
+if("${script_line_span_negative_result}" STREQUAL "0" OR
+   NOT script_line_span_negative_output MATCHES
+        "script editor drawing, hit testing, and caret mapping must share the model line-span authority")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Script line-span negative control did not fail at its owning contract.\n"
+        "result=${script_line_span_negative_result}\noutput:\n${script_line_span_negative_output}")
 endif()
 
 file(REMOVE_RECURSE "${probe_dir}")

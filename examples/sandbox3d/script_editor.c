@@ -180,36 +180,12 @@ static bool sandbox3d_script_editor_get_line(
     size_t* out_offset,
     size_t* out_length)
 {
-    size_t current_line = 0U;
-    size_t offset = 0U;
-    size_t index;
-    if (out_offset != NULL)
-    {
-        *out_offset = 0U;
-    }
-    if (out_length != NULL)
-    {
-        *out_length = 0U;
-    }
-    if (source == NULL || out_offset == NULL || out_length == NULL)
-    {
-        return false;
-    }
-    for (index = 0U; index <= source_size; ++index)
-    {
-        if (index == source_size || source[index] == '\n')
-        {
-            if (current_line == line_index)
-            {
-                *out_offset = offset;
-                *out_length = index - offset;
-                return true;
-            }
-            ++current_line;
-            offset = index + 1U;
-        }
-    }
-    return false;
+    return sandbox3d_script_editor_model_get_line_span(
+        source,
+        source_size,
+        line_index,
+        out_offset,
+        out_length);
 }
 
 static void sandbox3d_script_editor_copy_line(
