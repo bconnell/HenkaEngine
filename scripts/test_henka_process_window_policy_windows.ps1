@@ -255,6 +255,10 @@ public static class HenkaWindowPolicyNative
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowVisible(IntPtr hWnd);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindow(IntPtr hWnd);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
 
@@ -494,14 +498,28 @@ if ($KeepHidden) {
             -Height $visibleGeometry.Height)) {
         throw "The visible capture window overlaps the owner's virtual desktop."
     }
-    [void][HenkaWindowPolicyNative]::ShowWindow($visibleHandle, 6)
+    $minimizePreviousVisibility = [HenkaWindowPolicyNative]::ShowWindow($visibleHandle, 6)
     $minimizeDeadline = [DateTime]::UtcNow.AddSeconds(2)
     while (-not [HenkaWindowPolicyNative]::IsIconic($visibleHandle) -and
         [DateTime]::UtcNow -lt $minimizeDeadline) {
         Start-Sleep -Milliseconds 25
     }
     if (-not [HenkaWindowPolicyNative]::IsIconic($visibleHandle)) {
-        throw "The startup window policy overrode a later user minimize action."
+        $nonActivatingVisibleProcess.Process.Refresh()
+        $currentMainWindow = $nonActivatingVisibleProcess.Process.MainWindowHandle
+        $visibleRectAfterMinimize = New-Object HenkaWindowPolicyNative+RECT
+        $hasRectAfterMinimize = [HenkaWindowPolicyNative]::GetWindowRect(
+            $visibleHandle, [ref]$visibleRectAfterMinimize)
+        throw ("The visible capture window did not remain minimized after the explicit " +
+            "later user minimize action. originalHwnd=$($visibleHandle.ToInt64()), " +
+            "isWindow=$([HenkaWindowPolicyNative]::IsWindow($visibleHandle)), " +
+            "isVisible=$([HenkaWindowPolicyNative]::IsWindowVisible($visibleHandle)), " +
+            "isIconic=$([HenkaWindowPolicyNative]::IsIconic($visibleHandle)), " +
+            "showWindowPreviousVisibility=$minimizePreviousVisibility, " +
+            "processMainHwnd=$($currentMainWindow.ToInt64()), " +
+            "rectAvailable=$hasRectAfterMinimize, " +
+            "rect=$($visibleRectAfterMinimize.Left),$($visibleRectAfterMinimize.Top)," +
+            "$($visibleRectAfterMinimize.Right),$($visibleRectAfterMinimize.Bottom).")
     }
     Write-Output "[pass] Shared process policy supports a visible, non-minimized capture window wholly outside every virtual desktop monitor without taking foreground focus."
     Write-Output "[pass] A later user minimize action remains respected by the capture-window policy."

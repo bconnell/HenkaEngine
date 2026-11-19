@@ -268,19 +268,36 @@ function Resolve-HenkaBuildDependencyRoot {
         [AllowEmptyString()]
         [string]$DependencyRoot = "",
 
+        # Tests can supply a fixture cache beneath _local. Production callers
+        # leave this empty and use the canonical project-owned cache location.
+        [AllowEmptyString()]
+        [string]$SharedDependencyRoot = "",
+
+        # Tests can supply fixture declarations beneath _local. Production
+        # callers leave this empty and read pins from the repository root.
+        [AllowEmptyString()]
+        [string]$PinSourceRoot = "",
+
         [ValidateSet("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")]
         [string[]]$Providers = @("SDL3", "KTXSOFTWARE", "ENET", "LUA", "MINIAUDIO", "STB")
     )
+
+    $pinSource = if ([string]::IsNullOrWhiteSpace($PinSourceRoot)) {
+        [System.IO.Path]::GetFullPath($RepositoryRoot)
+    } else {
+        Resolve-HenkaLocalPath -RepositoryRoot $RepositoryRoot -Path $PinSourceRoot
+    }
 
     if (-not [string]::IsNullOrWhiteSpace($DependencyRoot)) {
         $explicitRoot = Resolve-HenkaDependencyRoot `
             -RepositoryRoot $RepositoryRoot `
             -DependencyRoot $DependencyRoot
-        $explicitPins = Get-HenkaCMakeDependencyPins -RepositoryRoot $RepositoryRoot -Providers $Providers
+        $explicitPins = Get-HenkaCMakeDependencyPins -RepositoryRoot $pinSource -Providers $Providers
         $explicitArguments = Get-HenkaCMakeFetchContentArguments `
             -DependencyRoot $explicitRoot `
             -Providers $Providers `
             -PinnedRevisions $explicitPins `
+            -PinSourceRoot $pinSource `
             -NoSharedDependencyCache
         $explicitAvailableCount = @($explicitArguments.ProviderStates | Where-Object { $_.Available }).Count
         return [pscustomobject]@{
@@ -290,7 +307,7 @@ function Resolve-HenkaBuildDependencyRoot {
         }
     }
 
-    $pins = Get-HenkaCMakeDependencyPins -RepositoryRoot $RepositoryRoot -Providers $Providers
+    $pins = Get-HenkaCMakeDependencyPins -RepositoryRoot $pinSource -Providers $Providers
     $buildLocalRoot = Join-Path $BuildRoot "_deps"
     $evaluated = @()
     if (Test-Path -LiteralPath $buildLocalRoot -PathType Container) {
@@ -298,6 +315,7 @@ function Resolve-HenkaBuildDependencyRoot {
             -DependencyRoot $buildLocalRoot `
             -PinnedRevisions $pins `
             -NoSharedDependencyCache `
+            -PinSourceRoot $pinSource `
             -Providers $Providers
         $buildLocalCount = @($buildLocal.ProviderStates | Where-Object { $_.Available }).Count
         if ($buildLocalCount -gt 0) {
@@ -312,12 +330,14 @@ function Resolve-HenkaBuildDependencyRoot {
 
     $shared = Get-HenkaCMakeFetchContentArguments `
         -DependencyRoot "" `
+        -SharedDependencyRoot $SharedDependencyRoot `
         -PinnedRevisions $pins `
+        -PinSourceRoot $pinSource `
         -Providers $Providers
     $sharedCount = @($shared.ProviderStates | Where-Object { $_.Available }).Count
     if ($sharedCount -gt 0) {
         $evaluated += [pscustomobject]@{
-            Path = Get-HenkaCMakeSharedDependencyRoot -RepositoryRoot $RepositoryRoot
+            Path = $shared.SharedDependencyRoot
             Mode = "shared"
             Priority = 1
             AvailableProviders = $sharedCount
