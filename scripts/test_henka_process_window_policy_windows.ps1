@@ -155,6 +155,46 @@ foreach ($relativePath in $automationWorkflowPaths) {
 }
 $packagedCheckerSource = [System.IO.File]::ReadAllText(
     (Join-Path $RepositoryRoot "scripts\check_packaged_sandbox3d_windows.ps1"))
+
+function Assert-HenkaPackagedHiddenStartupExceptionPolicy {
+    param([Parameter(Mandatory = $true)][string]$Source)
+
+    if ($Source -notmatch '(?im)\[bool\]\$RequireHiddenWindowStartup\s*=\s*\$true' -or
+        $Source -notmatch '(?im)if\s*\(\$RequireHiddenWindowStartup\s+-and\s+\$capture\.Stdout\s+-notmatch') {
+        throw "The packaged checker must require hidden-startup confirmation by default."
+    }
+
+    $prefabSmokeBlock = [regex]::Match(
+        $Source,
+        '(?s)Write-Step "Running packaged Prefab public API smoke"(?<block>.*?)Write-Output "\[pass\] Packaged Prefab public API smoke completed\."')
+    if (-not $prefabSmokeBlock.Success -or
+        $prefabSmokeBlock.Groups['block'].Value -notmatch '(?im)-Arguments\s+@\("--prefab-smoke-test"\)' -or
+        $prefabSmokeBlock.Groups['block'].Value -notmatch '(?im)-RequireHiddenWindowStartup:\$false') {
+        throw "Only the no-window Prefab public API CLI smoke may skip UI-window startup telemetry."
+    }
+
+    $bypassCount = [regex]::Matches(
+        $Source,
+        '(?im)-RequireHiddenWindowStartup\s*:\s*\$false').Count
+    if ($bypassCount -ne 1) {
+        throw "Exactly one bounded no-window Prefab CLI call may skip hidden-window telemetry."
+    }
+}
+
+Assert-HenkaPackagedHiddenStartupExceptionPolicy -Source $packagedCheckerSource
+$unboundedWindowExceptionRejected = $false
+try {
+    Assert-HenkaPackagedHiddenStartupExceptionPolicy `
+        -Source ($packagedCheckerSource + "`r`n-RequireHiddenWindowStartup:`$false")
+}
+catch {
+    $unboundedWindowExceptionRejected = $true
+}
+if (-not $unboundedWindowExceptionRejected) {
+    throw "The packaged checker policy accepted an additional hidden-startup bypass."
+}
+Write-Output "[pass] Hidden-startup confirmation is required for UI launches; the no-window Prefab CLI exception is singular and bounded."
+
 if ($packagedCheckerSource -notmatch '(?im)\$env:HENKA_AUTOMATION_START_HIDDEN\s*=\s*"1"' -or
     $packagedCheckerSource -notmatch '(?im)HENKA_AUTOMATION_DIAGNOSTIC window_start_hidden=1') {
     throw "The packaged checker must request and verify hidden startup for every automated Sandbox interaction."

@@ -2222,6 +2222,8 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
 
         [bool]$RequireIsolatedUserData = $true,
 
+        [bool]$RequireHiddenWindowStartup = $true,
+
         [ValidateRange(1000, 3600000)]
         [int]$TimeoutMilliseconds = 180000,
 
@@ -2284,7 +2286,8 @@ function Invoke-HenkaIsolatedPackageNativeCapture {
             -TimeoutMilliseconds $TimeoutMilliseconds `
             -Quiet:$Quiet
 
-        if ($capture.Stdout -notmatch "HENKA_AUTOMATION_DIAGNOSTIC window_start_hidden=1") {
+        if ($RequireHiddenWindowStartup -and
+            $capture.Stdout -notmatch "HENKA_AUTOMATION_DIAGNOSTIC window_start_hidden=1") {
             throw "$Label did not confirm that its automated Sandbox window started hidden."
         }
 
@@ -2461,7 +2464,8 @@ if ($NonInteractive) {
         -Arguments @("--prefab-smoke-test") `
         -WorkingDirectory $packageRoot `
         -Label "Run packaged Prefab public API smoke" `
-        -RequireIsolatedUserData:$false
+        -RequireIsolatedUserData:$false `
+        -RequireHiddenWindowStartup:$false
 
     if ($prefabSmoke.Stdout -notmatch "Prefab package smoke: public save/load/instantiate/override/duplicate/detach workflow passed\.") {
         throw "The packaged Prefab smoke test did not prove the public Prefab workflow."
