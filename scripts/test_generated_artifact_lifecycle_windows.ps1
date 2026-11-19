@@ -358,8 +358,17 @@ try {
     if ($fetchContentCleanupResult.ExitCode -ne 0 -or (Test-Path -LiteralPath $fetchContentCleanup.Candidate)) {
         throw "A safe CMake build dependency clone was not retired by exact cleanup. Output: $($fetchContentCleanupResult.Output)"
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $localRoot "dependencies\enet-src") -PathType Container)) {
-        throw "CMake build cleanup removed or damaged the shared dependency source."
+    $sharedDependencyRoot = Get-HenkaCMakeSharedDependencyRoot -RepositoryRoot $repoRoot
+    $fetchContentDefinitions = Get-HenkaCMakeFetchContentDefinitions
+    $sharedEnetSource = Join-Path $sharedDependencyRoot ([string]$fetchContentDefinitions["ENET"].RelativePath)
+    $sharedEnetValidation = Test-HenkaPinnedFetchContentSource `
+        -RepositoryRoot $repoRoot `
+        -SourceRoot $sharedEnetSource `
+        -Marker "CMakeLists.txt" `
+        -PinnedCommit $enetPin `
+        -PinnedRepository ([string]$fetchContentPins["ENET"].Repository)
+    if (-not $sharedEnetValidation.Available) {
+        throw "CMake build cleanup removed or damaged the canonical shared dependency source at ${sharedEnetSource}: $($sharedEnetValidation.RejectionReason)"
     }
 
     $wrongOriginFetchContent = New-CMakeFetchContentCleanupCandidate -Name "cmfc-wrong-origin" `
