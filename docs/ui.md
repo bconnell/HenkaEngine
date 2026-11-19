@@ -600,7 +600,7 @@ Picking and gizmo dragging use viewport-relative coordinates. Docked panel and d
 
 ## Current limitations
 
-- Text rendering is ASCII-oriented and lacks shaping, kerning, Unicode layout, and general wrapping.
+- Text layout is ASCII-oriented and lacks shaping, Unicode layout, and general word wrapping; the bundled editor font supports kerning.
 - Scale gizmo interaction is currently uniform-only in the Sandbox path.
 - Scene View cannot detach into a native window yet.
 - Full hierarchy editing is planned separately.
