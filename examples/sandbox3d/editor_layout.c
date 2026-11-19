@@ -915,6 +915,7 @@ henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
     static const size_t compact_options_columns[] = {6U, 3U, 2U};
     static const size_t wide_columns[] = {6U, 3U, 2U};
     sandbox3d_modeling_toolbar_layout layout;
+    sandbox3d_editor_scene_view_header_layout scene_header;
     const bool compact_toolbar = scene_frame.width < 760.0f;
     const size_t tool_count =
         compact_toolbar && authoring_available && !options_expanded ? 4U :
@@ -930,7 +931,9 @@ henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
     float tool_bottom;
     float summary_bottom;
     float toolbar_height;
+    float minimum_toolbar_y;
     size_t index;
+    henka_result result;
 
     if (out_layout == NULL || ui_context == NULL ||
         !sandbox3d_editor_layout_float_is_valid(scene_frame.x) ||
@@ -959,6 +962,15 @@ henka_result sandbox3d_editor_layout_modeling_toolbar_compute(
     y = authoring_available
         ? scene_frame.y + 82.0f
         : compact_toolbar ? scene_frame.y + 76.0f : scene_frame.y + 34.0f;
+    result = sandbox3d_editor_layout_scene_view_header_for_context(
+        ui_context, scene_frame, &scene_header);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    minimum_toolbar_y = scene_frame.y + scene_header.height +
+        (compact_toolbar ? 8.0f : 4.0f);
+    y = fmaxf(y, minimum_toolbar_y);
     width = scene_frame.width - 20.0f;
     layout.bounds = (henka_ui_rect){scene_frame.x + 10.0f, y, width, 0.0f};
 

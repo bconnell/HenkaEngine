@@ -1384,7 +1384,32 @@ try {
             -Pattern $pickerControlPattern) -gt 0
     }
     if (-not $pickerControlFound) {
-        throw "The visible editor did not expose the Base Color texture picker control."
+        $pickerFailureText = Read-SharedLogText -Path $stdoutPath
+        $pickerFailureTrace = @($pickerFailureText -split "\r?\n" |
+            Where-Object {
+                $_ -match 'HENKA_AUTOMATION_DIAGNOSTIC (?:input record=|details-scroll|frame seq=)' -or
+                $_ -match 'Material texture picker control:|Native authoring material:|Native authoring component picked:|Workspace UI geometry:'
+            } |
+            Select-Object -Last 32)
+        $pickerInputMatches = [Regex]::Matches(
+            $pickerFailureText,
+            'HENKA_AUTOMATION_DIAGNOSTIC input record=\d+ type=[^ ]+')
+        $pickerDetailsScrollCount = [Regex]::Matches(
+            $pickerFailureText,
+            'HENKA_AUTOMATION_DIAGNOSTIC details-scroll ')
+        $pickerProcessAlive = $null -ne $capturedProcess -and
+            -not $capturedProcess.Process.HasExited
+        $pickerFailureSummary = @(
+            "process_alive=$($pickerProcessAlive.ToString().ToLowerInvariant())"
+            "consumed_input_records=$($pickerInputMatches.Count)"
+            "details_scroll_records=$($pickerDetailsScrollCount.Count)"
+        ) -join ' '
+        if ($pickerFailureTrace.Count -eq 0) {
+            $pickerFailureTrace = @('(product emitted no bounded picker/scroll diagnostics)')
+        }
+        throw ("The visible editor did not expose the Base Color texture picker control " +
+            "($pickerFailureSummary). Recent product telemetry:`n" +
+            ($pickerFailureTrace -join "`n"))
     }
     $pickerControl = Get-LastMatch -Path $stdoutPath -Pattern $pickerControlPattern
     $pickerBeginCount = Get-LogMatchCount `

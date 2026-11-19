@@ -4,6 +4,7 @@
 #include <henka/memory.h>
 
 #include "../examples/sandbox3d/editor_font_bootstrap.h"
+#include "../examples/sandbox3d/editor_layout.h"
 #include "../examples/sandbox3d/editor_text_layout.h"
 #include "../engine/src/core/memory_internal.h"
 #include "../engine/src/platform/window_scale.h"
@@ -1780,6 +1781,89 @@ static void henka_test_platform_window_display_scale_contract(void)
     HENKA_TEST_ASSERT(framebuffer_x == -99.0f && framebuffer_y == -99.0f);
 }
 
+static void henka_test_modeling_toolbar_clears_reflowed_scene_header(void)
+{
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* font = NULL;
+    henka_ui_font_raster_profile* profile = NULL;
+    henka_ui_context* ui = NULL;
+    henka_ui_context* baseline_ui = NULL;
+    henka_ui_frame_desc frame_desc;
+    sandbox3d_workspace_model workspace;
+    sandbox3d_editor_layout_visibility visibility = {
+        true, true, true, true, true, true};
+    sandbox3d_editor_frame_layout frame;
+    sandbox3d_modeling_toolbar_layout toolbar;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, 0x53434U, 1U, 1U, &font, &profile));
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_ui_context_set_font_profile(ui, profile, 200U) == HENKA_SUCCESS);
+
+    memset(&frame_desc, 0, sizeof(frame_desc));
+    frame_desc.framebuffer_width = 1280;
+    frame_desc.framebuffer_height = 720;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    sandbox3d_workspace_model_reset(&workspace);
+    HENKA_TEST_ASSERT(sandbox3d_editor_frame_layout_build(
+        ui, &workspace, &visibility, 640, 360, &frame) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(frame.scene_header.narrow);
+    HENKA_TEST_ASSERT(frame.scene_header.height > 74.0f);
+    HENKA_TEST_ASSERT(frame.scene_header.shading_button_count == 4U);
+    HENKA_TEST_ASSERT(sandbox3d_editor_layout_modeling_toolbar_compute(
+        ui,
+        frame.scene_frame,
+        200U,
+        true,
+        false,
+        &toolbar) == HENKA_SUCCESS);
+
+    /* The toolbar is drawn above the Scene View header. Its canonical bounds
+     * must clear the actual Rendered hit target after font-driven reflow. */
+    HENKA_TEST_ASSERT(toolbar.bounds.y >=
+        frame.scene_header.shading_buttons[3].y +
+            frame.scene_header.shading_buttons[3].height + 8.0f);
+    HENKA_TEST_ASSERT(toolbar.bounds.y >=
+        frame.scene_frame.y + frame.scene_header.height + 8.0f);
+
+    /* The compact toolbar still occupies this band when no mesh component is
+     * selected, so the same header clearance applies in that state. */
+    HENKA_TEST_ASSERT(sandbox3d_editor_layout_modeling_toolbar_compute(
+        ui,
+        frame.scene_frame,
+        200U,
+        false,
+        false,
+        &toolbar) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(toolbar.bounds.y >=
+        frame.scene_header.shading_buttons[3].y +
+            frame.scene_header.shading_buttons[3].height + 8.0f);
+
+    /* Ordinary 100% layout keeps its established toolbar positions. */
+    HENKA_TEST_ASSERT(henka_ui_create(&baseline_ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(
+        baseline_ui, profile, 100U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(baseline_ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_editor_frame_layout_build(
+        baseline_ui, &workspace, &visibility, 1280, 720, &frame) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_editor_layout_modeling_toolbar_compute(
+        baseline_ui,
+        frame.scene_frame,
+        100U,
+        true,
+        false,
+        &toolbar) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(toolbar.bounds.y == frame.scene_frame.y + 82.0f);
+
+    henka_ui_destroy(baseline_ui);
+    henka_ui_destroy(ui);
+    henka_ui_font_raster_profile_destroy(profile);
+    henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
 void henka_test_ui_font(void)
 {
     henka_test_platform_window_display_scale_contract();
@@ -1804,4 +1888,5 @@ void henka_test_ui_font(void)
     henka_test_ui_mixed_glyph_solid_quads_keep_submission_order();
     henka_test_ui_font_text_draw_preserves_line_breaks();
     henka_test_ui_context_measurement_uses_active_font_metrics();
+    henka_test_modeling_toolbar_clears_reflowed_scene_header();
 }
