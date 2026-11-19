@@ -43,6 +43,7 @@ function Invoke-ValidationWrapper {
 try {
     New-Item -ItemType Directory -Path $candidateScripts -Force | Out-Null
     New-Item -ItemType Directory -Path $dependencyRoot -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repoRoot "CMakeLists.txt") -Destination (Join-Path $candidate "CMakeLists.txt")
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "henka_script_common.ps1") -Destination (Join-Path $candidateScripts "henka_script_common.ps1")
 
     $logLiteral = $logPath.Replace("'", "''")
@@ -68,7 +69,7 @@ exit 0
     $git = Get-HenkaGitPath
     & $git -C $candidate init --quiet 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Could not initialize the isolated exact-candidate test fixture." }
-    & $git -C $candidate -c core.autocrlf=false -c user.name="Henka storage regression" -c user.email="henka-storage-regression@invalid" add -- scripts 2>$null | Out-Null
+    & $git -C $candidate -c core.autocrlf=false -c user.name="Henka validation regression" -c user.email="henka-validation-regression@invalid" add -- CMakeLists.txt scripts 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Could not stage the isolated exact-candidate test fixture scripts." }
     & $git -C $candidate -c user.name="Henka storage regression" -c user.email="henka-storage-regression@invalid" commit --quiet -m "test fixture" 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Could not establish source provenance for the exact-candidate test fixture." }

@@ -42,6 +42,7 @@ typedef struct henka_ui_font_glyph_info
 
 typedef struct henka_ui_text_glyph
 {
+    size_t source_byte_offset;
     uint32_t source_codepoint;
     uint32_t rendered_codepoint;
     uint32_t glyph_index;

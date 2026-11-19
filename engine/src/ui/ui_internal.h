@@ -185,6 +185,21 @@ henka_result henka_ui_measure_font_text(
     float scale,
     int* out_width,
     int* out_height);
+henka_result henka_ui_measure_font_text_byte_offset_x(
+    const henka_ui_context* context,
+    const char* text,
+    size_t text_byte_count,
+    size_t byte_offset,
+    float scale,
+    float* out_x);
+henka_result henka_ui_measure_font_text_byte_offsets_x(
+    const henka_ui_context* context,
+    const char* text,
+    size_t text_byte_count,
+    const size_t* byte_offsets,
+    size_t byte_offset_count,
+    float scale,
+    float* out_x_positions);
 
 henka_result henka_ui_text_layout_build_limited(
     const henka_ui_font_resource* resource,

@@ -19,6 +19,9 @@
 #define HENKA_UI_FONT_TEST_SHA256 "7FB917C89019896D0B52EE84B7CBB3304C18CB90B19A62F5E32712BD23E97669"
 #define HENKA_UI_FONT_TEST_CODEPOINT_COUNT 96U
 
+_Static_assert(HENKA_UI_FONT_MAX_CONTEXTS == 6U,
+    "UI font context limit must remain bounded");
+
 typedef struct henka_ui_font_test_fixture
 {
     uint8_t* bytes;
@@ -1029,30 +1032,44 @@ static void henka_test_ui_atlas_identity_includes_font_scale_output_and_context(
 {
     henka_ui_font_test_fixture fixture;
     henka_ui_font_desc font_desc;
+    henka_ui_font_desc font_desc_other_glyph_set;
     henka_ui_font_resource* font = NULL;
+    henka_ui_font_resource* font_other_glyph_set = NULL;
     henka_ui_font_raster_profile* profile_a = NULL;
     henka_ui_font_raster_profile* profile_b = NULL;
     henka_ui_font_raster_profile* profile_c = NULL;
+    henka_ui_font_raster_profile* profile_other_glyph_set = NULL;
     henka_ui_font_raster_profile_desc desc_a;
     henka_ui_font_raster_profile_desc desc_b;
     henka_ui_font_raster_profile_desc desc_c;
+    henka_ui_font_raster_profile_desc desc_other_glyph_set;
     henka_ui_font_diagnostic diagnostic;
     henka_ui_font_atlas_key key_100;
     henka_ui_font_atlas_key key_125;
     henka_ui_font_atlas_key key_other_context;
     henka_ui_font_atlas_key key_other_output;
+    henka_ui_font_atlas_key key_other_glyph_set;
+    bool different_glyph_repertoires_have_distinct_keys;
 
     HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
     font_desc = henka_ui_font_test_desc(&fixture);
-    font_desc.atlas_width = 1024U;
-    font_desc.atlas_height = 1024U;
+    font_desc.atlas_width = 512U;
+    font_desc.atlas_height = 512U;
     HENKA_TEST_ASSERT(henka_ui_font_resource_create(&font_desc, &font, &diagnostic) == HENKA_SUCCESS);
+    font_desc_other_glyph_set = font_desc;
+    font_desc_other_glyph_set.required_codepoint_count -= 1U;
+    HENKA_TEST_ASSERT(henka_ui_font_resource_create(
+        &font_desc_other_glyph_set, &font_other_glyph_set, &diagnostic) == HENKA_SUCCESS);
     desc_a = henka_ui_font_test_profile_desc(0x201U, 1U, 1U);
     desc_b = henka_ui_font_test_profile_desc(0x202U, 1U, 1U);
     desc_c = henka_ui_font_test_profile_desc(0x201U, 3U, 2U);
+    desc_other_glyph_set = desc_a;
     HENKA_TEST_ASSERT(henka_ui_font_raster_profile_create(font, &desc_a, &profile_a, &diagnostic) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_font_raster_profile_create(font, &desc_b, &profile_b, &diagnostic) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_font_raster_profile_create(font, &desc_c, &profile_c, &diagnostic) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_font_raster_profile_create(
+        font_other_glyph_set, &desc_other_glyph_set,
+        &profile_other_glyph_set, &diagnostic) == HENKA_SUCCESS);
     {
         henka_ui_font_raster_profile_info info;
         HENKA_TEST_ASSERT(henka_ui_font_raster_profile_get_info(profile_a, 100U, &info));
@@ -1063,6 +1080,9 @@ static void henka_test_ui_atlas_identity_includes_font_scale_output_and_context(
         key_other_context = info.key;
         HENKA_TEST_ASSERT(henka_ui_font_raster_profile_get_info(profile_c, 100U, &info));
         key_other_output = info.key;
+        HENKA_TEST_ASSERT(henka_ui_font_raster_profile_get_info(
+            profile_other_glyph_set, 100U, &info));
+        key_other_glyph_set = info.key;
     }
     HENKA_TEST_ASSERT(strcmp(key_100.font_sha256_hex, HENKA_UI_FONT_TEST_SHA256) == 0);
     HENKA_TEST_ASSERT(key_100.app_scale_percent == 100U && key_125.app_scale_percent == 125U);
@@ -1072,9 +1092,114 @@ static void henka_test_ui_atlas_identity_includes_font_scale_output_and_context(
     HENKA_TEST_ASSERT(key_100.output_scale_numerator == 1U);
     HENKA_TEST_ASSERT(key_other_output.output_scale_numerator == 3U);
     HENKA_TEST_ASSERT(key_other_output.output_scale_denominator == 2U);
+    different_glyph_repertoires_have_distinct_keys =
+        !henka_ui_font_atlas_key_equal(&key_100, &key_other_glyph_set);
+    henka_ui_font_raster_profile_destroy(profile_other_glyph_set);
     henka_ui_font_raster_profile_destroy(profile_c);
     henka_ui_font_raster_profile_destroy(profile_b);
     henka_ui_font_raster_profile_destroy(profile_a);
+    henka_ui_font_resource_destroy(font_other_glyph_set);
+    henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+    HENKA_TEST_ASSERT(different_glyph_repertoires_have_distinct_keys);
+    HENKA_TEST_ASSERT(henka_ui_font_atlas_key_equal(&key_100, &key_100));
+    HENKA_TEST_ASSERT(!henka_ui_font_atlas_key_equal(&key_100, &key_125));
+    HENKA_TEST_ASSERT(!henka_ui_font_atlas_key_equal(&key_100, &key_other_context));
+}
+
+static void henka_test_editor_text_prefix_metrics_match_caret_hit_authority(void)
+{
+    static const char line[] = "AV";
+    static const char caret_line[] = "AVl 125% I/l/1 O/0";
+    static const char invalid_boundary[] = "\xc3\xa9";
+    const size_t boundary = 1U;
+    const float text_scale = 0.72f;
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* font = NULL;
+    henka_ui_font_raster_profile* profile = NULL;
+    henka_ui_context* ui = NULL;
+    henka_ui_frame_desc frame_desc;
+    henka_ui_text_run full_run;
+    henka_ui_font_diagnostic diagnostic;
+    henka_ui_font_glyph_info first_glyph;
+    henka_ui_font_glyph_info second_glyph;
+    float kerning = 0.0f;
+    float prefix_width = 0.0f;
+    const size_t byte_offsets[] = {0U, 1U, 2U};
+    float x_positions[sizeof(byte_offsets) / sizeof(byte_offsets[0])] = {0.0f};
+    float full_second_glyph_x = 0.0f;
+    float caret_x = 0.0f;
+    float end_x = 0.0f;
+    float invalid_x = 0.0f;
+    size_t hit_offset = SIZE_MAX;
+    char first_segment[2] = {'A', '\0'};
+    char second_segment[2] = {'V', '\0'};
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture, UINT64_C(0x701), 1U, 1U, &font, &profile));
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(ui, profile, 100U) == HENKA_SUCCESS);
+    memset(&full_run, 0, sizeof(full_run));
+    HENKA_TEST_ASSERT(henka_ui_font_resource_get_glyph(font, 'A', &first_glyph));
+    HENKA_TEST_ASSERT(henka_ui_font_resource_get_glyph(font, 'V', &second_glyph));
+    HENKA_TEST_ASSERT(henka_ui_font_resource_get_kerning(
+        font, first_glyph.glyph_index, second_glyph.glyph_index, &kerning));
+    HENKA_TEST_ASSERT(fabsf(kerning) > 0.0001f);
+    HENKA_TEST_ASSERT(henka_ui_text_layout_build_limited(
+        font, line, sizeof(line) - 1U, 0.0f, SIZE_MAX,
+        &full_run, &diagnostic) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(full_run.glyph_count == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_byte_offset_x(
+        ui, line, sizeof(line) - 1U, boundary, text_scale, &prefix_width) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(fabsf(prefix_width - full_run.glyphs[1].pen_x * text_scale) < 0.0001f);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_byte_offsets_x_for_context(
+        ui, line, sizeof(line) - 1U, byte_offsets,
+        sizeof(byte_offsets) / sizeof(byte_offsets[0]), text_scale,
+        x_positions) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(x_positions[0] == 0.0f);
+    HENKA_TEST_ASSERT(fabsf(x_positions[1] - prefix_width) < 0.0001f);
+    HENKA_TEST_ASSERT(fabsf(
+        x_positions[2] - full_run.advance_width * text_scale) < 0.0001f);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_byte_offset_x_for_context(
+        ui, invalid_boundary, sizeof(invalid_boundary) - 1U, 1U,
+        text_scale, &invalid_x) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    memset(&frame_desc, 0, sizeof(frame_desc));
+    frame_desc.framebuffer_width = 1280;
+    frame_desc.framebuffer_height = 720;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_draw_font_text(
+        ui, 20.0f, 30.0f, text_scale, line,
+        (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(ui->draw_quad_count == 2U);
+    full_second_glyph_x = ui->draw_quads[1].bounds.x;
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_draw_font_text(
+        ui, 20.0f, 30.0f, text_scale, first_segment,
+        (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_draw_font_text(
+        ui, 20.0f + prefix_width, 30.0f, text_scale, second_segment,
+        (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(ui->draw_quad_count == 2U);
+    HENKA_TEST_ASSERT(fabsf(ui->draw_quads[1].bounds.x - full_second_glyph_x) < 0.0001f);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_byte_offset_x(
+        ui, caret_line, sizeof(caret_line) - 1U, 3U, text_scale, &caret_x) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_byte_offset_x(
+        ui, caret_line, sizeof(caret_line) - 1U, sizeof(caret_line) - 1U,
+        text_scale, &end_x) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(end_x > caret_x);
+    HENKA_TEST_ASSERT(sandbox3d_editor_text_byte_offset_at_x(
+        ui, caret_line, text_scale, caret_x, &hit_offset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(hit_offset == 3U);
+
+    henka_ui_destroy(ui);
+    henka_ui_text_run_dispose(&full_run);
+    henka_ui_font_raster_profile_destroy(profile);
     henka_ui_font_resource_destroy(font);
     henka_ui_font_test_fixture_dispose(&fixture);
 }
@@ -1087,7 +1212,6 @@ static void henka_test_ui_atlas_cache_is_bounded_per_context(void)
     size_t index;
     size_t total_coverage = 0U;
 
-    HENKA_TEST_ASSERT(HENKA_UI_FONT_MAX_CONTEXTS == 6U);
     HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
     HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
         &fixture, 0x301U, 1U, 1U, &font, &profile));
@@ -1671,6 +1795,7 @@ void henka_test_ui_font(void)
     henka_test_ui_control_labels_use_centered_font_metrics();
     henka_test_ui_output_scale_aligns_draw_and_hit_coordinates();
     henka_test_ui_atlas_identity_includes_font_scale_output_and_context();
+    henka_test_editor_text_prefix_metrics_match_caret_hit_authority();
     henka_test_ui_atlas_cache_is_bounded_per_context();
     henka_test_ui_context_profile_replacement_is_atomic();
     henka_test_ui_font_scale_update_publishes_all_contexts_atomically();

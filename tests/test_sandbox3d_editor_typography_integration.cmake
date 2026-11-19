@@ -31,6 +31,102 @@ if(EXISTS "${probe_dir}")
     message(FATAL_ERROR "Refusing to reuse an existing typography integration probe: ${probe_dir}")
 endif()
 file(MAKE_DIRECTORY "${probe_dir}")
+
+file(READ "${SANDBOX3D_SOURCE_DIR}/script_editor.c" script_editor_source)
+string(REPLACE
+    "henka_ui_measure_text_byte_offsets_x_for_context("
+    "henka_ui_measure_text_byte_offsets_x_for_context_removed("
+    candidate_script_editor_source "${script_editor_source}")
+if(candidate_script_editor_source STREQUAL script_editor_source)
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Could not construct the syntax-token shared-layout negative control")
+endif()
+file(WRITE "${probe_dir}/script_editor.c" "${candidate_script_editor_source}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DSCRIPT_EDITOR_SOURCE=${probe_dir}/script_editor.c"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE token_metrics_negative_result
+    OUTPUT_VARIABLE token_metrics_negative_stdout
+    ERROR_VARIABLE token_metrics_negative_stderr)
+set(token_metrics_negative_output "${token_metrics_negative_stdout}\n${token_metrics_negative_stderr}")
+if("${token_metrics_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted loss of shared script-token layout")
+endif()
+if(NOT token_metrics_negative_output MATCHES
+    "syntax token starts must use one whole-line layout for kerning-consistent token, caret, and hit positions")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Script-token shared-layout negative control failed for an unexpected reason.\n"
+        "result=${token_metrics_negative_result}\noutput:\n${token_metrics_negative_output}")
+endif()
+
+string(REPLACE
+    "henka_ui_measure_text_byte_offset_x_for_context("
+    "henka_ui_measure_text_for_context("
+    candidate_script_editor_source "${script_editor_source}")
+if(candidate_script_editor_source STREQUAL script_editor_source)
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Could not construct the exact script-caret font-position negative control")
+endif()
+file(WRITE "${probe_dir}/script_editor.c" "${candidate_script_editor_source}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DSCRIPT_EDITOR_SOURCE=${probe_dir}/script_editor.c"
+        "-P" "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE caret_metrics_negative_result
+    OUTPUT_VARIABLE caret_metrics_negative_stdout
+    ERROR_VARIABLE caret_metrics_negative_stderr)
+set(caret_metrics_negative_output "${caret_metrics_negative_stdout}\n${caret_metrics_negative_stderr}")
+if("${caret_metrics_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted caret placement using rounded prefix measurement")
+endif()
+if(NOT caret_metrics_negative_output MATCHES
+    "script caret placement must use the exact byte-offset font position shared with token drawing and hit testing")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Script-caret shared-layout negative control failed for an unexpected reason.\n"
+        "result=${caret_metrics_negative_result}\noutput:\n${caret_metrics_negative_output}")
+endif()
+
+file(READ "${SANDBOX3D_SOURCE_DIR}/editor_typography_runtime.c" runtime_source)
+string(REPLACE
+    "return runtime->last_failed_display_scale_result;"
+    "return HENKA_SUCCESS;"
+    candidate_retry_runtime_source "${runtime_source}")
+if(candidate_retry_runtime_source STREQUAL runtime_source)
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Could not construct the display-scale retry failure negative control")
+endif()
+file(WRITE "${probe_dir}/editor_typography_runtime.c" "${candidate_retry_runtime_source}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${SANDBOX3D_SOURCE_DIR}"
+        "-DTYPOGRAPHY_RUNTIME_SOURCE=${probe_dir}/editor_typography_runtime.c"
+        -P "${TYPOGRAPHY_CHECKER}"
+    RESULT_VARIABLE retry_failure_negative_result
+    OUTPUT_VARIABLE retry_failure_negative_stdout
+    ERROR_VARIABLE retry_failure_negative_stderr)
+set(retry_failure_negative_output "${retry_failure_negative_stdout}\n${retry_failure_negative_stderr}")
+if("${retry_failure_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR "Typography integration checker accepted success during a failed display-scale retry cooldown")
+endif()
+if(NOT retry_failure_negative_output MATCHES
+    "display-scale retry cooldown must continue returning the prior resource failure until replacement succeeds")
+    file(REMOVE_RECURSE "${probe_dir}")
+    message(FATAL_ERROR
+        "Display-scale retry negative control failed for an unexpected reason.\n"
+        "result=${retry_failure_negative_result}\noutput:\n${retry_failure_negative_output}")
+endif()
+
 file(READ "${SANDBOX3D_SOURCE_DIR}/main.c" main_source)
 set(candidate_main "${main_source}")
 string(REPLACE

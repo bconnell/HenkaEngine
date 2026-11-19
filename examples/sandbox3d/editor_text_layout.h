@@ -50,6 +50,16 @@ henka_result sandbox3d_editor_text_byte_offset_at_x(
     float x,
     size_t* out_byte_offset);
 
+/* Return the active font authority's exact x position for a bounded UTF-8
+ * byte offset, including kerning with the glyph beginning at that offset. */
+henka_result sandbox3d_editor_text_byte_offset_x(
+    const henka_ui_context* ui,
+    const char* text,
+    size_t text_byte_count,
+    size_t byte_offset,
+    float scale,
+    float* out_x);
+
 henka_result sandbox3d_editor_text_format_hidden_row(
     const henka_ui_context* ui,
     const char* object_name,

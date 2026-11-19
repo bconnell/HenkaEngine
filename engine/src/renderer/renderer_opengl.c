@@ -7539,19 +7539,6 @@ void henka_opengl_renderer_get_memory_diagnostics(
     }
 }
 
-static bool henka_opengl_ui_font_atlas_key_equal(
-    const henka_ui_font_atlas_key* left,
-    const henka_ui_font_atlas_key* right)
-{
-    return left != NULL && right != NULL &&
-        strcmp(left->font_sha256_hex, right->font_sha256_hex) == 0 &&
-        left->app_scale_percent == right->app_scale_percent &&
-        left->output_scale_numerator == right->output_scale_numerator &&
-        left->output_scale_denominator == right->output_scale_denominator &&
-        left->raster_pixel_height == right->raster_pixel_height &&
-        left->graphics_context_identity == right->graphics_context_identity;
-}
-
 static henka_result henka_opengl_delete_retired_ui_font_texture(
     henka_opengl_ui_font_residency* residency,
     const char* operation)
@@ -7710,7 +7697,7 @@ static henka_result henka_opengl_ensure_ui_font_residency(
     if (residency->valid && residency->texture != 0U &&
         residency->atlas_width == profile_info.atlas_width &&
         residency->atlas_height == profile_info.atlas_height &&
-        henka_opengl_ui_font_atlas_key_equal(&residency->key, &profile_info.key))
+        henka_ui_font_atlas_key_equal(&residency->key, &profile_info.key))
     {
         *out_texture = residency->texture;
         return HENKA_SUCCESS;
@@ -7980,7 +7967,7 @@ henka_result henka_opengl_renderer_ui_font_resource_update_prepare(
             entry->live_residency->texture == 0U ||
             entry->live_residency->atlas_width != profile_info.atlas_width ||
             entry->live_residency->atlas_height != profile_info.atlas_height ||
-            !henka_opengl_ui_font_atlas_key_equal(
+            !henka_ui_font_atlas_key_equal(
                 &entry->live_residency->key, &profile_info.key);
         if (!entry->replace)
         {

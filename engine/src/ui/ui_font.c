@@ -229,6 +229,47 @@ bool henka_ui_font_sha256_hex(const void* bytes, size_t byte_count, char out_hex
     return true;
 }
 
+static bool henka_ui_font_glyph_set_sha256_hex(
+    const henka_ui_font_resource* resource,
+    char out_hex[65U])
+{
+    uint8_t canonical_codepoints[HENKA_UI_FONT_MAX_GLYPHS * 4U];
+    size_t index;
+
+    if (resource == NULL || out_hex == NULL || resource->glyphs == NULL ||
+        resource->info.glyph_count == 0U ||
+        resource->info.glyph_count > HENKA_UI_FONT_MAX_GLYPHS)
+    {
+        return false;
+    }
+    for (index = 0U; index < resource->info.glyph_count; ++index)
+    {
+        const uint32_t codepoint = resource->glyphs[index].codepoint;
+        canonical_codepoints[index * 4U] = (uint8_t)(codepoint >> 24U);
+        canonical_codepoints[index * 4U + 1U] = (uint8_t)(codepoint >> 16U);
+        canonical_codepoints[index * 4U + 2U] = (uint8_t)(codepoint >> 8U);
+        canonical_codepoints[index * 4U + 3U] = (uint8_t)codepoint;
+    }
+    return henka_ui_font_sha256_hex(
+        canonical_codepoints, resource->info.glyph_count * 4U, out_hex);
+}
+
+bool henka_ui_font_atlas_key_equal(
+    const henka_ui_font_atlas_key* left,
+    const henka_ui_font_atlas_key* right)
+{
+    return left != NULL && right != NULL &&
+        strcmp(left->font_sha256_hex, right->font_sha256_hex) == 0 &&
+        strcmp(left->glyph_set_sha256_hex, right->glyph_set_sha256_hex) == 0 &&
+        left->app_scale_percent == right->app_scale_percent &&
+        left->output_scale_numerator == right->output_scale_numerator &&
+        left->output_scale_denominator == right->output_scale_denominator &&
+        left->raster_pixel_height == right->raster_pixel_height &&
+        left->atlas_width == right->atlas_width &&
+        left->atlas_height == right->atlas_height &&
+        left->graphics_context_identity == right->graphics_context_identity;
+}
+
 void henka_ui_font_set_diagnostic(
     henka_ui_font_diagnostic* diagnostic,
     henka_ui_font_stage stage,
@@ -950,6 +991,7 @@ henka_result henka_ui_font_raster_profile_create(
         {100U, 125U, 150U, 200U};
     henka_ui_font_raster_profile* candidate = NULL;
     henka_ui_font_info base_info;
+    char glyph_set_sha256_hex[65U];
     size_t atlas_bytes;
     size_t total_coverage_bytes = 0U;
     size_t index;
@@ -993,6 +1035,14 @@ henka_result henka_ui_font_raster_profile_create(
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
     candidate->desc = *desc;
+    if (!henka_ui_font_glyph_set_sha256_hex(font, glyph_set_sha256_hex))
+    {
+        henka_ui_font_set_diagnostic(out_diagnostic,
+            HENKA_UI_FONT_STAGE_GLYPH_SET, base_info.identity,
+            "could not derive the bounded glyph repertoire identity");
+        result = HENKA_ERROR_ASSET_SOURCE;
+        goto failure;
+    }
     for (index = 0U; index < HENKA_UI_FONT_APP_SCALE_COUNT; ++index)
     {
         uint32_t raster_pixel_height;
@@ -1018,10 +1068,14 @@ henka_result henka_ui_font_raster_profile_create(
         }
         (void)snprintf(key->font_sha256_hex, sizeof(key->font_sha256_hex),
             "%s", base_info.sha256_hex);
+        (void)snprintf(key->glyph_set_sha256_hex,
+            sizeof(key->glyph_set_sha256_hex), "%s", glyph_set_sha256_hex);
         key->app_scale_percent = app_scales[index];
         key->output_scale_numerator = desc->output_scale_numerator;
         key->output_scale_denominator = desc->output_scale_denominator;
         key->raster_pixel_height = raster_pixel_height;
+        key->atlas_width = desc->atlas_width;
+        key->atlas_height = desc->atlas_height;
         key->graphics_context_identity = desc->graphics_context_identity;
         candidate->entries[index].atlas_width = desc->atlas_width;
         candidate->entries[index].atlas_height = desc->atlas_height;

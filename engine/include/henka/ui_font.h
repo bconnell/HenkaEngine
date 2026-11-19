@@ -87,12 +87,21 @@ typedef struct henka_ui_font_raster_profile_desc
 typedef struct henka_ui_font_atlas_key
 {
     char font_sha256_hex[65U];
+    char glyph_set_sha256_hex[65U];
     uint16_t app_scale_percent;
     uint32_t output_scale_numerator;
     uint32_t output_scale_denominator;
     uint32_t raster_pixel_height;
+    uint32_t atlas_width;
+    uint32_t atlas_height;
     uint64_t graphics_context_identity;
 } henka_ui_font_atlas_key;
+
+/* Compare all source, repertoire, raster, atlas, and context inputs that
+ * determine whether a GPU atlas can be reused. */
+bool henka_ui_font_atlas_key_equal(
+    const henka_ui_font_atlas_key* left,
+    const henka_ui_font_atlas_key* right);
 
 typedef struct henka_ui_font_raster_profile_info
 {

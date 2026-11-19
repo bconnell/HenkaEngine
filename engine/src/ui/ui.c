@@ -2732,6 +2732,104 @@ henka_result henka_ui_measure_text_for_context(
         out_height);
 }
 
+henka_result henka_ui_measure_text_byte_offsets_x_for_context(
+    const henka_ui_context* context,
+    const char* text,
+    size_t text_byte_count,
+    const size_t* byte_offsets,
+    size_t byte_offset_count,
+    float scale,
+    float* out_x_positions)
+{
+    double cursor_x = 0.0;
+    size_t offset_index = 0U;
+    size_t byte_index;
+    size_t index;
+
+    if ((byte_offset_count > 0U &&
+         (byte_offsets == NULL || out_x_positions == NULL)) ||
+        byte_offset_count > HENKA_UI_MAX_TEXT_BYTES + 1U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < byte_offset_count; ++index)
+    {
+        out_x_positions[index] = 0.0f;
+    }
+    if (context == NULL || text == NULL ||
+        text_byte_count > HENKA_UI_MAX_TEXT_BYTES ||
+        memchr(text, '\0', text_byte_count) != NULL ||
+        memchr(text, '\n', text_byte_count) != NULL ||
+        memchr(text, '\r', text_byte_count) != NULL ||
+        !henka_ui_float_is_finite(scale) || scale <= 0.0f ||
+        scale > HENKA_UI_MAX_SCALE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (context->font_profile != NULL)
+    {
+        return henka_ui_measure_font_text_byte_offsets_x(
+            context, text, text_byte_count, byte_offsets,
+            byte_offset_count, scale, out_x_positions);
+    }
+    for (index = 0U; index < byte_offset_count; ++index)
+    {
+        if (byte_offsets[index] > text_byte_count ||
+            (index > 0U && byte_offsets[index] < byte_offsets[index - 1U]) ||
+            (byte_offsets[index] < text_byte_count &&
+             (((unsigned char)text[byte_offsets[index]] & 0xc0U) == 0x80U)))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    while (offset_index < byte_offset_count && byte_offsets[offset_index] == 0U)
+    {
+        ++offset_index;
+    }
+    for (byte_index = 0U; byte_index < text_byte_count; ++byte_index)
+    {
+        if (henka_ui_find_glyph(text[byte_index]) != NULL)
+        {
+            cursor_x += 6.0 * (double)scale;
+        }
+        while (offset_index < byte_offset_count &&
+            byte_offsets[offset_index] == byte_index + 1U)
+        {
+            out_x_positions[offset_index] = (float)cursor_x;
+            ++offset_index;
+        }
+    }
+    if (offset_index != byte_offset_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_measure_text_byte_offset_x_for_context(
+    const henka_ui_context* context,
+    const char* text,
+    size_t text_byte_count,
+    size_t byte_offset,
+    float scale,
+    float* out_x)
+{
+    float position = 0.0f;
+    henka_result result;
+    if (out_x == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_x = 0.0f;
+    result = henka_ui_measure_text_byte_offsets_x_for_context(
+        context, text, text_byte_count, &byte_offset, 1U, scale, &position);
+    if (result == HENKA_SUCCESS)
+    {
+        *out_x = position;
+    }
+    return result;
+}
+
 henka_result henka_ui_panel_with_border_mask(
     henka_ui_context* context,
     henka_ui_rect bounds,

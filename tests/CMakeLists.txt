@@ -446,22 +446,24 @@ if(WIN32)
             ${CMAKE_SOURCE_DIR}/scripts/test_fullscreen_presentation_windows.ps1
             -RepositoryRoot ${CMAKE_SOURCE_DIR})
 
-    add_test(
-        NAME henka_showcase_asset_generator_tests
-        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
-            ${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
-            -OutputDirectory ${CMAKE_BINARY_DIR}/showcase_asset_test
-            -BaselineDirectory $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models)
+    if(TARGET henka_sandbox3d)
+        add_test(
+            NAME henka_showcase_asset_generator_tests
+            COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+                ${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
+                -OutputDirectory ${CMAKE_BINARY_DIR}/showcase_asset_test
+                -BaselineDirectory $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models)
 
-    add_test(
-        NAME henka_showcase_asset_cache_reuse_tests
-        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
-            ${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
-            -OutputDirectory ${CMAKE_BINARY_DIR}/showcase_asset_test
-            -BaselineDirectory $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models
-            -RequireVerifiedCacheHit)
-    set_tests_properties(henka_showcase_asset_cache_reuse_tests PROPERTIES
-        DEPENDS henka_showcase_asset_generator_tests)
+        add_test(
+            NAME henka_showcase_asset_cache_reuse_tests
+            COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+                ${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
+                -OutputDirectory ${CMAKE_BINARY_DIR}/showcase_asset_test
+                -BaselineDirectory $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models
+                -RequireVerifiedCacheHit)
+        set_tests_properties(henka_showcase_asset_cache_reuse_tests PROPERTIES
+            DEPENDS henka_showcase_asset_generator_tests)
+    endif()
 
     add_test(
         NAME henka_showcase_generation_ownership_tests

@@ -94,6 +94,32 @@ static henka_result sandbox3d_editor_text_measure_candidate(
     return sandbox3d_editor_text_measure_width(ui, scratch, out_width);
 }
 
+henka_result sandbox3d_editor_text_byte_offset_x(
+    const henka_ui_context* ui,
+    const char* text,
+    size_t text_byte_count,
+    size_t byte_offset,
+    float scale,
+    float* out_x)
+{
+    if (out_x == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_x = 0.0f;
+    if (ui == NULL || text == NULL || !isfinite((double)scale) || scale <= 0.0f ||
+        byte_offset > text_byte_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (text_byte_count > SANDBOX3D_EDITOR_TEXT_MAX_BYTES)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return henka_ui_measure_text_byte_offset_x_for_context(
+        ui, text, text_byte_count, byte_offset, scale, out_x);
+}
+
 henka_result sandbox3d_editor_text_wrap(
     const henka_ui_context* ui,
     const char* text,
@@ -511,10 +537,9 @@ henka_result sandbox3d_editor_text_byte_offset_at_x(
     float x,
     size_t* out_byte_offset)
 {
-    char prefix[SANDBOX3D_EDITOR_TEXT_MAX_BYTES + 1U];
     const size_t text_length = text != NULL ? strlen(text) : 0U;
     size_t previous_boundary = 0U;
-    int previous_width = 0;
+    float previous_width = 0.0f;
     size_t next_boundary;
 
     if (out_byte_offset == NULL)
@@ -534,22 +559,19 @@ henka_result sandbox3d_editor_text_byte_offset_at_x(
 
     while (previous_boundary < text_length)
     {
-        int next_width = 0;
-        int measured_height = 0;
+        float next_width = 0.0f;
         float midpoint;
         henka_result result;
 
         next_boundary = sandbox3d_editor_text_next_utf8_boundary(
             text, previous_boundary, text_length);
-        memcpy(prefix, text, next_boundary);
-        prefix[next_boundary] = '\0';
-        result = henka_ui_measure_text_for_context(
-            ui, prefix, scale, &next_width, &measured_height);
+        result = sandbox3d_editor_text_byte_offset_x(
+            ui, text, text_length, next_boundary, scale, &next_width);
         if (result != HENKA_SUCCESS)
         {
             return result;
         }
-        if (next_width < 0)
+        if (!isfinite((double)next_width) || next_width < previous_width)
         {
             return HENKA_ERROR_NUMERIC_RANGE;
         }

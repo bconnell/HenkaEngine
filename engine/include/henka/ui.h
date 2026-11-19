@@ -202,6 +202,24 @@ henka_result henka_ui_measure_text_for_context(
     float scale,
     int* out_width,
     int* out_height);
+/* Return the exact logical x position of a UTF-8 byte boundary in a single
+ * line, including kerning before the glyph at that boundary. This is the
+ * shared position authority for caret, hit testing, and segmented drawing. */
+henka_result henka_ui_measure_text_byte_offsets_x_for_context(
+    const henka_ui_context* context,
+    const char* text,
+    size_t text_byte_count,
+    const size_t* byte_offsets,
+    size_t byte_offset_count,
+    float scale,
+    float* out_x_positions);
+henka_result henka_ui_measure_text_byte_offset_x_for_context(
+    const henka_ui_context* context,
+    const char* text,
+    size_t text_byte_count,
+    size_t byte_offset,
+    float scale,
+    float* out_x);
 henka_result henka_ui_overlay_rect(henka_ui_context* context, henka_ui_rect bounds, henka_vec4 color);
 henka_result henka_ui_overlay_line(henka_ui_context* context, henka_vec2 start, henka_vec2 end, float thickness, henka_vec4 color);
 henka_result henka_ui_overlay_triangle(

@@ -41,6 +41,7 @@ struct sandbox3d_editor_typography_runtime
     bool active[SANDBOX3D_TYPOGRAPHY_CONTEXT_COUNT];
     uint64_t last_failed_display_scale_signature;
     uint64_t last_failed_display_scale_frame;
+    henka_result last_failed_display_scale_result;
     bool display_scale_failure_recorded;
     bool display_scale_query_failure_reported;
     char* settings_path;
@@ -563,6 +564,7 @@ henka_result sandbox3d_editor_typography_runtime_sync_display_scales(
     if (!changed)
     {
         runtime->display_scale_failure_recorded = false;
+        runtime->last_failed_display_scale_result = HENKA_SUCCESS;
         return HENKA_SUCCESS;
     }
     if (runtime->display_scale_failure_recorded &&
@@ -570,7 +572,7 @@ henka_result sandbox3d_editor_typography_runtime_sync_display_scales(
         frame_index >= runtime->last_failed_display_scale_frame &&
         frame_index - runtime->last_failed_display_scale_frame < 60U)
     {
-        return HENKA_SUCCESS;
+        return runtime->last_failed_display_scale_result;
     }
 
     for (slot = 0U; slot < SANDBOX3D_TYPOGRAPHY_CONTEXT_COUNT; ++slot)
@@ -619,6 +621,7 @@ henka_result sandbox3d_editor_typography_runtime_sync_display_scales(
         }
     }
     runtime->display_scale_failure_recorded = false;
+    runtime->last_failed_display_scale_result = HENKA_SUCCESS;
     return HENKA_SUCCESS;
 
 fail:
@@ -640,6 +643,7 @@ fail:
     }
     runtime->last_failed_display_scale_signature = signature;
     runtime->last_failed_display_scale_frame = frame_index;
+    runtime->last_failed_display_scale_result = result;
     runtime->display_scale_failure_recorded = true;
     return result;
 }

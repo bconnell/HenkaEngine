@@ -91,6 +91,37 @@ if(NOT private_negative_output MATCHES "private engine source include")
         "result=${private_negative_result}\noutput:\n${private_negative_output}")
 endif()
 
+set(font_metrics_negative_dir "${negative_dir}-font-metrics")
+if(EXISTS "${font_metrics_negative_dir}")
+    message(FATAL_ERROR "Refusing to reuse an existing script-editor font-metrics test directory: ${font_metrics_negative_dir}")
+endif()
+file(MAKE_DIRECTORY "${font_metrics_negative_dir}")
+file(WRITE "${font_metrics_negative_dir}/script_editor.c"
+    "void script_editor_without_active_font_metrics(void) {}\n")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSANDBOX3D_SOURCE_DIR=${font_metrics_negative_dir}"
+        "-DUI_TEXT_LAYOUT_SOURCE=${UI_TEXT_LAYOUT_SOURCE}"
+        "-DEDITOR_LAYOUT_SOURCE=${SANDBOX3D_SOURCE_DIR}/editor_layout.c"
+        "-DEDITOR_LAYOUT_HEADER=${SANDBOX3D_SOURCE_DIR}/editor_layout.h"
+        "-DSANDBOX3D_CMAKE_SOURCE=${SANDBOX3D_SOURCE_DIR}/CMakeLists.txt"
+        -P "${TEXT_AUTHORITY_CHECKER}"
+    RESULT_VARIABLE font_metrics_negative_result
+    OUTPUT_VARIABLE font_metrics_negative_stdout
+    ERROR_VARIABLE font_metrics_negative_stderr)
+set(font_metrics_negative_output "${font_metrics_negative_stdout}\n${font_metrics_negative_stderr}")
+file(REMOVE_RECURSE "${font_metrics_negative_dir}")
+if("${font_metrics_negative_result}" STREQUAL "0")
+    file(REMOVE_RECURSE "${negative_dir}")
+    message(FATAL_ERROR "Text-authority checker accepted a Script Editor with no active font metrics")
+endif()
+if(NOT font_metrics_negative_output MATCHES "code spans/caret do not use active UI font metrics")
+    file(REMOVE_RECURSE "${negative_dir}")
+    message(FATAL_ERROR
+        "Script-editor font-metrics negative control failed for an unexpected reason.\n"
+        "result=${font_metrics_negative_result}\noutput:\n${font_metrics_negative_output}")
+endif()
+
 set(negative_metrics_dir "${negative_dir}-metrics")
 if(EXISTS "${negative_metrics_dir}")
     message(FATAL_ERROR "Refusing to reuse an existing UI-metrics test directory: ${negative_metrics_dir}")
@@ -195,4 +226,4 @@ if(NOT legacy_negative_output MATCHES "Retired fixed-column wrapping/hidden-row 
 endif()
 file(REMOVE_RECURSE "${negative_dir}")
 
-message(STATUS "Sandbox3D text authority passes and rejects legacy callers, duplicate metrics, fixed-cell code layout, and product exposure of legacy helpers")
+message(STATUS "Sandbox3D text authority passes and rejects legacy callers, missing or duplicate font metrics, fixed-cell code layout, and product exposure of legacy helpers")
