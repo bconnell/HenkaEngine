@@ -98,7 +98,25 @@ function New-CMakeFetchContentCleanupCandidate {
     $candidate = Join-Path $testRoot $Name
     $sourceRoot = $repoRoot
     $dependencyRoot = Join-Path $candidate "_deps"
-    $sharedDependency = Join-Path (Join-Path $localRoot "dependencies") "enet-src"
+    $dependencyResolution = Resolve-HenkaBuildDependencyRoot `
+        -RepositoryRoot $repoRoot `
+        -BuildRoot $buildRoot `
+        -Providers @("ENET")
+    if ($null -eq $dependencyResolution) {
+        throw "The canonical Henka build dependency resolver did not find its ENet fixture source."
+    }
+    $dependencyRootPath = switch ([string]$dependencyResolution.Mode) {
+        "build-local" { [string]$dependencyResolution.Root; break }
+        "shared" { Get-HenkaCMakeSharedDependencyRoot -RepositoryRoot $repoRoot; break }
+        default { "" }
+    }
+    if ([string]::IsNullOrWhiteSpace($dependencyRootPath)) {
+        throw "The canonical Henka build dependency resolver returned unsupported mode '$($dependencyResolution.Mode)' for the ENet fixture."
+    }
+    $resolvedDependency = Join-Path $dependencyRootPath "enet-src"
+    if (-not (Test-Path -LiteralPath $resolvedDependency -PathType Container)) {
+        throw "The resolved Henka ENet fixture source is unavailable: $resolvedDependency"
+    }
     $dependencyClone = if ($UnexpectedGitPath.IsPresent) {
         Join-Path $candidate "unexpected-src"
     } else {
@@ -121,21 +139,21 @@ function New-CMakeFetchContentCleanupCandidate {
         [string]::IsNullOrWhiteSpace([string]$fetchContentPin.Repository)) {
         throw "The ENet test fixture does not match Henka's immutable FetchContent declaration."
     }
-    $sharedSourceValidation = Test-HenkaPinnedFetchContentSource `
+    $resolvedSourceValidation = Test-HenkaPinnedFetchContentSource `
         -RepositoryRoot $repoRoot `
-        -SourceRoot $sharedDependency `
+        -SourceRoot $resolvedDependency `
         -Marker "CMakeLists.txt" `
         -PinnedCommit ([string]$fetchContentPin.Commit) `
         -PinnedRepository ([string]$fetchContentPin.Repository)
-    if (-not $sharedSourceValidation.Available) {
-        throw "The shared ENet source is not an exact clean mirror of Henka's pin: $($sharedSourceValidation.RejectionReason)"
+    if (-not $resolvedSourceValidation.Available) {
+        throw "The resolved ENet source is not an exact clean mirror of Henka's pin: $($resolvedSourceValidation.RejectionReason)"
     }
 
-    & $gitPath clone --quiet --local --no-hardlinks $sharedDependency $dependencyClone
+    & $gitPath clone --quiet --local --no-hardlinks $resolvedDependency $dependencyClone
     if ($LASTEXITCODE -ne 0) { throw "Could not clone the shared pinned ENet dependency into the generated CMake fixture." }
     $fixtureOrigin = [string]$fetchContentPin.Repository
     if ($WrongOrigin.IsPresent) {
-        $fixtureOrigin = $sharedDependency
+        $fixtureOrigin = $resolvedDependency
     }
     & $gitPath -C $dependencyClone remote set-url origin $fixtureOrigin
     if ($LASTEXITCODE -ne 0) { throw "Could not set the generated ENet fixture's origin metadata." }
