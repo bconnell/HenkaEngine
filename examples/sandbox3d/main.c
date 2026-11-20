@@ -636,6 +636,7 @@ typedef struct sandbox3d_state
     bool native_authoring_material_control_reported;
     float native_authoring_material_control_reported_y;
     bool native_authoring_material_editor_reported;
+    bool native_authoring_material_editor_reported_source_fully_visible;
     float native_authoring_material_editor_reported_x;
     float native_authoring_material_editor_reported_y;
     float native_authoring_material_editor_reported_width;
@@ -15488,6 +15489,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_material_control_reported = false;
     state->native_authoring_material_control_reported_y = -FLT_MAX;
     state->native_authoring_material_editor_reported = false;
+    state->native_authoring_material_editor_reported_source_fully_visible = false;
     state->native_authoring_material_editor_reported_x = -FLT_MAX;
     state->native_authoring_material_editor_reported_y = -FLT_MAX;
     state->native_authoring_material_editor_reported_width = -FLT_MAX;
@@ -18007,6 +18009,7 @@ static bool sandbox3d_promote_authoring_material(
     state->native_authoring_material_asset = native_asset;
     state->native_authoring_material_entity = entity;
     state->native_authoring_material_editor_reported = false;
+    state->native_authoring_material_editor_reported_source_fully_visible = false;
     state->native_authoring_material_editor_reported_x = -FLT_MAX;
     state->native_authoring_material_editor_reported_y = -FLT_MAX;
     state->native_authoring_material_editor_reported_width = -FLT_MAX;
@@ -18471,6 +18474,7 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
             state->native_authoring_material_control_reported = false;
             state->native_authoring_material_control_reported_y = -FLT_MAX;
             state->native_authoring_material_editor_reported = false;
+            state->native_authoring_material_editor_reported_source_fully_visible = false;
             state->native_authoring_material_editor_reported_x = -FLT_MAX;
             state->native_authoring_material_editor_reported_y = -FLT_MAX;
             state->native_authoring_material_editor_reported_width = -FLT_MAX;
@@ -29959,23 +29963,26 @@ static bool sandbox3d_details_prepare_wrapped_value(
         out_line_count) == HENKA_SUCCESS;
 }
 
-static bool sandbox3d_details_flow_next_row(
+static bool sandbox3d_details_flow_reserve_row(
     sandbox3d_state* state,
     henka_ui_rect viewport,
     float row_height,
     size_t indent_level,
-    henka_ui_rect* out_bounds)
+    henka_ui_rect* out_bounds,
+    bool* out_visible)
 {
     bool visible;
 
     if (state == NULL ||
         state->ui == NULL ||
-        out_bounds == NULL)
+        out_bounds == NULL ||
+        out_visible == NULL)
     {
         return false;
     }
 
     visible = false;
+    *out_visible = false;
     if (henka_ui_flow_next_row(
             state->ui,
             row_height,
@@ -29986,11 +29993,27 @@ static bool sandbox3d_details_flow_next_row(
         return false;
     }
 
-    return
-        visible &&
-        sandbox3d_details_row_fully_visible(
-            viewport,
-            *out_bounds);
+    *out_visible = visible &&
+        sandbox3d_details_row_fully_visible(viewport, *out_bounds);
+    return true;
+}
+
+static bool sandbox3d_details_flow_next_row(
+    sandbox3d_state* state,
+    henka_ui_rect viewport,
+    float row_height,
+    size_t indent_level,
+    henka_ui_rect* out_bounds)
+{
+    bool visible;
+
+    return sandbox3d_details_flow_reserve_row(
+        state,
+        viewport,
+        row_height,
+        indent_level,
+        out_bounds,
+        &visible) && visible;
 }
 
 /* Place a measured control grid in the Details flow and reserve every row
@@ -32142,6 +32165,7 @@ details_group_authoring:
             bool native_material_history_drawn = false;
             bool native_profile_control_drawn = false;
             bool native_edge_loop_control_drawn = false;
+            bool source_row_visible = false;
             const bool edge_mode_authorized_at_frame =
                 state->native_authoring_edge_mode_entity == entity;
             const char* selection_label = selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
@@ -32155,22 +32179,31 @@ details_group_authoring:
                 "%s (%zu selected)",
                 selection_label,
                 selected_component_count);
-            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row))
+            if (sandbox3d_details_flow_reserve_row(
+                    state,
+                    flow_desc.bounds,
+                    28.0f,
+                    1U,
+                    &row,
+                    &source_row_visible))
             {
                 henka_ui_rect context_move_row;
                 const bool native_material_owned =
                     state->native_authoring_material_asset != NULL &&
                     state->native_authoring_material_entity == entity;
                 const float material_action_x = row.x + row.width - 108.0f;
-                sandbox3d_draw_value_row(
-                    state->ui,
-                    row.x,
-                    row.y,
-                    native_material_owned ? row.width - 116.0f : row.width - 112.0f,
-                    "Source",
-                    native_material_owned
-                        ? "Authoring mesh + material instance"
-                        : "Authoring mesh (per-object user slot)");
+                if (source_row_visible)
+                {
+                    sandbox3d_draw_value_row(
+                        state->ui,
+                        row.x,
+                        row.y,
+                        native_material_owned ? row.width - 116.0f : row.width - 112.0f,
+                        "Source",
+                        native_material_owned
+                            ? "Authoring mesh + material instance"
+                            : "Authoring mesh (per-object user slot)");
+                }
                 if (authored_object_available &&
                     sandbox3d_details_flow_next_row(
                         state,
@@ -32556,10 +32589,11 @@ details_group_authoring:
                 }
                 if (!native_material_owned)
                 {
-                    if (!state->native_authoring_material_control_reported ||
+                    if (source_row_visible &&
+                        (!state->native_authoring_material_control_reported ||
                         fabsf(
                             row.y - state->native_authoring_material_control_reported_y) >
-                            0.5f)
+                            0.5f))
                     {
                         printf(
                             "Native authoring material control: name=%s own_x=%.1f own_y=%.1f width=100.0 height=24.0 owned=0.\n",
@@ -32570,7 +32604,7 @@ details_group_authoring:
                         state->native_authoring_material_control_reported = true;
                         state->native_authoring_material_control_reported_y = row.y;
                     }
-                    if (henka_ui_button(
+                    if (source_row_visible && henka_ui_button(
                             state->ui,
                             "authoring_own_material",
                             (henka_ui_rect){material_action_x, row.y, 100.0f, 24.0f},
@@ -32634,6 +32668,8 @@ details_group_authoring:
                         }
 
                         if (!state->native_authoring_material_editor_reported ||
+                            source_row_visible !=
+                                state->native_authoring_material_editor_reported_source_fully_visible ||
                             fabsf(
                                 material_controls[0].x -
                                 state->native_authoring_material_editor_reported_x) > 0.5f ||
@@ -32647,9 +32683,10 @@ details_group_authoring:
                                 state->native_authoring_material_editor_reported_rows)
                         {
                             printf(
-                                "Native authoring material controls: name=%s source_y=%.1f rows=%zu all_visible=%u",
+                                "Native authoring material controls: name=%s source_y=%.1f source_fully_visible=%u rows=%zu all_visible=%u",
                                 display_name,
                                 row.y,
+                                source_row_visible ? 1U : 0U,
                                 material_control_rows,
                                 material_controls_all_visible ? 1U : 0U);
                             for (material_control_index = 0U;
@@ -32667,6 +32704,8 @@ details_group_authoring:
                             printf(".\n");
                             fflush(stdout);
                             state->native_authoring_material_editor_reported = true;
+                            state->native_authoring_material_editor_reported_source_fully_visible =
+                                source_row_visible;
                             state->native_authoring_material_editor_reported_x =
                                 material_controls[0].x;
                             state->native_authoring_material_editor_reported_y =

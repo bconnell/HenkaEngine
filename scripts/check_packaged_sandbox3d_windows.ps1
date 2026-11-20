@@ -77,7 +77,7 @@ function Get-PackageInfoValue {
 function Get-NativeAuthoringMaterialControlGeometry {
     param([Parameter(Mandatory = $true)][string]$LogPath)
 
-    $pattern = 'Native authoring material controls: name=(.+) source_y=([-0-9.]+) rows=(\d+) all_visible=([01])'
+    $pattern = 'Native authoring material controls: name=(.+) source_y=([-0-9.]+) source_fully_visible=([01]) rows=(\d+) all_visible=([01])'
     for ($controlIndex = 0; $controlIndex -lt 6; ++$controlIndex) {
         $pattern += ' item' + $controlIndex + '=([-0-9.]+),([-0-9.]+),([-0-9.]+),([01])'
     }
@@ -89,7 +89,7 @@ function Get-NativeAuthoringMaterialControlGeometry {
 
     $items = @()
     for ($controlIndex = 0; $controlIndex -lt 6; ++$controlIndex) {
-        $groupIndex = 5 + ($controlIndex * 4)
+        $groupIndex = 6 + ($controlIndex * 4)
         $items += [pscustomobject]@{
             X = [double]$match.Groups[$groupIndex].Value
             Y = [double]$match.Groups[$groupIndex + 1].Value
@@ -101,8 +101,9 @@ function Get-NativeAuthoringMaterialControlGeometry {
     return [pscustomobject]@{
         Name = $match.Groups[1].Value
         SourceY = [double]$match.Groups[2].Value
-        Rows = [int]$match.Groups[3].Value
-        AllVisible = ([int]$match.Groups[4].Value -eq 1)
+        SourceFullyVisible = ([int]$match.Groups[3].Value -eq 1)
+        Rows = [int]$match.Groups[4].Value
+        AllVisible = ([int]$match.Groups[5].Value -eq 1)
         Items = $items
     }
 }
@@ -4435,6 +4436,123 @@ try {
         }
         if ($visibleMaterialControlCount -ne 6) {
             throw "The six native material controls did not become fully visible through normal Details scrolling."
+        }
+        $sourceHiddenMaterialGridObserved = -not $nativeMaterialLayout.SourceFullyVisible -and
+            @($nativeMaterialLayout.Items | Where-Object { $_.Visible }).Count -gt 0
+        for ($sourceHiddenAttempt = 0;
+             $sourceHiddenAttempt -lt 12 -and -not $sourceHiddenMaterialGridObserved;
+             ++$sourceHiddenAttempt) {
+            $sourceHiddenGeometryOffset = Get-FileLengthSafe -Path $stdoutPath
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta -1
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring material controls:" `
+                    -StartingOffset $sourceHiddenGeometryOffset `
+                    -TimeoutMilliseconds 1500)) {
+                continue
+            }
+            $sourceHiddenLayout =
+                Get-NativeAuthoringMaterialControlGeometry -LogPath $stdoutPath
+            if ($null -eq $sourceHiddenLayout) {
+                throw "The material grid stopped reporting product geometry while scrolling past its Source row."
+            }
+            $visibleMaterialControlCount = @(
+                $sourceHiddenLayout.Items | Where-Object { $_.Visible }).Count
+            if (-not $sourceHiddenLayout.SourceFullyVisible -and
+                $visibleMaterialControlCount -gt 0) {
+                $sourceHiddenMaterialGridObserved = $true
+                $nativeMaterialLayout = $sourceHiddenLayout
+            }
+        }
+        if (-not $sourceHiddenMaterialGridObserved) {
+            throw "The packaged workflow could not confirm visible material controls while the Source row was not fully visible."
+        }
+        Write-Output "[pass] Product material-grid geometry remains available while the Source row is not fully visible"
+
+        # Exercise one real material hit target while the Source row is not fully
+        # visible. Geometry alone would not prove that the button draw and
+        # input path remained enabled with the enclosing row scrolled away.
+        $sourceHiddenActionIndex = -1
+        $sourceHiddenActionPatterns = @(
+            "parameter=Base Color",
+            "parameter=Metallic",
+            "parameter=Roughness",
+            "parameter=Emissive Strength",
+            "slot=Normal",
+            "parameter=Subsurface"
+        )
+        for ($controlIndex = 0;
+             $controlIndex -lt $nativeMaterialLayout.Items.Count;
+             ++$controlIndex) {
+            if ($nativeMaterialLayout.Items[$controlIndex].Visible) {
+                $sourceHiddenActionIndex = $controlIndex
+                break
+            }
+        }
+        if ($sourceHiddenActionIndex -lt 0 -or $nativeMaterialLayout.SourceFullyVisible) {
+            throw "No visible material hit target was available while the Source row was not fully visible."
+        }
+        $sourceHiddenAction = $nativeMaterialLayout.Items[$sourceHiddenActionIndex]
+        Assert-FramebufferRect `
+            -Name "Visible native material control with Source row scrolled away" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $sourceHiddenAction.X `
+            -Y $sourceHiddenAction.Y `
+            -Width $sourceHiddenAction.Width `
+            -Height 28.0
+        $sourceHiddenActionLogOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($sourceHiddenAction.X + ($sourceHiddenAction.Width * 0.5)) `
+            -FramebufferY ($sourceHiddenAction.Y + 14.0)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $sourceHiddenActionPatterns[$sourceHiddenActionIndex] `
+                -StartingOffset $sourceHiddenActionLogOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The visible material control did not accept a real click while its Source row was not fully visible."
+        }
+        Write-Output ("[pass] Native material control " + $sourceHiddenActionIndex + " accepted a real click while the Source row was not fully visible")
+
+        # Return to the fully visible material controls before exercising them.
+        for ($restoreMaterialAttempt = 0;
+             $restoreMaterialAttempt -lt 16 -and
+             $visibleMaterialControlCount -lt 6;
+             ++$restoreMaterialAttempt) {
+            $restoreMaterialGeometryOffset = Get-FileLengthSafe -Path $stdoutPath
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta 1
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring material controls:" `
+                    -StartingOffset $restoreMaterialGeometryOffset `
+                    -TimeoutMilliseconds 1500)) {
+                continue
+            }
+            $nativeMaterialLayout =
+                Get-NativeAuthoringMaterialControlGeometry -LogPath $stdoutPath
+            if ($null -eq $nativeMaterialLayout) {
+                throw "The native material grid did not restore product geometry after the Source-row regression check."
+            }
+            $visibleMaterialControlCount = @(
+                $nativeMaterialLayout.Items | Where-Object { $_.Visible }).Count
+        }
+        if ($visibleMaterialControlCount -ne 6) {
+            throw "The native material controls could not be restored after checking Source-row-independent layout."
         }
         $nativeMaterialRects = @($nativeMaterialLayout.Items)
         for ($controlIndex = 0; $controlIndex -lt $nativeMaterialRects.Count; ++$controlIndex) {
