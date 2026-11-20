@@ -1130,6 +1130,147 @@ void henka_test_sandbox3d_editor_layout(void)
         }
 
         {
+            const char* const material_labels[6] = {
+                "Base Color", "Metallic", "Roughness",
+                "Emission", "Texture", "Subsurface"};
+            const henka_ui_rect narrow_material_viewport = {
+                48.0f, 36.0f, 230.0f, 88.0f};
+            const float flow_spacing = 6.0f;
+            const float material_row_height = 28.0f;
+            const float material_row_gap = 4.0f;
+            const float material_row_step =
+                material_row_height + material_row_gap + flow_spacing;
+            henka_ui_flow_desc flow = {0};
+            henka_ui_rect visible_controls[6] = {{0}};
+            henka_ui_rect scrolled_controls[6] = {{0}};
+            size_t visible_rows = 0U;
+            size_t scrolled_rows = 0U;
+            size_t visible_control_count = 0U;
+            size_t hidden_control_count = 0U;
+            size_t control_index;
+            float visible_content_height = 0.0f;
+            float scrolled_content_height = 0.0f;
+            bool all_visible = true;
+
+            flow.bounds = narrow_material_viewport;
+            flow.row_spacing = flow_spacing;
+            HENKA_TEST_ASSERT(
+                henka_ui_flow_begin(ui_context, &flow) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(
+                sandbox3d_editor_layout_flow_text_control_grid_for_context(
+                    ui_context,
+                    narrow_material_viewport,
+                    flow.row_spacing,
+                    material_labels,
+                    6U,
+                    2.0f,
+                    80.0f,
+                    8.0f,
+                    8.0f,
+                    material_row_height,
+                    material_row_gap,
+                    visible_controls,
+                    6U,
+                    &visible_rows,
+                    &all_visible));
+            HENKA_TEST_ASSERT(visible_rows > 1U);
+            HENKA_TEST_ASSERT(!all_visible);
+            for (control_index = 0U; control_index < 6U; ++control_index)
+            {
+                const henka_ui_rect control = visible_controls[control_index];
+                const float row_offset = control.y - narrow_material_viewport.y;
+                const float row_index = roundf(row_offset / material_row_step);
+                size_t prior_index;
+
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    row_offset,
+                    row_index * material_row_step,
+                    0.01f);
+                HENKA_TEST_ASSERT(control.x >= narrow_material_viewport.x);
+                HENKA_TEST_ASSERT(
+                    control.x + control.width <=
+                    narrow_material_viewport.x + narrow_material_viewport.width + 0.01f);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    control.height,
+                    material_row_height,
+                    0.01f);
+                if (control.y >= narrow_material_viewport.y &&
+                    control.y + control.height <=
+                        narrow_material_viewport.y + narrow_material_viewport.height)
+                {
+                    ++visible_control_count;
+                }
+                else
+                {
+                    ++hidden_control_count;
+                }
+                for (prior_index = 0U; prior_index < control_index; ++prior_index)
+                {
+                    if (fabsf(
+                            visible_controls[prior_index].y - control.y) < 0.01f)
+                    {
+                        HENKA_TEST_ASSERT(
+                            visible_controls[prior_index].x +
+                                visible_controls[prior_index].width <=
+                            control.x + 0.01f);
+                    }
+                }
+            }
+            HENKA_TEST_ASSERT(visible_control_count > 0U);
+            HENKA_TEST_ASSERT(hidden_control_count > 0U);
+            HENKA_TEST_ASSERT(
+                henka_ui_flow_end(
+                    ui_context,
+                    &visible_content_height) == HENKA_SUCCESS);
+
+            flow.scroll_offset = material_row_step;
+            HENKA_TEST_ASSERT(
+                henka_ui_flow_begin(ui_context, &flow) == HENKA_SUCCESS);
+            all_visible = true;
+            HENKA_TEST_ASSERT(
+                sandbox3d_editor_layout_flow_text_control_grid_for_context(
+                    ui_context,
+                    narrow_material_viewport,
+                    flow.row_spacing,
+                    material_labels,
+                    6U,
+                    2.0f,
+                    80.0f,
+                    8.0f,
+                    8.0f,
+                    material_row_height,
+                    material_row_gap,
+                    scrolled_controls,
+                    6U,
+                    &scrolled_rows,
+                    &all_visible));
+            HENKA_TEST_ASSERT(scrolled_rows == visible_rows);
+            for (control_index = 0U; control_index < 6U; ++control_index)
+            {
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    scrolled_controls[control_index].x,
+                    visible_controls[control_index].x,
+                    0.01f);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    scrolled_controls[control_index].y,
+                    visible_controls[control_index].y - flow.scroll_offset,
+                    0.01f);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    scrolled_controls[control_index].width,
+                    visible_controls[control_index].width,
+                    0.01f);
+            }
+            HENKA_TEST_ASSERT(
+                henka_ui_flow_end(
+                    ui_context,
+                    &scrolled_content_height) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                scrolled_content_height,
+                visible_content_height,
+                0.01f);
+        }
+
+        {
             henka_ui_rect narrow_tabs[
                 SANDBOX3D_EDITOR_UTILITY_TAB_COUNT] = {{0}};
             henka_ui_rect wide_tabs[

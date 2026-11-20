@@ -73,6 +73,41 @@ function Get-PackageInfoValue {
     }
     return $match.Matches[0].Groups[1].Value.Trim()
 }
+
+function Get-NativeAuthoringMaterialControlGeometry {
+    param([Parameter(Mandatory = $true)][string]$LogPath)
+
+    $pattern = 'Native authoring material controls: name=(.+) source_y=([-0-9.]+) source_fully_visible=([01]) rows=(\d+) all_visible=([01])'
+    for ($controlIndex = 0; $controlIndex -lt 6; ++$controlIndex) {
+        $pattern += ' item' + $controlIndex + '=([-0-9.]+),([-0-9.]+),([-0-9.]+),([01])'
+    }
+    $pattern += '\.'
+    $match = Get-LastLogRegexMatch -Path $LogPath -Pattern $pattern
+    if ($null -eq $match) {
+        return $null
+    }
+
+    $items = @()
+    for ($controlIndex = 0; $controlIndex -lt 6; ++$controlIndex) {
+        $groupIndex = 6 + ($controlIndex * 4)
+        $items += [pscustomobject]@{
+            X = [double]$match.Groups[$groupIndex].Value
+            Y = [double]$match.Groups[$groupIndex + 1].Value
+            Width = [double]$match.Groups[$groupIndex + 2].Value
+            Visible = ([int]$match.Groups[$groupIndex + 3].Value -eq 1)
+        }
+    }
+
+    return [pscustomobject]@{
+        Name = $match.Groups[1].Value
+        SourceY = [double]$match.Groups[2].Value
+        SourceFullyVisible = ([int]$match.Groups[3].Value -eq 1)
+        Rows = [int]$match.Groups[4].Value
+        AllVisible = ([int]$match.Groups[5].Value -eq 1)
+        Items = $items
+    }
+}
+
 function Write-Step {
     param([string]$Message)
     Write-Output "[check] $Message"
@@ -4205,8 +4240,18 @@ try {
                 -Pattern "Native authoring material controls:" `
                 -TimeoutMilliseconds 3000)) {
 
-            throw "The native material editor controls did not become visible in the resolved ownership state."
+            throw "The native material grid did not report geometry in the resolved ownership state."
         }
+        $initialNativeMaterialLayout =
+            Get-NativeAuthoringMaterialControlGeometry -LogPath $stdoutPath
+        if ($null -eq $initialNativeMaterialLayout) {
+            throw "The native material grid geometry report could not be parsed."
+        }
+        if ($initialNativeMaterialLayout.Items[0].Y -le
+            ($initialNativeMaterialLayout.SourceY + 28.0)) {
+            throw "The native material grid overlaps the Source row instead of following the Object Details flow."
+        }
+        Write-Output "[pass] Native material grid follows the Source row without overlapping its hit area"
         $opticalGeometryStartingOffset = Get-FileLengthSafe -Path $stdoutPath
         $opticalGeometryObserved = $false
         for ($opticalScrollAttempt = 0;
@@ -4348,44 +4393,221 @@ try {
             throw "The user-facing native subsurface tint edit did not complete."
         }
         Write-Output "[pass] User-facing native subsurface tint edit completed"
-        # The optical controls are below the general material controls. Return
-        # to the top of the details flow before using the earlier material
-        # geometry record; otherwise the click lands in the scrolled layout.
-        Scroll-FramebufferPoint `
+        # Scroll back from the optical controls until the product reports every
+        # measured material hit rectangle fully inside the visible Details area.
+        $nativeMaterialLayout =
+            Get-NativeAuthoringMaterialControlGeometry -LogPath $stdoutPath
+        if ($null -eq $nativeMaterialLayout) {
+            throw "The native material editor control geometry could not be parsed."
+        }
+        $visibleMaterialControlCount = @(
+            $nativeMaterialLayout.Items | Where-Object { $_.Visible }).Count
+        for ($materialScrollAttempt = 0;
+             $materialScrollAttempt -lt 16 -and
+             $visibleMaterialControlCount -lt 6;
+             ++$materialScrollAttempt) {
+            $materialGeometryOffset = Get-FileLengthSafe -Path $stdoutPath
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta 1
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring material controls:" `
+                    -StartingOffset $materialGeometryOffset `
+                    -TimeoutMilliseconds 1500)) {
+                continue
+            }
+            $latestMaterialLayout =
+                Get-NativeAuthoringMaterialControlGeometry -LogPath $stdoutPath
+            if ($null -eq $latestMaterialLayout) {
+                throw "The native material grid did not report updated geometry after scrolling."
+            }
+            if ($latestMaterialLayout.Items[0].Y -le
+                ($latestMaterialLayout.SourceY + 28.0)) {
+                throw "The native material grid overlaps the Source row after scrolling."
+            }
+            $nativeMaterialLayout = $latestMaterialLayout
+            $visibleMaterialControlCount = @(
+                $nativeMaterialLayout.Items | Where-Object { $_.Visible }).Count
+        }
+        if ($visibleMaterialControlCount -ne 6) {
+            throw "The six native material controls did not become fully visible through normal Details scrolling."
+        }
+        $sourceHiddenMaterialGridObserved = -not $nativeMaterialLayout.SourceFullyVisible -and
+            @($nativeMaterialLayout.Items | Where-Object { $_.Visible }).Count -gt 0
+        for ($sourceHiddenAttempt = 0;
+             $sourceHiddenAttempt -lt 12 -and -not $sourceHiddenMaterialGridObserved;
+             ++$sourceHiddenAttempt) {
+            $sourceHiddenGeometryOffset = Get-FileLengthSafe -Path $stdoutPath
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta -1
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring material controls:" `
+                    -StartingOffset $sourceHiddenGeometryOffset `
+                    -TimeoutMilliseconds 1500)) {
+                continue
+            }
+            $sourceHiddenLayout =
+                Get-NativeAuthoringMaterialControlGeometry -LogPath $stdoutPath
+            if ($null -eq $sourceHiddenLayout) {
+                throw "The material grid stopped reporting product geometry while scrolling past its Source row."
+            }
+            $visibleMaterialControlCount = @(
+                $sourceHiddenLayout.Items | Where-Object { $_.Visible }).Count
+            if (-not $sourceHiddenLayout.SourceFullyVisible -and
+                $visibleMaterialControlCount -gt 0) {
+                $sourceHiddenMaterialGridObserved = $true
+                $nativeMaterialLayout = $sourceHiddenLayout
+            }
+        }
+        if (-not $sourceHiddenMaterialGridObserved) {
+            throw "The packaged workflow could not confirm visible material controls while the Source row was not fully visible."
+        }
+        Write-Output "[pass] Product material-grid geometry remains available while the Source row is not fully visible"
+
+        # Exercise one real material hit target while the Source row is not fully
+        # visible. Geometry alone would not prove that the button draw and
+        # input path remained enabled with the enclosing row scrolled away.
+        $sourceHiddenActionIndex = -1
+        $sourceHiddenActionPatterns = @(
+            "parameter=Base Color",
+            "parameter=Metallic",
+            "parameter=Roughness",
+            "parameter=Emissive Strength",
+            "slot=Normal",
+            "parameter=Subsurface"
+        )
+        for ($controlIndex = 0;
+             $controlIndex -lt $nativeMaterialLayout.Items.Count;
+             ++$controlIndex) {
+            if ($nativeMaterialLayout.Items[$controlIndex].Visible) {
+                $sourceHiddenActionIndex = $controlIndex
+                break
+            }
+        }
+        if ($sourceHiddenActionIndex -lt 0 -or $nativeMaterialLayout.SourceFullyVisible) {
+            throw "No visible material hit target was available while the Source row was not fully visible."
+        }
+        $sourceHiddenAction = $nativeMaterialLayout.Items[$sourceHiddenActionIndex]
+        Assert-FramebufferRect `
+            -Name "Visible native material control with Source row scrolled away" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $sourceHiddenAction.X `
+            -Y $sourceHiddenAction.Y `
+            -Width $sourceHiddenAction.Width `
+            -Height 28.0
+        $sourceHiddenActionLogOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
-            -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-            -WheelDelta 1
-        $nativeMaterialControlsMatch = Get-LastLogRegexMatch `
-            -Path $stdoutPath `
-            -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
-        if ($null -eq $nativeMaterialControlsMatch) {
-            throw "The native material editor control geometry could not be parsed."
+            -FramebufferX ($sourceHiddenAction.X + ($sourceHiddenAction.Width * 0.5)) `
+            -FramebufferY ($sourceHiddenAction.Y + 14.0)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $sourceHiddenActionPatterns[$sourceHiddenActionIndex] `
+                -StartingOffset $sourceHiddenActionLogOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The visible material control did not accept a real click while its Source row was not fully visible."
         }
-        $nativeMaterialTintX = [double]$nativeMaterialControlsMatch.Groups[2].Value
-        $nativeMaterialMetalX = [double]$nativeMaterialControlsMatch.Groups[3].Value
-        $nativeMaterialRoughX = [double]$nativeMaterialControlsMatch.Groups[4].Value
-        $nativeMaterialEmissiveX = [double]$nativeMaterialControlsMatch.Groups[5].Value
-        $nativeMaterialTextureX = [double]$nativeMaterialControlsMatch.Groups[6].Value
-        $nativeSubsurfaceX = [double]$nativeMaterialControlsMatch.Groups[7].Value
-        $nativeMaterialY = [double]$nativeMaterialControlsMatch.Groups[8].Value
-        $nativeMaterialSecondY = [double]$nativeMaterialControlsMatch.Groups[9].Value
-        $nativeMaterialWidth = [double]$nativeMaterialControlsMatch.Groups[10].Value
+        Write-Output ("[pass] Native material control " + $sourceHiddenActionIndex + " accepted a real click while the Source row was not fully visible")
+
+        # Return to the fully visible material controls before exercising them.
+        for ($restoreMaterialAttempt = 0;
+             $restoreMaterialAttempt -lt 16 -and
+             $visibleMaterialControlCount -lt 6;
+             ++$restoreMaterialAttempt) {
+            $restoreMaterialGeometryOffset = Get-FileLengthSafe -Path $stdoutPath
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta 1
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring material controls:" `
+                    -StartingOffset $restoreMaterialGeometryOffset `
+                    -TimeoutMilliseconds 1500)) {
+                continue
+            }
+            $nativeMaterialLayout =
+                Get-NativeAuthoringMaterialControlGeometry -LogPath $stdoutPath
+            if ($null -eq $nativeMaterialLayout) {
+                throw "The native material grid did not restore product geometry after the Source-row regression check."
+            }
+            $visibleMaterialControlCount = @(
+                $nativeMaterialLayout.Items | Where-Object { $_.Visible }).Count
+        }
+        if ($visibleMaterialControlCount -ne 6) {
+            throw "The native material controls could not be restored after checking Source-row-independent layout."
+        }
+        $nativeMaterialRects = @($nativeMaterialLayout.Items)
+        for ($controlIndex = 0; $controlIndex -lt $nativeMaterialRects.Count; ++$controlIndex) {
+            $controlRect = $nativeMaterialRects[$controlIndex]
+            Assert-FramebufferRect `
+                -Name ("Native material control " + $controlIndex) `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $controlRect.X `
+                -Y $controlRect.Y `
+                -Width $controlRect.Width `
+                -Height 28.0
+            for ($priorControlIndex = 0;
+                 $priorControlIndex -lt $controlIndex;
+                 ++$priorControlIndex) {
+                $priorRect = $nativeMaterialRects[$priorControlIndex]
+                if ([Math]::Abs($priorRect.Y - $controlRect.Y) -lt 0.5 -and
+                    $priorRect.X + $priorRect.Width -gt $controlRect.X + 0.5) {
+                    throw "Native material control rectangles overlap within the measured grid."
+                }
+            }
+        }
+        Write-Output "[pass] All six native material controls are fully visible and non-overlapping at the current Details scroll position"
+
+        $nativeMaterialTintX = $nativeMaterialRects[0].X
+        $nativeMaterialY = $nativeMaterialRects[0].Y
+        $nativeMaterialTintWidth = $nativeMaterialRects[0].Width
+        $nativeMaterialMetalX = $nativeMaterialRects[1].X
+        $nativeMaterialMetalY = $nativeMaterialRects[1].Y
+        $nativeMaterialMetalWidth = $nativeMaterialRects[1].Width
+        $nativeMaterialRoughX = $nativeMaterialRects[2].X
+        $nativeMaterialRoughY = $nativeMaterialRects[2].Y
+        $nativeMaterialRoughWidth = $nativeMaterialRects[2].Width
+        $nativeMaterialEmissiveX = $nativeMaterialRects[3].X
+        $nativeMaterialEmissiveY = $nativeMaterialRects[3].Y
+        $nativeMaterialEmissiveWidth = $nativeMaterialRects[3].Width
+        $nativeMaterialTextureX = $nativeMaterialRects[4].X
+        $nativeMaterialTextureY = $nativeMaterialRects[4].Y
+        $nativeMaterialTextureWidth = $nativeMaterialRects[4].Width
+        $nativeSubsurfaceX = $nativeMaterialRects[5].X
+        $nativeSubsurfaceY = $nativeMaterialRects[5].Y
+        $nativeSubsurfaceWidth = $nativeMaterialRects[5].Width
         Assert-FramebufferRect `
             -Name "Native authoring material tint control" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeMaterialTintX `
             -Y $nativeMaterialY `
-            -Width $nativeMaterialWidth `
+            -Width $nativeMaterialTintWidth `
             -Height 28.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialTintX + ($nativeMaterialWidth * 0.5)) `
+            -FramebufferX ($nativeMaterialTintX + ($nativeMaterialTintWidth * 0.5)) `
             -FramebufferY ($nativeMaterialY + 14.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material edited" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native material parameter edit did not complete."
@@ -4395,22 +4617,22 @@ try {
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeMaterialMetalX `
-            -Y $nativeMaterialY `
-            -Width $nativeMaterialWidth `
+            -Y $nativeMaterialMetalY `
+            -Width $nativeMaterialMetalWidth `
             -Height 28.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialMetalX + ($nativeMaterialWidth * 0.5)) `
-            -FramebufferY ($nativeMaterialY + 14.0)
+            -FramebufferX ($nativeMaterialMetalX + ($nativeMaterialMetalWidth * 0.5)) `
+            -FramebufferY ($nativeMaterialMetalY + 14.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "parameter=Metallic" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native metallic edit did not complete."
         }
         Write-Output "[pass] User-facing native metallic edit completed"
         foreach ($scalarControl in @(
-            @{ Name = "roughness"; X = $nativeMaterialRoughX; Y = $nativeMaterialY; Pattern = "parameter=Roughness" },
-            @{ Name = "emissive strength"; X = $nativeMaterialEmissiveX; Y = $nativeMaterialSecondY; Pattern = "parameter=Emissive Strength" }
+            @{ Name = "roughness"; X = $nativeMaterialRoughX; Y = $nativeMaterialRoughY; Width = $nativeMaterialRoughWidth; Pattern = "parameter=Roughness" },
+            @{ Name = "emissive strength"; X = $nativeMaterialEmissiveX; Y = $nativeMaterialEmissiveY; Width = $nativeMaterialEmissiveWidth; Pattern = "parameter=Emissive Strength" }
         )) {
             $scalarEdited = $false
             foreach ($scalarClickOffset in @(
@@ -4420,33 +4642,19 @@ try {
                 @(-8.0, 0.0),
                 @(8.0, 0.0)
             )) {
-                $latestNativeMaterialControlsMatch = Get-LastLogRegexMatch `
-                    -Path $stdoutPath `
-                    -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
-                if ($null -ne $latestNativeMaterialControlsMatch) {
-                    if ($scalarControl.Name -eq "roughness") {
-                        $scalarControl.X = [double]$latestNativeMaterialControlsMatch.Groups[4].Value
-                        $scalarControl.Y = [double]$latestNativeMaterialControlsMatch.Groups[8].Value
-                    }
-                    else {
-                        $scalarControl.X = [double]$latestNativeMaterialControlsMatch.Groups[5].Value
-                        $scalarControl.Y = [double]$latestNativeMaterialControlsMatch.Groups[9].Value
-                    }
-                    $nativeMaterialWidth = [double]$latestNativeMaterialControlsMatch.Groups[10].Value
-                }
                 Assert-FramebufferRect `
                     -Name ("Native authoring " + $scalarControl.Name + " control") `
                     -FramebufferWidth $framebufferWidth `
                     -FramebufferHeight $framebufferHeight `
                     -X $scalarControl.X `
                     -Y $scalarControl.Y `
-                    -Width $nativeMaterialWidth `
+                    -Width $scalarControl.Width `
                     -Height 28.0
                 Click-FramebufferPoint `
                     -Handle $mainWindowHandle `
                     -FramebufferWidth $framebufferWidth `
                     -FramebufferHeight $framebufferHeight `
-                    -FramebufferX ($scalarControl.X + ($nativeMaterialWidth * 0.5) + [double]$scalarClickOffset[0]) `
+                    -FramebufferX ($scalarControl.X + ($scalarControl.Width * 0.5) + [double]$scalarClickOffset[0]) `
                     -FramebufferY ($scalarControl.Y + 14.0 + [double]$scalarClickOffset[1])
                 if (Wait-FileContains -Path $stdoutPath -Pattern $scalarControl.Pattern -TimeoutMilliseconds 2500) {
                     $scalarEdited = $true
@@ -4463,15 +4671,15 @@ try {
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeSubsurfaceX `
-            -Y $nativeMaterialSecondY `
-            -Width $nativeMaterialWidth `
+            -Y $nativeSubsurfaceY `
+            -Width $nativeSubsurfaceWidth `
             -Height 28.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeSubsurfaceX + ($nativeMaterialWidth * 0.5)) `
-            -FramebufferY ($nativeMaterialSecondY + 14.0)
+            -FramebufferX ($nativeSubsurfaceX + ($nativeSubsurfaceWidth * 0.5)) `
+            -FramebufferY ($nativeSubsurfaceY + 14.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "parameter=Subsurface" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native subsurface edit did not complete."
         }
@@ -4481,16 +4689,16 @@ try {
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeMaterialTextureX `
-            -Y $nativeMaterialSecondY `
-            -Width $nativeMaterialWidth `
+            -Y $nativeMaterialTextureY `
+            -Width $nativeMaterialTextureWidth `
             -Height 28.0
         $nativeTextureLogOffset = Get-FileLengthSafe -Path $stdoutPath
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialTextureX + ($nativeMaterialWidth * 0.5)) `
-            -FramebufferY ($nativeMaterialSecondY + 14.0)
+            -FramebufferX ($nativeMaterialTextureX + ($nativeMaterialTextureWidth * 0.5)) `
+            -FramebufferY ($nativeMaterialTextureY + 14.0)
         # Texture assignment is a bounded native-source transaction over the
         # imported fixture. Require fresh post-click telemetry and allow the
         # transaction to finish without accepting a stale earlier edit.
