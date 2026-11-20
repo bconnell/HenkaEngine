@@ -51,6 +51,7 @@
 #include "workspace_persistence.h"
 #include "view_compass.h"
 #include "scene_hierarchy_projection.h"
+#include "transform_inspector.h"
 
 static bool g_sandbox3d_mcp_stdio = false;
 
@@ -524,6 +525,7 @@ typedef struct sandbox3d_state
     char audio_authoring_max_distance[16];
     henka_entity audio_authoring_form_entity;
     bool audio_authoring_form_initialized;
+    sandbox3d_transform_inspector transform_inspector;
     sandbox3d_authoring_object* authoring_object;
     bool authoring_topology_overlay_enabled;
     henka_entity authoring_topology_overlay_entity;
@@ -617,6 +619,10 @@ typedef struct sandbox3d_state
     sandbox3d_ui_geometry_report scene_objects_authoring_control_reports[
         SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_COUNT];
     sandbox3d_ui_geometry_report object_details_actions_disclosure_report;
+    sandbox3d_ui_geometry_report object_details_transform_disclosure_report;
+    sandbox3d_ui_geometry_report object_details_transform_row_reports[
+        SANDBOX3D_TRANSFORM_INSPECTOR_ROW_COUNT];
+    sandbox3d_ui_geometry_report object_details_transform_actions_report;
     sandbox3d_ui_geometry_report object_details_materials_disclosure_report;
     sandbox3d_ui_geometry_report object_details_material_view_report;
     sandbox3d_ui_geometry_report object_details_material_picker_row_report;
@@ -901,6 +907,12 @@ static void sandbox3d_reset_ui_geometry_reports(sandbox3d_state* state)
         sizeof(state->scene_objects_authoring_control_reports));
     memset(&state->object_details_actions_disclosure_report, 0,
         sizeof(state->object_details_actions_disclosure_report));
+    memset(&state->object_details_transform_disclosure_report, 0,
+        sizeof(state->object_details_transform_disclosure_report));
+    memset(state->object_details_transform_row_reports, 0,
+        sizeof(state->object_details_transform_row_reports));
+    memset(&state->object_details_transform_actions_report, 0,
+        sizeof(state->object_details_transform_actions_report));
     memset(&state->object_details_materials_disclosure_report, 0,
         sizeof(state->object_details_materials_disclosure_report));
     memset(&state->object_details_material_view_report, 0,
@@ -7118,6 +7130,88 @@ static bool sandbox3d_transform_is_finite(henka_transform transform)
         sandbox3d_is_finite_float(transform.scale.x) &&
         sandbox3d_is_finite_float(transform.scale.y) &&
         sandbox3d_is_finite_float(transform.scale.z);
+}
+
+static henka_result sandbox3d_apply_transform_inspector(
+    sandbox3d_state* state,
+    henka_entity entity,
+    henka_scene_document_object* authored_object,
+    bool* out_changed)
+{
+    henka_transform candidate;
+    henka_transform committed;
+    henka_result result;
+
+    if (out_changed != NULL)
+    {
+        *out_changed = false;
+    }
+    if (state == NULL || state->scene == NULL || authored_object == NULL ||
+        state->game_authoring == NULL || entity == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_is_play_locked(state->game_authoring) ||
+        henka_scene_is_entity_transform_locked(state->scene, entity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_transform_inspector_build_candidate(
+        &state->transform_inspector,
+        &candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (!sandbox3d_transform_inspector_candidate_changes(
+            &state->transform_inspector,
+            candidate))
+    {
+        sandbox3d_transform_inspector_discard(
+            &state->transform_inspector);
+        return HENKA_SUCCESS;
+    }
+    authored_object->transform = candidate;
+    result = sandbox3d_game_authoring_update_object_for_entity(
+        state->game_authoring,
+        entity,
+        authored_object);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (out_changed != NULL)
+    {
+        *out_changed = true;
+    }
+    result = henka_scene_get_entity_transform(
+        state->scene,
+        entity,
+        &committed);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = sandbox3d_transform_inspector_sync(
+        &state->transform_inspector,
+        entity,
+        committed,
+        NULL);
+    if (result == HENKA_SUCCESS && sandbox3d_automation_input_is_owned())
+    {
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC transform_commit entity=%u position=%.9g,%.9g,%.9g rotation=%.9g,%.9g,%.9g,%.9g scale=%.9g,%.9g,%.9g\n",
+            (unsigned int)entity,
+            committed.position.x,
+            committed.position.y,
+            committed.position.z,
+            committed.rotation.x,
+            committed.rotation.y,
+            committed.rotation.z,
+            committed.rotation.w,
+            committed.scale.x,
+            committed.scale.y,
+            committed.scale.z);
+        fflush(stdout);
+    }
+    return result;
 }
 
 static void sandbox3d_gizmo_set_mode(sandbox3d_state* state, sandbox3d_gizmo_mode mode)
@@ -30118,6 +30212,24 @@ static bool sandbox3d_details_flow_disclosure(
                 *expanded ? 1 : 0);
             fflush(stdout);
         }
+        if (group_id == SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM &&
+            sandbox3d_automation_input_is_owned() &&
+            sandbox3d_ui_geometry_report_changed(
+                &state->object_details_transform_disclosure_report,
+                selected_entity,
+                disclosure_bounds,
+                *expanded ? 1 : 0))
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC object_details_disclosure id=transform entity=%u x=%.1f y=%.1f width=%.1f height=%.1f expanded=%d.\n",
+                (unsigned int)selected_entity,
+                disclosure_bounds.x,
+                disclosure_bounds.y,
+                disclosure_bounds.width,
+                disclosure_bounds.height,
+                *expanded ? 1 : 0);
+            fflush(stdout);
+        }
         if (group_id == SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING &&
             (state->native_authoring_disclosure_reported_entity != selected_entity ||
              state->native_authoring_disclosure_reported_expanded != *expanded))
@@ -30275,10 +30387,7 @@ static void sandbox3d_draw_object_details_panel(
     char lock_action_label[32];
     char prefab_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
     char physics_text[96];
-    char position_text[64];
     char reset_action_id[64];
-    char rotation_text[64];
-    char scale_text[64];
     char velocity_text[64];
     char visibility_action_id[64];
     const sandbox3d_object_descriptor* descriptor;
@@ -30314,6 +30423,11 @@ static void sandbox3d_draw_object_details_panel(
     bool authored_object_available;
     bool bevel_controls_prioritized;
     bool stop_play_requested;
+    bool transform_pending_edits_refreshed;
+    bool transform_inspector_editable;
+    bool transform_apply_requested;
+    bool transform_discard_requested;
+    size_t transform_row_index;
 
     if (engine == NULL ||
         state == NULL ||
@@ -30476,6 +30590,31 @@ static void sandbox3d_draw_object_details_panel(
         henka_scene_is_entity_transform_locked(
             state->scene,
             entity);
+    transform_pending_edits_refreshed = false;
+    result = sandbox3d_transform_inspector_sync(
+        &state->transform_inspector,
+        entity,
+        transform,
+        &transform_pending_edits_refreshed);
+    if (result != HENKA_SUCCESS)
+    {
+        sandbox3d_transform_inspector_init(&state->transform_inspector);
+        result = sandbox3d_transform_inspector_sync(
+            &state->transform_inspector,
+            entity,
+            transform,
+            NULL);
+    }
+    if (transform_pending_edits_refreshed)
+    {
+        sandbox3d_set_status(
+            state,
+            false,
+            "Selection or transform changed; pending values were refreshed.");
+    }
+    transform_inspector_editable = authored_object_available &&
+        !transform_locked &&
+        !sandbox3d_game_authoring_is_play_locked(state->game_authoring);
 
     physics_body =
         sandbox3d_get_physics_body_for_entity(
@@ -30528,29 +30667,6 @@ static void sandbox3d_draw_object_details_panel(
             "%s",
             "(none)");
     }
-
-    snprintf(
-        position_text,
-        sizeof(position_text),
-        "%.2f %.2f %.2f",
-        transform.position.x,
-        transform.position.y,
-        transform.position.z);
-    snprintf(
-        rotation_text,
-        sizeof(rotation_text),
-        "%.2f %.2f %.2f %.2f",
-        transform.rotation.x,
-        transform.rotation.y,
-        transform.rotation.z,
-        transform.rotation.w);
-    snprintf(
-        scale_text,
-        sizeof(scale_text),
-        "%.2f %.2f %.2f",
-        transform.scale.x,
-        transform.scale.y,
-        transform.scale.z);
 
     if (authored_object_available && !authored_object.interaction.enabled)
     {
@@ -31460,6 +31576,10 @@ details_group_overview:
 
 details_group_transform:
     {
+    static const char* const transform_row_names[
+        SANDBOX3D_TRANSFORM_INSPECTOR_ROW_COUNT] = {
+            "position", "rotation", "scale"};
+
     (void)sandbox3d_details_flow_disclosure(
         state,
         flow_desc.bounds,
@@ -31474,47 +31594,165 @@ details_group_transform:
         if (sandbox3d_details_flow_next_row(
                 state,
                 flow_desc.bounds,
-                22.0f,
+                18.0f,
                 1U,
                 &row))
         {
-            sandbox3d_draw_value_row(
+            (void)sandbox3d_transform_inspector_draw_axis_header(
                 state->ui,
-                row.x,
-                row.y,
-                row.width,
-                "Position",
-                position_text);
+                row);
+        }
+        for (transform_row_index = 0U;
+            transform_row_index < 3U;
+            ++transform_row_index)
+        {
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    28.0f,
+                    1U,
+                    &row))
+            {
+                (void)sandbox3d_transform_inspector_draw_row(
+                    &state->transform_inspector,
+                    state->ui,
+                    (sandbox3d_transform_inspector_row)transform_row_index,
+                    row,
+                    transform_inspector_editable);
+                if (sandbox3d_automation_input_is_owned())
+                {
+                    henka_ui_rect label_bounds;
+                    henka_ui_rect fields[3];
+                    if (sandbox3d_transform_inspector_layout_row(
+                            row,
+                            &label_bounds,
+                            fields) == HENKA_SUCCESS &&
+                        sandbox3d_ui_geometry_report_changed(
+                            &state->object_details_transform_row_reports[
+                                transform_row_index],
+                            entity,
+                            row,
+                            transform_inspector_editable ? 1 : 0))
+                    {
+                        printf(
+                            "HENKA_AUTOMATION_DIAGNOSTIC transform_row entity=%u row=%s editable=%d rect=%.1f,%.1f,%.1f,%.1f label=%.1f,%.1f,%.1f,%.1f field0=%.1f,%.1f,%.1f,%.1f field1=%.1f,%.1f,%.1f,%.1f field2=%.1f,%.1f,%.1f,%.1f\n",
+                            (unsigned int)entity,
+                            transform_row_names[transform_row_index],
+                            transform_inspector_editable ? 1 : 0,
+                            row.x,
+                            row.y,
+                            row.width,
+                            row.height,
+                            label_bounds.x,
+                            label_bounds.y,
+                            label_bounds.width,
+                            label_bounds.height,
+                            fields[0].x,
+                            fields[0].y,
+                            fields[0].width,
+                            fields[0].height,
+                            fields[1].x,
+                            fields[1].y,
+                            fields[1].width,
+                            fields[1].height,
+                            fields[2].x,
+                            fields[2].y,
+                            fields[2].width,
+                            fields[2].height);
+                        fflush(stdout);
+                    }
+                }
+            }
         }
         if (sandbox3d_details_flow_next_row(
                 state,
                 flow_desc.bounds,
-                22.0f,
+                28.0f,
                 1U,
                 &row))
         {
-            sandbox3d_draw_value_row(
+            transform_apply_requested = false;
+            transform_discard_requested = false;
+            (void)sandbox3d_transform_inspector_draw_actions(
+                &state->transform_inspector,
                 state->ui,
-                row.x,
-                row.y,
-                row.width,
-                "Rotation",
-                rotation_text);
-        }
-        if (sandbox3d_details_flow_next_row(
-                state,
-                flow_desc.bounds,
-                22.0f,
-                1U,
-                &row))
-        {
-            sandbox3d_draw_value_row(
-                state->ui,
-                row.x,
-                row.y,
-                row.width,
-                "Scale",
-                scale_text);
+                row,
+                transform_inspector_editable,
+                &transform_apply_requested,
+                &transform_discard_requested);
+            if (sandbox3d_automation_input_is_owned())
+            {
+                henka_ui_rect label_bounds;
+                henka_ui_rect apply_bounds;
+                henka_ui_rect revert_bounds;
+                if (sandbox3d_transform_inspector_layout_actions(
+                        row,
+                        transform_inspector_editable,
+                        &label_bounds,
+                        &apply_bounds,
+                        &revert_bounds) == HENKA_SUCCESS &&
+                    sandbox3d_ui_geometry_report_changed(
+                        &state->object_details_transform_actions_report,
+                        entity,
+                        row,
+                        transform_inspector_editable ? 1 : 0))
+                {
+                    printf(
+                        "HENKA_AUTOMATION_DIAGNOSTIC transform_actions entity=%u editable=%d dirty=%d rect=%.1f,%.1f,%.1f,%.1f label=%.1f,%.1f,%.1f,%.1f apply=%.1f,%.1f,%.1f,%.1f revert=%.1f,%.1f,%.1f,%.1f\n",
+                        (unsigned int)entity,
+                        transform_inspector_editable ? 1 : 0,
+                        sandbox3d_transform_inspector_has_pending_edits(
+                            &state->transform_inspector) ? 1 : 0,
+                        row.x,
+                        row.y,
+                        row.width,
+                        row.height,
+                        label_bounds.x,
+                        label_bounds.y,
+                        label_bounds.width,
+                        label_bounds.height,
+                        apply_bounds.x,
+                        apply_bounds.y,
+                        apply_bounds.width,
+                        apply_bounds.height,
+                        revert_bounds.x,
+                        revert_bounds.y,
+                        revert_bounds.width,
+                        revert_bounds.height);
+                    fflush(stdout);
+                }
+            }
+            if (transform_discard_requested)
+            {
+                sandbox3d_transform_inspector_discard(
+                    &state->transform_inspector);
+                sandbox3d_set_status(
+                    state,
+                    false,
+                    "Transform edits reverted.");
+            }
+            else if (transform_apply_requested)
+            {
+                const bool had_pending_edits =
+                    sandbox3d_transform_inspector_has_pending_edits(
+                        &state->transform_inspector);
+                bool transform_changed = false;
+                result = sandbox3d_apply_transform_inspector(
+                    state,
+                    entity,
+                    &authored_object,
+                    &transform_changed);
+                sandbox3d_set_status(
+                    state,
+                    result != HENKA_SUCCESS,
+                    result != HENKA_SUCCESS
+                        ? (transform_changed
+                            ? "Transform was committed, but the editor could not refresh its live state."
+                            : "Transform was not applied; the scene remains unchanged.")
+                        : (had_pending_edits && transform_changed
+                            ? "World transform applied as one undoable edit."
+                            : "Transform is already up to date."));
+            }
         }
         if (sandbox3d_details_flow_next_row(
                 state,
@@ -47661,6 +47899,7 @@ int main(int argc, char** argv)
     automation_input_owned_value[0] = '\0';
     automation_start_hidden_value[0] = '\0';
     automation_user_data_base_path[0] = '\0';
+    sandbox3d_transform_inspector_init(&state.transform_inspector);
     if (argc == 2 && strcmp(argv[1], "--audio-smoke-test") == 0)
     {
         smoke_test = true;
