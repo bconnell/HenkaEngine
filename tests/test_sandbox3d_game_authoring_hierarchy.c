@@ -30,6 +30,7 @@ int main(void)
     henka_scene_document_object restored_history_object;
     henka_scene_document_object authored_history_object;
     henka_transform child_world;
+    henka_transform history_runtime_transform;
     henka_transform parent_transform = henka_transform_identity();
     henka_transform child_transform = henka_transform_identity();
     int result = 1;
@@ -197,6 +198,7 @@ int main(void)
         fprintf(stderr, "game authoring generic history test failed during capture\n");
         goto cleanup;
     }
+    authored_history_object.transform.position.x += 2.5f;
     if (snprintf(
             authored_history_object.name,
             sizeof(authored_history_object.name),
@@ -205,17 +207,29 @@ int main(void)
             authoring,
             child,
             &authored_history_object) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(
+            scene, child, &history_runtime_transform) != HENKA_SUCCESS ||
+        fabsf(history_runtime_transform.position.x -
+            authored_history_object.transform.position.x) > 0.0001f ||
         !sandbox3d_game_authoring_can_undo(authoring) ||
         sandbox3d_game_authoring_can_redo(authoring) ||
         sandbox3d_game_authoring_undo(authoring) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_get_object_for_entity(
             authoring, child, &duplicate_child_id, &restored_history_object) != HENKA_SUCCESS ||
         strcmp(restored_history_object.name, before_history_object.name) != 0 ||
+        henka_scene_get_entity_transform(
+            scene, child, &history_runtime_transform) != HENKA_SUCCESS ||
+        fabsf(history_runtime_transform.position.x -
+            before_history_object.transform.position.x) > 0.0001f ||
         !sandbox3d_game_authoring_can_redo(authoring) ||
         sandbox3d_game_authoring_redo(authoring) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_get_object_for_entity(
             authoring, child, &duplicate_child_id, &restored_history_object) != HENKA_SUCCESS ||
         strcmp(restored_history_object.name, "Authored history rename") != 0 ||
+        henka_scene_get_entity_transform(
+            scene, child, &history_runtime_transform) != HENKA_SUCCESS ||
+        fabsf(history_runtime_transform.position.x -
+            authored_history_object.transform.position.x) > 0.0001f ||
         sandbox3d_game_authoring_undo(authoring) != HENKA_SUCCESS)
     {
         fprintf(stderr, "game authoring generic object history test failed\n");
