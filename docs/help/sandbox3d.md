@@ -525,6 +525,8 @@ Object Details reports:
 - visibility;
 - position;
 - scale;
+- a **Transform** group with editable world Position, Rotation (degrees), and
+  Scale fields for registered scene objects;
 - object purpose;
 - mesh summary;
 - material summary;
@@ -545,6 +547,13 @@ Safe object actions include:
 - Focus Camera;
 - Reset Transform;
 - Print Object Info.
+
+Transform fields hold pending values until **Apply**. Apply publishes the
+complete transform through the normal Game Authoring operation and its undo
+history. **Revert** discards pending field edits and restores the last
+authoritative transform. Transform editing is unavailable while Play is
+active or when the selected object is not registered and editable through Game
+Authoring.
 
 ## Game authoring and Play
 
@@ -1042,7 +1051,6 @@ The current Sandbox remains an early engine/editor workspace.
 - Scene View is not detachable yet.
 - Current viewport gizmo scope covers world-axis move, rotate, and uniform scale.
 - Per-axis scale handles remain unavailable.
-- Numeric transform editing remains future work.
 - Manual desktop QA remains required for gizmo feel, hover clarity, orbit/pan feel, detached-window interaction, and general viewport ergonomics.
 
 ### Physics limits

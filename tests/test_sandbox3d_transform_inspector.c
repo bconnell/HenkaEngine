@@ -123,6 +123,65 @@ static void henka_test_transform_inspector_rejects_invalid_values(void)
             &candidate) == HENKA_ERROR_NUMERIC_RANGE);
 }
 
+static void henka_test_transform_inspector_discard_restores_authoritative_values(void)
+{
+    static const char* expected_fields[] = {
+        "1.25", "-2.5", "3.75", "0", "0", "0", "1", "1", "1"};
+    sandbox3d_transform_inspector inspector;
+    henka_transform original = henka_transform_identity();
+    henka_transform candidate;
+    size_t field_index;
+
+    original.position = (henka_vec3){1.25f, -2.5f, 3.75f};
+    sandbox3d_transform_inspector_init(&inspector);
+    HENKA_TEST_ASSERT(
+        sandbox3d_transform_inspector_sync(
+            &inspector,
+            (henka_entity)43U,
+            original,
+            NULL) == HENKA_SUCCESS);
+    snprintf(inspector.fields[0], sizeof(inspector.fields[0]), "%s", "99");
+    snprintf(inspector.fields[4], sizeof(inspector.fields[4]), "%s", "45");
+    snprintf(inspector.fields[8], sizeof(inspector.fields[8]), "%s", "0.25");
+    inspector.dirty = true;
+
+    sandbox3d_transform_inspector_discard(&inspector);
+
+    HENKA_TEST_ASSERT(
+        !sandbox3d_transform_inspector_has_pending_edits(&inspector));
+    for (field_index = 0U;
+        field_index < sizeof(expected_fields) / sizeof(expected_fields[0]);
+        ++field_index)
+    {
+        HENKA_TEST_ASSERT(
+            strcmp(inspector.fields[field_index], expected_fields[field_index]) == 0);
+    }
+    HENKA_TEST_ASSERT(inspector.baseline.position.x == original.position.x);
+    HENKA_TEST_ASSERT(inspector.baseline.position.y == original.position.y);
+    HENKA_TEST_ASSERT(inspector.baseline.position.z == original.position.z);
+    HENKA_TEST_ASSERT(inspector.baseline.rotation.x == original.rotation.x);
+    HENKA_TEST_ASSERT(inspector.baseline.rotation.y == original.rotation.y);
+    HENKA_TEST_ASSERT(inspector.baseline.rotation.z == original.rotation.z);
+    HENKA_TEST_ASSERT(inspector.baseline.rotation.w == original.rotation.w);
+    HENKA_TEST_ASSERT(inspector.baseline.scale.x == original.scale.x);
+    HENKA_TEST_ASSERT(inspector.baseline.scale.y == original.scale.y);
+    HENKA_TEST_ASSERT(inspector.baseline.scale.z == original.scale.z);
+    HENKA_TEST_ASSERT(
+        sandbox3d_transform_inspector_build_candidate(
+            &inspector,
+            &candidate) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(candidate.position.x == original.position.x);
+    HENKA_TEST_ASSERT(candidate.position.y == original.position.y);
+    HENKA_TEST_ASSERT(candidate.position.z == original.position.z);
+    HENKA_TEST_ASSERT(candidate.rotation.x == original.rotation.x);
+    HENKA_TEST_ASSERT(candidate.rotation.y == original.rotation.y);
+    HENKA_TEST_ASSERT(candidate.rotation.z == original.rotation.z);
+    HENKA_TEST_ASSERT(candidate.rotation.w == original.rotation.w);
+    HENKA_TEST_ASSERT(candidate.scale.x == original.scale.x);
+    HENKA_TEST_ASSERT(candidate.scale.y == original.scale.y);
+    HENKA_TEST_ASSERT(candidate.scale.z == original.scale.z);
+}
+
 static void henka_test_transform_inspector_rebases_external_changes(void)
 {
     sandbox3d_transform_inspector inspector;
@@ -287,6 +346,7 @@ void henka_test_sandbox3d_transform_inspector(void)
 {
     henka_test_transform_inspector_candidate_conversion();
     henka_test_transform_inspector_rejects_invalid_values();
+    henka_test_transform_inspector_discard_restores_authoritative_values();
     henka_test_transform_inspector_rebases_external_changes();
     henka_test_transform_inspector_layout_bounds();
     henka_test_transform_inspector_action_layout();

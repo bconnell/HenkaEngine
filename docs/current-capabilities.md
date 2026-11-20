@@ -127,6 +127,9 @@ Available object operations include:
 - visibility
 - locks
 - transforms
+- World Transform Inspector for registered scene objects: numeric XYZ
+  position, XYZ Euler rotation in degrees, and XYZ scale fields with pending
+  edits, Apply, and Revert;
 - bounded material inspection
 
 UI controls use bounded IDs, matched frame construction, release-confirm behavior, and transactional composite drawing.

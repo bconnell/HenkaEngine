@@ -31724,6 +31724,12 @@ details_group_transform:
                 henka_ui_rect label_bounds;
                 henka_ui_rect apply_bounds;
                 henka_ui_rect revert_bounds;
+                const bool transform_has_pending_edits =
+                    sandbox3d_transform_inspector_has_pending_edits(
+                        &state->transform_inspector);
+                const int transform_report_state =
+                    (transform_inspector_editable ? 1 : 0) |
+                    (transform_has_pending_edits ? 2 : 0);
                 if (sandbox3d_transform_inspector_layout_actions(
                         row,
                         transform_inspector_editable,
@@ -31734,14 +31740,13 @@ details_group_transform:
                         &state->object_details_transform_actions_report,
                         entity,
                         row,
-                        transform_inspector_editable ? 1 : 0))
+                        transform_report_state))
                 {
                     printf(
                         "HENKA_AUTOMATION_DIAGNOSTIC transform_actions entity=%u editable=%d dirty=%d rect=%.1f,%.1f,%.1f,%.1f label=%.1f,%.1f,%.1f,%.1f apply=%.1f,%.1f,%.1f,%.1f revert=%.1f,%.1f,%.1f,%.1f\n",
                         (unsigned int)entity,
                         transform_inspector_editable ? 1 : 0,
-                        sandbox3d_transform_inspector_has_pending_edits(
-                            &state->transform_inspector) ? 1 : 0,
+                        transform_has_pending_edits ? 1 : 0,
                         row.x,
                         row.y,
                         row.width,
