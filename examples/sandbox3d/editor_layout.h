@@ -180,10 +180,12 @@ henka_result sandbox3d_editor_layout_controls_status_page(
 
 /* Split Scene Objects content into independently usable action and hierarchy
  * regions. The action area may scroll, while the hierarchy retains its own
- * row paging and fixed page footer. */
+ * row paging and fixed page footer. Pass the last measured action-content
+ * height; zero uses a font-scaled first-frame estimate. */
 henka_result sandbox3d_editor_layout_scene_objects_regions(
     henka_ui_rect panel_bounds,
     float measured_line_height,
+    float desired_actions_content_height,
     sandbox3d_editor_scene_objects_layout* out_layout);
 
 /* Return the editor-owned modeling toolbar bounds for the current scene

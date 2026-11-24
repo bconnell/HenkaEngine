@@ -2955,6 +2955,7 @@ henka_result sandbox3d_editor_layout_controls_status_page(
 henka_result sandbox3d_editor_layout_scene_objects_regions(
     henka_ui_rect panel_bounds,
     float measured_line_height,
+    float desired_actions_content_height,
     sandbox3d_editor_scene_objects_layout* out_layout)
 {
     sandbox3d_editor_scene_objects_layout candidate = {0};
@@ -2964,8 +2965,10 @@ henka_result sandbox3d_editor_layout_scene_objects_regions(
     const float available_height = content_bottom - content_top;
     const float minimum_hierarchy_height = fmaxf(40.0f, measured_line_height + 8.0f);
     const float minimum_actions_height = fmaxf(48.0f, measured_line_height + 16.0f);
-    const float hierarchy_maximum_height =
-        available_height - 6.0f - minimum_actions_height;
+    const float maximum_actions_height =
+        available_height - 6.0f - minimum_hierarchy_height;
+    float desired_actions_viewport_height;
+    float actions_height;
     float hierarchy_height;
 
     if (out_layout == NULL)
@@ -2978,24 +2981,33 @@ henka_result sandbox3d_editor_layout_scene_objects_regions(
         !sandbox3d_editor_layout_float_is_valid(panel_bounds.width) ||
         !sandbox3d_editor_layout_float_is_valid(panel_bounds.height) ||
         !sandbox3d_editor_layout_float_is_valid(measured_line_height) ||
+        !sandbox3d_editor_layout_float_is_valid(desired_actions_content_height) ||
         panel_bounds.width <= 40.0f || panel_bounds.height <= 0.0f ||
-        measured_line_height <= 0.0f || available_height <= 0.0f ||
-        hierarchy_maximum_height < minimum_hierarchy_height)
+        measured_line_height <= 0.0f || desired_actions_content_height < 0.0f ||
+        available_height <= 0.0f ||
+        maximum_actions_height < minimum_actions_height)
     {
         return HENKA_ERROR_LIMIT;
     }
 
-    hierarchy_height = fminf(
-        fmaxf(minimum_hierarchy_height, available_height * 0.32f),
-        hierarchy_maximum_height);
+    /* The previous frame's measured action content determines the viewport.
+     * On the first frame, reserve a font-scaled estimate; give the remaining
+     * dock height to the hierarchy instead of leaving unused action space. */
+    desired_actions_viewport_height = desired_actions_content_height > 0.0f
+        ? desired_actions_content_height + 12.0f
+        : measured_line_height * 14.0f + 16.0f;
+    actions_height = fminf(
+        fmaxf(minimum_actions_height, desired_actions_viewport_height),
+        maximum_actions_height);
+    hierarchy_height = available_height - actions_height - 6.0f;
     candidate.actions_viewport = (henka_ui_rect){
         panel_bounds.x + 14.0f,
         content_top,
         panel_bounds.width - 40.0f,
-        available_height - hierarchy_height - 6.0f};
+        actions_height};
     candidate.hierarchy_viewport = (henka_ui_rect){
         panel_bounds.x + 14.0f,
-        content_top + candidate.actions_viewport.height + 6.0f,
+        content_top + actions_height + 6.0f,
         panel_bounds.width - 28.0f,
         hierarchy_height};
     candidate.page_footer = (henka_ui_rect){
