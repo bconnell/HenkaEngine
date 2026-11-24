@@ -1,5 +1,6 @@
 #include "asset_browser_tools.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -614,6 +615,35 @@ size_t sandbox3d_asset_browser_collect_filtered(
     }
 
     return count;
+}
+
+size_t sandbox3d_asset_browser_page_capacity(
+    float available_row_space,
+    float row_height,
+    float row_stride,
+    size_t maximum_rows)
+{
+    double additional_rows;
+
+    if (!isfinite(available_row_space) ||
+        !isfinite(row_height) ||
+        !isfinite(row_stride) ||
+        available_row_space < row_height ||
+        row_height <= 0.0f ||
+        row_stride <= 0.0f ||
+        maximum_rows == 0U)
+    {
+        return 0U;
+    }
+
+    additional_rows =
+        ((double)available_row_space - (double)row_height) /
+        (double)row_stride;
+    if (additional_rows >= (double)(maximum_rows - 1U))
+    {
+        return maximum_rows;
+    }
+    return (size_t)additional_rows + 1U;
 }
 
 size_t sandbox3d_asset_browser_page_count(

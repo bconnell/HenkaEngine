@@ -39610,23 +39610,8 @@ static void sandbox3d_draw_utility_panel(
             {
                 const float picker_row_space =
                     picker_navigation_y - picker_row_start_y;
-                if (picker_row_space >= 26.0f)
-                {
-                    asset_page_size =
-                        (size_t)(picker_row_space / picker_row_stride);
-                    if (asset_page_size < 1U)
-                    {
-                        asset_page_size = 1U;
-                    }
-                    else if (asset_page_size > 6U)
-                    {
-                        asset_page_size = 6U;
-                    }
-                }
-                else
-                {
-                    asset_page_size = 1U;
-                }
+                asset_page_size = sandbox3d_asset_browser_page_capacity(
+                    picker_row_space, 26.0f, picker_row_stride, 6U);
             }
             else
             {

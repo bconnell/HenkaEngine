@@ -28,6 +28,12 @@ size_t sandbox3d_asset_browser_collect_filtered(
     sandbox3d_asset_browser_item* out_items,
     size_t capacity);
 
+size_t sandbox3d_asset_browser_page_capacity(
+    float available_row_space,
+    float row_height,
+    float row_stride,
+    size_t maximum_rows);
+
 size_t sandbox3d_asset_browser_page_count(
     const henka_asset_manager* manager,
     henka_asset_type type,

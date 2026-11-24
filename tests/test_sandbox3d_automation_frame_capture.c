@@ -50,6 +50,7 @@ void henka_test_sandbox3d_automation_frame_capture(void)
 #if defined(_WIN32)
     {
         char current_directory[MAX_PATH];
+        char fixture_root[MAX_PATH * 2U] = { 0 };
         char fixture_directory[MAX_PATH * 3U] = { 0 };
         char output_directory[MAX_PATH * 3U];
         char request_path[MAX_PATH * 3U] = { 0 };
@@ -63,6 +64,7 @@ void henka_test_sandbox3d_automation_frame_capture(void)
         FILE* request_file = NULL;
         DWORD process_id = GetCurrentProcessId();
         DWORD tick_count = GetTickCount();
+        bool fixture_root_created = false;
         bool fixture_created = false;
         bool setup_succeeded = false;
         bool request_preserved_while_locked = false;
@@ -73,6 +75,34 @@ void henka_test_sandbox3d_automation_frame_capture(void)
                 current_directory) == 0U)
         {
             goto frame_capture_retry_cleanup;
+        }
+        {
+            const int fixture_root_length = snprintf(
+                fixture_root,
+                sizeof(fixture_root),
+                "%s\\test_tmp",
+                current_directory);
+            if (fixture_root_length < 0 ||
+                (size_t)fixture_root_length >= sizeof(fixture_root))
+            {
+                goto frame_capture_retry_cleanup;
+            }
+            if (CreateDirectoryA(fixture_root, NULL))
+            {
+                fixture_root_created = true;
+            }
+            else
+            {
+                const DWORD fixture_root_error = GetLastError();
+                const DWORD fixture_root_attributes =
+                    GetFileAttributesA(fixture_root);
+                if (fixture_root_error != ERROR_ALREADY_EXISTS ||
+                    fixture_root_attributes == INVALID_FILE_ATTRIBUTES ||
+                    (fixture_root_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0U)
+                {
+                    goto frame_capture_retry_cleanup;
+                }
+            }
         }
         {
             const int fixture_name_length = snprintf(
@@ -187,6 +217,10 @@ void henka_test_sandbox3d_automation_frame_capture(void)
         {
             (void)DeleteFileA(request_path);
             (void)RemoveDirectoryA(fixture_directory);
+        }
+        if (fixture_root_created)
+        {
+            (void)RemoveDirectoryA(fixture_root);
         }
         sandbox3d_automation_frame_capture_destroy(capture);
         (void)_putenv_s(
