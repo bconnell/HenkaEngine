@@ -58,6 +58,7 @@ void henka_test_sandbox3d_automation_frame_capture(void);
 void henka_test_sandbox3d_editor_font_bootstrap(void);
 void henka_test_sandbox3d_modeling_selection(void);
 void henka_test_sandbox3d_editor_layout(void);
+void henka_test_sandbox3d_transform_inspector(void);
 void henka_test_sandbox3d_camera_tools(void);
 void henka_test_camera_hardening(void);
 void henka_test_sandbox3d_object_details(void);

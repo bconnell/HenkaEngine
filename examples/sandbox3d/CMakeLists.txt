@@ -31,6 +31,7 @@ add_executable(henka_sandbox3d
     editor_utility_settings_layout.c
     editor_scale_transaction.c
     scene_hierarchy_projection.c
+    transform_inspector.c
     scene_document_bridge.c
     play_session.c
     game_authoring.c

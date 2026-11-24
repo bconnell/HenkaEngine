@@ -1107,6 +1107,7 @@ add_executable(henka_tests
     ../examples/sandbox3d/workspace_tools.c
     ../examples/sandbox3d/workspace_persistence.c
     ../examples/sandbox3d/editor_layout.c
+    ../examples/sandbox3d/transform_inspector.c
     ../examples/sandbox3d/editor_scale_control.c
     ../examples/sandbox3d/editor_utility_settings_layout.c
     ../examples/sandbox3d/editor_scale_transaction.c
@@ -1126,6 +1127,7 @@ add_executable(henka_tests
     test_sandbox3d_automation_frame_capture.c
     test_sandbox3d_editor_font_bootstrap.c
     test_sandbox3d_editor_layout.c
+    test_sandbox3d_transform_inspector.c
     test_sandbox3d_camera_tools.c
     test_camera_hardening.c
     test_sandbox3d_object_details.c
@@ -1180,6 +1182,7 @@ add_test(NAME henka_ui_font_tests COMMAND henka_tests --group ui_font)
 add_test(NAME henka_sandbox3d_editor_font_bootstrap_tests COMMAND henka_tests --group sandbox3d_editor_font_bootstrap)
 add_test(NAME henka_sandbox3d_automation_frame_capture_tests COMMAND henka_tests --group sandbox3d_automation_frame_capture)
 add_test(NAME henka_sandbox3d_editor_layout_tests COMMAND henka_tests --group sandbox3d_editor_layout)
+add_test(NAME henka_sandbox3d_transform_inspector_tests COMMAND henka_tests --group sandbox3d_transform_inspector)
 add_test(NAME henka_platform_display_scale_tests COMMAND henka_tests --group platform_display_scale)
 set_tests_properties(henka_ui_font_tests henka_sandbox3d_editor_layout_tests PROPERTIES
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"

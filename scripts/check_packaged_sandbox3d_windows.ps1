@@ -20,6 +20,7 @@ if ($ContractOnly -and -not $NonInteractive) {
 . (Join-Path $PSScriptRoot "henka_ui_automation_helpers.ps1")
 . (Join-Path $PSScriptRoot "henka_packaged_startup_readiness.ps1")
 . (Join-Path $PSScriptRoot "henka_packaged_scene_objects.ps1")
+. (Join-Path $PSScriptRoot "henka_packaged_transform_inspector.ps1")
 . (Join-Path $PSScriptRoot "henka_typography_package_policy.ps1")
 
 Write-Output "[safe] Packaged UI validation never activates or foregrounds the Sandbox window."
@@ -2041,6 +2042,7 @@ $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
 $startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png"
 $productStartupPrimitiveScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_product_startup_add_cube.png"
 $productStartupGroundDetailsScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_product_startup_ground_details.png"
+$productStartupTransformInspectorScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_product_startup_transform_inspector.png"
 $terrainUiBeforeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_before_create.png"
 $terrainUiAfterScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_terrain_ui_after_create.png"
 $qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
@@ -2586,6 +2588,7 @@ Remove-Item `
         $startupScreenshotPath,
         $productStartupPrimitiveScreenshotPath,
         $qaScreenshotPath,
+        $productStartupTransformInspectorScreenshotPath,
         $shadingMaterialPreviewScreenshotPath,
         $shadingRenderedScreenshotPath,
         $nativeScreenshotPath,
@@ -3317,6 +3320,25 @@ try {
                 -Path $productStartupPrimitiveScreenshotPath `
                 -Description "Packaged product-native Add Cube"
             Write-Output "[pass] Product-native Add Cube visual proof captured"
+            $addCubeReadyMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern '^DEFAULT_SCENE_ADD_CUBE_READY entity=(?<entity>[0-9]+) document_id=[0-9]+ source=primitive canonical_document=1\.'
+            if ($null -eq $addCubeReadyMatch) {
+                throw "The packaged Add Cube workflow did not retain its canonical entity identity for Transform Inspector proof."
+            }
+            Invoke-PackagedTransformInspectorWorkflow `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -DetailsX $detailsX `
+                -DetailsY $detailsY `
+                -DetailsWidth $detailsWidth `
+                -DetailsHeight $detailsHeight `
+                -EntityId ([uint32]$addCubeReadyMatch.Groups['entity'].Value) `
+                -EventPath $automationInputPath `
+                -StdoutPath $stdoutPath `
+                -ScreenshotPath $productStartupTransformInspectorScreenshotPath
+            Write-Output "[pass] Packaged Transform Inspector edited, applied, and reverted the product-native Add Cube"
             Invoke-PackagedProductGameAuthoringWorkflow `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `

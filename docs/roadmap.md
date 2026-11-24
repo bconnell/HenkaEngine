@@ -306,8 +306,10 @@ Current runtime foundations also include rigid-body physics v1: fixed-step world
 Viewport/editor tooling is a Foundation with active usability work: Scene View,
 Compass navigation, docked and detached panels, layout persistence, bounded
 interaction diagnostics, and early authoring surfaces are implemented. Native
-desktop feel, broader hierarchy/project workflows, numeric transform editing,
-and complete manual interaction QA remain open.
+desktop feel, broader hierarchy/project workflows, and complete manual
+interaction QA remain open. Object Details now includes a World Transform
+Inspector for numeric position, rotation, and scale editing through Game
+Authoring.
 
 ### Planned workspace improvements
 
@@ -317,9 +319,8 @@ and complete manual interaction QA remain open.
 4. Mature Scene Hierarchy / Parenting on the available runtime foundation.
 5. Add prefab editor authoring, persistence, and source-change behavior on the
    available runtime snapshot and hierarchy foundations.
-6. Add numeric transform editing.
-7. Extend undo and redo to more basic scene operations.
-8. Extend settings/save-slot and HAMS authoring persistence into a complete scene/project save and load workflow.
+6. Extend undo and redo to more basic scene operations.
+7. Extend settings/save-slot and HAMS authoring persistence into a complete scene/project save and load workflow.
 
 ## Agent and automation interface
 

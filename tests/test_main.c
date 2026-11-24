@@ -35,6 +35,7 @@ static const henka_test_group g_henka_test_groups[] = {
     {"sandbox3d_editor_font_bootstrap", henka_test_sandbox3d_editor_font_bootstrap},
     {"sandbox3d_modeling_selection", henka_test_sandbox3d_modeling_selection},
     {"sandbox3d_editor_layout", henka_test_sandbox3d_editor_layout},
+    {"sandbox3d_transform_inspector", henka_test_sandbox3d_transform_inspector},
     {"sandbox3d_camera_tools", henka_test_sandbox3d_camera_tools},
     {"camera_hardening", henka_test_camera_hardening},
     {"sandbox3d_object_details", henka_test_sandbox3d_object_details},
