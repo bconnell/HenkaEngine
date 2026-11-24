@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -207,6 +208,16 @@ static void henka_test_sandbox3d_asset_browser_paging(void)
 
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_count(&manager, HENKA_ASSET_TYPE_TEXTURE, 3U) == 3U);
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_count(&manager, HENKA_ASSET_TYPE_TEXTURE, 0U) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_capacity(9.0f, 26.0f, 30.0f, 6U) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_capacity(25.99f, 26.0f, 30.0f, 6U) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_capacity(26.0f, 26.0f, 30.0f, 6U) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_capacity(29.8f, 26.0f, 30.0f, 6U) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_capacity(55.99f, 26.0f, 30.0f, 6U) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_capacity(56.0f, 26.0f, 30.0f, 6U) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_capacity(1000.0f, 26.0f, 30.0f, 6U) == 6U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_capacity(100.0f, 26.0f, 30.0f, 0U) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_capacity(NAN, 26.0f, 30.0f, 6U) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_capacity(80.0f, INFINITY, 30.0f, 6U) == 0U);
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_page(
         &manager, HENKA_ASSET_TYPE_TEXTURE, 1U, 3U, items, 3U) == 3U);
     HENKA_TEST_ASSERT(items[0].metadata_index == 3U);
