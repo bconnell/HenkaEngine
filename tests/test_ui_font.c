@@ -2,6 +2,7 @@
 
 #include <float.h>
 #include <henka/memory.h>
+#include <henka/ui_icons.h>
 
 #include "../examples/sandbox3d/editor_font_bootstrap.h"
 #include "../examples/sandbox3d/editor_layout.h"
@@ -676,6 +677,7 @@ typedef enum henka_test_ui_centered_control
     HENKA_TEST_UI_CENTERED_SEGMENT,
     HENKA_TEST_UI_CENTERED_TOGGLE,
     HENKA_TEST_UI_CENTERED_DISCLOSURE_ROW,
+    HENKA_TEST_UI_CENTERED_TOOL_BUTTON,
     HENKA_TEST_UI_CENTERED_CONTROL_COUNT
 } henka_test_ui_centered_control;
 
@@ -698,6 +700,7 @@ static void henka_test_ui_assert_centered_control_label(
     henka_result result;
     bool toggle_value = false;
     bool ink_centered;
+    henka_ui_rect control_bounds = bounds;
 
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
     switch (control)
@@ -750,6 +753,21 @@ static void henka_test_ui_assert_centered_control_label(
         HENKA_TEST_ASSERT(!expanded && !changed);
         break;
     }
+    case HENKA_TEST_UI_CENTERED_TOOL_BUTTON:
+    {
+        const henka_ui_tool_button_desc descriptor = {
+            "font.centered.tool_button",
+            label,
+            "",
+            HENKA_UI_ICON_MOVE,
+            true,
+            false};
+
+        /* The real viewport transform strip uses 44-pixel-high tool buttons. */
+        control_bounds.height = 44.0f;
+        (void)henka_ui_tool_button(ui, control_bounds, &descriptor);
+        break;
+    }
     default:
         HENKA_TEST_ASSERT(false);
         break;
@@ -773,10 +791,11 @@ static void henka_test_ui_assert_centered_control_label(
     }
     HENKA_TEST_ASSERT(glyph_count ==
         strlen(label) + (control == HENKA_TEST_UI_CENTERED_SEGMENT ? 1U : 0U));
-    HENKA_TEST_ASSERT(glyph_top >= bounds.y - 0.01f);
-    HENKA_TEST_ASSERT(glyph_bottom <= bounds.y + bounds.height + 0.01f);
+    HENKA_TEST_ASSERT(glyph_top >= control_bounds.y - 0.01f);
+    HENKA_TEST_ASSERT(glyph_bottom <= control_bounds.y + control_bounds.height + 0.01f);
     ink_center_error_pixels = fabsf(
-        ((glyph_top + glyph_bottom) * 0.5f - (bounds.y + bounds.height * 0.5f)) *
+        ((glyph_top + glyph_bottom) * 0.5f -
+            (control_bounds.y + control_bounds.height * 0.5f)) *
         output_scale * app_scale_factor);
     ink_centered = ink_center_error_pixels <= 1.0f;
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
