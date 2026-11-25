@@ -75,6 +75,14 @@ function Get-SceneDocumentActionControls {
         -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls visible=1 save_rect=(?<save_x>[-0-9.]+),(?<save_y>[-0-9.]+),(?<save_width>[-0-9.]+),(?<save_height>[-0-9.]+) reload_rect=(?<reload_x>[-0-9.]+),(?<reload_y>[-0-9.]+),(?<reload_width>[-0-9.]+),(?<reload_height>[-0-9.]+)\.'
 }
 
+function Get-SceneReloadConfirmationControls {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    return Get-LastLogRegexMatch `
+        -Path $Path `
+        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_reload_confirmation available=1 cancel_rect=(?<cancel_x>[-0-9.]+),(?<cancel_y>[-0-9.]+),(?<cancel_width>[-0-9.]+),(?<cancel_height>[-0-9.]+) confirm_rect=(?<confirm_x>[-0-9.]+),(?<confirm_y>[-0-9.]+),(?<confirm_width>[-0-9.]+),(?<confirm_height>[-0-9.]+)\.'
+}
+
 function Get-SceneObjectsControl {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -494,6 +502,103 @@ try {
     if ($null -eq $reloadClick -or $reloadClick.Groups['locked'].Value -ne '0') {
         throw "Reload Scene was activated while Game Authoring was play-locked."
     }
+    $reloadConfirmationPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_confirmation_pending name=' +
+        [Regex]::Escape($transientSceneName) + '\.'
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern $reloadConfirmationPattern -TimeoutMilliseconds 5000)) {
+        $prematureReloadPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reloaded name=' +
+            [Regex]::Escape($sceneName) + '\.'
+        if (Wait-FileContains -Path $stdoutPath -Pattern $prematureReloadPattern -TimeoutMilliseconds 100) {
+            throw "The first Reload Scene click discarded the newer unsaved Scene Name without confirmation."
+        }
+        throw "Reload Scene did not expose a confirmation state after the first click."
+    }
+    $confirmationControls = Get-SceneReloadConfirmationControls -Path $stdoutPath
+    if ($null -eq $confirmationControls) {
+        throw "The product opened Reload Scene confirmation without exposing its real Cancel and Confirm controls."
+    }
+    $cancelX = Convert-HenkaAutomationNumber $confirmationControls.Groups['cancel_x'].Value
+    $cancelY = Convert-HenkaAutomationNumber $confirmationControls.Groups['cancel_y'].Value
+    $cancelWidth = Convert-HenkaAutomationNumber $confirmationControls.Groups['cancel_width'].Value
+    $cancelHeight = Convert-HenkaAutomationNumber $confirmationControls.Groups['cancel_height'].Value
+    $confirmX = Convert-HenkaAutomationNumber $confirmationControls.Groups['confirm_x'].Value
+    $confirmY = Convert-HenkaAutomationNumber $confirmationControls.Groups['confirm_y'].Value
+    $confirmWidth = Convert-HenkaAutomationNumber $confirmationControls.Groups['confirm_width'].Value
+    $confirmHeight = Convert-HenkaAutomationNumber $confirmationControls.Groups['confirm_height'].Value
+    if ($cancelWidth -le 0.0 -or $cancelHeight -le 0.0 -or
+        $confirmWidth -le 0.0 -or $confirmHeight -le 0.0 -or
+        $cancelX -lt ($detailsX - 0.5) -or $cancelY -lt ($detailsY - 0.5) -or
+        ($cancelX + $cancelWidth) -gt ($detailsX + $detailsWidth + 0.5) -or
+        ($cancelY + $cancelHeight) -gt ($detailsY + $detailsHeight + 0.5) -or
+        $confirmX -lt ($detailsX - 0.5) -or $confirmY -lt ($detailsY - 0.5) -or
+        ($confirmX + $confirmWidth) -gt ($detailsX + $detailsWidth + 0.5) -or
+        ($confirmY + $confirmHeight) -gt ($detailsY + $detailsHeight + 0.5)) {
+        throw "A Reload Scene confirmation control reported invalid or off-panel hit geometry."
+    }
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X ($cancelX + ($cancelWidth * 0.5)) `
+        -Y ($cancelY + ($cancelHeight * 0.5))
+    $cancelledPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_confirmation_cancelled name=' +
+        [Regex]::Escape($transientSceneName) + '\.'
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern $cancelledPattern -TimeoutMilliseconds 10000)) {
+        throw "Cancel did not preserve the unsaved Scene Name in the live document."
+    }
+    $reloadedBeforeConfirmPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reloaded name='
+    if (Wait-FileContains -Path $stdoutPath -Pattern $reloadedBeforeConfirmPattern -TimeoutMilliseconds 100) {
+        throw "Cancelling Reload Scene still replaced the live document."
+    }
+
+    $cancelledName = $transientSceneName + " Kept"
+    $sceneNameControls = Get-SceneNameControls -Path $stdoutPath
+    if ($null -eq $sceneNameControls) {
+        throw "Scene Name controls were unavailable after cancelling reload."
+    }
+    $sceneNameFieldX = (Convert-HenkaAutomationNumber $sceneNameControls.Groups['field_x'].Value) +
+        ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['field_width'].Value) * 0.5)
+    $sceneNameFieldY = (Convert-HenkaAutomationNumber $sceneNameControls.Groups['field_y'].Value) +
+        ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['field_height'].Value) * 0.5)
+    $sceneNameApplyX = (Convert-HenkaAutomationNumber $sceneNameControls.Groups['rename_x'].Value) +
+        ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['rename_width'].Value) * 0.5)
+    $sceneNameApplyY = (Convert-HenkaAutomationNumber $sceneNameControls.Groups['rename_y'].Value) +
+        ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['rename_height'].Value) * 0.5)
+    Send-HenkaAutomationClickAt -EventPath $automationInputPath -X $sceneNameFieldX -Y $sceneNameFieldY
+    Clear-HenkaTextField -EventPath $automationInputPath
+    Send-HenkaAutomationText -EventPath $automationInputPath -Text $cancelledName
+    Send-HenkaAutomationClickAt -EventPath $automationInputPath -X $sceneNameApplyX -Y $sceneNameApplyY
+    $cancelledNamePattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_name_rename result=success name=' +
+        [Regex]::Escape($cancelledName) + '\.'
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern $cancelledNamePattern -TimeoutMilliseconds 10000)) {
+        throw "The post-cancel scene edit did not reach the canonical document."
+    }
+    $sceneActionControls = Get-SceneDocumentActionControls -Path $stdoutPath
+    if ($null -eq $sceneActionControls) {
+        throw "Reload Scene controls were unavailable after cancelling confirmation."
+    }
+    $reloadX = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_x'].Value
+    $reloadY = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_y'].Value
+    $reloadWidth = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_width'].Value
+    $reloadHeight = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_height'].Value
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X ($reloadX + ($reloadWidth * 0.5)) `
+        -Y ($reloadY + ($reloadHeight * 0.5))
+    $secondPendingPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_confirmation_pending name=' +
+        [Regex]::Escape($cancelledName) + '\.'
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern $secondPendingPattern -TimeoutMilliseconds 10000)) {
+        throw "The second Reload Scene click did not request confirmation for the current unsaved name."
+    }
+    $confirmationControls = Get-SceneReloadConfirmationControls -Path $stdoutPath
+    if ($null -eq $confirmationControls) {
+        throw "The second Reload Scene confirmation did not expose its real controls."
+    }
+    $confirmX = Convert-HenkaAutomationNumber $confirmationControls.Groups['confirm_x'].Value
+    $confirmY = Convert-HenkaAutomationNumber $confirmationControls.Groups['confirm_y'].Value
+    $confirmWidth = Convert-HenkaAutomationNumber $confirmationControls.Groups['confirm_width'].Value
+    $confirmHeight = Convert-HenkaAutomationNumber $confirmationControls.Groups['confirm_height'].Value
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X ($confirmX + ($confirmWidth * 0.5)) `
+        -Y ($confirmY + ($confirmHeight * 0.5))
     $reloadAttemptPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_attempt result=(?<result>-?\d+)\.'
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern $reloadAttemptPattern -TimeoutMilliseconds 10000)) {
         $capturedProcess.Process.Refresh()
@@ -516,7 +621,7 @@ try {
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern $reloadedNamePattern -TimeoutMilliseconds 10000)) {
         throw "Reload Scene did not restore the saved canonical Scene Document name."
     }
-    Write-Output "[pass] Packaged Scene Objects Rename, Save Scene, and Reload Scene preserved '$sceneName'."
+    Write-Output "[pass] Packaged Scene Objects Rename, Save Scene, Reload Scene confirmation/cancel, and confirmed reload preserved '$sceneName'."
 
     Send-HenkaSceneObjectsControlClick `
         -EventPath $automationInputPath `
