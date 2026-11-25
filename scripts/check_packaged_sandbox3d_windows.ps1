@@ -644,28 +644,7 @@ function Assert-FramebufferRect {
         [Parameter(Mandatory = $true)][double]$Height
     )
 
-    foreach ($value in @($X, $Y, $Width, $Height)) {
-        if ([double]::IsNaN($value) -or
-            [double]::IsInfinity($value)) {
-            throw "$Name reported a non-finite framebuffer rectangle."
-        }
-    }
-
-    if ($FramebufferWidth -le 0 -or $FramebufferHeight -le 0) {
-        throw "Framebuffer dimensions must be positive for geometry validation."
-    }
-    if ($Width -le 0.0 -or $Height -le 0.0) {
-        throw "$Name reported a non-positive framebuffer rectangle."
-    }
-    if ($X -lt 0.0 -or
-        $Y -lt 0.0 -or
-        $X + $Width -gt [double]$FramebufferWidth -or
-        $Y + $Height -gt [double]$FramebufferHeight) {
-        throw (
-            "$Name is outside the reported framebuffer: " +
-            "rect=($X,$Y,$Width,$Height), " +
-            "framebuffer=$($FramebufferWidth)x$($FramebufferHeight).")
-    }
+    Assert-HenkaAutomationFramebufferRect @PSBoundParameters
 
     Write-Output "[pass] $Name is inside the reported framebuffer"
 }

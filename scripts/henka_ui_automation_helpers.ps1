@@ -253,6 +253,38 @@ function Convert-HenkaFramebufferPointToWindowPoint {
     }
 }
 
+function Assert-HenkaAutomationFramebufferRect {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [Parameter(Mandatory = $true)][double]$Width,
+        [Parameter(Mandatory = $true)][double]$Height
+    )
+
+    foreach ($value in @($X, $Y, $Width, $Height)) {
+        if ([double]::IsNaN($value) -or [double]::IsInfinity($value)) {
+            throw "$Name reported a non-finite framebuffer rectangle."
+        }
+    }
+    if ($FramebufferWidth -le 0 -or $FramebufferHeight -le 0) {
+        throw "Framebuffer dimensions must be positive for geometry validation."
+    }
+    if ($Width -le 0.0 -or $Height -le 0.0) {
+        throw "$Name reported a non-positive framebuffer rectangle."
+    }
+    if ($X -lt 0.0 -or $Y -lt 0.0 -or
+        $X + $Width -gt [double]$FramebufferWidth -or
+        $Y + $Height -gt [double]$FramebufferHeight) {
+        throw (
+            "$Name is outside the reported framebuffer: " +
+            "rect=($X,$Y,$Width,$Height), " +
+            "framebuffer=$($FramebufferWidth)x$($FramebufferHeight).")
+    }
+}
+
 function Send-HenkaAutomationKey {
     param(
         [Parameter(Mandatory = $true)][string]$EventPath,

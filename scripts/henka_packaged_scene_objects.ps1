@@ -213,7 +213,7 @@ function Get-HenkaSceneObjectsControlClickPoint {
     }
 
     $rect = $report.Rect
-    $null = Assert-FramebufferRect `
+    Assert-HenkaAutomationFramebufferRect `
         -Name "Product-owned Scene Objects control $Id" `
         -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
         -X $rect.X -Y $rect.Y -Width $rect.Width -Height $rect.Height
