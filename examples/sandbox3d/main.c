@@ -622,6 +622,7 @@ typedef struct sandbox3d_state
         SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_COUNT];
     sandbox3d_ui_geometry_report object_details_actions_disclosure_report;
     sandbox3d_ui_geometry_report game_authoring_scene_actions_report;
+    sandbox3d_ui_geometry_report scene_reload_confirmation_report;
     sandbox3d_ui_geometry_report object_details_transform_disclosure_report;
     sandbox3d_ui_geometry_report object_details_transform_row_reports[
         SANDBOX3D_TRANSFORM_INSPECTOR_ROW_COUNT];
@@ -758,6 +759,7 @@ typedef struct sandbox3d_state
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
     sandbox3d_game_authoring* game_authoring;
     sandbox3d_scene_name_editor scene_name_editor;
+    bool game_authoring_reload_confirmation_pending;
     sandbox3d_mcp_server* mcp_server;
     bool mcp_stdio;
     sandbox3d_audio_runtime* audio_runtime;
@@ -920,6 +922,8 @@ static void sandbox3d_reset_ui_geometry_reports(sandbox3d_state* state)
         sizeof(state->object_details_actions_disclosure_report));
     memset(&state->game_authoring_scene_actions_report, 0,
         sizeof(state->game_authoring_scene_actions_report));
+    memset(&state->scene_reload_confirmation_report, 0,
+        sizeof(state->scene_reload_confirmation_report));
     memset(&state->object_details_transform_disclosure_report, 0,
         sizeof(state->object_details_transform_disclosure_report));
     memset(state->object_details_transform_row_reports, 0,
@@ -38872,129 +38876,241 @@ details_group_actions:
                     "Selection cleared from Object Details.");
             }
         }
-        if (state->game_authoring != NULL &&
-            sandbox3d_details_flow_next_row(
-                state,
-                flow_desc.bounds,
-                26.0f,
-                1U,
-                &row))
+        if (state->game_authoring != NULL)
         {
-            const float gap = 6.0f;
-            const float button_width = (row.width - gap) * 0.5f;
-            const henka_ui_rect save_bounds = {
-                row.x, row.y, button_width, row.height};
-            const henka_ui_rect reload_bounds = {
-                row.x + button_width + gap,
-                row.y,
-                button_width,
-                row.height};
-            if (sandbox3d_automation_input_is_owned() &&
-                sandbox3d_ui_geometry_report_changed(
-                    &state->game_authoring_scene_actions_report,
-                    sandbox3d_get_real_selected_entity(state),
-                    save_bounds,
-                    1))
+            if (state->game_authoring_reload_confirmation_pending &&
+                sandbox3d_game_authoring_is_play_locked(state->game_authoring))
             {
-                printf(
-                    "HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls visible=1 save_rect=%.1f,%.1f,%.1f,%.1f reload_rect=%.1f,%.1f,%.1f,%.1f.\n",
-                    save_bounds.x,
-                    save_bounds.y,
-                    save_bounds.width,
-                    save_bounds.height,
-                    reload_bounds.x,
-                    reload_bounds.y,
-                    reload_bounds.width,
-                    reload_bounds.height);
-                fflush(stdout);
+                state->game_authoring_reload_confirmation_pending = false;
+                memset(&state->scene_reload_confirmation_report, 0,
+                    sizeof(state->scene_reload_confirmation_report));
             }
-            if (henka_ui_button(
-                    state->ui,
-                    "game_authoring_save",
-                    save_bounds,
-                    "Save Scene") &&
-                !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+
+            if (state->game_authoring_reload_confirmation_pending)
             {
-                const henka_result save_result = sandbox3d_game_authoring_save(
-                    state->game_authoring,
-                    henka_engine_get_user_data_base_path(engine));
-                char canonical_scene_name[
-                    HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
-                sandbox3d_set_statusf(
-                    state,
-                    save_result != HENKA_SUCCESS,
-                    false,
-                    save_result == HENKA_SUCCESS ? "Game scene saved." : "Game scene save failed: %s.",
-                    henka_result_to_string(save_result));
-                if (sandbox3d_automation_input_is_owned() &&
-                    save_result == HENKA_SUCCESS &&
-                    sandbox3d_game_authoring_get_scene_name(
-                        state->game_authoring,
-                        canonical_scene_name,
-                        sizeof(canonical_scene_name)) == HENKA_SUCCESS)
+                if (sandbox3d_details_flow_next_row(
+                        state,
+                        flow_desc.bounds,
+                        26.0f,
+                        1U,
+                        &row))
                 {
-                    printf(
-                        "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=saved name=%s.\n",
-                        canonical_scene_name);
-                    fflush(stdout);
-                }
-            }
-            if (henka_ui_button(
-                    state->ui,
-                    "game_authoring_load",
-                    reload_bounds,
-                    "Reload Scene"))
-            {
-                const bool play_locked =
-                    sandbox3d_game_authoring_is_play_locked(
-                        state->game_authoring);
-                if (sandbox3d_automation_input_is_owned())
-                {
-                    printf(
-                        "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_button_clicked play_locked=%d.\n",
-                        play_locked ? 1 : 0);
-                    fflush(stdout);
-                }
-                if (!play_locked)
-                {
-                    const henka_result load_result =
-                        sandbox3d_game_authoring_load(
-                            state->game_authoring,
-                            henka_engine_get_user_data_base_path(engine));
-                    char canonical_scene_name[
-                        HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
-                    if (sandbox3d_automation_input_is_owned())
+                    const float gap = 6.0f;
+                    const float button_width = (row.width - gap) * 0.5f;
+                    const henka_ui_rect cancel_bounds = {
+                        row.x, row.y, button_width, row.height};
+                    const henka_ui_rect confirm_bounds = {
+                        row.x + button_width + gap,
+                        row.y,
+                        button_width,
+                        row.height};
+                    const bool cancel_clicked = henka_ui_button(
+                        state->ui,
+                        "game_authoring_reload_cancel",
+                        cancel_bounds,
+                        "Cancel");
+                    const bool confirm_clicked = henka_ui_button(
+                        state->ui,
+                        "game_authoring_reload_confirm",
+                        confirm_bounds,
+                        "Reload Saved");
+
+                    if (sandbox3d_automation_input_is_owned() &&
+                        sandbox3d_ui_geometry_report_changed(
+                            &state->scene_reload_confirmation_report,
+                            sandbox3d_get_real_selected_entity(state),
+                            cancel_bounds,
+                            1))
                     {
                         printf(
-                            "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_attempt result=%d.\n",
-                            (int)load_result);
+                            "HENKA_AUTOMATION_DIAGNOSTIC scene_reload_confirmation available=1 cancel_rect=%.1f,%.1f,%.1f,%.1f confirm_rect=%.1f,%.1f,%.1f,%.1f.\n",
+                            cancel_bounds.x,
+                            cancel_bounds.y,
+                            cancel_bounds.width,
+                            cancel_bounds.height,
+                            confirm_bounds.x,
+                            confirm_bounds.y,
+                            confirm_bounds.width,
+                            confirm_bounds.height);
                         fflush(stdout);
                     }
-                    if (load_result == HENKA_SUCCESS)
+
+                    if (cancel_clicked)
                     {
-                        state->audio_authoring_form_initialized = false;
-                        state->audio_authoring_form_entity =
-                            HENKA_INVALID_ENTITY;
-                        sandbox3d_scene_name_editor_reset(
-                            &state->scene_name_editor);
+                        char canonical_scene_name[
+                            HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+                        state->game_authoring_reload_confirmation_pending = false;
+                        memset(&state->scene_reload_confirmation_report, 0,
+                            sizeof(state->scene_reload_confirmation_report));
+                        if (sandbox3d_automation_input_is_owned() &&
+                            sandbox3d_game_authoring_get_scene_name(
+                                state->game_authoring,
+                                canonical_scene_name,
+                                sizeof(canonical_scene_name)) == HENKA_SUCCESS)
+                        {
+                            printf(
+                                "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_confirmation_cancelled name=%s.\n",
+                                canonical_scene_name);
+                            fflush(stdout);
+                        }
+                        sandbox3d_set_statusf(
+                            state, false, false,
+                            "Scene reload cancelled; current edits kept.");
                     }
+                    else if (confirm_clicked)
+                    {
+                        const henka_result load_result =
+                            sandbox3d_game_authoring_load(
+                                state->game_authoring,
+                                henka_engine_get_user_data_base_path(engine));
+                        char canonical_scene_name[
+                            HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+                        state->game_authoring_reload_confirmation_pending = false;
+                        memset(&state->scene_reload_confirmation_report, 0,
+                            sizeof(state->scene_reload_confirmation_report));
+                        if (sandbox3d_automation_input_is_owned())
+                        {
+                            printf(
+                                "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_attempt result=%d.\n",
+                                (int)load_result);
+                            fflush(stdout);
+                        }
+                        if (load_result == HENKA_SUCCESS)
+                        {
+                            state->audio_authoring_form_initialized = false;
+                            state->audio_authoring_form_entity =
+                                HENKA_INVALID_ENTITY;
+                            sandbox3d_scene_name_editor_reset(
+                                &state->scene_name_editor);
+                        }
+                        sandbox3d_set_statusf(
+                            state,
+                            load_result != HENKA_SUCCESS,
+                            false,
+                            load_result == HENKA_SUCCESS ?
+                                "Game scene reloaded transactionally." :
+                                "Game scene reload failed; current state retained: %s.",
+                            henka_result_to_string(load_result));
+                        if (sandbox3d_automation_input_is_owned() &&
+                            load_result == HENKA_SUCCESS &&
+                            sandbox3d_game_authoring_get_scene_name(
+                                state->game_authoring,
+                                canonical_scene_name,
+                                sizeof(canonical_scene_name)) == HENKA_SUCCESS)
+                        {
+                            printf(
+                                "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reloaded name=%s.\n",
+                                canonical_scene_name);
+                            fflush(stdout);
+                        }
+                    }
+                }
+            }
+            else if (sandbox3d_details_flow_next_row(
+                         state,
+                         flow_desc.bounds,
+                         26.0f,
+                         1U,
+                         &row))
+            {
+                const float gap = 6.0f;
+                const float button_width = (row.width - gap) * 0.5f;
+                const henka_ui_rect save_bounds = {
+                    row.x, row.y, button_width, row.height};
+                const henka_ui_rect reload_bounds = {
+                    row.x + button_width + gap,
+                    row.y,
+                    button_width,
+                    row.height};
+                if (sandbox3d_automation_input_is_owned() &&
+                    sandbox3d_ui_geometry_report_changed(
+                        &state->game_authoring_scene_actions_report,
+                        sandbox3d_get_real_selected_entity(state),
+                        save_bounds,
+                        1))
+                {
+                    printf(
+                        "HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls visible=1 save_rect=%.1f,%.1f,%.1f,%.1f reload_rect=%.1f,%.1f,%.1f,%.1f.\n",
+                        save_bounds.x,
+                        save_bounds.y,
+                        save_bounds.width,
+                        save_bounds.height,
+                        reload_bounds.x,
+                        reload_bounds.y,
+                        reload_bounds.width,
+                        reload_bounds.height);
+                    fflush(stdout);
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_save",
+                        save_bounds,
+                        "Save Scene") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    const henka_result save_result = sandbox3d_game_authoring_save(
+                        state->game_authoring,
+                        henka_engine_get_user_data_base_path(engine));
+                    char canonical_scene_name[
+                        HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
                     sandbox3d_set_statusf(
                         state,
-                        load_result != HENKA_SUCCESS,
+                        save_result != HENKA_SUCCESS,
                         false,
-                        load_result == HENKA_SUCCESS ? "Game scene reloaded transactionally." : "Game scene reload failed; current state retained: %s.",
-                        henka_result_to_string(load_result));
+                        save_result == HENKA_SUCCESS ? "Game scene saved." : "Game scene save failed: %s.",
+                        henka_result_to_string(save_result));
                     if (sandbox3d_automation_input_is_owned() &&
-                        load_result == HENKA_SUCCESS &&
+                        save_result == HENKA_SUCCESS &&
                         sandbox3d_game_authoring_get_scene_name(
                             state->game_authoring,
                             canonical_scene_name,
                             sizeof(canonical_scene_name)) == HENKA_SUCCESS)
                     {
                         printf(
-                            "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reloaded name=%s.\n",
+                            "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=saved name=%s.\n",
                             canonical_scene_name);
                         fflush(stdout);
+                    }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_load",
+                        reload_bounds,
+                        "Reload Scene"))
+                {
+                    const bool play_locked =
+                        sandbox3d_game_authoring_is_play_locked(
+                            state->game_authoring);
+                    if (sandbox3d_automation_input_is_owned())
+                    {
+                        printf(
+                            "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_button_clicked play_locked=%d.\n",
+                            play_locked ? 1 : 0);
+                        fflush(stdout);
+                    }
+                    if (!play_locked)
+                    {
+                        char canonical_scene_name[
+                            HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+                        state->game_authoring_reload_confirmation_pending = true;
+                        memset(&state->scene_reload_confirmation_report, 0,
+                            sizeof(state->scene_reload_confirmation_report));
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Confirm reload to replace the current scene with its saved version.");
+                        if (sandbox3d_automation_input_is_owned() &&
+                            sandbox3d_game_authoring_get_scene_name(
+                                state->game_authoring,
+                                canonical_scene_name,
+                                sizeof(canonical_scene_name)) == HENKA_SUCCESS)
+                        {
+                            printf(
+                                "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_confirmation_pending name=%s.\n",
+                                canonical_scene_name);
+                            fflush(stdout);
+                        }
                     }
                 }
             }
