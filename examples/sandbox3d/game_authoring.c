@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <math.h>
+#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -25,11 +26,20 @@ typedef struct sandbox3d_game_authoring_binding
     henka_entity entity;
 } sandbox3d_game_authoring_binding;
 
+typedef enum sandbox3d_game_authoring_history_kind
+{
+    SANDBOX3D_GAME_AUTHORING_HISTORY_OBJECT = 0,
+    SANDBOX3D_GAME_AUTHORING_HISTORY_SCENE_NAME
+} sandbox3d_game_authoring_history_kind;
+
 typedef struct sandbox3d_game_authoring_history_entry
 {
+    sandbox3d_game_authoring_history_kind kind;
     henka_entity entity;
     henka_scene_document_object before;
     henka_scene_document_object after;
+    char scene_name_before[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+    char scene_name_after[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
 } sandbox3d_game_authoring_history_entry;
 
 struct sandbox3d_game_authoring
@@ -99,6 +109,33 @@ static bool sandbox3d_game_authoring_authored_state_equal(
         memcmp(left, right, sizeof(*left)) == 0;
 }
 
+static sandbox3d_game_authoring_history_entry*
+sandbox3d_game_authoring_begin_history_entry(
+    sandbox3d_game_authoring* authoring)
+{
+    if (authoring == NULL || authoring->history_replaying)
+    {
+        return NULL;
+    }
+    if (authoring->history_applied_count < authoring->history_entry_count)
+    {
+        authoring->history_entry_count = authoring->history_applied_count;
+    }
+    if (authoring->history_entry_count >=
+        SANDBOX3D_GAME_AUTHORING_MAX_HISTORY_STEPS)
+    {
+        memmove(
+            &authoring->history[0],
+            &authoring->history[1],
+            (SANDBOX3D_GAME_AUTHORING_MAX_HISTORY_STEPS - 1U) *
+                sizeof(authoring->history[0]));
+        authoring->history_entry_count =
+            SANDBOX3D_GAME_AUTHORING_MAX_HISTORY_STEPS - 1U;
+        authoring->history_applied_count = authoring->history_entry_count;
+    }
+    return &authoring->history[authoring->history_entry_count++];
+}
+
 static void sandbox3d_game_authoring_append_history(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
@@ -111,23 +148,41 @@ static void sandbox3d_game_authoring_append_history(
     {
         return;
     }
-    if (authoring->history_applied_count < authoring->history_entry_count)
     {
-        authoring->history_entry_count = authoring->history_applied_count;
+        sandbox3d_game_authoring_history_entry* entry =
+            sandbox3d_game_authoring_begin_history_entry(authoring);
+        if (entry == NULL)
+        {
+            return;
+        }
+        entry->kind = SANDBOX3D_GAME_AUTHORING_HISTORY_OBJECT;
+        entry->entity = entity;
+        entry->before = *before;
+        entry->after = *after;
     }
-    if (authoring->history_entry_count >= SANDBOX3D_GAME_AUTHORING_MAX_HISTORY_STEPS)
+    authoring->history_applied_count = authoring->history_entry_count;
+}
+
+static void sandbox3d_game_authoring_append_scene_name_history(
+    sandbox3d_game_authoring* authoring,
+    const char* before,
+    const char* after)
+{
+    sandbox3d_game_authoring_history_entry* entry;
+    if (authoring == NULL || before == NULL || after == NULL ||
+        strcmp(before, after) == 0)
     {
-        memmove(
-            &authoring->history[0],
-            &authoring->history[1],
-            (SANDBOX3D_GAME_AUTHORING_MAX_HISTORY_STEPS - 1U) *
-                sizeof(authoring->history[0]));
-        authoring->history_entry_count =
-            SANDBOX3D_GAME_AUTHORING_MAX_HISTORY_STEPS - 1U;
-        authoring->history_applied_count = authoring->history_entry_count;
+        return;
     }
-    authoring->history[authoring->history_entry_count++] =
-        (sandbox3d_game_authoring_history_entry){entity, *before, *after};
+    entry = sandbox3d_game_authoring_begin_history_entry(authoring);
+    if (entry == NULL)
+    {
+        return;
+    }
+    entry->kind = SANDBOX3D_GAME_AUTHORING_HISTORY_SCENE_NAME;
+    entry->entity = HENKA_INVALID_ENTITY;
+    memcpy(entry->scene_name_before, before, strlen(before) + 1U);
+    memcpy(entry->scene_name_after, after, strlen(after) + 1U);
     authoring->history_applied_count = authoring->history_entry_count;
 }
 
@@ -3402,6 +3457,60 @@ henka_result sandbox3d_game_authoring_get_object_for_entity(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_game_authoring_get_scene_name(
+    const sandbox3d_game_authoring* authoring,
+    char* out_name,
+    size_t out_capacity)
+{
+    if (authoring == NULL || authoring->document == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_scene_document_get_name(
+        authoring->document,
+        out_name,
+        out_capacity);
+}
+
+henka_result sandbox3d_game_authoring_set_scene_name(
+    sandbox3d_game_authoring* authoring,
+    const char* name)
+{
+    char before[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+    char after[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+    henka_result result;
+
+    if (authoring == NULL || authoring->document == NULL || name == NULL ||
+        sandbox3d_game_authoring_is_play_locked(authoring))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_scene_document_get_name(
+        authoring->document, before, sizeof(before));
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_scene_document_set_name(authoring->document, name);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_scene_document_get_name(
+        authoring->document, after, sizeof(after));
+    if (result != HENKA_SUCCESS)
+    {
+        const henka_result rollback_result = henka_scene_document_set_name(
+            authoring->document, before);
+        return rollback_result == HENKA_SUCCESS
+            ? result
+            : HENKA_ERROR_UNKNOWN;
+    }
+    sandbox3d_game_authoring_append_scene_name_history(
+        authoring, before, after);
+    return HENKA_SUCCESS;
+}
+
 henka_result sandbox3d_game_authoring_get_entity_for_document_id(
     const sandbox3d_game_authoring* authoring,
     henka_scene_document_id document_id,
@@ -4514,6 +4623,20 @@ henka_result sandbox3d_game_authoring_undo(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     entry = &authoring->history[authoring->history_applied_count - 1U];
+    if (entry->kind == SANDBOX3D_GAME_AUTHORING_HISTORY_SCENE_NAME)
+    {
+        result = henka_scene_document_set_name(
+            authoring->document, entry->scene_name_before);
+        if (result == HENKA_SUCCESS)
+        {
+            --authoring->history_applied_count;
+        }
+        return result;
+    }
+    if (entry->kind != SANDBOX3D_GAME_AUTHORING_HISTORY_OBJECT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     authoring->history_replaying = true;
     result = sandbox3d_game_authoring_update_object_for_entity(
         authoring, entry->entity, &entry->before);
@@ -4557,6 +4680,20 @@ henka_result sandbox3d_game_authoring_redo(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     entry = &authoring->history[authoring->history_applied_count];
+    if (entry->kind == SANDBOX3D_GAME_AUTHORING_HISTORY_SCENE_NAME)
+    {
+        result = henka_scene_document_set_name(
+            authoring->document, entry->scene_name_after);
+        if (result == HENKA_SUCCESS)
+        {
+            ++authoring->history_applied_count;
+        }
+        return result;
+    }
+    if (entry->kind != SANDBOX3D_GAME_AUTHORING_HISTORY_OBJECT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     authoring->history_replaying = true;
     result = sandbox3d_game_authoring_update_object_for_entity(
         authoring, entry->entity, &entry->after);

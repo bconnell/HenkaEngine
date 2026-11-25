@@ -90,6 +90,9 @@ typedef struct sandbox3d_editor_controls_status_layout
 
 typedef struct sandbox3d_editor_scene_objects_layout
 {
+    henka_ui_rect scene_name_label;
+    henka_ui_rect scene_name_field;
+    henka_ui_rect scene_name_apply;
     henka_ui_rect actions_viewport;
     henka_ui_rect hierarchy_viewport;
     henka_ui_rect page_footer;
@@ -178,13 +181,15 @@ henka_result sandbox3d_editor_layout_controls_status_page(
     henka_ui_rect panel_bounds,
     sandbox3d_editor_controls_status_layout* out_layout);
 
-/* Split Scene Objects content into independently usable action and hierarchy
- * regions. The action area may scroll, while the hierarchy retains its own
- * row paging and fixed page footer. Pass the last measured action-content
- * height; zero uses a font-scaled first-frame estimate. */
+/* Split Scene Objects content into independently usable scene-name, action,
+ * hierarchy, and footer regions. The action area may scroll, while the
+ * hierarchy retains its own row paging and fixed page footer. Text widths and
+ * heights come from the active UI font authority. A zero action-content
+ * height uses a font-scaled first-frame estimate. */
 henka_result sandbox3d_editor_layout_scene_objects_regions(
     henka_ui_rect panel_bounds,
     float measured_line_height,
+    float measured_scene_name_label_width,
     float desired_actions_content_height,
     sandbox3d_editor_scene_objects_layout* out_layout);
 

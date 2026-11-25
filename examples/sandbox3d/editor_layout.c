@@ -2989,21 +2989,38 @@ henka_result sandbox3d_editor_layout_controls_status_page(
 henka_result sandbox3d_editor_layout_scene_objects_regions(
     henka_ui_rect panel_bounds,
     float measured_line_height,
+    float measured_scene_name_label_width,
     float desired_actions_content_height,
     sandbox3d_editor_scene_objects_layout* out_layout)
 {
     sandbox3d_editor_scene_objects_layout candidate = {0};
-    const float content_top = panel_bounds.y + 60.0f;
+    const float name_left = panel_bounds.x + 14.0f;
+    const float name_width = panel_bounds.width - 28.0f;
+    const float name_top = panel_bounds.y + 60.0f;
     const float footer_y = panel_bounds.y + panel_bounds.height - 34.0f;
     const float content_bottom = footer_y - 6.0f;
-    const float available_height = content_bottom - content_top;
-    const float minimum_hierarchy_height = fmaxf(40.0f, measured_line_height + 8.0f);
-    const float minimum_actions_height = fmaxf(48.0f, measured_line_height + 16.0f);
-    const float maximum_actions_height =
-        available_height - 6.0f - minimum_hierarchy_height;
+    const float name_label_height = fmaxf(measured_line_height, 16.0f);
+    const float name_control_height = fmaxf(measured_line_height + 10.0f, 28.0f);
+    const float control_gap = 6.0f;
+    const float row_gap = 4.0f;
+    const float content_gap = 8.0f;
+    const float apply_width = fminf(
+        fmaxf(52.0f, measured_line_height * 3.2f),
+        name_width * 0.42f);
+    const float minimum_field_width = fmaxf(64.0f, measured_line_height * 3.4f);
+    const float one_row_minimum_width = measured_scene_name_label_width +
+        control_gap + minimum_field_width + control_gap + apply_width;
+    const float field_and_apply_minimum_width =
+        minimum_field_width + control_gap + apply_width;
+    float content_top;
+    float available_height;
+    float minimum_hierarchy_height;
+    float minimum_actions_height;
+    float maximum_actions_height;
     float desired_actions_viewport_height;
     float actions_height;
     float hierarchy_height;
+    float name_header_height;
 
     if (out_layout == NULL)
     {
@@ -3015,10 +3032,83 @@ henka_result sandbox3d_editor_layout_scene_objects_regions(
         !sandbox3d_editor_layout_float_is_valid(panel_bounds.width) ||
         !sandbox3d_editor_layout_float_is_valid(panel_bounds.height) ||
         !sandbox3d_editor_layout_float_is_valid(measured_line_height) ||
+        !sandbox3d_editor_layout_float_is_valid(measured_scene_name_label_width) ||
         !sandbox3d_editor_layout_float_is_valid(desired_actions_content_height) ||
         panel_bounds.width <= 40.0f || panel_bounds.height <= 0.0f ||
-        measured_line_height <= 0.0f || desired_actions_content_height < 0.0f ||
-        available_height <= 0.0f ||
+        measured_line_height <= 0.0f || measured_scene_name_label_width <= 0.0f ||
+        desired_actions_content_height < 0.0f || name_width < 90.0f)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    if (name_width >= 196.0f && name_width >= one_row_minimum_width)
+    {
+        candidate.scene_name_label = (henka_ui_rect){
+            name_left,
+            name_top,
+            measured_scene_name_label_width,
+            name_control_height};
+        candidate.scene_name_field = (henka_ui_rect){
+            name_left + measured_scene_name_label_width + control_gap,
+            name_top,
+            name_width - measured_scene_name_label_width -
+                control_gap - control_gap - apply_width,
+            name_control_height};
+        candidate.scene_name_apply = (henka_ui_rect){
+            name_left + name_width - apply_width,
+            name_top,
+            apply_width,
+            name_control_height};
+        name_header_height = name_control_height;
+    }
+    else if (name_width >= 136.0f &&
+        name_width >= field_and_apply_minimum_width)
+    {
+        candidate.scene_name_label = (henka_ui_rect){
+            name_left,
+            name_top,
+            name_width,
+            name_label_height};
+        candidate.scene_name_field = (henka_ui_rect){
+            name_left,
+            name_top + name_label_height + row_gap,
+            name_width - control_gap - apply_width,
+            name_control_height};
+        candidate.scene_name_apply = (henka_ui_rect){
+            name_left + name_width - apply_width,
+            candidate.scene_name_field.y,
+            apply_width,
+            name_control_height};
+        name_header_height = name_label_height + row_gap + name_control_height;
+    }
+    else
+    {
+        candidate.scene_name_label = (henka_ui_rect){
+            name_left,
+            name_top,
+            name_width,
+            name_label_height};
+        candidate.scene_name_field = (henka_ui_rect){
+            name_left,
+            name_top + name_label_height + row_gap,
+            name_width,
+            name_control_height};
+        candidate.scene_name_apply = (henka_ui_rect){
+            name_left,
+            candidate.scene_name_field.y + name_control_height + row_gap,
+            name_width,
+            name_control_height};
+        name_header_height = name_label_height + row_gap +
+            name_control_height + row_gap + name_control_height;
+    }
+
+    content_top = name_top + name_header_height + content_gap;
+    available_height = content_bottom - content_top;
+    minimum_hierarchy_height = fmaxf(40.0f, measured_line_height + 8.0f);
+    minimum_actions_height = fmaxf(48.0f, measured_line_height + 16.0f);
+    maximum_actions_height =
+        available_height - 6.0f - minimum_hierarchy_height;
+    if (available_height <= 0.0f ||
         maximum_actions_height < minimum_actions_height)
     {
         return HENKA_ERROR_LIMIT;
@@ -3035,7 +3125,7 @@ henka_result sandbox3d_editor_layout_scene_objects_regions(
         maximum_actions_height);
     hierarchy_height = available_height - actions_height - 6.0f;
     candidate.actions_viewport = (henka_ui_rect){
-        panel_bounds.x + 14.0f,
+        name_left,
         content_top,
         panel_bounds.width - 40.0f,
         actions_height};
@@ -3054,7 +3144,31 @@ henka_result sandbox3d_editor_layout_scene_objects_regions(
         !sandbox3d_editor_layout_float_is_valid(candidate.actions_viewport.y) ||
         !sandbox3d_editor_layout_float_is_valid(candidate.actions_viewport.width) ||
         !sandbox3d_editor_layout_float_is_valid(candidate.actions_viewport.height) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_label.x) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_label.y) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_label.width) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_label.height) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_field.x) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_field.y) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_field.width) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_field.height) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_apply.x) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_apply.y) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_apply.width) ||
+        !sandbox3d_editor_layout_float_is_valid(candidate.scene_name_apply.height) ||
         !sandbox3d_editor_layout_float_is_valid(candidate.hierarchy_viewport.y) ||
+        candidate.scene_name_label.width <= 0.0f ||
+        candidate.scene_name_field.width <= 0.0f ||
+        candidate.scene_name_apply.width <= 0.0f ||
+        candidate.scene_name_label.x < panel_bounds.x ||
+        candidate.scene_name_field.x < panel_bounds.x ||
+        candidate.scene_name_apply.x < panel_bounds.x ||
+        candidate.scene_name_label.x + candidate.scene_name_label.width >
+            panel_bounds.x + panel_bounds.width ||
+        candidate.scene_name_field.x + candidate.scene_name_field.width >
+            panel_bounds.x + panel_bounds.width ||
+        candidate.scene_name_apply.x + candidate.scene_name_apply.width >
+            panel_bounds.x + panel_bounds.width ||
         candidate.actions_viewport.width <= 0.0f ||
         candidate.actions_viewport.height < minimum_actions_height ||
         candidate.hierarchy_viewport.height < minimum_hierarchy_height ||

@@ -2,6 +2,17 @@
 #include <stdint.h>
 #include <string.h>
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <process.h>
+#include <windows.h>
+#endif
+
 #include <henka/core.h>
 #include <henka/memory.h>
 #include <henka/scene.h>
@@ -136,6 +147,105 @@ cleanup:
     henka_scene_document_destroy(document);
     return success;
 }
+
+#if defined(_WIN32)
+typedef struct test_bounded_hierarchy_worker_context
+{
+    const sandbox3d_scene_document_bridge* bridge;
+    henka_result result;
+} test_bounded_hierarchy_worker_context;
+
+static unsigned int __stdcall test_bounded_hierarchy_worker(void* context)
+{
+    test_bounded_hierarchy_worker_context* worker =
+        (test_bounded_hierarchy_worker_context*)context;
+    worker->result = sandbox3d_scene_document_bridge_apply_hierarchy(
+        worker->bridge);
+    return worker->result == HENKA_SUCCESS ? 0U : 1U;
+}
+
+static bool test_hierarchy_apply_with_bounded_stack(void)
+{
+    henka_scene_document* document = NULL;
+    sandbox3d_scene_document_bridge* bridge = NULL;
+    henka_scene* scene = NULL;
+    henka_scene_document_object root_object =
+        henka_scene_document_object_default();
+    henka_scene_document_object child_object =
+        henka_scene_document_object_default();
+    henka_scene_document_id root_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id child_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_entity root_entity = HENKA_INVALID_ENTITY;
+    henka_entity child_entity = HENKA_INVALID_ENTITY;
+    henka_entity child_parent = HENKA_INVALID_ENTITY;
+    test_bounded_hierarchy_worker_context worker;
+    uintptr_t thread_handle = 0U;
+    unsigned int thread_id = 0U;
+    unsigned long thread_exit_code = 1UL;
+    bool success = false;
+
+    if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_document_add_object(
+            document, &root_object, &root_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    child_object.parent_id = root_id;
+    if (henka_scene_document_add_object(
+            document, &child_object, &child_id) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_create(document, scene, &bridge) !=
+            HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    root_entity = henka_scene_create_entity_named(scene, "Bounded Stack Root");
+    child_entity = henka_scene_create_entity_named(scene, "Bounded Stack Child");
+    if (root_entity == HENKA_INVALID_ENTITY ||
+        child_entity == HENKA_INVALID_ENTITY ||
+        sandbox3d_scene_document_bridge_bind(
+            bridge, root_id, root_entity) != HENKA_SUCCESS ||
+        sandbox3d_scene_document_bridge_bind(
+            bridge, child_id, child_entity) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    worker.bridge = bridge;
+    worker.result = HENKA_ERROR_UNKNOWN;
+    thread_handle = _beginthreadex(
+        NULL,
+        64U * 1024U,
+        test_bounded_hierarchy_worker,
+        &worker,
+        STACK_SIZE_PARAM_IS_A_RESERVATION,
+        &thread_id);
+    if (thread_handle == 0U)
+    {
+        goto cleanup;
+    }
+    if (WaitForSingleObject((HANDLE)thread_handle, INFINITE) != WAIT_OBJECT_0 ||
+        GetExitCodeThread((HANDLE)thread_handle, &thread_exit_code) == 0U ||
+        thread_exit_code != 0UL || worker.result != HENKA_SUCCESS ||
+        henka_scene_get_entity_parent(
+            scene, child_entity, &child_parent) != HENKA_SUCCESS ||
+        child_parent != root_entity)
+    {
+        goto cleanup;
+    }
+    success = true;
+
+cleanup:
+    if (thread_handle != 0U)
+    {
+        CloseHandle((HANDLE)thread_handle);
+    }
+    sandbox3d_scene_document_bridge_destroy(bridge);
+    henka_scene_destroy(scene);
+    henka_scene_document_destroy(document);
+    return success;
+}
+#endif
 
 static bool test_renderer_enabled_round_trip(void)
 {
@@ -272,6 +382,13 @@ int main(void)
         fprintf(stderr, "hierarchy capacity transaction test failed\n");
         return 1;
     }
+#if defined(_WIN32)
+    if (!test_hierarchy_apply_with_bounded_stack())
+    {
+        fprintf(stderr, "hierarchy apply exceeded the bounded worker stack\n");
+        return 1;
+    }
+#endif
     if (!test_renderer_enabled_round_trip())
     {
         fprintf(stderr, "renderer enabled round-trip test failed\n");
