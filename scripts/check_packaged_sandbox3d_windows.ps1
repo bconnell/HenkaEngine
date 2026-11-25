@@ -3276,12 +3276,21 @@ try {
             Write-Output "[pass] Product-native Ground long Object Details visual proof captured"
 
             Write-Step "Checking product-native Add Cube through the visible Scene Objects UI"
-            $addCubeRowX = $sceneObjectsX + 14.0
-            $addCubeY = $sceneObjectsY + 60.0
-            $addCubeRowWidth = $sceneObjectsWidth - 28.0
-            $addCubeHeight = 24.0
+            $addCubeControlPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=add_cube available=(?<available>[01]) asset_open=(?<assetOpen>[01]) rect=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)\.'
+            $addCubeControl = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern $addCubeControlPattern
+            if ($null -eq $addCubeControl -or
+                $addCubeControl.Groups["available"].Value -ne "1" -or
+                $addCubeControl.Groups["assetOpen"].Value -ne "0") {
+                throw "The product did not report an available Add Cube control in the normal Scene Objects state."
+            }
+            $addCubeRowX = [double]$addCubeControl.Groups["x"].Value
+            $addCubeY = [double]$addCubeControl.Groups["y"].Value
+            $addCubeRowWidth = [double]$addCubeControl.Groups["width"].Value
+            $addCubeHeight = [double]$addCubeControl.Groups["height"].Value
             Assert-FramebufferRect `
-                -Name "Scene Objects action row containing Add Cube" `
+                -Name "Product-reported Add Cube control" `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
                 -X $addCubeRowX `
@@ -3289,11 +3298,9 @@ try {
                 -Width $addCubeRowWidth `
                 -Height $addCubeHeight
 
-            # Ground is selected for the Details capture, so the product renders
-            # Add Cube, Clone, and Delete in this row.  The row's center is Clone;
-            # click inside its first action cell instead of reusing the unselected
-            # full-width Add Cube target.
-            $addCubeClickX = $addCubeRowX + 8.0
+            # Ground is selected for the Details capture. Use the live control
+            # rectangle so preceding Scene Objects controls cannot stale the click.
+            $addCubeClickX = $addCubeRowX + ($addCubeRowWidth * 0.5)
             $addCubeClickY = $addCubeY + ($addCubeHeight * 0.5)
             $addCubeOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
