@@ -1441,6 +1441,31 @@ static henka_result henka_ui_draw_fit_text_centered(
         color);
 }
 
+henka_result henka_ui_draw_fit_semantic_text_centered(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    float padding_x,
+    float scale,
+    const char* text,
+    henka_ui_semantic_color color)
+{
+    if (context == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
+    return henka_ui_draw_fit_text_centered(
+        context,
+        bounds,
+        padding_x,
+        scale,
+        text,
+        henka_ui_semantic_color_to_vec4(context, color));
+}
+
 static bool henka_ui_button_internal(
     henka_ui_context* context,
     const char* id,

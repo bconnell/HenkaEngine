@@ -2,6 +2,8 @@
 
 #include <math.h>
 
+#include "ui_internal.h"
+
 static bool henka_ui_icon_bounds_are_valid(henka_ui_rect bounds)
 {
     return isfinite((double)bounds.x) != 0 &&
@@ -223,6 +225,11 @@ bool henka_ui_tool_button(
         bounds.y + 6.0f,
         fminf(20.0f, bounds.width - 12.0f),
         fminf(20.0f, bounds.height - 12.0f)};
+    const henka_ui_rect label_bounds = {
+        bounds.x + 32.0f,
+        bounds.y,
+        bounds.width - 36.0f,
+        bounds.height};
     bool clicked;
 
     if (context == NULL || desc == NULL || desc->id == NULL || desc->label == NULL ||
@@ -255,10 +262,10 @@ bool henka_ui_tool_button(
         desc->enabled
             ? (henka_vec4){0.72f, 0.82f, 0.90f, 1.0f}
             : (henka_vec4){0.40f, 0.45f, 0.51f, 1.0f});
-    (void)henka_ui_label_colored(
+    (void)henka_ui_draw_fit_semantic_text_centered(
         context,
-        bounds.x + 32.0f,
-        bounds.y + 9.0f,
+        label_bounds,
+        0.0f,
         1.0f,
         desc->label,
         desc->enabled ? HENKA_UI_COLOR_NORMAL : HENKA_UI_COLOR_DISABLED);

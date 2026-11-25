@@ -178,6 +178,15 @@ henka_result henka_ui_draw_font_text_centered_limited(
     float maximum_width,
     size_t maximum_line_count);
 
+/* Shared one-line fit and visible-ink centering for semantic-color controls. */
+henka_result henka_ui_draw_fit_semantic_text_centered(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    float padding_x,
+    float scale,
+    const char* text,
+    henka_ui_semantic_color color);
+
 /* Context metrics share the font/profile authority used by font drawing. */
 henka_result henka_ui_measure_font_text(
     const henka_ui_context* context,
