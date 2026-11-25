@@ -1206,6 +1206,8 @@ void henka_test_sandbox3d_editor_layout(void)
             size_t visible_control_count = 0U;
             size_t hidden_control_count = 0U;
             size_t control_index;
+            int measured_subsurface_width = 0;
+            int measured_subsurface_height = 0;
             float visible_content_height = 0.0f;
             float scrolled_content_height = 0.0f;
             bool all_visible = true;
@@ -1215,7 +1217,7 @@ void henka_test_sandbox3d_editor_layout(void)
             HENKA_TEST_ASSERT(
                 henka_ui_flow_begin(ui_context, &flow) == HENKA_SUCCESS);
             HENKA_TEST_ASSERT(
-                sandbox3d_editor_layout_flow_text_control_grid_for_context(
+                sandbox3d_editor_layout_flow_button_grid_for_context(
                     ui_context,
                     narrow_material_viewport,
                     flow.row_spacing,
@@ -1224,13 +1226,23 @@ void henka_test_sandbox3d_editor_layout(void)
                     2.0f,
                     80.0f,
                     8.0f,
-                    8.0f,
                     material_row_height,
                     material_row_gap,
                     visible_controls,
                     6U,
                     &visible_rows,
                     &all_visible));
+            HENKA_TEST_ASSERT(
+                henka_ui_measure_text_for_context(
+                    ui_context,
+                    material_labels[5],
+                    2.0f,
+                    &measured_subsurface_width,
+                    &measured_subsurface_height) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(
+                visible_controls[5].width + 0.01f >=
+                (float)measured_subsurface_width +
+                    HENKA_UI_BUTTON_TEXT_HORIZONTAL_PADDING * 2.0f);
             HENKA_TEST_ASSERT(visible_rows > 1U);
             HENKA_TEST_ASSERT(!all_visible);
             for (control_index = 0U; control_index < 6U; ++control_index)
@@ -1286,7 +1298,7 @@ void henka_test_sandbox3d_editor_layout(void)
                 henka_ui_flow_begin(ui_context, &flow) == HENKA_SUCCESS);
             all_visible = true;
             HENKA_TEST_ASSERT(
-                sandbox3d_editor_layout_flow_text_control_grid_for_context(
+                sandbox3d_editor_layout_flow_button_grid_for_context(
                     ui_context,
                     narrow_material_viewport,
                     flow.row_spacing,
@@ -1294,7 +1306,6 @@ void henka_test_sandbox3d_editor_layout(void)
                     6U,
                     2.0f,
                     80.0f,
-                    8.0f,
                     8.0f,
                     material_row_height,
                     material_row_gap,

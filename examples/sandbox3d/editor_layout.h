@@ -295,6 +295,24 @@ bool sandbox3d_editor_layout_flow_text_control_grid_for_context(
     size_t* out_row_count,
     bool* out_all_visible);
 
+/* Layout ordinary buttons with the same canonical horizontal inset as the
+ * shared UI button renderer. Callers cannot supply a competing text inset. */
+bool sandbox3d_editor_layout_flow_button_grid_for_context(
+    henka_ui_context* ui_context,
+    henka_ui_rect viewport,
+    float flow_row_spacing,
+    const char* const* labels,
+    size_t item_count,
+    float scale,
+    float minimum_item_width,
+    float horizontal_gap,
+    float row_height,
+    float row_gap,
+    henka_ui_rect* out_items,
+    size_t item_capacity,
+    size_t* out_row_count,
+    bool* out_all_visible);
+
 #define SANDBOX3D_EDITOR_UTILITY_TAB_COUNT 10U
 
 /* Canonical product labels and measured geometry for Utility destinations. */
