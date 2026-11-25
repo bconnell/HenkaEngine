@@ -15,6 +15,7 @@
 #include <henka/scene.h>
 
 #include "../examples/sandbox3d/game_authoring.h"
+#include "../examples/sandbox3d/scene_name_editor.h"
 #include "../engine/src/core/memory_internal.h"
 #include "../engine/src/scene/scene_internal.h"
 
@@ -3758,6 +3759,190 @@ iteration_cleanup:
     return success && observed_out_of_memory && observed_success;
 }
 
+static bool test_scene_name_rename_history_and_project_reopen(void)
+{
+    const char* project_root = "build/test_tmp";
+    const char* relative_path = "game_authoring_scene_name_history.hscene";
+    const char* scene_file =
+        "build/test_tmp/game_authoring_scene_name_history.hscene";
+    const char* manifest_file = "build/test_tmp/henka.project";
+    henka_scene* scene = NULL;
+    henka_scene* reopened_scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    sandbox3d_game_authoring* reopened_authoring = NULL;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_entity reopened_entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id reopened_document_id =
+        HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object reopened_object;
+    char observed_name[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+    char oversized_name[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES + 8U];
+    bool success = false;
+
+    (void)remove(scene_file);
+    (void)remove(manifest_file);
+    memset(oversized_name, 'x', sizeof(oversized_name));
+    oversized_name[sizeof(oversized_name) - 1U] = '\0';
+
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+            scene, "Scene Rename Identity")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create(
+            scene, relative_path, &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, entity, &document_id) != HENKA_SUCCESS ||
+        document_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_get_scene_name(
+            authoring, observed_name, sizeof(observed_name)) != HENKA_SUCCESS ||
+        strcmp(observed_name, "Untitled Scene") != 0 ||
+        sandbox3d_game_authoring_set_scene_name(
+            authoring, "Untitled Scene") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_can_undo(authoring) ||
+        sandbox3d_game_authoring_can_redo(authoring) ||
+        sandbox3d_game_authoring_set_scene_name(authoring, "") !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_set_scene_name(authoring, oversized_name) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_set_scene_name(authoring, "bad\nname") !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_can_undo(authoring) ||
+        sandbox3d_game_authoring_set_scene_name(
+            authoring, "Workshop Draft") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_set_scene_name(
+            authoring, "Workshop Draft") != HENKA_SUCCESS ||
+        !sandbox3d_game_authoring_can_undo(authoring) ||
+        sandbox3d_game_authoring_can_redo(authoring) ||
+        sandbox3d_game_authoring_undo(authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_scene_name(
+            authoring, observed_name, sizeof(observed_name)) != HENKA_SUCCESS ||
+        strcmp(observed_name, "Untitled Scene") != 0 ||
+        sandbox3d_game_authoring_can_undo(authoring) ||
+        !sandbox3d_game_authoring_can_redo(authoring) ||
+        sandbox3d_game_authoring_redo(authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_scene_name(
+            authoring, observed_name, sizeof(observed_name)) != HENKA_SUCCESS ||
+        strcmp(observed_name, "Workshop Draft") != 0 ||
+        sandbox3d_game_authoring_undo(authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_set_scene_name(
+            authoring, "Scene Rename Persisted") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_can_redo(authoring) ||
+        sandbox3d_game_authoring_set_scene_name(
+            authoring, "still\tinvalid") != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_get_scene_name(
+            authoring, observed_name, sizeof(observed_name)) != HENKA_SUCCESS ||
+        strcmp(observed_name, "Scene Rename Persisted") != 0 ||
+        sandbox3d_game_authoring_save(authoring, project_root) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    sandbox3d_game_authoring_destroy(authoring);
+    authoring = NULL;
+    henka_scene_destroy(scene);
+    scene = NULL;
+
+    if (sandbox3d_game_authoring_open_project(
+            project_root, &reopened_scene, &reopened_authoring) != HENKA_SUCCESS ||
+        reopened_scene == NULL || reopened_authoring == NULL ||
+        sandbox3d_game_authoring_get_scene_name(
+            reopened_authoring,
+            observed_name,
+            sizeof(observed_name)) != HENKA_SUCCESS ||
+        strcmp(observed_name, "Scene Rename Persisted") != 0 ||
+        sandbox3d_game_authoring_can_undo(reopened_authoring) ||
+        sandbox3d_game_authoring_can_redo(reopened_authoring) ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            reopened_authoring, document_id, &reopened_entity) != HENKA_SUCCESS ||
+        reopened_entity == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            reopened_authoring,
+            reopened_entity,
+            &reopened_document_id,
+            &reopened_object) != HENKA_SUCCESS ||
+        reopened_document_id != document_id ||
+        strcmp(reopened_object.name, "Scene Rename Identity") != 0)
+    {
+        goto cleanup;
+    }
+    success = true;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(reopened_authoring);
+    henka_scene_destroy(reopened_scene);
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove(manifest_file);
+    (void)remove(scene_file);
+    return success;
+}
+
+static bool test_scene_name_editor_draft_sync(void)
+{
+    sandbox3d_scene_name_editor editor = {0};
+    char oversized_name[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES + 1U];
+    char preserved_draft[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+    char preserved_observed[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+
+    if (sandbox3d_scene_name_editor_sync(&editor, "Main Scene") !=
+            HENKA_SUCCESS ||
+        strcmp(editor.edit_buffer, "Main Scene") != 0 ||
+        strcmp(editor.observed_scene_name, "Main Scene") != 0 ||
+        !editor.initialized)
+    {
+        return false;
+    }
+
+    (void)memcpy(editor.edit_buffer, "Unsaved Draft", sizeof("Unsaved Draft"));
+    if (sandbox3d_scene_name_editor_sync(&editor, "Main Scene") !=
+            HENKA_SUCCESS ||
+        strcmp(editor.edit_buffer, "Unsaved Draft") != 0)
+    {
+        return false;
+    }
+
+    if (sandbox3d_scene_name_editor_sync(&editor, "Reloaded Scene") !=
+            HENKA_SUCCESS ||
+        strcmp(editor.edit_buffer, "Reloaded Scene") != 0 ||
+        strcmp(editor.observed_scene_name, "Reloaded Scene") != 0)
+    {
+        return false;
+    }
+
+    (void)memcpy(editor.edit_buffer, "Keep Draft", sizeof("Keep Draft"));
+    if (sandbox3d_scene_name_editor_sync(&editor, editor.edit_buffer) !=
+            HENKA_SUCCESS ||
+        strcmp(editor.edit_buffer, "Keep Draft") != 0 ||
+        strcmp(editor.observed_scene_name, "Keep Draft") != 0)
+    {
+        return false;
+    }
+
+    (void)memcpy(preserved_draft, editor.edit_buffer, sizeof(preserved_draft));
+    (void)memcpy(
+        preserved_observed,
+        editor.observed_scene_name,
+        sizeof(preserved_observed));
+    memset(oversized_name, 'x', sizeof(oversized_name));
+    oversized_name[sizeof(oversized_name) - 1U] = '\0';
+    if (sandbox3d_scene_name_editor_sync(&editor, oversized_name) !=
+            HENKA_ERROR_LIMIT ||
+        memcmp(editor.edit_buffer, preserved_draft, sizeof(preserved_draft)) != 0 ||
+        memcmp(
+            editor.observed_scene_name,
+            preserved_observed,
+            sizeof(preserved_observed)) != 0)
+    {
+        return false;
+    }
+
+    sandbox3d_scene_name_editor_reset(&editor);
+    return !editor.initialized &&
+        sandbox3d_scene_name_editor_sync(&editor, "Reloaded Scene") ==
+            HENKA_SUCCESS &&
+        strcmp(editor.edit_buffer, "Reloaded Scene") == 0;
+}
+
 int main(void)
 {
     const char* relative_path = "build/test_tmp/game_authoring_slice.hscene";
@@ -3794,6 +3979,16 @@ int main(void)
     henka_result parent_result;
     int exit_code = 1;
 
+    if (!test_scene_name_editor_draft_sync())
+    {
+        fprintf(stderr, "scene name editor draft synchronization test failed\n");
+        return 1;
+    }
+    if (!test_scene_name_rename_history_and_project_reopen())
+    {
+        fprintf(stderr, "scene name history and project reopen test failed\n");
+        return 1;
+    }
     if (!test_create_prefab_asset_from_authored_scene())
     {
         fprintf(stderr, "game authoring prefab creation test failed\n");

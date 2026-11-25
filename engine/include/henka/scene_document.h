@@ -13,7 +13,8 @@
 #include <henka/scene.h>
 #include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(16)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(17)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V16 UINT32_C(16)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V15 UINT32_C(15)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V14 UINT32_C(14)
 #define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V13 UINT32_C(13)
@@ -36,6 +37,7 @@
 #define HENKA_SCENE_DOCUMENT_MAX_PROMPT_BYTES 128U
 #define HENKA_SCENE_DOCUMENT_MAX_FILE_BYTES (4U * 1024U * 1024U)
 #define HENKA_SCENE_DOCUMENT_MAX_INSPECTION_BYTES (128U * 1024U)
+#define HENKA_SCENE_DOCUMENT_DEFAULT_NAME "Untitled Scene"
 
 typedef struct henka_scene_document henka_scene_document;
 typedef uint64_t henka_scene_document_id;
@@ -235,6 +237,14 @@ henka_scene_document_character_controller_default(void);
 henka_result henka_scene_document_create(henka_scene_document** out_document);
 void henka_scene_document_destroy(henka_scene_document* document);
 henka_result henka_scene_document_clear(henka_scene_document* document);
+/* Scene identity is document metadata, distinct from every entity name. */
+henka_result henka_scene_document_get_name(
+    const henka_scene_document* document,
+    char* out_name,
+    size_t out_capacity);
+henka_result henka_scene_document_set_name(
+    henka_scene_document* document,
+    const char* name);
 /* Replaces destination with a validated authored snapshot transactionally.
  * Persistent object/behavior IDs and the allocation watermark are copied
  * exactly; runtime pointers and handles are not part of the document. */

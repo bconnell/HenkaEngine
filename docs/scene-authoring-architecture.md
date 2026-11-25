@@ -262,7 +262,8 @@ scale is not approximated. Destroying a parent promotes its direct children to
 roots while preserving their world transforms, and stale parent handles cannot
 be reused.
 
-HSCN v16 persists parent IDs, an optional authored scene camera, the value-owned
+HSCN v17 persists the bounded scene-level name in addition to parent IDs, an
+optional authored scene camera, the value-owned
 Character Controller component, pointer-free inline renderer material state,
 supported non-terrain material-instance texture overrides by confined source
 path, value-owned scene environment settings, direct lighting, fog, local-light

@@ -39,6 +39,7 @@ $previousAutomationDiagnostics = $env:HENKA_AUTOMATION_DIAGNOSTICS
 $automationRecordProgressPattern = 'HENKA_AUTOMATION_DIAGNOSTIC input record=\d+ type='
 
 . (Join-Path $repoRoot "scripts\henka_ui_automation_helpers.ps1")
+. (Join-Path $repoRoot "scripts\henka_packaged_scene_objects.ps1")
 
 function Get-LastMatch {
     param(
@@ -51,6 +52,29 @@ function Get-LastMatch {
         throw "The editor did not report the required geometry: $Pattern"
     }
     return $match
+}
+
+function Get-SceneObjectsControlTarget {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Id,
+        [Parameter(Mandatory = $true)][bool]$ExpectedAssetOpen,
+        [Parameter(Mandatory = $true)][PSCustomObject]$SceneObjects,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [long]$AfterLogIndex = -1,
+        [ValidateRange(0, 30000)][int]$StateWaitTimeoutMilliseconds = 0
+    )
+
+    return Get-HenkaSceneObjectsControlClickPoint `
+        -Path $Path `
+        -Id $Id `
+        -ExpectedAssetOpen $ExpectedAssetOpen `
+        -SceneObjects $SceneObjects `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -AfterLogIndex $AfterLogIndex `
+        -StateWaitTimeoutMilliseconds $StateWaitTimeoutMilliseconds
 }
 
 function Read-SharedLogText {
@@ -547,12 +571,23 @@ function Wait-AssetTransition {
     param(
         [Parameter(Mandatory = $true)][string]$LogPath,
         [Parameter(Mandatory = $true)][string]$Action,
-        [Parameter(Mandatory = $true)][int]$PartCount
+        [Parameter(Mandatory = $true)][int]$PartCount,
+        [switch]$ReturnMatch
     )
 
     $pattern = "Native asset document: name=$([Regex]::Escape($assetName)) action=$Action parts=$PartCount\."
     if (-not (Wait-FileContains -Path $LogPath -Pattern $pattern -TimeoutMilliseconds 15000)) {
         throw "The editor did not report the native asset transition: $Action/$PartCount."
+    }
+    if ($ReturnMatch) {
+        $transitionMatch = Get-LastLogRegexMatch -Path $LogPath -Pattern $pattern
+        if ($null -eq $transitionMatch) {
+            throw "The native asset transition disappeared before its product-log position could be captured: $Action/$PartCount."
+        }
+        return [PSCustomObject]@{
+            LogIndex = [long]$transitionMatch.Index
+            Text = $transitionMatch.Value
+        }
     }
 }
 
@@ -796,6 +831,18 @@ try {
     $panelX = [double]::Parse($sceneGeometry.Groups["x"].Value, [Globalization.CultureInfo]::InvariantCulture)
     $panelY = [double]::Parse($sceneGeometry.Groups["y"].Value, [Globalization.CultureInfo]::InvariantCulture)
     $panelWidth = [double]::Parse($sceneGeometry.Groups["width"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $panelHeight = [double]::Parse($sceneGeometry.Groups["height"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $framebufferGeometry = Get-LastMatch `
+        -Path $stdoutPath `
+        -Pattern '^Sandbox UI ready: .*framebuffer (?<width>\d+)x(?<height>\d+),'
+    $framebufferWidth = [int]::Parse($framebufferGeometry.Groups["width"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $framebufferHeight = [int]::Parse($framebufferGeometry.Groups["height"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $sceneObjectsPanel = [PSCustomObject]@{
+        X = $panelX
+        Y = $panelY
+        Width = $panelWidth
+        Height = $panelHeight
+    }
 
     # Exercise the real Utility > Assets fallback-recovery surface before the
     # modeling workflow mutates the scene. The geometry contract rejects the
@@ -1103,28 +1150,33 @@ try {
     }
     Write-Output "[pass] Real Asset Browser Retry is inside the Utility panel, rejects a still-missing source without corrupting fallback state, then loads the repaired file-backed texture."
 
-    $actionWidth = [double][Math]::Max(56.0, ($panelWidth - 40.0) / 3.0)
-    $primitiveActionWidth = [double][Math]::Max(72.0, ($panelWidth - 34.0) / 2.0)
-    $nativeActionY = [double]($panelY + 90.0)
-    $nameX = [double]($panelX + 14.0 + ($primitiveActionWidth * 2.0 + 6.0) * 0.5)
-    $nameY = [double]($nativeActionY + 85.0)
-    $newAssetX = [double]($panelX + 14.0 + $primitiveActionWidth * 0.5)
-    $newAssetY = [double]($nativeActionY + 115.0)
-
-    Send-HenkaAutomationClick -EventPath $automationInputPath -X $nameX -Y $nameY
+    $nameTarget = Get-SceneObjectsControlTarget `
+        -Path $stdoutPath -Id "asset_name" -ExpectedAssetOpen $false `
+        -SceneObjects $sceneObjectsPanel `
+        -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight
+    Send-HenkaAutomationClick -EventPath $automationInputPath -X $nameTarget.X -Y $nameTarget.Y
     Clear-TextField -EventPath $automationInputPath
     Send-HenkaAutomationText -EventPath $automationInputPath -Text $assetName
     # The runtime consumes one bounded automation event per frame. Wait for the
     # actual product state instead of guessing how long a slow renderer needs.
     Wait-AssetNameInput -LogPath $stdoutPath -Name $assetName
-    Send-HenkaAutomationClick -EventPath $automationInputPath -X $newAssetX -Y $newAssetY
-    Wait-AssetTransition -LogPath $stdoutPath -Action "created" -PartCount 0
+    $newAssetTarget = Get-SceneObjectsControlTarget `
+        -Path $stdoutPath -Id "new_asset" -ExpectedAssetOpen $false `
+        -SceneObjects $sceneObjectsPanel `
+        -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight
+    Send-HenkaAutomationClick -EventPath $automationInputPath -X $newAssetTarget.X -Y $newAssetTarget.Y
+    $assetCreationTransition = Wait-AssetTransition -LogPath $stdoutPath -Action "created" -PartCount 0 -ReturnMatch
 
     # Start with one Quad Sphere so the visible workflow proves the generic
     # all-quad primitive path. All subsequent changes are normal editor actions
     # against the selected component source, not fixture construction.
-    $quadSphereX = [double]($panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth * 0.5)
-    Send-HenkaAutomationClick -EventPath $automationInputPath -X $quadSphereX -Y ($nativeActionY + 42.0)
+    $quadSphereTarget = Get-SceneObjectsControlTarget `
+        -Path $stdoutPath -Id "quad_sphere" -ExpectedAssetOpen $true `
+        -AfterLogIndex $assetCreationTransition.LogIndex `
+        -StateWaitTimeoutMilliseconds 5000 `
+        -SceneObjects $sceneObjectsPanel `
+        -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight
+    Send-HenkaAutomationClick -EventPath $automationInputPath -X $quadSphereTarget.X -Y $quadSphereTarget.Y
     Wait-AssetTransition -LogPath $stdoutPath -Action "part-added" -PartCount 1
 
     $disclosure = Get-LastMatch `
@@ -2123,21 +2175,26 @@ try {
     # Save the document through its visible asset-level control after the
     # source/project save. This is the persistence boundary used to reopen the
     # complete asset, not the Object Details source reload control.
-    $assetActionY = [double]($nativeActionY + 88.0)
-    $saveAssetX = [double]($panelX + 14.0 + $primitiveActionWidth * 0.5)
+    $saveAssetTarget = Get-SceneObjectsControlTarget `
+        -Path $stdoutPath -Id "save_asset" -ExpectedAssetOpen $true `
+        -SceneObjects $sceneObjectsPanel `
+        -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
-        -X $saveAssetX `
-        -Y ($assetActionY + 12.0)
+        -X $saveAssetTarget.X `
+        -Y $saveAssetTarget.Y
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=.* action=saved parts=1" -TimeoutMilliseconds 8000)) {
         throw "The visible native asset save did not complete."
     }
 
-    $closeAssetX = [double]($panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth * 0.5)
+    $closeAssetTarget = Get-SceneObjectsControlTarget `
+        -Path $stdoutPath -Id "close_asset" -ExpectedAssetOpen $true `
+        -SceneObjects $sceneObjectsPanel `
+        -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
-        -X $closeAssetX `
-        -Y ($assetActionY + 12.0)
+        -X $closeAssetTarget.X `
+        -Y $closeAssetTarget.Y
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=.* action=closed parts=1" -TimeoutMilliseconds 8000)) {
         throw "The visible native asset close did not complete."
     }
@@ -2145,9 +2202,11 @@ try {
     # Reopen through the visible Open Asset control, then make a second visible
     # component edit. The save/reload boundary is therefore exercised before
     # the final edit, not only at process shutdown.
-    $openX = [double]($panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth * 0.5)
-    $openY = [double]($nativeActionY + 115.0)
-    Send-HenkaAutomationClick -EventPath $automationInputPath -X $openX -Y $openY
+    $openAssetTarget = Get-SceneObjectsControlTarget `
+        -Path $stdoutPath -Id "open_asset" -ExpectedAssetOpen $false `
+        -SceneObjects $sceneObjectsPanel `
+        -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight
+    Send-HenkaAutomationClick -EventPath $automationInputPath -X $openAssetTarget.X -Y $openAssetTarget.Y
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=.* action=opened parts=1" -TimeoutMilliseconds 8000)) {
         throw "The visible native asset reopen did not complete."
     }

@@ -201,19 +201,52 @@ function Get-HenkaSceneObjectsControlClickPoint {
         [Parameter(Mandatory = $true)][bool]$ExpectedAssetOpen,
         [Parameter(Mandatory = $true)][PSCustomObject]$SceneObjects,
         [Parameter(Mandatory = $true)][int]$FramebufferWidth,
-        [Parameter(Mandatory = $true)][int]$FramebufferHeight
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [long]$AfterLogIndex = -1,
+        [ValidateRange(0, 30000)][int]$StateWaitTimeoutMilliseconds = 0,
+        [ValidateRange(10, 1000)][int]$StatePollIntervalMilliseconds = 100
     )
 
-    $report = Get-HenkaSceneObjectsControlReport -Path $Path -Id $Id
-    if ($null -eq $report -or -not $report.Available) {
-        throw "The product did not report an available Scene Objects control '$Id'."
-    }
-    if ($report.AssetOpen -ne $ExpectedAssetOpen) {
-        throw "The product reported Scene Objects control '$Id' for the wrong asset-document state."
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $report = $null
+    while ($true) {
+        $report = Get-HenkaSceneObjectsControlReport -Path $Path -Id $Id
+        $hasFreshExpectedState = $null -ne $report -and
+            $report.Available -and
+            $report.AssetOpen -eq $ExpectedAssetOpen -and
+            $report.LogIndex -gt $AfterLogIndex
+        if ($hasFreshExpectedState) {
+            break
+        }
+
+        if ($StateWaitTimeoutMilliseconds -le 0 -or
+            $watch.ElapsedMilliseconds -ge $StateWaitTimeoutMilliseconds) {
+            if ($StateWaitTimeoutMilliseconds -le 0) {
+                if ($null -eq $report -or -not $report.Available) {
+                    throw "The product did not report an available Scene Objects control '$Id'."
+                }
+                if ($report.AssetOpen -ne $ExpectedAssetOpen) {
+                    throw "The product reported Scene Objects control '$Id' for the wrong asset-document state."
+                }
+                if ($report.LogIndex -le $AfterLogIndex) {
+                    throw "The product reported Scene Objects control '$Id' only before the required transition log index $AfterLogIndex."
+                }
+            }
+
+            $lastState = if ($null -eq $report) {
+                "no matching product report"
+            } else {
+                "available=$([int]$report.Available) asset_open=$([int]$report.AssetOpen) log_index=$($report.LogIndex)"
+            }
+            throw "Timed out after $($watch.ElapsedMilliseconds)ms waiting for a fresh product-owned Scene Objects control '$Id' report after log index $AfterLogIndex with available=1 asset_open=$([int]$ExpectedAssetOpen); last report: $lastState."
+        }
+
+        $remainingMilliseconds = $StateWaitTimeoutMilliseconds - [int]$watch.ElapsedMilliseconds
+        Start-Sleep -Milliseconds ([Math]::Max(1, [Math]::Min($StatePollIntervalMilliseconds, $remainingMilliseconds)))
     }
 
     $rect = $report.Rect
-    $null = Assert-FramebufferRect `
+    Assert-HenkaAutomationFramebufferRect `
         -Name "Product-owned Scene Objects control $Id" `
         -FramebufferWidth $FramebufferWidth -FramebufferHeight $FramebufferHeight `
         -X $rect.X -Y $rect.Y -Width $rect.Width -Height $rect.Height

@@ -795,26 +795,19 @@ static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(
     henka_scene_document_id override_document_id,
     const henka_scene_document_object* override_object)
 {
-    henka_scene_document_id parent_ids[
-        SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
-    henka_entity entities[
-        SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
-    henka_entity parent_entities[
-        SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
-    henka_entity previous_parents[
-        SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
+    henka_scene_document_id* parent_ids = NULL;
+    henka_entity* entities = NULL;
+    henka_entity* parent_entities = NULL;
+    henka_entity* previous_parents = NULL;
     henka_scene* candidate_scene = NULL;
-    size_t candidate_applied_order[
-        SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
-    bool candidate_applied[
-        SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS] = {false};
+    size_t* candidate_applied_order = NULL;
+    bool* candidate_applied = NULL;
     size_t candidate_applied_count = 0U;
-    size_t applied_order[
-        SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
-    bool applied[
-        SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS] = {false};
+    size_t* applied_order = NULL;
+    bool* applied = NULL;
     size_t applied_count = 0U;
     size_t index;
+    size_t binding_count;
     henka_result result = HENKA_SUCCESS;
 
     if (bridge == NULL || bridge->play_locked ||
@@ -822,7 +815,34 @@ static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    for (index = 0U; index < bridge->binding_count; ++index)
+    binding_count = bridge->binding_count;
+    if (binding_count == 0U)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (binding_count > SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    parent_ids = henka_calloc(binding_count, sizeof(*parent_ids));
+    entities = henka_calloc(binding_count, sizeof(*entities));
+    parent_entities = henka_calloc(binding_count, sizeof(*parent_entities));
+    previous_parents = henka_calloc(binding_count, sizeof(*previous_parents));
+    candidate_applied_order =
+        henka_calloc(binding_count, sizeof(*candidate_applied_order));
+    candidate_applied = henka_calloc(binding_count, sizeof(*candidate_applied));
+    applied_order = henka_calloc(binding_count, sizeof(*applied_order));
+    applied = henka_calloc(binding_count, sizeof(*applied));
+    if (parent_ids == NULL || entities == NULL || parent_entities == NULL ||
+        previous_parents == NULL || candidate_applied_order == NULL ||
+        candidate_applied == NULL || applied_order == NULL || applied == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
+    for (index = 0U; index < binding_count; ++index)
     {
         henka_scene_document_object object;
         size_t parent_index;
@@ -837,14 +857,16 @@ static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(
                 bridge->bindings[index].document_id,
                 &object) != HENKA_SUCCESS)
         {
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
         }
         if (henka_scene_get_entity_parent(
                 bridge->scene,
                 entities[index],
                 &previous_parents[index]) != HENKA_SUCCESS)
         {
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
         }
         parent_ids[index] = object.parent_id;
         parent_entities[index] = HENKA_INVALID_ENTITY;
@@ -858,7 +880,8 @@ static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(
             !henka_scene_is_entity_valid(
                 bridge->scene, bridge->bindings[parent_index].entity))
         {
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
         }
         parent_entities[index] = bridge->bindings[parent_index].entity;
     }
@@ -872,7 +895,7 @@ static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(
     result = henka_scene_clone(bridge->scene, &candidate_scene);
     if (result != HENKA_SUCCESS)
     {
-        return result;
+        goto cleanup;
     }
     result = sandbox3d_scene_document_bridge_apply_hierarchy_links(
         bridge,
@@ -880,7 +903,7 @@ static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(
         parent_ids,
         entities,
         parent_entities,
-        bridge->binding_count,
+        binding_count,
         candidate_applied,
         candidate_applied_order,
         &candidate_applied_count);
@@ -888,7 +911,7 @@ static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(
     candidate_scene = NULL;
     if (result != HENKA_SUCCESS)
     {
-        return result;
+        goto cleanup;
     }
 
     result = sandbox3d_scene_document_bridge_apply_hierarchy_links(
@@ -897,7 +920,7 @@ static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(
         parent_ids,
         entities,
         parent_entities,
-        bridge->binding_count,
+        binding_count,
         applied,
         applied_order,
         &applied_count);
@@ -905,7 +928,7 @@ static henka_result sandbox3d_scene_document_bridge_apply_hierarchy_internal(
     {
         goto rollback;
     }
-    return HENKA_SUCCESS;
+    goto cleanup;
 
 rollback:
     while (applied_count > 0U)
@@ -917,6 +940,20 @@ rollback:
             previous_parents[restore_index],
             HENKA_SCENE_PARENT_KEEP_WORLD);
     }
+
+cleanup:
+    if (candidate_scene != NULL)
+    {
+        henka_scene_destroy(candidate_scene);
+    }
+    henka_free(applied);
+    henka_free(applied_order);
+    henka_free(candidate_applied);
+    henka_free(candidate_applied_order);
+    henka_free(previous_parents);
+    henka_free(parent_entities);
+    henka_free(entities);
+    henka_free(parent_ids);
     return result;
 }
 

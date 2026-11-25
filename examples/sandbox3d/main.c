@@ -42,6 +42,7 @@
 #include "terrain_autosave.h"
 #include "physics_tools.h"
 #include "game_authoring.h"
+#include "scene_name_editor.h"
 #include "mcp_server.h"
 #include "audio_runtime.h"
 #include "realism_detail.h"
@@ -615,10 +616,12 @@ typedef struct sandbox3d_state
     sandbox3d_ui_geometry_report default_scene_ground_row_report;
     sandbox3d_ui_geometry_report default_scene_ground_display_report;
     sandbox3d_ui_geometry_report default_scene_new_cube_row_report;
+    sandbox3d_ui_geometry_report scene_name_editor_report;
     sandbox3d_ui_geometry_report scene_objects_layout_report;
     sandbox3d_ui_geometry_report scene_objects_authoring_control_reports[
         SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_COUNT];
     sandbox3d_ui_geometry_report object_details_actions_disclosure_report;
+    sandbox3d_ui_geometry_report game_authoring_scene_actions_report;
     sandbox3d_ui_geometry_report object_details_transform_disclosure_report;
     sandbox3d_ui_geometry_report object_details_transform_row_reports[
         SANDBOX3D_TRANSFORM_INSPECTOR_ROW_COUNT];
@@ -754,6 +757,7 @@ typedef struct sandbox3d_state
     henka_entity realism_entities[SANDBOX3D_REALISM_ENTITY_COUNT];
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
     sandbox3d_game_authoring* game_authoring;
+    sandbox3d_scene_name_editor scene_name_editor;
     sandbox3d_mcp_server* mcp_server;
     bool mcp_stdio;
     sandbox3d_audio_runtime* audio_runtime;
@@ -906,12 +910,16 @@ static void sandbox3d_reset_ui_geometry_reports(sandbox3d_state* state)
         sizeof(state->default_scene_ground_display_report));
     memset(&state->default_scene_new_cube_row_report, 0,
         sizeof(state->default_scene_new_cube_row_report));
+    memset(&state->scene_name_editor_report, 0,
+        sizeof(state->scene_name_editor_report));
     memset(&state->scene_objects_layout_report, 0,
         sizeof(state->scene_objects_layout_report));
     memset(state->scene_objects_authoring_control_reports, 0,
         sizeof(state->scene_objects_authoring_control_reports));
     memset(&state->object_details_actions_disclosure_report, 0,
         sizeof(state->object_details_actions_disclosure_report));
+    memset(&state->game_authoring_scene_actions_report, 0,
+        sizeof(state->game_authoring_scene_actions_report));
     memset(&state->object_details_transform_disclosure_report, 0,
         sizeof(state->object_details_transform_disclosure_report));
     memset(state->object_details_transform_row_reports, 0,
@@ -26559,6 +26567,8 @@ static henka_ui_rect sandbox3d_panel_content_bounds(
         sandbox3d_editor_scene_objects_layout scene_layout;
         int measured_width = 0;
         int measured_height = 0;
+        int scene_name_label_width = 0;
+        int scene_name_label_height = 0;
 
         if (state->ui == NULL ||
             henka_ui_measure_text_for_context(
@@ -26568,9 +26578,17 @@ static henka_ui_rect sandbox3d_panel_content_bounds(
                 &measured_width,
                 &measured_height) != HENKA_SUCCESS ||
             measured_width <= 0 || measured_height <= 0 ||
+            henka_ui_measure_text_for_context(
+                state->ui,
+                "Name",
+                1.0f,
+                &scene_name_label_width,
+                &scene_name_label_height) != HENKA_SUCCESS ||
+            scene_name_label_width <= 0 || scene_name_label_height <= 0 ||
             sandbox3d_editor_layout_scene_objects_regions(
                 layout->scene_objects_panel,
                 (float)measured_height,
+                (float)scene_name_label_width,
                 state->editor_ui.scene_objects_actions_content_height,
                 &scene_layout) != HENKA_SUCCESS)
         {
@@ -28690,6 +28708,8 @@ static void sandbox3d_draw_scene_objects_panel(
     size_t wrapped_capacity;
     int text_width_one;
     int text_height_one;
+    int scene_name_label_width;
+    int scene_name_label_height;
     int page_index_int;
     int page_count_int;
     float row_height;
@@ -28697,6 +28717,7 @@ static void sandbox3d_draw_scene_objects_panel(
     float text_y;
     float row_width;
     henka_result layout_result;
+    henka_result scene_name_result;
     sandbox3d_editor_scene_objects_layout scene_objects_layout;
     henka_ui_rect actions_viewport;
     henka_ui_rect hierarchy_viewport;
@@ -28704,6 +28725,7 @@ static void sandbox3d_draw_scene_objects_panel(
     size_t* row_line_counts;
     sandbox3d_scene_hierarchy_row* hierarchy_rows;
     bool has_selection;
+    bool scene_name_applied;
     bool scene_objects_layout_report_changed;
     bool scene_objects_geometry_reports_enabled;
 
@@ -28770,9 +28792,17 @@ static void sandbox3d_draw_scene_objects_panel(
     if (henka_ui_measure_text_for_context(
             state->ui, "M", 1.0f, &text_width_one, &text_height_one) != HENKA_SUCCESS ||
         text_width_one <= 0 || text_height_one <= 0 ||
+        henka_ui_measure_text_for_context(
+            state->ui,
+            "Name",
+            1.0f,
+            &scene_name_label_width,
+            &scene_name_label_height) != HENKA_SUCCESS ||
+        scene_name_label_width <= 0 || scene_name_label_height <= 0 ||
         sandbox3d_editor_layout_scene_objects_regions(
             panel_bounds,
             (float)text_height_one,
+            (float)scene_name_label_width,
             state->editor_ui.scene_objects_actions_content_height,
             &scene_objects_layout) != HENKA_SUCCESS)
     {
@@ -28785,6 +28815,75 @@ static void sandbox3d_draw_scene_objects_panel(
         return;
     }
     line_height = (float)text_height_one;
+    if (scene_objects_geometry_reports_enabled &&
+        sandbox3d_ui_geometry_report_changed(
+            &state->scene_name_editor_report,
+            HENKA_INVALID_ENTITY,
+            scene_objects_layout.scene_name_field,
+            state->game_authoring != NULL ? 1 : 0))
+    {
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC scene_name_controls available=%u label_rect=%.1f,%.1f,%.1f,%.1f field_rect=%.1f,%.1f,%.1f,%.1f rename_rect=%.1f,%.1f,%.1f,%.1f.\n",
+            state->game_authoring != NULL ? 1U : 0U,
+            scene_objects_layout.scene_name_label.x,
+            scene_objects_layout.scene_name_label.y,
+            scene_objects_layout.scene_name_label.width,
+            scene_objects_layout.scene_name_label.height,
+            scene_objects_layout.scene_name_field.x,
+            scene_objects_layout.scene_name_field.y,
+            scene_objects_layout.scene_name_field.width,
+            scene_objects_layout.scene_name_field.height,
+            scene_objects_layout.scene_name_apply.x,
+            scene_objects_layout.scene_name_apply.y,
+            scene_objects_layout.scene_name_apply.width,
+            scene_objects_layout.scene_name_apply.height);
+        fflush(stdout);
+    }
+    if (state->game_authoring != NULL)
+    {
+        scene_name_applied = false;
+        scene_name_result = sandbox3d_scene_name_editor_draw(
+            &state->scene_name_editor,
+            state->ui,
+            state->game_authoring,
+            &scene_objects_layout,
+            &scene_name_applied);
+        if (scene_name_result != HENKA_SUCCESS)
+        {
+            sandbox3d_set_statusf(
+                state,
+                true,
+                false,
+                "Scene name could not be applied: %s.",
+                henka_result_to_string(scene_name_result));
+            if (scene_objects_geometry_reports_enabled)
+            {
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC scene_name_rename result=error code=%d.\n",
+                    (int)scene_name_result);
+                fflush(stdout);
+            }
+        }
+        else if (scene_name_applied)
+        {
+            char canonical_scene_name[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+            sandbox3d_set_status(
+                state,
+                false,
+                "Scene name updated. Undo and redo include this change.");
+            if (scene_objects_geometry_reports_enabled &&
+                sandbox3d_game_authoring_get_scene_name(
+                    state->game_authoring,
+                    canonical_scene_name,
+                    sizeof(canonical_scene_name)) == HENKA_SUCCESS)
+            {
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC scene_name_rename result=success name=%s.\n",
+                    canonical_scene_name);
+                fflush(stdout);
+            }
+        }
+    }
     actions_viewport = scene_objects_layout.actions_viewport;
     hierarchy_viewport = scene_objects_layout.hierarchy_viewport;
     footer_y = scene_objects_layout.page_footer.y;
@@ -38783,44 +38882,121 @@ details_group_actions:
         {
             const float gap = 6.0f;
             const float button_width = (row.width - gap) * 0.5f;
+            const henka_ui_rect save_bounds = {
+                row.x, row.y, button_width, row.height};
+            const henka_ui_rect reload_bounds = {
+                row.x + button_width + gap,
+                row.y,
+                button_width,
+                row.height};
+            if (sandbox3d_automation_input_is_owned() &&
+                sandbox3d_ui_geometry_report_changed(
+                    &state->game_authoring_scene_actions_report,
+                    sandbox3d_get_real_selected_entity(state),
+                    save_bounds,
+                    1))
+            {
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls visible=1 save_rect=%.1f,%.1f,%.1f,%.1f reload_rect=%.1f,%.1f,%.1f,%.1f.\n",
+                    save_bounds.x,
+                    save_bounds.y,
+                    save_bounds.width,
+                    save_bounds.height,
+                    reload_bounds.x,
+                    reload_bounds.y,
+                    reload_bounds.width,
+                    reload_bounds.height);
+                fflush(stdout);
+            }
             if (henka_ui_button(
                     state->ui,
                     "game_authoring_save",
-                    (henka_ui_rect){row.x, row.y, button_width, row.height},
+                    save_bounds,
                     "Save Scene") &&
                 !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
             {
                 const henka_result save_result = sandbox3d_game_authoring_save(
                     state->game_authoring,
                     henka_engine_get_user_data_base_path(engine));
+                char canonical_scene_name[
+                    HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
                 sandbox3d_set_statusf(
                     state,
                     save_result != HENKA_SUCCESS,
                     false,
                     save_result == HENKA_SUCCESS ? "Game scene saved." : "Game scene save failed: %s.",
                     henka_result_to_string(save_result));
+                if (sandbox3d_automation_input_is_owned() &&
+                    save_result == HENKA_SUCCESS &&
+                    sandbox3d_game_authoring_get_scene_name(
+                        state->game_authoring,
+                        canonical_scene_name,
+                        sizeof(canonical_scene_name)) == HENKA_SUCCESS)
+                {
+                    printf(
+                        "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=saved name=%s.\n",
+                        canonical_scene_name);
+                    fflush(stdout);
+                }
             }
             if (henka_ui_button(
                     state->ui,
                     "game_authoring_load",
-                    (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
-                    "Reload Scene") &&
-                !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                    reload_bounds,
+                    "Reload Scene"))
             {
-                const henka_result load_result = sandbox3d_game_authoring_load(
-                    state->game_authoring,
-                    henka_engine_get_user_data_base_path(engine));
-                if (load_result == HENKA_SUCCESS)
+                const bool play_locked =
+                    sandbox3d_game_authoring_is_play_locked(
+                        state->game_authoring);
+                if (sandbox3d_automation_input_is_owned())
                 {
-                    state->audio_authoring_form_initialized = false;
-                    state->audio_authoring_form_entity = HENKA_INVALID_ENTITY;
+                    printf(
+                        "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_button_clicked play_locked=%d.\n",
+                        play_locked ? 1 : 0);
+                    fflush(stdout);
                 }
-                sandbox3d_set_statusf(
-                    state,
-                    load_result != HENKA_SUCCESS,
-                    false,
-                    load_result == HENKA_SUCCESS ? "Game scene reloaded transactionally." : "Game scene reload failed; current state retained: %s.",
-                    henka_result_to_string(load_result));
+                if (!play_locked)
+                {
+                    const henka_result load_result =
+                        sandbox3d_game_authoring_load(
+                            state->game_authoring,
+                            henka_engine_get_user_data_base_path(engine));
+                    char canonical_scene_name[
+                        HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+                    if (sandbox3d_automation_input_is_owned())
+                    {
+                        printf(
+                            "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_attempt result=%d.\n",
+                            (int)load_result);
+                        fflush(stdout);
+                    }
+                    if (load_result == HENKA_SUCCESS)
+                    {
+                        state->audio_authoring_form_initialized = false;
+                        state->audio_authoring_form_entity =
+                            HENKA_INVALID_ENTITY;
+                        sandbox3d_scene_name_editor_reset(
+                            &state->scene_name_editor);
+                    }
+                    sandbox3d_set_statusf(
+                        state,
+                        load_result != HENKA_SUCCESS,
+                        false,
+                        load_result == HENKA_SUCCESS ? "Game scene reloaded transactionally." : "Game scene reload failed; current state retained: %s.",
+                        henka_result_to_string(load_result));
+                    if (sandbox3d_automation_input_is_owned() &&
+                        load_result == HENKA_SUCCESS &&
+                        sandbox3d_game_authoring_get_scene_name(
+                            state->game_authoring,
+                            canonical_scene_name,
+                            sizeof(canonical_scene_name)) == HENKA_SUCCESS)
+                    {
+                        printf(
+                            "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reloaded name=%s.\n",
+                            canonical_scene_name);
+                        fflush(stdout);
+                    }
+                }
             }
         }
     }

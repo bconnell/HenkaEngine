@@ -153,6 +153,15 @@ henka_result sandbox3d_game_authoring_get_object_for_entity(
     henka_entity entity,
     henka_scene_document_id* out_document_id,
     henka_scene_document_object* out_object);
+/* Scene identity is canonical Scene Document metadata, separate from entity
+ * names. Renames participate in the coordinator's bounded undo/redo history. */
+henka_result sandbox3d_game_authoring_get_scene_name(
+    const sandbox3d_game_authoring* authoring,
+    char* out_name,
+    size_t out_capacity);
+henka_result sandbox3d_game_authoring_set_scene_name(
+    sandbox3d_game_authoring* authoring,
+    const char* name);
 /* Resolves a persistent authored identity to its currently bound live entity.
  * The coordinator remains the sole owner of this mapping; callers do not
  * receive a raw document or bridge pointer. */

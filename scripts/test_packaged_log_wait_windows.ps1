@@ -6,6 +6,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
+. (Join-Path $PSScriptRoot "henka_ui_automation_helpers.ps1")
 
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
@@ -269,6 +270,80 @@ try {
         throw "The packaged click-target resolver authorized an unavailable button."
     }
     Write-Output "[pass] Unequal text-measured control geometry is parsed from product telemetry; unavailable controls cannot authorize clicks"
+
+    $nativeControlRecords = @(
+        "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=asset_name available=1 asset_open=0 rect=30.0,219.0,216.0,24.0.",
+        "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=new_asset available=1 asset_open=0 rect=30.0,249.0,84.0,24.0."
+    ) -join "`r`n"
+    [System.IO.File]::WriteAllText($controlReportPath, $nativeControlRecords + "`r`n", $encoding)
+    $scenePanel = [PSCustomObject]@{ X = 16.0; Y = 16.0; Width = 256.0; Height = 688.0 }
+    $assetNameTarget = Get-HenkaSceneObjectsControlClickPoint `
+        -Path $controlReportPath -Id "asset_name" -ExpectedAssetOpen $false `
+        -SceneObjects $scenePanel -FramebufferWidth 1280 -FramebufferHeight 720
+    $newAssetTarget = Get-HenkaSceneObjectsControlClickPoint `
+        -Path $controlReportPath -Id "new_asset" -ExpectedAssetOpen $false `
+        -SceneObjects $scenePanel -FramebufferWidth 1280 -FramebufferHeight 720
+    $staleNameClickIntersectsField =
+        144.0 -ge $assetNameTarget.Rect.X -and
+        144.0 -lt ($assetNameTarget.Rect.X + $assetNameTarget.Rect.Width) -and
+        191.0 -ge $assetNameTarget.Rect.Y -and
+        191.0 -lt ($assetNameTarget.Rect.Y + $assetNameTarget.Rect.Height)
+    $staleNewAssetClickIntersectsButton =
+        71.0 -ge $newAssetTarget.Rect.X -and
+        71.0 -lt ($newAssetTarget.Rect.X + $newAssetTarget.Rect.Width) -and
+        221.0 -ge $newAssetTarget.Rect.Y -and
+        221.0 -lt ($newAssetTarget.Rect.Y + $newAssetTarget.Rect.Height)
+    if ($assetNameTarget.X -ne 138.0 -or $assetNameTarget.Y -ne 231.0 -or
+        $newAssetTarget.X -ne 72.0 -or $newAssetTarget.Y -ne 261.0 -or
+        $staleNameClickIntersectsField -or $staleNewAssetClickIntersectsButton) {
+        throw "Native authoring targets did not use the product-reported name-field and New Asset rectangles."
+    }
+    Write-Output "[pass] Native asset name and New Asset clicks resolve from their product-reported rectangles, not stale panel-relative guesses"
+
+    $controlTransitionLogPath = Join-Path $temporaryRoot "scene-objects-control-transition.log"
+    $createdTransition = "Native asset document: name=FreshAsset action=created parts=0."
+    $staleQuadSphereControl = "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=quad_sphere available=1 asset_open=0 rect=36.0,279.0,72.0,24.0."
+    [System.IO.File]::WriteAllText(
+        $controlTransitionLogPath,
+        $staleQuadSphereControl + "`r`n" + $createdTransition + "`r`n",
+        $encoding)
+    $createdTransitionMatch = Get-LastLogRegexMatch `
+        -Path $controlTransitionLogPath `
+        -Pattern ([Regex]::Escape($createdTransition))
+    if ($null -eq $createdTransitionMatch) {
+        throw "The synthetic asset-created transition could not be located in the focused state-wait regression."
+    }
+    $staleControlFailure = $null
+    try {
+        $null = Get-HenkaSceneObjectsControlClickPoint `
+            -Path $controlTransitionLogPath -Id "quad_sphere" -ExpectedAssetOpen $true `
+            -AfterLogIndex $createdTransitionMatch.Index `
+            -StateWaitTimeoutMilliseconds 100 -StatePollIntervalMilliseconds 10 `
+            -SceneObjects $scenePanel -FramebufferWidth 1280 -FramebufferHeight 720
+    }
+    catch {
+        $staleControlFailure = $_.Exception.Message
+    }
+    if ($staleControlFailure -notmatch 'fresh.*after log index') {
+        throw "A pre-creation Quad Sphere report did not fail the bounded post-transition state wait with a stale-authority diagnostic."
+    }
+    $freshQuadSphereControl = "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=quad_sphere available=1 asset_open=1 rect=36.0,279.0,72.0,24.0."
+    [System.IO.File]::AppendAllText(
+        $controlTransitionLogPath,
+        $freshQuadSphereControl + "`r`n",
+        $encoding)
+    $freshQuadSphereTarget = Get-HenkaSceneObjectsControlClickPoint `
+        -Path $controlTransitionLogPath -Id "quad_sphere" -ExpectedAssetOpen $true `
+        -AfterLogIndex $createdTransitionMatch.Index `
+        -StateWaitTimeoutMilliseconds 100 -StatePollIntervalMilliseconds 10 `
+        -SceneObjects $scenePanel -FramebufferWidth 1280 -FramebufferHeight 720
+    if (-not $freshQuadSphereTarget.Report.Available -or
+        -not $freshQuadSphereTarget.Report.AssetOpen -or
+        $freshQuadSphereTarget.Report.LogIndex -le $createdTransitionMatch.Index -or
+        $freshQuadSphereTarget.X -ne 72.0 -or $freshQuadSphereTarget.Y -ne 291.0) {
+        throw "A fresh post-creation Quad Sphere report did not authorize its product-reported click center."
+    }
+    Write-Output "[pass] Pre-creation control telemetry cannot authorize a post-creation click; a fresh product report after the transition can"
 
     $malformedControlPath = Join-Path $temporaryRoot "scene-objects-control-geometry-malformed.log"
     [System.IO.File]::WriteAllText(

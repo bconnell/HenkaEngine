@@ -179,6 +179,142 @@ static uint32_t test_scene_document_legacy_checksum(
     return ~checksum;
 }
 
+static bool test_scene_document_write_v16_fixture(
+    const char* version17_path,
+    const char* version16_path)
+{
+    FILE* file = NULL;
+    unsigned char* data = NULL;
+    long file_length;
+    size_t size;
+    size_t payload_size;
+    size_t name_prefix_size;
+    const uint16_t name_length = (uint16_t)strlen(HENKA_SCENE_DOCUMENT_DEFAULT_NAME);
+    uint32_t checksum;
+    size_t index;
+    bool result = false;
+
+    if (version17_path == NULL || version16_path == NULL)
+    {
+        return false;
+    }
+#if defined(_WIN32)
+    if (fopen_s(&file, version17_path, "rb") != 0)
+    {
+        file = NULL;
+    }
+#else
+    file = fopen(version17_path, "rb");
+#endif
+    if (file == NULL || fseek(file, 0L, SEEK_END) != 0 ||
+        (file_length = ftell(file)) < 42L || fseek(file, 0L, SEEK_SET) != 0)
+    {
+        if (file != NULL) fclose(file);
+        return false;
+    }
+    size = (size_t)file_length;
+    data = (unsigned char*)malloc(size);
+    if (data == NULL || fread(data, 1U, size, file) != size)
+    {
+        free(data);
+        fclose(file);
+        return false;
+    }
+    if (fclose(file) != 0)
+    {
+        free(data);
+        return false;
+    }
+
+    name_prefix_size = sizeof(uint16_t) + (size_t)name_length;
+    if (size - 40U < name_prefix_size ||
+        data[size - name_prefix_size] != (unsigned char)(name_length & 0xFFU) ||
+        data[size - name_prefix_size + 1U] != (unsigned char)((name_length >> 8U) & 0xFFU) ||
+        memcmp(
+            data + size - name_length,
+            HENKA_SCENE_DOCUMENT_DEFAULT_NAME,
+            name_length) != 0)
+    {
+        free(data);
+        return false;
+    }
+    payload_size = size - 40U - name_prefix_size;
+    size -= name_prefix_size;
+    data[4] = 16U;
+    data[5] = 0U;
+    data[6] = 0U;
+    data[7] = 0U;
+    for (index = 0U; index < sizeof(uint64_t); ++index)
+    {
+        data[12U + index] = (unsigned char)(((uint64_t)payload_size >> (index * 8U)) & 0xFFU);
+    }
+    checksum = test_scene_document_legacy_checksum(data + 40U, payload_size);
+    for (index = 0U; index < sizeof(uint32_t); ++index)
+    {
+        data[32U + index] = (unsigned char)((checksum >> (index * 8U)) & 0xFFU);
+    }
+    result = test_scene_document_write_bytes(version16_path, data, size);
+    free(data);
+    return result;
+}
+
+static bool test_scene_document_name_api(void)
+{
+    const char* path = "build/test_tmp/scene_document_name.hscene";
+    henka_scene_document* document = NULL;
+    henka_scene_document* loaded = NULL;
+    henka_scene_document* copied = NULL;
+    char name[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+    char oversized[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES + 1U];
+    char short_output[4] = {'x', 'x', 'x', '\0'};
+    char inspection[256];
+    size_t inspection_size = 0U;
+    bool success = false;
+
+    (void)remove(path);
+    if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
+        henka_scene_document_create(&loaded) != HENKA_SUCCESS ||
+        henka_scene_document_create(&copied) != HENKA_SUCCESS ||
+        henka_scene_document_get_name(document, name, sizeof(name)) != HENKA_SUCCESS ||
+        strcmp(name, HENKA_SCENE_DOCUMENT_DEFAULT_NAME) != 0 ||
+        henka_scene_document_get_name(document, short_output, sizeof(short_output)) != HENKA_ERROR_LIMIT ||
+        strcmp(short_output, "xxx") != 0 ||
+        henka_scene_document_set_name(document, "") != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_scene_document_set_name(document, "invalid\nname") != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_scene_document_set_name(document, "invalid\tname") != HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        goto cleanup;
+    }
+    memset(oversized, 'X', sizeof(oversized));
+    oversized[sizeof(oversized) - 1U] = '\0';
+    if (henka_scene_document_set_name(document, oversized) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_scene_document_get_name(document, name, sizeof(name)) != HENKA_SUCCESS ||
+        strcmp(name, HENKA_SCENE_DOCUMENT_DEFAULT_NAME) != 0 ||
+        henka_scene_document_set_name(document, "Highlands Workshop 03") != HENKA_SUCCESS ||
+        henka_scene_document_copy(copied, document) != HENKA_SUCCESS ||
+        henka_scene_document_save_file(document, ".", path) != HENKA_SUCCESS ||
+        henka_scene_document_load_file(loaded, ".", path) != HENKA_SUCCESS ||
+        henka_scene_document_get_name(loaded, name, sizeof(name)) != HENKA_SUCCESS ||
+        strcmp(name, "Highlands Workshop 03") != 0 ||
+        henka_scene_document_format_inspection(
+            copied, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
+        strstr(inspection, "HSCN version=17 name=Highlands Workshop 03") == NULL ||
+        henka_scene_document_clear(document) != HENKA_SUCCESS ||
+        henka_scene_document_get_name(document, name, sizeof(name)) != HENKA_SUCCESS ||
+        strcmp(name, HENKA_SCENE_DOCUMENT_DEFAULT_NAME) != 0)
+    {
+        goto cleanup;
+    }
+    success = true;
+
+cleanup:
+    (void)remove(path);
+    henka_scene_document_destroy(copied);
+    henka_scene_document_destroy(loaded);
+    henka_scene_document_destroy(document);
+    return success;
+}
+
 static bool test_scene_document_legacy_read_u16(
     const unsigned char* buffer,
     size_t capacity,
@@ -265,11 +401,15 @@ static bool test_scene_document_legacy_compact_current_extensions(
     const size_t material_texture_count = 7U;
     size_t read_position = header_bytes;
     size_t write_position = header_bytes;
+    size_t suffix_end = source_size;
     size_t object_index;
+    uint32_t source_format_version;
 
     if (data == NULL || out_size == NULL || source_size < header_bytes ||
         object_count > (source_size - header_bytes) /
-            (2U * sizeof(uint64_t) + sizeof(uint32_t)))
+            (2U * sizeof(uint64_t) + sizeof(uint32_t)) ||
+        !test_scene_document_legacy_read_u32(
+            data, source_size, &(size_t){4U}, &source_format_version))
     {
         return false;
     }
@@ -459,15 +599,42 @@ static bool test_scene_document_legacy_compact_current_extensions(
         }
     }
 
-    if (write_position > read_position)
+    if (source_format_version == HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    {
+        const size_t scene_name_length = strlen(HENKA_SCENE_DOCUMENT_DEFAULT_NAME);
+        const size_t scene_name_extension_bytes = sizeof(uint16_t) + scene_name_length;
+        size_t scene_name_prefix_position;
+
+        /* These legacy fixtures are derived from the default-named source. */
+        if (source_size < scene_name_extension_bytes)
+        {
+            return false;
+        }
+        scene_name_prefix_position = source_size - scene_name_extension_bytes;
+        if (
+            data[scene_name_prefix_position] != (unsigned char)(scene_name_length & 0xFFU) ||
+            data[scene_name_prefix_position + 1U] !=
+                (unsigned char)((scene_name_length >> 8U) & 0xFFU) ||
+            memcmp(
+                data + scene_name_prefix_position + sizeof(uint16_t),
+                HENKA_SCENE_DOCUMENT_DEFAULT_NAME,
+                scene_name_length) != 0)
+        {
+            return false;
+        }
+        /* Legacy fixtures must not carry the v17-only scene-name trailer. */
+        suffix_end = scene_name_prefix_position;
+    }
+
+    if (write_position > read_position || suffix_end < read_position)
     {
         return false;
     }
     memmove(
         data + write_position,
         data + read_position,
-        source_size - read_position);
-    write_position += source_size - read_position;
+        suffix_end - read_position);
+    write_position += suffix_end - read_position;
     *out_size = write_position;
     return true;
 }
@@ -567,6 +734,48 @@ static bool test_scene_document_patch_u32_and_checksum(
     return result;
 }
 
+static bool test_scene_document_read_name_extension_size(
+    FILE* file,
+    long file_size,
+    size_t* out_extension_size)
+{
+    unsigned char version_bytes[sizeof(uint32_t)];
+    unsigned char name_extension[
+        sizeof(uint16_t) + sizeof(HENKA_SCENE_DOCUMENT_DEFAULT_NAME) - 1U];
+    const size_t name_length = sizeof(HENKA_SCENE_DOCUMENT_DEFAULT_NAME) - 1U;
+    const size_t extension_size = sizeof(uint16_t) + name_length;
+    uint32_t format_version;
+
+    if (file == NULL || out_extension_size == NULL || file_size < 40L ||
+        fseek(file, 4L, SEEK_SET) != 0 ||
+        fread(version_bytes, 1U, sizeof(version_bytes), file) != sizeof(version_bytes))
+    {
+        return false;
+    }
+    format_version = (uint32_t)version_bytes[0] |
+        ((uint32_t)version_bytes[1] << 8U) |
+        ((uint32_t)version_bytes[2] << 16U) |
+        ((uint32_t)version_bytes[3] << 24U);
+    if (format_version < HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    {
+        *out_extension_size = 0U;
+        return true;
+    }
+    if (format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION ||
+        (uint64_t)file_size < 40U + (uint64_t)extension_size ||
+        fseek(file, file_size - (long)extension_size, SEEK_SET) != 0 ||
+        fread(name_extension, 1U, extension_size, file) != extension_size ||
+        name_extension[0] != (unsigned char)(name_length & 0xFFU) ||
+        name_extension[1] != (unsigned char)((name_length >> 8U) & 0xFFU) ||
+        memcmp(name_extension + sizeof(uint16_t),
+            HENKA_SCENE_DOCUMENT_DEFAULT_NAME, name_length) != 0)
+    {
+        return false;
+    }
+    *out_extension_size = extension_size;
+    return true;
+}
+
 static bool test_scene_document_patch_v10_environment_mode(
     const char* path,
     uint32_t mode)
@@ -576,6 +785,7 @@ static bool test_scene_document_patch_v10_environment_mode(
     const size_t render_resources_bytes = 144U * sizeof(uint32_t);
     FILE* file = NULL;
     long length;
+    size_t name_extension_size = 0U;
     bool result;
 
     if (path == NULL ||
@@ -586,7 +796,11 @@ static bool test_scene_document_patch_v10_environment_mode(
 #endif
         fseek(file, 0L, SEEK_END) != 0 ||
         (length = ftell(file)) <
-            (long)(40U + environment_bytes + render_settings_bytes + render_resources_bytes))
+            (long)(40U + environment_bytes + render_settings_bytes + render_resources_bytes) ||
+        !test_scene_document_read_name_extension_size(
+            file, length, &name_extension_size) ||
+        (uint64_t)length < (uint64_t)name_extension_size + 40U +
+            environment_bytes + render_settings_bytes + render_resources_bytes)
     {
         if (file != NULL) fclose(file);
         return false;
@@ -594,7 +808,8 @@ static bool test_scene_document_patch_v10_environment_mode(
     result = fclose(file) == 0 &&
         test_scene_document_patch_u32_and_checksum(
             path,
-            length - (long)environment_bytes - (long)render_settings_bytes -
+            length - (long)name_extension_size -
+                (long)environment_bytes - (long)render_settings_bytes -
                 (long)render_resources_bytes +
                 (long)(11U * sizeof(uint32_t)),
             mode);
@@ -1394,6 +1609,7 @@ static bool test_scene_document_patch_render_resource_u32(
     long length;
     const size_t render_resources_bytes = 144U * sizeof(uint32_t);
     const size_t header_bytes = 40U;
+    size_t name_extension_size = 0U;
     size_t resource_start;
 
     if (path == NULL ||
@@ -1403,12 +1619,17 @@ static bool test_scene_document_patch_render_resource_u32(
         (file = fopen(path, "rb")) == NULL ||
 #endif
         fseek(file, 0L, SEEK_END) != 0 ||
-        (length = ftell(file)) < (long)(header_bytes + render_resources_bytes))
+        (length = ftell(file)) < (long)(header_bytes + render_resources_bytes) ||
+        !test_scene_document_read_name_extension_size(
+            file, length, &name_extension_size) ||
+        (uint64_t)length <
+            (uint64_t)header_bytes + (uint64_t)render_resources_bytes +
+                (uint64_t)name_extension_size)
     {
         if (file != NULL) fclose(file);
         return false;
     }
-    resource_start = (size_t)length - render_resources_bytes;
+    resource_start = (size_t)length - name_extension_size - render_resources_bytes;
     fclose(file);
     return test_scene_document_patch_u32_and_checksum(
         path,
@@ -1635,6 +1856,7 @@ int main(void)
     const char* v13_path = "build/test_tmp/scene_document_legacy_v13.hscene";
     const char* v14_path = "build/test_tmp/scene_document_legacy_v14.hscene";
     const char* v15_path = "build/test_tmp/scene_document_legacy_v15.hscene";
+    const char* v16_path = "build/test_tmp/scene_document_legacy_v16.hscene";
     const char* malformed_resources_path =
         "build/test_tmp/scene_document_malformed_resources.hscene";
     const char* camera_path = "build/test_tmp/scene_document_camera.hscene";
@@ -1663,6 +1885,7 @@ int main(void)
     henka_scene_document_id duplicate_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_behavior_id behavior_id = HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID;
     char inspection[HENKA_SCENE_DOCUMENT_MAX_INSPECTION_BYTES];
+    char scene_name[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
     size_t index;
     size_t inspection_size = 0U;
     int result = 1;
@@ -1672,6 +1895,11 @@ int main(void)
         henka_scene_document_create(&exhausted) != HENKA_SUCCESS ||
         henka_scene_document_create(&camera_document) != HENKA_SUCCESS)
     {
+        goto cleanup;
+    }
+    if (!test_scene_document_name_api())
+    {
+        fprintf(stderr, "scene document scene-name API test failed\n");
         goto cleanup;
     }
     test_scene_document_save_propagates_path_errors();
@@ -1838,16 +2066,45 @@ int main(void)
                 "scripts/rotate.lua"},
             &behavior_id) == HENKA_SUCCESS ||
         henka_scene_document_get_object_count(document) != 257U ||
-        henka_scene_document_validate(document) != HENKA_SUCCESS ||
-        henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS ||
+        henka_scene_document_validate(document) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "scene document test failed during behavior validation\n");
+        goto cleanup;
+    }
+    if (henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", second_path) != HENKA_SUCCESS ||
-        !test_scene_document_write_v3_to_v8_fixture(v3_path, 3U) ||
-        !test_scene_document_files_equal(first_path, second_path) ||
-        !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)) ||
-        henka_scene_document_format_inspection(
+        !test_scene_document_write_v3_to_v8_fixture(v3_path, 3U))
+    {
+        fprintf(stderr, "scene document test failed writing deterministic fixtures\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_files_equal(first_path, second_path) ||
+        !test_scene_document_patch_u32(second_path, 4L, UINT32_C(4)))
+    {
+        fprintf(stderr, "scene document test failed comparing or patching deterministic files\n");
+        goto cleanup;
+    }
+    if (henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=16 objects=257") == NULL ||
-        henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
+        inspection_size == 0U ||
+        strstr(inspection, "HSCN version=17 name=Untitled Scene objects=257") == NULL)
+    {
+        fprintf(stderr, "scene document test failed inspecting saved document metadata\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_write_v16_fixture(first_path, v16_path))
+    {
+        fprintf(stderr, "scene document test failed creating v16 compatibility fixture\n");
+        goto cleanup;
+    }
+    if (henka_scene_document_load_file(loaded, ".", v16_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_name(loaded, scene_name, sizeof(scene_name)) != HENKA_SUCCESS ||
+        strcmp(scene_name, HENKA_SCENE_DOCUMENT_DEFAULT_NAME) != 0)
+    {
+        fprintf(stderr, "scene document test failed migrating v16 scene name\n");
+        goto cleanup;
+    }
+    if (henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
         !loaded_render_resources.local_light_active[1] ||
         loaded_render_resources.local_lights[1].position.x != 1.0f ||
@@ -1855,21 +2112,37 @@ int main(void)
         !loaded_render_resources.reflection_probe_active[3] ||
         loaded_render_resources.reflection_probes[3].influence != 0.65f)
     {
-        fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
+        fprintf(stderr, "scene document test failed loading current render resources\n");
         goto cleanup;
     }
-    if (!test_scene_document_write_v13_fixture(first_path, v13_path) ||
-        henka_scene_document_load_file(loaded, ".", v13_path) != HENKA_SUCCESS ||
-        henka_scene_document_get_object_count(loaded) != 257U ||
+    if (!test_scene_document_write_v13_fixture(first_path, v13_path))
+    {
+        fprintf(stderr, "scene document test failed creating the v13 compatibility fixture\n");
+        goto cleanup;
+    }
+    if (henka_scene_document_load_file(loaded, ".", v13_path) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "scene document test failed loading the v13 compatibility fixture\n");
+        goto cleanup;
+    }
+    if (henka_scene_document_get_object_count(loaded) != 257U ||
         henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
         !loaded_render_resources.local_light_active[1] ||
-        !loaded_render_resources.reflection_probe_active[3] ||
-        !test_scene_document_write_v12_fixture(first_path, v12_path) ||
+        !loaded_render_resources.reflection_probe_active[3])
+    {
+        fprintf(stderr, "scene document test failed checking v13 compatibility data\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_write_v12_fixture(first_path, v12_path) ||
         henka_scene_document_load_file(loaded, ".", v12_path) != HENKA_SUCCESS ||
         henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
         !loaded_render_resources.local_light_active[1] ||
-        !loaded_render_resources.reflection_probe_active[3] ||
-        !test_scene_document_write_v11_fixture(first_path, v11_path) ||
+        !loaded_render_resources.reflection_probe_active[3])
+    {
+        fprintf(stderr, "scene document test failed during v12 resource compatibility load\n");
+        goto cleanup;
+    }
+    if (!test_scene_document_write_v11_fixture(first_path, v11_path) ||
         henka_scene_document_load_file(loaded, ".", v11_path) != HENKA_SUCCESS ||
         henka_scene_document_get_render_resources(loaded, &loaded_render_resources) != HENKA_SUCCESS ||
         loaded_render_resources.local_light_active[0] ||
@@ -2266,7 +2539,7 @@ int main(void)
         !loaded_object.audio.streaming ||
         henka_scene_document_format_inspection(
             loaded, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        strstr(inspection, "HSCN version=16") == NULL)
+        strstr(inspection, "HSCN version=17 name=Untitled Scene") == NULL)
     {
         fprintf(stderr, "scene document test failed during streamed audio v7 round-trip\n");
         goto cleanup;
@@ -2283,6 +2556,7 @@ int main(void)
 
 cleanup:
     remove(camera_path);
+    remove(v16_path);
     remove(v11_path);
     remove(malformed_resources_path);
     henka_scene_document_destroy(exhausted);

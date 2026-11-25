@@ -304,6 +304,7 @@ add_executable(henka_sandbox3d_game_authoring_tests
     ../examples/sandbox3d/scene_document_bridge.c
     ../examples/sandbox3d/play_session.c
     ../examples/sandbox3d/game_authoring.c
+    ../examples/sandbox3d/scene_name_editor.c
     test_sandbox3d_game_authoring.c
 )
 
