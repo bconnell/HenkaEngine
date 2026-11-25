@@ -118,6 +118,7 @@ void henka_test_sandbox3d_editor_layout(void)
                 sandbox3d_editor_layout_scene_objects_regions(
                     panel,
                     line_heights[panel_index],
+                    0.0f,
                     &scene_objects_layout) == HENKA_SUCCESS);
             actions = &scene_objects_layout.actions_viewport;
             hierarchy = &scene_objects_layout.hierarchy_viewport;
@@ -136,6 +137,7 @@ void henka_test_sandbox3d_editor_layout(void)
             sandbox3d_editor_layout_scene_objects_regions(
                 (henka_ui_rect){0.0f, 0.0f, 138.0f, 110.0f},
                 24.0f,
+                0.0f,
                 &scene_objects_layout) == HENKA_ERROR_LIMIT);
         HENKA_TEST_ASSERT(henka_test_rect_is_empty(
             scene_objects_layout.actions_viewport));
@@ -143,6 +145,62 @@ void henka_test_sandbox3d_editor_layout(void)
             scene_objects_layout.hierarchy_viewport));
         HENKA_TEST_ASSERT(henka_test_rect_is_empty(
             scene_objects_layout.page_footer));
+    }
+
+    {
+        const henka_ui_rect tall_panel = {0.0f, 0.0f, 300.0f, 700.0f};
+        const float line_height = 14.0f;
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_scene_objects_regions(
+                tall_panel,
+                line_height,
+                0.0f,
+                &scene_objects_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            scene_objects_layout.actions_viewport.height <=
+                line_height * 14.0f + 16.0f);
+        HENKA_TEST_ASSERT(
+            scene_objects_layout.hierarchy_viewport.y <=
+                tall_panel.y + 60.0f + line_height * 14.0f + 22.0f);
+        HENKA_TEST_ASSERT(
+            scene_objects_layout.hierarchy_viewport.height >
+                scene_objects_layout.actions_viewport.height);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_scene_objects_regions(
+                tall_panel,
+                line_height,
+                180.0f,
+                &scene_objects_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_objects_layout.actions_viewport.height,
+            192.0f,
+            0.01f);
+        HENKA_TEST_ASSERT(
+            scene_objects_layout.hierarchy_viewport.height > 300.0f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_scene_objects_regions(
+                tall_panel,
+                line_height,
+                4096.0f,
+                &scene_objects_layout) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(scene_objects_layout.hierarchy_viewport.height >= 40.0f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_scene_objects_regions(
+                tall_panel,
+                line_height,
+                -1.0f,
+                &scene_objects_layout) == HENKA_ERROR_LIMIT);
+        HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+            scene_objects_layout.actions_viewport));
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_scene_objects_regions(
+                tall_panel,
+                line_height,
+                NAN,
+                &scene_objects_layout) == HENKA_ERROR_LIMIT);
+        HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+            scene_objects_layout.actions_viewport));
     }
 
     {

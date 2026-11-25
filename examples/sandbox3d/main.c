@@ -26571,6 +26571,7 @@ static henka_ui_rect sandbox3d_panel_content_bounds(
             sandbox3d_editor_layout_scene_objects_regions(
                 layout->scene_objects_panel,
                 (float)measured_height,
+                state->editor_ui.scene_objects_actions_content_height,
                 &scene_layout) != HENKA_SUCCESS)
         {
             return bounds;
@@ -28772,6 +28773,7 @@ static void sandbox3d_draw_scene_objects_panel(
         sandbox3d_editor_layout_scene_objects_regions(
             panel_bounds,
             (float)text_height_one,
+            state->editor_ui.scene_objects_actions_content_height,
             &scene_objects_layout) != HENKA_SUCCESS)
     {
         free(row_line_counts);
