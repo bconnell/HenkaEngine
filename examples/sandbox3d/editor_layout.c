@@ -1919,6 +1919,40 @@ bool sandbox3d_editor_layout_flow_text_control_grid_for_context(
     return true;
 }
 
+bool sandbox3d_editor_layout_flow_button_grid_for_context(
+    henka_ui_context* ui_context,
+    henka_ui_rect viewport,
+    float flow_row_spacing,
+    const char* const* labels,
+    size_t item_count,
+    float scale,
+    float minimum_item_width,
+    float horizontal_gap,
+    float row_height,
+    float row_gap,
+    henka_ui_rect* out_items,
+    size_t item_capacity,
+    size_t* out_row_count,
+    bool* out_all_visible)
+{
+    return sandbox3d_editor_layout_flow_text_control_grid_for_context(
+        ui_context,
+        viewport,
+        flow_row_spacing,
+        labels,
+        item_count,
+        scale,
+        minimum_item_width,
+        HENKA_UI_BUTTON_TEXT_HORIZONTAL_PADDING,
+        horizontal_gap,
+        row_height,
+        row_gap,
+        out_items,
+        item_capacity,
+        out_row_count,
+        out_all_visible);
+}
+
 static const char* const g_sandbox3d_editor_utility_tab_labels[
     SANDBOX3D_EDITOR_UTILITY_TAB_COUNT] = {
         "Help",

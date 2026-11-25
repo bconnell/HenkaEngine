@@ -32883,7 +32883,7 @@ details_group_authoring:
                     size_t material_control_index;
                     bool material_controls_all_visible = false;
                     const bool material_grid_valid =
-                        sandbox3d_editor_layout_flow_text_control_grid_for_context(
+                        sandbox3d_editor_layout_flow_button_grid_for_context(
                             state->ui,
                             flow_desc.bounds,
                             flow_desc.row_spacing,
@@ -32891,7 +32891,6 @@ details_group_authoring:
                             6U,
                             1.0f,
                             80.0f,
-                            8.0f,
                             8.0f,
                             28.0f,
                             4.0f,
