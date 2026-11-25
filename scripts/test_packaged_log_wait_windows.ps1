@@ -300,6 +300,51 @@ try {
     }
     Write-Output "[pass] Native asset name and New Asset clicks resolve from their product-reported rectangles, not stale panel-relative guesses"
 
+    $controlTransitionLogPath = Join-Path $temporaryRoot "scene-objects-control-transition.log"
+    $createdTransition = "Native asset document: name=FreshAsset action=created parts=0."
+    $staleQuadSphereControl = "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=quad_sphere available=1 asset_open=0 rect=36.0,279.0,72.0,24.0."
+    [System.IO.File]::WriteAllText(
+        $controlTransitionLogPath,
+        $staleQuadSphereControl + "`r`n" + $createdTransition + "`r`n",
+        $encoding)
+    $createdTransitionMatch = Get-LastLogRegexMatch `
+        -Path $controlTransitionLogPath `
+        -Pattern ([Regex]::Escape($createdTransition))
+    if ($null -eq $createdTransitionMatch) {
+        throw "The synthetic asset-created transition could not be located in the focused state-wait regression."
+    }
+    $staleControlFailure = $null
+    try {
+        $null = Get-HenkaSceneObjectsControlClickPoint `
+            -Path $controlTransitionLogPath -Id "quad_sphere" -ExpectedAssetOpen $true `
+            -AfterLogIndex $createdTransitionMatch.Index `
+            -StateWaitTimeoutMilliseconds 100 -StatePollIntervalMilliseconds 10 `
+            -SceneObjects $scenePanel -FramebufferWidth 1280 -FramebufferHeight 720
+    }
+    catch {
+        $staleControlFailure = $_.Exception.Message
+    }
+    if ($staleControlFailure -notmatch 'fresh.*after log index') {
+        throw "A pre-creation Quad Sphere report did not fail the bounded post-transition state wait with a stale-authority diagnostic."
+    }
+    $freshQuadSphereControl = "HENKA_AUTOMATION_DIAGNOSTIC scene_objects_control id=quad_sphere available=1 asset_open=1 rect=36.0,279.0,72.0,24.0."
+    [System.IO.File]::AppendAllText(
+        $controlTransitionLogPath,
+        $freshQuadSphereControl + "`r`n",
+        $encoding)
+    $freshQuadSphereTarget = Get-HenkaSceneObjectsControlClickPoint `
+        -Path $controlTransitionLogPath -Id "quad_sphere" -ExpectedAssetOpen $true `
+        -AfterLogIndex $createdTransitionMatch.Index `
+        -StateWaitTimeoutMilliseconds 100 -StatePollIntervalMilliseconds 10 `
+        -SceneObjects $scenePanel -FramebufferWidth 1280 -FramebufferHeight 720
+    if (-not $freshQuadSphereTarget.Report.Available -or
+        -not $freshQuadSphereTarget.Report.AssetOpen -or
+        $freshQuadSphereTarget.Report.LogIndex -le $createdTransitionMatch.Index -or
+        $freshQuadSphereTarget.X -ne 72.0 -or $freshQuadSphereTarget.Y -ne 291.0) {
+        throw "A fresh post-creation Quad Sphere report did not authorize its product-reported click center."
+    }
+    Write-Output "[pass] Pre-creation control telemetry cannot authorize a post-creation click; a fresh product report after the transition can"
+
     $malformedControlPath = Join-Path $temporaryRoot "scene-objects-control-geometry-malformed.log"
     [System.IO.File]::WriteAllText(
         $malformedControlPath,

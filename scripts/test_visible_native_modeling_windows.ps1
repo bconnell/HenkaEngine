@@ -61,7 +61,9 @@ function Get-SceneObjectsControlTarget {
         [Parameter(Mandatory = $true)][bool]$ExpectedAssetOpen,
         [Parameter(Mandatory = $true)][PSCustomObject]$SceneObjects,
         [Parameter(Mandatory = $true)][int]$FramebufferWidth,
-        [Parameter(Mandatory = $true)][int]$FramebufferHeight
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [long]$AfterLogIndex = -1,
+        [ValidateRange(0, 30000)][int]$StateWaitTimeoutMilliseconds = 0
     )
 
     return Get-HenkaSceneObjectsControlClickPoint `
@@ -70,7 +72,9 @@ function Get-SceneObjectsControlTarget {
         -ExpectedAssetOpen $ExpectedAssetOpen `
         -SceneObjects $SceneObjects `
         -FramebufferWidth $FramebufferWidth `
-        -FramebufferHeight $FramebufferHeight
+        -FramebufferHeight $FramebufferHeight `
+        -AfterLogIndex $AfterLogIndex `
+        -StateWaitTimeoutMilliseconds $StateWaitTimeoutMilliseconds
 }
 
 function Read-SharedLogText {
@@ -567,12 +571,23 @@ function Wait-AssetTransition {
     param(
         [Parameter(Mandatory = $true)][string]$LogPath,
         [Parameter(Mandatory = $true)][string]$Action,
-        [Parameter(Mandatory = $true)][int]$PartCount
+        [Parameter(Mandatory = $true)][int]$PartCount,
+        [switch]$ReturnMatch
     )
 
     $pattern = "Native asset document: name=$([Regex]::Escape($assetName)) action=$Action parts=$PartCount\."
     if (-not (Wait-FileContains -Path $LogPath -Pattern $pattern -TimeoutMilliseconds 15000)) {
         throw "The editor did not report the native asset transition: $Action/$PartCount."
+    }
+    if ($ReturnMatch) {
+        $transitionMatch = Get-LastLogRegexMatch -Path $LogPath -Pattern $pattern
+        if ($null -eq $transitionMatch) {
+            throw "The native asset transition disappeared before its product-log position could be captured: $Action/$PartCount."
+        }
+        return [PSCustomObject]@{
+            LogIndex = [long]$transitionMatch.Index
+            Text = $transitionMatch.Value
+        }
     }
 }
 
@@ -1150,13 +1165,15 @@ try {
         -SceneObjects $sceneObjectsPanel `
         -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight
     Send-HenkaAutomationClick -EventPath $automationInputPath -X $newAssetTarget.X -Y $newAssetTarget.Y
-    Wait-AssetTransition -LogPath $stdoutPath -Action "created" -PartCount 0
+    $assetCreationTransition = Wait-AssetTransition -LogPath $stdoutPath -Action "created" -PartCount 0 -ReturnMatch
 
     # Start with one Quad Sphere so the visible workflow proves the generic
     # all-quad primitive path. All subsequent changes are normal editor actions
     # against the selected component source, not fixture construction.
     $quadSphereTarget = Get-SceneObjectsControlTarget `
         -Path $stdoutPath -Id "quad_sphere" -ExpectedAssetOpen $true `
+        -AfterLogIndex $assetCreationTransition.LogIndex `
+        -StateWaitTimeoutMilliseconds 5000 `
         -SceneObjects $sceneObjectsPanel `
         -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight
     Send-HenkaAutomationClick -EventPath $automationInputPath -X $quadSphereTarget.X -Y $quadSphereTarget.Y
