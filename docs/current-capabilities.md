@@ -49,7 +49,7 @@ See [architecture.md](architecture.md), [runtime-foundations.md](runtime-foundat
 
 - The Sandbox exposes Wireframe, Solid, Material Preview, and Rendered Scene View policies through the OpenGL renderer path.
 - Rendered mode consumes imported PBR materials, scene lighting, HDR targets, bounded environment/IBL fallbacks, directional and bounded local-light shadows, fog, bloom, tone mapping, AO, and a temporal reconstruction foundation.
-- Scene-owned render settings, environment, value-owned local lights, and reflection probes persist through the supported Scene Document v16 path and are consumed by Play and packaged Rendered startup within the bounded renderer scope.
+- Scene-owned render settings, environment, value-owned local lights, and reflection probes persist through the supported Scene Document v17 path and are consumed by Play and packaged Rendered startup within the bounded renderer scope.
 - The renderer boundary is isolated from renderer-independent runtime and authoring data.
 
 ### Remaining hardening
@@ -136,7 +136,6 @@ UI controls use bounded IDs, matched frame construction, release-confirm behavio
 
 ### Remaining work
 
-- Durable scene rename
 - Complete project serialization
 - Native desktop feel
 - Complete manual interaction QA
@@ -153,6 +152,9 @@ The Sandbox has a bounded Game Authoring V1 path for its registered scene object
 
 - Persistent Scene Document IDs map to generation-checked runtime entities through a dedicated adapter.
 - Runtime handles are not serialized.
+- The Scene Objects panel edits the persistent scene-level name through Game
+  Authoring history. HSCN v16 and earlier files use the legacy `Untitled
+  Scene` default; saves use v17 format.
 - Authored renderer enablement is persisted and applied as a separate runtime state from scene visibility; disabling it leaves the entity's visibility state intact while excluding it from the renderer passes.
 - Object Details exposes authored Physics and Interaction values for bound objects.
 - Supported values include primitive body/shape and trigger choices, interaction enablement, and prompt inspection.
@@ -257,7 +259,8 @@ The public runtime scene now provides a bounded generation-checked parent/child
 transform foundation with cycle rejection, keep-local/keep-world reparenting,
 deterministic direct-child enumeration, subtree propagation, and parent-
 destruction promotion. Passing `HENKA_INVALID_ENTITY` enumerates root entities.
-HSCN v16 persists parent IDs, an optional authored scene camera, the value-owned
+HSCN v17 persists the scene-level name, parent IDs, an optional authored scene
+camera, the value-owned
 Character Controller component, pointer-free inline renderer material state,
 supported non-terrain material-instance texture overrides by confined source
 path, value-owned scene environment settings, direct lighting, fog, local-light
@@ -370,7 +373,7 @@ history remain open.
   payloads. Non-overridden borrowed material assets refresh through their
   owning asset authority; persisted asset-backed overrides fail closed rather
   than being flattened into inline material state.
-- HSCN v16 persists prefab-instance provenance and explicit non-root local
+- HSCN v17 persists prefab-instance provenance and explicit non-root local
   transform override metadata for a prefab-backed object group:
   the project-relative prefab path, instance-root ID, durable source ID, and
   source revision. The document validator rejects missing or mismatched
