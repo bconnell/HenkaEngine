@@ -1449,6 +1449,14 @@ henka_result henka_ui_draw_fit_semantic_text_centered(
     const char* text,
     henka_ui_semantic_color color)
 {
+    if (context == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
     return henka_ui_draw_fit_text_centered(
         context,
         bounds,

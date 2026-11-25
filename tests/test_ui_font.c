@@ -875,6 +875,62 @@ static void henka_test_ui_control_labels_use_centered_font_metrics(void)
     henka_ui_font_test_fixture_dispose(&fixture);
 }
 
+static void henka_test_ui_tool_button_label_respects_hidden_visibility(void)
+{
+    henka_ui_font_test_fixture fixture;
+    henka_ui_font_resource* font = NULL;
+    henka_ui_font_raster_profile* profile = NULL;
+    henka_ui_context* ui = NULL;
+    henka_ui_frame_desc frame_desc;
+    const henka_ui_tool_button_desc descriptor = {
+        "font.hidden.tool_button",
+        "Move",
+        "Move the selection",
+        HENKA_UI_ICON_MOVE,
+        true,
+        false};
+    size_t glyph_count = 0U;
+    size_t quad_index;
+
+    HENKA_TEST_ASSERT(henka_ui_font_test_fixture_load(&fixture));
+    HENKA_TEST_ASSERT(henka_ui_font_test_create_profile(
+        &fixture,
+        UINT64_C(0x481),
+        1U,
+        1U,
+        &font,
+        &profile));
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_context_set_font_profile(
+        ui, profile, 100U) == HENKA_SUCCESS);
+    henka_ui_set_visible(ui, false);
+
+    memset(&frame_desc, 0, sizeof(frame_desc));
+    frame_desc.framebuffer_width = 1280;
+    frame_desc.framebuffer_height = 720;
+    frame_desc.mouse_position = (henka_vec2){-1.0f, -1.0f};
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    (void)henka_ui_tool_button(
+        ui,
+        (henka_ui_rect){20.0f, 20.0f, 128.0f, 44.0f},
+        &descriptor);
+
+    for (quad_index = 0U; quad_index < ui->draw_quad_count; ++quad_index)
+    {
+        if (ui->draw_quads[quad_index].kind == HENKA_UI_DRAW_QUAD_GLYPH)
+        {
+            ++glyph_count;
+        }
+    }
+    HENKA_TEST_ASSERT(glyph_count == 0U);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    henka_ui_destroy(ui);
+    henka_ui_font_raster_profile_destroy(profile);
+    henka_ui_font_resource_destroy(font);
+    henka_ui_font_test_fixture_dispose(&fixture);
+}
+
 static void henka_test_ui_output_scale_aligns_draw_and_hit_coordinates(void)
 {
     static const uint32_t output_numerators[] = {5U, 3U, 2U};
@@ -1896,6 +1952,7 @@ void henka_test_ui_font(void)
     henka_test_ui_font_application_bootstrap_verifies_asset_identity();
     henka_test_ui_atlas_uses_effective_raster_pixel_size();
     henka_test_ui_control_labels_use_centered_font_metrics();
+    henka_test_ui_tool_button_label_respects_hidden_visibility();
     henka_test_ui_output_scale_aligns_draw_and_hit_coordinates();
     henka_test_ui_atlas_identity_includes_font_scale_output_and_context();
     henka_test_editor_text_prefix_metrics_match_caret_hit_authority();
