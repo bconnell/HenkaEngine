@@ -38,6 +38,13 @@ void henka_settings_destroy(henka_settings* settings);
 henka_result henka_settings_load_file(henka_settings* settings, const char* path);
 henka_result henka_settings_save_file(const henka_settings* settings, const char* path);
 /*
+ * Atomically moves a prepared file over its destination. Both paths must be
+ * on the same filesystem; the source path is consumed only on success.
+ */
+henka_result henka_file_atomic_replace(
+    const char* prepared_path,
+    const char* destination_path);
+/*
  * Applies a bounded batch of integer keys to a candidate settings map, saves
  * it atomically, then publishes the in-memory map only after the file commit.
  */

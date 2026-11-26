@@ -3,6 +3,18 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <errno.h>
+
+#if defined(_WIN32)
+#include <direct.h>
+#define sandbox3d_test_make_directory(path) _mkdir(path)
+#define sandbox3d_test_remove_directory(path) _rmdir(path)
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#define sandbox3d_test_make_directory(path) mkdir(path, 0777)
+#define sandbox3d_test_remove_directory(path) rmdir(path)
+#endif
 
 #include <henka/audio.h>
 #include <henka/assets.h>
@@ -4000,6 +4012,202 @@ cleanup:
     return success;
 }
 
+static bool test_unsaved_scene_save_as_preserves_independent_files(void)
+{
+    const char* project_root = "build/test_tmp/save_as_authoring_transaction";
+    const char* first_relative_path = "first_scene.hscene";
+    const char* second_relative_path = "second_scene.hscene";
+    const char* blocked_relative_path = "blocked_scene.hscene";
+    const char* first_scene_file =
+        "build/test_tmp/save_as_authoring_transaction/first_scene.hscene";
+    const char* second_scene_file =
+        "build/test_tmp/save_as_authoring_transaction/second_scene.hscene";
+    const char* blocked_scene_path =
+        "build/test_tmp/save_as_authoring_transaction/blocked_scene.hscene";
+    const char* manifest_file =
+        "build/test_tmp/save_as_authoring_transaction/henka.project";
+    henka_scene* scene = NULL;
+    henka_scene* reopened_scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    sandbox3d_game_authoring* reopened_authoring = NULL;
+    henka_scene_document* first_saved_document = NULL;
+    henka_scene_document* second_saved_document = NULL;
+    henka_entity first_entity = HENKA_INVALID_ENTITY;
+    henka_entity second_entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id first_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id second_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object object;
+    bool success = false;
+    const char* failure_stage = "preparing isolated test paths";
+    henka_result blocked_save_result = HENKA_SUCCESS;
+
+    (void)remove(first_scene_file);
+    (void)remove(second_scene_file);
+    (void)remove(manifest_file);
+    failure_stage = "creating isolated test paths";
+    if ((sandbox3d_test_remove_directory(blocked_scene_path) != 0 &&
+         errno != ENOENT) ||
+        (sandbox3d_test_make_directory(project_root) != 0 &&
+         errno != EEXIST))
+    {
+        goto cleanup;
+    }
+    failure_stage = "creating the authoring scene and saving two independent files";
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create(scene, "", &authoring) !=
+            HENKA_SUCCESS ||
+        (first_entity = henka_scene_create_entity_named(
+             scene, "First Saved Object")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, first_entity, &first_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_save_as(
+            authoring, project_root, first_relative_path) != HENKA_SUCCESS ||
+        strcmp(
+            sandbox3d_game_authoring_get_relative_path(authoring),
+            first_relative_path) != 0 ||
+        henka_scene_document_create(&first_saved_document) != HENKA_SUCCESS ||
+        henka_scene_document_load_file(
+            first_saved_document, project_root, first_relative_path) !=
+            HENKA_SUCCESS ||
+        henka_scene_document_get_object_count(first_saved_document) != 1U ||
+        henka_scene_document_get_object(
+            first_saved_document, first_id, &object) != HENKA_SUCCESS ||
+        strcmp(object.name, "First Saved Object") != 0 ||
+        (second_entity = henka_scene_create_entity_named(
+             scene, "Second Saved Object")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, second_entity, &second_id) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_save_as(
+            authoring, project_root, second_relative_path) != HENKA_SUCCESS ||
+        strcmp(
+            sandbox3d_game_authoring_get_relative_path(authoring),
+            second_relative_path) != 0 ||
+        henka_scene_document_create(&second_saved_document) != HENKA_SUCCESS ||
+        henka_scene_document_load_file(
+            second_saved_document, project_root, second_relative_path) !=
+            HENKA_SUCCESS ||
+        henka_scene_document_get_object_count(first_saved_document) != 1U ||
+        henka_scene_document_get_object_count(second_saved_document) != 2U ||
+        henka_scene_document_get_object(
+            second_saved_document, second_id, &object) != HENKA_SUCCESS ||
+        strcmp(object.name, "Second Saved Object") != 0 ||
+        sandbox3d_game_authoring_save_as(
+            authoring, project_root, "../save_as_escape.hscene") !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        strcmp(
+            sandbox3d_game_authoring_get_relative_path(authoring),
+            second_relative_path) != 0 ||
+        sandbox3d_game_authoring_get_object_count(authoring) != 2U)
+    {
+        goto cleanup;
+    }
+
+    failure_stage = "rejecting overwrite of an independent Save As target";
+    blocked_save_result = sandbox3d_game_authoring_save_as(
+        authoring, project_root, first_relative_path);
+    if (blocked_save_result != HENKA_ERROR_INVALID_ARGUMENT ||
+        strcmp(
+            sandbox3d_game_authoring_get_relative_path(authoring),
+            second_relative_path) != 0 ||
+        sandbox3d_game_authoring_get_object_count(authoring) != 2U ||
+        henka_scene_document_load_file(
+            first_saved_document, project_root, first_relative_path) !=
+            HENKA_SUCCESS ||
+        henka_scene_document_get_object_count(first_saved_document) != 1U ||
+        henka_scene_document_get_object(
+            first_saved_document, first_id, &object) != HENKA_SUCCESS ||
+        strcmp(object.name, "First Saved Object") != 0)
+    {
+        fprintf(stderr, "Save As overwrote an existing independent scene\n");
+        goto cleanup;
+    }
+
+    /* A directory at the requested scene path must be rejected before either
+     * the scene file or startup-scene manifest is published. */
+    failure_stage = "creating the blocked scene-file target";
+    if (sandbox3d_test_make_directory(blocked_scene_path) != 0)
+    {
+        goto cleanup;
+    }
+    failure_stage = "rejecting the blocked Save As target";
+    blocked_save_result = sandbox3d_game_authoring_save_as(
+        authoring, project_root, blocked_relative_path);
+    if (blocked_save_result == HENKA_SUCCESS)
+    {
+        fprintf(stderr, "blocked Save As unexpectedly succeeded\n");
+        goto cleanup;
+    }
+    failure_stage = "preserving live authoring state after blocked Save As";
+    if (strcmp(
+            sandbox3d_game_authoring_get_relative_path(authoring),
+            second_relative_path) != 0 ||
+        sandbox3d_game_authoring_get_object_count(authoring) != 2U)
+    {
+        goto cleanup;
+    }
+
+    henka_scene_document_destroy(first_saved_document);
+    first_saved_document = NULL;
+    failure_stage = "preserving the prior scene file and rejecting an empty path";
+    if (henka_scene_document_create(&first_saved_document) != HENKA_SUCCESS ||
+        henka_scene_document_load_file(
+            first_saved_document, project_root, first_relative_path) !=
+            HENKA_SUCCESS ||
+        henka_scene_document_get_object_count(first_saved_document) != 1U ||
+        henka_scene_document_get_object(
+            first_saved_document, first_id, &object) != HENKA_SUCCESS ||
+        strcmp(object.name, "First Saved Object") != 0 ||
+        sandbox3d_game_authoring_save_as(
+            authoring, project_root, "") != HENKA_ERROR_INVALID_ARGUMENT ||
+        strcmp(
+            sandbox3d_game_authoring_get_relative_path(authoring),
+            second_relative_path) != 0 ||
+        sandbox3d_game_authoring_get_object_count(authoring) != 2U)
+    {
+        goto cleanup;
+    }
+
+    sandbox3d_game_authoring_destroy(authoring);
+    authoring = NULL;
+    henka_scene_destroy(scene);
+    scene = NULL;
+    failure_stage = "reopening the project from its persisted startup-scene manifest";
+    if (sandbox3d_game_authoring_open_project(
+            project_root, &reopened_scene, &reopened_authoring) !=
+            HENKA_SUCCESS ||
+        reopened_scene == NULL || reopened_authoring == NULL ||
+        strcmp(
+            sandbox3d_game_authoring_get_relative_path(reopened_authoring),
+            second_relative_path) != 0 ||
+        sandbox3d_game_authoring_get_object_count(reopened_authoring) != 2U)
+    {
+        goto cleanup;
+    }
+    success = true;
+
+cleanup:
+    if (!success)
+    {
+        fprintf(
+            stderr,
+            "Save As regression failed during %s (blocked result=%d).\n",
+            failure_stage,
+            (int)blocked_save_result);
+    }
+    sandbox3d_game_authoring_destroy(reopened_authoring);
+    henka_scene_destroy(reopened_scene);
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    henka_scene_document_destroy(first_saved_document);
+    henka_scene_document_destroy(second_saved_document);
+    (void)remove(first_scene_file);
+    (void)remove(second_scene_file);
+    (void)remove(manifest_file);
+    (void)sandbox3d_test_remove_directory(blocked_scene_path);
+    (void)sandbox3d_test_remove_directory(project_root);
+    return success;
+}
+
 static bool test_engine_backed_unsaved_scene_runs_user_data_script(void)
 {
     const char* test_root = "build/test_tmp";
@@ -4129,6 +4337,11 @@ int main(void)
     if (!test_unsaved_scene_authoring_path())
     {
         fprintf(stderr, "unsaved scene authoring path test failed\n");
+        return 1;
+    }
+    if (!test_unsaved_scene_save_as_preserves_independent_files())
+    {
+        fprintf(stderr, "unsaved scene Save As regression failed\n");
         return 1;
     }
     if (!test_engine_backed_unsaved_scene_runs_user_data_script())

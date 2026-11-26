@@ -541,17 +541,27 @@ static henka_result henka_persistence_flush_file(FILE* file)
     return HENKA_SUCCESS;
 }
 
-static henka_result henka_persistence_replace_file(const char* temp_path, const char* destination_path)
+henka_result henka_file_atomic_replace(
+    const char* prepared_path,
+    const char* destination_path)
 {
-#ifdef _WIN32
-    if (!MoveFileExA(temp_path, destination_path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    if (prepared_path == NULL || prepared_path[0] == '\0' ||
+        destination_path == NULL || destination_path[0] == '\0')
     {
-        return HENKA_ERROR_UNKNOWN;
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+#ifdef _WIN32
+    if (!MoveFileExA(
+            prepared_path,
+            destination_path,
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    {
+        return HENKA_ERROR_PLATFORM;
     }
 #else
-    if (rename(temp_path, destination_path) != 0)
+    if (rename(prepared_path, destination_path) != 0)
     {
-        return HENKA_ERROR_UNKNOWN;
+        return HENKA_ERROR_PLATFORM;
     }
 #endif
 
@@ -1230,7 +1240,7 @@ henka_result henka_settings_save_file(const henka_settings* settings, const char
 
     if (result == HENKA_SUCCESS)
     {
-        result = henka_persistence_replace_file(temp_path, path);
+        result = henka_file_atomic_replace(temp_path, path);
     }
 
     if (result != HENKA_SUCCESS)

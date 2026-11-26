@@ -104,6 +104,7 @@ void henka_test_sandbox3d_editor_layout(void)
                 details_panel,
                 details_viewport,
                 true,
+                false,
                 &scene_actions) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(scene_actions.visible);
         HENKA_TEST_ASSERT_FLOAT_CLOSE(
@@ -114,6 +115,24 @@ void henka_test_sandbox3d_editor_layout(void)
             scene_actions.action_row.width, 292.0f, 0.01f);
         HENKA_TEST_ASSERT_FLOAT_CLOSE(
             scene_actions.action_row.height, 26.0f, 0.01f);
+        HENKA_TEST_ASSERT(!scene_actions.compact);
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            scene_actions.action_row, scene_actions.new_scene_button));
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            scene_actions.action_row, scene_actions.save_scene_button));
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            scene_actions.action_row, scene_actions.save_as_button));
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            scene_actions.action_row, scene_actions.reload_scene_button));
+        HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+            scene_actions.new_scene_button,
+            scene_actions.save_scene_button));
+        HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+            scene_actions.save_scene_button,
+            scene_actions.save_as_button));
+        HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+            scene_actions.save_as_button,
+            scene_actions.reload_scene_button));
         HENKA_TEST_ASSERT_FLOAT_CLOSE(
             scene_actions.scroll_viewport.y, 110.0f, 0.01f);
         HENKA_TEST_ASSERT_FLOAT_CLOSE(
@@ -125,8 +144,74 @@ void henka_test_sandbox3d_editor_layout(void)
 
         HENKA_TEST_ASSERT(
             sandbox3d_editor_layout_details_scene_actions(
+                compact_panel,
+                (henka_ui_rect){409.0f, 50.0f, 205.0f, 100.0f},
+                true,
+                false,
+                &scene_actions) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(scene_actions.visible);
+        HENKA_TEST_ASSERT(scene_actions.compact);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.action_row.height, 56.0f, 0.01f);
+        HENKA_TEST_ASSERT(scene_actions.new_scene_button.width >= 96.0f);
+        HENKA_TEST_ASSERT(scene_actions.save_scene_button.width >= 96.0f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.save_scene_button.y,
+            scene_actions.new_scene_button.y,
+            0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.save_as_button.y,
+            scene_actions.new_scene_button.y + 30.0f,
+            0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.reload_scene_button.y,
+            scene_actions.save_as_button.y,
+            0.01f);
+        HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+            scene_actions.new_scene_button,
+            scene_actions.save_scene_button));
+        HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+            scene_actions.save_as_button,
+            scene_actions.reload_scene_button));
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            compact_panel, scene_actions.action_row));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.scroll_viewport.y, 112.0f, 0.01f);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_scene_actions(
                 details_panel,
                 details_viewport,
+                true,
+                true,
+                &scene_actions) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(scene_actions.visible);
+        HENKA_TEST_ASSERT(scene_actions.save_as_open);
+        HENKA_TEST_ASSERT(scene_actions.save_as_form_available);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.action_row.height, 56.0f, 0.01f);
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            scene_actions.action_row, scene_actions.save_as_path_label));
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            scene_actions.action_row, scene_actions.save_as_path_field));
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            scene_actions.action_row, scene_actions.save_as_confirm_button));
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            scene_actions.action_row, scene_actions.save_as_cancel_button));
+        HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+            scene_actions.save_as_path_label,
+            scene_actions.save_as_path_field));
+        HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+            scene_actions.save_as_confirm_button,
+            scene_actions.save_as_cancel_button));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.scroll_viewport.y, 140.0f, 0.01f);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_scene_actions(
+                details_panel,
+                details_viewport,
+                false,
                 false,
                 &scene_actions) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(!scene_actions.visible);
@@ -144,6 +229,7 @@ void henka_test_sandbox3d_editor_layout(void)
                 (henka_ui_rect){100.0f, 40.0f, 320.0f, 70.0f},
                 details_viewport,
                 true,
+                false,
                 &scene_actions) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(!scene_actions.visible);
         HENKA_TEST_ASSERT(henka_test_rect_is_empty(
@@ -154,6 +240,7 @@ void henka_test_sandbox3d_editor_layout(void)
                 details_panel,
                 (henka_ui_rect){114.0f, 112.0f, 280.0f, 194.0f},
                 true,
+                false,
                 &scene_actions) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(scene_actions.visible);
         HENKA_TEST_ASSERT_FLOAT_CLOSE(

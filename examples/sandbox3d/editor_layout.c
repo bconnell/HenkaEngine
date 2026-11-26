@@ -2194,18 +2194,36 @@ henka_result sandbox3d_editor_layout_details_footer_for_context(
     return HENKA_SUCCESS;
 }
 
+static bool sandbox3d_editor_layout_rect_has_area(henka_ui_rect rect)
+{
+    return sandbox3d_editor_layout_float_is_valid(rect.x) &&
+        sandbox3d_editor_layout_float_is_valid(rect.y) &&
+        sandbox3d_editor_layout_float_is_valid(rect.width) &&
+        sandbox3d_editor_layout_float_is_valid(rect.height) &&
+        rect.width > 0.0f && rect.height > 0.0f;
+}
+
 henka_result sandbox3d_editor_layout_details_scene_actions(
     henka_ui_rect panel_bounds,
     henka_ui_rect base_scroll_viewport,
     bool controls_available,
+    bool save_as_open,
     sandbox3d_editor_details_scene_actions_layout* out_layout)
 {
     sandbox3d_editor_details_scene_actions_layout candidate = {0};
     const double panel_bottom =
         (double)panel_bounds.y + (double)panel_bounds.height;
     const double row_y = (double)panel_bounds.y + 38.0;
-    const double row_bottom = row_y + 26.0;
-    const double required_scroll_top = row_bottom + 6.0;
+    const double compact_gap = 4.0;
+    const double compact_button_min_width = 56.0;
+    const double one_row_button_min_width = 56.0;
+    const double action_row_min_width =
+        compact_button_min_width * 2.0 + compact_gap;
+    const double one_row_min_width =
+        one_row_button_min_width * 4.0 + compact_gap * 3.0;
+    const double form_path_label_width = 52.0;
+    const double form_path_min_width = 80.0;
+    const double form_button_min_width = 64.0;
     const bool panel_values_valid =
         sandbox3d_editor_layout_float_is_valid(panel_bounds.x) &&
         sandbox3d_editor_layout_float_is_valid(panel_bounds.y) &&
@@ -2232,32 +2250,133 @@ henka_result sandbox3d_editor_layout_details_scene_actions(
         candidate.scroll_viewport.height = 0.0f;
     }
     if (controls_available && panel_bounds.width > 28.0f &&
-        row_bottom <= panel_bottom - 8.0 &&
-        row_y <= (double)FLT_MAX && row_bottom <= (double)FLT_MAX)
+        row_y <= (double)FLT_MAX)
     {
-        candidate.action_row = (henka_ui_rect){
-            panel_bounds.x + 14.0f,
-            (float)row_y,
-            panel_bounds.width - 28.0f,
-            26.0f};
-        candidate.visible = true;
+        const double row_width = (double)panel_bounds.width - 28.0;
+        const bool use_compact_grid = save_as_open ||
+            row_width < one_row_min_width;
+        const double action_row_height = use_compact_grid ? 56.0 : 26.0;
+        const double row_bottom = row_y + action_row_height;
+        const double required_scroll_top = row_bottom + 6.0;
 
-        if (required_scroll_top >
-            (double)candidate.scroll_viewport.y)
+        candidate.save_as_open = save_as_open;
+        if (row_width >= action_row_min_width &&
+            row_bottom <= panel_bottom - 8.0 &&
+            row_bottom <= (double)FLT_MAX)
         {
-            const double shift = required_scroll_top -
-                (double)candidate.scroll_viewport.y;
-            const double remaining_height =
-                (double)candidate.scroll_viewport.height - shift;
-            if (!isfinite(shift) || !isfinite(remaining_height) ||
-                required_scroll_top > (double)FLT_MAX)
+            const float row_x = panel_bounds.x + 14.0f;
+            const float row_height = (float)action_row_height;
+            candidate.action_row = (henka_ui_rect){
+                row_x,
+                (float)row_y,
+                (float)row_width,
+                row_height};
+            candidate.visible = true;
+            candidate.compact = use_compact_grid;
+
+            if (save_as_open)
             {
-                return HENKA_ERROR_NUMERIC_RANGE;
+                const double form_button_width = fmin(
+                    96.0,
+                    (row_width - compact_gap) * 0.5);
+                const double form_buttons_width =
+                    form_button_width * 2.0 + compact_gap;
+                if (row_width >= form_path_label_width + compact_gap +
+                        form_path_min_width &&
+                    form_button_width >= form_button_min_width &&
+                    form_buttons_width <= row_width)
+                {
+                    const double form_button_x = row_x +
+                        (row_width - form_buttons_width) * 0.5;
+                    const double second_row_y = row_y + 30.0;
+                    candidate.save_as_path_label = (henka_ui_rect){
+                        row_x,
+                        (float)row_y,
+                        (float)form_path_label_width,
+                        26.0f};
+                    candidate.save_as_path_field = (henka_ui_rect){
+                        row_x + (float)(form_path_label_width + compact_gap),
+                        (float)row_y,
+                        (float)(row_width - form_path_label_width -
+                            compact_gap),
+                        26.0f};
+                    candidate.save_as_confirm_button = (henka_ui_rect){
+                        (float)form_button_x,
+                        (float)second_row_y,
+                        (float)form_button_width,
+                        26.0f};
+                    candidate.save_as_cancel_button = (henka_ui_rect){
+                        (float)(form_button_x + form_button_width +
+                            compact_gap),
+                        (float)second_row_y,
+                        (float)form_button_width,
+                        26.0f};
+                    candidate.save_as_form_available = true;
+                }
             }
-            candidate.scroll_viewport.y = (float)required_scroll_top;
-            candidate.scroll_viewport.height = remaining_height > 0.0
-                ? (float)remaining_height
-                : 0.0f;
+            else if (use_compact_grid)
+            {
+                const double button_width =
+                    (row_width - compact_gap) * 0.5;
+                const double second_row_y = row_y + 30.0;
+                candidate.new_scene_button = (henka_ui_rect){
+                    row_x, (float)row_y, (float)button_width, 26.0f};
+                candidate.save_scene_button = (henka_ui_rect){
+                    row_x + (float)(button_width + compact_gap),
+                    (float)row_y,
+                    (float)button_width,
+                    26.0f};
+                candidate.save_as_button = (henka_ui_rect){
+                    row_x,
+                    (float)second_row_y,
+                    (float)button_width,
+                    26.0f};
+                candidate.reload_scene_button = (henka_ui_rect){
+                    row_x + (float)(button_width + compact_gap),
+                    (float)second_row_y,
+                    (float)button_width,
+                    26.0f};
+            }
+            else
+            {
+                const double button_width =
+                    (row_width - compact_gap * 3.0) * 0.25;
+                candidate.new_scene_button = (henka_ui_rect){
+                    row_x, (float)row_y, (float)button_width, 26.0f};
+                candidate.save_scene_button = (henka_ui_rect){
+                    row_x + (float)(button_width + compact_gap),
+                    (float)row_y,
+                    (float)button_width,
+                    26.0f};
+                candidate.save_as_button = (henka_ui_rect){
+                    row_x + (float)((button_width + compact_gap) * 2.0),
+                    (float)row_y,
+                    (float)button_width,
+                    26.0f};
+                candidate.reload_scene_button = (henka_ui_rect){
+                    row_x + (float)((button_width + compact_gap) * 3.0),
+                    (float)row_y,
+                    (float)button_width,
+                    26.0f};
+            }
+
+            if (required_scroll_top >
+                (double)candidate.scroll_viewport.y)
+            {
+                const double shift = required_scroll_top -
+                    (double)candidate.scroll_viewport.y;
+                const double remaining_height =
+                    (double)candidate.scroll_viewport.height - shift;
+                if (!isfinite(shift) || !isfinite(remaining_height) ||
+                    required_scroll_top > (double)FLT_MAX)
+                {
+                    return HENKA_ERROR_NUMERIC_RANGE;
+                }
+                candidate.scroll_viewport.y = (float)required_scroll_top;
+                candidate.scroll_viewport.height = remaining_height > 0.0
+                    ? (float)remaining_height
+                    : 0.0f;
+            }
         }
     }
 
@@ -2271,6 +2390,41 @@ henka_result sandbox3d_editor_layout_details_scene_actions(
             candidate.scroll_viewport.height))
     {
         return HENKA_ERROR_NUMERIC_RANGE;
+    }
+
+    if (candidate.visible)
+    {
+        if (!sandbox3d_editor_layout_rect_has_area(candidate.action_row) ||
+            !sandbox3d_editor_layout_rect_has_area(candidate.scroll_viewport))
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
+        if (candidate.save_as_open)
+        {
+            if (candidate.save_as_form_available &&
+                (!sandbox3d_editor_layout_rect_has_area(
+                    candidate.save_as_path_label) ||
+                 !sandbox3d_editor_layout_rect_has_area(
+                    candidate.save_as_path_field) ||
+                 !sandbox3d_editor_layout_rect_has_area(
+                    candidate.save_as_confirm_button) ||
+                 !sandbox3d_editor_layout_rect_has_area(
+                    candidate.save_as_cancel_button)))
+            {
+                return HENKA_ERROR_NUMERIC_RANGE;
+            }
+        }
+        else if (!sandbox3d_editor_layout_rect_has_area(
+                     candidate.new_scene_button) ||
+                 !sandbox3d_editor_layout_rect_has_area(
+                     candidate.save_scene_button) ||
+                 !sandbox3d_editor_layout_rect_has_area(
+                     candidate.save_as_button) ||
+                 !sandbox3d_editor_layout_rect_has_area(
+                     candidate.reload_scene_button))
+        {
+            return HENKA_ERROR_NUMERIC_RANGE;
+        }
     }
 
     *out_layout = candidate;

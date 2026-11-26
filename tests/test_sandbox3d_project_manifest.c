@@ -4,6 +4,10 @@
 
 #if defined(_WIN32)
 #include <direct.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 #else
 #include <sys/stat.h>
 #include <unistd.h>
@@ -738,11 +742,11 @@ static int test_save_rejects_manifest_failure_without_scene_mutation(void)
         "build/test_tmp/project_save_manifest_failure_root/save_failure.hscene";
     const char* manifest_path =
         "build/test_tmp/project_save_manifest_failure_root/henka.project";
-    const char* manifest_temp_blocker_path =
-        "build/test_tmp/project_save_manifest_failure_root/henka.project.henka-tmp";
-    const char* manifest_temp_blocker_file_path =
-        "build/test_tmp/project_save_manifest_failure_root/henka.project.henka-tmp/locked.txt";
+    const char* manifest_stage_blocker_path =
+        "build/test_tmp/project_save_manifest_failure_root/.henka-save";
     const char* existing_scene_contents = "existing scene\n";
+    const char* existing_manifest_contents = "existing manifest\n";
+    const char* existing_stage_contents = "protected save stage\n";
     henka_scene* scene = NULL;
     sandbox3d_game_authoring* authoring = NULL;
     henka_entity entity = HENKA_INVALID_ENTITY;
@@ -750,7 +754,10 @@ static int test_save_rejects_manifest_failure_without_scene_mutation(void)
     henka_camera camera;
     henka_result save_result = HENKA_ERROR_UNKNOWN;
     FILE* scene_file = NULL;
+    FILE* manifest_file = NULL;
     char observed_scene_contents[sizeof("existing scene\n")] = {0};
+    char observed_manifest_contents[sizeof("existing manifest\n")] = {0};
+    char observed_stage_contents[sizeof("protected save stage\n")] = {0};
     int success = 0;
 
     if (!test_ensure_directory("build/test_tmp") ||
@@ -761,17 +768,16 @@ static int test_save_rejects_manifest_failure_without_scene_mutation(void)
     (void)remove(scene_file_path);
     (void)remove(manifest_path);
     (void)test_remove_directory(manifest_path);
-    (void)remove(manifest_temp_blocker_path);
-    (void)test_remove_directory(manifest_temp_blocker_path);
-    (void)remove(manifest_temp_blocker_file_path);
+    (void)remove(manifest_stage_blocker_path);
+    (void)test_remove_directory(manifest_stage_blocker_path);
     camera = henka_camera_create_perspective(
         60.0f * HENKA_DEG_TO_RAD,
         1.0f,
         0.1f,
         100.0f);
-    if (!test_ensure_directory(manifest_temp_blocker_path) ||
-        !test_write_file(manifest_temp_blocker_file_path, "occupied\n") ||
+    if (!test_write_file(manifest_stage_blocker_path, existing_stage_contents) ||
         !test_write_file(scene_file_path, existing_scene_contents) ||
+        !test_write_file(manifest_path, existing_manifest_contents) ||
         henka_scene_create(&scene) != HENKA_SUCCESS ||
         henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS ||
         (entity = henka_scene_create_entity_named(
@@ -786,6 +792,10 @@ static int test_save_rejects_manifest_failure_without_scene_mutation(void)
 
     save_result = sandbox3d_game_authoring_save(authoring, project_root);
     if (save_result == HENKA_SUCCESS ||
+        strcmp(
+            sandbox3d_game_authoring_get_relative_path(authoring),
+            scene_path) != 0 ||
+        sandbox3d_game_authoring_get_object_count(authoring) != 1U ||
         fopen_s(&scene_file, scene_file_path, "rb") != 0 ||
         scene_file == NULL ||
         fread(
@@ -805,6 +815,38 @@ static int test_save_rejects_manifest_failure_without_scene_mutation(void)
         }
         goto cleanup;
     }
+    fclose(scene_file);
+    scene_file = NULL;
+    if (fopen_s(&manifest_file, manifest_path, "rb") != 0 ||
+        manifest_file == NULL ||
+        fread(
+            observed_manifest_contents,
+            1U,
+            sizeof(observed_manifest_contents) - 1U,
+            manifest_file) != sizeof(observed_manifest_contents) - 1U ||
+        memcmp(
+            observed_manifest_contents,
+            existing_manifest_contents,
+            sizeof(observed_manifest_contents) - 1U) != 0)
+    {
+        goto cleanup;
+    }
+    fclose(manifest_file);
+    manifest_file = NULL;
+    if (fopen_s(&manifest_file, manifest_stage_blocker_path, "rb") != 0 ||
+        manifest_file == NULL ||
+        fread(
+            observed_stage_contents,
+            1U,
+            sizeof(observed_stage_contents) - 1U,
+            manifest_file) != sizeof(observed_stage_contents) - 1U ||
+        memcmp(
+            observed_stage_contents,
+            existing_stage_contents,
+            sizeof(observed_stage_contents) - 1U) != 0)
+    {
+        goto cleanup;
+    }
     success = 1;
 
 cleanup:
@@ -812,16 +854,138 @@ cleanup:
     {
         fclose(scene_file);
     }
+    if (manifest_file != NULL)
+    {
+        fclose(manifest_file);
+    }
     sandbox3d_game_authoring_destroy(authoring);
     henka_scene_destroy(scene);
     (void)remove(scene_file_path);
     (void)remove(manifest_path);
-    (void)remove(manifest_temp_blocker_file_path);
-    if (!test_remove_directory(manifest_temp_blocker_path))
-    {
-        success = 0;
-    }
+    (void)remove(manifest_stage_blocker_path);
+    (void)test_remove_directory(manifest_stage_blocker_path);
     return success;
+}
+
+static int test_save_rolls_back_scene_when_manifest_commit_fails(void)
+{
+#if defined(_WIN32)
+    const char* project_root =
+        "build/test_tmp/project_save_manifest_commit_failure_root";
+    const char* scene_path = "rollback.hscene";
+    const char* scene_file_path =
+        "build/test_tmp/project_save_manifest_commit_failure_root/rollback.hscene";
+    const char* manifest_path =
+        "build/test_tmp/project_save_manifest_commit_failure_root/henka.project";
+    const char* existing_scene_contents = "scene before commit\n";
+    const char* existing_manifest_contents = "manifest before commit\n";
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_camera camera;
+    henka_result save_result = HENKA_ERROR_UNKNOWN;
+    HANDLE manifest_lock = INVALID_HANDLE_VALUE;
+    FILE* scene_file = NULL;
+    FILE* manifest_file = NULL;
+    char observed_scene_contents[sizeof("scene before commit\n")] = {0};
+    char observed_manifest_contents[sizeof("manifest before commit\n")] = {0};
+    int success = 0;
+
+    if (!test_ensure_directory("build/test_tmp") ||
+        !test_ensure_directory(project_root))
+    {
+        goto cleanup;
+    }
+    (void)remove(scene_file_path);
+    (void)remove(manifest_path);
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        1.0f,
+        0.1f,
+        100.0f);
+    if (!test_write_file(scene_file_path, existing_scene_contents) ||
+        !test_write_file(manifest_path, existing_manifest_contents) ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_set_camera(scene, &camera) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+            scene, "Manifest Commit Failure Object")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create(
+            scene, scene_path, &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, entity, &document_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    manifest_lock = CreateFileA(
+        manifest_path,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+    if (manifest_lock == INVALID_HANDLE_VALUE)
+    {
+        goto cleanup;
+    }
+    save_result = sandbox3d_game_authoring_save(authoring, project_root);
+    CloseHandle(manifest_lock);
+    manifest_lock = INVALID_HANDLE_VALUE;
+    if (save_result == HENKA_SUCCESS ||
+        strcmp(
+            sandbox3d_game_authoring_get_relative_path(authoring),
+            scene_path) != 0 ||
+        sandbox3d_game_authoring_get_object_count(authoring) != 1U ||
+        fopen_s(&scene_file, scene_file_path, "rb") != 0 ||
+        scene_file == NULL ||
+        fread(
+            observed_scene_contents,
+            1U,
+            sizeof(observed_scene_contents) - 1U,
+            scene_file) != sizeof(observed_scene_contents) - 1U ||
+        memcmp(
+            observed_scene_contents,
+            existing_scene_contents,
+            sizeof(observed_scene_contents) - 1U) != 0)
+    {
+        goto cleanup;
+    }
+    fclose(scene_file);
+    scene_file = NULL;
+    if (fopen_s(&manifest_file, manifest_path, "rb") != 0 ||
+        manifest_file == NULL ||
+        fread(
+            observed_manifest_contents,
+            1U,
+            sizeof(observed_manifest_contents) - 1U,
+            manifest_file) != sizeof(observed_manifest_contents) - 1U ||
+        memcmp(
+            observed_manifest_contents,
+            existing_manifest_contents,
+            sizeof(observed_manifest_contents) - 1U) != 0)
+    {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    if (manifest_lock != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(manifest_lock);
+    }
+    if (scene_file != NULL) fclose(scene_file);
+    if (manifest_file != NULL) fclose(manifest_file);
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove(scene_file_path);
+    (void)remove(manifest_path);
+    (void)test_remove_directory(project_root);
+    return success;
+#else
+    return 1;
+#endif
 }
 
 static int test_project_reopen_cycle(void)
@@ -1474,6 +1638,11 @@ int main(void)
     if (!test_save_rejects_manifest_failure_without_scene_mutation())
     {
         fprintf(stderr, "project save partially mutated the scene on manifest failure\n");
+        goto cleanup;
+    }
+    if (!test_save_rolls_back_scene_when_manifest_commit_fails())
+    {
+        fprintf(stderr, "project save did not roll back after manifest commit failure\n");
         goto cleanup;
     }
 
