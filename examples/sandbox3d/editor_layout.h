@@ -343,17 +343,18 @@ typedef struct sandbox3d_editor_details_scene_actions_layout
 {
     henka_ui_rect action_row;
     henka_ui_rect new_scene_button;
+    henka_ui_rect open_scene_button;
     henka_ui_rect save_scene_button;
     henka_ui_rect save_as_button;
     henka_ui_rect reload_scene_button;
-    henka_ui_rect save_as_path_label;
-    henka_ui_rect save_as_path_field;
-    henka_ui_rect save_as_confirm_button;
-    henka_ui_rect save_as_cancel_button;
+    henka_ui_rect path_label;
+    henka_ui_rect path_field;
+    henka_ui_rect path_confirm_button;
+    henka_ui_rect path_cancel_button;
     henka_ui_rect scroll_viewport;
     bool compact;
-    bool save_as_open;
-    bool save_as_form_available;
+    bool path_editor_open;
+    bool path_editor_available;
     bool visible;
 } sandbox3d_editor_details_scene_actions_layout;
 
@@ -365,7 +366,7 @@ henka_result sandbox3d_editor_layout_details_scene_actions(
     henka_ui_rect panel_bounds,
     henka_ui_rect base_scroll_viewport,
     bool controls_available,
-    bool save_as_open,
+    bool path_editor_open,
     sandbox3d_editor_details_scene_actions_layout* out_layout);
 float sandbox3d_editor_layout_details_empty_selection_text_y(
     henka_ui_rect panel_bounds,

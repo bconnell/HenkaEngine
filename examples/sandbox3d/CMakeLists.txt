@@ -37,7 +37,7 @@ add_executable(henka_sandbox3d
     game_authoring.c
     project_save_transaction.c
     scene_name_editor.c
-    scene_save_as_editor.c
+    scene_path_editor.c
     mcp_server.c
     audio_runtime.c
     script_editor_model.c

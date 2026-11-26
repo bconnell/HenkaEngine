@@ -342,9 +342,30 @@ static int test_storage_path_errors_are_preserved(void)
 
 int main(void)
 {
-    return test_codec_and_transaction_recovery() &&
-        test_save_resident_regions_transactionally() &&
-        test_save_dirty_regions_skips_clean_residents() &&
-        test_committed_journal_stays_bounded_across_repeated_runs() &&
-        test_storage_path_errors_are_preserved() ? 0 : 1;
+    if (!test_codec_and_transaction_recovery())
+    {
+        fprintf(stderr, "terrain storage test failed: codec and transaction recovery\n");
+        return 1;
+    }
+    if (!test_save_resident_regions_transactionally())
+    {
+        fprintf(stderr, "terrain storage test failed: resident region save\n");
+        return 1;
+    }
+    if (!test_save_dirty_regions_skips_clean_residents())
+    {
+        fprintf(stderr, "terrain storage test failed: dirty region save\n");
+        return 1;
+    }
+    if (!test_committed_journal_stays_bounded_across_repeated_runs())
+    {
+        fprintf(stderr, "terrain storage test failed: bounded repeated journal\n");
+        return 1;
+    }
+    if (!test_storage_path_errors_are_preserved())
+    {
+        fprintf(stderr, "terrain storage test failed: storage path error preservation\n");
+        return 1;
+    }
+    return 0;
 }
