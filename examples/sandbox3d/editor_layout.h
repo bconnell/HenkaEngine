@@ -339,10 +339,22 @@ typedef struct sandbox3d_editor_details_footer_layout
     size_t row_count;
 } sandbox3d_editor_details_footer_layout;
 
+typedef struct sandbox3d_editor_details_scene_actions_layout
+{
+    henka_ui_rect action_row;
+    henka_ui_rect scroll_viewport;
+    bool visible;
+} sandbox3d_editor_details_scene_actions_layout;
+
 henka_result sandbox3d_editor_layout_details_footer_for_context(
     const henka_ui_context* ui_context,
     henka_ui_rect panel_bounds,
     sandbox3d_editor_details_footer_layout* out_layout);
+henka_result sandbox3d_editor_layout_details_scene_actions(
+    henka_ui_rect panel_bounds,
+    henka_ui_rect base_scroll_viewport,
+    bool controls_available,
+    sandbox3d_editor_details_scene_actions_layout* out_layout);
 
 #ifdef HENKA_SANDBOX3D_TEST_SEAM
 /* Regression-only coverage for the retired fixed-column display helpers.

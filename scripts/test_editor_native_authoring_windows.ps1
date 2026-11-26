@@ -570,7 +570,7 @@ try {
         -X ($cancelX + ($cancelWidth * 0.5)) `
         -Y ($cancelY + ($cancelHeight * 0.5))
     $cancelledPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reload_confirmation_cancelled name=' +
-        [Regex]::Escape($transientSceneName) + '\.'
+        [Regex]::Escape($transientSceneName) + '(?=\s|$)'
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern $cancelledPattern -TimeoutMilliseconds 10000)) {
         throw "Cancel did not preserve the unsaved Scene Name in the live document."
     }
@@ -677,6 +677,140 @@ try {
         throw "The unsaved Scene Name edit did not reach the canonical document before New Scene."
     }
 
+    $terrainTabMatch = Get-LastLogRegexMatch `
+        -Path $stdoutPath `
+        -Pattern 'Terrain utility tab: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+)\.'
+    if ($null -eq $terrainTabMatch) {
+        throw "The packaged New Scene test could not reach the production Terrain Utility tab."
+    }
+    $terrainTabX = Convert-HenkaAutomationNumber $terrainTabMatch.Groups['x'].Value
+    $terrainTabY = Convert-HenkaAutomationNumber $terrainTabMatch.Groups['y'].Value
+    $terrainTabWidth = Convert-HenkaAutomationNumber $terrainTabMatch.Groups['width'].Value
+    $terrainTabHeight = Convert-HenkaAutomationNumber $terrainTabMatch.Groups['height'].Value
+    $terrainUtilityOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X ($terrainTabX + ($terrainTabWidth * 0.5)) `
+        -Y ($terrainTabY + ($terrainTabHeight * 0.5))
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern 'Utility active: Terrain\.' `
+            -StartingOffset $terrainUtilityOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "The real packaged Terrain Utility tab click did not activate Terrain before New Scene."
+    }
+    $terrainCreateMatch = Get-LastLogRegexMatch `
+        -Path $stdoutPath `
+        -Pattern 'Terrain Create control: x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=(?<height>[-0-9.]+)\.'
+    if ($null -eq $terrainCreateMatch) {
+        throw "The production Create Terrain control was unavailable before the New Scene transaction."
+    }
+    $terrainCreateX = Convert-HenkaAutomationNumber $terrainCreateMatch.Groups['x'].Value
+    $terrainCreateY = Convert-HenkaAutomationNumber $terrainCreateMatch.Groups['y'].Value
+    $terrainCreateWidth = Convert-HenkaAutomationNumber $terrainCreateMatch.Groups['width'].Value
+    $terrainCreateHeight = Convert-HenkaAutomationNumber $terrainCreateMatch.Groups['height'].Value
+    $terrainCreateOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X ($terrainCreateX + ($terrainCreateWidth * 0.5)) `
+        -Y ($terrainCreateY + ($terrainCreateHeight * 0.5))
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern 'Terrain authoring content created\.' `
+            -StartingOffset $terrainCreateOffset `
+            -TimeoutMilliseconds 20000) -or
+        -not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern 'Terrain render: 16 bounded chunks resident;' `
+            -StartingOffset $terrainCreateOffset `
+            -TimeoutMilliseconds 20000)) {
+        throw "The packaged UI could not create active Terrain before the New Scene transaction."
+    }
+    Write-Output "[pass] Created Terrain through its real Utility action before New Scene."
+
+    $terrainViewportMatch = Get-LastLogRegexMatch `
+        -Path $stdoutPath `
+        -Pattern 'CAPTURE_READY_STARTUP mode=startup viewport=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+) '
+    if ($null -eq $terrainViewportMatch) {
+        throw "The packaged Terrain edit could not obtain the product-reported scene viewport."
+    }
+    $terrainViewportX = Convert-HenkaAutomationNumber $terrainViewportMatch.Groups['x'].Value
+    $terrainViewportY = Convert-HenkaAutomationNumber $terrainViewportMatch.Groups['y'].Value
+    $terrainViewportWidth = Convert-HenkaAutomationNumber $terrainViewportMatch.Groups['width'].Value
+    $terrainViewportHeight = Convert-HenkaAutomationNumber $terrainViewportMatch.Groups['height'].Value
+    if ($terrainViewportWidth -le 0.0 -or $terrainViewportHeight -le 0.0) {
+        throw "The product-reported scene viewport is not large enough for a Terrain edit."
+    }
+    $terrainCursorPattern = 'HENKA_AUTOMATION_DIAGNOSTIC terrain_cursor frame=(?<frame>\d+) pointer_x=(?<x>[-0-9.]+) pointer_y=(?<y>[-0-9.]+) hit=(?<hit>[01])'
+    $terrainProbeFractions = @(
+        [pscustomobject]@{ X = 0.75; Y = 0.45 },
+        [pscustomobject]@{ X = 0.90; Y = 0.45 },
+        [pscustomobject]@{ X = 0.65; Y = 0.60 },
+        [pscustomobject]@{ X = 0.85; Y = 0.60 },
+        [pscustomobject]@{ X = 0.95; Y = 0.72 },
+        [pscustomobject]@{ X = 0.70; Y = 0.78 },
+        [pscustomobject]@{ X = 0.50; Y = 0.85 },
+        [pscustomobject]@{ X = 0.30; Y = 0.70 },
+        [pscustomobject]@{ X = 0.10; Y = 0.60 },
+        [pscustomobject]@{ X = 0.50; Y = 0.40 },
+        [pscustomobject]@{ X = 0.50; Y = 0.60 },
+        [pscustomobject]@{ X = 0.50; Y = 0.80 }
+    )
+    $terrainHit = $null
+    foreach ($probe in $terrainProbeFractions) {
+        $probeX = $terrainViewportX + ($terrainViewportWidth * $probe.X)
+        $probeY = $terrainViewportY + ($terrainViewportHeight * $probe.Y)
+        $probeOffset = Get-FileLengthSafe -Path $stdoutPath
+        $moveEvent = 'move {0} {1}' -f `
+            (Format-HenkaAutomationFloat -Value $probeX), `
+            (Format-HenkaAutomationFloat -Value $probeY)
+        Send-HenkaAutomationEvent `
+            -EventPath $automationInputPath `
+            -EventLine $moveEvent `
+            -SettleMilliseconds 180
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern $terrainCursorPattern `
+                -StartingOffset $probeOffset `
+                -TimeoutMilliseconds 3000)) {
+            throw "The product did not report Terrain ray state after a real viewport move."
+        }
+        $probeResult = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $terrainCursorPattern
+        if ($null -eq $probeResult) {
+            throw "The product Terrain ray report could not be parsed after a viewport move."
+        }
+        $reportedX = Convert-HenkaAutomationNumber $probeResult.Groups['x'].Value
+        $reportedY = Convert-HenkaAutomationNumber $probeResult.Groups['y'].Value
+        if ([Math]::Abs($reportedX - $probeX) -gt 1.0 -or
+            [Math]::Abs($reportedY - $probeY) -gt 1.0) {
+            throw "The product Terrain ray report did not correspond to the latest viewport move."
+        }
+        if ($probeResult.Groups['hit'].Value -eq '1') {
+            $terrainHit = $probeResult
+            break
+        }
+    }
+    if ($null -eq $terrainHit) {
+        throw "The product Terrain ray authority found no resident terrain beneath the bounded viewport probe points."
+    }
+
+    $terrainHitX = Convert-HenkaAutomationNumber $terrainHit.Groups['x'].Value
+    $terrainHitY = Convert-HenkaAutomationNumber $terrainHit.Groups['y'].Value
+    Write-Output ("[pass] Product Terrain ray authority reported resident ground at {0:F1},{1:F1}." -f $terrainHitX, $terrainHitY)
+    $terrainEditOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X $terrainHitX `
+        -Y $terrainHitY
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern 'Terrain raise committed through the shared command API\.' `
+            -StartingOffset $terrainEditOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "A real Terrain viewport click did not commit a terrain edit before New Scene."
+    }
+    Write-Output "[pass] The production Terrain brush committed an edit through a real viewport click."
+
     $sceneActionControls = Get-SceneDocumentActionControls -Path $stdoutPath
     if ($null -eq $sceneActionControls) {
         throw "The product New Scene control was unavailable after the saved scene reloaded."
@@ -727,7 +861,7 @@ try {
         -X ($cancelX + ($cancelWidth * 0.5)) `
         -Y ($cancelY + ($cancelHeight * 0.5))
     $newSceneCancelledPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=new_scene_confirmation_cancelled name=' +
-        [Regex]::Escape($newSceneDraftName) + '\.'
+        [Regex]::Escape($newSceneDraftName) + ' terrain_active=1\.'
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern $newSceneCancelledPattern -TimeoutMilliseconds 10000)) {
         throw "Cancelling New Scene did not preserve the canonical unsaved Scene Name edit."
     }
@@ -759,7 +893,7 @@ try {
         -EventPath $automationInputPath `
         -X ($confirmX + ($confirmWidth * 0.5)) `
         -Y ($confirmY + ($confirmHeight * 0.5))
-    $newSceneCreatedPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=new_scene_created name=Untitled Scene relative_path_empty=1 document_object_count=0 scene_entity_count=\d+ camera_present=1 environment_present=1 environment_mode=0 sun_enabled=1 selection_empty=1\.'
+    $newSceneCreatedPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=new_scene_created name=Untitled Scene relative_path_empty=1 document_object_count=0 scene_entity_count=\d+ camera_present=1 environment_present=1 environment_mode=0 sun_enabled=1 selection_empty=1 terrain_was_active=1 terrain_active=0 audio_system_setter_succeeded=1 audio_asset_manager_setter_succeeded=1\.'
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern $newSceneCreatedPattern -TimeoutMilliseconds 15000)) {
         throw "New Scene did not publish an empty unsaved scene with its camera, default environment, and empty selection."
     }

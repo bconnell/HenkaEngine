@@ -2194,6 +2194,89 @@ henka_result sandbox3d_editor_layout_details_footer_for_context(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_editor_layout_details_scene_actions(
+    henka_ui_rect panel_bounds,
+    henka_ui_rect base_scroll_viewport,
+    bool controls_available,
+    sandbox3d_editor_details_scene_actions_layout* out_layout)
+{
+    sandbox3d_editor_details_scene_actions_layout candidate = {0};
+    const double panel_bottom =
+        (double)panel_bounds.y + (double)panel_bounds.height;
+    const double row_y = (double)panel_bounds.y + 38.0;
+    const double row_bottom = row_y + 26.0;
+    const double required_scroll_top = row_bottom + 6.0;
+    const bool panel_values_valid =
+        sandbox3d_editor_layout_float_is_valid(panel_bounds.x) &&
+        sandbox3d_editor_layout_float_is_valid(panel_bounds.y) &&
+        sandbox3d_editor_layout_float_is_valid(panel_bounds.width) &&
+        sandbox3d_editor_layout_float_is_valid(panel_bounds.height) &&
+        sandbox3d_editor_layout_float_is_valid(base_scroll_viewport.x) &&
+        sandbox3d_editor_layout_float_is_valid(base_scroll_viewport.y) &&
+        sandbox3d_editor_layout_float_is_valid(base_scroll_viewport.width) &&
+        sandbox3d_editor_layout_float_is_valid(base_scroll_viewport.height);
+
+    if (out_layout == NULL || !panel_values_valid ||
+        panel_bounds.width < 0.0f || panel_bounds.height < 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    candidate.scroll_viewport = base_scroll_viewport;
+    if (candidate.scroll_viewport.width < 0.0f)
+    {
+        candidate.scroll_viewport.width = 0.0f;
+    }
+    if (candidate.scroll_viewport.height < 0.0f)
+    {
+        candidate.scroll_viewport.height = 0.0f;
+    }
+    if (controls_available && panel_bounds.width > 28.0f &&
+        row_bottom <= panel_bottom - 8.0 &&
+        row_y <= (double)FLT_MAX && row_bottom <= (double)FLT_MAX)
+    {
+        candidate.action_row = (henka_ui_rect){
+            panel_bounds.x + 14.0f,
+            (float)row_y,
+            panel_bounds.width - 28.0f,
+            26.0f};
+        candidate.visible = true;
+
+        if (required_scroll_top >
+            (double)candidate.scroll_viewport.y)
+        {
+            const double shift = required_scroll_top -
+                (double)candidate.scroll_viewport.y;
+            const double remaining_height =
+                (double)candidate.scroll_viewport.height - shift;
+            if (!isfinite(shift) || !isfinite(remaining_height) ||
+                required_scroll_top > (double)FLT_MAX)
+            {
+                return HENKA_ERROR_NUMERIC_RANGE;
+            }
+            candidate.scroll_viewport.y = (float)required_scroll_top;
+            candidate.scroll_viewport.height = remaining_height > 0.0
+                ? (float)remaining_height
+                : 0.0f;
+        }
+    }
+
+    if (!sandbox3d_editor_layout_float_is_valid(
+            candidate.scroll_viewport.x) ||
+        !sandbox3d_editor_layout_float_is_valid(
+            candidate.scroll_viewport.y) ||
+        !sandbox3d_editor_layout_float_is_valid(
+            candidate.scroll_viewport.width) ||
+        !sandbox3d_editor_layout_float_is_valid(
+            candidate.scroll_viewport.height))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+
+    *out_layout = candidate;
+    return HENKA_SUCCESS;
+}
+
 static bool sandbox3d_editor_layout_is_wrap_space(char value)
 {
     return value == ' ' || value == '\t';

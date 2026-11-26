@@ -42,10 +42,15 @@ void henka_test_sandbox3d_editor_layout(void)
         henka_ui_context* footer_ui = NULL;
         henka_ui_frame_desc frame_desc = {0};
         sandbox3d_editor_details_footer_layout footer = {0};
+        sandbox3d_editor_details_scene_actions_layout scene_actions = {0};
         const henka_ui_rect compact_panel = {
             395.0f, 12.0f, 233.0f, 155.0f};
         const henka_ui_rect wide_panel = {
             300.0f, 12.0f, 340.0f, 155.0f};
+        const henka_ui_rect details_panel = {
+            100.0f, 40.0f, 320.0f, 280.0f};
+        const henka_ui_rect details_viewport = {
+            114.0f, 78.0f, 280.0f, 228.0f};
 
         HENKA_TEST_ASSERT(henka_ui_create(&footer_ui) == HENKA_SUCCESS);
         frame_desc.framebuffer_width = 1280;
@@ -93,6 +98,68 @@ void henka_test_sandbox3d_editor_layout(void)
             wide_panel, footer.save_project));
         HENKA_TEST_ASSERT(henka_test_rect_is_contained(
             wide_panel, footer.reload_project));
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_scene_actions(
+                details_panel,
+                details_viewport,
+                true,
+                &scene_actions) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(scene_actions.visible);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.action_row.x, 114.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.action_row.y, 78.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.action_row.width, 292.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.action_row.height, 26.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.scroll_viewport.y, 110.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.scroll_viewport.height, 196.0f, 0.01f);
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            details_panel, scene_actions.action_row));
+        HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+            details_panel, scene_actions.scroll_viewport));
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_scene_actions(
+                details_panel,
+                details_viewport,
+                false,
+                &scene_actions) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!scene_actions.visible);
+        HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+            scene_actions.action_row));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.scroll_viewport.y, details_viewport.y, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.scroll_viewport.height,
+            details_viewport.height,
+            0.01f);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_scene_actions(
+                (henka_ui_rect){100.0f, 40.0f, 320.0f, 70.0f},
+                details_viewport,
+                true,
+                &scene_actions) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!scene_actions.visible);
+        HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+            scene_actions.action_row));
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_scene_actions(
+                details_panel,
+                (henka_ui_rect){114.0f, 112.0f, 280.0f, 194.0f},
+                true,
+                &scene_actions) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(scene_actions.visible);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.scroll_viewport.y, 112.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            scene_actions.scroll_viewport.height, 194.0f, 0.01f);
 
         henka_ui_destroy(footer_ui);
     }

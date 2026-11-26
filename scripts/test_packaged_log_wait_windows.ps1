@@ -32,6 +32,19 @@ $checkerAst = [System.Management.Automation.Language.Parser]::ParseFile(
 if ($parseErrors.Count -ne 0) {
     throw "Packaged Sandbox checker has PowerShell parse errors: $($parseErrors[0].Message)"
 }
+$automationHelpersPath = Join-Path $RepositoryRoot "scripts\henka_ui_automation_helpers.ps1"
+if (-not (Test-Path -LiteralPath $automationHelpersPath -PathType Leaf)) {
+    throw "The shared UI automation helper file was not found: $automationHelpersPath"
+}
+$automationTokens = $null
+$automationParseErrors = $null
+$automationHelpersAst = [System.Management.Automation.Language.Parser]::ParseFile(
+    $automationHelpersPath,
+    [ref]$automationTokens,
+    [ref]$automationParseErrors)
+if ($automationParseErrors.Count -ne 0) {
+    throw "The shared UI automation helper file has PowerShell parse errors: $($automationParseErrors[0].Message)"
+}
 $sceneTokens = $null
 $sceneParseErrors = $null
 $sceneObjectsAst = [System.Management.Automation.Language.Parser]::ParseFile(
@@ -42,13 +55,13 @@ if ($sceneParseErrors.Count -ne 0) {
     throw "Packaged Scene Objects helper has PowerShell parse errors: $($sceneParseErrors[0].Message)"
 }
 
-$waitFunction = $checkerAst.Find({
+$waitFunction = $automationHelpersAst.Find({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
         $node.Name -eq "Wait-FileContainsAfterOffset"
 }, $true)
 if ($null -eq $waitFunction) {
-    throw "The packaged checker does not define its log-wait helper."
+    throw "The shared UI automation helpers do not define their log-wait helper."
 }
 $logMatchFunction = $checkerAst.Find({
     param($node)
@@ -57,6 +70,19 @@ $logMatchFunction = $checkerAst.Find({
 }, $true)
 if ($null -eq $logMatchFunction) {
     throw "The packaged checker does not define its last-log match helper."
+}
+foreach ($sharedHelperName in @(
+        "Wait-FileContainsAfterOffset",
+        "Get-FileLengthSafe",
+        "Normalize-HenkaLogLineEndings")) {
+    $duplicateCheckerFunction = $checkerAst.Find({
+        param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $sharedHelperName
+    }, $true)
+    if ($null -ne $duplicateCheckerFunction) {
+        throw "The packaged checker duplicates shared helper '$sharedHelperName' instead of using the canonical helper."
+    }
 }
 $requiredSceneFunctions = @(
     "Wait-HenkaSceneObjectsRowDrawAfterOffset",
@@ -107,7 +133,7 @@ if (-not $genericAuthoringSource.Contains("`$genericPrimitiveIds = @('cylinder',
 if ($genericAuthoringSource -match 'genericActionWidth|genericPrimitiveActionWidth|genericPrimitiveX|genericOpenAssetX') {
     throw "The packaged generic-authoring path still duplicates measured production control geometry."
 }
-$fileLengthFunction = $checkerAst.Find({
+$fileLengthFunction = $automationHelpersAst.Find({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
         $node.Name -eq "Get-FileLengthSafe"
@@ -120,14 +146,15 @@ $framebufferRectFunction = $checkerAst.Find({
 if ($null -eq $fileLengthFunction -or $null -eq $framebufferRectFunction) {
     throw "The packaged checker is missing the path-length or framebuffer-geometry authority required by pager tests."
 }
-$normalizerFunction = $checkerAst.Find({
+$normalizerFunction = $automationHelpersAst.Find({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
         $node.Name -eq "Normalize-HenkaLogLineEndings"
 }, $true)
-if ($null -ne $normalizerFunction) {
-    . ([ScriptBlock]::Create($normalizerFunction.Extent.Text))
+if ($null -eq $normalizerFunction) {
+    throw "The shared UI automation helpers do not define the canonical log line normalizer."
 }
+. ([ScriptBlock]::Create($normalizerFunction.Extent.Text))
 . ([ScriptBlock]::Create($waitFunction.Extent.Text))
 . ([ScriptBlock]::Create($logMatchFunction.Extent.Text))
 . ([ScriptBlock]::Create($fileLengthFunction.Extent.Text))

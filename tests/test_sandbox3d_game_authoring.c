@@ -4000,6 +4000,91 @@ cleanup:
     return success;
 }
 
+static bool test_engine_backed_unsaved_scene_runs_user_data_script(void)
+{
+    const char* test_root = "build/test_tmp";
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_scene_document_behavior behavior;
+    henka_scene_document_id document_id =
+        HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    char script_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES * 2U] = {0};
+    const char* user_data_root;
+    int written;
+    bool script_created = false;
+    bool success = false;
+
+    config.application_name = "Henka Unsaved Scene Script Root Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    config.user_data_base_path = test_root;
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        (entity = henka_scene_create_entity_named(
+             scene, "Unsaved Script Object")) == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_create_with_engine(
+            scene, "", engine, &authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, entity, &document_id) != HENKA_SUCCESS ||
+        document_id == HENKA_INVALID_SCENE_DOCUMENT_ID)
+    {
+        goto cleanup;
+    }
+
+    user_data_root = henka_engine_get_user_data_base_path(engine);
+    if (user_data_root == NULL || user_data_root[0] == '\0' ||
+        sandbox3d_game_authoring_attach_script_template(
+            authoring,
+            user_data_root,
+            entity,
+            HENKA_SCRIPT_LANGUAGE_LUA) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_behavior_at_for_entity(
+            authoring, entity, 0U, &behavior) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    written = snprintf(
+        script_path,
+        sizeof(script_path),
+        "%s/%s",
+        user_data_root,
+        behavior.asset_path);
+    if (written < 0 || (size_t)written >= sizeof(script_path))
+    {
+        goto cleanup;
+    }
+    script_created = true;
+
+    if (sandbox3d_game_authoring_start_play(authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_play_state(authoring) !=
+            SANDBOX3D_PLAY_SESSION_RUNNING)
+    {
+        fprintf(stderr,
+            "engine-backed unsaved-scene Play did not resolve its user-data script root\n");
+        goto cleanup;
+    }
+    success = true;
+
+cleanup:
+    if (authoring != NULL && sandbox3d_game_authoring_is_play_locked(authoring))
+    {
+        (void)sandbox3d_game_authoring_stop_play(authoring);
+    }
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+    if (script_created && remove(script_path) != 0)
+    {
+        success = false;
+    }
+    return success;
+}
+
 int main(void)
 {
     const char* relative_path = "build/test_tmp/game_authoring_slice.hscene";
@@ -4044,6 +4129,11 @@ int main(void)
     if (!test_unsaved_scene_authoring_path())
     {
         fprintf(stderr, "unsaved scene authoring path test failed\n");
+        return 1;
+    }
+    if (!test_engine_backed_unsaved_scene_runs_user_data_script())
+    {
+        fprintf(stderr, "engine-backed unsaved-scene script-root test failed\n");
         return 1;
     }
     if (!test_scene_name_rename_history_and_project_reopen())

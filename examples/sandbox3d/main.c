@@ -727,6 +727,9 @@ typedef struct sandbox3d_state
     henka_ui_rect automation_diagnostic_utility_settings_smooth_rect;
     float automation_diagnostic_utility_settings_scroll_offset;
     bool automation_diagnostic_utility_settings_smooth_enabled;
+    bool automation_diagnostic_terrain_cursor_reported;
+    henka_vec2 automation_diagnostic_terrain_cursor_pointer;
+    bool automation_diagnostic_terrain_cursor_hit;
     bool automation_diagnostic_controls_scroll_reported;
     henka_ui_rect automation_diagnostic_controls_scroll_viewport;
     float automation_diagnostic_controls_scroll_offset;
@@ -5443,6 +5446,68 @@ static void sandbox3d_report_utility_settings_layout(
         smooth_enabled;
 }
 
+static void sandbox3d_report_terrain_cursor_diagnostic(
+    sandbox3d_state* state)
+{
+    char diagnostics_value[8];
+    henka_vec2 pointer;
+    bool hit;
+    bool changed;
+
+    if (state == NULL)
+    {
+        return;
+    }
+    pointer = state->diagnostics.framebuffer_mouse;
+    hit = state->diagnostics.terrain_pick_valid;
+    changed =
+        !state->automation_diagnostic_terrain_cursor_reported ||
+        fabsf(state->automation_diagnostic_terrain_cursor_pointer.x - pointer.x) > 0.25f ||
+        fabsf(state->automation_diagnostic_terrain_cursor_pointer.y - pointer.y) > 0.25f ||
+        state->automation_diagnostic_terrain_cursor_hit != hit;
+
+    if (state == NULL ||
+        !state->diagnostics.mouse_framebuffer_valid ||
+        state->workspace.active_utility != SANDBOX3D_UTILITY_TERRAIN ||
+        state->terrain_world == NULL ||
+        !changed ||
+        !sandbox3d_automation_input_is_owned() ||
+        !sandbox3d_copy_environment_value(
+            "HENKA_AUTOMATION_DIAGNOSTICS",
+            diagnostics_value,
+            sizeof(diagnostics_value)) ||
+        strcmp(diagnostics_value, "1") != 0)
+    {
+        return;
+    }
+
+    if (hit)
+    {
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC terrain_cursor frame=%llu pointer_x=%.1f pointer_y=%.1f hit=1 world=%.3f,%.3f,%.3f chunk=%d,%d\n",
+            (unsigned long long)state->automation_diagnostic_frame_sequence,
+            pointer.x,
+            pointer.y,
+            state->diagnostics.terrain_pick.position.x,
+            state->diagnostics.terrain_pick.position.y,
+            state->diagnostics.terrain_pick.position.z,
+            state->diagnostics.terrain_pick.chunk_id.x,
+            state->diagnostics.terrain_pick.chunk_id.z);
+    }
+    else
+    {
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC terrain_cursor frame=%llu pointer_x=%.1f pointer_y=%.1f hit=0\n",
+            (unsigned long long)state->automation_diagnostic_frame_sequence,
+            pointer.x,
+            pointer.y);
+    }
+    fflush(stdout);
+    state->automation_diagnostic_terrain_cursor_reported = true;
+    state->automation_diagnostic_terrain_cursor_pointer = pointer;
+    state->automation_diagnostic_terrain_cursor_hit = hit;
+}
+
 static void sandbox3d_draw_utility_panel(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -5610,6 +5675,46 @@ static bool sandbox3d_copy_environment_value(
 static henka_result sandbox3d_initialize_gizmo_rendering(
     henka_engine* engine,
     sandbox3d_state* state);
+static void sandbox3d_clear_terrain_scene_state(sandbox3d_state* state)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+
+    henka_terrain_render_runtime_destroy(state->terrain_render);
+    state->terrain_render = NULL;
+    henka_terrain_streamer_destroy(state->terrain_streamer);
+    state->terrain_streamer = NULL;
+    henka_terrain_storage_destroy(state->terrain_storage);
+    state->terrain_storage = NULL;
+    henka_terrain_collision_runtime_destroy(
+        state->terrain_collision_runtime);
+    state->terrain_collision_runtime = NULL;
+    henka_terrain_physics_destroy(state->terrain_physics);
+    state->terrain_physics = NULL;
+    henka_terrain_edit_history_destroy(state->terrain_edit_history);
+    state->terrain_edit_history = NULL;
+    henka_terrain_world_destroy(state->terrain_world);
+    state->terrain_world = NULL;
+    state->terrain_stroke_active = false;
+    state->terrain_stroke_last_position = (henka_vec3){0};
+    state->terrain_autosave_elapsed_seconds = 0.0;
+}
+
+static bool sandbox3d_has_active_terrain_scene_state(
+    const sandbox3d_state* state)
+{
+    return state != NULL &&
+        (state->terrain_world != NULL ||
+         state->terrain_storage != NULL ||
+         state->terrain_streamer != NULL ||
+         state->terrain_render != NULL ||
+         state->terrain_physics != NULL ||
+         state->terrain_collision_runtime != NULL ||
+         state->terrain_edit_history != NULL);
+}
+
 static henka_result sandbox3d_create_new_scene(
     henka_engine* engine,
     sandbox3d_state* state)
@@ -5618,15 +5723,16 @@ static henka_result sandbox3d_create_new_scene(
     henka_action_context* candidate_actions = NULL;
     henka_physics_world* candidate_physics = NULL;
     sandbox3d_game_authoring* candidate_authoring = NULL;
-    henka_terrain_render_runtime* candidate_terrain_render = NULL;
     sandbox3d_state* candidate_gizmo_state = NULL;
     sandbox3d_gizmo_render_state candidate_gizmo_render = {0};
     henka_scene* previous_scene;
     henka_action_context* previous_actions;
     henka_physics_world* previous_physics;
     sandbox3d_game_authoring* previous_authoring;
-    henka_terrain_render_runtime* previous_terrain_render;
     sandbox3d_gizmo_render_state previous_gizmo_render;
+    bool candidate_audio_system_setter_succeeded = false;
+    bool candidate_audio_asset_manager_setter_succeeded = false;
+    bool previous_terrain_was_active;
     henka_result result;
     size_t index;
 
@@ -5670,6 +5776,21 @@ static henka_result sandbox3d_create_new_scene(
     }
     if (result == HENKA_SUCCESS)
     {
+        result = sandbox3d_game_authoring_set_audio_system(
+            candidate_authoring,
+            sandbox3d_audio_runtime_get_system_if_available(
+                state->audio_runtime));
+        candidate_audio_system_setter_succeeded = result == HENKA_SUCCESS;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_game_authoring_set_audio_asset_manager(
+            candidate_authoring,
+            henka_engine_get_asset_manager(engine));
+        candidate_audio_asset_manager_setter_succeeded = result == HENKA_SUCCESS;
+    }
+    if (result == HENKA_SUCCESS)
+    {
         result = henka_physics_world_create(&candidate_physics);
     }
     if (result == HENKA_SUCCESS)
@@ -5710,33 +5831,6 @@ static henka_result sandbox3d_create_new_scene(
             }
         }
     }
-    if (result == HENKA_SUCCESS && state->terrain_render != NULL)
-    {
-        henka_terrain_render_desc render_desc =
-            henka_terrain_render_desc_default();
-        if (state->terrain_world == NULL || state->terrain_material_asset == NULL)
-        {
-            result = HENKA_ERROR_INVALID_ARGUMENT;
-        }
-        else
-        {
-            render_desc.max_resident_chunks = 16U;
-            render_desc.max_pending_requests = 16U;
-            result = henka_assets_get_material_asset_material(
-                state->terrain_material_asset,
-                &render_desc.material);
-            if (result == HENKA_SUCCESS)
-            {
-                render_desc.material_asset = state->terrain_material_asset;
-                result = henka_terrain_render_runtime_create(
-                    engine,
-                    candidate_scene,
-                    state->terrain_world,
-                    &render_desc,
-                    &candidate_terrain_render);
-            }
-        }
-    }
     if (result != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -5745,6 +5839,8 @@ static henka_result sandbox3d_create_new_scene(
     /* This is the final fallible operation. Until the renderer accepts the
      * candidate scene, the current document, history, and physics world stay
      * authoritative and untouched. */
+    previous_terrain_was_active =
+        sandbox3d_has_active_terrain_scene_state(state);
     result = henka_engine_set_scene(engine, candidate_scene);
     if (result != HENKA_SUCCESS)
     {
@@ -5755,7 +5851,6 @@ static henka_result sandbox3d_create_new_scene(
     previous_actions = state->actions;
     previous_physics = state->physics.world;
     previous_authoring = state->game_authoring;
-    previous_terrain_render = state->terrain_render;
     previous_gizmo_render = state->gizmo_render;
 
     sandbox3d_cancel_active_modeling_operator_session(state);
@@ -5773,15 +5868,14 @@ static henka_result sandbox3d_create_new_scene(
     state->actions = candidate_actions;
     state->physics.world = candidate_physics;
     state->game_authoring = candidate_authoring;
-    state->terrain_render = candidate_terrain_render;
     state->gizmo_render = candidate_gizmo_render;
     candidate_scene = NULL;
     candidate_actions = NULL;
     candidate_physics = NULL;
     candidate_authoring = NULL;
-    candidate_terrain_render = NULL;
     henka_free(candidate_gizmo_state);
     candidate_gizmo_state = NULL;
+    sandbox3d_clear_terrain_scene_state(state);
 
     for (index = 0U; index < SANDBOX3D_OBJECT_COUNT; ++index)
     {
@@ -5839,7 +5933,6 @@ static henka_result sandbox3d_create_new_scene(
     state->gizmo.hover_axis = SANDBOX3D_GIZMO_AXIS_NONE;
     state->gizmo.hover_handle_type = SANDBOX3D_GIZMO_HANDLE_NONE;
     state->gizmo.active_handle_type = SANDBOX3D_GIZMO_HANDLE_NONE;
-    state->terrain_stroke_active = false;
     state->marker_material_instance_valid = false;
     memset(
         state->giraffe_material_instances,
@@ -5851,7 +5944,6 @@ static henka_result sandbox3d_create_new_scene(
     sandbox3d_scene_name_editor_reset(&state->scene_name_editor);
     sandbox3d_reset_ui_geometry_reports(state);
 
-    henka_terrain_render_runtime_destroy(previous_terrain_render);
     sandbox3d_game_authoring_destroy(previous_authoring);
     henka_action_context_destroy(previous_actions);
     henka_physics_world_destroy(previous_physics);
@@ -5884,7 +5976,7 @@ static henka_result sandbox3d_create_new_scene(
         const bool selection_empty =
             sandbox3d_get_real_selected_entity(state) == HENKA_INVALID_ENTITY;
         printf(
-            "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=new_scene_created name=%s relative_path_empty=%u document_object_count=%zu scene_entity_count=%zu camera_present=%u environment_present=%u environment_mode=%d sun_enabled=%u selection_empty=%u.\n",
+            "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=new_scene_created name=%s relative_path_empty=%u document_object_count=%zu scene_entity_count=%zu camera_present=%u environment_present=%u environment_mode=%d sun_enabled=%u selection_empty=%u terrain_was_active=%u terrain_active=%u audio_system_setter_succeeded=%u audio_asset_manager_setter_succeeded=%u.\n",
             name_available ? scene_name : "<unavailable>",
             relative_path != NULL && relative_path[0] == '\0' ? 1U : 0U,
             document_object_count,
@@ -5893,13 +5985,16 @@ static henka_result sandbox3d_create_new_scene(
             environment_present ? 1U : 0U,
             environment_present ? (int)environment.mode : -1,
             environment_present && environment.sun.enabled ? 1U : 0U,
-            selection_empty ? 1U : 0U);
+            selection_empty ? 1U : 0U,
+            previous_terrain_was_active ? 1U : 0U,
+            sandbox3d_has_active_terrain_scene_state(state) ? 1U : 0U,
+            candidate_audio_system_setter_succeeded ? 1U : 0U,
+            candidate_audio_asset_manager_setter_succeeded ? 1U : 0U);
         fflush(stdout);
     }
     return HENKA_SUCCESS;
 
 cleanup:
-    henka_terrain_render_runtime_destroy(candidate_terrain_render);
     if (candidate_gizmo_state != NULL)
     {
         henka_mesh_destroy(candidate_gizmo_state->gizmo_render.axis_mesh);
@@ -15318,17 +15413,8 @@ fail:
     henka_free(terrain_layer_metallic_roughness_pixels);
     henka_free(samples);
     henka_free(seed_samples);
-    henka_terrain_render_runtime_destroy(state->terrain_render);
-    state->terrain_render = NULL;
+    sandbox3d_clear_terrain_scene_state(state);
     state->terrain_material_asset = NULL;
-    henka_terrain_streamer_destroy(state->terrain_streamer);
-    state->terrain_streamer = NULL;
-    henka_terrain_physics_destroy(state->terrain_physics);
-    state->terrain_physics = NULL;
-    henka_terrain_storage_destroy(state->terrain_storage);
-    state->terrain_storage = NULL;
-    henka_terrain_world_destroy(state->terrain_world);
-    state->terrain_world = NULL;
     return result;
 }
 
@@ -15828,13 +15914,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     }
 
     sandbox3d_cancel_active_modeling_operator_session(state);
-    henka_terrain_render_runtime_destroy(state->terrain_render);
-    henka_terrain_streamer_destroy(state->terrain_streamer);
-    henka_terrain_storage_destroy(state->terrain_storage);
-    henka_terrain_collision_runtime_destroy(state->terrain_collision_runtime);
-    henka_terrain_physics_destroy(state->terrain_physics);
-    henka_terrain_edit_history_destroy(state->terrain_edit_history);
-    henka_terrain_world_destroy(state->terrain_world);
+    sandbox3d_clear_terrain_scene_state(state);
     henka_mesh_destroy(state->gizmo_render.axis_mesh);
     henka_mesh_destroy(state->gizmo_render.ring_mesh);
     henka_mesh_destroy(state->grid_mesh);
@@ -22438,6 +22518,7 @@ static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sand
             terrain_ray,
             &state->diagnostics.terrain_pick);
     }
+    sandbox3d_report_terrain_cursor_diagnostic(state);
 
     selected_entity = state->diagnostics.selected_entity;
     state->diagnostics.selected_entity_valid =
@@ -26397,6 +26478,9 @@ static void sandbox3d_draw_terrain_mode_banner(
 
     if (state == NULL || state->ui == NULL ||
         state->workspace.active_utility != SANDBOX3D_UTILITY_TERRAIN ||
+        state->terrain_world == NULL ||
+        state->terrain_render == NULL ||
+        state->terrain_physics == NULL ||
         bounds.width < 300.0f || bounds.height < 120.0f)
     {
         return;
@@ -26798,6 +26882,51 @@ static henka_ui_rect sandbox3d_controls_main_content_bounds(
         SANDBOX3D_PANEL_SCROLL_CONTROLS);
 }
 
+static henka_ui_rect sandbox3d_details_base_content_bounds(
+    const sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout)
+{
+    henka_ui_rect bounds = {0.0f, 0.0f, 0.0f, 0.0f};
+
+    if (state == NULL || layout == NULL)
+    {
+        return bounds;
+    }
+    bounds = layout->object_details_panel;
+    bounds.x += 14.0f;
+    bounds.y += 38.0f;
+    bounds.width -= 40.0f;
+    bounds.height -= 52.0f;
+    if (sandbox3d_should_draw_native_authoring_project_controls(state))
+    {
+        sandbox3d_editor_details_footer_layout footer;
+        if (sandbox3d_editor_layout_details_footer_for_context(
+                state->ui,
+                layout->object_details_panel,
+                &footer) == HENKA_SUCCESS)
+        {
+            bounds.height -= footer.scroll_reserve;
+        }
+    }
+    return bounds;
+}
+
+static henka_result sandbox3d_details_scene_actions_layout_for_state(
+    const sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
+    sandbox3d_editor_details_scene_actions_layout* out_layout)
+{
+    if (state == NULL || layout == NULL || out_layout == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_editor_layout_details_scene_actions(
+        layout->object_details_panel,
+        sandbox3d_details_base_content_bounds(state, layout),
+        state->game_authoring != NULL,
+        out_layout);
+}
+
 static henka_ui_rect sandbox3d_panel_content_bounds(
     const sandbox3d_state* state,
     const sandbox3d_workspace_layout* layout,
@@ -26833,22 +26962,15 @@ static henka_ui_rect sandbox3d_panel_content_bounds(
     }
     else if (target == SANDBOX3D_PANEL_SCROLL_DETAILS)
     {
-        bounds = layout->object_details_panel;
-        bounds.x += 14.0f;
-        bounds.y += 38.0f;
-        bounds.width -= 40.0f;
-        bounds.height -= 52.0f;
-        if (sandbox3d_should_draw_native_authoring_project_controls(state))
+        sandbox3d_editor_details_scene_actions_layout scene_actions_layout;
+        if (sandbox3d_details_scene_actions_layout_for_state(
+                state,
+                layout,
+                &scene_actions_layout) == HENKA_SUCCESS)
         {
-            sandbox3d_editor_details_footer_layout footer;
-            if (sandbox3d_editor_layout_details_footer_for_context(
-                    state->ui,
-                    layout->object_details_panel,
-                    &footer) == HENKA_SUCCESS)
-            {
-                bounds.height -= footer.scroll_reserve;
-            }
+            return scene_actions_layout.scroll_viewport;
         }
+        bounds = sandbox3d_details_base_content_bounds(state, layout);
     }
     else if (target == SANDBOX3D_PANEL_SCROLL_UTILITY)
     {
@@ -30917,11 +31039,14 @@ static void sandbox3d_draw_game_authoring_scene_controls(
                             sizeof(canonical_scene_name)) == HENKA_SUCCESS)
                     {
                         printf(
-                            "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=%s name=%s.\n",
+                            "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=%s name=%s terrain_active=%u.\n",
                             cancelled_new_scene
                                 ? "new_scene_confirmation_cancelled"
                                 : "reload_confirmation_cancelled",
-                            canonical_scene_name);
+                            canonical_scene_name,
+                            sandbox3d_has_active_terrain_scene_state(state)
+                                ? 1U
+                                : 0U);
                         fflush(stdout);
                     }
                     sandbox3d_set_statusf(
@@ -31317,20 +31442,15 @@ static void sandbox3d_draw_object_details_panel(
         layout,
         SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
 
-    scene_action_row = (henka_ui_rect){
-        panel_bounds.x + 14.0f,
-        panel_bounds.y + 38.0f,
-        panel_bounds.width - 28.0f,
-        26.0f};
-    scene_document_controls_visible =
-        state->game_authoring != NULL &&
-        scene_action_row.width > 0.0f &&
-        scene_action_row.y + scene_action_row.height <=
-            panel_bounds.y + panel_bounds.height - 8.0f;
-    if (!scene_document_controls_visible)
     {
-        scene_action_row.width = 0.0f;
-        scene_action_row.height = 0.0f;
+        sandbox3d_editor_details_scene_actions_layout scene_actions_layout = {0};
+        scene_document_controls_visible =
+            sandbox3d_details_scene_actions_layout_for_state(
+                state,
+                layout,
+                &scene_actions_layout) == HENKA_SUCCESS &&
+            scene_actions_layout.visible;
+        scene_action_row = scene_actions_layout.action_row;
     }
     if (state->game_authoring != NULL)
     {
@@ -31684,21 +31804,6 @@ static void sandbox3d_draw_object_details_panel(
         state,
         layout,
         SANDBOX3D_PANEL_SCROLL_DETAILS);
-    if (scene_document_controls_visible)
-    {
-        const float scene_actions_bottom =
-            scene_action_row.y + scene_action_row.height + 6.0f;
-        if (flow_desc.bounds.y < scene_actions_bottom)
-        {
-            const float shift = scene_actions_bottom - flow_desc.bounds.y;
-            flow_desc.bounds.y = scene_actions_bottom;
-            flow_desc.bounds.height -= shift;
-            if (flow_desc.bounds.height < 0.0f)
-            {
-                flow_desc.bounds.height = 0.0f;
-            }
-        }
-    }
     flow_desc.row_spacing = 6.0f;
     flow_desc.indent_width = 10.0f;
 

@@ -1093,3 +1093,81 @@ function Get-LastLogRegexMatch {
 
     return $null
 }
+
+
+function Get-FileLengthSafe {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return 0L
+    }
+
+    return [System.IO.FileInfo]::new($Path).Length
+}
+
+function Normalize-HenkaLogLineEndings {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    return $Text.Replace("`r`n", "`n").Replace("`r", "`n")
+}
+
+function Wait-FileContainsAfterOffset {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][long]$StartingOffset,
+        [int]$TimeoutMilliseconds = 5000
+    )
+
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMilliseconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            $stream = $null
+            $reader = $null
+            try {
+                $shareMode = [System.IO.FileShare](
+                    [int][System.IO.FileShare]::ReadWrite -bor
+                    [int][System.IO.FileShare]::Delete)
+                $stream = [System.IO.FileStream]::new(
+                    $Path,
+                    [System.IO.FileMode]::Open,
+                    [System.IO.FileAccess]::Read,
+                    $shareMode)
+                if ($stream.Length -gt $StartingOffset) {
+                    $stream.Seek($StartingOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
+                    $reader = [System.IO.StreamReader]::new(
+                        $stream,
+                        [System.Text.Encoding]::UTF8,
+                        $true,
+                        4096,
+                        $false)
+                    $text = Normalize-HenkaLogLineEndings -Text $reader.ReadToEnd()
+                    if ([Regex]::IsMatch(
+                            $text,
+                            $Pattern,
+                            [System.Text.RegularExpressions.RegexOptions]::Multiline)) {
+                        return $true
+                    }
+                }
+            }
+            catch [System.IO.IOException] {
+                # The producer may be between writes; retry until the bounded deadline.
+            }
+            catch [System.UnauthorizedAccessException] {
+                # The producer may be between writes; retry until the bounded deadline.
+            }
+            finally {
+                if ($null -ne $reader) {
+                    $reader.Dispose()
+                }
+                elseif ($null -ne $stream) {
+                    $stream.Dispose()
+                }
+            }
+        }
+
+        Start-Sleep -Milliseconds 150
+    }
+
+    return $false
+}
