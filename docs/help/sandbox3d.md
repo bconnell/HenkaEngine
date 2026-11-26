@@ -582,11 +582,11 @@ Current fields include:
 
 In Game Authoring, **New Scene** is available from the Actions group without selecting an object. It asks for confirmation before replacing the current document. Cancel keeps the current scene and any unsaved edits. Confirm creates an empty, unsaved scene with the normal camera and default environment and clears the selection; it does not modify the previously saved scene file.
 
-The new scene has no saved path, so Save Scene and Reload Scene fail closed until a save path exists. Save As and Open are separate scene-management workflows and are not provided by this New Scene action.
+The new scene has no saved path. Save and Reload fail closed until a path exists; use **Save As** to choose a project-relative scene path. A successful Save As writes the new `.hscene` file and selects it as the project's startup scene. Open remains a separate scene-management workflow.
 
 ### Scene save/reload
 
-The Actions group provides Save Scene and Reload Scene for the confined `sandbox3d_scene.hscene` file.
+The Actions group provides **Save**, **Save As**, and **Reload** for confined `.hscene` documents. Save As requires a new project-relative path and does not overwrite an existing scene; use Save to update the active scene. Save As also updates the `henka.project` startup-scene selection. The scene and manifest are staged as one project-save transaction: a manifest commit failure rolls back the scene file, and the active document path changes only after the transaction succeeds. If the filesystem cannot complete rollback, the product reports the remaining scene or recovery path.
 
 Standalone manager-owned material definitions assigned to scene objects are
 saved by canonical material identity and rebound on reload when the project

@@ -78,7 +78,56 @@ function Get-SceneDocumentActionControls {
 
     return Get-LastLogRegexMatch `
         -Path $Path `
-        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls visible=1 document_object_count=(?<document_object_count>\d+) selection_present=(?<selection_present>[01]) relative_path_empty=(?<relative_path_empty>[01]) save_rect=(?<save_x>[-0-9.]+),(?<save_y>[-0-9.]+),(?<save_width>[-0-9.]+),(?<save_height>[-0-9.]+) reload_rect=(?<reload_x>[-0-9.]+),(?<reload_y>[-0-9.]+),(?<reload_width>[-0-9.]+),(?<reload_height>[-0-9.]+) new_scene_rect=(?<new_scene_x>[-0-9.]+),(?<new_scene_y>[-0-9.]+),(?<new_scene_width>[-0-9.]+),(?<new_scene_height>[-0-9.]+)\.'
+        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls visible=1 document_object_count=(?<document_object_count>\d+) selection_present=(?<selection_present>[01]) relative_path_empty=(?<relative_path_empty>[01]) save_rect=(?<save_x>[-0-9.]+),(?<save_y>[-0-9.]+),(?<save_width>[-0-9.]+),(?<save_height>[-0-9.]+) save_as_rect=(?<save_as_x>[-0-9.]+),(?<save_as_y>[-0-9.]+),(?<save_as_width>[-0-9.]+),(?<save_as_height>[-0-9.]+) reload_rect=(?<reload_x>[-0-9.]+),(?<reload_y>[-0-9.]+),(?<reload_width>[-0-9.]+),(?<reload_height>[-0-9.]+) new_scene_rect=(?<new_scene_x>[-0-9.]+),(?<new_scene_y>[-0-9.]+),(?<new_scene_width>[-0-9.]+),(?<new_scene_height>[-0-9.]+)\.'
+}
+
+function Get-SceneSaveAsControls {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    return Get-LastLogRegexMatch `
+        -Path $Path `
+        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_save_as_controls visible=1 path_rect=(?<path_x>[-0-9.]+),(?<path_y>[-0-9.]+),(?<path_width>[-0-9.]+),(?<path_height>[-0-9.]+) save_rect=(?<save_x>[-0-9.]+),(?<save_y>[-0-9.]+),(?<save_width>[-0-9.]+),(?<save_height>[-0-9.]+) cancel_rect=(?<cancel_x>[-0-9.]+),(?<cancel_y>[-0-9.]+),(?<cancel_width>[-0-9.]+),(?<cancel_height>[-0-9.]+) relative_path_empty=(?<relative_path_empty>[01])\.'
+}
+
+function Save-HenkaProductFramebufferScreenshot {
+    param(
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][string]$CaptureDirectory,
+        [Parameter(Mandatory = $true)][string]$RequestFile,
+        [Parameter(Mandatory = $true)][string]$Description,
+        [Parameter(Mandatory = $true)][string]$DestinationPath
+    )
+
+    $bitmap = New-HenkaAutomationProductFramebufferBitmap `
+        -Handle $Process.MainWindowHandle `
+        -Process $Process `
+        -StdoutPath $StdoutPath `
+        -OutputDirectory $CaptureDirectory `
+        -RequestFile $RequestFile `
+        -Description $Description
+    try {
+        $geometry = Get-HenkaAutomationWindowGeometry -Handle $Process.MainWindowHandle
+        if ($bitmap.Width -ne $geometry.ClientWidth -or
+            $bitmap.Height -ne $geometry.ClientHeight) {
+            throw "$Description framebuffer was $($bitmap.Width)x$($bitmap.Height), expected client size $($geometry.ClientWidth)x$($geometry.ClientHeight)."
+        }
+        $content = Get-HenkaAutomationScreenshotContentSummary -Bitmap $bitmap
+        if (-not $content.HasVisibleContent) {
+            throw ("$Description framebuffer was blank or uniform; sampled={0}, distinct_colors={1}, " +
+                "non_dominant_samples={2}, minimum={3}." -f
+                $content.SampleCount,
+                $content.DistinctColorCount,
+                $content.NonDominantSamples,
+                $content.MinimumNonDominantSamples)
+        }
+        $bitmap.Save($DestinationPath, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $bitmap.Dispose()
+    }
+
+    return $DestinationPath
 }
 
 function Get-SceneTransitionConfirmationControls {
@@ -442,6 +491,10 @@ try {
     $saveY = Convert-HenkaAutomationNumber $sceneActionControls.Groups['save_y'].Value
     $saveWidth = Convert-HenkaAutomationNumber $sceneActionControls.Groups['save_width'].Value
     $saveHeight = Convert-HenkaAutomationNumber $sceneActionControls.Groups['save_height'].Value
+    $saveAsX = Convert-HenkaAutomationNumber $sceneActionControls.Groups['save_as_x'].Value
+    $saveAsY = Convert-HenkaAutomationNumber $sceneActionControls.Groups['save_as_y'].Value
+    $saveAsWidth = Convert-HenkaAutomationNumber $sceneActionControls.Groups['save_as_width'].Value
+    $saveAsHeight = Convert-HenkaAutomationNumber $sceneActionControls.Groups['save_as_height'].Value
     $reloadX = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_x'].Value
     $reloadY = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_y'].Value
     $reloadWidth = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_width'].Value
@@ -942,36 +995,98 @@ try {
     if ((Get-FileHash -LiteralPath $savedScenePath -Algorithm SHA256).Hash -ne $savedSceneHash) {
         throw "Rejected Save/Reload actions changed the prior saved scene file."
     }
-    $newSceneScreenshotPath = Join-Path $runtimeDirectory "new-scene.png"
-    $newSceneBitmap = New-HenkaAutomationProductFramebufferBitmap `
-        -Handle $capturedProcess.Process.MainWindowHandle `
+
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X ($saveAsX + ($saveAsWidth * 0.5)) `
+        -Y ($saveAsY + ($saveAsHeight * 0.5))
+    $saveAsControlsPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_save_as_controls visible=1 .* relative_path_empty=1\.'
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern $saveAsControlsPattern -TimeoutMilliseconds 10000)) {
+        throw "Save As did not open its product path editor."
+    }
+    $saveAsControls = Get-SceneSaveAsControls -Path $stdoutPath
+    if ($null -eq $saveAsControls -or
+        [int]$saveAsControls.Groups['relative_path_empty'].Value -ne 1) {
+        throw "Save As path editor geometry or initial state was unavailable."
+    }
+    $saveAsOpenScreenshotPath = Join-Path $runtimeDirectory "new-scene-save-as-open.png"
+    $null = Save-HenkaProductFramebufferScreenshot `
         -Process $capturedProcess.Process `
         -StdoutPath $stdoutPath `
-        -OutputDirectory $frameCaptureDirectory `
+        -CaptureDirectory $frameCaptureDirectory `
         -RequestFile $frameCaptureRequestPath `
-        -Description "Packaged New Scene editor"
-    try {
-        $newSceneGeometry = Get-HenkaAutomationWindowGeometry `
-            -Handle $capturedProcess.Process.MainWindowHandle
-        if ($newSceneBitmap.Width -ne $newSceneGeometry.ClientWidth -or
-            $newSceneBitmap.Height -ne $newSceneGeometry.ClientHeight) {
-            throw "The product framebuffer capture was $($newSceneBitmap.Width)x$($newSceneBitmap.Height), expected client size $($newSceneGeometry.ClientWidth)x$($newSceneGeometry.ClientHeight)."
-        }
-        $newSceneContent = Get-HenkaAutomationScreenshotContentSummary -Bitmap $newSceneBitmap
-        if (-not $newSceneContent.HasVisibleContent) {
-            throw ("The product framebuffer capture was blank or uniform; sampled={0}, distinct_colors={1}, " +
-                "non_dominant_samples={2}, minimum={3}." -f
-                $newSceneContent.SampleCount,
-                $newSceneContent.DistinctColorCount,
-                $newSceneContent.NonDominantSamples,
-                $newSceneContent.MinimumNonDominantSamples)
-        }
-        $newSceneBitmap.Save($newSceneScreenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
+        -Description "Packaged empty-scene Save As form" `
+        -DestinationPath $saveAsOpenScreenshotPath
+    Write-Output "[pass] Captured the real product framebuffer with Save As open and no selected object. Screenshot: $saveAsOpenScreenshotPath"
+    $saveAsRelativePath = 'GoldenPathSaveAs.hscene'
+    $saveAsTargetPath = Join-Path $userDataBasePath $saveAsRelativePath
+    $projectManifestPath = Join-Path $userDataBasePath 'henka.project'
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X ((Convert-HenkaAutomationNumber $saveAsControls.Groups['path_x'].Value) +
+            ((Convert-HenkaAutomationNumber $saveAsControls.Groups['path_width'].Value) * 0.5)) `
+        -Y ((Convert-HenkaAutomationNumber $saveAsControls.Groups['path_y'].Value) +
+            ((Convert-HenkaAutomationNumber $saveAsControls.Groups['path_height'].Value) * 0.5))
+    Send-HenkaAutomationText -EventPath $automationInputPath -Text $saveAsRelativePath
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X ((Convert-HenkaAutomationNumber $saveAsControls.Groups['save_x'].Value) +
+            ((Convert-HenkaAutomationNumber $saveAsControls.Groups['save_width'].Value) * 0.5)) `
+        -Y ((Convert-HenkaAutomationNumber $saveAsControls.Groups['save_y'].Value) +
+            ((Convert-HenkaAutomationNumber $saveAsControls.Groups['save_height'].Value) * 0.5))
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern 'scene_document_persistence action=saved_as relative_path_empty=0 document_object_count=0\.' -TimeoutMilliseconds 15000)) {
+        throw "The real Save As action did not save the empty scene to a project-relative path."
     }
-    finally {
-        $newSceneBitmap.Dispose()
+    if (-not (Test-Path -LiteralPath $saveAsTargetPath -PathType Leaf)) {
+        throw "The Save As target scene file was not created at the packaged user-data root."
     }
-    Write-Output "[pass] Packaged New Scene cancel preserved the unsaved scene-name edit; confirmed creation produced an empty, camera-ready scene without changing the saved file. Screenshot: $newSceneScreenshotPath"
+    if (-not (Test-Path -LiteralPath $projectManifestPath -PathType Leaf) -or
+        (Get-Content -LiteralPath $projectManifestPath -Raw) -notmatch ('(?m)^startup_scene=' + [Regex]::Escape($saveAsRelativePath) + '$')) {
+        throw "Save As did not update the project startup-scene manifest to the selected path."
+    }
+
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern 'scene_document_action_controls visible=1 document_object_count=0 selection_present=0 relative_path_empty=0 ' -TimeoutMilliseconds 10000)) {
+        throw "Saved scene actions did not return after Save As completed."
+    }
+    $savedSceneActions = Get-SceneDocumentActionControls -Path $stdoutPath
+    $savedReloadX = Convert-HenkaAutomationNumber $savedSceneActions.Groups['reload_x'].Value
+    $savedReloadY = Convert-HenkaAutomationNumber $savedSceneActions.Groups['reload_y'].Value
+    $savedReloadWidth = Convert-HenkaAutomationNumber $savedSceneActions.Groups['reload_width'].Value
+    $savedReloadHeight = Convert-HenkaAutomationNumber $savedSceneActions.Groups['reload_height'].Value
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X ($savedReloadX + ($savedReloadWidth * 0.5)) `
+        -Y ($savedReloadY + ($savedReloadHeight * 0.5))
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern 'action=reload_confirmation_pending' -TimeoutMilliseconds 10000)) {
+        throw "Reload did not offer confirmation for the newly saved scene."
+    }
+    $reloadConfirmation = Get-SceneTransitionConfirmationControls `
+        -Path $stdoutPath `
+        -Action 'reload'
+    if ($null -eq $reloadConfirmation) {
+        throw "Reload confirmation geometry was unavailable after Save As."
+    }
+    Send-HenkaAutomationClickAt `
+        -EventPath $automationInputPath `
+        -X ((Convert-HenkaAutomationNumber $reloadConfirmation.Groups['confirm_x'].Value) +
+            ((Convert-HenkaAutomationNumber $reloadConfirmation.Groups['confirm_width'].Value) * 0.5)) `
+        -Y ((Convert-HenkaAutomationNumber $reloadConfirmation.Groups['confirm_y'].Value) +
+            ((Convert-HenkaAutomationNumber $reloadConfirmation.Groups['confirm_height'].Value) * 0.5))
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern 'scene_document_persistence action=reloaded name=Untitled Scene\.' -TimeoutMilliseconds 15000)) {
+        throw "The scene saved through Save As did not reload through the product UI."
+    }
+    if ((Get-FileHash -LiteralPath $savedScenePath -Algorithm SHA256).Hash -ne $savedSceneHash) {
+        throw "Save As or reload modified the independent previously saved scene."
+    }
+    $newSceneScreenshotPath = Join-Path $runtimeDirectory "new-scene.png"
+    $null = Save-HenkaProductFramebufferScreenshot `
+        -Process $capturedProcess.Process `
+        -StdoutPath $stdoutPath `
+        -CaptureDirectory $frameCaptureDirectory `
+        -RequestFile $frameCaptureRequestPath `
+        -Description "Packaged New Scene editor" `
+        -DestinationPath $newSceneScreenshotPath
+    Write-Output "[pass] Packaged Save As used the real path field and button, updated the startup manifest, preserved the independent prior scene, and reloaded through the confirmation UI. Screenshot: $newSceneScreenshotPath"
 
     Send-HenkaSceneObjectsControlClick `
         -EventPath $automationInputPath `

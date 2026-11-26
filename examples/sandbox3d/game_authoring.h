@@ -265,6 +265,14 @@ henka_result sandbox3d_game_authoring_attach_script_template(
 henka_result sandbox3d_game_authoring_save(
     sandbox3d_game_authoring* authoring,
     const char* project_root);
+/* Saves the current authored document to a confined project-relative path.
+ * Save As requires a new path; it does not replace another scene file. The
+ * active path and project root change only after the scene and startup
+ * manifest writes, plus the in-memory document publication, succeed. */
+henka_result sandbox3d_game_authoring_save_as(
+    sandbox3d_game_authoring* authoring,
+    const char* project_root,
+    const char* relative_path);
 /* Loads the manifest-selected startup scene when henka.project is present;
  * an absent manifest falls back to the coordinator path. When the coordinator
  * was opened with an engine or asset manager, supported persisted mesh sources

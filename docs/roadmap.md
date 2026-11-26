@@ -360,7 +360,7 @@ The Sandbox has a bounded Game Authoring V1 slice sharing Scene Document, runtim
 
 1. Persistent Scene Document object IDs mapped through a bounded adapter to generation-checked runtime entities.
 2. Authored Physics and Interaction values in Object Details for registered scene objects.
-3. Confined, checksummed `.hscene` Save Scene and Reload Scene operations with candidate validation and failure retention.
+3. Confined, checksummed `.hscene` Save, Save As, and Reload operations with candidate validation and failure retention; Save As creates a new project-relative scene without overwriting existing scenes and updates the startup-scene manifest transactionally.
 4. A dedicated Play session with Start, Pause, Resume, Step, Stop, an isolated runtime scene, and an active-session mutation/save barrier.
 5. Bounded HenkaScript/Lua lifecycle adapters, a callable VM, language-neutral host schema, typed host dispatch, isolated Play Scene Document binding, bounded behavior state, and explicit mixed-language event routing.
 6. Bounded Inspector creation and transactional attachment of Lua/HenkaScript behavior templates.

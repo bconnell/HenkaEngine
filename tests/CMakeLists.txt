@@ -304,6 +304,7 @@ add_executable(henka_sandbox3d_game_authoring_tests
     ../examples/sandbox3d/scene_document_bridge.c
     ../examples/sandbox3d/play_session.c
     ../examples/sandbox3d/game_authoring.c
+    ../examples/sandbox3d/project_save_transaction.c
     ../examples/sandbox3d/scene_name_editor.c
     test_sandbox3d_game_authoring.c
 )
@@ -324,6 +325,7 @@ add_executable(henka_sandbox3d_game_authoring_camera_tests
     ../examples/sandbox3d/scene_document_bridge.c
     ../examples/sandbox3d/play_session.c
     ../examples/sandbox3d/game_authoring.c
+    ../examples/sandbox3d/project_save_transaction.c
     test_sandbox3d_game_authoring_camera.c
 )
 
@@ -343,6 +345,7 @@ add_executable(henka_sandbox3d_game_authoring_hierarchy_tests
     ../examples/sandbox3d/scene_document_bridge.c
     ../examples/sandbox3d/play_session.c
     ../examples/sandbox3d/game_authoring.c
+    ../examples/sandbox3d/project_save_transaction.c
     test_sandbox3d_game_authoring_hierarchy.c
 )
 
@@ -362,6 +365,7 @@ add_executable(henka_sandbox3d_project_manifest_tests
     ../examples/sandbox3d/scene_document_bridge.c
     ../examples/sandbox3d/play_session.c
     ../examples/sandbox3d/game_authoring.c
+    ../examples/sandbox3d/project_save_transaction.c
     test_sandbox3d_project_manifest.c
 )
 
@@ -398,6 +402,7 @@ add_executable(henka_sandbox3d_game_authoring_identity_tests
     ../examples/sandbox3d/scene_document_bridge.c
     ../examples/sandbox3d/play_session.c
     ../examples/sandbox3d/game_authoring.c
+    ../examples/sandbox3d/project_save_transaction.c
     test_sandbox3d_game_authoring_identity.c
 )
 

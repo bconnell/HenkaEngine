@@ -162,7 +162,7 @@ The Sandbox has a bounded Game Authoring V1 path for its registered scene object
 
 ### Save and reload
 
-Save Scene and Reload Scene use the confined, checksummed `.hscene` format.
+Save, Save As, and Reload use the confined, checksummed `.hscene` format. Save As creates a new project-relative scene file without overwriting an existing scene and updates the `henka.project` startup-scene selection. The scene and manifest are committed transactionally; a manifest commit failure rolls back the scene write and leaves the active authoring path unchanged. The filesystem rollback path reports the recovery location if rollback itself cannot complete.
 
 Candidate loads, rebinding, and runtime presentation updates fail closed and retain the prior authoring state on failure.
 

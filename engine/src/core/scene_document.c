@@ -3121,15 +3121,6 @@ static bool henka_scene_document_make_payload(
     return true;
 }
 
-static bool henka_scene_document_atomic_replace(const char* temporary_path, const char* path)
-{
-#if defined(_WIN32)
-    return MoveFileExA(temporary_path, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-#else
-    return rename(temporary_path, path) == 0;
-#endif
-}
-
 static FILE* henka_scene_document_open_file(const char* path, const char* mode)
 {
     FILE* file = NULL;
@@ -3229,10 +3220,7 @@ henka_result henka_scene_document_save_file(
         goto save_cleanup;
     }
     file = NULL;
-    if (!henka_scene_document_atomic_replace(temporary_path, path))
-    {
-        result = HENKA_ERROR_PLATFORM;
-    }
+    result = henka_file_atomic_replace(temporary_path, path);
 
 save_cleanup:
     if (file != NULL) fclose(file);
