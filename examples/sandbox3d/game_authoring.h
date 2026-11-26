@@ -59,6 +59,21 @@ henka_result sandbox3d_game_authoring_open_project_with_engine(
     henka_engine* engine,
     henka_scene** out_scene,
     sandbox3d_game_authoring** out_authoring);
+/* Opens one explicit project-relative scene into an isolated candidate. The
+ * project startup-scene manifest is read only and remains unchanged. */
+henka_result sandbox3d_game_authoring_open_scene(
+    const char* project_root,
+    const char* relative_path,
+    henka_scene** out_scene,
+    sandbox3d_game_authoring** out_authoring);
+/* Engine-backed Open Scene variant rematerializes supported persisted asset
+ * sources before returning the isolated candidate scene and coordinator. */
+henka_result sandbox3d_game_authoring_open_scene_with_engine(
+    const char* project_root,
+    const char* relative_path,
+    henka_engine* engine,
+    henka_scene** out_scene,
+    sandbox3d_game_authoring** out_authoring);
 void sandbox3d_game_authoring_destroy(
     sandbox3d_game_authoring* authoring);
 
@@ -281,6 +296,11 @@ henka_result sandbox3d_game_authoring_save_as(
  * whose persistent object IDs do not exactly match the live bindings are
  * rejected before publication. */
 henka_result sandbox3d_game_authoring_load(
+    sandbox3d_game_authoring* authoring,
+    const char* project_root);
+/* Reloads the currently active scene path without re-resolving the startup
+ * scene from the project manifest. */
+henka_result sandbox3d_game_authoring_reload(
     sandbox3d_game_authoring* authoring,
     const char* project_root);
 henka_result sandbox3d_game_authoring_save_play_state(

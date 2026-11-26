@@ -4042,6 +4042,12 @@ static bool test_unsaved_scene_save_as_preserves_independent_files(void)
     henka_scene* reopened_scene = NULL;
     sandbox3d_game_authoring* authoring = NULL;
     sandbox3d_game_authoring* reopened_authoring = NULL;
+    henka_scene* opened_scene = NULL;
+    sandbox3d_game_authoring* opened_authoring = NULL;
+    henka_scene* startup_after_open_scene = NULL;
+    sandbox3d_game_authoring* startup_after_open_authoring = NULL;
+    henka_scene* rejected_scene = NULL;
+    sandbox3d_game_authoring* rejected_authoring = NULL;
     henka_scene_document* first_saved_document = NULL;
     henka_scene_document* second_saved_document = NULL;
     henka_entity first_entity = HENKA_INVALID_ENTITY;
@@ -4049,11 +4055,44 @@ static bool test_unsaved_scene_save_as_preserves_independent_files(void)
     henka_scene_document_id first_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id second_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_object object;
+    henka_scene_environment_desc expected_open_environment =
+        henka_scene_environment_default();
+    henka_scene_environment_desc opened_environment;
+    henka_scene_render_settings expected_open_render_settings =
+        henka_scene_render_settings_default();
+    henka_scene_render_settings opened_render_settings;
+    henka_scene_render_resources expected_open_render_resources =
+        henka_scene_render_resources_default();
+    henka_scene_render_resources opened_render_resources;
     bool success = false;
     bool working_directory_changed = false;
     char original_working_directory[4096];
     const char* failure_stage = "preparing isolated test paths";
     henka_result blocked_save_result = HENKA_SUCCESS;
+
+    expected_open_environment.mode = HENKA_SCENE_ENVIRONMENT_PROCEDURAL;
+    expected_open_environment.intensity = 2.35f;
+    expected_open_environment.time_of_day_hours = 19.5f;
+    expected_open_environment.time_of_day_enabled = true;
+    expected_open_environment.sun.enabled = true;
+    expected_open_environment.sun.intensity = 3.6f;
+    expected_open_render_settings.light_direction =
+        henka_vec3_normalize((henka_vec3){-0.31f, -0.88f, -0.21f});
+    expected_open_render_settings.light_intensity = 4.25f;
+    expected_open_render_settings.fog.enabled = true;
+    expected_open_render_settings.fog.density = 0.035f;
+    expected_open_render_resources.local_light_active[1] = true;
+    expected_open_render_resources.local_lights[1] =
+        (henka_scene_light_desc){
+            HENKA_SCENE_LIGHT_POINT,
+            {2.0f, 3.0f, 4.0f},
+            {0.0f, -1.0f, 0.0f},
+            {0.7f, 0.8f, 1.0f},
+            18.0f,
+            16.0f,
+            0.0f,
+            0.0f,
+            true};
 
     (void)remove(first_scene_file);
     (void)remove(second_scene_file);
@@ -4074,6 +4113,12 @@ static bool test_unsaved_scene_save_as_preserves_independent_files(void)
     }
     failure_stage = "creating the authoring scene and first object";
     if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_set_environment(
+            scene, expected_open_environment) != HENKA_SUCCESS ||
+        henka_scene_set_render_settings(
+            scene, expected_open_render_settings) != HENKA_SUCCESS ||
+        henka_scene_set_render_resources(
+            scene, expected_open_render_resources) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_create(scene, "", &authoring) !=
             HENKA_SUCCESS ||
         (first_entity = henka_scene_create_entity_named(
@@ -4260,6 +4305,134 @@ static bool test_unsaved_scene_save_as_preserves_independent_files(void)
     {
         goto cleanup;
     }
+    failure_stage = "opening an explicit independent scene without changing the startup scene";
+    if (sandbox3d_game_authoring_open_scene(
+            project_root,
+            first_relative_path,
+            &opened_scene,
+            &opened_authoring) != HENKA_SUCCESS ||
+        opened_scene == NULL || opened_authoring == NULL ||
+        strcmp(
+            sandbox3d_game_authoring_get_relative_path(opened_authoring),
+            first_relative_path) != 0 ||
+        sandbox3d_game_authoring_get_object_count(opened_authoring) != 1U)
+    {
+        goto cleanup;
+    }
+    failure_stage = "restoring the opened scene environment and render authorities";
+    if (henka_scene_get_environment(
+            opened_scene, &opened_environment) != HENKA_SUCCESS ||
+        henka_scene_get_render_settings(
+            opened_scene, &opened_render_settings) != HENKA_SUCCESS ||
+        henka_scene_get_render_resources(
+            opened_scene, &opened_render_resources) != HENKA_SUCCESS ||
+        opened_environment.mode != expected_open_environment.mode ||
+        opened_environment.intensity != expected_open_environment.intensity ||
+        opened_environment.time_of_day_hours !=
+            expected_open_environment.time_of_day_hours ||
+        opened_environment.time_of_day_enabled !=
+            expected_open_environment.time_of_day_enabled ||
+        opened_environment.sun.enabled != expected_open_environment.sun.enabled ||
+        opened_environment.sun.intensity !=
+            expected_open_environment.sun.intensity ||
+        opened_render_settings.light_intensity !=
+            expected_open_render_settings.light_intensity ||
+        opened_render_settings.fog.enabled !=
+            expected_open_render_settings.fog.enabled ||
+        opened_render_settings.fog.density !=
+            expected_open_render_settings.fog.density ||
+        !opened_render_resources.local_light_active[1] ||
+        opened_render_resources.local_lights[1].intensity !=
+            expected_open_render_resources.local_lights[1].intensity)
+    {
+        goto cleanup;
+    }
+    {
+        henka_entity opened_first_entity = HENKA_INVALID_ENTITY;
+        henka_entity reloaded_first_entity = HENKA_INVALID_ENTITY;
+        if (sandbox3d_game_authoring_get_entity_for_document_id(
+                opened_authoring, first_id, &opened_first_entity) !=
+                HENKA_SUCCESS ||
+            strcmp(
+                henka_scene_get_entity_name(opened_scene, opened_first_entity),
+                "First Saved Object") != 0)
+        {
+            goto cleanup;
+        }
+        failure_stage = "preparing a changed file at the explicitly opened path";
+        if (henka_scene_document_load_file(
+                first_saved_document,
+                project_root,
+                first_relative_path) != HENKA_SUCCESS ||
+            henka_scene_document_get_object(
+                first_saved_document, first_id, &object) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        (void)snprintf(object.name, sizeof(object.name), "%s", "Reloaded First Object");
+        if (henka_scene_document_set_object(
+                first_saved_document, &object) != HENKA_SUCCESS ||
+            henka_scene_document_save_file(
+                first_saved_document,
+                project_root,
+                first_relative_path) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        failure_stage = "reloading the explicitly opened scene rather than the startup scene";
+        if (sandbox3d_game_authoring_reload(
+                opened_authoring, project_root) != HENKA_SUCCESS ||
+            strcmp(
+                sandbox3d_game_authoring_get_relative_path(opened_authoring),
+                first_relative_path) != 0 ||
+            sandbox3d_game_authoring_get_entity_for_document_id(
+                opened_authoring, first_id, &reloaded_first_entity) != HENKA_SUCCESS ||
+            reloaded_first_entity != opened_first_entity ||
+            strcmp(
+                henka_scene_get_entity_name(opened_scene, reloaded_first_entity),
+                "Reloaded First Object") != 0)
+        {
+            goto cleanup;
+        }
+    }
+    failure_stage = "rejecting an escaping Open Scene path without returning partial candidates";
+    if (sandbox3d_game_authoring_open_scene(
+            project_root,
+            "../save_as_escape.hscene",
+            &rejected_scene,
+            &rejected_authoring) != HENKA_ERROR_INVALID_ARGUMENT ||
+        rejected_scene != NULL || rejected_authoring != NULL)
+    {
+        goto cleanup;
+    }
+    failure_stage = "rejecting a missing explicit Open Scene path instead of using the startup scene";
+    rejected_scene = opened_scene;
+    rejected_authoring = opened_authoring;
+    if (sandbox3d_game_authoring_open_scene(
+            project_root,
+            NULL,
+            &rejected_scene,
+            &rejected_authoring) != HENKA_ERROR_INVALID_ARGUMENT ||
+        rejected_scene != NULL || rejected_authoring != NULL)
+    {
+        goto cleanup;
+    }
+    failure_stage = "verifying explicit Open Scene left the startup manifest unchanged";
+    if (sandbox3d_game_authoring_open_project(
+            project_root,
+            &startup_after_open_scene,
+            &startup_after_open_authoring) != HENKA_SUCCESS ||
+        startup_after_open_scene == NULL ||
+        startup_after_open_authoring == NULL ||
+        strcmp(
+            sandbox3d_game_authoring_get_relative_path(
+                startup_after_open_authoring),
+            second_relative_path) != 0 ||
+        sandbox3d_game_authoring_get_object_count(
+            startup_after_open_authoring) != 2U)
+    {
+        goto cleanup;
+    }
     success = true;
 
 cleanup:
@@ -4279,12 +4452,18 @@ cleanup:
     {
         fprintf(
             stderr,
-            "Save As regression failed during %s (blocked result=%d).\n",
+            "Save As/Open Scene regression failed during %s (blocked result=%d).\n",
             failure_stage,
             (int)blocked_save_result);
     }
     sandbox3d_game_authoring_destroy(reopened_authoring);
     henka_scene_destroy(reopened_scene);
+    sandbox3d_game_authoring_destroy(opened_authoring);
+    henka_scene_destroy(opened_scene);
+    sandbox3d_game_authoring_destroy(startup_after_open_authoring);
+    henka_scene_destroy(startup_after_open_scene);
+    sandbox3d_game_authoring_destroy(rejected_authoring);
+    henka_scene_destroy(rejected_scene);
     sandbox3d_game_authoring_destroy(authoring);
     henka_scene_destroy(scene);
     henka_scene_document_destroy(first_saved_document);
@@ -4297,6 +4476,134 @@ cleanup:
     (void)sandbox3d_test_remove_directory(empty_root_working_directory);
     (void)sandbox3d_test_remove_directory(first_scene_directory);
     (void)sandbox3d_test_remove_directory(blocked_scene_path);
+    (void)sandbox3d_test_remove_directory(project_root);
+    return success;
+}
+
+static bool test_open_scene_rehydrates_inline_material_shader(void)
+{
+    const char* project_root = "build/test_tmp/open_scene_inline_material";
+    const char* relative_path = "inline_material.hscene";
+    const char* scene_file =
+        "build/test_tmp/open_scene_inline_material/inline_material.hscene";
+    const char* manifest_file =
+        "build/test_tmp/open_scene_inline_material/henka.project";
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_asset_manager* assets = NULL;
+    henka_shader* basic_shader = NULL;
+    henka_scene* source_scene = NULL;
+    sandbox3d_game_authoring* source_authoring = NULL;
+    henka_scene_document* persisted_document = NULL;
+    henka_scene* opened_scene = NULL;
+    sandbox3d_game_authoring* opened_authoring = NULL;
+    henka_entity source_entity = HENKA_INVALID_ENTITY;
+    henka_entity opened_entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_object persisted_object;
+    henka_material source_material = henka_material_default();
+    henka_material opened_material;
+    henka_result open_result = HENKA_SUCCESS;
+    bool success = false;
+
+    (void)remove(scene_file);
+    (void)remove(manifest_file);
+    if (sandbox3d_test_make_directory(project_root) != 0 && errno != EEXIST)
+    {
+        goto cleanup;
+    }
+
+    config.application_name = "Henka Open Scene Inline Material Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    config.user_data_base_path = project_root;
+    config.window_start_hidden = true;
+    if (henka_engine_create(&config, &engine) != HENKA_SUCCESS ||
+        (assets = henka_engine_get_asset_manager(engine)) == NULL ||
+        henka_assets_load_shader(
+            assets,
+            "assets/shaders/basic_lit.vert",
+            "assets/shaders/basic_lit.frag",
+            &basic_shader) != HENKA_SUCCESS ||
+        basic_shader == NULL ||
+        henka_scene_create(&source_scene) != HENKA_SUCCESS ||
+        (source_entity = henka_scene_create_entity_named(
+             source_scene, "Inline Material Object")) == HENKA_INVALID_ENTITY)
+    {
+        goto cleanup;
+    }
+
+    source_material.shader = basic_shader;
+    source_material.base_color.x = 0.22f;
+    source_material.base_color.y = 0.47f;
+    source_material.base_color.z = 0.73f;
+    if (henka_scene_set_entity_material(
+            source_scene, source_entity, source_material) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create_with_engine(
+            source_scene, "", engine, &source_authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_register_entity(
+            source_authoring, source_entity, &document_id) != HENKA_SUCCESS ||
+        document_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_save_as(
+            source_authoring, project_root, relative_path) != HENKA_SUCCESS ||
+        henka_scene_document_create(&persisted_document) != HENKA_SUCCESS ||
+        henka_scene_document_load_file(
+            persisted_document, project_root, relative_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_object(
+            persisted_document, document_id, &persisted_object) != HENKA_SUCCESS ||
+        persisted_object.source.kind != HENKA_SCENE_DOCUMENT_SOURCE_NONE ||
+        !persisted_object.renderer.material_override)
+    {
+        goto cleanup;
+    }
+
+    sandbox3d_game_authoring_destroy(source_authoring);
+    source_authoring = NULL;
+    henka_scene_destroy(source_scene);
+    source_scene = NULL;
+
+    open_result = sandbox3d_game_authoring_open_scene_with_engine(
+        project_root,
+        relative_path,
+        engine,
+        &opened_scene,
+        &opened_authoring);
+    if (open_result != HENKA_SUCCESS || opened_scene == NULL ||
+        opened_authoring == NULL ||
+        sandbox3d_game_authoring_get_object_count(opened_authoring) != 1U ||
+        sandbox3d_game_authoring_get_entity_for_document_id(
+            opened_authoring, document_id, &opened_entity) != HENKA_SUCCESS ||
+        opened_entity == HENKA_INVALID_ENTITY ||
+        strcmp(
+            henka_scene_get_entity_name(opened_scene, opened_entity),
+            "Inline Material Object") != 0 ||
+        henka_scene_get_entity_material(
+            opened_scene, opened_entity, &opened_material) != HENKA_SUCCESS ||
+        opened_material.shader != basic_shader ||
+        fabsf(opened_material.base_color.x - source_material.base_color.x) > 0.0001f ||
+        fabsf(opened_material.base_color.y - source_material.base_color.y) > 0.0001f ||
+        fabsf(opened_material.base_color.z - source_material.base_color.z) > 0.0001f)
+    {
+        fprintf(
+            stderr,
+            "engine-backed Open Scene did not restore inline material values and shader authority (result=%d)\n",
+            (int)open_result);
+        goto cleanup;
+    }
+
+    success = true;
+
+cleanup:
+    sandbox3d_game_authoring_destroy(opened_authoring);
+    henka_scene_destroy(opened_scene);
+    henka_scene_document_destroy(persisted_document);
+    sandbox3d_game_authoring_destroy(source_authoring);
+    henka_scene_destroy(source_scene);
+    henka_engine_destroy(engine);
+    (void)remove(scene_file);
+    (void)remove(manifest_file);
     (void)sandbox3d_test_remove_directory(project_root);
     return success;
 }
@@ -4435,6 +4742,11 @@ int main(void)
     if (!test_unsaved_scene_save_as_preserves_independent_files())
     {
         fprintf(stderr, "unsaved scene Save As regression failed\n");
+        return 1;
+    }
+    if (!test_open_scene_rehydrates_inline_material_shader())
+    {
+        fprintf(stderr, "Open Scene inline material shader restoration regression failed.\n");
         return 1;
     }
     if (!test_engine_backed_unsaved_scene_runs_user_data_script())

@@ -48,6 +48,7 @@ $previousAutomationCaptureRequestFile = $env:HENKA_AUTOMATION_CAPTURE_REQUEST_FI
 
 . (Join-Path $repoRoot "scripts\henka_ui_automation_helpers.ps1")
 . (Join-Path $repoRoot "scripts\henka_packaged_startup_readiness.ps1")
+. (Join-Path $repoRoot "scripts\henka_packaged_scene_open_workflow.ps1")
 
 function Get-SceneObjectsGeometry {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -78,7 +79,7 @@ function Get-SceneDocumentActionControls {
 
     return Get-LastLogRegexMatch `
         -Path $Path `
-        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls visible=1 document_object_count=(?<document_object_count>\d+) selection_present=(?<selection_present>[01]) relative_path_empty=(?<relative_path_empty>[01]) save_rect=(?<save_x>[-0-9.]+),(?<save_y>[-0-9.]+),(?<save_width>[-0-9.]+),(?<save_height>[-0-9.]+) save_as_rect=(?<save_as_x>[-0-9.]+),(?<save_as_y>[-0-9.]+),(?<save_as_width>[-0-9.]+),(?<save_as_height>[-0-9.]+) reload_rect=(?<reload_x>[-0-9.]+),(?<reload_y>[-0-9.]+),(?<reload_width>[-0-9.]+),(?<reload_height>[-0-9.]+) new_scene_rect=(?<new_scene_x>[-0-9.]+),(?<new_scene_y>[-0-9.]+),(?<new_scene_width>[-0-9.]+),(?<new_scene_height>[-0-9.]+)\.'
+        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls visible=1 document_object_count=(?<document_object_count>\d+) selection_present=(?<selection_present>[01]) relative_path_empty=(?<relative_path_empty>[01]) save_rect=(?<save_x>[-0-9.]+),(?<save_y>[-0-9.]+),(?<save_width>[-0-9.]+),(?<save_height>[-0-9.]+) save_as_rect=(?<save_as_x>[-0-9.]+),(?<save_as_y>[-0-9.]+),(?<save_as_width>[-0-9.]+),(?<save_as_height>[-0-9.]+) reload_rect=(?<reload_x>[-0-9.]+),(?<reload_y>[-0-9.]+),(?<reload_width>[-0-9.]+),(?<reload_height>[-0-9.]+) new_scene_rect=(?<new_scene_x>[-0-9.]+),(?<new_scene_y>[-0-9.]+),(?<new_scene_width>[-0-9.]+),(?<new_scene_height>[-0-9.]+) open_scene_rect=(?<open_scene_x>[-0-9.]+),(?<open_scene_y>[-0-9.]+),(?<open_scene_width>[-0-9.]+),(?<open_scene_height>[-0-9.]+)\.'
 }
 
 function Get-SceneSaveAsControls {
@@ -87,6 +88,12 @@ function Get-SceneSaveAsControls {
     return Get-LastLogRegexMatch `
         -Path $Path `
         -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_save_as_controls visible=1 path_rect=(?<path_x>[-0-9.]+),(?<path_y>[-0-9.]+),(?<path_width>[-0-9.]+),(?<path_height>[-0-9.]+) save_rect=(?<save_x>[-0-9.]+),(?<save_y>[-0-9.]+),(?<save_width>[-0-9.]+),(?<save_height>[-0-9.]+) cancel_rect=(?<cancel_x>[-0-9.]+),(?<cancel_y>[-0-9.]+),(?<cancel_width>[-0-9.]+),(?<cancel_height>[-0-9.]+) relative_path_empty=(?<relative_path_empty>[01])\.'
+}
+
+function Get-SceneOpenControls {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    return Get-LastLogRegexMatch -Path $Path -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_open_controls visible=1 path_rect=(?<path_x>[-0-9.]+),(?<path_y>[-0-9.]+),(?<path_width>[-0-9.]+),(?<path_height>[-0-9.]+) open_rect=(?<open_x>[-0-9.]+),(?<open_y>[-0-9.]+),(?<open_width>[-0-9.]+),(?<open_height>[-0-9.]+) cancel_rect=(?<cancel_x>[-0-9.]+),(?<cancel_y>[-0-9.]+),(?<cancel_width>[-0-9.]+),(?<cancel_height>[-0-9.]+) relative_path_empty=(?<relative_path_empty>[01])\.'
 }
 
 function Save-HenkaProductFramebufferScreenshot {
@@ -133,7 +140,7 @@ function Save-HenkaProductFramebufferScreenshot {
 function Get-SceneTransitionConfirmationControls {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][ValidateSet("new", "reload")][string]$Action
+        [Parameter(Mandatory = $true)][ValidateSet("new", "reload", "open")][string]$Action
     )
 
     $pattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_confirmation action=' +
@@ -503,15 +510,21 @@ try {
     $newSceneY = Convert-HenkaAutomationNumber $sceneActionControls.Groups['new_scene_y'].Value
     $newSceneWidth = Convert-HenkaAutomationNumber $sceneActionControls.Groups['new_scene_width'].Value
     $newSceneHeight = Convert-HenkaAutomationNumber $sceneActionControls.Groups['new_scene_height'].Value
+    $openSceneX = Convert-HenkaAutomationNumber $sceneActionControls.Groups['open_scene_x'].Value
+    $openSceneY = Convert-HenkaAutomationNumber $sceneActionControls.Groups['open_scene_y'].Value
+    $openSceneWidth = Convert-HenkaAutomationNumber $sceneActionControls.Groups['open_scene_width'].Value
+    $openSceneHeight = Convert-HenkaAutomationNumber $sceneActionControls.Groups['open_scene_height'].Value
     foreach ($actionRect in @(
             [pscustomobject]@{ X = $saveX; Y = $saveY; Width = $saveWidth; Height = $saveHeight },
+            [pscustomobject]@{ X = $saveAsX; Y = $saveAsY; Width = $saveAsWidth; Height = $saveAsHeight },
             [pscustomobject]@{ X = $reloadX; Y = $reloadY; Width = $reloadWidth; Height = $reloadHeight },
-            [pscustomobject]@{ X = $newSceneX; Y = $newSceneY; Width = $newSceneWidth; Height = $newSceneHeight })) {
+            [pscustomobject]@{ X = $newSceneX; Y = $newSceneY; Width = $newSceneWidth; Height = $newSceneHeight },
+            [pscustomobject]@{ X = $openSceneX; Y = $openSceneY; Width = $openSceneWidth; Height = $openSceneHeight })) {
         if ($actionRect.Width -le 0.0 -or $actionRect.Height -le 0.0 -or
             $actionRect.X -lt ($detailsX - 0.5) -or $actionRect.Y -lt ($detailsY - 0.5) -or
             ($actionRect.X + $actionRect.Width) -gt ($detailsX + $detailsWidth + 0.5) -or
             ($actionRect.Y + $actionRect.Height) -gt ($detailsY + $detailsHeight + 0.5)) {
-            throw "A New/Save/Reload control escaped the visible Object Details panel."
+            throw "A New/Open/Save/Save As/Reload control escaped the visible Object Details panel."
         }
     }
     Send-HenkaAutomationClickAt `
@@ -946,7 +959,7 @@ try {
         -EventPath $automationInputPath `
         -X ($confirmX + ($confirmWidth * 0.5)) `
         -Y ($confirmY + ($confirmHeight * 0.5))
-    $newSceneCreatedPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=new_scene_created name=Untitled Scene relative_path_empty=1 document_object_count=0 scene_entity_count=\d+ camera_present=1 environment_present=1 environment_mode=0 sun_enabled=1 selection_empty=1 terrain_was_active=1 terrain_active=0 audio_system_setter_succeeded=1 audio_asset_manager_setter_succeeded=1\.'
+    $newSceneCreatedPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=new_scene_created name=Untitled Scene relative_path=[^ ]* relative_path_empty=1 document_object_count=0 scene_entity_count=\d+ camera_present=1 environment_present=1 environment_mode=0 sun_enabled=1 selection_empty=1 terrain_was_active=1 terrain_active=0 audio_system_setter_succeeded=1 audio_asset_manager_setter_succeeded=1\.'
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern $newSceneCreatedPattern -TimeoutMilliseconds 15000)) {
         throw "New Scene did not publish an empty unsaved scene with its camera, default environment, and empty selection."
     }
@@ -1147,6 +1160,24 @@ try {
         -Id 'open_asset' `
         -AssetOpen $false
     Assert-HenkaDocumentTelemetry -Path $stdoutPath -Name $assetName -Action "opened" -PartCount 4
+
+    Send-HenkaSceneObjectsControlClick -EventPath $automationInputPath -StdoutPath $stdoutPath -Id 'close_asset' -AssetOpen $true
+    Assert-HenkaDocumentTelemetry -Path $stdoutPath -Name $assetName -Action "closed" -PartCount 4
+    $projectManifestPath = Join-Path $userDataBasePath 'henka.project'
+    Invoke-HenkaPackagedSceneOpenWorkflow -Context @{
+        Process = $capturedProcess.Process
+        AutomationInputPath = $automationInputPath
+        StdoutPath = $stdoutPath
+        FrameCaptureDirectory = $frameCaptureDirectory
+        FrameCaptureRequestPath = $frameCaptureRequestPath
+        RuntimeDirectory = $runtimeDirectory
+        ExpectedCurrentSceneName = 'Untitled Scene'
+        SceneName = $sceneName
+        SavedScenePath = $savedScenePath
+        SavedSceneHash = $savedSceneHash
+        ProjectManifestPath = $projectManifestPath
+        ProjectManifestHash = (Get-FileHash -LiteralPath $projectManifestPath -Algorithm SHA256).Hash
+    }
 
     Write-Output "[pass] Editor-owned native authoring UI: create, add, save, close, and reopen completed."
     Write-Output "[pass] Runtime evidence retained: $runtimeDirectory"

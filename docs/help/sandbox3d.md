@@ -16,6 +16,7 @@
 - [Sandbox panels](#sandbox-panels)
 - [Game authoring and Play](#game-authoring-and-play)
 - [New Scene](#new-scene)
+- [Open Scene](#open-scene)
 - [Scripting source panel](#scripting-source-panel)
 - [Physics QA](#physics-qa)
 - [Terrain tools](#terrain-tools)
@@ -582,7 +583,13 @@ Current fields include:
 
 In Game Authoring, **New Scene** is available from the Actions group without selecting an object. It asks for confirmation before replacing the current document. Cancel keeps the current scene and any unsaved edits. Confirm creates an empty, unsaved scene with the normal camera and default environment and clears the selection; it does not modify the previously saved scene file.
 
-The new scene has no saved path. Save and Reload fail closed until a path exists; use **Save As** to choose a project-relative scene path. A successful Save As writes the new `.hscene` file and selects it as the project's startup scene. Open remains a separate scene-management workflow.
+The new scene has no saved path. Save and Reload fail closed until a path exists; use **Save As** to choose a project-relative scene path. A successful Save As writes the new `.hscene` file and selects it as the project's startup scene.
+
+### Open Scene
+
+In Game Authoring, choose **Open** from the Actions group, enter a project-relative `.hscene` path, then choose **Open** in the path editor. Henka asks before replacing the current document. Cancel keeps the active scene and its edits. Confirm loads and validates the selected scene as an isolated candidate before switching; an invalid, missing, or unsupported scene leaves the current document active and reports the failure.
+
+Open Scene does not change the `henka.project` startup-scene selection. Use **Save As** when the new scene should become the project's startup scene.
 
 ### Scene save/reload
 

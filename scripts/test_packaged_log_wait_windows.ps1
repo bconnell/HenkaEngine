@@ -63,13 +63,13 @@ $waitFunction = $automationHelpersAst.Find({
 if ($null -eq $waitFunction) {
     throw "The shared UI automation helpers do not define their log-wait helper."
 }
-$logMatchFunction = $checkerAst.Find({
+$logMatchFunction = $automationHelpersAst.Find({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
         $node.Name -eq "Get-LastLogRegexMatch"
 }, $true)
 if ($null -eq $logMatchFunction) {
-    throw "The packaged checker does not define its last-log match helper."
+    throw "The shared UI automation helpers do not define their last-log match helper."
 }
 foreach ($sharedHelperName in @(
         "Wait-FileContainsAfterOffset",
