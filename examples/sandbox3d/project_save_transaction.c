@@ -17,6 +17,7 @@
 #endif
 
 #include <henka/memory.h>
+#include <henka/persistence.h>
 
 #define SANDBOX3D_PROJECT_SAVE_COPY_BUFFER_BYTES 16384U
 #define SANDBOX3D_PROJECT_SAVE_STAGE_ATTEMPTS 128U
@@ -455,7 +456,8 @@ henka_result sandbox3d_project_save_transaction(
     henka_result result;
 
     if (candidate_scene == NULL || candidate_manifest == NULL ||
-        project_root == NULL || scene_relative_path == NULL ||
+        project_root == NULL || project_root[0] == '\0' ||
+        scene_relative_path == NULL ||
         scene_relative_path[0] == '\0' || manifest_relative_path == NULL ||
         manifest_relative_path[0] == '\0')
     {
@@ -492,6 +494,12 @@ henka_result sandbox3d_project_save_transaction(
     if (scene_exists && !allow_scene_replace)
     {
         result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto cleanup;
+    }
+
+    result = henka_path_ensure_parent_directory(scene_path);
+    if (result != HENKA_SUCCESS)
+    {
         goto cleanup;
     }
 

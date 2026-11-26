@@ -367,6 +367,9 @@ henka_result sandbox3d_editor_layout_details_scene_actions(
     bool controls_available,
     bool save_as_open,
     sandbox3d_editor_details_scene_actions_layout* out_layout);
+float sandbox3d_editor_layout_details_empty_selection_text_y(
+    henka_ui_rect panel_bounds,
+    const sandbox3d_editor_details_scene_actions_layout* scene_actions_layout);
 
 #ifdef HENKA_SANDBOX3D_TEST_SEAM
 /* Regression-only coverage for the retired fixed-column display helpers.

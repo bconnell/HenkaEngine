@@ -31633,8 +31633,12 @@ static void sandbox3d_draw_object_details_panel(
     {
         char empty_selection_hint[160];
         size_t empty_selection_hint_lines = 0U;
-        const float empty_selection_text_offset =
-            scene_document_controls_visible ? 34.0f : 0.0f;
+        const float empty_selection_text_y =
+            sandbox3d_editor_layout_details_empty_selection_text_y(
+                panel_bounds,
+                scene_document_controls_visible
+                    ? &scene_actions_layout
+                    : NULL);
         const float hint_width = panel_bounds.width - 28.0f;
 
         state->editor_ui.details_content_height = 0.0f;
@@ -31642,7 +31646,7 @@ static void sandbox3d_draw_object_details_panel(
         henka_ui_label(
             state->ui,
             panel_bounds.x + 14.0f,
-            panel_bounds.y + 38.0f + empty_selection_text_offset,
+            empty_selection_text_y,
             1.0f,
             "No object selected.");
         if (hint_width > 0.0f &&
@@ -31658,7 +31662,7 @@ static void sandbox3d_draw_object_details_panel(
             henka_ui_label(
                 state->ui,
                 panel_bounds.x + 14.0f,
-                panel_bounds.y + 56.0f + empty_selection_text_offset,
+                empty_selection_text_y + 18.0f,
                 1.0f,
                 empty_selection_hint);
         }
@@ -31667,7 +31671,7 @@ static void sandbox3d_draw_object_details_panel(
             henka_ui_label(
                 state->ui,
                 panel_bounds.x + 14.0f,
-                panel_bounds.y + 56.0f + empty_selection_text_offset,
+                empty_selection_text_y + 18.0f,
                 1.0f,
                 "Select an object.");
         }

@@ -2203,6 +2203,17 @@ static bool sandbox3d_editor_layout_rect_has_area(henka_ui_rect rect)
         rect.width > 0.0f && rect.height > 0.0f;
 }
 
+float sandbox3d_editor_layout_details_empty_selection_text_y(
+    henka_ui_rect panel_bounds,
+    const sandbox3d_editor_details_scene_actions_layout* scene_actions_layout)
+{
+    if (scene_actions_layout != NULL && scene_actions_layout->visible)
+    {
+        return scene_actions_layout->scroll_viewport.y + 2.0f;
+    }
+    return panel_bounds.y + 38.0f;
+}
+
 henka_result sandbox3d_editor_layout_details_scene_actions(
     henka_ui_rect panel_bounds,
     henka_ui_rect base_scroll_viewport,

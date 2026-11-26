@@ -89,6 +89,47 @@ function Get-SceneSaveAsControls {
         -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_save_as_controls visible=1 path_rect=(?<path_x>[-0-9.]+),(?<path_y>[-0-9.]+),(?<path_width>[-0-9.]+),(?<path_height>[-0-9.]+) save_rect=(?<save_x>[-0-9.]+),(?<save_y>[-0-9.]+),(?<save_width>[-0-9.]+),(?<save_height>[-0-9.]+) cancel_rect=(?<cancel_x>[-0-9.]+),(?<cancel_y>[-0-9.]+),(?<cancel_width>[-0-9.]+),(?<cancel_height>[-0-9.]+) relative_path_empty=(?<relative_path_empty>[01])\.'
 }
 
+function Save-HenkaProductFramebufferScreenshot {
+    param(
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][string]$CaptureDirectory,
+        [Parameter(Mandatory = $true)][string]$RequestFile,
+        [Parameter(Mandatory = $true)][string]$Description,
+        [Parameter(Mandatory = $true)][string]$DestinationPath
+    )
+
+    $bitmap = New-HenkaAutomationProductFramebufferBitmap `
+        -Handle $Process.MainWindowHandle `
+        -Process $Process `
+        -StdoutPath $StdoutPath `
+        -OutputDirectory $CaptureDirectory `
+        -RequestFile $RequestFile `
+        -Description $Description
+    try {
+        $geometry = Get-HenkaAutomationWindowGeometry -Handle $Process.MainWindowHandle
+        if ($bitmap.Width -ne $geometry.ClientWidth -or
+            $bitmap.Height -ne $geometry.ClientHeight) {
+            throw "$Description framebuffer was $($bitmap.Width)x$($bitmap.Height), expected client size $($geometry.ClientWidth)x$($geometry.ClientHeight)."
+        }
+        $content = Get-HenkaAutomationScreenshotContentSummary -Bitmap $bitmap
+        if (-not $content.HasVisibleContent) {
+            throw ("$Description framebuffer was blank or uniform; sampled={0}, distinct_colors={1}, " +
+                "non_dominant_samples={2}, minimum={3}." -f
+                $content.SampleCount,
+                $content.DistinctColorCount,
+                $content.NonDominantSamples,
+                $content.MinimumNonDominantSamples)
+        }
+        $bitmap.Save($DestinationPath, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $bitmap.Dispose()
+    }
+
+    return $DestinationPath
+}
+
 function Get-SceneTransitionConfirmationControls {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -968,6 +1009,15 @@ try {
         [int]$saveAsControls.Groups['relative_path_empty'].Value -ne 1) {
         throw "Save As path editor geometry or initial state was unavailable."
     }
+    $saveAsOpenScreenshotPath = Join-Path $runtimeDirectory "new-scene-save-as-open.png"
+    $null = Save-HenkaProductFramebufferScreenshot `
+        -Process $capturedProcess.Process `
+        -StdoutPath $stdoutPath `
+        -CaptureDirectory $frameCaptureDirectory `
+        -RequestFile $frameCaptureRequestPath `
+        -Description "Packaged empty-scene Save As form" `
+        -DestinationPath $saveAsOpenScreenshotPath
+    Write-Output "[pass] Captured the real product framebuffer with Save As open and no selected object. Screenshot: $saveAsOpenScreenshotPath"
     $saveAsRelativePath = 'GoldenPathSaveAs.hscene'
     $saveAsTargetPath = Join-Path $userDataBasePath $saveAsRelativePath
     $projectManifestPath = Join-Path $userDataBasePath 'henka.project'
@@ -1029,34 +1079,13 @@ try {
         throw "Save As or reload modified the independent previously saved scene."
     }
     $newSceneScreenshotPath = Join-Path $runtimeDirectory "new-scene.png"
-    $newSceneBitmap = New-HenkaAutomationProductFramebufferBitmap `
-        -Handle $capturedProcess.Process.MainWindowHandle `
+    $null = Save-HenkaProductFramebufferScreenshot `
         -Process $capturedProcess.Process `
         -StdoutPath $stdoutPath `
-        -OutputDirectory $frameCaptureDirectory `
+        -CaptureDirectory $frameCaptureDirectory `
         -RequestFile $frameCaptureRequestPath `
-        -Description "Packaged New Scene editor"
-    try {
-        $newSceneGeometry = Get-HenkaAutomationWindowGeometry `
-            -Handle $capturedProcess.Process.MainWindowHandle
-        if ($newSceneBitmap.Width -ne $newSceneGeometry.ClientWidth -or
-            $newSceneBitmap.Height -ne $newSceneGeometry.ClientHeight) {
-            throw "The product framebuffer capture was $($newSceneBitmap.Width)x$($newSceneBitmap.Height), expected client size $($newSceneGeometry.ClientWidth)x$($newSceneGeometry.ClientHeight)."
-        }
-        $newSceneContent = Get-HenkaAutomationScreenshotContentSummary -Bitmap $newSceneBitmap
-        if (-not $newSceneContent.HasVisibleContent) {
-            throw ("The product framebuffer capture was blank or uniform; sampled={0}, distinct_colors={1}, " +
-                "non_dominant_samples={2}, minimum={3}." -f
-                $newSceneContent.SampleCount,
-                $newSceneContent.DistinctColorCount,
-                $newSceneContent.NonDominantSamples,
-                $newSceneContent.MinimumNonDominantSamples)
-        }
-        $newSceneBitmap.Save($newSceneScreenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
-    }
-    finally {
-        $newSceneBitmap.Dispose()
-    }
+        -Description "Packaged New Scene editor" `
+        -DestinationPath $newSceneScreenshotPath
     Write-Output "[pass] Packaged Save As used the real path field and button, updated the startup manifest, preserved the independent prior scene, and reloaded through the confirmation UI. Screenshot: $newSceneScreenshotPath"
 
     Send-HenkaSceneObjectsControlClick `

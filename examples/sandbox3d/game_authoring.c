@@ -4988,7 +4988,7 @@ static henka_result sandbox3d_game_authoring_save_to_path(
     bool has_current_camera = false;
     bool document_swapped = false;
     henka_result result;
-    if (authoring == NULL || project_root == NULL ||
+    if (authoring == NULL || project_root == NULL || project_root[0] == '\0' ||
         relative_path == NULL || relative_path[0] == '\0' ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
         strlen(project_root) >= HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES)

@@ -136,6 +136,12 @@ void henka_test_sandbox3d_editor_layout(void)
         HENKA_TEST_ASSERT_FLOAT_CLOSE(
             scene_actions.scroll_viewport.y, 110.0f, 0.01f);
         HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            sandbox3d_editor_layout_details_empty_selection_text_y(
+                details_panel,
+                &scene_actions),
+            scene_actions.scroll_viewport.y + 2.0f,
+            0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
             scene_actions.scroll_viewport.height, 196.0f, 0.01f);
         HENKA_TEST_ASSERT(henka_test_rect_is_contained(
             details_panel, scene_actions.action_row));
@@ -206,6 +212,40 @@ void henka_test_sandbox3d_editor_layout(void)
             scene_actions.save_as_cancel_button));
         HENKA_TEST_ASSERT_FLOAT_CLOSE(
             scene_actions.scroll_viewport.y, 140.0f, 0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            sandbox3d_editor_layout_details_empty_selection_text_y(
+                details_panel,
+                &scene_actions),
+            scene_actions.scroll_viewport.y + 2.0f,
+            0.01f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_empty_selection_text_y(
+                details_panel,
+                &scene_actions) >=
+            scene_actions.action_row.y + scene_actions.action_row.height +
+                8.0f);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_scene_actions(
+                compact_panel,
+                (henka_ui_rect){409.0f, 50.0f, 205.0f, 100.0f},
+                true,
+                true,
+                &scene_actions) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(scene_actions.visible);
+        HENKA_TEST_ASSERT(scene_actions.save_as_open);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            sandbox3d_editor_layout_details_empty_selection_text_y(
+                compact_panel,
+                &scene_actions),
+            scene_actions.scroll_viewport.y + 2.0f,
+            0.01f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_layout_details_empty_selection_text_y(
+                compact_panel,
+                &scene_actions) >=
+            scene_actions.action_row.y + scene_actions.action_row.height +
+                8.0f);
 
         HENKA_TEST_ASSERT(
             sandbox3d_editor_layout_details_scene_actions(
@@ -222,6 +262,12 @@ void henka_test_sandbox3d_editor_layout(void)
         HENKA_TEST_ASSERT_FLOAT_CLOSE(
             scene_actions.scroll_viewport.height,
             details_viewport.height,
+            0.01f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            sandbox3d_editor_layout_details_empty_selection_text_y(
+                details_panel,
+                &scene_actions),
+            details_panel.y + 38.0f,
             0.01f);
 
         HENKA_TEST_ASSERT(
