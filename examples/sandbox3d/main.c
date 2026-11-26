@@ -640,6 +640,7 @@ typedef struct sandbox3d_state
     sandbox3d_ui_geometry_report object_details_material_view_report;
     sandbox3d_ui_geometry_report object_details_material_picker_row_report;
     sandbox3d_ui_geometry_report object_details_visibility_button_report;
+    sandbox3d_ui_geometry_report object_details_focus_camera_button_report;
     sandbox3d_ui_geometry_report game_authoring_physics_disclosure_report;
     sandbox3d_ui_geometry_report game_authoring_play_controls_report;
     sandbox3d_ui_geometry_report game_authoring_step_controls_report;
@@ -951,6 +952,8 @@ static void sandbox3d_reset_ui_geometry_reports(sandbox3d_state* state)
         sizeof(state->object_details_material_picker_row_report));
     memset(&state->object_details_visibility_button_report, 0,
         sizeof(state->object_details_visibility_button_report));
+    memset(&state->object_details_focus_camera_button_report, 0,
+        sizeof(state->object_details_focus_camera_button_report));
     memset(&state->game_authoring_physics_disclosure_report, 0,
         sizeof(state->game_authoring_physics_disclosure_report));
     memset(&state->game_authoring_play_controls_report, 0,
@@ -5832,7 +5835,7 @@ static henka_result sandbox3d_replace_scene_document(
     {
         result = henka_action_context_set_camera(
             candidate_actions,
-            &candidate_camera);
+            &state->camera);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -20991,7 +20994,10 @@ static bool sandbox3d_focus_camera_on_selected(sandbox3d_state* state)
     henka_action_request request;
     henka_action_result result;
     henka_bounds bounds;
+    henka_camera previous_camera;
     henka_entity entity;
+    bool action_succeeded;
+    bool camera_changed;
 
     if (state == NULL || state->scene == NULL || state->actions == NULL)
     {
@@ -21005,9 +21011,35 @@ static bool sandbox3d_focus_camera_on_selected(sandbox3d_state* state)
     }
 
     memset(&request, 0, sizeof(request));
+    memset(&result, 0, sizeof(result));
     request.command = HENKA_ACTION_COMMAND_FOCUS_CAMERA_ON_OBJECT;
     request.params.entity.entity = entity;
-    if (!sandbox3d_execute_action(state, &request, &result))
+    previous_camera = state->camera;
+    action_succeeded = sandbox3d_execute_action(state, &request, &result);
+    camera_changed =
+        fabsf(state->camera.position.x - previous_camera.position.x) > 0.0001f ||
+        fabsf(state->camera.position.y - previous_camera.position.y) > 0.0001f ||
+        fabsf(state->camera.position.z - previous_camera.position.z) > 0.0001f ||
+        fabsf(state->camera.yaw_radians - previous_camera.yaw_radians) > 0.0001f ||
+        fabsf(state->camera.pitch_radians - previous_camera.pitch_radians) > 0.0001f;
+    if (sandbox3d_automation_input_is_owned())
+    {
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC camera_focus_action entity=%u result=%d camera_changed=%d position_x=%.4f position_y=%.4f position_z=%.4f yaw=%.4f pitch=%.4f status=%d engine_result=%d message=\"%s\".\n",
+            (unsigned int)entity,
+            action_succeeded ? 1 : 0,
+            camera_changed ? 1 : 0,
+            state->camera.position.x,
+            state->camera.position.y,
+            state->camera.position.z,
+            state->camera.yaw_radians,
+            state->camera.pitch_radians,
+            (int)result.status,
+            (int)result.engine_result,
+            result.message);
+        fflush(stdout);
+    }
+    if (!action_succeeded)
     {
         return false;
     }
@@ -31200,7 +31232,7 @@ static void sandbox3d_draw_game_authoring_scene_controls(
                     else
                     {
                         const henka_result load_result =
-                            sandbox3d_game_authoring_load(
+                            sandbox3d_game_authoring_reload(
                                 state->game_authoring,
                                 henka_engine_get_user_data_base_path(engine));
                         char canonical_scene_name[
@@ -39920,6 +39952,11 @@ details_group_actions:
                 row.y,
                 item_width,
                 row.height};
+            const henka_ui_rect focus_camera_bounds = {
+                row.x + item_width + gap,
+                row.y,
+                item_width,
+                row.height};
 
             if (sandbox3d_automation_input_is_owned() &&
                 sandbox3d_ui_geometry_report_changed(
@@ -39977,14 +40014,27 @@ details_group_actions:
                 }
             }
 
+            if (sandbox3d_automation_input_is_owned() &&
+                sandbox3d_ui_geometry_report_changed(
+                    &state->object_details_focus_camera_button_report,
+                    entity,
+                    focus_camera_bounds,
+                    0))
+            {
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC object_details_focus_camera_control entity=%u label=Focus_Camera x=%.1f y=%.1f width=%.1f height=%.1f.\n",
+                    (unsigned int)entity,
+                    focus_camera_bounds.x,
+                    focus_camera_bounds.y,
+                    focus_camera_bounds.width,
+                    focus_camera_bounds.height);
+                fflush(stdout);
+            }
+
             if (henka_ui_primary_button(
                     state->ui,
                     focus_action_id,
-                    (henka_ui_rect){
-                        row.x + item_width + gap,
-                        row.y,
-                        item_width,
-                        row.height},
+                    focus_camera_bounds,
                     "Focus Camera"))
             {
                 if (sandbox3d_focus_camera_on_selected(state))

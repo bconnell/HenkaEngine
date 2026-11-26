@@ -1050,7 +1050,7 @@ function Get-LastLogRegexMatch {
                 $true,
                 4096,
                 $false)
-            $text = $reader.ReadToEnd()
+            $text = Normalize-HenkaLogLineEndings -Text $reader.ReadToEnd()
             $reader.Dispose()
             $reader = $null
             $stream = $null

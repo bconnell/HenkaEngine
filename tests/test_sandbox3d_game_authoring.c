@@ -4055,11 +4055,44 @@ static bool test_unsaved_scene_save_as_preserves_independent_files(void)
     henka_scene_document_id first_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id second_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_object object;
+    henka_scene_environment_desc expected_open_environment =
+        henka_scene_environment_default();
+    henka_scene_environment_desc opened_environment;
+    henka_scene_render_settings expected_open_render_settings =
+        henka_scene_render_settings_default();
+    henka_scene_render_settings opened_render_settings;
+    henka_scene_render_resources expected_open_render_resources =
+        henka_scene_render_resources_default();
+    henka_scene_render_resources opened_render_resources;
     bool success = false;
     bool working_directory_changed = false;
     char original_working_directory[4096];
     const char* failure_stage = "preparing isolated test paths";
     henka_result blocked_save_result = HENKA_SUCCESS;
+
+    expected_open_environment.mode = HENKA_SCENE_ENVIRONMENT_PROCEDURAL;
+    expected_open_environment.intensity = 2.35f;
+    expected_open_environment.time_of_day_hours = 19.5f;
+    expected_open_environment.time_of_day_enabled = true;
+    expected_open_environment.sun.enabled = true;
+    expected_open_environment.sun.intensity = 3.6f;
+    expected_open_render_settings.light_direction =
+        henka_vec3_normalize((henka_vec3){-0.31f, -0.88f, -0.21f});
+    expected_open_render_settings.light_intensity = 4.25f;
+    expected_open_render_settings.fog.enabled = true;
+    expected_open_render_settings.fog.density = 0.035f;
+    expected_open_render_resources.local_light_active[1] = true;
+    expected_open_render_resources.local_lights[1] =
+        (henka_scene_light_desc){
+            HENKA_SCENE_LIGHT_POINT,
+            {2.0f, 3.0f, 4.0f},
+            {0.0f, -1.0f, 0.0f},
+            {0.7f, 0.8f, 1.0f},
+            18.0f,
+            16.0f,
+            0.0f,
+            0.0f,
+            true};
 
     (void)remove(first_scene_file);
     (void)remove(second_scene_file);
@@ -4080,6 +4113,12 @@ static bool test_unsaved_scene_save_as_preserves_independent_files(void)
     }
     failure_stage = "creating the authoring scene and first object";
     if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_scene_set_environment(
+            scene, expected_open_environment) != HENKA_SUCCESS ||
+        henka_scene_set_render_settings(
+            scene, expected_open_render_settings) != HENKA_SUCCESS ||
+        henka_scene_set_render_resources(
+            scene, expected_open_render_resources) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_create(scene, "", &authoring) !=
             HENKA_SUCCESS ||
         (first_entity = henka_scene_create_entity_named(
@@ -4280,14 +4319,78 @@ static bool test_unsaved_scene_save_as_preserves_independent_files(void)
     {
         goto cleanup;
     }
+    failure_stage = "restoring the opened scene environment and render authorities";
+    if (henka_scene_get_environment(
+            opened_scene, &opened_environment) != HENKA_SUCCESS ||
+        henka_scene_get_render_settings(
+            opened_scene, &opened_render_settings) != HENKA_SUCCESS ||
+        henka_scene_get_render_resources(
+            opened_scene, &opened_render_resources) != HENKA_SUCCESS ||
+        opened_environment.mode != expected_open_environment.mode ||
+        opened_environment.intensity != expected_open_environment.intensity ||
+        opened_environment.time_of_day_hours !=
+            expected_open_environment.time_of_day_hours ||
+        opened_environment.time_of_day_enabled !=
+            expected_open_environment.time_of_day_enabled ||
+        opened_environment.sun.enabled != expected_open_environment.sun.enabled ||
+        opened_environment.sun.intensity !=
+            expected_open_environment.sun.intensity ||
+        opened_render_settings.light_intensity !=
+            expected_open_render_settings.light_intensity ||
+        opened_render_settings.fog.enabled !=
+            expected_open_render_settings.fog.enabled ||
+        opened_render_settings.fog.density !=
+            expected_open_render_settings.fog.density ||
+        !opened_render_resources.local_light_active[1] ||
+        opened_render_resources.local_lights[1].intensity !=
+            expected_open_render_resources.local_lights[1].intensity)
+    {
+        goto cleanup;
+    }
     {
         henka_entity opened_first_entity = HENKA_INVALID_ENTITY;
+        henka_entity reloaded_first_entity = HENKA_INVALID_ENTITY;
         if (sandbox3d_game_authoring_get_entity_for_document_id(
                 opened_authoring, first_id, &opened_first_entity) !=
                 HENKA_SUCCESS ||
             strcmp(
                 henka_scene_get_entity_name(opened_scene, opened_first_entity),
                 "First Saved Object") != 0)
+        {
+            goto cleanup;
+        }
+        failure_stage = "preparing a changed file at the explicitly opened path";
+        if (henka_scene_document_load_file(
+                first_saved_document,
+                project_root,
+                first_relative_path) != HENKA_SUCCESS ||
+            henka_scene_document_get_object(
+                first_saved_document, first_id, &object) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        (void)snprintf(object.name, sizeof(object.name), "%s", "Reloaded First Object");
+        if (henka_scene_document_set_object(
+                first_saved_document, &object) != HENKA_SUCCESS ||
+            henka_scene_document_save_file(
+                first_saved_document,
+                project_root,
+                first_relative_path) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        failure_stage = "reloading the explicitly opened scene rather than the startup scene";
+        if (sandbox3d_game_authoring_reload(
+                opened_authoring, project_root) != HENKA_SUCCESS ||
+            strcmp(
+                sandbox3d_game_authoring_get_relative_path(opened_authoring),
+                first_relative_path) != 0 ||
+            sandbox3d_game_authoring_get_entity_for_document_id(
+                opened_authoring, first_id, &reloaded_first_entity) != HENKA_SUCCESS ||
+            reloaded_first_entity != opened_first_entity ||
+            strcmp(
+                henka_scene_get_entity_name(opened_scene, reloaded_first_entity),
+                "Reloaded First Object") != 0)
         {
             goto cleanup;
         }

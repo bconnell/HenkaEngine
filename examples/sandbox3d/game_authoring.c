@@ -1917,6 +1917,51 @@ static void sandbox3d_game_authoring_report_open_failure(
     fflush(stdout);
 }
 
+static henka_result sandbox3d_game_authoring_apply_document_render_state(
+    const henka_scene_document* document,
+    henka_scene* scene)
+{
+    henka_scene_environment_desc environment =
+        henka_scene_environment_default();
+    henka_scene_render_settings render_settings =
+        henka_scene_render_settings_default();
+    henka_scene_render_resources render_resources =
+        henka_scene_render_resources_default();
+    henka_result result;
+
+    if (document == NULL || scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_scene_document_get_environment(document, &environment);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_environment(scene, environment);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_document_get_render_settings(
+            document,
+            &render_settings);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_render_settings(scene, render_settings);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_document_get_render_resources(
+            document,
+            &render_resources);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_render_resources(scene, render_resources);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_game_authoring_open_project_internal(
     const char* project_root,
     const char* requested_relative_path,
@@ -2181,6 +2226,13 @@ static henka_result sandbox3d_game_authoring_open_project_internal(
         failure_stage = "apply_scene_camera";
         result = sandbox3d_scene_document_bridge_apply_camera(
             candidate_authoring->bridge);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        failure_stage = "apply_scene_render_state";
+        result = sandbox3d_game_authoring_apply_document_render_state(
+            candidate_authoring->document,
+            candidate_scene);
     }
     if (result != HENKA_SUCCESS)
     {
@@ -5421,9 +5473,10 @@ henka_result sandbox3d_game_authoring_save_as(
         false);
 }
 
-henka_result sandbox3d_game_authoring_load(
+static henka_result sandbox3d_game_authoring_load_relative_path(
     sandbox3d_game_authoring* authoring,
-    const char* project_root)
+    const char* project_root,
+    const char* relative_path)
 {
     henka_mesh* candidate_owned_meshes[
         SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS] = {0};
@@ -5431,11 +5484,6 @@ henka_result sandbox3d_game_authoring_load(
         SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS] = {0};
     henka_scene_document* candidate = NULL;
     henka_scene* candidate_scene = NULL;
-    henka_scene_environment_desc candidate_environment;
-    henka_scene_render_settings candidate_render_settings =
-        henka_scene_render_settings_default();
-    henka_scene_render_resources candidate_render_resources =
-        henka_scene_render_resources_default();
     sandbox3d_scene_document_bridge* candidate_bridge = NULL;
     char selected_relative_path[
         SANDBOX3D_GAME_AUTHORING_MAX_RELATIVE_PATH_BYTES];
@@ -5443,22 +5491,24 @@ henka_result sandbox3d_game_authoring_load(
     size_t candidate_owned_mesh_count = 0U;
     size_t published_owned_mesh_count = 0U;
     henka_result result;
-    if (authoring == NULL || project_root == NULL ||
+    if (authoring == NULL || project_root == NULL || relative_path == NULL ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
         strlen(project_root) >= HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = sandbox3d_game_authoring_get_startup_scene_path(
-        authoring,
-        project_root,
-        selected_relative_path,
-        sizeof(selected_relative_path),
-        true);
-    if (result != HENKA_SUCCESS)
+    if (relative_path[0] == '\0')
     {
-        return result;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (strlen(relative_path) >= sizeof(selected_relative_path))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    memcpy(
+        selected_relative_path,
+        relative_path,
+        strlen(relative_path) + 1U);
     result = henka_scene_document_create(&candidate);
     if (result != HENKA_SUCCESS)
     {
@@ -5495,39 +5545,9 @@ henka_result sandbox3d_game_authoring_load(
     {
         goto load_cleanup;
     }
-    result = henka_scene_document_get_environment(
+    result = sandbox3d_game_authoring_apply_document_render_state(
         candidate,
-        &candidate_environment);
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_scene_set_environment(
-            candidate_scene,
-            candidate_environment);
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_scene_document_get_render_settings(
-            candidate,
-            &candidate_render_settings);
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_scene_set_render_settings(
-            candidate_scene,
-            candidate_render_settings);
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_scene_document_get_render_resources(
-            candidate,
-            &candidate_render_resources);
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_scene_set_render_resources(
-            candidate_scene,
-            candidate_render_resources);
-    }
+        candidate_scene);
     if (result != HENKA_SUCCESS)
     {
         goto load_cleanup;
@@ -5731,6 +5751,50 @@ load_cleanup:
         candidate_owned_meshes,
         candidate_owned_mesh_count);
     return result;
+}
+
+henka_result sandbox3d_game_authoring_load(
+    sandbox3d_game_authoring* authoring,
+    const char* project_root)
+{
+    char selected_relative_path[
+        SANDBOX3D_GAME_AUTHORING_MAX_RELATIVE_PATH_BYTES];
+    henka_result result;
+
+    if (authoring == NULL || project_root == NULL ||
+        sandbox3d_game_authoring_is_play_locked(authoring) ||
+        strlen(project_root) >= HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_game_authoring_get_startup_scene_path(
+        authoring,
+        project_root,
+        selected_relative_path,
+        sizeof(selected_relative_path),
+        true);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    return sandbox3d_game_authoring_load_relative_path(
+        authoring,
+        project_root,
+        selected_relative_path);
+}
+
+henka_result sandbox3d_game_authoring_reload(
+    sandbox3d_game_authoring* authoring,
+    const char* project_root)
+{
+    if (authoring == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_game_authoring_load_relative_path(
+        authoring,
+        project_root,
+        authoring->relative_path);
 }
 
 henka_result sandbox3d_game_authoring_save_play_state(

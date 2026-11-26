@@ -298,6 +298,11 @@ henka_result sandbox3d_game_authoring_save_as(
 henka_result sandbox3d_game_authoring_load(
     sandbox3d_game_authoring* authoring,
     const char* project_root);
+/* Reloads the currently active scene path without re-resolving the startup
+ * scene from the project manifest. */
+henka_result sandbox3d_game_authoring_reload(
+    sandbox3d_game_authoring* authoring,
+    const char* project_root);
 henka_result sandbox3d_game_authoring_save_play_state(
     sandbox3d_game_authoring* authoring,
     const char* project_root);
