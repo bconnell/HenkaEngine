@@ -717,7 +717,7 @@ henka_result sandbox3d_game_authoring_create(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_authoring = NULL;
-    if (scene == NULL || relative_path == NULL || relative_path[0] == '\0')
+    if (scene == NULL || relative_path == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -3457,6 +3457,14 @@ henka_result sandbox3d_game_authoring_get_object_for_entity(
     return HENKA_SUCCESS;
 }
 
+size_t sandbox3d_game_authoring_get_object_count(
+    const sandbox3d_game_authoring* authoring)
+{
+    return authoring == NULL || authoring->document == NULL
+        ? 0U
+        : henka_scene_document_get_object_count(authoring->document);
+}
+
 henka_result sandbox3d_game_authoring_get_scene_name(
     const sandbox3d_game_authoring* authoring,
     char* out_name,
@@ -4960,6 +4968,7 @@ henka_result sandbox3d_game_authoring_save(
     bool has_current_camera = false;
     henka_result result;
     if (authoring == NULL || project_root == NULL ||
+        authoring->relative_path[0] == '\0' ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
         strlen(project_root) >= HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES)
     {

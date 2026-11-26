@@ -348,83 +348,13 @@ function New-HenkaCapturedWindowBitmap {
         [Parameter(Mandatory = $true)][string]$Description
     )
 
-    if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
-        throw "$Description refused to capture while the Sandbox owns foreground focus."
-    }
-    if ([string]::IsNullOrWhiteSpace($script:automationFrameCaptureOutputDirectory) -or
-        [string]::IsNullOrWhiteSpace($script:automationFrameCaptureRequestFile)) {
-        throw "$Description has no application-owned framebuffer capture channel."
-    }
-
-    $label = "pkg" + [guid]::NewGuid().ToString("N").Substring(0, 16)
-    $requestTemporaryPath = $script:automationFrameCaptureRequestFile + "." + $label + ".tmp"
-    $startingOffset = Get-FileLengthSafe -Path $stdoutPath
-    try {
-        if (Test-Path -LiteralPath $script:automationFrameCaptureRequestFile) {
-            throw "$Description found an unconsumed framebuffer capture request."
-        }
-        Write-Utf8NoBom -Path $requestTemporaryPath -Content ($label + "`n")
-        [System.IO.File]::Move(
-            $requestTemporaryPath,
-            $script:automationFrameCaptureRequestFile)
-    }
-    finally {
-        if (Test-Path -LiteralPath $requestTemporaryPath -PathType Leaf) {
-            Remove-Item -LiteralPath $requestTemporaryPath -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    $requestPattern = 'HENKA_AUTOMATION_DIAGNOSTIC app_frame_capture status=requested sequence=(?<sequence>[1-9][0-9]*) label=' +
-        [Regex]::Escape($label) + '$'
-    if (-not (Wait-FileContainsAfterOffset `
-            -Path $stdoutPath `
-            -Pattern $requestPattern `
-            -StartingOffset $startingOffset `
-            -TimeoutMilliseconds 10000)) {
-        throw "$Description was not acknowledged by the Sandbox application capture path."
-    }
-    $captureMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $requestPattern
-    if ($null -eq $captureMatch) {
-        throw "$Description has no matching application capture sequence."
-    }
-    $sequence = [uint32]::Parse(
-        $captureMatch.Groups["sequence"].Value,
-        [Globalization.CultureInfo]::InvariantCulture)
-    $framePath = Join-Path $script:automationFrameCaptureOutputDirectory (
-        "frame-{0:D4}-{1}.bmp" -f $sequence, $label)
-    $deadline = (Get-Date).AddSeconds(10)
-    $lastLength = -1L
-    $stableSamples = 0
-    while ((Get-Date) -lt $deadline) {
-        $length = Get-FileLengthSafe -Path $framePath
-        if ($length -gt 54 -and $length -eq $lastLength) {
-            $stableSamples++
-            if ($stableSamples -ge 2) {
-                break
-            }
-        }
-        else {
-            $stableSamples = 0
-        }
-        $lastLength = $length
-        Start-Sleep -Milliseconds 75
-    }
-    if ($stableSamples -lt 2) {
-        throw "$Description did not produce a complete application framebuffer image."
-    }
-
-    $bitmap = New-HenkaDetachedBitmapFromFile `
-        -Path $framePath `
-        -MaxDimension 8192 `
-        -MaxPixels 16777216
-    try {
-        Remove-Item -LiteralPath $framePath -Force -ErrorAction Stop
-    }
-    catch {
-        $bitmap.Dispose()
-        throw
-    }
-    return $bitmap
+    return New-HenkaAutomationProductFramebufferBitmap `
+        -Handle $Handle `
+        -Process $process `
+        -StdoutPath $stdoutPath `
+        -OutputDirectory $script:automationFrameCaptureOutputDirectory `
+        -RequestFile $script:automationFrameCaptureRequestFile `
+        -Description $Description
 }
 
 function Save-WindowScreenshot {

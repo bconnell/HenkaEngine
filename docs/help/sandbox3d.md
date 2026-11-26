@@ -15,6 +15,7 @@
 - [Viewport tools and transforms](#viewport-tools-and-transforms)
 - [Sandbox panels](#sandbox-panels)
 - [Game authoring and Play](#game-authoring-and-play)
+- [New Scene](#new-scene)
 - [Scripting source panel](#scripting-source-panel)
 - [Physics QA](#physics-qa)
 - [Terrain tools](#terrain-tools)
@@ -576,6 +577,12 @@ Current fields include:
 
 - enabled state;
 - authored prompt.
+
+### New Scene
+
+In Game Authoring, **New Scene** is available from the Actions group without selecting an object. It asks for confirmation before replacing the current document. Cancel keeps the current scene and any unsaved edits. Confirm creates an empty, unsaved scene with the normal camera and default environment and clears the selection; it does not modify the previously saved scene file.
+
+The new scene has no saved path, so Save Scene and Reload Scene fail closed until a save path exists. Save As and Open are separate scene-management workflows and are not provided by this New Scene action.
 
 ### Scene save/reload
 

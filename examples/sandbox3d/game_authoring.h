@@ -153,6 +153,8 @@ henka_result sandbox3d_game_authoring_get_object_for_entity(
     henka_entity entity,
     henka_scene_document_id* out_document_id,
     henka_scene_document_object* out_object);
+size_t sandbox3d_game_authoring_get_object_count(
+    const sandbox3d_game_authoring* authoring);
 /* Scene identity is canonical Scene Document metadata, separate from entity
  * names. Renames participate in the coordinator's bounded undo/redo history. */
 henka_result sandbox3d_game_authoring_get_scene_name(

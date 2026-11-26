@@ -763,6 +763,111 @@ function New-HenkaDetachedBitmapFromFile {
     }
 }
 
+function New-HenkaAutomationProductFramebufferBitmap {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][string]$OutputDirectory,
+        [Parameter(Mandatory = $true)][string]$RequestFile,
+        [Parameter(Mandatory = $true)][string]$Description,
+        [ValidateRange(1000, 60000)][int]$TimeoutMilliseconds = 10000
+    )
+
+    if ($Handle -eq [IntPtr]::Zero -or
+        [HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
+        throw "$Description refused to capture an invalid or foreground Henka window."
+    }
+    if (-not (Test-Path -LiteralPath $StdoutPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $OutputDirectory -PathType Container)) {
+        throw "$Description has no existing product capture log or output directory."
+    }
+
+    $outputFullPath = [System.IO.Path]::GetFullPath($OutputDirectory).TrimEnd([char[]]@([char]'\', [char]'/'))
+    $requestFullPath = [System.IO.Path]::GetFullPath($RequestFile)
+    $requestParent = [System.IO.Path]::GetDirectoryName($requestFullPath).TrimEnd([char[]]@([char]'\', [char]'/'))
+    $outputParent = [System.IO.Path]::GetDirectoryName($outputFullPath).TrimEnd([char[]]@([char]'\', [char]'/'))
+    $outputItem = Get-Item -LiteralPath $outputFullPath -Force -ErrorAction Stop
+    if (($outputItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        $requestParent -ine $outputParent -or
+        (Test-Path -LiteralPath $requestFullPath)) {
+        throw "$Description requires an ordinary capture directory and a fresh sibling request path."
+    }
+
+    $label = "ui" + [Guid]::NewGuid().ToString("N").Substring(0, 16)
+    $requestTemporaryPath = $requestFullPath + "." + $label + ".tmp"
+    try {
+        [System.IO.File]::WriteAllText(
+            $requestTemporaryPath,
+            ($label + "`n"),
+            (New-Object System.Text.UTF8Encoding($false)))
+        [System.IO.File]::Move($requestTemporaryPath, $requestFullPath)
+    }
+    finally {
+        if (Test-Path -LiteralPath $requestTemporaryPath -PathType Leaf) {
+            Remove-Item -LiteralPath $requestTemporaryPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $requestPattern = 'HENKA_AUTOMATION_DIAGNOSTIC app_frame_capture status=requested sequence=(?<sequence>[1-9][0-9]*) label=' +
+        [Regex]::Escape($label) + '(?:\r?$)'
+    if (-not (Wait-FileContains `
+            -Path $StdoutPath `
+            -Pattern $requestPattern `
+            -TimeoutMilliseconds $TimeoutMilliseconds)) {
+        if ($Process.HasExited) {
+            throw "$Description process exited before acknowledging its product framebuffer request."
+        }
+        throw "$Description was not acknowledged by the product framebuffer capture path."
+    }
+    $captureMatch = Get-LastLogRegexMatch -Path $StdoutPath -Pattern $requestPattern
+    if ($null -eq $captureMatch) {
+        throw "$Description has no matching product framebuffer sequence."
+    }
+    $sequence = [uint32]::Parse(
+        $captureMatch.Groups['sequence'].Value,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $framePath = Join-Path $outputFullPath ("frame-{0:D4}-{1}.bmp" -f $sequence, $label)
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMilliseconds)
+    $previousLength = -1L
+    $stableSamples = 0
+    while ((Get-Date) -lt $deadline) {
+        if ($Process.HasExited) {
+            throw "$Description process exited before its product framebuffer was complete."
+        }
+        if (Test-Path -LiteralPath $framePath -PathType Leaf) {
+            $currentLength = (Get-Item -LiteralPath $framePath -ErrorAction Stop).Length
+            if ($currentLength -gt 54 -and $currentLength -eq $previousLength) {
+                $stableSamples++
+                if ($stableSamples -ge 2) {
+                    break
+                }
+            }
+            else {
+                $stableSamples = 0
+            }
+            $previousLength = $currentLength
+        }
+        Start-Sleep -Milliseconds 75
+    }
+    if ($stableSamples -lt 2) {
+        throw "$Description did not produce a complete product framebuffer image."
+    }
+
+    $bitmap = New-HenkaDetachedBitmapFromFile `
+        -Path $framePath `
+        -MaxDimension 8192 `
+        -MaxPixels 16777216
+    try {
+        Remove-Item -LiteralPath $framePath -Force -ErrorAction Stop
+    }
+    catch {
+        $bitmap.Dispose()
+        throw
+    }
+    return $bitmap
+}
+
 function Get-HenkaAutomationScreenshotContentSummary {
     param(
         [Parameter(Mandatory = $true)][System.Drawing.Bitmap]$Bitmap,
