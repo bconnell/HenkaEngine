@@ -200,22 +200,6 @@ function Wait-FileContains {
     return $false
 }
 
-function Get-FileLengthSafe {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        return 0L
-    }
-
-    return [System.IO.FileInfo]::new($Path).Length
-}
-
-function Normalize-HenkaLogLineEndings {
-    param([Parameter(Mandatory = $true)][string]$Text)
-
-    return $Text.Replace("`r`n", "`n").Replace("`r", "`n")
-}
-
 function Get-LogPatternCount {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -255,67 +239,6 @@ function Assert-PackagedGeometryTelemetryStable {
     Write-Output "[pass] $Description geometry telemetry remained stable while idle ($after records)"
 }
 
-function Wait-FileContainsAfterOffset {
-    param(
-        [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Pattern,
-        [Parameter(Mandatory = $true)][long]$StartingOffset,
-        [int]$TimeoutMilliseconds = 5000
-    )
-
-    $deadline = (Get-Date).AddMilliseconds($TimeoutMilliseconds)
-    while ((Get-Date) -lt $deadline) {
-        if (Test-Path -LiteralPath $Path -PathType Leaf) {
-            $stream = $null
-            $reader = $null
-            try {
-                $shareMode = [System.IO.FileShare](
-                    [int][System.IO.FileShare]::ReadWrite -bor
-                    [int][System.IO.FileShare]::Delete)
-                $stream = [System.IO.FileStream]::new(
-                    $Path,
-                    [System.IO.FileMode]::Open,
-                    [System.IO.FileAccess]::Read,
-                    $shareMode)
-                if ($stream.Length -gt $StartingOffset) {
-                    $stream.Seek($StartingOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
-                    $reader = [System.IO.StreamReader]::new(
-                        $stream,
-                        [System.Text.Encoding]::UTF8,
-                        $true,
-                        4096,
-                        $false)
-                    $text = Normalize-HenkaLogLineEndings -Text $reader.ReadToEnd()
-                    if ([Regex]::IsMatch(
-                            $text,
-                            $Pattern,
-                            [System.Text.RegularExpressions.RegexOptions]::Multiline)) {
-                        return $true
-                    }
-                }
-            }
-            catch [System.IO.IOException] {
-                # The producer may be between writes; retry until the bounded deadline.
-            }
-            catch [System.UnauthorizedAccessException] {
-                # The producer may be between writes; retry until the bounded deadline.
-            }
-            finally {
-                if ($null -ne $reader) {
-                    $reader.Dispose()
-                }
-                elseif ($null -ne $stream) {
-                    $stream.Dispose()
-                }
-            }
-        }
-
-        Start-Sleep -Milliseconds 150
-    }
-
-    return $false
-}
-
 function Get-WindowRect {
     param([System.IntPtr]$Handle)
 
@@ -348,83 +271,13 @@ function New-HenkaCapturedWindowBitmap {
         [Parameter(Mandatory = $true)][string]$Description
     )
 
-    if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
-        throw "$Description refused to capture while the Sandbox owns foreground focus."
-    }
-    if ([string]::IsNullOrWhiteSpace($script:automationFrameCaptureOutputDirectory) -or
-        [string]::IsNullOrWhiteSpace($script:automationFrameCaptureRequestFile)) {
-        throw "$Description has no application-owned framebuffer capture channel."
-    }
-
-    $label = "pkg" + [guid]::NewGuid().ToString("N").Substring(0, 16)
-    $requestTemporaryPath = $script:automationFrameCaptureRequestFile + "." + $label + ".tmp"
-    $startingOffset = Get-FileLengthSafe -Path $stdoutPath
-    try {
-        if (Test-Path -LiteralPath $script:automationFrameCaptureRequestFile) {
-            throw "$Description found an unconsumed framebuffer capture request."
-        }
-        Write-Utf8NoBom -Path $requestTemporaryPath -Content ($label + "`n")
-        [System.IO.File]::Move(
-            $requestTemporaryPath,
-            $script:automationFrameCaptureRequestFile)
-    }
-    finally {
-        if (Test-Path -LiteralPath $requestTemporaryPath -PathType Leaf) {
-            Remove-Item -LiteralPath $requestTemporaryPath -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    $requestPattern = 'HENKA_AUTOMATION_DIAGNOSTIC app_frame_capture status=requested sequence=(?<sequence>[1-9][0-9]*) label=' +
-        [Regex]::Escape($label) + '$'
-    if (-not (Wait-FileContainsAfterOffset `
-            -Path $stdoutPath `
-            -Pattern $requestPattern `
-            -StartingOffset $startingOffset `
-            -TimeoutMilliseconds 10000)) {
-        throw "$Description was not acknowledged by the Sandbox application capture path."
-    }
-    $captureMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $requestPattern
-    if ($null -eq $captureMatch) {
-        throw "$Description has no matching application capture sequence."
-    }
-    $sequence = [uint32]::Parse(
-        $captureMatch.Groups["sequence"].Value,
-        [Globalization.CultureInfo]::InvariantCulture)
-    $framePath = Join-Path $script:automationFrameCaptureOutputDirectory (
-        "frame-{0:D4}-{1}.bmp" -f $sequence, $label)
-    $deadline = (Get-Date).AddSeconds(10)
-    $lastLength = -1L
-    $stableSamples = 0
-    while ((Get-Date) -lt $deadline) {
-        $length = Get-FileLengthSafe -Path $framePath
-        if ($length -gt 54 -and $length -eq $lastLength) {
-            $stableSamples++
-            if ($stableSamples -ge 2) {
-                break
-            }
-        }
-        else {
-            $stableSamples = 0
-        }
-        $lastLength = $length
-        Start-Sleep -Milliseconds 75
-    }
-    if ($stableSamples -lt 2) {
-        throw "$Description did not produce a complete application framebuffer image."
-    }
-
-    $bitmap = New-HenkaDetachedBitmapFromFile `
-        -Path $framePath `
-        -MaxDimension 8192 `
-        -MaxPixels 16777216
-    try {
-        Remove-Item -LiteralPath $framePath -Force -ErrorAction Stop
-    }
-    catch {
-        $bitmap.Dispose()
-        throw
-    }
-    return $bitmap
+    return New-HenkaAutomationProductFramebufferBitmap `
+        -Handle $Handle `
+        -Process $process `
+        -StdoutPath $stdoutPath `
+        -OutputDirectory $script:automationFrameCaptureOutputDirectory `
+        -RequestFile $script:automationFrameCaptureRequestFile `
+        -Description $Description
 }
 
 function Save-WindowScreenshot {

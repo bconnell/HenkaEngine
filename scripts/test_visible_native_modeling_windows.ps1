@@ -458,15 +458,25 @@ function Invoke-VisibleFaceExtrude {
     }
 }
 
-function Ensure-VisibleFaceEditTools {
+function Ensure-VisibleDetailsAuthoringControl {
     param(
         [Parameter(Mandatory = $true)][string]$ObjectName,
+        [string]$ControlPattern = "",
+        [string]$ControlDescription = "face-edit controls",
+        [int]$InitialMatchCount = -1,
         [ValidateRange(1, 64)][int]$MaximumScrollSteps = 48
     )
 
-    $toolsPattern = 'Native authoring face edit tools: name=(?<name>' +
-        [Regex]::Escape($ObjectName) +
-        ') extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width='
+    $targetPattern = $ControlPattern
+    if ([string]::IsNullOrWhiteSpace($targetPattern)) {
+        $targetPattern = 'Native authoring face edit tools: name=(?<name>' +
+            [Regex]::Escape($ObjectName) +
+            ') extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width='
+    }
+    if (([Regex]::new($targetPattern).GetGroupNames() -notcontains "name") -or
+        ([Regex]::new($targetPattern).GetGroupNames() -notcontains "y")) {
+        throw "The $ControlDescription geometry pattern must expose named name and y captures."
+    }
     $scrollPattern = 'HENKA_AUTOMATION_DIAGNOSTIC details-scroll frame=\d+ point=\((?<pointX>[-0-9.]+),(?<pointY>[-0-9.]+)\) content=(?<content>[-0-9.]+) viewport=(?<viewport>[-0-9.]+) delta=(?<delta>[-0-9.]+) offset=(?<before>[-0-9.]+)->(?<after>[-0-9.]+) handled=(?<handled>[01]) authored=(?<authored>[01]) document=\d+'
     $workspacePattern = 'Workspace UI geometry: .*details=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+)\.'
     $workspace = Get-LastMatch -Path $stdoutPath -Pattern $workspacePattern
@@ -484,10 +494,25 @@ function Ensure-VisibleFaceEditTools {
     $lastOffset = 0.0
     $maximumOffsetObserved = 0.0
     $furthestOffsetObserved = 0.0
+    if ($InitialMatchCount -lt 0) {
+        $InitialMatchCount = Get-LogMatchCount -Path $stdoutPath -Pattern $targetPattern
+    }
+    $currentMatchCount = Get-LogMatchCount -Path $stdoutPath -Pattern $targetPattern
+    if ($currentMatchCount -gt $InitialMatchCount) {
+        $target = Get-LastMatch -Path $stdoutPath -Pattern $targetPattern
+        if ($target.Groups["name"].Success -and
+            $target.Groups["name"].Value -ceq $ObjectName) {
+            Write-Host ("[pass] The product reported fresh {0} geometry for {1} at y={2}." -f
+                $ControlDescription,
+                $ObjectName,
+                $target.Groups["y"].Value)
+            return $target
+        }
+    }
     foreach ($wheelDelta in @(-1.0, 1.0)) {
         for ($attempt = 0; $attempt -lt $MaximumScrollSteps; ++$attempt) {
             $scrollCount = Get-LogMatchCount -Path $stdoutPath -Pattern $scrollPattern
-            $toolsCount = Get-LogMatchCount -Path $stdoutPath -Pattern $toolsPattern
+            $targetCount = Get-LogMatchCount -Path $stdoutPath -Pattern $targetPattern
             Send-HenkaAutomationScroll `
                 -EventPath $automationInputPath `
                 -X $scrollX `
@@ -530,20 +555,22 @@ function Ensure-VisibleFaceEditTools {
 
             if (Wait-LogMatchCountIncrease `
                     -Path $stdoutPath `
-                    -InitialCount $toolsCount `
-                    -Pattern $toolsPattern `
+                    -InitialCount $targetCount `
+                    -Pattern $targetPattern `
                     -TimeoutMilliseconds 1000) {
-                $tools = Get-LastMatch -Path $stdoutPath -Pattern $toolsPattern
-                if ($tools.Groups["name"].Success -and
-                    $tools.Groups["name"].Value -ceq $ObjectName) {
+                $target = Get-LastMatch -Path $stdoutPath -Pattern $targetPattern
+                if ($target.Groups["name"].Success -and
+                    $target.Groups["name"].Value -ceq $ObjectName -and
+                    [Math]::Abs($offsetAfter - $offsetBefore) -gt 0.25) {
                     $reachMessage = ("[pass] Object Details scroll changed offset {0:F1}->{1:F1}; " +
-                        "the product reported fresh face-edit geometry for {2} at y={3}.") -f
+                        "the product reported fresh {2} geometry for {3} at y={4}.") -f
                         $offsetBefore,
                         $offsetAfter,
+                        $ControlDescription,
                         $ObjectName,
-                        $tools.Groups["y"].Value
-                    Write-Output $reachMessage
-                    return
+                        $target.Groups["y"].Value
+                    Write-Host $reachMessage
+                    return $target
                 }
             }
 
@@ -555,10 +582,10 @@ function Ensure-VisibleFaceEditTools {
         }
     }
 
-    throw ("The face-edit controls did not become visible after bounded real Object Details scrolling " +
-        "(content={0:F1}, viewport={1:F1}, last_offset={2:F1}, furthest_offset={3:F1}, " +
-        "largest_reported_max_offset={4:F1}, " +
-        "max_steps_per_direction={5}).") -f
+    throw ("The {0} did not become visible after bounded real Object Details scrolling " +
+        "(content={1:F1}, viewport={2:F1}, last_offset={3:F1}, furthest_offset={4:F1}, " +
+        "largest_reported_max_offset={5:F1}, max_steps_per_direction={6}).") -f
+        $ControlDescription,
         $lastContentHeight,
         $lastViewportHeight,
         $lastOffset,
@@ -1276,6 +1303,12 @@ try {
             -Path (Join-Path $runtimeDirectory ($mode.Name + "-mode-normal-distance.png"))
 
         if ($mode.Name -eq "vertex") {
+            $smoothControlsPattern = "Native authoring smooth controls: name=(?<name>" +
+                [Regex]::Escape($authoringName) +
+                ') smooth_x=(?<x>[-0-9.]+) smooth_y=(?<y>[-0-9.]+) width=90.0 height=24.0\.'
+            $smoothControlsInitialCount = Get-LogMatchCount `
+                -Path $stdoutPath `
+                -Pattern $smoothControlsPattern
             $pickedCount = Get-LogMatchCount `
                 -Path $stdoutPath `
                 -Pattern ("Native authoring component picked: name=" + [Regex]::Escape($authoringName) + ' .* mode=vertex .* selected=1')
@@ -1290,9 +1323,11 @@ try {
                     -TimeoutMilliseconds 5000)) {
                 throw "The visible editor did not pick one real source vertex for Smooth Vertices."
             }
-            $smoothControls = Get-LastMatch `
-                -Path $stdoutPath `
-                -Pattern ("Native authoring smooth controls: name=" + [Regex]::Escape($authoringName) + ' smooth_x=(?<x>[-0-9.]+) smooth_y=(?<y>[-0-9.]+) width=90.0 height=24.0\.')
+            $smoothControls = Ensure-VisibleDetailsAuthoringControl `
+                -ObjectName $authoringName `
+                -ControlPattern $smoothControlsPattern `
+                -ControlDescription "Smooth Vertices controls" `
+                -InitialMatchCount $smoothControlsInitialCount
             $smoothPreviewCount = Get-LogMatchCount `
                 -Path $stdoutPath `
                 -Pattern ("Native authoring smooth preview: name=" + [Regex]::Escape($authoringName) + ' .* result=success')
@@ -1445,7 +1480,7 @@ try {
         throw "The visible numeric modeling move did not commit through the operator transaction."
     }
 
-    Ensure-VisibleFaceEditTools -ObjectName $authoringName
+    $null = Ensure-VisibleDetailsAuthoringControl -ObjectName $authoringName
     Invoke-VisibleFaceExtrude `
         -Pattern ("Native authoring face edit tools: name=" + [Regex]::Escape($authoringName) + ' extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width=') `
         -XGroup "x" -YGroup "y" `
@@ -2246,7 +2281,7 @@ try {
     if (-not $reopenedPicked) {
         throw "The visible reopened asset did not produce a fresh selected face before re-edit."
     }
-    Ensure-VisibleFaceEditTools -ObjectName $authoringName
+    $null = Ensure-VisibleDetailsAuthoringControl -ObjectName $authoringName
     Invoke-VisibleFaceExtrude `
         -Pattern 'Native authoring face edit tools: name=(?<name>.+?) extrude_x=(?<x>[-0-9.]+) inset_x=(?<inset>[-0-9.]+) y=(?<y>[-0-9.]+) width=' `
         -XGroup "x" -YGroup "y" `
