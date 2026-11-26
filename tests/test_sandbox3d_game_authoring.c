@@ -4016,6 +4016,129 @@ cleanup:
     return success;
 }
 
+static bool test_scene_unsaved_change_authority(void)
+{
+    const char* project_root = "build/test_tmp/scene_dirty_authority";
+    const char* scene_relative_path = "scene.hscene";
+    const char* scene_file =
+        "build/test_tmp/scene_dirty_authority/scene.hscene";
+    const char* manifest_file =
+        "build/test_tmp/scene_dirty_authority/henka.project";
+    const char* blocked_project_root =
+        "build/test_tmp/scene_dirty_authority_blocked_root";
+    henka_scene* scene = NULL;
+    sandbox3d_game_authoring* authoring = NULL;
+    henka_entity entity = HENKA_INVALID_ENTITY;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_transform saved_transform;
+    henka_transform changed_transform;
+    bool has_unsaved_changes = false;
+    bool success = false;
+    FILE* blocked_root_file = NULL;
+
+    (void)remove(scene_file);
+    (void)remove(manifest_file);
+    (void)remove(blocked_project_root);
+    if (sandbox3d_test_make_directory(project_root) != 0 && errno != EEXIST)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_create(&scene) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_create(scene, "", &authoring) !=
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_has_unsaved_changes(
+            authoring, &has_unsaved_changes) != HENKA_SUCCESS ||
+        !has_unsaved_changes)
+    {
+        goto cleanup;
+    }
+    entity = henka_scene_create_entity_named(scene, "Dirty State Object");
+    if (entity == HENKA_INVALID_ENTITY ||
+        sandbox3d_game_authoring_register_entity(
+            authoring, entity, &object_id) != HENKA_SUCCESS ||
+        object_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        sandbox3d_game_authoring_has_unsaved_changes(
+            authoring, &has_unsaved_changes) != HENKA_SUCCESS ||
+        !has_unsaved_changes)
+    {
+        goto cleanup;
+    }
+    if (henka_scene_get_entity_transform(scene, entity, &saved_transform) !=
+        HENKA_SUCCESS ||
+        sandbox3d_game_authoring_save_as(
+            authoring, project_root, scene_relative_path) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_has_unsaved_changes(
+            authoring, &has_unsaved_changes) != HENKA_SUCCESS ||
+        has_unsaved_changes)
+    {
+        goto cleanup;
+    }
+
+    changed_transform = saved_transform;
+    changed_transform.position.x += 0.25f;
+    if (henka_scene_set_entity_transform(
+            scene, entity, changed_transform) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_has_unsaved_changes(
+            authoring, &has_unsaved_changes) != HENKA_SUCCESS ||
+        !has_unsaved_changes)
+    {
+        goto cleanup;
+    }
+
+#if defined(_WIN32)
+    if (fopen_s(&blocked_root_file, blocked_project_root, "wb") != 0)
+    {
+        blocked_root_file = NULL;
+    }
+#else
+    blocked_root_file = fopen(blocked_project_root, "wb");
+#endif
+    if (blocked_root_file == NULL ||
+        fputc('x', blocked_root_file) == EOF)
+    {
+        goto cleanup;
+    }
+    if (fclose(blocked_root_file) != 0)
+    {
+        blocked_root_file = NULL;
+        goto cleanup;
+    }
+    blocked_root_file = NULL;
+    if (sandbox3d_game_authoring_save(authoring, blocked_project_root) ==
+            HENKA_SUCCESS ||
+        sandbox3d_game_authoring_has_unsaved_changes(
+            authoring, &has_unsaved_changes) != HENKA_SUCCESS ||
+        !has_unsaved_changes ||
+        strcmp(sandbox3d_game_authoring_get_relative_path(authoring),
+            scene_relative_path) != 0)
+    {
+        goto cleanup;
+    }
+
+    if (henka_scene_set_entity_transform(
+            scene, entity, saved_transform) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_has_unsaved_changes(
+            authoring, &has_unsaved_changes) != HENKA_SUCCESS ||
+        has_unsaved_changes)
+    {
+        goto cleanup;
+    }
+    success = true;
+
+cleanup:
+    if (blocked_root_file != NULL)
+    {
+        (void)fclose(blocked_root_file);
+    }
+    sandbox3d_game_authoring_destroy(authoring);
+    henka_scene_destroy(scene);
+    (void)remove(scene_file);
+    (void)remove(manifest_file);
+    (void)remove(blocked_project_root);
+    (void)sandbox3d_test_remove_directory(project_root);
+    return success;
+}
+
 static bool test_unsaved_scene_save_as_preserves_independent_files(void)
 {
     const char* project_root = "build/test_tmp/save_as_authoring_transaction";
@@ -4737,6 +4860,11 @@ int main(void)
     if (!test_unsaved_scene_authoring_path())
     {
         fprintf(stderr, "unsaved scene authoring path test failed\n");
+        return 1;
+    }
+    if (!test_scene_unsaved_change_authority())
+    {
+        fprintf(stderr, "scene unsaved-change authority test failed\n");
         return 1;
     }
     if (!test_unsaved_scene_save_as_preserves_independent_files())

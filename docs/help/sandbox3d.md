@@ -17,6 +17,7 @@
 - [Game authoring and Play](#game-authoring-and-play)
 - [New Scene](#new-scene)
 - [Open Scene](#open-scene)
+- [Unsaved scene changes](#unsaved-scene-changes)
 - [Scripting source panel](#scripting-source-panel)
 - [Physics QA](#physics-qa)
 - [Terrain tools](#terrain-tools)
@@ -604,6 +605,16 @@ material instance are saved with that identity and overlaid after the
 definition is rebound. Texture or terrain dependency overrides remain
 unsupported by this document path and fail closed rather than losing their
 asset authority.
+
+### Unsaved scene changes
+
+When the Scene Document or Terrain has unsaved changes, New, Open, Reload, and
+closing the editor ask whether to **Save**, **Discard**, or **Cancel**. Cancel
+keeps the current document and its edits. Discard continues the requested
+transition without saving those edits. Save continues only after the scene and
+any dirty Terrain state have been saved successfully; if saving fails, the
+current document remains active. An untitled scene has no save path, so use
+**Save As** before choosing Save in a transition prompt.
 
 While Play is running or paused, scene authoring edits, scene save/reload, and other scene mutations are rejected.
 

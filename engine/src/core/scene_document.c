@@ -3121,6 +3121,62 @@ static bool henka_scene_document_make_payload(
     return true;
 }
 
+henka_result henka_scene_document_content_equal(
+    const henka_scene_document* left,
+    const henka_scene_document* right,
+    bool* out_equal)
+{
+    uint8_t* left_payload = NULL;
+    uint8_t* right_payload = NULL;
+    size_t left_size = 0U;
+    size_t right_size = 0U;
+    henka_result result;
+
+    if (out_equal != NULL)
+    {
+        *out_equal = false;
+    }
+    if (left == NULL || left->storage == NULL || right == NULL ||
+        right->storage == NULL || out_equal == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_scene_document_validate(left);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_scene_document_validate(right);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    /* These fields are encoded in the scene-file header rather than payload.
+     * Compare them before allocating canonical payload buffers. */
+    if (left->storage->object_count != right->storage->object_count ||
+        left->storage->next_id != right->storage->next_id)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (!henka_scene_document_make_payload(
+            left->storage, &left_payload, &left_size) ||
+        !henka_scene_document_make_payload(
+            right->storage, &right_payload, &right_size))
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    *out_equal = left_size == right_size &&
+        memcmp(left_payload, right_payload, left_size) == 0;
+    result = HENKA_SUCCESS;
+
+cleanup:
+    henka_free(right_payload);
+    henka_free(left_payload);
+    return result;
+}
+
 static FILE* henka_scene_document_open_file(const char* path, const char* mode)
 {
     FILE* file = NULL;

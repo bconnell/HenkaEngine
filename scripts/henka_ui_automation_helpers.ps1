@@ -1171,3 +1171,237 @@ function Wait-FileContainsAfterOffset {
 
     return $false
 }
+
+function ConvertFrom-HenkaAutomationDiagnosticFields {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$EventName,
+        [Parameter(Mandatory = $true)][string[]]$FieldNames,
+        [Parameter(Mandatory = $true)][string[]]$RequiredFieldNames
+    )
+
+    $prefix = 'HENKA_AUTOMATION_DIAGNOSTIC ' + $EventName + ' '
+    if (-not $Line.StartsWith($prefix, [System.StringComparison]::Ordinal)) {
+        return $null
+    }
+
+    $payload = $Line.Substring($prefix.Length).Trim()
+    if ($payload.EndsWith('.')) {
+        $payload = $payload.Substring(0, $payload.Length - 1).TrimEnd()
+    }
+
+    # Parse every key boundary, including fields this caller does not consume.
+    # This lets producers add/reorder diagnostic fields without contaminating
+    # the preceding free-form value (for example, an active scene name).
+    $fieldMatches = [Regex]::Matches($payload, '(?<!\S)(?<name>[A-Za-z][A-Za-z0-9_]*)=')
+    $values = @{}
+    for ($fieldIndex = 0; $fieldIndex -lt $fieldMatches.Count; $fieldIndex++) {
+        $fieldMatch = $fieldMatches[$fieldIndex]
+        $fieldName = $fieldMatch.Groups['name'].Value
+        if ($values.ContainsKey($fieldName)) {
+            return $null
+        }
+
+        $valueStart = $fieldMatch.Index + $fieldMatch.Length
+        $valueEnd = if ($fieldIndex + 1 -lt $fieldMatches.Count) {
+            $fieldMatches[$fieldIndex + 1].Index
+        }
+        else {
+            $payload.Length
+        }
+        $values[$fieldName] = $payload.Substring($valueStart, $valueEnd - $valueStart).Trim()
+    }
+
+    $recognizedValues = @{}
+    foreach ($fieldName in $FieldNames) {
+        if ($values.ContainsKey($fieldName)) {
+            $recognizedValues[$fieldName] = $values[$fieldName]
+        }
+    }
+
+    foreach ($fieldName in $RequiredFieldNames) {
+        if ($FieldNames -notcontains $fieldName) {
+            return $null
+        }
+        if (-not $recognizedValues.ContainsKey($fieldName) -or [string]::IsNullOrWhiteSpace([string]$recognizedValues[$fieldName])) {
+            return $null
+        }
+    }
+    return [pscustomobject]$recognizedValues
+}
+
+function ConvertFrom-HenkaSceneTransitionDecisionLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+    $fieldNames = @('action','choice','scene_retained','scene_dirty','terrain_dirty_regions','active_name','active_path','object_count','selected_entity','terrain_active')
+    $values = ConvertFrom-HenkaAutomationDiagnosticFields -Line $Line -EventName 'scene_transition_decision' -FieldNames $fieldNames -RequiredFieldNames $fieldNames
+    if ($null -eq $values) { return $null }
+    return [pscustomobject]@{
+        Action = $values.action
+        Choice = $values.choice
+        SceneRetained = $values.scene_retained
+        SceneDirty = $values.scene_dirty
+        TerrainDirtyRegions = $values.terrain_dirty_regions
+        ActiveName = $values.active_name
+        ActivePath = $values.active_path
+        ObjectCount = $values.object_count
+        SelectedEntity = $values.selected_entity
+        TerrainActive = $values.terrain_active
+    }
+}
+
+function ConvertFrom-HenkaSceneOpenAttemptLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+    $fieldNames = @('action','result','relative_path_empty','active_name','active_relative_path','active_document_object_count','selection_present')
+    $values = ConvertFrom-HenkaAutomationDiagnosticFields -Line $Line -EventName 'scene_document_persistence' -FieldNames $fieldNames -RequiredFieldNames $fieldNames
+    if ($null -eq $values -or $values.action -ne 'scene_open_attempt') { return $null }
+    return [pscustomobject]@{
+        Result = $values.result
+        RelativePathEmpty = $values.relative_path_empty
+        ActiveName = $values.active_name
+        ActiveRelativePath = $values.active_relative_path
+        ActiveDocumentObjectCount = $values.active_document_object_count
+        SelectionPresent = $values.selection_present
+    }
+}
+
+function ConvertFrom-HenkaSceneTransitionResultLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+    $fieldNames = @('action','result','active_name','active_path','object_count','selected_entity')
+    $values = ConvertFrom-HenkaAutomationDiagnosticFields -Line $Line -EventName 'scene_transition_result' -FieldNames $fieldNames -RequiredFieldNames $fieldNames
+    if ($null -eq $values) { return $null }
+    return [pscustomobject]@{
+        Action = $values.action
+        Result = $values.result
+        ActiveName = $values.active_name
+        ActivePath = $values.active_path
+        ObjectCount = $values.object_count
+        SelectedEntity = $values.selected_entity
+    }
+}
+
+function ConvertFrom-HenkaSceneTransitionTerrainSaveLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+    $fieldNames = @('result','dirty_before','saved','dirty_after')
+    $values = ConvertFrom-HenkaAutomationDiagnosticFields -Line $Line -EventName 'scene_transition_terrain_save' -FieldNames $fieldNames -RequiredFieldNames $fieldNames
+    if ($null -eq $values) { return $null }
+    return [pscustomobject]@{
+        Result = $values.result
+        DirtyBefore = $values.dirty_before
+        Saved = $values.saved
+        DirtyAfter = $values.dirty_after
+    }
+}
+
+function ConvertFrom-HenkaSceneOpenedLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+    $fieldNames = @('action','name','relative_path','relative_path_empty','document_object_count')
+    $values = ConvertFrom-HenkaAutomationDiagnosticFields -Line $Line -EventName 'scene_document_persistence' -FieldNames $fieldNames -RequiredFieldNames $fieldNames
+    if ($null -eq $values -or $values.action -ne 'scene_opened') { return $null }
+    return [pscustomobject]@{
+        Action = $values.action
+        Name = $values.name
+        RelativePath = $values.relative_path
+        RelativePathEmpty = $values.relative_path_empty
+        DocumentObjectCount = $values.document_object_count
+    }
+}
+
+function Assert-HenkaStructuredState {
+    param(
+        [Parameter(Mandatory = $true)][string]$Description,
+        [Parameter()][AllowNull()][object]$Actual,
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$Expected,
+        [ValidateSet('PRODUCT_STATE_MISMATCH','TEST_PRECONDITION_UNMET')][string]$MismatchClassification = 'PRODUCT_STATE_MISMATCH'
+    )
+
+    if ($Expected.Count -eq 0) {
+        throw "[HENKA_VALIDATION_CLASS=HARNESS_CONTRACT_INVALID] $Description did not declare any expected state fields."
+    }
+    if ($null -eq $Actual) {
+        throw "[HENKA_VALIDATION_CLASS=UNCLASSIFIED_OBSERVATION_GAP] $Description had no structured actual state to compare."
+    }
+
+    foreach ($fieldName in @($Expected.Keys | Sort-Object)) {
+        $actualProperty = $Actual.PSObject.Properties[$fieldName]
+        if ($null -eq $actualProperty) {
+            throw "[HENKA_VALIDATION_CLASS=UNCLASSIFIED_OBSERVATION_GAP] $Description omitted required state field '$fieldName'; product reporting versus checker contract remains unresolved."
+        }
+
+        $expectedValue = if ($null -eq $Expected[$fieldName]) { '<null>' } else { [Convert]::ToString($Expected[$fieldName], [Globalization.CultureInfo]::InvariantCulture) }
+        $actualValue = if ($null -eq $actualProperty.Value) { '<null>' } else { [Convert]::ToString($actualProperty.Value, [Globalization.CultureInfo]::InvariantCulture) }
+        if (-not [string]::Equals($actualValue, $expectedValue, [System.StringComparison]::Ordinal)) {
+            throw "[HENKA_VALIDATION_CLASS=$MismatchClassification] $Description field '$fieldName' expected '$expectedValue', product reported '$actualValue'."
+        }
+    }
+
+    return $true
+}
+
+function Get-HenkaSceneTransitionDecisionAfterOffset {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][ValidateSet('new', 'reload', 'open', 'close')][string]$Action,
+        [Parameter(Mandatory = $true)][ValidateSet('save', 'discard', 'cancel')][string]$Choice,
+        [Parameter(Mandatory = $true)][long]$StartingOffset,
+        [int]$TimeoutMilliseconds = 10000
+    )
+
+    $actionChoicePattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision (?=.*(?<!\S)action=' +
+        [Regex]::Escape($Action) + '(?=\s|$))(?=.*(?<!\S)choice=' +
+        [Regex]::Escape($Choice) + '(?=\s|$))[^\r\n]*$'
+    if (-not (Wait-FileContainsAfterOffset -Path $Path -Pattern $actionChoicePattern -StartingOffset $StartingOffset -TimeoutMilliseconds $TimeoutMilliseconds)) {
+        return $null
+    }
+
+    $decisionMatch = Get-LastLogRegexMatch -Path $Path -Pattern $actionChoicePattern
+    if ($null -eq $decisionMatch) {
+        return $null
+    }
+
+    return ConvertFrom-HenkaSceneTransitionDecisionLine -Line $decisionMatch.Value
+}
+
+function Get-HenkaSceneOpenAttemptAfterOffset {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][long]$StartingOffset, [int]$TimeoutMilliseconds = 10000)
+    $attemptPattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence (?=[^\r\n]*(?<!\S)action=scene_open_attempt(?=\s|\.))[^\r\n]*$'
+    if (-not (Wait-FileContainsAfterOffset -Path $Path -Pattern $attemptPattern -StartingOffset $StartingOffset -TimeoutMilliseconds $TimeoutMilliseconds)) { return $null }
+    $attemptMatch = Get-LastLogRegexMatch -Path $Path -Pattern $attemptPattern
+    if ($null -eq $attemptMatch) { return $null }
+    return ConvertFrom-HenkaSceneOpenAttemptLine -Line $attemptMatch.Value
+}
+
+function Get-HenkaSceneOpenedAfterOffset {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][long]$StartingOffset, [int]$TimeoutMilliseconds = 10000)
+    $openedPattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence (?=[^\r\n]*(?<!\S)action=scene_opened(?=\s|\.))[^\r\n]*$'
+    if (-not (Wait-FileContainsAfterOffset -Path $Path -Pattern $openedPattern -StartingOffset $StartingOffset -TimeoutMilliseconds $TimeoutMilliseconds)) { return $null }
+    $openedMatch = Get-LastLogRegexMatch -Path $Path -Pattern $openedPattern
+    if ($null -eq $openedMatch) { return $null }
+    return ConvertFrom-HenkaSceneOpenedLine -Line $openedMatch.Value
+}
+
+function Get-HenkaSceneTransitionResultAfterOffset {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][ValidateSet('new','reload','open','close')][string]$Action,
+        [Parameter(Mandatory = $true)][long]$StartingOffset,
+        [int]$TimeoutMilliseconds = 10000
+    )
+    $resultPattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_transition_result (?=[^\r\n]*(?<!\S)action=' + [Regex]::Escape($Action) + '(?=\s|\.))[^\r\n]*$'
+    if (-not (Wait-FileContainsAfterOffset -Path $Path -Pattern $resultPattern -StartingOffset $StartingOffset -TimeoutMilliseconds $TimeoutMilliseconds)) { return $null }
+    $resultMatch = Get-LastLogRegexMatch -Path $Path -Pattern $resultPattern
+    if ($null -eq $resultMatch) { return $null }
+    return ConvertFrom-HenkaSceneTransitionResultLine -Line $resultMatch.Value
+}
+
+function Get-HenkaSceneTransitionTerrainSaveAfterOffset {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][long]$StartingOffset,
+        [int]$TimeoutMilliseconds = 10000
+    )
+    $savePattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_transition_terrain_save [^\r\n]*$'
+    if (-not (Wait-FileContainsAfterOffset -Path $Path -Pattern $savePattern -StartingOffset $StartingOffset -TimeoutMilliseconds $TimeoutMilliseconds)) { return $null }
+    $saveMatch = Get-LastLogRegexMatch -Path $Path -Pattern $savePattern
+    if ($null -eq $saveMatch) { return $null }
+    return ConvertFrom-HenkaSceneTransitionTerrainSaveLine -Line $saveMatch.Value
+}

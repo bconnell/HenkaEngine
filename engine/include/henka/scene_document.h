@@ -258,6 +258,13 @@ henka_result henka_scene_document_copy(
 henka_result henka_scene_document_swap_contents(
     henka_scene_document* destination,
     henka_scene_document* prepared_source);
+/* Compares the complete persisted scene-document authority using the same
+ * canonical encoding as save/load. Runtime handles and struct padding are
+ * intentionally excluded. */
+henka_result henka_scene_document_content_equal(
+    const henka_scene_document* left,
+    const henka_scene_document* right,
+    bool* out_equal);
 size_t henka_scene_document_get_object_count(const henka_scene_document* document);
 henka_result henka_scene_document_get_object_at(
     const henka_scene_document* document,
